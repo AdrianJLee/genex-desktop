@@ -596,7 +596,9 @@ function endedWithSession(options: DelegatedOptions, turn: FinishedTurn): boolea
  * turn, so the same session goes on by itself, with the tools and a brief for the new kind. A turn
  * that linked the game to an engine project, or switched its link to another, first waits until the
  * game's plugins say its apps are ready (`health`, `waitUntilReady`): that project's editor may still
- * be opening. Any other change goes on at once, whatever `health` would say. A run's turn, a turn
+ * be opening. One that never gets ready (a step blocks, or the wait's cap passes) goes on too, told
+ * why: the agent opens, reopens or waits for its app itself; only while the person is using the app
+ * (Genex's own hold) does nothing go on. Any other change goes on at once, whatever `health` would say. A run's turn, a turn
  * that did not end as it should, one whose facts are the same (a folder with no kind that took the
  * web starter included) and one whose game still has no facts end as they did.
  */
@@ -609,13 +611,14 @@ async function continueOnNewFacts(ctx: HarnessCtx, seat: Seat, turn: FinishedTur
   // A plugin's web build (Godot exporting its game for the web) leaves the game the kind it was.
   if (kindKey(servedFactsOf(handoff.descriptor)) === kindKey(servedFactsOf(game))) return turn.outcome;
   const next = await withFactsNow(ctx, handoff, game);
-  const waited = linkedAnew(handoff.descriptor, game) ? await waitUntilReady(ctx, options, next) : ReadyWait.Ready;
-  if (waited === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
-  if (waited === ReadyWait.Ended) return turn.outcome;
+  const waited = linkedAnew(handoff.descriptor, game) ? await waitUntilReady(ctx, options, next) : READY;
+  if (waited.wait === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
+  if (waited.wait === ReadyWait.Held) return turn.outcome;
   const launch = next.launchTool ? toolCall(options.engine, next.launchTool.name) : undefined;
   // The seat runs on the new kind from now on: a switch sent meanwhile starts from it.
   Object.assign(seat, { handoff: next, briefFor: await briefWriter(ctx, options, next) });
-  return goOnInSession(ctx, seat, turn, factsReadyPrompt(servedFactsOf(game), launch));
+  const notReady = waited.wait === ReadyWait.NotReady ? waited.reason : undefined;
+  return goOnInSession(ctx, seat, turn, factsReadyPrompt(servedFactsOf(game), launch, notReady));
 }
 
 /** The engine project a game is linked to, or null: a web game, or a folder whose project isn't linked. */
@@ -627,25 +630,32 @@ function linkedAnew(before: Handoff["descriptor"], after: Handoff["descriptor"])
   return link !== null && link !== engineLinkOf(before) && hooksOn(after, HookEvent.Health);
 }
 
-/** How a wait until the game's apps are ready ended: ready, Stop, or not ready (the chat was told why). */
-const ReadyWait = { Ready: "ready", Stopped: "stopped", Ended: "ended" } as const;
+/**
+ * How a wait until the game's apps are ready ended: ready, Stop, not ready (the chat was told why), or
+ * held for the person, who is using the app.
+ */
+const ReadyWait = { Ready: "ready", Stopped: "stopped", NotReady: "not-ready", Held: "held" } as const;
 type ReadyWait = (typeof ReadyWait)[keyof typeof ReadyWait];
+/** A wait's end, with why the apps aren't ready when they aren't. */
+type ReadyEnd = { wait: ReadyWait; reason?: string };
+const READY: ReadyEnd = { wait: ReadyWait.Ready };
 
 /**
  * Waits until the game's apps are ready, as its plugins' `health` steps say, up to `READY_WAIT_MS`:
  * the first reason a step gives for not being ready yet is said once in the chat (and on the
- * status line). Unless they are ready, the chat has been told why it doesn't go on.
+ * status line). Unless they are ready, the chat has been told why, and the answer carries it for
+ * the agent.
  */
-async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<ReadyWait> {
+async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<ReadyEnd> {
   const scope: HookScope = { project: handoff.project, threadId: options.threadId };
   const clock = { now: () => Date.now(), sleep };
   const until = Date.now() + READY_WAIT_MS;
   const first = await fireHooks(ctx, handoff.descriptor, HookEvent.Health, scope);
   if (first.blocked) {
     await sayInTurn(ctx, options.turnId, first.blocked.reason);
-    return ReadyWait.Ended;
+    return { wait: ReadyWait.NotReady, reason: first.blocked.reason };
   }
-  if (!first.pending) return ReadyWait.Ready;
+  if (!first.pending) return READY;
   const notReady = pendingLine(first.pending);
   await sayInTurn(ctx, options.turnId, notReady);
   ctx.setStatus?.(`waiting: ${notReady}`);
@@ -653,11 +663,11 @@ async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handof
   const ready = await waitReady(ctx, handoff.descriptor, scope, clock, until);
   if (ctx.cancelled) {
     await sayInTurn(ctx, options.turnId, READY_WORDS.stopped);
-    return ReadyWait.Stopped;
+    return { wait: ReadyWait.Stopped };
   }
-  if (ready.ok) return ReadyWait.Ready;
+  if (ready.ok) return READY;
   await sayInTurn(ctx, options.turnId, ready.timedOut ? READY_WORDS.timedOut(ready.reason) : ready.reason);
-  return ReadyWait.Ended;
+  return { wait: ready.held ? ReadyWait.Held : ReadyWait.NotReady, reason: ready.reason };
 }
 
 /**

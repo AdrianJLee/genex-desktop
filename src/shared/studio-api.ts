@@ -478,6 +478,12 @@ export interface StudioApi {
   openRouterKeySave(key: string): Promise<import("./engine-descriptor.ts").EngineStatus>;
   /** Forget the saved OpenRouter key. */
   openRouterKeyClear(): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /** Whether a TypeSafe key is saved for pilots' fast decisions (optional: pilots choose by their own order without one). */
+  typeSafeKeyStatus(): Promise<import("./fast-decisions.ts").FastDecisionKeyStatus>;
+  /** Check a pasted TypeSafe key with TypeSafe and keep it in the OS secret store when it is taken; the key never comes back. */
+  typeSafeKeySave(key: string): Promise<import("./fast-decisions.ts").FastDecisionKeyStatus>;
+  /** Forget the saved TypeSafe key. */
+  typeSafeKeyClear(): Promise<import("./fast-decisions.ts").FastDecisionKeyStatus>;
   /**
    * Connect OpenRouter in the browser: OpenRouter's page opens, and the call settles once the
    * person approved Genex there (the key is then checked and saved, never sent back), cancelled,

@@ -333,6 +333,7 @@ const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineAssist,
   PluginService.GameEngineCanAssist,
   PluginService.GameEngineAssisting,
+  PluginService.GameComputerControl,
 ]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([

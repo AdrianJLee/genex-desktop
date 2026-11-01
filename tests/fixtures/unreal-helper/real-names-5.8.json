@@ -1,4 +1,10 @@
 {
+ "AIMoveCompletedSignature": [
+  "broadcast"
+ ],
+ "AbilityTask_ApplyRootMotionJumpForce": [
+  "finish"
+ ],
  "Actor": [
   "attach_to_component",
   "destroy_actor",
@@ -14,7 +20,9 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
   "set_actor_label",
   "set_actor_location_and_rotation",
@@ -22,34 +30,60 @@
   "set_editor_property",
   "set_folder_path"
  ],
+ "ActorActionUtility": [
+  "run"
+ ],
  "ActorComponent": [
   "get_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
+ ],
+ "ActorForWorldTransforms": [
+  "actor"
  ],
  "AddNewSubobjectParams": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "AnimBlueprint": [],
+ "AnimGraphLibrary": [
+  "look_at"
+ ],
  "AnimGraphNode_OrientationDriver": [
   "node"
  ],
- "AnimInstance": [],
+ "AnimInstance": [
+  "get_current_active_montage",
+  "montage_get_current_section",
+  "montage_get_play_rate",
+  "montage_get_position"
+ ],
+ "AnimMontage": [
+  "get_name"
+ ],
  "AnimNode_SplineIK": [
   "offset"
+ ],
+ "AnimNotifyEvent": [
+  "get_editor_property"
  ],
  "AnimPose": [
   "get_bone_pose",
   "get_editor_property",
-  "set_editor_property"
+  "is_valid",
+  "set_editor_property",
+  "to_tuple"
  ],
  "AnimPoseEvaluationOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "AnimPoseExtensions": [
   "get_anim_pose_at_time",
@@ -59,6 +93,8 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
+  "is_valid",
   "set_editor_property"
  ],
  "AnimPoseSpaces": [
@@ -75,6 +111,7 @@
   "get_path_name",
   "get_play_length",
   "get_skeleton",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "AnimSequenceBase": [
@@ -86,15 +123,30 @@
   "get_path_name",
   "get_play_length",
   "get_skeleton",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "AnimSyncMarker": [
   "time"
  ],
+ "AnimationLibrary": [
+  "get_anim_notify_event_trigger_time",
+  "get_animation_notify_events",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_path_name",
+  "get_typed_outer",
+  "set_editor_property"
+ ],
  "AnimationMode": [
   "ANIMATION_BLUEPRINT",
   "ANIMATION_SINGLE_NODE",
   "name"
+ ],
+ "AppleImageUtilsImageConversionResult": [
+  "error"
  ],
  "Array": [],
  "AssetData": [
@@ -102,7 +154,9 @@
   "get_class",
   "get_editor_property",
   "get_tag_value",
-  "set_editor_property"
+  "is_valid",
+  "set_editor_property",
+  "to_tuple"
  ],
  "AssetImportTask": [
   "get_class",
@@ -110,6 +164,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "imported_object_paths",
   "set_editor_property"
  ],
@@ -124,6 +179,8 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
+  "is_valid",
   "set_editor_property"
  ],
  "AssetTools": [
@@ -137,12 +194,16 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "AttachmentRule": [
   "KEEP_WORLD",
   "SNAP_TO_TARGET",
   "name"
+ ],
+ "AudioCaptureComponent": [
+  "start"
  ],
  "AutoExposureMethod": [
   "AEM_MANUAL",
@@ -162,11 +223,16 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property",
   "take_high_res_screenshot"
  ],
  "AutomationPerformaceHelper": [
   "sample"
+ ],
+ "BlendMode": [
+  "BLEND_OPAQUE",
+  "name"
  ],
  "Blueprint": [
   "generated_class",
@@ -175,6 +241,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "BlueprintEditorLibrary": [
@@ -187,6 +254,7 @@
   "get_member_variable_type",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "list_member_variable_names",
   "set_editor_property"
  ],
@@ -201,20 +269,38 @@
  ],
  "Box": [],
  "BoxSphereBounds": [],
+ "Button": [
+  "get_cached_geometry",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_is_enabled",
+  "get_name",
+  "get_parent",
+  "get_path_name",
+  "get_typed_outer",
+  "is_in_viewport",
+  "is_visible",
+  "set_editor_property"
+ ],
  "CameraActor": [
   "attach_to_component",
   "destroy_actor",
+  "get_actor_bounds",
   "get_actor_forward_vector",
   "get_actor_label",
   "get_actor_location",
   "get_actor_rotation",
+  "get_attached_actors",
   "get_class",
   "get_component_by_class",
   "get_components_by_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
   "set_actor_label",
   "set_actor_location_and_rotation",
@@ -226,17 +312,76 @@
   "set_constraint_aspect_ratio",
   "set_field_of_view"
  ],
+ "Canvas": [
+  "draw_texture"
+ ],
  "CapsuleComponent": [
-  "get_scaled_capsule_half_height"
+  "attach_to_component",
+  "get_all_socket_names",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_owner",
+  "get_path_name",
+  "get_scaled_capsule_half_height",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
+  "set_collision_enabled",
+  "set_editor_property",
+  "set_material",
+  "set_mobility",
+  "set_relative_location_and_rotation",
+  "visible"
  ],
  "ChaosWheeledVehicleMovementComponent": [
   "break_wheel_status",
   "get_num_wheels",
   "get_wheel_state"
  ],
- "Character": [],
+ "Character": [
+  "attach_to_component",
+  "destroy_actor",
+  "get_actor_bounds",
+  "get_actor_forward_vector",
+  "get_actor_label",
+  "get_actor_location",
+  "get_actor_rotation",
+  "get_attached_actors",
+  "get_class",
+  "get_component_by_class",
+  "get_components_by_class",
+  "get_control_rotation",
+  "get_controller",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_owner",
+  "get_path_name",
+  "get_typed_outer",
+  "get_velocity",
+  "player_state",
+  "set_actor_label",
+  "set_actor_location_and_rotation",
+  "set_actor_scale3d",
+  "set_editor_property",
+  "set_folder_path"
+ ],
+ "CharacterDefaultInputs": [
+  "control_rotation"
+ ],
  "CharacterMovementComponent": [
-  "is_falling"
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_owner",
+  "get_path_name",
+  "get_typed_outer",
+  "is_falling",
+  "set_editor_property"
  ],
  "Class": [
   "get_name",
@@ -254,7 +399,8 @@
  ],
  "Color": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "ComparisonTolerance": [
   "LOW",
@@ -264,6 +410,9 @@
   "MOVABLE",
   "STATIC",
   "name"
+ ],
+ "ContextualAnimRolesAsset": [
+  "roles"
  ],
  "ControlRigSnapperSelection": [
   "actors"
@@ -284,7 +433,12 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_atmosphere_sun_light",
   "set_bloom_scale",
   "set_bloom_threshold",
@@ -300,11 +454,14 @@
   "set_relative_location_and_rotation",
   "set_temperature",
   "set_use_temperature",
-  "set_volumetric_scattering_intensity"
+  "set_volumetric_scattering_intensity",
+  "visible"
  ],
  "DrawDebugTrace": [
-  "NONE"
+  "NONE",
+  "name"
  ],
+ "DrawToRenderTargetContext": [],
  "DynamicMesh": [
   "append_box",
   "append_linear_stairs",
@@ -321,8 +478,10 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "get_vertex_bone_weights",
   "recompute_normals",
+  "reset",
   "set_all_mesh_vertex_positions",
   "set_editor_property",
   "set_mesh_u_vs_from_box_projection",
@@ -349,6 +508,7 @@
   "get_metadata_tag",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "list_assets",
   "load_asset",
   "save_directory",
@@ -361,6 +521,9 @@
   "get_dirty_map_packages",
   "save_dirty_packages"
  ],
+ "EnhancedActionKeyMapping": [
+  "get_editor_property"
+ ],
  "ExponentialHeightFogComponent": [
   "attach_to_component",
   "get_all_socket_names",
@@ -368,7 +531,12 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_editor_property",
   "set_fog_density",
   "set_fog_height_falloff",
@@ -379,7 +547,8 @@
   "set_volumetric_fog_albedo",
   "set_volumetric_fog_distance",
   "set_volumetric_fog_extinction_scale",
-  "set_volumetric_fog_scattering_distribution"
+  "set_volumetric_fog_scattering_distribution",
+  "visible"
  ],
  "FKChainRotationMode": [
   "INTERPOLATED",
@@ -404,7 +573,9 @@
   "get_player_camera_manager",
   "get_player_controller",
   "get_player_pawn",
+  "get_real_time_seconds",
   "get_time_seconds",
+  "get_typed_outer",
   "get_world_delta_seconds",
   "is_game_paused",
   "set_editor_property",
@@ -414,11 +585,13 @@
  "GeometryScriptBoneWeight": [],
  "GeometryScriptCalculateNormalsOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptCollisionFromMeshOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptCollisionGenerationMethod": [
   "ALIGNED_BOXES",
@@ -427,35 +600,46 @@
  ],
  "GeometryScriptCopyMeshFromAssetOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptCopyMeshToAssetOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptCreateNewStaticMeshAssetOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptMeshBevelOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptMeshReadLOD": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptMeshSelection": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptMeshWriteLOD": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
+ ],
+ "GeometryScriptPointFlatteningOptions": [
+  "frame"
  ],
  "GeometryScriptPrimitiveOptions": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptPrimitiveOriginMode": [
   "BASE",
@@ -468,12 +652,14 @@
  "GeometryScriptTriangleList": [
   "convert_triangle_list_to_array",
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScriptVectorList": [
   "convert_vector_list_to_array",
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "GeometryScript_AssetUtils": [
   "copy_mesh_from_skeletal_mesh",
@@ -483,6 +669,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "GeometryScript_BoneWeights": [
@@ -493,6 +680,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "get_vertex_bone_weights",
   "set_editor_property"
  ],
@@ -502,6 +690,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property",
   "set_static_mesh_collision_from_mesh"
  ],
@@ -514,6 +703,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "GeometryScript_MeshEdits": [
@@ -522,6 +712,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_all_mesh_vertex_positions",
   "set_editor_property"
  ],
@@ -532,6 +723,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "GeometryScript_MeshQueries": [
@@ -542,6 +734,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "GeometryScript_NewAssetUtils": [
@@ -551,6 +744,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "GeometryScript_Normals": [
@@ -559,6 +753,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "recompute_normals",
   "set_editor_property"
  ],
@@ -573,6 +768,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "GeometryScript_UVs": [
@@ -581,6 +777,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property",
   "set_mesh_u_vs_from_box_projection",
   "set_mesh_u_vs_from_planar_projection"
@@ -594,7 +791,12 @@
   "get_editor_property",
   "get_instance_count",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_collision_enabled",
   "set_cull_distances",
   "set_editor_property",
@@ -602,7 +804,8 @@
   "set_mobility",
   "set_relative_location_and_rotation",
   "set_static_mesh",
-  "static_mesh"
+  "static_mesh",
+  "visible"
  ],
  "HitResult": [
   "to_tuple"
@@ -613,13 +816,15 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "run_batch_retarget",
   "set_editor_property"
  ],
  "IKRetargetBatchOperationInputs": [
   "get_editor_property",
   "search",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "IKRetargetFKChainsController": [
   "get_class",
@@ -628,6 +833,7 @@
   "get_name",
   "get_path_name",
   "get_settings",
+  "get_typed_outer",
   "set_editor_property",
   "set_settings"
  ],
@@ -638,6 +844,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "IKRetargetOpControllerBase": [],
@@ -649,6 +856,7 @@
   "get_name",
   "get_path_name",
   "get_settings",
+  "get_typed_outer",
   "set_editor_property",
   "set_settings"
  ],
@@ -659,6 +867,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "IKRetargeterController": [
@@ -678,6 +887,7 @@
   "get_op_controller",
   "get_path_name",
   "get_rotation_offset_for_retarget_pose_bone",
+  "get_typed_outer",
   "remove_all_ops",
   "reset_retarget_pose",
   "set_editor_property",
@@ -700,6 +910,7 @@
   "get_retarget_chain_start_bone",
   "get_retarget_chains",
   "get_retarget_root",
+  "get_typed_outer",
   "set_editor_property",
   "set_retarget_chain_start_bone",
   "set_skeletal_mesh"
@@ -710,6 +921,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "IKRigDefinitionFactory": [
@@ -718,6 +930,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "InputAction": [
@@ -726,6 +939,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "InputActionValueType": [
@@ -741,8 +955,13 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "key_is_valid",
   "set_editor_property"
+ ],
+ "InputMappingContext": [
+  "get_editor_property",
+  "get_name"
  ],
  "InstancedStaticMeshComponent": [
   "add_instances",
@@ -753,7 +972,12 @@
   "get_editor_property",
   "get_instance_count",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_collision_enabled",
   "set_cull_distances",
   "set_editor_property",
@@ -761,7 +985,8 @@
   "set_mobility",
   "set_relative_location_and_rotation",
   "set_static_mesh",
-  "static_mesh"
+  "static_mesh",
+  "visible"
  ],
  "IntVector": [],
  "InterchangeCombineStaticMeshesBehavior": [
@@ -775,6 +1000,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "InterchangeGenericCommonSkeletalMeshesAndAnimationsProperties": [],
@@ -786,11 +1012,13 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "Key": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "LevelEditorSubsystem": [
   "editor_request_end_play",
@@ -800,14 +1028,17 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "load_level",
   "save_current_level",
   "set_editor_property"
  ],
  "LinearColor": [
+  "distance",
   "get_editor_property",
   "set_editor_property",
-  "set_temperature"
+  "set_temperature",
+  "to_tuple"
  ],
  "LocalFogVolumeComponent": [
   "attach_to_component",
@@ -816,13 +1047,19 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_editor_property",
   "set_fog_albedo",
   "set_height_fog_extinction",
   "set_mobility",
   "set_radial_fog_extinction",
-  "set_relative_location_and_rotation"
+  "set_relative_location_and_rotation",
+  "visible"
  ],
  "LocalLightComponent": [
   "attach_to_component",
@@ -831,7 +1068,12 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_attenuation_radius",
   "set_bloom_scale",
   "set_bloom_threshold",
@@ -845,7 +1087,8 @@
   "set_relative_location_and_rotation",
   "set_temperature",
   "set_use_temperature",
-  "set_volumetric_scattering_intensity"
+  "set_volumetric_scattering_intensity",
+  "visible"
  ],
  "LocationVolume": [
   "load"
@@ -857,6 +1100,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialEditingLibrary": [
@@ -869,6 +1113,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "has_material_usage",
   "recompile_material",
   "set_editor_property",
@@ -884,6 +1129,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionComponentMask": [
@@ -892,6 +1138,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionConstant": [
@@ -900,6 +1147,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionConstant3Vector": [
@@ -908,6 +1156,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionLinearInterpolate": [
@@ -916,6 +1165,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionMultiply": [
@@ -924,6 +1174,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionNoise": [
@@ -932,6 +1183,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionOneMinus": [
@@ -940,6 +1192,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionSaturate": [
@@ -948,6 +1201,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionScalarParameter": [
@@ -956,6 +1210,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionVectorParameter": [
@@ -964,6 +1219,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionVertexNormalWS": [
@@ -972,6 +1228,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialExpressionWorldPosition": [
@@ -980,6 +1237,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialFactoryNew": [
@@ -988,6 +1246,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialInstanceConstant": [
@@ -997,6 +1256,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialInstanceConstantFactoryNew": [
@@ -1005,6 +1265,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialInterface": [
@@ -1014,6 +1275,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "MaterialProperty": [
@@ -1037,10 +1299,15 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "log",
   "set_editor_property",
   "sin",
-  "tan"
+  "tan",
+  "wrap"
+ ],
+ "MediaPlateComponent": [
+  "close"
  ],
  "MeshComponent": [
   "set_collision_enabled",
@@ -1048,13 +1315,32 @@
  ],
  "MeshNaniteSettings": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "MetasoundFrontendVersion": [
   "number"
  ],
+ "MoverTrajectoryPredictor": [
+  "setup"
+ ],
  "Name": [
-  "is_none"
+  "is_none",
+  "is_valid"
+ ],
+ "NavigationPath": [
+  "is_partial",
+  "is_valid"
+ ],
+ "NavigationSystemV1": [
+  "find_path_to_location_synchronously",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_path_name",
+  "get_typed_outer",
+  "set_editor_property"
  ],
  "NiagaraSystemCollection": [
   "release"
@@ -1064,6 +1350,12 @@
   "get_name",
   "set_editor_property",
   "static_class"
+ ],
+ "ObjectIterator": [],
+ "ObjectTypeQuery": [
+  "OBJECT_TYPE_QUERY1",
+  "OBJECT_TYPE_QUERY2",
+  "name"
  ],
  "Package": [
   "get_name"
@@ -1076,6 +1368,7 @@
   "get_name",
   "get_path_name",
   "get_project_file_path",
+  "get_typed_outer",
   "project_dir",
   "project_log_dir",
   "set_editor_property"
@@ -1083,19 +1376,25 @@
  "Pawn": [
   "attach_to_component",
   "destroy_actor",
+  "get_actor_bounds",
   "get_actor_forward_vector",
   "get_actor_label",
   "get_actor_location",
   "get_actor_rotation",
+  "get_attached_actors",
   "get_class",
   "get_component_by_class",
   "get_components_by_class",
+  "get_control_rotation",
   "get_controller",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
+  "player_state",
   "set_actor_label",
   "set_actor_location_and_rotation",
   "set_actor_scale3d",
@@ -1110,20 +1409,27 @@
  "PlayerController": [
   "attach_to_component",
   "destroy_actor",
+  "get_actor_bounds",
   "get_actor_forward_vector",
   "get_actor_label",
   "get_actor_location",
   "get_actor_rotation",
+  "get_attached_actors",
   "get_class",
   "get_component_by_class",
   "get_components_by_class",
+  "get_control_rotation",
   "get_controlled_pawn",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
   "get_view_target",
+  "get_viewport_size",
+  "player_state",
   "set_actor_label",
   "set_actor_location_and_rotation",
   "set_actor_scale3d",
@@ -1133,17 +1439,21 @@
  "PlayerStart": [
   "attach_to_component",
   "destroy_actor",
+  "get_actor_bounds",
   "get_actor_forward_vector",
   "get_actor_label",
   "get_actor_location",
   "get_actor_rotation",
+  "get_attached_actors",
   "get_class",
   "get_component_by_class",
   "get_components_by_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
   "set_actor_label",
   "set_actor_location_and_rotation",
@@ -1162,13 +1472,16 @@
   "get_actor_label",
   "get_actor_location",
   "get_actor_rotation",
+  "get_attached_actors",
   "get_class",
   "get_component_by_class",
   "get_components_by_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
   "set_actor_label",
   "set_actor_location_and_rotation",
@@ -1176,11 +1489,49 @@
   "set_editor_property",
   "set_folder_path"
  ],
- "PrimitiveComponent": [],
+ "PrimitiveComponent": [
+  "attach_to_component",
+  "get_all_socket_names",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_owner",
+  "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
+  "set_collision_enabled",
+  "set_editor_property",
+  "set_material",
+  "set_mobility",
+  "set_relative_location_and_rotation",
+  "visible"
+ ],
+ "QuartzTransportTimeStamp": [
+  "seconds"
+ ],
  "Quat": [
   "get_editor_property",
   "log",
   "rotator",
+  "set_editor_property",
+  "to_tuple"
+ ],
+ "RenderingLibrary": [
+  "begin_draw_canvas_to_render_target",
+  "create_render_target2d",
+  "end_draw_canvas_to_render_target",
+  "export_render_target",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_path_name",
+  "get_typed_outer",
+  "import_file_as_texture2d",
+  "read_render_target",
   "set_editor_property"
  ],
  "RetargetAutoAlignMethod": [
@@ -1196,15 +1547,22 @@
  "RigHierarchyController": [
   "add_component"
  ],
+ "RigLocalAndGlobalDirtyState": [
+  "local"
+ ],
  "RigUnit_ChainInfo": [
   "param"
  ],
  "RigUnit_CurveExists": [
   "exists"
  ],
+ "RigUnit_DrawDebugCatmullRomSpline": [
+  "monotonic"
+ ],
  "Rotator": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "SceneComponent": [
   "get_editor_property",
@@ -1232,22 +1590,27 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "SkeletalMeshActor": [
   "attach_to_component",
   "destroy_actor",
+  "get_actor_bounds",
   "get_actor_forward_vector",
   "get_actor_label",
   "get_actor_location",
   "get_actor_rotation",
+  "get_attached_actors",
   "get_class",
   "get_component_by_class",
   "get_components_by_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
   "set_actor_label",
   "set_actor_location_and_rotation",
@@ -1258,13 +1621,18 @@
  "SkeletalMeshComponent": [
   "attach_to_component",
   "get_all_socket_names",
+  "get_anim_instance",
   "get_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
   "get_skinned_asset",
   "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_animation",
   "set_animation_mode",
   "set_collision_enabled",
@@ -1277,7 +1645,8 @@
   "set_skeletal_mesh",
   "set_skeletal_mesh_asset",
   "set_update_animation_in_editor",
-  "skeletal_mesh"
+  "skeletal_mesh",
+  "visible"
  ],
  "Skeleton": [
   "get_class",
@@ -1285,6 +1654,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "SkyAtmosphereComponent": [
@@ -1294,11 +1664,17 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_editor_property",
   "set_mobility",
   "set_relative_location_and_rotation",
-  "set_sky_luminance_factor"
+  "set_sky_luminance_factor",
+  "visible"
  ],
  "SkyLightComponent": [
   "attach_to_component",
@@ -1307,7 +1683,12 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_cast_shadows",
   "set_cast_volumetric_shadow",
   "set_editor_property",
@@ -1316,7 +1697,19 @@
   "set_mobility",
   "set_real_time_capture",
   "set_relative_location_and_rotation",
-  "set_volumetric_scattering_intensity"
+  "set_volumetric_scattering_intensity",
+  "visible"
+ ],
+ "SlateLibrary": [
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_local_size",
+  "get_name",
+  "get_path_name",
+  "get_typed_outer",
+  "local_to_viewport",
+  "set_editor_property"
  ],
  "SoftClassPath": [
   "export_text"
@@ -1327,7 +1720,11 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
+ ],
+ "SparseVolumeTextureViewerComponent": [
+  "playing"
  ],
  "SplineComponent": [
   "attach_to_component",
@@ -1338,16 +1735,22 @@
   "get_location_at_distance_along_spline",
   "get_name",
   "get_number_of_spline_points",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
   "get_spline_length",
+  "get_typed_outer",
   "is_closed_loop",
+  "is_simulating_physics",
+  "is_visible",
   "set_closed_loop",
   "set_collision_enabled",
   "set_editor_property",
   "set_material",
   "set_mobility",
   "set_relative_location_and_rotation",
-  "set_spline_points"
+  "set_spline_points",
+  "visible"
  ],
  "SplineCoordinateSpace": [
   "LOCAL",
@@ -1364,23 +1767,28 @@
   "get_num_nanite_triangles",
   "get_num_triangles",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property",
   "set_material"
  ],
  "StaticMeshActor": [
   "attach_to_component",
   "destroy_actor",
+  "get_actor_bounds",
   "get_actor_forward_vector",
   "get_actor_label",
   "get_actor_location",
   "get_actor_rotation",
+  "get_attached_actors",
   "get_class",
   "get_component_by_class",
   "get_components_by_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_typed_outer",
   "get_velocity",
   "set_actor_label",
   "set_actor_location_and_rotation",
@@ -1396,14 +1804,20 @@
   "get_default_object",
   "get_editor_property",
   "get_name",
+  "get_owner",
   "get_path_name",
+  "get_socket_location",
+  "get_typed_outer",
+  "is_simulating_physics",
+  "is_visible",
   "set_collision_enabled",
   "set_editor_property",
   "set_material",
   "set_mobility",
   "set_relative_location_and_rotation",
   "set_static_mesh",
-  "static_mesh"
+  "static_mesh",
+  "visible"
  ],
  "StaticMeshEditorSubsystem": [
   "add_simple_collisions",
@@ -1413,6 +1827,7 @@
   "get_name",
   "get_nanite_settings",
   "get_path_name",
+  "get_typed_outer",
   "remove_collisions",
   "set_convex_decomposition_collisions",
   "set_editor_property",
@@ -1427,12 +1842,15 @@
   "get_object",
   "get_object_for_blueprint",
   "get_path_name",
+  "get_typed_outer",
   "get_variable_name",
+  "is_valid",
   "set_editor_property"
  ],
  "SubobjectDataHandle": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "SubobjectDataSubsystem": [
   "add_new_subobject",
@@ -1441,6 +1859,7 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "k2_find_subobject_data_from_handle",
   "k2_gather_subobject_data_for_blueprint",
   "k2_gather_subobject_data_for_instance",
@@ -1449,6 +1868,7 @@
  ],
  "SystemLibrary": [
   "execute_console_command",
+  "get_actor_bounds",
   "get_class",
   "get_component_bounds",
   "get_console_variable_int_value",
@@ -1457,14 +1877,26 @@
   "get_engine_version",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
+  "is_valid",
   "line_trace_single",
+  "line_trace_single_for_objects",
   "raise_script_error",
   "set_editor_property"
  ],
  "Text": [],
+ "TextBlock": [
+  "get_text"
+ ],
  "Texture2D": [
   "blueprint_get_size_x",
   "blueprint_get_size_y"
+ ],
+ "TextureRenderTarget2D": [],
+ "TextureRenderTargetFormat": [
+  "RTF_RGBA8",
+  "RTF_RGBA8_SRGB",
+  "name"
  ],
  "ToolsetDefinition": [
   "get_class",
@@ -1472,20 +1904,27 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
  "TopLevelAssetPath": [
   "get_editor_property",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "TraceTypeQuery": [
-  "TRACE_TYPE_QUERY1"
+  "TRACE_TYPE_QUERY1",
+  "name"
  ],
  "Transform": [
   "get_editor_property",
   "scale3d",
   "set_editor_property",
+  "to_tuple",
   "translation"
+ ],
+ "UMGWidgetDescriptionResult": [
+  "widgets"
  ],
  "UnrealEditorSubsystem": [
   "get_class",
@@ -1496,21 +1935,39 @@
   "get_level_viewport_camera_info",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "set_editor_property"
  ],
- "UserWidget": [],
+ "UserWidget": [
+  "get_cached_geometry",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_is_enabled",
+  "get_name",
+  "get_parent",
+  "get_path_name",
+  "get_typed_outer",
+  "is_in_viewport",
+  "is_visible",
+  "set_editor_property"
+ ],
  "Vector": [
   "cross",
+  "distance",
   "get_editor_property",
   "length",
   "rotator",
-  "set_editor_property"
+  "set_editor_property",
+  "to_tuple"
  ],
  "Vector2D": [
   "cross",
+  "distance",
   "get_editor_property",
   "length",
   "set_editor_property",
+  "to_tuple",
   "vector"
  ],
  "Vector4": [
@@ -1518,6 +1975,7 @@
   "length",
   "rotator",
   "set_editor_property",
+  "to_tuple",
   "vector"
  ],
  "ViewportCapture": [
@@ -1531,12 +1989,47 @@
   "get_editor_property"
  ],
  "WheeledVehiclePawn": [],
+ "Widget": [
+  "get_cached_geometry",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_is_enabled",
+  "get_name",
+  "get_parent",
+  "get_path_name",
+  "get_typed_outer",
+  "is_in_viewport",
+  "is_visible",
+  "set_editor_property"
+ ],
+ "WidgetLayoutLibrary": [
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_path_name",
+  "get_typed_outer",
+  "get_viewport_size",
+  "set_editor_property"
+ ],
+ "WidgetLibrary": [
+  "get_all_widgets_of_class",
+  "get_class",
+  "get_default_object",
+  "get_editor_property",
+  "get_name",
+  "get_path_name",
+  "get_typed_outer",
+  "set_editor_property"
+ ],
  "World": [
   "get_class",
   "get_default_object",
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "get_typed_outer",
   "get_world_settings",
   "set_editor_property"
  ],

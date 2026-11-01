@@ -26,6 +26,7 @@ import {
   StateLevel,
   TargetRuntime,
 } from "../../src/shared/computer-target.ts";
+import { editorCapabilities } from "../../src/shared/engine-play.ts";
 import { clickModifiers, parseCombo, pointInView, capActions } from "../../src/substrate/preview-input.ts";
 
 describe("computer tool — parsing either transport", () => {
@@ -57,9 +58,11 @@ describe("computer tool — parsing either transport", () => {
     const wait = parseComputerArgs({ action: "wait", duration: "900" });
     assert.equal(wait.ok && wait.request.duration, 300, "waits are capped at five minutes");
     // The web verbs are described where a target reads pages (the desktop), every other verb on a game's window.
+    // walk_to and look_at are described where an engine's play declares it walks, pilot where it runs pilots.
     const described =
       computerToolDefinition().description +
-      computerToolDefinition({ role: "operator", capabilities: DESKTOP_CAPABILITIES }).description;
+      computerToolDefinition({ role: "operator", capabilities: DESKTOP_CAPABILITIES }).description +
+      computerToolDefinition({ capabilities: editorCapabilities({ walk: true, pilot: true }) }).description;
     for (const action of COMPUTER_ACTIONS)
       assert.ok(
         described.includes(action) ||
@@ -289,6 +292,8 @@ describe("computer tool — built from what the target can do", () => {
 
   /** The verbs only a desktop offers: an app brought forward, a page opened in the person's browser. */
   const DESKTOP_ONLY: ReadonlySet<string> = new Set(["bring_to_front", "open_page"]);
+  /** The verbs only an engine's play that walks or runs pilots offers. */
+  const WALKING: ReadonlySet<string> = new Set(["walk_to", "look_at", "pilot"]);
 
   it("offers a browser game real input, screenshots and its console, and asks the game nothing", () => {
     // Flipped (phase 5): `camera` and `state` read window.__studio, which no game carries now.
@@ -299,7 +304,12 @@ describe("computer tool — built from what the target can do", () => {
       // verbs, bring_to_front and open_page are the desktop's, never a game window's.
       COMPUTER_ACTIONS.filter(
         (action) =>
-          action !== "act" && !action.startsWith("web_") && !DESKTOP_ONLY.has(action) && !asksTheGame.has(action),
+          action !== "act" &&
+          !action.startsWith("web_") &&
+          !DESKTOP_ONLY.has(action) &&
+          !asksTheGame.has(action) &&
+          // Flipped on purpose: walking and looking by itself is an engine play's, never a browser game's.
+          !WALKING.has(action),
       ),
     );
     for (const kept of ["screenshot", "zoom", "left_click", "key", "look", "console", "reload"])

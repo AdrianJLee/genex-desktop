@@ -50,6 +50,7 @@ import { PickerModels } from "./PickerModels.tsx";
 import { CatalogNoteKind, catalogNote } from "./catalog-note.ts";
 import { type ProviderWords, RowHeading, RowTone, type RowView } from "./provider-row.tsx";
 import { MeteredProviderRows } from "./MeteredProviders.tsx";
+import { FastDecisionsRow } from "./FastDecisionsRow.tsx";
 import { LocalServerRow } from "./LocalServerRow.tsx";
 import { errorCode } from "../../shared/errors.ts";
 
@@ -751,6 +752,7 @@ export function ModelProvidersSection({ engines, onEnginesRefresh }: ModelSettin
       ))}
       <MeteredProviderRows engines={engines} onEnginesRefresh={onEnginesRefresh} />
       {localServer && <LocalServerRow engine={localServer} onEnginesRefresh={onEnginesRefresh} />}
+      <FastDecisionsRow />
     </div>
   );
 }

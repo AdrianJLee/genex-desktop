@@ -1154,6 +1154,12 @@ export const PluginService = {
    */
   GameEngineAssisting: "game.engine.assisting",
   /**
+   * `game-engine`: computer control for the bound game's chat: when it is off, Genex asks the person
+   * on its card to turn it on (then macOS's own grants) and starts the chat's next turn with the
+   * task; when it is on, nothing is posted. It grants no app: each still asks on its own card.
+   */
+  GameComputerControl: "game.computer.control",
+  /**
    * `game-engine`: a long job of the plugin's (an engine's build or package) started in Genex's
    * process sandbox, writing only folders inside the bound game; answers its id at once, and the
    * host owns the job from then on.
@@ -1243,6 +1249,8 @@ export const EngineAssistRefusal = {
    * answers it does the clicking, so nothing more is posted.
    */
   InAssist: "in-assist",
+  /** Computer control is on already: the chat's turn can click now, so nothing was posted. */
+  AlreadyOn: "already-on",
 } as const;
 export type EngineAssistRefusal = (typeof EngineAssistRefusal)[keyof typeof EngineAssistRefusal];
 

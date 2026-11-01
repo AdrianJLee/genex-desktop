@@ -18,7 +18,13 @@ import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, sta
 import os from "node:os";
 import path from "node:path";
 import { sandboxBesidePlugins } from "./core/boot-side-by-side.ts";
-import { assistAvailable, assistUnderWay, coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
+import {
+  assistAvailable,
+  assistUnderWay,
+  computerControlAssist,
+  coreAssistHost,
+  engineAssist,
+} from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { MentionSources } from "./core/mention-tags.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
@@ -101,7 +107,13 @@ import { LOCK_RECOVERY_DIR } from "../substrate/engines/ownership-locks.ts";
 import { OpenRouterEngine } from "../substrate/engines/openrouter.ts";
 import { LocalServerEngine } from "../substrate/engines/local-server.ts";
 import { serverSettings } from "../substrate/local-server/settings.ts";
-import { LOCAL_SERVER_KEY_SECRET, OPENROUTER_KEY_SECRET, secretKeyStore } from "../substrate/provider-keys.ts";
+import {
+  LOCAL_SERVER_KEY_SECRET,
+  OPENROUTER_KEY_SECRET,
+  secretKeyStore,
+  TYPESAFE_KEY_SECRET,
+} from "../substrate/provider-keys.ts";
+import { FastDecisions } from "./core/fast-decisions.ts";
 import { EngineRegistry } from "../substrate/engines/registry.ts";
 import type { Engine, LiveToolResult } from "../substrate/engines/types.ts";
 import { EventStore } from "../substrate/event-store.ts";
@@ -485,6 +497,8 @@ export class StudioCore {
   readonly snapshots: SnapshotEngine;
   readonly snapshotIndex = new SnapshotIndex();
   readonly engines = new EngineRegistry();
+  /** The fast decision model a play's pilot may ask, on the TypeSafe key saved in Settings (optional). */
+  readonly fastDecisions: FastDecisions;
   readonly contextPreferences: ContextPreferences;
   readonly games: GameWorkspaces;
   readonly journal: UpdateJournal;
@@ -593,6 +607,9 @@ export class StudioCore {
     this.#consent = new PluginConsent({ timeoutMs: options.consentTimeoutMs ?? CONSENT_TIMEOUT_MS });
     this.locks = this.#createLocks();
     this.layout = layoutFor(options.paths.userData);
+    this.fastDecisions = new FastDecisions(
+      secretKeyStore(path.join(this.layout.secrets, "providers"), TYPESAFE_KEY_SECRET),
+    );
     this.appLook = options.appLook ?? unsupportedAppLook();
     this.screenAccess = options.screenAccess ?? null;
     if (options.gamesRoot) this.layout.gamesRoot = options.gamesRoot;
@@ -1203,6 +1220,9 @@ export class StudioCore {
     services.engineCanAssist = (pluginId) => assistAvailable(coreAssistHost(this), pluginId);
     // `game.engine.assisting`: whether the chat still runs it, so a plugin's card ends with its turn.
     services.engineAssisting = (pluginId, binding) => assistUnderWay(coreAssistHost(this), pluginId, binding);
+    // `game.computer.control`: the setting's card for a chat whose agent needs computer control.
+    services.computerControl = (pluginId, binding, task, call) =>
+      computerControlAssist(coreAssistHost(this), { pluginId, binding, task, ...call });
   }
 
   /** The registry's start, each part of it marked so a slow plugin setup's log says which part held it. */

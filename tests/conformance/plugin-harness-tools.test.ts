@@ -128,6 +128,7 @@ const UNREAL_PROJECT_TOOLS = [
   `unreal__${MotionToolName.Add}`,
   ...Object.values(EditorControlToolName).map((name) => `unreal__${name}`),
   ...Object.values(GamePackageToolName).map((name) => `unreal__${name}`),
+  "unreal__click-interface",
 ];
 /** The steps only the Unreal Loop's runner and the live builder's checkpoint take, through the harness's own plugin calls. */
 const RUNNER_TOOLS = [

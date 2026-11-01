@@ -129,6 +129,9 @@ const METHODS = [
   "cursorSignOut",
   "openRouterKeySave",
   "openRouterKeyClear",
+  "typeSafeKeyStatus",
+  "typeSafeKeySave",
+  "typeSafeKeyClear",
   "openRouterSignIn",
   "openRouterSignInReopen",
   "openRouterSignInCancel",
@@ -370,6 +373,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     retrySandboxSetup: ready,
     setUpSandbox: () => ({ outcome: "installed", state: ready() }),
     readyUpdate: () => null,
+    typeSafeKeyStatus: () => ({ state: "missing" }),
     appAbout: () => ({ version: "0.1.0", platform: "darwin", arch: "arm64" }),
     bootstrap: () => ({
       threadId: "thread-main",

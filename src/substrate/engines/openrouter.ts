@@ -37,6 +37,7 @@ import { LocalSessions } from "./local-session.ts";
 import { CompletionStop, DEFAULT_COMPACTION_PERCENT, STOPPED_BY_USER } from "./common.ts";
 import type { ApiKeyStore } from "../provider-keys.ts";
 import { SecretStorageUnavailableError } from "../secrets.ts";
+import { cleanApiKey } from "../provider-keys.ts";
 import { HOUR_MS, SECOND_MS } from "../../shared/duration.ts";
 import { ContextSource } from "../../shared/context.ts";
 import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts";
@@ -71,8 +72,6 @@ const CHARS_PER_TOKEN = 3;
 const IMAGE_RESERVE_TOKENS = 1_600;
 /** Tokens set aside for the provider's chat template around the messages and tools. */
 const TEMPLATE_SLACK_TOKENS = 512;
-/** The shortest and longest a pasted key may be, and the characters it may hold (no space, no newline). */
-const KEY_SHAPE = /^[\x21-\x7e]{16,512}$/;
 /** The reasoning efforts a thinking model is offered; OpenRouter maps them onto each provider's own dial. */
 const OPENROUTER_EFFORTS = [ReasoningEffort.Low, ReasoningEffort.Medium, ReasoningEffort.High] as const;
 /** Tokens per million, the unit OpenRouter's catalog prices are quoted against. */
@@ -243,12 +242,8 @@ function estimatedPromptTokens(request: CompleteRequest): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
-/** The key as pasted, trimmed, or null when it cannot be a key (a space, a newline, too short or long). */
-export function cleanApiKey(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const key = value.trim();
-  return KEY_SHAPE.test(key) ? key : null;
-}
+/** The key as pasted, trimmed, or null when it cannot be a key; the rule is every pasted key's (`provider-keys.ts`). */
+export { cleanApiKey };
 
 export interface OpenRouterEngineOptions {
   /** The engine's home: its sessions live under it. */

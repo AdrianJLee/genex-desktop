@@ -135,6 +135,8 @@ describe("a plugin's engine declaration", () => {
       projectFiles: [".uproject"],
       fact: "unreal-project",
       projectInFolder: true,
+      // Flipped on purpose: Unreal's play walks the player and turns its view by itself.
+      play: { walk: true, pilot: true },
       // Epic's launcher, which Do it for me installs Unreal in: never Unreal's editor.
       apps: { mac: ["com.epicgames.EpicGamesLauncher"], windows: ["EpicGamesLauncher.exe", "EpicWebHelper.exe"] },
     });

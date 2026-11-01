@@ -388,6 +388,20 @@ OpenCode 2.x's background server listens outside any sandbox; its password
 (`~/.config/opencode/service.json`) is in every sandbox's deny-read list (`baseDenyRead`), but a
 server the person runs without a password stays reachable.
 
+## TypeSafe (fast decisions for pilots)
+
+Optional, and not a model engine: TypeSafe's Jev answers typed questions in a fraction of a second,
+and an engine play's pilot (see [computer use](computer-use.md)) may ask it which of its moves to make.
+Settings → Model Providers ends with its row ([FastDecisionsRow.tsx](../src/renderer/panels/FastDecisionsRow.tsx)).
+A pasted key goes over `studio:typesafe.key.save` (native); main
+([fast-decisions.ts](../src/main/core/fast-decisions.ts)) checks it with TypeSafe's `GET /v1/models`,
+keeps it only when taken (`typesafe-api-key` in the SecretStore under `userData/secrets/providers`) and
+answers its state, never the key; `studio:typesafe.key.status` (fixture-safe) reads whether one is
+saved. A play's decider ([typesafe.ts](../src/substrate/typesafe.ts)) sends each ask as one
+`POST /v1/systemone` on the pinned `jev-1.14.0` (`FAST_DECISION_MODEL`): a `choice` named `genex_move` over
+the moves beside the pilot's own questions, dropped after 1.5 s. Without a key nothing reaches
+TypeSafe and pilots choose by their own order.
+
 ## MCP setup
 
 Add server opens one window: a paste box, then On this Mac or From a URL, a name, the command

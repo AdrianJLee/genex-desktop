@@ -6195,4 +6195,15 @@ export default {
   "In the running build": "En el build en curso",
   "Not in your game yet. It arrives when the build lands.":
     "Aún no está en tu juego. Llega cuando el build se integre.",
+  "Couldn't reach TypeSafe to check the key: {why}": "No se pudo contactar con TypeSafe para comprobar la clave: {why}",
+  Key: "Clave",
+  "Optional. With a key, Unreal play-tests pick their moves with Jev, several times a second.":
+    "Opcional. Con una clave, las pruebas en Unreal eligen sus jugadas con Jev varias veces por segundo.",
+  "That doesn't look like a TypeSafe key. Copy it again from TypeSafe's console.":
+    "Eso no parece una clave de TypeSafe. Cópiala otra vez desde la consola de TypeSafe.",
+  "TypeSafe API key": "Clave de API de TypeSafe",
+  "TypeSafe didn't accept that key. Check it and paste it again.":
+    "TypeSafe no aceptó esa clave. Revísala y pégala otra vez.",
+  "TypeSafe key": "Clave de TypeSafe",
+  "Unreal play-tests pick their moves with Jev": "Las pruebas en Unreal eligen sus jugadas con Jev",
 } satisfies LocaleCatalog;

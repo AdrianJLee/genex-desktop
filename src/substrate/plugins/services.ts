@@ -308,6 +308,18 @@ export class PluginServices {
       ) => Promise<EngineAssistAnswer>)
     | undefined;
   /**
+   * Computer control for a game's chat (`game.computer.control`): the setting's card when it is off,
+   * then the chat's next turn with the task. Unset, every call answers `unavailable`.
+   */
+  computerControl:
+    | ((
+        pluginId: string,
+        binding: PluginBinding | undefined,
+        task: string,
+        call: { asked: boolean; signal?: AbortSignal },
+      ) => Promise<EngineAssistAnswer>)
+    | undefined;
+  /**
    * Host assists' reach (`game.engine.canAssist`): whether Do it for me can run for the plugin on this
    * computer. Unset, it never can.
    */
@@ -353,6 +365,7 @@ export class PluginServices {
     [PluginService.GameSnapshot]: ({ args, binding }) => this.#gameSnapshot(requireBinding(binding), args?.reason),
     [PluginService.GameEngineRuns]: ({ id }) => this.#engineRuns(id),
     [PluginService.GameEngineAssist]: (call) => this.#assist(call),
+    [PluginService.GameComputerControl]: (call) => this.#computerControl(call),
     [PluginService.GameEngineCanAssist]: async ({ id }) => (this.engineCanAssist ? this.engineCanAssist(id) : false),
     [PluginService.GameEngineAssisting]: async ({ id, binding }) => {
       if (!this.engineAssisting) throw new Error(MESSAGE.AssistsUnavailable);
@@ -383,6 +396,16 @@ export class PluginServices {
     const asked = isPersonsCall(invocation, binding);
     return this.engineAssist(id, binding, task, {
       asked,
+      ...(invocation?.signal ? { signal: invocation.signal } : {}),
+    });
+  }
+  /** Computer control for the chat (`game.computer.control`): never a Genex moment's or an observer's step. */
+  async #computerControl({ id, args, binding, invocation }: ServiceCall): Promise<EngineAssistAnswer> {
+    if (isGenexStep(invocation, binding)) return { started: false, reason: EngineAssistRefusal.NotPerson };
+    const task = assistTask(args?.task);
+    if (!this.computerControl) return { started: false, reason: EngineAssistRefusal.Unavailable };
+    return this.computerControl(id, binding, task, {
+      asked: isPersonsCall(invocation, binding),
       ...(invocation?.signal ? { signal: invocation.signal } : {}),
     });
   }

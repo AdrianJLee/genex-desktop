@@ -73,6 +73,8 @@ import {
   wantsUnreal,
 } from "./editor-port.ts";
 import { callProjectTool } from "./editor-mcp.ts";
+import { clickInterface } from "./click-interface.ts";
+import { ensureStarterPilot } from "./starter-pilot.ts";
 import { type ProcessEnv, systemProcesses } from "./editor-reopen.ts";
 import { pollUntil } from "./editor-queue.ts";
 import { QUIT_WAIT_MS, RESTART_POLL_MS } from "./editor-restart.ts";
@@ -214,6 +216,7 @@ const UnrealTool = {
   WaitEditor: "wait-editor",
   EngineStatus: "engine-status",
   InstallUnreal: "install-unreal",
+  ClickInterface: "click-interface",
 } as const;
 type UnrealTool = (typeof UnrealTool)[keyof typeof UnrealTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(UnrealTool));
@@ -1942,7 +1945,10 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
   const tools: Record<UnrealTool, ToolHandler> = {
     [UnrealTool.UseProject]: async (args, context) => {
       const storage = (await setupOptions(deps, context)).storage;
-      return usedWords(await useProject(deps, await namedProject(textArg(args, "project"), storage), context));
+      const used = await useProject(deps, await namedProject(textArg(args, "project"), storage), context);
+      // A linked game gets Genex's starter pilot, so its first playtest can start playing at once.
+      await ensureStarterPilot(context.directory);
+      return usedWords(used);
     },
     [UnrealTool.ShowSteps]: (_args, context) => showSteps(deps, context),
     [UnrealTool.NewGame]: (args, context) => newGame(deps, args, context),
@@ -1950,6 +1956,7 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
     [UnrealTool.WaitEditor]: (args, context) => waitEditor(deps, args, context),
     [UnrealTool.EngineStatus]: async () => readinessAnswer(engineReadiness(await findEngines(deps.env))),
     [UnrealTool.InstallUnreal]: async (_args, context) => forMeSays(await doItForMe(deps, context, forMe)),
+    [UnrealTool.ClickInterface]: (args, context) => clickInterface(args, context),
   };
   return {
     async action(name, args, context) {

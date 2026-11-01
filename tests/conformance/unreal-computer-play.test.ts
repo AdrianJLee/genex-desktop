@@ -9,11 +9,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
 import { agentPlaying } from "../../src/plugins/unreal/agent-play.ts";
+import { SECOND_MS } from "../../src/shared/duration.ts";
 import {
   ENGINE_PLAY_VIEW,
+  EnginePlayOptionalTool,
   EnginePlayRefusal,
   type EnginePlayShot,
   EnginePlayTool,
+  type EnginePlayWalked,
 } from "../../src/shared/engine-play.ts";
 import { createComputerPlay, unrealKey } from "../../src/plugins/unreal/computer-play.ts";
 import { createEditorQueue, LoopTool } from "../../src/plugins/unreal/editor-queue.ts";
@@ -34,12 +37,18 @@ const CONTEXT: PluginContext = {
 };
 
 /** The play tools over a stand-in editor that plays the game at `rate` game seconds per second. */
-function playTools(options: { rate?: number; storage?: string } = {}) {
+function playTools(
+  options: {
+    rate?: number;
+    storage?: string;
+    overrides?: Partial<Record<string, (args: Record<string, unknown>) => unknown>>;
+  } = {},
+) {
   const storage = options.storage ?? STORAGE;
-  const game = playable({ rate: options.rate ?? 1 });
+  const game = playable({ rate: options.rate ?? 1 }, options.overrides);
   const queue = createEditorQueue(game.deps);
   const play = createComputerPlay({ queueDeps: () => game.deps, queue: () => queue, game: () => GAME });
-  const call = (tool: EnginePlayTool, args: Record<string, unknown> = {}) =>
+  const call = (tool: EnginePlayTool | EnginePlayOptionalTool, args: Record<string, unknown> = {}) =>
     play.handlers[tool](args, CONTEXT, storage);
   const tools = () => game.editor.calls.map(([tool]) => tool);
   const agentPlays = () => agentPlaying(storage, GAME, game.deps.now());
@@ -79,6 +88,21 @@ describe("the Unreal plugin's play tools for the computer", () => {
     const { call, seconds } = playTools({ rate: 0.5 });
     await call(EnginePlayTool.Open);
     assert.ok(seconds() >= 2, "the play ran 2 game seconds before the session looks");
+  });
+
+  it("answers a tap soon after its tenth of a game second, not a quarter second later", async () => {
+    const { call, deps } = playTools();
+    await call(EnginePlayTool.Open);
+    const before = deps.now();
+    await call(EnginePlayTool.Input, { keys: "KeyI", seconds: 0.1 });
+    assert.ok(deps.now() - before <= 150, `a 0.1 s tap took ${deps.now() - before} ms of the queue's clock`);
+  });
+
+  it("looks soon at a game that waits paused on its title menu, its clock standing still", async () => {
+    const { call, deps } = playTools({ rate: 0 });
+    const before = deps.now();
+    await call(EnginePlayTool.Open);
+    assert.ok(deps.now() - before <= 3 * SECOND_MS, `waited ${deps.now() - before} ms for a clock that never moves`);
   });
 
   // A plugin update restarts the backend mid-session: the play the old session started must not outlive it.
@@ -199,16 +223,113 @@ describe("the Unreal plugin's play tools for the computer", () => {
     }
   });
 
-  it("takes the player's view as a PNG at the view's size, and reads the player", async () => {
+  it("takes the player's view as a PNG at the view's size, its on-screen UI in it, and reads the player", async () => {
     const { call, captures } = playTools();
     await call(EnginePlayTool.Open);
     const shot = (await call(EnginePlayTool.Shot)) as EnginePlayShot;
     assert.deepEqual([shot.width, shot.height], [ENGINE_PLAY_VIEW.width, ENGINE_PLAY_VIEW.height]);
     assert.match(captures[0]?.name ?? "", /^genex-computer-\d+$/);
+    assert.equal(captures[0]?.ui, true, "the HUD, a menu or an inventory, as the player sees them");
     assert.equal(shot.png, `png:/p/Saved/Genex/captures/${captures[0]?.name}.png`);
     assert.deepEqual([shot.data, shot.mime], [shot.png, "image/png"], "the picture also as data, named as a PNG");
     const state = (await call(EnginePlayTool.State)) as { pawn: string; gameSeconds: number };
     assert.equal(state.pawn, "OffroadCar_0");
+  });
+
+  it("still takes the player's view, without the UI, from a project whose older helper refuses the UI shot", async () => {
+    const olderHelper = (a: Record<string, unknown>) =>
+      a.ui
+        ? { error: "capture_play() got an unexpected keyword argument 'ui'" }
+        : { queued: true, file: `/p/Saved/Genex/captures/${a.name}.png` };
+    const { call, editor, files } = playTools({ overrides: { [LoopTool.CapturePlay]: olderHelper } });
+    for (const file of ["/p/Saved/Genex/captures/genex-computer-1.png"]) files.add(file);
+    await call(EnginePlayTool.Open);
+    const shot = (await call(EnginePlayTool.Shot)) as EnginePlayShot;
+    assert.match(String(shot.png), /^png:\/p\/Saved\/Genex\/captures\/genex-computer-\d+\.png$/);
+    const asked = editor.calls.filter(([tool]) => tool === LoopTool.CapturePlay).map(([, args]) => args.ui);
+    assert.deepEqual(asked, [true, false]);
+  });
+
+  it("walks the player through the helper and answers once the walk has ended", async () => {
+    const asked: Array<Record<string, unknown>> = [];
+    let reads = 0;
+    const walk = (state: string) => ({
+      state,
+      target: "BP_Door_2",
+      way: "navmesh",
+      partial: false,
+      distanceM: state === "arrived" ? 0.9 : 6,
+      tried: [],
+      reason: "",
+      gameSeconds: 4,
+    });
+    const { call } = playTools({
+      overrides: {
+        walk_to: (args) => {
+          asked.push(args);
+          return { walking: true, target: "BP_Door_2", way: "navmesh", waypoints: 3, distanceM: 8 };
+        },
+        player_state: () => ({ pawn: "BP_Hero_0", walk: walk(++reads < 3 ? "walking" : "arrived") }),
+      },
+    });
+    await call(EnginePlayTool.Open);
+    const walked = (await call(EnginePlayOptionalTool.Walk, { target: "door", seconds: 12 })) as EnginePlayWalked;
+    assert.deepEqual(asked, [{ target: "door", within: 1.2, seconds: 12 }]);
+    assert.equal(walked.state, "arrived");
+    assert.equal(walked.distanceM, 0.9);
+  });
+
+  // A walk's own polls read player_state too: had they taken the detectors' findings, the agent
+  // would only have heard of a hitch on its tenth time.
+  it("takes the detectors' findings only on the computer's own read of the player, never in its polls", async () => {
+    let reads = 0;
+    const { call, editor } = playTools({
+      overrides: {
+        walk_to: () => ({ walking: true, target: "BP_Door_2", way: "direct", waypoints: 1, distanceM: 3 }),
+        player_state: () => ({ pawn: "BP_Hero_0", walk: { state: ++reads < 3 ? "walking" : "arrived" } }),
+      },
+    });
+    await call(EnginePlayTool.Open);
+    await call(EnginePlayOptionalTool.Walk, { target: "door" });
+    await call(EnginePlayTool.State);
+    const stateReads = editor.calls.filter(([tool]) => tool === LoopTool.PlayerState).map(([, args]) => args);
+    assert.deepEqual(stateReads.at(-1), { take_findings: true }, "the computer's read takes them");
+    assert.ok(
+      stateReads.slice(0, -1).every((args) => !args?.take_findings),
+      "every poll during the walk only peeks",
+    );
+  });
+
+  it("answers a walk the helper refused as failed, in the helper's words", async () => {
+    const { call } = playTools({
+      overrides: { walk_to: () => ({ error: "No actor is called gate. Closest names: BP_Door_2." }) },
+    });
+    await call(EnginePlayTool.Open);
+    const walked = (await call(EnginePlayOptionalTool.Walk, { target: "gate" })) as EnginePlayWalked;
+    assert.equal(walked.state, "failed");
+    assert.match(walked.reason, /No actor is called gate\. Closest names: BP_Door_2\./);
+  });
+
+  it("turns the view through the helper and answers once the look has ended", async () => {
+    let reads = 0;
+    const { call } = playTools({
+      overrides: {
+        look_at: () => ({ looking: true, target: "BP_Enemy_1" }),
+        player_state: () => ({
+          pawn: "BP_Hero_0",
+          look: {
+            state: ++reads < 2 ? "looking" : "looked",
+            target: "BP_Enemy_1",
+            reason: "",
+            offDegrees: 1,
+            gameSeconds: 0.3,
+          },
+        }),
+      },
+    });
+    await call(EnginePlayTool.Open);
+    const looked = (await call(EnginePlayOptionalTool.Look, { target: "enemy" })) as { state: string };
+    assert.equal(looked.state, "looked");
   });
 
   it("leaves the editor to the queue while it has a build to play, and says why", async () => {
@@ -256,6 +377,11 @@ describe("the Unreal plugin's play tools for the computer", () => {
       ["Fn", null],
       ["keyw", null],
       ["", null],
+      // Unreal's own names, as an agent who read the game's code writes them.
+      ["LeftMouseButton", "LeftMouseButton"],
+      ["SpaceBar", "SpaceBar"],
+      ["E", "E"],
+      ["ee", null],
     ];
     for (const [code, name] of table) assert.equal(unrealKey(code), name, code);
   });

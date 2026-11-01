@@ -5998,3 +5998,17 @@ describe("pictures of a Loop's builds (Loop phase 5)", () => {
     assert.equal(loads[0]?.params.shot, true, "the load whose screenshot is the build's picture says so");
   });
 });
+
+describe("an engine app the chat finds not ready", () => {
+  it("UR1. a chat that linked an Unreal project whose editor wasn't running ended with words asking the person to open it: the agent is told the reason and gets its app ready itself", async () => {
+    const { MOMENT_WORDS } = await import("../../src/plugins/unreal/hook-answers.ts");
+    const { CoreFact } = await import("../../src/harness-seed/loop/folder-facts.ts");
+    const reason = MOMENT_WORDS.NotReady("WalkLab");
+    assert.doesNotMatch(reason, /button|send a message/i, "where Unreal stands, never an errand for the person");
+    const facts = [{ id: CoreFact.UnrealProject, path: "WalkLab", source: "link" }] as never;
+    const prompt = factsReadyPrompt(facts, undefined, reason);
+    assert.ok(prompt.includes(reason), prompt);
+    assert.match(prompt, /Get it ready with your own tools/);
+    assert.doesNotMatch(factsReadyPrompt(facts), /isn't ready/, "a ready app adds nothing");
+  });
+});

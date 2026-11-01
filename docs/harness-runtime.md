@@ -388,7 +388,10 @@ recoveries the restore and crash moments followed by `health` until it is quiet,
 `turn.start` (a block ends it before any engine works) and `turn.end`, ends with
 `endOfTurnCheckpoint` (`checkpoint.take` only if unsaved) and, after a turn that linked the game to
 an engine project or switched its link, waits on `health` (`waitReady`, up to `READY_WAIT_MS`); any
-other kind change goes on at once. Genex's own hold of that checkpoint or of `turn.start` is said
+other kind change goes on at once. When the app never gets ready (a step blocks, or the cap passes)
+the chat says why once and the same session goes on, its prompt carrying the reason
+(`factsReadyPrompt`'s `notReady`): the agent opens, reopens or waits for the app itself. Only Genex's
+own hold for the person using the app keeps it from going on. Genex's own hold of that checkpoint or of `turn.start` is said
 in the person's words (`hold`), and Plan mode says nothing; so is Genex's hold of a run's start,
 its lead's turns, the Unreal lead's close, restores and C++ (`loop/director/held-words.ts`,
 `loop/unreal/hold-words.ts`). A host call of the moments that fails holds a blocking moment back

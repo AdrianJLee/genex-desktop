@@ -17,6 +17,7 @@ import {
 } from "../../src/shared/computer-target.ts";
 import {
   ENGINE_PLAY_VIEW,
+  EnginePlayOptionalTool,
   EnginePlayRefusal,
   EnginePlayTool,
   editorCapabilities,
@@ -38,9 +39,9 @@ const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QD
 
 /** A stand-in engine plugin: its play tools, recorded, and a game whose player wins once W was held 2 s. */
 function standInEngine(options: { refuseOpen?: boolean; afterOpen?: (answer: unknown) => Promise<void> } = {}) {
-  const calls: Array<[EnginePlayTool, Record<string, unknown>]> = [];
+  const calls: Array<[EnginePlayTool | EnginePlayOptionalTool, Record<string, unknown>]> = [];
   const game = { heldW: 0, playing: false, paused: false, pausedAtInput: [] as boolean[] };
-  const call = async (tool: EnginePlayTool, args: Record<string, unknown>) => {
+  const call = async (tool: EnginePlayTool | EnginePlayOptionalTool, args: Record<string, unknown>) => {
     calls.push([tool, args]);
     switch (tool) {
       case EnginePlayTool.Open:
@@ -90,6 +91,8 @@ describe("the computer on a game played in its engine's editor", () => {
       "screenshot",
       "wait",
       "state",
+      // Flipped on purpose: every session now offers its recap.
+      "recap",
       "batch",
     ]);
     const tool = computerToolDefinition({ role: "builder", capabilities: source.caps, observeByDefault: false });
@@ -197,7 +200,7 @@ describe("the computer on a game played in its engine's editor", () => {
   });
 
   it("runs its after-open step once, right after the play opens and before any move, with the open's answer", async () => {
-    const seen: Array<{ before: EnginePlayTool[]; answer: unknown }> = [];
+    const seen: Array<{ before: Array<EnginePlayTool | EnginePlayOptionalTool>; answer: unknown }> = [];
     const { source, calls } = standInEngine({
       afterOpen: async (answer) => {
         seen.push({ before: calls.map(([tool]) => tool), answer });
@@ -229,10 +232,11 @@ function playersEngine(
     opened?: Record<string, unknown>;
     shot?: Record<string, unknown>;
     pause?: unknown;
+    shrink?: (picture: Buffer) => Promise<Buffer>;
   } = {},
 ) {
-  const calls: Array<[EnginePlayTool, Record<string, unknown>]> = [];
-  const call = async (tool: EnginePlayTool, args: Record<string, unknown>) => {
+  const calls: Array<[EnginePlayTool | EnginePlayOptionalTool, Record<string, unknown>]> = [];
+  const call = async (tool: EnginePlayTool | EnginePlayOptionalTool, args: Record<string, unknown>) => {
     calls.push([tool, args]);
     const player = typeof args.player === "number" ? args.player : 1;
     switch (tool) {
@@ -251,7 +255,12 @@ function playersEngine(
     }
   };
   const caps = options.caps ?? editorCapabilities(TOY_ENGINE.play);
-  const source = editorPlaySource({ call, caps, players: options.players ?? 3 });
+  const source = editorPlaySource({
+    call,
+    caps,
+    players: options.players ?? 3,
+    ...(options.shrink ? { shrink: options.shrink } : {}),
+  });
   const sent = (tool: EnginePlayTool) => calls.filter(([t]) => t === tool).map(([, args]) => args);
   return { source, calls, sent };
 }
@@ -333,6 +342,39 @@ describe("the computer on a play with several players, as its engine declares", 
     assert.equal(images(await at.run("computer", { action: "screenshot" })), 1, "exactly the most is shown");
   });
 
+  // Unreal's 1280×720 PNG of a lit level came to just over 1 MB, and the agent never saw its game.
+  it("shrinks a picture over the size a model can be shown into a JPEG that fits, and refuses one it cannot", async () => {
+    const big = Buffer.alloc(MAX_PLAY_SHOT_BYTES + 1, 1).toString("base64");
+    const small = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 9, 0xff, 0xd9]);
+    const shrunk: number[] = [];
+    const { source } = playersEngine({
+      shot: { data: big, mime: StillMimeType.Png, ...ENGINE_PLAY_VIEW },
+      shrink: async (picture) => {
+        shrunk.push(picture.length);
+        return small;
+      },
+    });
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-play-") });
+    const answer = await session.run("computer", { action: "screenshot" });
+    assert.equal(images(answer), 1);
+    assert.deepEqual(shrunk, [MAX_PLAY_SHOT_BYTES + 1]);
+    const shown = typeof answer === "string" ? undefined : answer.images?.[0];
+    assert.equal(shown?.mimeType, StillMimeType.Jpeg);
+    assert.equal(shown?.data, small.toString("base64"));
+    const stubborn = playersEngine({
+      shot: { data: big, mime: StillMimeType.Png, ...ENGINE_PLAY_VIEW },
+      shrink: async () => Buffer.alloc(MAX_PLAY_SHOT_BYTES + 1),
+    });
+    const still = computerSession(stubborn.source, "/game", {
+      pacing: "running",
+      frameDir: await tmpDir("editor-play-"),
+    });
+    assert.match(
+      text(await still.run("computer", { action: "screenshot" })),
+      /picture is too large to show \(1\.0 MB; the most is 1\.0 MB\)/,
+    );
+  });
+
   it("stops asking to pause once the engine says it cannot, and says the clock runs on", async () => {
     const pause = { refused: EnginePlayRefusal.Unsupported, message: "This engine cannot pause its play." };
     const { source, sent } = playersEngine({
@@ -397,5 +439,119 @@ describe("what an engine declares its editor can do in play", () => {
     assert.deepEqual([still.pointer, still.aimedClicks, still.state], [PointerLevel.None, false, "none"]);
     assert.equal(Object.hasOwn(still, "players"), false, "one player is no players field");
     assert.equal(editorCapabilities({ clock: "replayable" }).clock, "freeze", "the play tools pause, never step");
+  });
+});
+
+describe("the computer walks and looks in a play that can", () => {
+  /** A stand-in engine whose play walks the player and turns its view: every call, and the walk's answer. */
+  function walkingEngine(walked: Record<string, unknown>) {
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const call = async (tool: EnginePlayTool | EnginePlayOptionalTool, args: Record<string, unknown>) => {
+      calls.push([tool, args]);
+      switch (tool) {
+        case EnginePlayTool.Open:
+          return { ...ENGINE_PLAY_VIEW, joined: false };
+        case EnginePlayOptionalTool.Walk:
+          return walked;
+        case EnginePlayOptionalTool.Look:
+          return { state: "looked", target: "BP_Enemy_1", reason: "", offDegrees: 1.2, gameSeconds: 0.4 };
+        case EnginePlayTool.State:
+          return { gameSeconds: 3, location: [1, 2, 3] };
+        case EnginePlayTool.Pause:
+          return { paused: Boolean(args.paused) };
+        default:
+          return {};
+      }
+    };
+    const source = editorPlaySource({ call, caps: editorCapabilities({ walk: true }) });
+    return { source, calls };
+  }
+  const arrived = {
+    state: "arrived",
+    target: "BP_Door_2",
+    way: "navmesh",
+    partial: false,
+    distanceM: 0.9,
+    tried: [],
+    reason: "",
+    gameSeconds: 6.4,
+  };
+
+  it("offers walk_to and look_at only where the engine declares its play walks, and a play's answer can take it back", () => {
+    const walking = editorCapabilities({ walk: true });
+    assert.ok(computerActionsFor(walking).includes("walk_to"));
+    assert.ok(computerActionsFor(walking).includes("look_at"));
+    assert.ok(!computerActionsFor(editorCapabilities()).includes("walk_to"));
+    assert.equal(narrowCapabilities(walking, { walk: false }).walk, false);
+    assert.equal(narrowCapabilities(editorCapabilities(), { walk: true }).walk, undefined, "an answer never adds");
+    const tool = computerToolDefinition({ role: "builder", capabilities: walking, observeByDefault: false });
+    assert.match(tool.description, /walk_to text=<an actor's name or x,y,z>/);
+  });
+
+  it("walks to a target through play-walk, the game running only while it walks, and says how it ended", async () => {
+    const { source, calls } = walkingEngine(arrived);
+    const session = computerSession(source, "/game", { pacing: "paced", frameDir: await tmpDir("editor-walk-") });
+    const answer = text(await session.run("computer", { action: "walk_to", text: "door", duration: 12 }));
+    assert.match(answer, /^OK — walk to door: arrived: 0\.9 m from BP_Door_2 after 6\.4 game s, by the nav mesh\./);
+    const around = calls.filter(([tool]) => tool !== EnginePlayTool.State).slice(-3);
+    assert.deepEqual(around, [
+      [EnginePlayTool.Pause, { paused: false }],
+      [EnginePlayOptionalTool.Walk, { target: "door", seconds: 12 }],
+      [EnginePlayTool.Pause, { paused: true }],
+    ]);
+  });
+
+  it("says what stopped a walk and what it tried", async () => {
+    const stuck = {
+      ...arrived,
+      state: "stuck",
+      way: "direct",
+      distanceM: 7.8,
+      gameSeconds: 9,
+      reason: "no way past at 1210,-340,90",
+      tried: ["jump", "left", "right", "replan"],
+    };
+    const { source } = walkingEngine(stuck);
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-walk-") });
+    assert.match(
+      text(await session.run("computer", { action: "walk_to", text: "BP_Door_2" })),
+      /stuck: 7\.8 m from BP_Door_2 after 9 game s, straight: no way past at 1210,-340,90; tried jump, left, right, replan/,
+    );
+  });
+
+  it("says how far off the player's body faces an actor it walked to, and nothing of it for a point", async () => {
+    const faced = { ...arrived, facingDeg: 4.2 };
+    const { source } = walkingEngine(faced);
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-walk-") });
+    assert.match(
+      text(await session.run("computer", { action: "walk_to", text: "door" })),
+      /arrived: 0\.9 m from BP_Door_2 after 6\.4 game s, by the nav mesh, facing it 4\.2° off\./,
+    );
+    const pointed = walkingEngine({ ...arrived, facingDeg: null });
+    const toPoint = computerSession(pointed.source, "/game", {
+      pacing: "running",
+      frameDir: await tmpDir("editor-walk-"),
+    });
+    assert.doesNotMatch(text(await toPoint.run("computer", { action: "walk_to", text: "10,0,0" })), /facing/);
+  });
+
+  it("turns the view onto a target through play-look", async () => {
+    const { source, calls } = walkingEngine(arrived);
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-look-") });
+    assert.match(
+      text(await session.run("computer", { action: "look_at", text: "enemy" })),
+      /looked: 1\.2° off BP_Enemy_1 after 0\.4 game s/,
+    );
+    assert.deepEqual(
+      calls.filter(([tool]) => tool === EnginePlayOptionalTool.Look),
+      [[EnginePlayOptionalTool.Look, { target: "enemy" }]],
+    );
+  });
+
+  it("refuses walk_to where the play cannot walk, before anything reaches the engine", async () => {
+    const { source, calls } = standInEngine();
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-walk-") });
+    assert.match(text(await session.run("computer", { action: "walk_to", text: "door" })), /walk_to is not available/);
+    assert.deepEqual(calls, []);
   });
 });

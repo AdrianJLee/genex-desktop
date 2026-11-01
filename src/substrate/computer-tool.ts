@@ -11,8 +11,8 @@
  * The action vocabulary is Anthropic's `computer_toolset_20260801` (screenshot, zoom,
  * left_click …, key, type, scroll, wait) so both models already know how to hold it, plus the
  * studio verbs a target may have: `state` (what it reports about itself), `reload` (rebuild +
- * reload after edits), `console` (errors since load), and `camera` (a named viewpoint; no target
- * offers one today).
+ * reload after edits), `console` (errors since load), `recap` (what the session's moves amounted
+ * to), and `camera` (a named viewpoint; no target offers one today).
  *
  * Electron-free: this file parses the flat arguments the bridge shim and the MCP schema
  * deliver and maps an action onto {@link PreviewInputAction}s. The port that executes them
@@ -84,8 +84,12 @@ export const COMPUTER_HOST_ACTIONS = [
   "state",
   "reload",
   "console",
+  "recap",
   "batch",
   "act",
+  "walk_to",
+  "look_at",
+  "pilot",
   "web_open",
   "web_read",
   "web_click",
@@ -101,6 +105,9 @@ export const ComputerVerb = {
   Reload: "reload",
   Act: "act",
   Look: "look",
+  WalkTo: "walk_to",
+  LookAt: "look_at",
+  Pilot: "pilot",
   BringToFront: "bring_to_front",
   OpenPage: "open_page",
 } as const;
@@ -432,6 +439,9 @@ const ACTION_NEEDS: Partial<Record<ComputerAction, (request: ComputerRequest) =>
   camera: (r) => (r.text ? null : COMPUTER_ARG_PROBLEM.cameraNeedsName),
   look: (r) => (r.dx !== undefined || r.dy !== undefined ? null : COMPUTER_ARG_PROBLEM.lookNeedsDelta),
   act: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.actNeedsName),
+  walk_to: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.targetNeeded(r.action)),
+  look_at: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.targetNeeded(r.action)),
+  pilot: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.pilotNeedsFile),
   web_open: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.webOpenNeedsUrl),
   web_click: (r) => (r.ref ? null : COMPUTER_ARG_PROBLEM.webNeedsRef(r.action)),
   web_type: (r) => (r.ref && r.text !== undefined ? null : COMPUTER_ARG_PROBLEM.webTypeNeedsRefAndText),
@@ -537,6 +547,19 @@ function pointerInput(request: ComputerRequest): PreviewInputAction[] {
  * An input action → the preview's HID plan. Coordinates are pixels of the last screenshot
  * (origin top-left), clamped by the port; a click without a coordinate lands on the pointer.
  */
+/** Input that only points (hovering, scrolling): a game may rightly not answer it at all. */
+const POINTING_ONLY: ReadonlySet<ComputerAction> = new Set<ComputerAction>(["mouse_move", "scroll"]);
+
+/** Whether a move presses something a game should answer: a key, a click, typing, a look or a named action; in a batch, any step. */
+export function pressesSomething(request: ComputerRequest): boolean {
+  if (request.action === ComputerVerb.Batch) return (request.steps ?? []).some(pressesSomething);
+  if (request.action === ComputerVerb.Act || request.action === ComputerVerb.WalkTo) return true;
+  if (request.action === ComputerVerb.LookAt || request.action === ComputerVerb.Pilot) return true;
+  return (
+    (COMPUTER_INPUT_ACTIONS as readonly ComputerAction[]).includes(request.action) && !POINTING_ONLY.has(request.action)
+  );
+}
+
 export function computerToInput(request: ComputerRequest, pointer: { x: number; y: number }): PreviewInputAction[] {
   const click = CLICKS[request.action];
   if (click) {
@@ -596,6 +619,9 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
   scroll: (caps) => caps.pointer !== PointerLevel.None,
   cursor_position: (caps) => canPoint(caps),
   act: (caps) => caps.actions,
+  walk_to: (caps) => caps.walk === true,
+  look_at: (caps) => caps.walk === true,
+  pilot: (caps) => caps.pilot === true,
   state: (caps) => hasState(caps),
   console: (caps) => caps.console,
   reload: (caps) => caps.reload,
@@ -720,11 +746,15 @@ const ACTION_DEED: Record<ComputerAction, ScreenDeed> = {
   camera: ScreenDeed.Look,
   state: ScreenDeed.Look,
   console: ScreenDeed.Look,
+  recap: ScreenDeed.Look,
   wait: ScreenDeed.Wait,
   reload: ScreenDeed.Reload,
   batch: ScreenDeed.Press,
   look: ScreenDeed.Move,
   act: ScreenDeed.Press,
+  walk_to: ScreenDeed.Move,
+  look_at: ScreenDeed.Move,
+  pilot: ScreenDeed.Move,
   web_open: ScreenDeed.Load,
   web_read: ScreenDeed.Look,
   web_click: ScreenDeed.Click,
@@ -794,6 +824,12 @@ function describeStudioAction(request: ComputerRequest): string {
       return `zoom ${request.region?.map(Math.round).join(",")}`;
     case "camera":
       return `camera ${request.text}`;
+    case "walk_to":
+      return `walk to ${String(request.text ?? "").slice(0, MAX_CAPTION_TEXT_CHARS)}`;
+    case "look_at":
+      return `look at ${String(request.text ?? "").slice(0, MAX_CAPTION_TEXT_CHARS)}`;
+    case "pilot":
+      return `pilot ${String(request.text ?? "").slice(0, MAX_CAPTION_TEXT_CHARS)}`;
     case "batch":
       return `batch: ${(request.steps ?? []).map(describeAction).join(", ")}`;
     case "look":

@@ -134,6 +134,10 @@ export interface TargetCapabilities {
    * by number (an engine's editor play of several players). Absent is one.
    */
   players?: number;
+  /** Whether the target walks the player to a target and turns its view by itself (`walk_to`, `look_at`). Absent is no. */
+  walk?: boolean;
+  /** Whether the target runs pilots, files of moves that play by themselves every frame (`pilot`). Absent is no. */
+  pilot?: boolean;
 }
 
 /**
@@ -245,4 +249,6 @@ export interface ComputerTraceSummary {
   deterministic: boolean;
   /** Every route the session's input took: evidence is as strong as the weakest of them. */
   routes?: InputRoute[];
+  /** Moves that pressed something the target took, yet left the game's state as it was. */
+  stillInputs?: number;
 }

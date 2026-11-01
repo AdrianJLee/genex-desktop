@@ -5766,4 +5766,14 @@ export default {
   "{count, plural, one {Show # more worker} other {Show # more workers}}": "{count, plural, other {再显示 # 个助手}}",
   "In the running build": "在进行中的构建里",
   "Not in your game yet. It arrives when the build lands.": "还不在你的游戏里。构建合入后就会出现。",
+  "Couldn't reach TypeSafe to check the key: {why}": "无法连接 TypeSafe 来检查密钥：{why}",
+  Key: "密钥",
+  "Optional. With a key, Unreal play-tests pick their moves with Jev, several times a second.":
+    "可选。有了密钥，Unreal 试玩每秒会用 Jev 选几次动作。",
+  "That doesn't look like a TypeSafe key. Copy it again from TypeSafe's console.":
+    "这看起来不像 TypeSafe 密钥。从 TypeSafe 控制台再复制一次吧。",
+  "TypeSafe API key": "TypeSafe API 密钥",
+  "TypeSafe didn't accept that key. Check it and paste it again.": "TypeSafe 没有接受这个密钥。检查一下再粘贴。",
+  "TypeSafe key": "TypeSafe 密钥",
+  "Unreal play-tests pick their moves with Jev": "Unreal 试玩用 Jev 选动作",
 } satisfies LocaleCatalog;

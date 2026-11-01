@@ -139,6 +139,7 @@ const FIELDS = [
   "contextPreferences",
   "engineLinks",
   "engines",
+  "fastDecisions",
   "games",
   "hooks",
   "host",

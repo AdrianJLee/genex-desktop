@@ -720,6 +720,21 @@ describe("remembering a project's last good answer", () => {
     assert.equal(editor.asks.length, 2, "the editor is asked again in the background");
   });
 
+  it("within 2 s of a good answer, a check says yes without asking the editor again", async () => {
+    // Every call to the editor checks first: at a few calls a second, a check per call doubled the
+    // editor's work, each request waiting for one of its frames.
+    const editor = standInCheck();
+    let clock = 0;
+    const answers = rememberAnswers(editor.check, () => clock);
+    assert.equal(await answers(PORT, GAME), true);
+    clock += 1_500;
+    assert.equal(await answers(PORT, GAME), true);
+    assert.equal(editor.asks.length, 1, "no ask while the answer is this fresh");
+    clock += 1_000;
+    assert.equal(await answers(PORT, GAME), true);
+    assert.equal(editor.asks.length, 2, "asked again in the background once it is older");
+  });
+
   it("one failed ask after a good one doesn't flip the answer; the next call asks and believes it", async () => {
     const editor = standInCheck();
     let clock = 0;

@@ -17,7 +17,7 @@ import unreal  # noqa: E402
 REAL = json.load(open(os.path.join(os.path.dirname(__file__), 'real-names-5.8.json')))
 
 # The stub's own test machinery, which models nothing in Unreal.
-STUB_CLASSES = {'Floor'}
+STUB_CLASSES = {'Floor', 'Picture'}
 STUB_MEMBERS = {'corners'}
 STUB_FUNCTIONS = {'reset'}
 

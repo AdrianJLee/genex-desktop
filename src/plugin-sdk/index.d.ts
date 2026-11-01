@@ -696,6 +696,14 @@ export interface PluginHostCall {
    */
   (method: "game.engine.canAssist"): Promise<boolean>;
   /**
+   * `game-engine`: computer control for the bound game's chat, for an agent that must click in an app
+   * (a game's own menus during a playtest): when it is off, Genex asks the person on its card to turn
+   * it on (then macOS's own grants) and starts the chat's next turn with `task`; when it is on, it
+   * answers `already-on` and posts nothing. It grants no app: each still asks on its own card. A
+   * plugin that did not come with Genex reaches it only on the person's own call.
+   */
+  (method: "game.computer.control", args: PluginEngineAssistArgs): Promise<PluginEngineAssistAnswer>;
+  /**
    * `game-engine`: whether the bound game's chat still runs the turn your Do it for me started:
    * false once that turn has ended (answered, failed or taken back), or after 20 minutes. Use it to
    * end a progress display the agent never ended. Throws where the host has no assists.
@@ -709,7 +717,14 @@ export interface PluginEngineAssistArgs {
 }
 
 /** Why `game.engine.assist` started nothing. */
-export type PluginEngineAssistRefusal = "unavailable" | "declined" | "no-chat" | "not-person" | "no-apps" | "in-assist";
+export type PluginEngineAssistRefusal =
+  | "unavailable"
+  | "declined"
+  | "no-chat"
+  | "not-person"
+  | "no-apps"
+  | "in-assist"
+  | "already-on";
 
 /** `game.engine.assist`'s answer: whether the chat's turn started, and why not. */
 export interface PluginEngineAssistAnswer {

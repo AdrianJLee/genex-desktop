@@ -2789,6 +2789,25 @@ export const METERED_PROVIDER_WORDS = {
   },
 } as const;
 
+/** Settings → Model Providers: TypeSafe's key, for play-tests' fast decisions (`panels/FastDecisionsRow.tsx`). */
+export const FAST_DECISION_WORDS = {
+  name: "TypeSafe",
+  keysUrl: "https://console.typesafe.ai/keys",
+  keyLabel: t("TypeSafe API key"),
+  keyPlaceholder: t("API key"),
+  notConnectedLine: t("Optional. With a key, Unreal play-tests pick their moves with Jev, several times a second."),
+  connectedLine: t("Unreal play-tests pick their moves with Jev"),
+  refused: t("TypeSafe didn't accept that key. Check it and paste it again."),
+  key: t("Key"),
+  keyMenu: t("TypeSafe key"),
+  save: t("Save key"),
+  getKey: t("Get a key"),
+  replace: t("Replace key…"),
+  replaceLine: t("The new key is checked before it's saved"),
+  remove: t("Remove key"),
+  cancel: t("Cancel"),
+} as const;
+
 /** Settings → Model Providers: the person's own model server (`panels/LocalServerRow.tsx`). */
 export const LOCAL_SERVER_WORDS = {
   name: t("Local server"),

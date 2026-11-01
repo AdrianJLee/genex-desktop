@@ -24,8 +24,15 @@ import unreal
 
 KMH_PER_CM_PER_S = 0.036
 MIN_HOLD_SECONDS = 0.05
+# A key held this briefly is a tap: pressed for one tick of the world, then let go. A forced key is
+# pressed again every frame it stays forced, which a game's key event reads as one press a frame.
+TAP_SECONDS = 0.15
+# A tap lets go after this many wall seconds even when the world never ticks (a stalled editor).
+TAP_WALL_S = 1.0
 # The mouse's own keys: its movement (2D, in pixels) and its wheel (notches, up positive).
 MOUSE_MOVE = 'Mouse2D'
+# Keys a same-named action is pressed by are a keyboard's or mouse's, never a gamepad's.
+GAMEPAD_PREFIX = 'Gamepad'
 MOUSE_WHEEL = 'MouseWheelAxis'
 # A mouse movement lasts one frame of the game; its wall-clock cap is a wait of almost no game time.
 ONE_FRAME_S = 1e-6
@@ -79,6 +86,11 @@ def game_world() -> unreal.World:
     return world
 
 
+def real_seconds() -> float:
+    """The play world's real-time clock: it runs on while the game is paused, a tick at a time."""
+    return float(unreal.GameplayStatics.get_real_time_seconds(game_world()))
+
+
 def game_seconds() -> float:
     """The play session's game clock: it stops while the game is paused or frozen."""
     return float(unreal.GameplayStatics.get_time_seconds(game_world()))
@@ -89,6 +101,20 @@ def _player_controller() -> unreal.PlayerController:
     if controller is None:
         raise RuntimeError('The play session has no local player yet.')
     return controller
+
+
+def control_rotation() -> unreal.Rotator:
+    """Where the local player's view faces: its controller's rotation."""
+    return _player_controller().get_control_rotation()
+
+
+def eyes() -> tuple | None:
+    """Where the local player's view is seen from (its camera), or None when the play has no camera yet."""
+    camera = unreal.GameplayStatics.get_player_camera_manager(game_world(), 0)
+    if camera is None:
+        return None
+    at = camera.get_camera_location()
+    return (float(at.x), float(at.y), float(at.z))
 
 
 def player_pawn() -> unreal.Pawn:
@@ -108,12 +134,35 @@ def _assets(class_name: str) -> list[unreal.AssetData]:
     return registry.get_assets_by_class(unreal.TopLevelAssetPath('/Script/EnhancedInput', class_name))
 
 
-def _find_action(name: str) -> unreal.InputAction | None:
+def _find_actions(name: str) -> list:
+    """Every input action asset called `name` (IA_Shoot or Shoot): a game built from several templates can
+    hold more than one of the same name."""
     wanted = name.lower()
+    found = []
     for data in _assets('InputAction'):
         asset_name = str(data.asset_name).lower()
         if wanted in (asset_name, str(data.package_name).lower()) or asset_name == f'ia_{wanted}':
-            return data.get_asset()
+            found.append(data.get_asset())
+    return found
+
+
+def _find_action(name: str) -> unreal.InputAction | None:
+    found = _find_actions(name)
+    return found[0] if found else None
+
+
+def _shared_key(actions: list) -> str | None:
+    """The first keyboard or mouse key any of `actions` is mapped to in the game's input mapping contexts:
+    pressing it reaches whichever of them the player's controls use (Enhanced Input's forced action finds
+    one of several same-named actions by its name alone, maybe one the player's controls never read)."""
+    for data in _assets('InputMappingContext'):
+        mappings = data.get_asset().get_editor_property('default_key_mappings').get_editor_property('mappings')
+        for mapping in mappings:
+            if not any(mapping.get_editor_property('action') is action for action in actions):
+                continue
+            key = str(mapping.get_editor_property('key').get_editor_property('key_name'))
+            if key != 'None' and not key.startswith(GAMEPAD_PREFIX):
+                return key
     return None
 
 
@@ -135,10 +184,15 @@ def _action_value(action: unreal.InputAction, x: float, y: float) -> str:
 
 
 def resolve(name: str) -> Input:
-    """The input action (IA_Throttle or Throttle) or key (W) called `name`, or RuntimeError."""
-    action = _find_action(name)
-    if action is not None:
-        return Input(action.get_name(), action)
+    """The input action (IA_Throttle or Throttle) or key (W) called `name`, or RuntimeError. When several
+    input actions share the name, the key they are mapped to is pressed instead."""
+    actions = _find_actions(name)
+    if len(actions) > 1:
+        key = _shared_key(actions)
+        if key is not None:
+            return Input(key, None)
+    if actions:
+        return Input(actions[0].get_name(), actions[0])
     if _is_key(name):
         return Input(name, None)
     raise RuntimeError(f'{name} is neither an input action nor a key. Call list_actions to see them.')
@@ -213,7 +267,11 @@ def _tick(_delta: float) -> None:
         return
     for label in [label for label, held in _held.items() if held.until_game <= now or held.until_wall <= wall]:
         release(label)
-    _watches[:] = [(step, stop) for step, stop in list(_watches) if step(now, wall)]
+    stepped = list(_watches)
+    kept = [(step, stop) for step, stop in stepped if step(now, wall)]
+    # A step may start a watch of its own (a look that ends stills the mouse): it stays.
+    started = [entry for entry in _watches if entry not in stepped]
+    _watches[:] = kept + started
     if not _held and not _watches:
         _stop_ticking()
 
@@ -269,11 +327,37 @@ def list_actions() -> str:
 
 
 def hold(name: str, x: float, y: float, seconds: float) -> str:
-    """Holds an input action or key for `seconds` of game time (see the module notes)."""
+    """Holds an input action or key for `seconds` of game time (see the module notes); a key held
+    no longer than TAP_SECONDS is tapped."""
     held_seconds = max(seconds, MIN_HOLD_SECONDS)
     held_input = resolve(name)
+    if held_input.action is None and held_seconds <= TAP_SECONDS:
+        tap(held_input.label)
+        return json.dumps({'held': held_input.label, 'seconds': held_seconds, 'tap': True})
     press(held_input, x, y, held_seconds)
     return json.dumps({'held': held_input.label, 'seconds': held_seconds})
+
+
+def tap(key: str) -> None:
+    """Presses a key for one tick of the play world, then lets go of it: one press, as a keyboard's
+    tap, while the game is paused as well (its real-time clock still ticks)."""
+    _run(f'Input.+key {key} 1')
+    since, until_wall = real_seconds(), wall_clock() + TAP_WALL_S
+
+    def let_go() -> None:
+        _try_run(f'Input.-key {key}')
+
+    def step(_game_now: float, wall_now: float) -> bool:
+        try:
+            ticked = real_seconds() > since
+        except RuntimeError:  # the play session ended and took its input with it
+            return False
+        if ticked or wall_now >= until_wall:
+            let_go()
+            return False
+        return True
+
+    watch(step, let_go)
 
 
 def _try_run(command: str) -> None:
@@ -309,6 +393,16 @@ def _one_frame(key: str, value: str, still: str) -> None:
         return False
 
     watch(step, let_go)
+
+
+def force_key(key: str, value: str) -> None:
+    """Forces a key (an analog one such as Mouse2D) to value until forced again or settled."""
+    _run(f'Input.+key {key} {value}')
+
+
+def settle_key(key: str, still: str) -> None:
+    """Stills a forced analog key for a frame, then lets go of it (letting go at once injects its opposite)."""
+    _one_frame(key, still, still)
 
 
 def move_mouse(dx: float, dy: float, wheel: float) -> dict:

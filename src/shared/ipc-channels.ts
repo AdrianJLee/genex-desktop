@@ -155,6 +155,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:cursor.signout": "cursorSignOut",
   "studio:openrouter.key.save": "openRouterKeySave",
   "studio:openrouter.key.clear": "openRouterKeyClear",
+  "studio:typesafe.key.status": "typeSafeKeyStatus",
+  "studio:typesafe.key.save": "typeSafeKeySave",
+  "studio:typesafe.key.clear": "typeSafeKeyClear",
   "studio:openrouter.signin": "openRouterSignIn",
   "studio:openrouter.signin.reopen": "openRouterSignInReopen",
   "studio:openrouter.signin.cancel": "openRouterSignInCancel",
@@ -444,6 +447,9 @@ export interface StudioInvokePayloads {
   "studio:cursor.signout": undefined;
   "studio:openrouter.key.save": { key: string };
   "studio:openrouter.key.clear": undefined;
+  "studio:typesafe.key.status": undefined;
+  "studio:typesafe.key.save": { key: string };
+  "studio:typesafe.key.clear": undefined;
   "studio:openrouter.signin": undefined;
   "studio:openrouter.signin.reopen": undefined;
   "studio:openrouter.signin.cancel": undefined;

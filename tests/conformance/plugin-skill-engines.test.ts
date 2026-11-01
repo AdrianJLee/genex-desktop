@@ -175,6 +175,7 @@ const UNREAL_EDITOR_TOOLS = [
   "unreal__package-game",
   "unreal__package-status",
   "unreal__open-editor",
+  "unreal__click-interface",
   "unreal__quit-editor",
   "unreal__editor-status",
 ];

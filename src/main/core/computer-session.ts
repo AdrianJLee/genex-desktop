@@ -18,10 +18,22 @@ import {
   canPause,
   canPoint,
   InputRoute,
+  StateLevel,
   type TargetCapabilities,
 } from "../../shared/computer-target.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import {
+  type EnginePlayFinding,
+  type EnginePlayLooked,
+  EnginePlayStateField,
+  type EnginePlayPiloted,
+  type EnginePlayWalked,
+  type PilotDecisions,
+  PilotOutcome,
+  EnginePlayWay,
+  findingsOf,
+} from "../../shared/engine-play.ts";
 import { CaptureSurface, StillMimeType } from "../../shared/preview-contract.ts";
 import {
   COMPUTER_TOOL_NAME,
@@ -33,11 +45,14 @@ import {
   computerToInput,
   describeComputerAction,
   parseComputerArgs,
+  pressesSomething,
   unsupportedAction,
   unsupportedPlayer,
   WebVerb,
 } from "../../substrate/computer-tool.ts";
 import { COMPUTER_ARG_PROBLEM } from "../../substrate/computer-tool-prompts.ts";
+import { sessionRecap } from "../../substrate/computer-recap.ts";
+import { StillKind, type StillWatch, stillWatch } from "../../substrate/computer-response.ts";
 import type {
   ComputerTarget,
   TargetClock,
@@ -74,6 +89,14 @@ const STEP_CHUNK_MS = 5 * SECOND_MS;
 const MAX_NUMBERED_FOLDERS = 500;
 /** The seed a stepped session plants when it was given none, so two runs start from the same dice. */
 const DEFAULT_SEED = 1;
+/** The trace rows a session keeps in memory for its recap; older ones are counted, not kept. */
+const RECAP_ROWS = 2_000;
+/** A pilot's game seconds when the call names none; the most of its last moments an answer reads, and how long its facts and evidence may run. */
+const PILOT_DEFAULT_SECONDS = 60;
+const PILOT_TIMELINE_LINES = 12;
+/** The detectors' findings a pilot's result lists. */
+const PILOT_FINDINGS_LISTED = 12;
+const PILOT_JSON_CHARS = 600;
 
 export { ComputerPacing };
 
@@ -124,6 +147,10 @@ interface ActionRecord {
   applied: { taken: number; planned: number } | null;
   /** Why the action failed, when it did. */
   failed?: string;
+  /** How a move that pressed something left the game, when it left it as it was. */
+  still?: StillKind;
+  /** What the game's own bug detectors told with this action's state read. */
+  findings?: EnginePlayFinding[];
 }
 
 /** Everything an action's handler reads: the request, the target, and the session's helpers. */
@@ -155,9 +182,11 @@ interface SessionHelpers {
   readonly setupNote: () => string | null;
   readonly clearSetupNote: () => void;
   readonly cursor: (target: ComputerTarget, size: { width: number; height: number }) => { x: number; y: number };
-  readonly stateText: (target: ComputerTarget, max?: number) => Promise<string>;
-  /** The state after a move, as the answer shows it. */
+  readonly stateText: (ctx: ActionContext, max?: number) => Promise<string>;
+  /** The state after a move, as the answer shows it, with a note when moves in a row changed nothing in the game. */
   readonly afterMove: (ctx: ActionContext) => Promise<string>;
+  /** The session's trace rows kept so far, and how many older ones were dropped. */
+  readonly history: () => { rows: readonly TraceRow[]; dropped: number };
   /** Save a frame under the session's folder; a PNG keeps its own extension. */
   readonly saveFrame: (jpeg: Buffer, name: string, mime?: StillMimeType) => Promise<string>;
   readonly frame: (target: ComputerTarget, jpeg: Buffer | null, caption: string, act: ScreenAct) => Promise<void>;
@@ -165,6 +194,8 @@ interface SessionHelpers {
   readonly waiting: (target: ComputerTarget, ms: number) => Promise<number | null>;
   /** Carry out an input plan inside the session's pacing; what it took and how much time ran. */
   readonly inputting: (target: ComputerTarget, actions: PreviewInputAction[]) => Promise<InputOutcome>;
+  /** Run what the target does by itself (a walk, a turn of the view) with its clock running. */
+  readonly driven: <T>(target: ComputerTarget, run: () => Promise<T>) => Promise<T>;
   readonly observeByDefault: boolean;
 }
 
@@ -390,6 +421,142 @@ async function act(ctx: ActionContext): Promise<LiveToolResult> {
   return observed(ctx, `${head}. ${await helpers.afterMove(ctx)}${ctx.noteLine}`, true);
 }
 
+/** A number the engine answered, as the answer prints it; `?` when it said none. */
+function amount(value: number | null): string {
+  return value === null ? "?" : String(value);
+}
+
+/** How a walk ended, in the answer's words. */
+function walkedText(walked: EnginePlayWalked): string {
+  const way = walked.way === EnginePlayWay.NavMesh ? COMPUTER_ARG_PROBLEM.wayNavMesh : COMPUTER_ARG_PROBLEM.wayDirect;
+  const head = COMPUTER_ARG_PROBLEM.walked(
+    walked.state,
+    amount(walked.distanceM),
+    walked.target,
+    amount(walked.gameSeconds),
+    way,
+  );
+  const partial = walked.partial ? COMPUTER_ARG_PROBLEM.partialWay : "";
+  const reason = walked.reason ? `: ${walked.reason}` : "";
+  const tried = walked.tried.length ? COMPUTER_ARG_PROBLEM.tried(walked.tried) : "";
+  const facing = walked.facingDeg === null ? "" : COMPUTER_ARG_PROBLEM.facing(amount(walked.facingDeg));
+  return `${head}${partial}${facing}${reason}${tried}`;
+}
+
+/** How a turn of the view ended, in the answer's words. */
+function lookedText(looked: EnginePlayLooked): string {
+  const head = COMPUTER_ARG_PROBLEM.looked(
+    looked.state,
+    amount(looked.offDegrees),
+    looked.target,
+    amount(looked.gameSeconds),
+  );
+  return `${head}${looked.reason ? `: ${looked.reason}` : ""}`;
+}
+
+/** The player walked to a target by the target itself, the game running while it walks: how it ended. */
+async function walkTo(ctx: ActionContext): Promise<LiveToolResult> {
+  const { request, target, helpers } = ctx;
+  const walk = target.walk;
+  if (!walk) return COMPUTER_ARG_PROBLEM.unsupported(request.action, "");
+  const spec = {
+    target: String(request.text ?? "").trim(),
+    ...(request.duration ? { seconds: request.duration } : {}),
+  };
+  const { walked, route } = await helpers.driven(target, () => walk(spec));
+  ctx.record.route = route;
+  tally(ctx.record, { simMs: null, taken: 1, planned: 1, route });
+  return observed(
+    ctx,
+    `OK — ${ctx.caption}: ${walkedText(walked)}. ${await helpers.afterMove(ctx)}${ctx.noteLine}`,
+    true,
+  );
+}
+
+/** The player's view turned onto a target by the target itself: how the turn ended. */
+async function lookAt(ctx: ActionContext): Promise<LiveToolResult> {
+  const { request, target, helpers } = ctx;
+  const look = target.look;
+  if (!look) return COMPUTER_ARG_PROBLEM.unsupported(request.action, "");
+  const { looked, route } = await helpers.driven(target, () => look({ target: String(request.text ?? "").trim() }));
+  ctx.record.route = route;
+  tally(ctx.record, { simMs: null, taken: 1, planned: 1, route });
+  return observed(
+    ctx,
+    `OK — ${ctx.caption}: ${lookedText(looked)}. ${await helpers.afterMove(ctx)}${ctx.noteLine}`,
+    true,
+  );
+}
+
+/** A pilot's facts or evidence, as the answer prints them: short JSON. */
+function shortJson(value: Record<string, unknown>): string {
+  const text = JSON.stringify(value);
+  return text.length > PILOT_JSON_CHARS ? `${text.slice(0, PILOT_JSON_CHARS)}…` : text;
+}
+
+/** Who decided a pilot's moves, in the answer's words. */
+function decidersText(decisions: PilotDecisions): string {
+  if (!decisions.model) return COMPUTER_ARG_PROBLEM.pilotByOrder(decisions.byOrder);
+  if (decisions.asked === 0) return COMPUTER_ARG_PROBLEM.pilotNothingToAsk(decisions.byOrder);
+  const said = COMPUTER_ARG_PROBLEM.pilotByJev(
+    decisions.model,
+    decisions.answered,
+    decisions.asked,
+    amount(decisions.medianMs),
+    decisions.inputTokens,
+    decisions.byOrder,
+  );
+  return decisions.failures.length ? `${said}. ${COMPUTER_ARG_PROBLEM.pilotFailures(decisions.failures)}` : said;
+}
+
+/** How a pilot's run ended, in the answer's words: outcome, plan, moves, who decided, errors and its last moments. */
+function pilotedText(piloted: EnginePlayPiloted): string {
+  const head = COMPUTER_ARG_PROBLEM.piloted(piloted.outcome, amount(piloted.gameSeconds));
+  const stages = piloted.stages.map((stage) =>
+    COMPUTER_ARG_PROBLEM.pilotStage(stage.name, stage.atSeconds === null ? null : String(stage.atSeconds)),
+  );
+  const moves = piloted.moves.map((move) =>
+    COMPUTER_ARG_PROBLEM.pilotMove(move.name, move.started, move.worked, move.failed, amount(move.medianSeconds)),
+  );
+  const evidence = Object.keys(piloted.evidence).length ? shortJson(piloted.evidence) : "";
+  const lines = [
+    piloted.note ? `${head}: ${piloted.note}` : head,
+    evidence ? COMPUTER_ARG_PROBLEM.pilotEvidence(evidence) : "",
+    stages.length ? COMPUTER_ARG_PROBLEM.pilotStages(stages) : "",
+    moves.length ? COMPUTER_ARG_PROBLEM.pilotMoves(moves) : "",
+    decidersText(piloted.decisions),
+    piloted.errors.length ? COMPUTER_ARG_PROBLEM.pilotErrors(piloted.errors) : "",
+    Object.keys(piloted.facts).length ? COMPUTER_ARG_PROBLEM.pilotFacts(shortJson(piloted.facts)) : "",
+    piloted.timeline.length ? COMPUTER_ARG_PROBLEM.pilotTimeline(piloted.timeline.slice(-PILOT_TIMELINE_LINES)) : "",
+    piloted.findings.length
+      ? COMPUTER_ARG_PROBLEM.pilotFindings(
+          piloted.findings
+            .slice(0, PILOT_FINDINGS_LISTED)
+            .map((f) => `${f.code} at ${amount(f.gameSeconds)} s: ${f.detail}`),
+        )
+      : "",
+    piloted.record ? COMPUTER_ARG_PROBLEM.pilotRecord(piloted.record) : "",
+  ];
+  return lines.filter(Boolean).join("\n");
+}
+
+/** A pilot file played by the target itself, the game running while it plays: how its run ended. */
+async function pilot(ctx: ActionContext): Promise<LiveToolResult> {
+  const { request, target, helpers } = ctx;
+  const run = target.pilot;
+  if (!run) return COMPUTER_ARG_PROBLEM.unsupported(request.action, "");
+  const spec = { file: String(request.text ?? "").trim(), seconds: request.duration ?? PILOT_DEFAULT_SECONDS };
+  const { piloted, route } = await helpers.driven(target, () => run(spec));
+  ctx.record.route = route;
+  tally(ctx.record, { simMs: null, taken: 1, planned: 1, route });
+  if (piloted.outcome === PilotOutcome.Broken) ctx.record.failed = piloted.note;
+  return observed(
+    ctx,
+    `OK — ${ctx.caption}: ${pilotedText(piloted)}\n${await helpers.afterMove(ctx)}${ctx.noteLine}`,
+    true,
+  );
+}
+
 /** A running app's window brought in front of the others by name: the answer says where things stand after. */
 async function bringToFront(ctx: ActionContext): Promise<LiveToolResult> {
   const { request, target, helpers } = ctx;
@@ -423,15 +590,22 @@ const HOST_ACTIONS: Record<ComputerHostAction, HostActionHandler> = {
     return `X=${c.x}, Y=${c.y}`;
   },
   wait,
-  state: async (ctx) => `${await ctx.helpers.stateText(ctx.target, STATE_CHARS.asked)}${ctx.noteLine}`,
+  state: async (ctx) => `${await ctx.helpers.stateText(ctx, STATE_CHARS.asked)}${ctx.noteLine}`,
   console: consoleErrors,
+  recap: async (ctx) => {
+    const errors = ctx.target.console?.(ctx.helpers.loadedAt()).filter((entry) => entry.level === "error");
+    return sessionRecap({ ...ctx.helpers.history(), consoleErrors: errors?.map((entry) => entry.message) ?? null });
+  },
   reload: async (ctx) => {
     const noted = ctx.note ? ` — ${ctx.note}` : "";
-    const state = await ctx.helpers.stateText(ctx.target, STATE_CHARS.afterAction);
+    const state = await ctx.helpers.stateText(ctx, STATE_CHARS.afterAction);
     return `reloaded ${path.basename(ctx.helpers.root())}${noted} — ${state}`;
   },
   batch,
   act,
+  walk_to: walkTo,
+  look_at: lookAt,
+  pilot,
   web_open: web,
   web_read: web,
   web_click: web,
@@ -496,6 +670,9 @@ function movesOf(request: ComputerRequest): number {
   const moving =
     request.action === ComputerVerb.Wait ||
     request.action === ComputerVerb.Act ||
+    request.action === ComputerVerb.WalkTo ||
+    request.action === ComputerVerb.LookAt ||
+    request.action === ComputerVerb.Pilot ||
     request.action === ComputerVerb.BringToFront ||
     request.action === ComputerVerb.OpenPage ||
     WEB_MOVES.has(request.action);
@@ -590,6 +767,17 @@ function clockKeeper(options: ComputerSessionOptions) {
       await pacedTime(holds ? target.clock : undefined, ms);
       return null;
     },
+    driven: async <T>(target: ComputerTarget, run: () => Promise<T>): Promise<T> => {
+      // What the target does by itself runs on its own time: a stepped session no longer replays.
+      if (stepping) fallBack();
+      const clock = holds ? target.clock : undefined;
+      await clock?.start();
+      try {
+        return await run();
+      } finally {
+        await clock?.pause();
+      }
+    },
     inputting: async (target: ComputerTarget, actions: PreviewInputAction[]): Promise<InputOutcome> => {
       if (stepping) return steppedInput(target, actions);
       const clock = holds ? target.clock : undefined;
@@ -671,8 +859,11 @@ function traceKeeper(options: ComputerSessionOptions) {
   let started: number | null = null;
   let steps = 0;
   const routes = new Set<InputRoute>();
+  const rows: TraceRow[] = [];
+  let dropped = 0;
   return {
     path: (): string | null => file,
+    history: () => ({ rows, dropped }),
     write: async (
       request: ComputerRequest,
       caption: string,
@@ -696,42 +887,107 @@ function traceKeeper(options: ComputerSessionOptions) {
         ...(record.applied ? { applied: record.applied } : {}),
         ...(refused ? { refused: true as const } : {}),
         ...(record.failed ? { failed: record.failed } : {}),
+        ...(record.still ? { still: record.still } : {}),
+        ...(record.findings?.length ? { findings: record.findings } : {}),
       };
+      rows.push(row);
+      if (rows.length > RECAP_ROWS) {
+        rows.shift();
+        dropped += 1;
+      }
       claimed ??= claimFile();
       const into = await claimed;
       await ensureDir(options.frameDir);
       await appendFile(into, traceLine(row));
     },
-    summary: (deterministic: boolean): TraceSummary => ({
+    summary: (deterministic: boolean, stillInputs: number): TraceSummary => ({
       path: steps ? file : null,
       steps,
       deterministic,
       routes: [...routes],
+      stillInputs,
     }),
   };
 }
 
-/** The session's helpers over its source, its options and the keeper of its clock. */
+/** Whether a target's state is the game's own, the only state that says whether the game answered a move. */
+function isGameState(target: ComputerTarget): boolean {
+  return target.caps.state === StateLevel.Game;
+}
+
+/** The state as an answer shows it, cut to `max` characters, without the findings said on their own line. */
+function shownState(state: unknown, max: number): string {
+  const shown =
+    typeof state === "object" && state !== null && Object.hasOwn(state, EnginePlayStateField.Findings)
+      ? Object.fromEntries(Object.entries(state).filter(([key]) => key !== EnginePlayStateField.Findings))
+      : state;
+  return `state: ${JSON.stringify(shown ?? { __missing: true }).slice(0, max)}`;
+}
+
+/** What the game's own detectors told with a state read: kept on the action's record, and said on a line of its own. */
+function noticedLine(ctx: ActionContext, state: unknown): string {
+  const findings = findingsOf(state);
+  if (!findings.length) return "";
+  ctx.record.findings = [...(ctx.record.findings ?? []), ...findings];
+  const items = findings.map((f) => COMPUTER_ARG_PROBLEM.noticedItem(f.detail, f.code, f.count, f.gameSeconds));
+  return `\n${COMPUTER_ARG_PROBLEM.gameNoticed(items)}`;
+}
+
+/**
+ * A move's state handed to the session's watch: judged when the move pressed something the game
+ * took, seen otherwise. Answers the note once enough moves in a row changed nothing, else nothing.
+ */
+function judgeMove(watch: StillWatch, ctx: ActionContext, state: unknown): string {
+  if (!isGameState(ctx.target)) return "";
+  const taken = (ctx.record.applied?.taken ?? 0) > 0;
+  if (!taken || !pressesSomething(ctx.request)) {
+    watch.seen(state);
+    return "";
+  }
+  const { kind, note } = watch.judge(state);
+  if (kind) ctx.record.still = kind;
+  if (!note) return "";
+  const said =
+    note.kind === StillKind.Frozen
+      ? COMPUTER_ARG_PROBLEM.frozenInputs(note.inputs)
+      : COMPUTER_ARG_PROBLEM.stillInputs(note.inputs);
+  return `\n${said}`;
+}
+
+/** The session's helpers over its source, its options, the keeper of its clock and its watch on still inputs. */
 function sessionHelpers<T extends ComputerTarget>(
   source: TargetSource<T>,
   options: ComputerSessionOptions,
-  state: { root: () => string; loadedAt: () => number; note: { value: string | null } },
+  state: {
+    root: () => string;
+    loadedAt: () => number;
+    note: { value: string | null };
+    history: SessionHelpers["history"];
+  },
   clock: ReturnType<typeof clockKeeper>,
+  watch: StillWatch,
 ): SessionHelpers {
   const numbering = folderNumbering(options.frameDir);
   const readState = async (target: ComputerTarget): Promise<unknown> =>
-    (target.state ? await target.state().catch(() => null) : null) ?? { __missing: true };
+    target.state ? await target.state().catch(() => null) : null;
   return {
     root: state.root,
     loadedAt: state.loadedAt,
+    history: state.history,
     setupNote: () => state.note.value,
     clearSetupNote: () => {
       state.note.value = null;
     },
     cursor: (target, size) => target.pointer() ?? centre(size),
-    stateText: async (target, max = STATE_CHARS.default) =>
-      `state: ${JSON.stringify(await readState(target)).slice(0, max)}`,
-    afterMove: async (ctx) => `state: ${JSON.stringify(await readState(ctx.target)).slice(0, STATE_CHARS.afterAction)}`,
+    stateText: async (ctx, max = STATE_CHARS.default) => {
+      const read = await readState(ctx.target);
+      if (isGameState(ctx.target)) watch.seen(read);
+      return `${shownState(read, max)}${noticedLine(ctx, read)}`;
+    },
+    afterMove: async (ctx) => {
+      const read = await readState(ctx.target);
+      return `${shownState(read, STATE_CHARS.afterAction)}${judgeMove(watch, ctx, read)}${noticedLine(ctx, read)}`;
+    },
     saveFrame: async (jpeg, name, mime = StillMimeType.Jpeg) => {
       await ensureDir(options.frameDir);
       await numbering.ready;
@@ -744,6 +1000,7 @@ function sessionHelpers<T extends ComputerTarget>(
     frame: (target, jpeg, caption, act) => source.frame(target as T, jpeg, caption, act),
     waiting: clock.waiting,
     inputting: clock.inputting,
+    driven: clock.driven,
     observeByDefault: options.observeByDefault ?? false,
   };
 }
@@ -793,6 +1050,7 @@ export function computerSession<T extends ComputerTarget>(
   const note = { value: null as string | null };
   const clock = clockKeeper(options);
   const trace = traceKeeper(options);
+  const watch = stillWatch();
   const ensureLoaded = sharedLoad(async (force: boolean): Promise<TargetLoad<T>> => {
     const loaded = await source.load(root, force);
     if (!loaded.fresh || loaded.problem) return loaded;
@@ -802,7 +1060,13 @@ export function computerSession<T extends ComputerTarget>(
     note.value = loaded.note;
     return loaded;
   });
-  const helpers = sessionHelpers(source, options, { root: () => root, loadedAt: () => loadedAt, note }, clock);
+  const helpers = sessionHelpers(
+    source,
+    options,
+    { root: () => root, loadedAt: () => loadedAt, note, history: trace.history },
+    clock,
+    watch,
+  );
   const refuse = async (request: ComputerRequest, sentence: string): Promise<LiveToolResult> => {
     await trace.write(request, describeComputerAction(request), emptyRecord(), null, true);
     return sentence;
@@ -847,7 +1111,7 @@ export function computerSession<T extends ComputerTarget>(
     retarget: (next) => {
       root = next;
     },
-    trace: () => trace.summary(clock.deterministic()),
+    trace: () => trace.summary(clock.deterministic(), watch.total()),
   };
 }
 

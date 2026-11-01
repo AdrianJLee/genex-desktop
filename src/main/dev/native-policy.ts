@@ -41,6 +41,10 @@ const NATIVE_CHANNELS = [
   // deletes it there. A fixture profile has no key and no network.
   "studio:openrouter.key.save",
   "studio:openrouter.key.clear",
+  // Saving checks the TypeSafe key with TypeSafe and writes it to the OS secret store; forgetting
+  // it deletes it there. A fixture profile has no key and no network.
+  "studio:typesafe.key.save",
+  "studio:typesafe.key.clear",
   // The browser sign-in opens OpenRouter in the person's browser, listens on a loopback port and
   // redeems the code with OpenRouter; opening its page again is the browser too.
   "studio:openrouter.signin",
@@ -215,6 +219,8 @@ const FIXTURE_SAFE = [
   "studio:game.asset.still",
   "studio:engines",
   "studio:engines.recheck",
+  // Reads whether a TypeSafe key is saved in the profile's own store; it never reaches TypeSafe.
+  "studio:typesafe.key.status",
   "studio:hardware",
   "studio:model-install.status",
   "studio:cli-install.status",

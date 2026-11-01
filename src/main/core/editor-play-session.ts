@@ -11,7 +11,13 @@ import path from "node:path";
 import { ScreenRole } from "../../shared/agent-screen.ts";
 import type { TargetCapabilities } from "../../shared/computer-target.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
-import { ENGINE_PLAY_TOOLS, EnginePlayTool, editorCapabilities } from "../../shared/engine-play.ts";
+import {
+  ENGINE_PLAY_TOOLS,
+  ENGINE_PLAY_VIEW,
+  type EnginePlayOptionalTool,
+  EnginePlayTool,
+  editorCapabilities,
+} from "../../shared/engine-play.ts";
 import type { LiveToolResult } from "../../shared/engine-requests.ts";
 import { type EngineBinding, isEngineGame } from "../../shared/game-engine.ts";
 import type { GameProject } from "../../shared/game-project.ts";
@@ -38,6 +44,13 @@ const MESSAGE = {
 } as const;
 
 /** The game a session's editor computer is for, and the session's own thread, engine and end where it has them. */
+
+/** A play shot too large to show, as a JPEG at the play view's width; Electron's codec loads only when one arrives. */
+async function shrinkPlayShot(picture: Buffer): Promise<Buffer> {
+  const { resizeToJpeg } = await import("../preview-images.ts");
+  return resizeToJpeg(picture, ENGINE_PLAY_VIEW.width);
+}
+
 export interface EditorPlayGame {
   project: string;
   /** The game's folder. */
@@ -165,7 +178,7 @@ export async function editorPlayComputer(
     ...(game.threadId ? { threadId: game.threadId } : {}),
   };
   // Each call takes the editor lock its tool needs, the person first, as any harness step does.
-  const call = (tool: EnginePlayTool, args: Record<string, unknown>) => {
+  const call = (tool: EnginePlayTool | EnginePlayOptionalTool, args: Record<string, unknown>) => {
     // The cancelled session must still reach the backend to let go of its keys and stop its play.
     const signal = tool === EnginePlayTool.Close ? AbortSignal.timeout(CLEANUP_TIMEOUT_MS) : game.signal;
     return x.pluginTools.invokePluginTool(`${plugin}__${tool}`, args, binding, signal, {
@@ -177,7 +190,8 @@ export async function editorPlayComputer(
   const afterOpen = async (opened: unknown) => {
     opening = reachesLiveData(opened) ? EDITOR_PLAY_PROMPTS.liveData : null;
   };
-  const editor = { call, caps: plays.caps, afterOpen };
+  const decider = () => core.fastDecisions.decider();
+  const editor = { call, caps: plays.caps, afterOpen, shrink: shrinkPlayShot, decider };
   const tools = computerTools(x.previews, use.grant, game.directory, use.outDir, use.session, { editor });
   // The first answer after the play opened carries what opened with it.
   const onLiveTool: ComputerTools["onLiveTool"] = async (name, args) => {

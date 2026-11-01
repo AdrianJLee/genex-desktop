@@ -5968,4 +5968,15 @@ export default {
     "{count, plural, other {작업자 #명 더 보기}}",
   "In the running build": "진행 중인 빌드에 있음",
   "Not in your game yet. It arrives when the build lands.": "아직 게임에 없어요. 빌드가 반영되면 들어와요.",
+  "Couldn't reach TypeSafe to check the key: {why}": "키를 확인하려고 TypeSafe에 연결하지 못했어요: {why}",
+  Key: "키",
+  "Optional. With a key, Unreal play-tests pick their moves with Jev, several times a second.":
+    "선택 사항이에요. 키가 있으면 Unreal 플레이 테스트가 Jev로 1초에 여러 번 행동을 골라요.",
+  "That doesn't look like a TypeSafe key. Copy it again from TypeSafe's console.":
+    "TypeSafe 키처럼 보이지 않아요. TypeSafe 콘솔에서 다시 복사해 줘.",
+  "TypeSafe API key": "TypeSafe API 키",
+  "TypeSafe didn't accept that key. Check it and paste it again.":
+    "TypeSafe가 그 키를 받지 않았어요. 확인하고 다시 붙여 넣어 줘.",
+  "TypeSafe key": "TypeSafe 키",
+  "Unreal play-tests pick their moves with Jev": "Unreal 플레이 테스트가 Jev로 행동을 골라요",
 } satisfies LocaleCatalog;

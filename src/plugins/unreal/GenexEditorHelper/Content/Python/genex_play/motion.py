@@ -13,7 +13,7 @@ route it only holds the throttle. player_state reports both.
 
 import math
 
-from genex_play import play, route, route_math
+from genex_play import near, play, route, route_math, walk
 
 SETTLE_MAX_S = 8.0
 DRIVE_MAX_S = 30.0
@@ -215,5 +215,7 @@ def player_state() -> dict:
     now = play.game_seconds()
     drive = _drive_report(now)
     state.update({'routeProgressM': drive['progressM'] if drive is not None else None,
-                  'settle': _settle_report(now), 'drive': drive})
+                  'settle': _settle_report(now), 'drive': drive,
+                  'walk': walk.walk_report(now), 'look': walk.look_report(now),
+                  'near': near.nearby(play.player_pawn())})
     return state

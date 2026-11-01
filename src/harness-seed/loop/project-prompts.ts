@@ -237,8 +237,12 @@ export function unrealWithoutPlugin(engine: string | undefined): string[] {
  * build of the game is that tool's, never the session's own, even after its last reply said it
  * would build it: the session decides by its Loop rules again.
  */
-export function factsReadyPrompt(facts: readonly FactRef[], launch?: string): string {
-  const ready = `The project now holds ${holdsWords(facts)}; your tools fit it now.`;
+export function factsReadyPrompt(facts: readonly FactRef[], launch?: string, notReady?: string): string {
+  const holds = `The project now holds ${holdsWords(facts)}; your tools fit it now.`;
+  // An app that isn't ready is the agent's to get ready (open, reopen or wait for it), never the person's.
+  const ready = notReady
+    ? `${holds} Its app isn't ready yet: ${notReady} Get it ready with your own tools (open, reopen or wait for it) before you use it.`
+    : holds;
   if (launch)
     return `${ready} Loop is on, so decide as your Loop rules say: when the ask is to build the game or change it substantially, start it now with ${launch} (call it last, then recap in one short paragraph); anything smaller, finish it here and tell the user what you did.`;
   return `${ready} Go on with what you said you would do, then tell the user what you made.`;

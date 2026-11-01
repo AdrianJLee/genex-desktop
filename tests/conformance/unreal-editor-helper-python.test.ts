@@ -13,6 +13,7 @@ import { test } from "node:test";
 import { agentBrief } from "../../src/harness-seed/loop/unreal/agent-prompts.ts";
 import { AgentKind } from "../../src/harness-seed/loop/unreal/lead-contract.ts";
 import { TOOLSET_OF } from "../../src/plugins/unreal/loop-tools.ts";
+import { EnginePlayFindingCode } from "../../src/shared/engine-play.ts";
 import { checkPython, GENEX_NAMES } from "../../src/plugins/unreal/python-check.ts";
 
 const FIXTURES = path.resolve("tests/fixtures/unreal-helper");
@@ -122,12 +123,25 @@ test("apply.py's check knows exactly the names of the helper's genex module", { 
   assert.deepEqual(JSON.parse(run.stdout), [...GENEX_NAMES].sort());
 });
 
+/** The finding codes the helper's play detectors send. */
+const LIST_FINDING_CODES = `import json
+from genex_play import detect
+print(json.dumps(sorted(detect.CODES)))`;
+
+test("the play's detectors send exactly the app's finding codes", { skip: SKIP }, () => {
+  const run = spawnSync("python3", ["-c", LIST_FINDING_CODES], PYTHON);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(JSON.parse(run.stdout), Object.values(EnginePlayFindingCode).sort());
+});
+
 /** Unreal 5.8.3's own names for every class the stub models (make_real_names.py). */
 const REAL_NAMES = path.join(FIXTURES, "real-names-5.8.json");
 /** The helper's packages agents call into the editor through; `*_math.py` modules are pure and touch no engine. */
+/** Helper files that call no engine: the pilot's runtime calls the pilot's own methods (look, moves, a move's run). */
+const ENGINE_FREE = new Set(["pilot.py", "pilot_kit.py"]);
 const ENGINE_FACING = ["genex_build", "genex_play"].flatMap((pkg) =>
   readdirSync(path.join(HELPER_PYTHON, pkg))
-    .filter((file) => file.endsWith(".py") && !file.endsWith("_math.py"))
+    .filter((file) => file.endsWith(".py") && !file.endsWith("_math.py") && !ENGINE_FREE.has(file))
     .map((file) => path.join(pkg, file)),
 );
 

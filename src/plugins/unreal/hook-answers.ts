@@ -101,8 +101,7 @@ export const MOMENT_WORDS = {
   NoProject: "This game isn't linked to an Unreal project.",
   Waiting: (project: string | null) =>
     `Unreal is opening ${project ?? "this game's project"}; a first start can take several minutes. This chat goes on by itself when it's ready. Stop ends the wait.`,
-  NotReady: (project: string | null) =>
-    `Unreal didn't finish opening ${project ?? "this game's project"}. Open it from the Unreal button above the game, then send a message to go on.`,
+  NotReady: (project: string | null) => `Unreal isn't running with ${project ?? "this game's project"} open.`,
   // A run's start.
   NotSetUp: (why: string) => `Genex couldn't set this game's Unreal project up for the Loop: ${why}`,
   NoHelper:

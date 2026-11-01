@@ -29,7 +29,7 @@ export type Call = [string, Record<string, unknown>, number?];
 const PARAMETERS: Partial<Record<string, string[]>> = {
   [LoopTool.ApplyPart]: ["script", "part"],
   [LoopTool.Hold]: ["name", "x", "y", "seconds"],
-  [LoopTool.CapturePlay]: ["name", "width", "height"],
+  [LoopTool.CapturePlay]: ["name", "width", "height", "ui"],
   [LoopTool.GameState]: ["part"],
   [LoopTool.ProbeCharacters]: ["part"],
   [LoopTool.ProbeView]: [],
@@ -225,8 +225,8 @@ export type PlayOptions = {
   clock?: boolean;
 };
 
-/** A capture as the stand-in took it: the shot's name and the game's clock then. */
-export type Capture = { name: string; gameSeconds: number };
+/** A capture as the stand-in took it: the shot's name, the game's clock then, and whether it asked for the UI. */
+export type Capture = { name: string; gameSeconds: number; ui: boolean };
 
 /** The tag checks' actors in the stand-in's play world: the track a feature built, and a part's lantern. */
 const PLAY_WORLD_ACTORS = [
@@ -312,7 +312,7 @@ export function playable(
     [LoopTool.GameState]: () => ({ pie: playing(), player: player(), actors: PLAY_WORLD_ACTORS, more: 0 }),
     [LoopTool.CapturePlay]: (a) => {
       const file = `/p/Saved/Genex/captures/${a.name}.png`;
-      captures.push({ name: String(a.name), gameSeconds: seconds() });
+      captures.push({ name: String(a.name), gameSeconds: seconds(), ui: a.ui === true });
       files.add(file);
       return { queued: true, file };
     },
@@ -320,7 +320,7 @@ export function playable(
   });
   const d = deps(editor.port, files);
   now = d.now;
-  return { editor, deps: d, captures, game, seconds };
+  return { editor, deps: d, captures, game, seconds, files };
 }
 
 /**

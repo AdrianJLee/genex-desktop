@@ -64,6 +64,7 @@ class PlayCase(HelperCase):
     def frame(self, game: float, wall: float) -> None:
         """One editor frame: the game clock and the wall clock move, then every post-tick callback runs."""
         unreal.state['game_seconds'] += game
+        unreal.state['real_seconds'] += wall
         unreal.state['world_delta'] = game
         self.clock.now += wall
         for callback in list(unreal.state['ticks'].values()):
@@ -124,6 +125,32 @@ class GameTimeHolds(PlayCase):
         self.assertEqual(unreal.state['ticks'], {})
         unreal.state['pie'] = True
         self.assertEqual(tool('player_state')['held'], [], 'the next play session starts with nothing held')
+
+
+class Taps(PlayCase):
+    """A key forced on is pressed again every frame it stays forced, which a game's key event reads as
+    one press a frame: a tap presses for one tick of the world, as a keyboard's tap does."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        unreal.state['keys'].add('I')
+
+    def test_a_tapped_key_is_pressed_for_one_tick_of_the_world_then_let_go(self) -> None:
+        tool('hold', 'I', 1.0, 0.0, 0.1)
+        self.assertIn('Input.+key I 1', self.commands())
+        self.frame(0.05, 0.05)
+        self.assertEqual(self.commands().count('Input.-key I'), 1)
+        self.assertEqual(unreal.state['ticks'], {}, 'nothing left to tick')
+
+    def test_a_tap_lets_go_after_one_tick_while_the_game_is_paused(self) -> None:
+        tool('hold', 'I', 1.0, 0.0, 0.1)
+        self.frame(0.0, 0.05)
+        self.assertEqual(self.commands().count('Input.-key I'), 1, 'its clock stands still, the world still ticks')
+
+    def test_a_longer_hold_of_a_key_stays_held(self) -> None:
+        tool('hold', 'W', 1.0, 0.0, 1.0)
+        self.frames(3, game=0.05, wall=0.05)
+        self.assertEqual(self.commands().count('Input.-key W'), 0)
 
 
 class Mouse(PlayCase):
@@ -374,6 +401,33 @@ class ProbeRoute(PlayCase):
     def test_without_a_play_session_it_is_refused(self) -> None:
         unreal.state['pie'] = False
         self.assertIn('error', tool('probe_route'))
+
+
+class SameNamedActions(PlayCase):
+    """A game built from several templates holds more than one input action of the same name; forcing one by
+    name may reach one the player's controls never read, so the key they share is pressed instead."""
+
+    def add_shoot(self, package: str, keys: list) -> unreal.InputAction:
+        action = unreal.InputAction('IA_Shoot', unreal.InputActionValueType.BOOLEAN)
+        unreal.state['registry'].append(unreal.AssetData(f'{package}/IA_Shoot', 'InputAction', asset=action))
+        context = unreal.InputMappingContext(f'IMC_{len(unreal.state["registry"])}',
+                                             [unreal.EnhancedActionKeyMapping(action, key) for key in keys])
+        unreal.state['registry'].append(unreal.AssetData(f'{package}/{context.name}', 'InputMappingContext', asset=context))
+        return action
+
+    def test_presses_the_shared_key_when_two_actions_share_a_name(self) -> None:
+        unreal.state['keys'].add('LeftMouseButton')
+        self.add_shoot('/Game/Template/Input', ['Gamepad_RightTriggerAxis', 'LeftMouseButton'])
+        self.add_shoot('/Game/Kit/Input', ['LeftMouseButton'])
+        held = play.resolve('Shoot')
+        self.assertEqual((held.label, held.action), ('LeftMouseButton', None))
+        json.loads(play.hold('Shoot', 1.0, 0.0, 0.5))
+        self.assertIn('Input.+key LeftMouseButton 1', self.commands())
+
+    def test_one_action_of_a_name_is_still_forced_as_the_action(self) -> None:
+        only = self.add_shoot('/Game/Kit/Input', ['LeftMouseButton'])
+        held = play.resolve('Shoot')
+        self.assertEqual((held.label, held.action), ('IA_Shoot', only))
 
 
 if __name__ == '__main__':

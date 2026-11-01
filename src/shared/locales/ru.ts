@@ -6150,4 +6150,15 @@ export default {
     "{count, plural, one {Показать ещё # помощника} few {Показать ещё # помощников} many {Показать ещё # помощников} other {Показать ещё # помощника}}",
   "In the running build": "В текущей сборке",
   "Not in your game yet. It arrives when the build lands.": "Пока не в игре. Попадёт туда, когда сборка зальётся.",
+  "Couldn't reach TypeSafe to check the key: {why}": "Не удалось связаться с TypeSafe, чтобы проверить ключ: {why}",
+  Key: "Ключ",
+  "Optional. With a key, Unreal play-tests pick their moves with Jev, several times a second.":
+    "Необязательно. С ключом плей-тесты в Unreal выбирают ходы с Jev по нескольку раз в секунду.",
+  "That doesn't look like a TypeSafe key. Copy it again from TypeSafe's console.":
+    "Это не похоже на ключ TypeSafe. Скопируй его ещё раз из консоли TypeSafe.",
+  "TypeSafe API key": "API-ключ TypeSafe",
+  "TypeSafe didn't accept that key. Check it and paste it again.":
+    "TypeSafe не принял этот ключ. Проверь его и вставь снова.",
+  "TypeSafe key": "Ключ TypeSafe",
+  "Unreal play-tests pick their moves with Jev": "Плей-тесты в Unreal выбирают ходы с Jev",
 } satisfies LocaleCatalog;

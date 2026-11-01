@@ -499,8 +499,22 @@ Because it is enabled by default, Unreal loads it without a `.uproject` entry. I
 Epic's server lists:
 - `project_file` names the project the editor has open (the bridge's check above).
 - `list_actions` lists the game's controls.
-- `hold` presses an input action or a key for a time and returns at once.
-- `player_state` reads where the pawn is and how fast it moves, and the latest settle and drive.
+- `hold` presses an input action or a key for a time and returns at once. A key held 0.15 s or
+  less is tapped: pressed for one tick of the play world (its real-time clock, which runs on while
+  the game is paused), then let go, since a forced key is pressed again every frame it stays
+  forced and a game's key event would read a longer tap as several presses.
+- `player_state` reads where the pawn is and how fast it moves, the latest settle and drive, what
+  is `near` (`genex_play/near.py`: the nearest six of the game's own actors with a body within 60 m,
+  as `Stone_1: 3.8 m, 20° right` from where the view faces; the engine's own actors, such as level
+  geometry and lights, and bodiless ones are left out), and
+  `findings`: what the play's bug detectors (`genex_play/detect.py`) told since the last read. From
+  the first read until the play ends they check the pawn and the frame time every editor frame: a
+  position that is not a number, a pawn that vanished, a fall over 8 game seconds, a frame over
+  0.75 s (after the first 3 game seconds, never one a shot froze), a move over 20 m in one frame.
+  Each kind is told on its 1st, 10th, 100th and 1000th time, with the app's `EnginePlayFindingCode`
+  spellings; the findings come even when the state can't be read. Only the computer's own read
+  (`play-state`, `take_findings: true`) takes them; every other read (the plugin's polls during a walk,
+  a settle or a drive) only peeks, so none is lost before the agent hears of it.
 - `release_all` lets go of everything held, and ends a settle or a drive.
 - `settle` watches the pawn come to rest (moving under 20 cm/s with its height steady) and returns
   at once.
@@ -508,6 +522,61 @@ Epic's server lists:
   `GenexRoute`) and returns at once.
 - `probe_route` measures the pawn against the route: how far its facing and position are off it,
   and how far along it is.
+- `walk_to` walks the pawn to an actor (its label or name, or part of it; the closest match wins)
+  or a point, in game time, and returns at once (`genex_play/walk.py`). An actor is where its
+  colliding parts are (a character's editor-only arrow lies elsewhere in play), and it is reached
+  on its own level: its bottom near the pawn's feet, or the actor rising through them. The way is
+  the level's nav mesh path when it has one, else the straight line, checked a step ahead for
+  drops. Each frame it forces the game's move action (`IA_Move`, X right and Y forward in the
+  controller's frame) toward the next waypoint for 0.25 game s, never under 0.4 of a full push (a
+  move action's dead zone stops a smaller one), so a stopped walk lets go by itself; a game without
+  one is walked with W/A/S/D. It lets go early by the slide, and when it gets no closer for 1.5
+  game s it jumps, side-steps left and right, then plans again before it reports `stuck`. Arrived
+  at an actor, it ends facing it within 15°, so a swing or an interact reaches it: a body that
+  turns where it walks by a light push toward it (0.8 game s at most), a body that turns with its
+  view by turning the view as `look_at` does (2 game s at most). `player_state`'s `walk` says how
+  it stands: `walking`, `arrived`, `stuck`, `stopped` (a drop ahead), `timed-out` or `failed`, with
+  the way, distance left, what it tried and how far off it faces an actor (`facingDeg`).
+- `look_at` turns the view onto an actor or a point by forcing `Mouse2D`, measuring each frame how
+  far the last frame's movement turned it (no sensitivity set up front), and says at once when
+  the view doesn't turn. `player_state`'s `look` says how it stands.
+- `ui_widgets` lists the game's own on-screen interface (UMG): every visible widget that shows text or is a
+  button, inside the user widgets in the viewport, with its kind and box; `ui_press {button}` presses a
+  visible, enabled button by its text or name through its click event (hit-testing skipped). A game whose
+  interface is drawn in C++ Slate or on a HUD canvas lists nothing: screenshots are then the only reading.
+- `light_play {on}` lowers the rendering while an agent plays (screen percentage 50, scalability groups at
+  most 1) and puts each console variable back exactly when the computer tool's play ends.
+- `pilot {file, seconds, decide}` starts a pilot and `pilot_step {answer, stop}` steps it
+  (`genex_play/pilot.py`). A pilot is a `.py` of the project (`Pilots/<goal>.py`, given relative to it,
+  no link or `..`, compiled from source with no bytecode left beside it) whose last
+  `genex_play.pilot_kit.Pilot` subclass is played: every frame its running move's generator steps
+  (`pilot_game.Game`'s `walk_to`, `look_at`, `hold`, `tap`, `wait`, `mouse` controllers; a stopped
+  move's controllers let go), every `1/look_hz` game s it looks, checks `outcome` and its `stages`, and
+  offers its `moves`. At decision points (nothing runs, a move ended, the moves changed, `decide_hz`)
+  a `decide` run puts an ask out for the host; its answer picks, a running move giving way only when
+  it `can_stop` and the pick leads by `stop_lead` (or is `urgent`). Otherwise, or while an ask
+  waits, the first move offered wins; with nothing running a stand-in starts after 0.3 s and the
+  answer replaces it without the margin; an ask is dropped after 2 s. A move failing at once twice
+  rests 3 s. The run ends `done`/`failed` by the outcome, `stalled` (no stage done and no move worked
+  for `stall_seconds`, or one stage over `stage_seconds`), `timed-out`, `stopped` or `broken`, and
+  its report carries the plan, a tally per move, the counts of asks and order picks, the last facts,
+  the pilot's errors with their lines and its last 40 moments. A pilot's `reflex(game)` runs every
+  frame whatever move runs (`game.dodge` presses once per hit read from the attacker's montage
+  notifies, `game.threat`). The report also carries the run id, what the play's detectors found
+  during it (the first of each kind with a frame of the play view, at most 12) and its film log,
+  every pick with its odds and facts, saved in `Saved/Genex/pilots/<run>.json`. When the run ends
+  the plugin writes its record into the game folder, `playtests/runs/<date>-<run>/record.md`, with
+  those frames and `decisions.json` copied beside it (from `Saved/Genex` only, by real path; once
+  per run; the newest 30 kept); the agent is told to add what it learned to `playtests/notes.md`.
+  The Unreal skill has a playtest end with the bugs numbered and an `ask_user` question on which to
+  fix; the agent fixes the picked ones, then verifies each by running the pilot that caught it again.
+  A game folder whose `pilots/` holds no pilot gets Genex's starter, `pilots/explore.py` (copied from
+  `GenexEditorHelper/Templates/pilots/`, never over a file, once: `pilots/.genex-starter` marks it given),
+  when a game is linked or the agent's play
+  opens, so a playtest can start playing at once; the skill sends real play (minutes of it) through a
+  pilot and leaves quick looks to single inputs and the toolsets.
+  `click-interface {what}` lets a playtest press the game's own C++ Slate interface with Genex's computer
+  control (`game.computer.control`: the setting's card when it is off, then the chat's next turn clicks).
 
 The input goes through Enhanced Input's own `Input.+action` / `Input.+key` console commands.
 These find the player's subsystem from its player controller, which Python cannot do reliably.
@@ -622,7 +691,12 @@ actors tagged `GenexPart:<Part>`, which `rollback_part` deletes. `genex.import_m
 reached through no link (a `.glb`, `.gltf`, `.fbx` or `.obj` up to 100 MB; a `.wav`, `.png`, `.jpg`
 or `.jpeg` up to 20 MB), into `/Game/Parts/<Part>/Imported/<name>/` and answer the static mesh,
 SoundWave or Texture2D to place: another file is refused before Unreal imports, a model that makes
-several meshes after. `capture_play` writes a game-view PNG under `Saved/Genex/captures/`. Two read-only probes measure during play what a shot can hide:
+several meshes after. `capture_play` writes a game-view PNG under `Saved/Genex/captures/`; with `ui`
+it shows the game's on-screen UI too (`genex_play/screen.py`): Slate draws the UI over the play
+view, so the shot is cut from a `Shot showui` shot of the editor's window, where the play view is
+found once per play by matching a quarter-size scene shot at its framing. A window shot the
+editor's own viewport took (Unreal hands a screenshot request to whichever viewport draws first) is
+taken again, and with no window shot the 3D frame alone comes. Two read-only probes measure during play what a shot can hide:
 `probe_characters` traces each pawn's bottom (a character's capsule and visible feet) to the ground
 and compares its facing with its velocity (a vehicle also reports its wheels on the ground), and
 `probe_view` checks the player's own meshes (the view target's and what is attached to it, drawn

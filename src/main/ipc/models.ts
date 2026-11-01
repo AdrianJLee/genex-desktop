@@ -69,7 +69,7 @@ const MESSAGE = {
 } as const;
 
 export interface ModelsIpcDeps {
-  core: Pick<StudioCore, "engines">;
+  core: Pick<StudioCore, "engines" | "fastDecisions">;
   subscription(id: string): SubscriptionEngine | null;
   pushUiEvent(event: UiEvent): void;
   /** OpenRouter's browser sign-in, which hands the key it gets to the engine. */
@@ -184,8 +184,8 @@ export function registerModelsIpc(
 }
 
 /**
- * The OpenRouter key, pasted or got by the browser sign-in: checked with OpenRouter, kept in the OS
- * secret store, never sent back.
+ * The OpenRouter key, pasted or got by the browser sign-in, and the TypeSafe key pilots' fast
+ * decisions use: each checked with its service, kept in the OS secret store, never sent back.
  */
 function registerApiKeyIpc(
   handle: IpcHandle,
@@ -206,6 +206,9 @@ function registerApiKeyIpc(
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
     return status;
   });
+  handle("studio:typesafe.key.status", async () => core.fastDecisions.status());
+  handle("studio:typesafe.key.save", async (payload) => core.fastDecisions.save(payload?.key));
+  handle("studio:typesafe.key.clear", async () => core.fastDecisions.clear());
   handle("studio:openrouter.signin", async () => {
     const engine = keyEngine();
     const result = await openRouterLogin.start((key) => engine.saveKey(key));

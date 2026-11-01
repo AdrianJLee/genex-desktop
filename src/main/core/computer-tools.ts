@@ -7,6 +7,7 @@
  * (`game-bridge-target.ts`), or, for a game played in its engine's editor, the engine plugin's
  * play tools (`editor-play-target.ts`).
  */
+import type { FastDecider } from "../../shared/fast-decisions.ts";
 import { type AgentScreen, type AgentScreenRole, ScreenDeed } from "../../shared/agent-screen.ts";
 import {
   BROWSER_CAPABILITIES,
@@ -32,7 +33,7 @@ import {
   type TargetSource,
 } from "./computer-session.ts";
 import { type EngineLauncher, gameBridgeSource } from "./game-bridge-target.ts";
-import { type EnginePlayCall, editorPlaySource } from "./editor-play-target.ts";
+import { type EnginePlayCall, editorPlaySource, type ShrinkShot } from "./editor-play-target.ts";
 import type { FramePort, PreviewService } from "./previews.ts";
 import { iterationDir } from "./run-shots.ts";
 import type { SessionPort } from "./session-port.ts";
@@ -112,6 +113,10 @@ export interface ComputerToolsOptions {
     call: EnginePlayCall;
     caps?: TargetCapabilities;
     afterOpen?: (opened: unknown) => Promise<void>;
+    /** Re-encodes a play shot too large to show (Electron's JPEG codec). */
+    shrink?: ShrinkShot;
+    /** The fast decision model a pilot's asks go to, when one is set up in Settings (optional). */
+    decider?: () => Promise<FastDecider | null>;
   };
 }
 

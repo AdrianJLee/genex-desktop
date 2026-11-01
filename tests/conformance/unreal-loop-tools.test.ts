@@ -18,6 +18,7 @@ import {
   LeadLoopToolName,
   LoopEditorTool,
   LoopToolName,
+  shotFileReady,
 } from "../../src/plugins/unreal/loop-tools.ts";
 import { unrealPython } from "../../src/plugins/unreal/python-check.ts";
 import { loadReference, storeReference } from "../../src/plugins/unreal/reference-store.ts";
@@ -219,6 +220,19 @@ async function writeFakeUnrealPython(engineDir: string, problem: Record<string, 
   await writeFile(python, `#!/bin/sh\ncat > /dev/null\ncat "${answer}"\n`);
   await chmod(python, 0o755);
 }
+
+describe("a shot file the editor writes", () => {
+  it("is read only once it has bytes: Unreal makes the file before it fills it", async () => {
+    const dir = await realpath(await tmpDir("studio-shot-ready-"));
+    const shot = path.join(dir, "shot.png");
+    assert.equal(await shotFileReady(shot), false, "not there yet");
+    await writeFile(shot, "");
+    assert.equal(await shotFileReady(shot), false, "made, not filled");
+    await writeFile(shot, "png");
+    assert.equal(await shotFileReady(shot), true);
+    assert.equal(await shotFileReady(dir), false, "a folder is no shot");
+  });
+});
 
 describe("the Unreal Loop's tools", () => {
   it("check-part passes a good part and names each problem of a bad one", async () => {

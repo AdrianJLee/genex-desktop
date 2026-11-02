@@ -329,6 +329,16 @@
     0 10px 34px color-mix(in srgb, var(--people-primary-bottom) 42%, transparent),
     0 0.5px 1.5px color-mix(in srgb, var(--people-primary-bottom) 25%, transparent);
 }
+/* Play's tint (Show game) over the art: its blue on the glass, in the top's own ink. */
+.game-hero .game-primary.play-tint {
+  background: color-mix(in srgb, var(--people-primary-bottom) 34%, var(--hero-glass));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--people-primary-top) 55%, transparent);
+  color: var(--hero-ink);
+  backdrop-filter: blur(12px);
+}
+.game-hero .game-primary.play-tint:enabled:hover {
+  background: color-mix(in srgb, var(--people-primary-bottom) 48%, var(--hero-glass));
+}
 .game-primary-row {
   display: flex;
   gap: 10px;
@@ -376,7 +386,9 @@
 }
 .game-installing {
   position: relative;
-  width: min(360px, 100%);
+  /* A fixed width, so the bar keeps its place in the row while the words above size it. */
+  width: 360px;
+  max-width: 100%;
   height: 52px;
   overflow: hidden;
   border-radius: 13px;

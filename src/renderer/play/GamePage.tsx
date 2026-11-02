@@ -28,6 +28,8 @@ import {
   platformsOf,
 } from "../../shared/play-native.ts";
 import { usePlay, usePlayWeb } from "../state/hooks.ts";
+import { CardMenu } from "./card-menu/CardMenu.tsx";
+import { useCardMenu } from "./PlayCard.tsx";
 import { FeedStatus } from "./play-model.ts";
 import { PlayPage, type PlayView } from "../state/play.ts";
 import { studio } from "../state/studio.ts";
@@ -381,7 +383,30 @@ function Pills({ game }: { game: PlayGameDetail }): JSX.Element {
         {formatCount(game.comments)}
       </button>
       <ShareButton game={game} />
+      <PageMenu game={game} />
     </>
+  );
+}
+
+/**
+ * The page's ⋯ after Share: the card's menu (`CardMenu`), so an installed game is shown in its
+ * folder or removed from this computer here too, and its owner gets their items. With nothing in
+ * it, there is no ⋯.
+ */
+function PageMenu({ game }: { game: PlayGameDetail }): JSX.Element | null {
+  const [open, setOpen] = useState(false);
+  const menu = useCardMenu(game);
+  const installed = usePlay((s) => s.installs.installed.find((one) => one.slug === game.slug) ?? null);
+  if (!menu && !installed) return null;
+  return (
+    <CardMenu
+      game={game}
+      menu={menu}
+      installed={installed}
+      open={open}
+      onOpenChange={setOpen}
+      triggerClassName="game-pill game-pill-icon game-menu"
+    />
   );
 }
 

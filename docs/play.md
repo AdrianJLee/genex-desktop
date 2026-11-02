@@ -235,7 +235,7 @@ is.
   with thumbnails and a Shots section; Reduce Motion or the pause holds it. A picture that fails to
   load leaves the run, so a broken cover falls back to the floor. Below: Runs on, Size (of the
   build for this computer), Players and Made with, About when there is a description, and the
-  Store. Share copies the page's link and turns into a check. On Windows in a dark theme the
+  Store. Share copies the page's link and turns into a check; a ⋯ after it holds the card's menu (Show in Finder and Remove from this Mac for an installed game, the owner's items). On Windows in a dark theme the
   window buttons have no box over the art (`setPictureUnderControls`); a light theme there and
   Linux keep the bar in its own colour above it.
 - Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as

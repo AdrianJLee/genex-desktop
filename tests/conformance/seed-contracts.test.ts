@@ -347,11 +347,6 @@ describe("the follow-up queue (shared/message-queue.ts ↔ loop/message-queue.ts
 describe("model roles (shared/model-roles.ts ↔ loop/model-roles.ts)", () => {
   it("has the same tables", () => {
     for (const key of ["FABLE", "OPUS", "SOL", "TERRA"] as const) assert.equal(roles[key], seedRoles[key], key);
-    // The older seed's engine constants stay exported for kept files; they are the app's ids.
-    assert.deepEqual(
-      [seedRoles.CLAUDE_CODE_ENGINE, seedRoles.CODEX_ENGINE, seedRoles.BONSAI_ENGINE],
-      [EngineId.ClaudeCode, EngineId.Codex, EngineId.Bonsai],
-    );
     assert.deepEqual(roles.ROLES, seedRoles.ROLES);
     assert.deepEqual(roles.CLAUDE_CODE_MODELS, seedRoles.CLAUDE_CODE_MODELS);
     assert.deepEqual(roles.CODEX_MODELS, seedRoles.CODEX_MODELS);

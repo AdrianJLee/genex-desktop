@@ -48,13 +48,6 @@ export const EngineId = {
 } as const;
 export type EngineId = (typeof EngineId)[keyof typeof EngineId];
 
-// The older seed's names for the same ids. A harness file the agent kept from that vintage may
-// still import them (tests/fixtures/seed-exports-2e-pre.json), so they stay exported; new code
-// writes `EngineId.ClaudeCode`.
-export const CLAUDE_CODE_ENGINE = EngineId.ClaudeCode;
-export const CODEX_ENGINE = EngineId.Codex;
-export const BONSAI_ENGINE = EngineId.Bonsai;
-
 export function supportsSessions(
   descriptor: { supportsSessions?: boolean; kind?: string } | null | undefined,
 ): boolean {

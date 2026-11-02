@@ -1,7 +1,6 @@
 {
   "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.": "3D-модели, персонажи, звук и арт для твоих игр — прямо в чате за кредиты Genex. Код по-прежнему пишет твой провайдер.",
   "Account and jobs": "Аккаунт и задачи",
-  "Add the listed pinned Genex packages. Multiplayer includes its player-identity dependency. A template game gets Studio's built-in copies in its import map; any other game installs them with its own package manager, with the npm registry open for that command only.": "Добавить перечисленные пакеты Genex закреплённых версий. Мультиплеер подтянет свою зависимость для идентификации игроков. Игра из шаблона получит встроенные копии Studio в своей import map; любая другая игра установит их своим менеджером пакетов, а реестр npm будет открыт только для этой команды.",
   "Approve character workflow": "Одобрить создание персонажа",
   "Asset setup state": "Состояние настройки ассетов",
   "Blender server address": "Адрес сервера Blender",
@@ -27,7 +26,7 @@
   "Remove Studio’s saved Genex credential and stop new asset submissions.": "Удалить сохранённые в Studio данные входа Genex и остановить отправку новых ассетов.",
   "Review Genex terms": "Посмотреть условия Genex",
   "Review character candidates in Studio before approving paid generation.": "Посмотри варианты персонажа в Studio, прежде чем одобрять платную генерацию.",
-  "Run a Genex CLI command that spends coin or credits or changes what this game sells, with your saved Genex account.": "Выполнить команду Genex CLI, которая тратит монеты или кредиты либо меняет то, что продаёт эта игра, от имени твоего сохранённого аккаунта Genex.",
+  "Run a Genex CLI command that spends Nex or credits or changes what this game sells, with your saved Genex account.": "Выполнить команду Genex CLI, которая тратит Nex или кредиты либо меняет то, что продаёт эта игра, от имени твоего сохранённого аккаунта Genex.",
   "Sign and notarize Mac apps with my own Apple Developer ID": "Подписывать и нотаризовать приложения для Mac моим Apple Developer ID",
   "Take this game's cover": "Снять обложку игры",
   "Unlock saved account": "Разблокировать сохранённый аккаунт",

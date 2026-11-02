@@ -1,7 +1,6 @@
 [
   "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
   "Account and jobs",
-  "Add the listed pinned Genex packages. Multiplayer includes its player-identity dependency. A template game gets Studio's built-in copies in its import map; any other game installs them with its own package manager, with the npm registry open for that command only.",
   "Approve character workflow",
   "Asset setup state",
   "Blender server address",
@@ -27,7 +26,7 @@
   "Remove Studio’s saved Genex credential and stop new asset submissions.",
   "Review Genex terms",
   "Review character candidates in Studio before approving paid generation.",
-  "Run a Genex CLI command that spends coin or credits or changes what this game sells, with your saved Genex account.",
+  "Run a Genex CLI command that spends Nex or credits or changes what this game sells, with your saved Genex account.",
   "Sign and notarize Mac apps with my own Apple Developer ID",
   "Take this game's cover",
   "Unlock saved account",

@@ -17,12 +17,22 @@ import { PluginCapability, type PluginManifest } from "../../shared/plugins.ts";
 import { CoreFact, isFactId } from "../../shared/project-facts.ts";
 
 /** How much one declaration may say. */
-const LIMIT = { LabelChars: 40, ProjectFiles: 4, Apps: 4, BundleIdChars: 155, ExeChars: 64 } as const;
+const LIMIT = {
+  LabelChars: 40,
+  ProjectFiles: 4,
+  Apps: 4,
+  BundleIdChars: 155,
+  ExeChars: 64,
+  Pages: 4,
+  HostChars: 253,
+} as const;
 
 /** A Mac bundle id in reverse-DNS form: two or more dotted parts of letters, digits and dashes. */
 const BUNDLE_ID = /^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/;
 /** A Windows program's file name: a name of its own (spaces inside allowed) ending in `.exe`, never a path. */
 const EXE_NAME = /^[A-Za-z0-9_-]([A-Za-z0-9 ._-]*[A-Za-z0-9_-])?\.exe$/i;
+/** A web host by name: two or more dotted lowercase parts ending in letters, never an address, a port or a path. */
+const HOST_NAME = /^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused.
 const CONTROL = /[\0-\x1f\x7f]/;
 const CORE_FACTS: ReadonlySet<unknown> = new Set(Object.values(CoreFact));
@@ -42,9 +52,10 @@ const MESSAGE = {
     "Invalid engine projectInFolder (true when the Loop needs the project inside the game folder)",
   InvalidWritesProjectFiles:
     "Invalid engine writesProjectFiles (true when the engine's agents change the project as files)",
-  InvalidPlay: `Invalid engine play (an object with optional players 1-${MAX_PLAY_PLAYERS}, clock ${[...CLOCK_LEVELS].join("|")}, pointer and state booleans)`,
+  InvalidPlay: `Invalid engine play (an object with optional players 1-${MAX_PLAY_PLAYERS}, clock ${[...CLOCK_LEVELS].join("|")}, pointer, state, walk and pilot booleans)`,
   InvalidApps: `Invalid engine apps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Editor; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
   InvalidPlayerApps: `Invalid engine playerApps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Player; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
+  InvalidPages: `Invalid engine pages (1-${LIMIT.Pages} distinct lowercase web hosts such as create.example.com, never an address, a port or a path)`,
 } as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -68,6 +79,8 @@ const isBundleId = (value: unknown) =>
   typeof value === "string" && value.length <= LIMIT.BundleIdChars && BUNDLE_ID.test(value);
 const isExeName = (value: unknown) =>
   typeof value === "string" && value.length <= LIMIT.ExeChars && EXE_NAME.test(value);
+const isHostName = (value: unknown) =>
+  typeof value === "string" && value.length <= LIMIT.HostChars && HOST_NAME.test(value);
 const isPlayers = (value: unknown) =>
   typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_PLAY_PLAYERS;
 
@@ -84,13 +97,17 @@ function enginePlay(raw: unknown): EnginePlayDeclaration {
     isOptional(raw.players, isPlayers) &&
     isOptional(raw.clock, (clock) => CLOCK_LEVELS.has(clock)) &&
     isOptional(raw.pointer, isBoolean) &&
-    isOptional(raw.state, isBoolean);
+    isOptional(raw.state, isBoolean) &&
+    isOptional(raw.walk, isBoolean) &&
+    isOptional(raw.pilot, isBoolean);
   if (!valid) throw new Error(MESSAGE.InvalidPlay);
   const play: EnginePlayDeclaration = {};
   if (raw.players !== undefined) play.players = raw.players as number;
   if (raw.clock !== undefined) play.clock = raw.clock as ClockLevel;
   if (raw.pointer !== undefined) play.pointer = raw.pointer as boolean;
   if (raw.state !== undefined) play.state = raw.state as boolean;
+  if (raw.walk !== undefined) play.walk = raw.walk as boolean;
+  if (raw.pilot !== undefined) play.pilot = raw.pilot as boolean;
   return play;
 }
 
@@ -139,5 +156,9 @@ export function validateEngine(
   if (raw.play !== undefined) engine.play = enginePlay(raw.play);
   if (raw.apps !== undefined) engine.apps = engineApps(raw.apps, MESSAGE.InvalidApps);
   if (raw.playerApps !== undefined) engine.playerApps = engineApps(raw.playerApps, MESSAGE.InvalidPlayerApps);
+  if (raw.pages !== undefined) {
+    if (!isDistinctList(raw.pages, 1, LIMIT.Pages, isHostName)) throw new Error(MESSAGE.InvalidPages);
+    engine.pages = [...(raw.pages as string[])];
+  }
   return engine;
 }

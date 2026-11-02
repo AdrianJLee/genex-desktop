@@ -2,7 +2,8 @@
  * Signing and notarizing a creator's Mac app with their own Apple Developer ID before Publish sends
  * it: their identity from their own keychain, every program inside the app signed before the app,
  * Apple's notary asked through the keychain profile they stored, the ticket stapled. Genex holds no
- * Apple secret. A failure says why by code and leaves the app as it was built. The commands are stand-ins.
+ * Apple secret. notarytool and stapler run from the developer folder xcode-select names, never through
+ * /usr/bin/xcrun. A failure says why by code and leaves the app as it was built. The commands are stand-ins.
  */
 import assert from "node:assert/strict";
 import { mkdir, readdir, symlink, writeFile } from "node:fs/promises";
@@ -29,6 +30,7 @@ const FIND_IDENTITY = [
 ].join("\n");
 const MACH_O = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0, 0, 0, 0]);
 const FAT = Buffer.from([0xca, 0xfe, 0xba, 0xbe, 0, 0, 0, 2]);
+const DEVELOPER_DIR = "/Applications/Xcode.app/Contents/Developer";
 
 /** A packaged Mac app: its program, a framework's library, a plain data file and a link out. */
 async function macApp() {
@@ -48,22 +50,29 @@ async function macApp() {
 /** Deps whose commands answer from `answers` by program (`codesign`, `notarytool`…), every call recorded. */
 function fakeDeps(answers: Partial<Record<string, { code: number; stdout?: string }>> = {}) {
   const calls: string[][] = [];
+  const files: string[] = [];
   const deps: NotarizeDeps = {
     run: async (file, args) => {
       calls.push([path.basename(file), ...args]);
-      const tool = path.basename(file) === "xcrun" ? (args[0] ?? "") : path.basename(file);
+      files.push(file);
+      const tool = path.basename(file);
       const answer = answers[tool] ?? { code: 0 };
-      const stdout =
-        answer.stdout ??
-        (tool === "security" ? FIND_IDENTITY : tool === "notarytool" ? '{"status":"Accepted","id":"n-1"}' : "");
+      const stdout = answer.stdout ?? STANDARD_OUTPUT[tool] ?? "";
       if (tool === "ditto") await writeFile(args.at(-1) ?? "", "zip");
       return { code: answer.code, stdout, stderr: answer.code === 0 ? "" : "error: the stand-in failed" };
     },
   };
-  return { deps, calls };
+  return { deps, calls, files };
 }
 
-const tools = (calls: string[][]) => calls.map((call) => (call[0] === "xcrun" ? call[1] : call[0]));
+/** What each stand-in prints when it succeeds and the case names no other answer. */
+const STANDARD_OUTPUT: Partial<Record<string, string>> = {
+  security: FIND_IDENTITY,
+  "xcode-select": `${DEVELOPER_DIR}\n`,
+  notarytool: '{"status":"Accepted","id":"n-1"}',
+};
+
+const tools = (calls: string[][]) => calls.map((call) => call[0]);
 
 describe("notarizing a creator's Mac app", () => {
   it("is asked for only when the creator turned it on in Genex's settings", () => {
@@ -117,19 +126,35 @@ describe("notarizing a creator's Mac app", () => {
 
   it("signs with hardened runtime, notarizes with the creator's stored profile, staples, and leaves no zip", async () => {
     const { root, app } = await macApp();
-    const { deps, calls } = fakeDeps();
+    const { deps, calls, files } = fakeDeps();
     const outcome = await notarizeMacApp(app, { identity: "", profile: "" }, deps, new AbortController().signal);
     assert.deepEqual(outcome, { notarized: true, identity: ADA });
-    assert.deepEqual(tools(calls), ["security", "codesign", "codesign", "codesign", "ditto", "notarytool", "stapler"]);
+    assert.deepEqual(tools(calls), [
+      "security",
+      "xcode-select",
+      "codesign",
+      "codesign",
+      "codesign",
+      "ditto",
+      "notarytool",
+      "stapler",
+    ]);
+    assert.deepEqual(calls[1], ["xcode-select", "--print-path"]);
+    assert.deepEqual(
+      files.filter((file) => /notarytool|stapler/.test(file)),
+      [path.join(DEVELOPER_DIR, "usr/bin/notarytool"), path.join(DEVELOPER_DIR, "usr/bin/stapler")],
+      "Apple's developer tools from the folder xcode-select names",
+    );
+    assert.ok(!files.includes("/usr/bin/xcrun"), "never the /usr/bin stand-in");
     assert.deepEqual(calls[0], ["security", "find-identity", "-v", "-p", "codesigning"]);
     for (const sign of calls.filter((call) => call[0] === "codesign"))
       assert.deepEqual(sign.slice(1, 7), ["--force", "--options", "runtime", "--timestamp", "--sign", ADA]);
-    assert.equal(calls[3]?.at(-1), app, "the app itself is signed last");
-    const submit = calls.find((call) => call[1] === "notarytool") ?? [];
-    assert.deepEqual(submit.slice(1, 3), ["notarytool", "submit"]);
+    assert.equal(calls[4]?.at(-1), app, "the app itself is signed last");
+    const submit = calls.find((call) => call[0] === "notarytool") ?? [];
+    assert.deepEqual(submit.slice(0, 2), ["notarytool", "submit"]);
     assert.ok(submit.includes(DEFAULT_NOTARY_PROFILE), "the profile the creator stored with notarytool");
     assert.ok(submit.includes("--wait"));
-    assert.deepEqual(calls.at(-1), ["xcrun", "stapler", "staple", app]);
+    assert.deepEqual(calls.at(-1), ["stapler", "staple", app]);
     assert.deepEqual(await readdir(path.dirname(app)), ["Dust.app"], "the zip sent to Apple is gone");
     assert.deepEqual(await readdir(root), ["Builds"]);
   });
@@ -143,30 +168,47 @@ describe("notarizing a creator's Mac app", () => {
         MacNotarizeFailure.NoIdentity,
         ["security"],
       ],
-      ["codesign refuses", { codesign: { code: 1 } }, MacNotarizeFailure.Sign, ["security", "codesign"]],
+      [
+        "no developer tools on this Mac: the app is left unsigned",
+        { "xcode-select": { code: 2, stdout: "" } },
+        MacNotarizeFailure.Submit,
+        ["security", "xcode-select"],
+      ],
+      [
+        "a developer folder that isn't a path",
+        { "xcode-select": { code: 0, stdout: "Developer\n" } },
+        MacNotarizeFailure.Submit,
+        ["security", "xcode-select"],
+      ],
+      [
+        "codesign refuses",
+        { codesign: { code: 1 } },
+        MacNotarizeFailure.Sign,
+        ["security", "xcode-select", "codesign"],
+      ],
       [
         "no stored profile",
         { notarytool: { code: 69 } },
         MacNotarizeFailure.Submit,
-        ["security", "codesign", "codesign", "codesign", "ditto", "notarytool"],
+        ["security", "xcode-select", "codesign", "codesign", "codesign", "ditto", "notarytool"],
       ],
       [
         "Apple rejects it",
         { notarytool: { code: 0, stdout: '{"status":"Invalid","id":"n-2"}' } },
         MacNotarizeFailure.Rejected,
-        ["security", "codesign", "codesign", "codesign", "ditto", "notarytool"],
+        ["security", "xcode-select", "codesign", "codesign", "codesign", "ditto", "notarytool"],
       ],
       [
         "an answer that isn't Apple's",
         { notarytool: { code: 0, stdout: "not json" } },
         MacNotarizeFailure.Submit,
-        ["security", "codesign", "codesign", "codesign", "ditto", "notarytool"],
+        ["security", "xcode-select", "codesign", "codesign", "codesign", "ditto", "notarytool"],
       ],
       [
         "the staple fails",
         { stapler: { code: 65 } },
         MacNotarizeFailure.Staple,
-        ["security", "codesign", "codesign", "codesign", "ditto", "notarytool", "stapler"],
+        ["security", "xcode-select", "codesign", "codesign", "codesign", "ditto", "notarytool", "stapler"],
       ],
     ];
     for (const [why, answers, failure, ran] of cases) {

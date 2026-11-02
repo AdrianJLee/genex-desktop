@@ -1,10 +1,12 @@
 /**
- * The Claude Code, Codex, OpenRouter and OpenCode marks, used only to name the providers Studio
- * connects to. Claude Code is a trademark of Anthropic, Codex of OpenAI, OpenRouter of OpenRouter,
- * Inc. and OpenCode of its owners. The paths are their marks as collected by lobe-icons (MIT,
- * @lobehub/icons-static-svg 1.95.1: claudecode.svg, codex.svg, openrouter-color.svg and
- * opencode.svg), unaltered, on a 24-unit grid with even-odd holes. Colours are the ones those
- * files carry; OpenCode's file is monochrome, so its face is a grey that reads on light and dark.
+ * The Claude Code, Codex, OpenRouter, OpenCode, Grok and Cursor marks, used only to name the
+ * providers Studio connects to. Claude Code is a trademark of Anthropic, Codex of OpenAI, OpenRouter
+ * of OpenRouter, Inc., OpenCode of its owners, Grok of xAI and Cursor of Anysphere. The paths are
+ * their marks as collected by lobe-icons (MIT, @lobehub/icons-static-svg 1.95.1: claudecode.svg,
+ * codex.svg, openrouter-color.svg, opencode.svg, grok.svg and cursor.svg), unaltered, on a 24-unit
+ * grid with even-odd holes. Colours are the ones those files carry; OpenCode's, Grok's and Cursor's
+ * files are monochrome, so their face is a grey that reads on light and dark. Genex's own G is the
+ * wordmark's (`ui/GenexLogo.tsx`), fitted to the same grid.
  */
 export interface ProviderMark {
   path: string;
@@ -31,3 +33,25 @@ export const OPENCODE_MARK: ProviderMark = {
   path: "M16 6H8v12h8V6zm4 16H4V2h16v20z",
   colors: ["#B7B4B4", "#4B4646"],
 };
+
+export const GROK_MARK: ProviderMark = {
+  path: "M9.27 15.29l7.978-5.897c.391-.29.95-.177 1.137.272.98 2.369.542 5.215-1.41 7.169-1.951 1.954-4.667 2.382-7.149 1.406l-2.711 1.257c3.889 2.661 8.611 2.003 11.562-.953 2.341-2.344 3.066-5.539 2.388-8.42l.006.007c-.983-4.232.242-5.924 2.75-9.383.06-.082.12-.164.179-.248l-3.301 3.305v-.01L9.267 15.292M7.623 16.723c-2.792-2.67-2.31-6.801.071-9.184 1.761-1.763 4.647-2.483 7.166-1.425l2.705-1.25a7.808 7.808 0 00-1.829-1A8.975 8.975 0 005.984 5.83c-2.533 2.536-3.33 6.436-1.962 9.764 1.022 2.487-.653 4.246-2.34 6.022-.599.63-1.199 1.259-1.682 1.925l7.62-6.815",
+  colors: ["#B7B4B4", "#4B4646"],
+};
+
+export const CURSOR_MARK: ProviderMark = {
+  path: "M22.106 5.68L12.5.135a.998.998 0 00-.998 0L1.893 5.68a.84.84 0 00-.419.726v11.186c0 .3.16.577.42.727l9.607 5.547a.999.999 0 00.998 0l9.608-5.547a.84.84 0 00.42-.727V6.407a.84.84 0 00-.42-.726zm-.603 1.176L12.228 22.92c-.063.108-.228.064-.228-.061V12.34a.59.59 0 00-.295-.51l-9.11-5.26c-.107-.062-.063-.228.062-.228h18.55c.264 0 .428.286.296.514z",
+  colors: ["#B7B4B4", "#4B4646"],
+};
+
+/**
+ * Genex's G, the wordmark's own fitted to the 24-unit grid: silver on a dark theme, graphite on a
+ * light one, as the wordmark takes the theme's ink (owner, 2026-10-28: white in the dark theme).
+ */
+export const GENEX_MARK: ProviderMark = {
+  path: "M17.958 13.553H8.730V12.012H23.000V16.196C23.000 16.196 21.891 20.551 12.208 20.551C12.208 20.551 1.000 20.869 1.000 11.547C1.000 2.909 13.125 3.448 13.125 3.448C22.458 3.448 23.000 7.974 23.000 7.974L20.583 8.366C20.583 8.366 19.833 4.891 12.958 4.891C12.958 4.891 3.750 4.549 3.750 11.718C3.750 11.718 3.542 18.863 12.333 19.059C19.250 19.279 20.250 15.609 20.333 14.973C20.583 14.165 19.500 13.553 17.958 13.553Z",
+  colors: ["#F4F5F8", "#B4B8C2", "#6A6E79"],
+};
+
+/** Genex's G on a light theme. */
+export const GENEX_MARK_ON_LIGHT: ProviderMark = { path: GENEX_MARK.path, colors: ["#5A5E69", "#3A3D45", "#1E2025"] };

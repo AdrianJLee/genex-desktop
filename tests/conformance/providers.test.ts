@@ -20,9 +20,11 @@ import {
   PROVIDERS,
   SUBSCRIPTION_ENGINES,
   isLocalEngine,
+  isBeta,
   isMetered,
   loginKind,
   providerInfo,
+  runsClaudeCode,
   type RoleSupport,
 } from "../../src/shared/providers.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
@@ -76,11 +78,20 @@ describe("provider table", () => {
     assert.equal(loginKind("codex"), "console");
     assert.equal(loginKind("ollama"), "none");
     assert.equal(loginKind("opencode"), "cli", "OpenCode runs its own sign-in in the terminal");
+    assert.equal(loginKind("grok"), "cli", "Grok Build runs its own `grok login` in the terminal");
     assert.equal(loginKind("openrouter"), "none", "OpenRouter's key is pasted in Settings");
     assert.equal(loginKind("local-server"), "none", "a local server's address and key are typed in Settings");
     assert.equal(loginKind("gemini-cli"), "none");
     assert.equal(providerInfo("gemini-cli"), undefined);
     assert.equal(providerInfo("constructor"), undefined);
+  });
+
+  it("names the engines whose sessions are Claude Code's: Claude Code and Genex", () => {
+    assert.deepEqual(
+      PROVIDERS.filter((provider) => runsClaudeCode(provider.id)).map((provider) => provider.id),
+      ["claude-code", "genex"],
+    );
+    assert.equal(runsClaudeCode(null), false);
   });
 
   it("says who pays for each provider, and never calls an unknown engine local or metered", () => {
@@ -91,11 +102,19 @@ describe("provider table", () => {
       bonsai: "local",
       ollama: "local",
       opencode: "metered",
+      // Grok Build runs on whatever its own sign-in is (a Grok plan, or an xAI key in its config), so,
+      // like OpenCode, it is never picked on the person's behalf.
+      grok: "metered",
       openrouter: "metered",
       // Flipped (a local server): a server the person runs is local, never metered.
       "local-server": "local",
+      // Flipped (Cursor): third-party models in Cursor, and Cursor's own past the plan's pool, are paid
+      // from the account's credit, so the app never picks it by itself.
+      cursor: "metered",
+      // Genex bills the person's Genex credits per call: only their own pick runs on it.
+      genex: "metered",
     });
-    for (const id of ["openrouter", "opencode"]) assert.equal(isMetered(id), true, id);
+    for (const id of ["openrouter", "opencode", "grok", "cursor", "genex"]) assert.equal(isMetered(id), true, id);
     for (const id of ["bonsai", "ollama", "local-server"]) assert.equal(isLocalEngine(id), true, id);
     for (const id of ["claude-code", "codex", "gemini-cli", "constructor", null, undefined]) {
       assert.equal(isMetered(id), false, String(id));
@@ -103,6 +122,14 @@ describe("provider table", () => {
     }
     for (const provider of PROVIDERS)
       assert.equal(provider.billing === "subscription", provider.subscription, provider.id);
+  });
+
+  it("names the providers that ship in beta: Cursor, until a live test proves it", () => {
+    assert.deepEqual(
+      PROVIDERS.filter((provider) => isBeta(provider.id)).map((provider) => provider.id),
+      ["cursor"],
+    );
+    for (const id of ["gemini-cli", "constructor", null, undefined]) assert.equal(isBeta(id), false, String(id));
   });
 
   it("is served on each engine descriptor; an unlisted engine carries none", async () => {

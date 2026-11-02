@@ -125,21 +125,23 @@ class GenexLoopTools(unreal.ToolsetDefinition):
 
     @toolset_registry.tool_call
     @staticmethod
-    def capture_play(name: str, width: int = 1280, height: int = 720) -> str:
+    def capture_play(name: str, width: int = 1280, height: int = 720, ui: bool = False) -> str:
         """Queues a shot of the running play session's game view, without the editor around it.
 
-        The PNG appears in <project>/Saved/Genex/captures/<name>.png a frame or two later; wait
-        for the file.
+        The PNG appears in <project>/Saved/Genex/captures/<name>.png a frame or two later (with ui,
+        about a second later); wait for the file.
 
         Args:
             name: The shot's name: 1 to 64 letters, digits, _ or - (never a path).
             width: Width in pixels, 320 to 3840 (0 for 1280).
-            height: Height in pixels, 240 to 2160 (0 for 720).
+            height: Height in pixels, 240 to 2160 (0 for 720); with ui, the play view's own shape.
+            ui: Whether the shot shows the game's on-screen UI (its HUD, menus, inventory) as the
+                player sees it, not the 3D frame alone.
 
         Returns:
-            JSON {queued, file}.
+            JSON {queued, file, ui}.
         """
-        return _answer(capture.capture_play, name, width, height)
+        return _answer(capture.capture_play, name, width, height, ui)
 
     @toolset_registry.tool_call
     @staticmethod

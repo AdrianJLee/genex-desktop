@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, 'stubs')
 import unreal as stub  # noqa: E402
 
-STUB_ONLY = {'Floor'}
+STUB_ONLY = {'Floor', 'Picture'}
 HELPER = os.path.join('..', '..', '..', 'src', 'plugins', 'unreal', 'GenexEditorHelper', 'Content', 'Python')
 ENGINE_FACING = ('genex_build', 'genex_play')
 # Members every Python object or container has: the checker never asks the engine for these.

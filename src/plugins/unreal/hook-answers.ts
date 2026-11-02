@@ -93,15 +93,15 @@ export const MOMENT_WORDS = {
   NotReopened: (why: string) => `the Unreal plugin didn't reopen Unreal (${why})`,
   // Health.
   Reopening: "Genex is reopening Unreal.",
-  ReopenFailed: (error: string) => `reopening Unreal failed: ${error || "no reason given"}`,
+  ReopenFailed: (error: string): string => `reopening Unreal failed: ${error || MOMENT_WORDS.NoReason}`,
+  NoReason: "no reason given",
   Busy: "Unreal is busy: its editor runs and answers nothing yet.",
   CantTellRunning: "Genex can't tell whether Unreal is running.",
   Gone: "Unreal isn't running: it crashed or was quit.",
   NoProject: "This game isn't linked to an Unreal project.",
   Waiting: (project: string | null) =>
     `Unreal is opening ${project ?? "this game's project"}; a first start can take several minutes. This chat goes on by itself when it's ready. Stop ends the wait.`,
-  NotReady: (project: string | null) =>
-    `Unreal didn't finish opening ${project ?? "this game's project"}. Open it from the Unreal button above the game, then send a message to go on.`,
+  NotReady: (project: string | null) => `Unreal isn't running with ${project ?? "this game's project"} open.`,
   // A run's start.
   NotSetUp: (why: string) => `Genex couldn't set this game's Unreal project up for the Loop: ${why}`,
   NoHelper:

@@ -15,6 +15,7 @@
  * validating the fields it acts on.
  */
 import type { StudioApi } from "./studio-api.ts";
+import type { StudioErrorCode } from "./error-codes.ts";
 import type { AddSource, ShareItem } from "./asset-library.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
@@ -24,6 +25,7 @@ import type { PlayPurchaseAnswer } from "./play-purchase.ts";
 import type { PlayCoverType, PlayGameChange } from "./play-manage.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
 import type { StatsPeriod } from "./play-stats.ts";
+import type { ItemReportReason } from "./store-items.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 
 type Arg<M extends keyof StudioApi, I extends number> = Parameters<StudioApi[M]>[I];
@@ -84,7 +86,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:activity": "studioActivity",
   "studio:run.summary": "runSummary",
   "studio:run.review": "runReview",
-  "studio:staged": "staged",
   "studio:settings": "settings",
   "studio:settings.set": "setSettings",
   "studio:diagnostics": "diagnostics",
@@ -150,8 +151,14 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:claude-login.browser": "claudeLoginOpenBrowser",
   "studio:claude-login.cancel": "claudeLoginCancel",
   "studio:opencode.signin": "openCodeSignIn",
+  "studio:grok.signin": "grokSignIn",
+  "studio:cursor.signin": "cursorSignIn",
+  "studio:cursor.signout": "cursorSignOut",
   "studio:openrouter.key.save": "openRouterKeySave",
   "studio:openrouter.key.clear": "openRouterKeyClear",
+  "studio:typesafe.key.status": "typeSafeKeyStatus",
+  "studio:typesafe.key.save": "typeSafeKeySave",
+  "studio:typesafe.key.clear": "typeSafeKeyClear",
   "studio:openrouter.signin": "openRouterSignIn",
   "studio:openrouter.signin.reopen": "openRouterSignInReopen",
   "studio:openrouter.signin.cancel": "openRouterSignInCancel",
@@ -226,10 +233,34 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:assets.file": "assetLibraryFile",
   "studio:play.manage": "playManage",
   "studio:play.cover": "playCover",
+  "studio:store.items": "storeItems",
+  "studio:store.my-items": "storeMyItems",
+  "studio:store.item-games": "storeItemGames",
+  "studio:store.buy": "storeBuy",
+  "studio:store.answer": "storeAnswer",
+  "studio:store.claim": "storeClaim",
+  "studio:store.shelf": "storeShelf",
+  "studio:store.coins": "storeCoins",
+  "studio:store.get-coin": "storeGetCoin",
+  "studio:store.report": "storeReport",
+  "studio:items.browse": "itemsBrowse",
+  "studio:items.detail": "itemsBrowseDetail",
+  "studio:items.add": "itemsAddToGame",
+  "studio:items.remove": "itemsRemoveFromGame",
+  "studio:items.selling": "itemsSelling",
+  "studio:items.put-on-sale": "itemPutOnSale",
+  "studio:items.take-off-sale": "itemTakeOffSale",
+  "studio:items.shared": "itemSetShared",
+  "studio:items.local": "itemsLocal",
+  "studio:items.local-approve": "itemsLocalApprove",
+  "studio:items.local-withdraw": "itemsLocalWithdraw",
+  "studio:items.local-share": "itemsLocalShare",
+  "studio:items.local-settle": "itemsLocalSettle",
   "studio:genex-account.read": "genexAccount",
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
   "studio:genex-account.sign-out": "genexSignOut",
+  "studio:genex-account.build": "genexBuild",
   "studio:notify": "notify",
   "studio:badge": "setBadge",
   "studio:rollback": "rollback",
@@ -265,9 +296,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:run.stop": "stopRun",
   "studio:run.finish": "finishRun",
   "studio:autopilot.resume": "resumeAutopilot",
-  "studio:skillopt.start": "startSkillOpt",
-  "studio:skillopt.accept": "acceptProposal",
-  "studio:skillopt.discard": "discardProposal",
   "studio:export": "exportGame",
   "studio:cancel-model-download": "cancelModelDownload",
   "studio:model-install.status": "modelInstallStatus",
@@ -351,7 +379,6 @@ export interface StudioInvokePayloads {
   "studio:activity": undefined;
   "studio:run.summary": { project: string; runId: string; graphFrom?: NonNullable<Arg<"runSummary", 2>> };
   "studio:run.review": { project: string; runId?: string };
-  "studio:staged": undefined;
   "studio:settings": undefined;
   "studio:settings.set": Arg<"setSettings", 0>;
   "studio:diagnostics": undefined;
@@ -418,8 +445,14 @@ export interface StudioInvokePayloads {
   "studio:claude-login.browser": undefined;
   "studio:claude-login.cancel": undefined;
   "studio:opencode.signin": undefined;
+  "studio:grok.signin": undefined;
+  "studio:cursor.signin": undefined;
+  "studio:cursor.signout": undefined;
   "studio:openrouter.key.save": { key: string };
   "studio:openrouter.key.clear": undefined;
+  "studio:typesafe.key.status": undefined;
+  "studio:typesafe.key.save": { key: string };
+  "studio:typesafe.key.clear": undefined;
   "studio:openrouter.signin": undefined;
   "studio:openrouter.signin.reopen": undefined;
   "studio:openrouter.signin.cancel": undefined;
@@ -487,10 +520,34 @@ export interface StudioInvokePayloads {
   "studio:play.share": { url: string; at?: PlayPoint };
   "studio:play.manage": { gameId: string; change: PlayGameChange };
   "studio:play.cover": { gameId: string; image: Uint8Array; contentType: PlayCoverType };
+  "studio:store.items": { slug: string };
+  "studio:store.my-items": { slug: string };
+  "studio:store.item-games": { itemId: string };
+  "studio:store.buy": { itemId: string; slug: string };
+  "studio:store.answer": PlayPurchaseAnswer;
+  "studio:store.claim": { itemId: string; slug: string };
+  "studio:store.shelf": { userId: string };
+  "studio:store.coins": undefined;
+  "studio:store.get-coin": undefined;
+  "studio:store.report": { itemId: string; reason: ItemReportReason; message: string | null };
+  "studio:items.browse": { query: string; cursor: string | null; tags: string[] };
+  "studio:items.detail": { itemId: string };
+  "studio:items.add": { itemId: string; projectId: string };
+  "studio:items.remove": { itemId: string; projectId: string };
+  "studio:items.selling": undefined;
+  "studio:items.put-on-sale": { itemId: string };
+  "studio:items.take-off-sale": { itemId: string };
+  "studio:items.shared": { itemId: string; shared: boolean };
+  "studio:items.local": { project: string };
+  "studio:items.local-approve": { project: string; localId: string; contentHash: string };
+  "studio:items.local-withdraw": { project: string; localId: string };
+  "studio:items.local-share": { project: string; localId: string; contentHash: string; shared: boolean };
+  "studio:items.local-settle": { project: string; force: boolean };
   "studio:genex-account.read": undefined;
   "studio:genex-account.sign-in": undefined;
   "studio:genex-account.cancel": undefined;
   "studio:genex-account.sign-out": undefined;
+  "studio:genex-account.build": { idea?: string };
   "studio:notify": Arg<"notify", 0>;
   "studio:badge": { count: number };
   "studio:rollback": { snapshotId: string };
@@ -533,9 +590,6 @@ export interface StudioInvokePayloads {
   "studio:run.stop": { runId: string };
   "studio:run.finish": { runId: string; threadId: string };
   "studio:autopilot.resume": { runId: string };
-  "studio:skillopt.start": undefined;
-  "studio:skillopt.accept": { index: number } & NonNullable<Arg<"acceptProposal", 1>>;
-  "studio:skillopt.discard": { index: number; reason?: string } & NonNullable<Arg<"discardProposal", 2>>;
   "studio:export": { project: string };
   "studio:cancel-model-download": Record<string, never>;
   "studio:model-install.status": undefined;
@@ -562,8 +616,11 @@ export type StudioInvokeResult<C extends StudioInvokeChannel> = Awaited<
   ReturnType<StudioApi[(typeof STUDIO_INVOKE_CHANNELS)[C]]>
 >;
 
-/** Every invoke answers with this envelope; the preload turns `ok: false` into a rejection. */
-export type IpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: string };
+/**
+ * Every invoke answers with this envelope; the preload turns `ok: false` into a rejection, with the
+ * failure's typed code when it had one (`CodedError`).
+ */
+export type IpcResult<T = unknown> = { ok: true; value: T } | { ok: false; error: string; code?: StudioErrorCode };
 
 /** Each push channel and the `StudioApi` subscription that delivers it. */
 export const STUDIO_PUSH_CHANNELS = {
@@ -571,6 +628,7 @@ export const STUDIO_PUSH_CHANNELS = {
   "studio:terminal": "onTerminal",
   "studio:claude-login": "onClaudeLogin",
   "studio:codex-login": "onCodexLogin",
+  "studio:store.sheet": "onStoreSheet",
 } as const satisfies Record<`studio:${string}`, keyof StudioApi>;
 
 export type StudioPushChannel = keyof typeof STUDIO_PUSH_CHANNELS;

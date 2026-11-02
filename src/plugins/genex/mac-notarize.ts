@@ -8,9 +8,12 @@
  *
  * Every Mach-O program inside the app is signed (hardened runtime, secure timestamp), deepest
  * first, then the app. A zip of it goes to Apple's notary and waits for its answer, and the ticket is
- * stapled to the app. Each step runs a system tool by its full path, with no shell. A step that fails
- * says why by code and stops there: the app then goes as it was built (ad hoc), as it does for a
- * creator who chose no notarization.
+ * stapled to the app. Each step runs a tool by its full path, with no shell: macOS's own, and Apple's
+ * notarytool and stapler from the developer folder xcode-select names (Xcode or its Command Line
+ * Tools, which the creator's own `notarytool store-credentials` needed), never through the /usr/bin
+ * xcrun stand-in, which asks a Mac without them to install them. A step that fails says why by code
+ * and stops there: the app then goes as it was built (ad hoc), as it does for a creator who chose no
+ * notarization.
  */
 import { execFile } from "node:child_process";
 import { lstat, mkdtemp, open, readdir, rm } from "node:fs/promises";
@@ -44,7 +47,7 @@ const MAX_BUNDLE_ENTRIES = 50_000;
 const SECURITY = "/usr/bin/security";
 const CODESIGN = "/usr/bin/codesign";
 const DITTO = "/usr/bin/ditto";
-const XCRUN = "/usr/bin/xcrun";
+const XCODE_SELECT = "/usr/bin/xcode-select";
 
 /** The first four bytes of a Mach-O program: 32- and 64-bit in either order, and a universal one. */
 const MACH_O_MAGICS: ReadonlySet<string> = new Set([
@@ -199,10 +202,18 @@ async function signAll(app: string, identity: string, deps: NotarizeDeps, signal
   return true;
 }
 
+/** Where Apple's developer tools are: the folder xcode-select names, or null on a Mac without them. */
+async function developerTools(deps: NotarizeDeps, signal: AbortSignal): Promise<string | null> {
+  const selected = await deps.run(XCODE_SELECT, ["--print-path"], { signal, timeoutMs: SIGN_TIMEOUT_MS });
+  const folder = selected.code === 0 ? selected.stdout.trim() : "";
+  return path.isAbsolute(folder) ? path.join(folder, "usr", "bin") : null;
+}
+
 /** Sends a zip of the signed `app` to Apple's notary through `profile` and waits; why not when it isn't accepted. */
 async function submit(
   app: string,
   profile: string,
+  tools: string,
   deps: NotarizeDeps,
   signal: AbortSignal,
 ): Promise<MacNotarizeFailure | null> {
@@ -214,8 +225,8 @@ async function submit(
       timeoutMs: SIGN_TIMEOUT_MS,
     });
     if (zipped.code !== 0) return MacNotarizeFailure.Submit;
-    const args = ["notarytool", "submit", zip, "--keychain-profile", profile, "--wait", "--output-format", "json"];
-    const answer = await deps.run(XCRUN, args, { signal, timeoutMs: NOTARY_TIMEOUT_MS });
+    const args = ["submit", zip, "--keychain-profile", profile, "--wait", "--output-format", "json"];
+    const answer = await deps.run(path.join(tools, "notarytool"), args, { signal, timeoutMs: NOTARY_TIMEOUT_MS });
     const status = answer.code === 0 ? notaryStatus(answer.stdout) : null;
     if (status === null) return MacNotarizeFailure.Submit;
     return status === ACCEPTED ? null : MacNotarizeFailure.Rejected;
@@ -243,10 +254,14 @@ export async function notarizeMacApp(
   });
   const identity = pickIdentity(developerIds(listed.stdout), signing.identity.trim());
   if (isFailure(identity)) return { failure: identity };
+  // Without Apple's developer tools the notary can't be asked: the app stays as built, unsigned.
+  const tools = await developerTools(deps, signal);
+  if (!tools) return { failure: signal.aborted ? MacNotarizeFailure.Stopped : MacNotarizeFailure.Submit };
   if (!(await signAll(app, identity, deps, signal))) return { failure: MacNotarizeFailure.Sign };
-  const refused = await submit(app, signing.profile.trim() || DEFAULT_NOTARY_PROFILE, deps, signal);
+  const refused = await submit(app, signing.profile.trim() || DEFAULT_NOTARY_PROFILE, tools, deps, signal);
   if (refused) return { failure: signal.aborted ? MacNotarizeFailure.Stopped : refused };
-  const stapled = await deps.run(XCRUN, ["stapler", "staple", app], { signal, timeoutMs: SIGN_TIMEOUT_MS });
+  const stapler = path.join(tools, "stapler");
+  const stapled = await deps.run(stapler, ["staple", app], { signal, timeoutMs: SIGN_TIMEOUT_MS });
   if (stapled.code !== 0) return { failure: MacNotarizeFailure.Staple };
   return { notarized: true, identity };
 }

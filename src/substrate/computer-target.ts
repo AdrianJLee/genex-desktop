@@ -13,6 +13,7 @@ import type {
   StillMimeType,
 } from "../shared/preview-contract.ts";
 import type { InputRoute, TargetCapabilities } from "../shared/computer-target.ts";
+import type { EnginePlayLooked, EnginePlayPiloted, EnginePlayWalked } from "../shared/engine-play.ts";
 import type { PreviewInputAction } from "./preview-input.ts";
 
 export type { TargetCapabilities };
@@ -104,8 +105,25 @@ export interface ComputerTarget {
   refusals?(): Array<{ op: string; code: string; message: string }>;
   /** Named game actions ("jump"), where the target declares `actions`. */
   act?(actions: TargetGameAction[]): Promise<{ applied: number; route: InputRoute }>;
+  /** Walk the player to a target by itself, where the target declares `walk`: how the walk ended. */
+  walk?(spec: { target: string; seconds?: number }): Promise<{ walked: EnginePlayWalked; route: InputRoute }>;
+  /** Turn the player's view onto a target, where the target declares `walk`: how the turn ended. */
+  look?(spec: { target: string }): Promise<{ looked: EnginePlayLooked; route: InputRoute }>;
+  /** Run a pilot file of the game's project, where the target declares `pilot`: how its run ended. */
+  pilot?(spec: { file: string; seconds: number }): Promise<{ piloted: EnginePlayPiloted; route: InputRoute }>;
   /** Web pages by their structure, where the target declares `dom`. */
   web?: TargetWeb;
+  /**
+   * Bring a running app's window in front of the others, where the target declares `apps`: null once
+   * it is in front, else why it is not (refused, declined, or it did not come forward). With
+   * `window`, the app's window whose title holds it, among several the app has open.
+   */
+  front?(app: string, window?: string): Promise<string | null>;
+  /**
+   * Open an https page in the person's own default browser, where the target declares `apps`: null
+   * once it is handed to the browser, else why not (not https, or not a page the task may open).
+   */
+  openPage?(address: string): Promise<string | null>;
   /**
    * Address this player (1 to `caps.players`) with every later look, input and state read, where
    * the target plays several at once.

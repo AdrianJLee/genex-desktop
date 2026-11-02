@@ -16,13 +16,25 @@ import { STORAGE_KEYS } from "../storage.ts";
 
 /** Set once the welcome is finished or skipped on this profile. */
 export const WELCOMED_KEY = STORAGE_KEYS.welcomed;
-/** The demo prompt names the game the Judges' screen plays. */
+/** The demo prompt names the game the second opinion's screen plays. */
 export const DEMO_IDEA = t("A tiny space shooter in a field of asteroids");
 
 /** Welcome only a first launch: the session allows it, the library is empty and this profile was never welcomed. */
 export function shouldWelcome(allowed: boolean | undefined, games: number, storage: Pick<Storage, "getItem">): boolean {
   return allowed === true && games === 0 && storage.getItem(WELCOMED_KEY) !== "1";
 }
+
+/** The onboarding screens: the welcome, Connect, and one for each of Connect's other ways. */
+export const WelcomeScreen = {
+  Welcome: "welcome",
+  Connect: "connect",
+  Local: "local",
+  OpenRouter: "openrouter",
+  OpenCode: "opencode",
+  Grok: "grok",
+  Cursor: "cursor",
+} as const;
+export type WelcomeScreen = (typeof WelcomeScreen)[keyof typeof WelcomeScreen];
 
 /** A subscription first launch offers to connect: Claude Code or Codex. */
 export type Subscription = SubscriptionId;
@@ -189,6 +201,20 @@ export function markState(view: ConnectView): MarkState {
   if (view.kind === ConnectViewKind.On) return MarkState.On;
   if (view.kind === ConnectViewKind.Busy || view.kind === ConnectViewKind.Code) return MarkState.Busy;
   return installsCli(view) ? MarkState.Missing : MarkState.Idle;
+}
+
+/**
+ * Building with Genex's button (owner, 2026-10-28): Use Genex, then a Genex ready status once
+ * picked. Picking asks nothing: the first message says what is missing (a sign-in, Pro or credits)
+ * and waits for it. While the Claude Code Genex runs is set up, it says so.
+ */
+export function genexChoiceView(choice: {
+  picked: boolean;
+  installing: boolean;
+}): Exclude<ConnectView, { kind: typeof ConnectViewKind.Code }> {
+  if (!choice.picked) return { kind: ConnectViewKind.Action, action: ConnectAction.Connect, label: t("Use Genex") };
+  if (choice.installing) return { kind: ConnectViewKind.Busy, label: t("Getting Genex ready…"), cancel: false };
+  return { kind: ConnectViewKind.On, label: t("Genex ready") };
 }
 
 /** Ollama names an untagged pull `:latest`; installed models are compared the same way. */

@@ -9,9 +9,11 @@ import { sizeWords } from "../../../../shared/byte-size.ts";
 import {
   CloudBuildFailure,
   CloudBuildState,
+  GenexBuildReview,
   type GenexCloudBuild,
   GenexListingState,
   type GenexNativeRecord,
+  type GenexNativeSent,
   type MacNotarizeFailure,
 } from "../../../../shared/genex.ts";
 import { CoreFact, type FactRef } from "../../../../shared/project-facts.ts";
@@ -34,6 +36,10 @@ export const PlatformEnd = {
   Sending: "sending",
   /** On Genex: this build is what desktop players get. */
   Sent: "sent",
+  /** On Genex, waiting for Genex's review before players get it. */
+  Review: "review",
+  /** On Genex, but Genex turned it down: players never get it. */
+  Rejected: "rejected",
   /** The last Publish could not send it. */
   Failed: "failed",
   /** This computer can't make it, and Genex can build it on its own computers. */
@@ -114,6 +120,13 @@ function nativeDetail(row: PublishPlatform & { target: NativeTarget }, now: numb
 /** Whether a record's entry is for `row`'s platform. */
 const forRow = (row: PublishPlatform) => (entry: { platform: string }) => entry.platform === row.target;
 
+/** Where a sent app stands with players: theirs, waiting for Genex's review, or turned down. */
+const REVIEW_END: Record<GenexBuildReview, PlatformEnd> = {
+  [GenexBuildReview.Pending]: PlatformEnd.Review,
+  [GenexBuildReview.Approved]: PlatformEnd.Sent,
+  [GenexBuildReview.Rejected]: PlatformEnd.Rejected,
+};
+
 /** The app on Genex for `row` when it is this build or a newer one, else none. */
 function currentSent(row: PublishPlatform, native: GenexNativeRecord | undefined) {
   const sent = native?.sent.find(forRow(row));
@@ -127,7 +140,8 @@ const withNotarized = (detail: string, row: PublishPlatform, native: GenexNative
 
 /** Where an app Publish sends stands: being sent, on Genex (this build or a newer one), or not sent. */
 function sendEnd(row: PublishPlatform, native: GenexNativeRecord | undefined): PlatformEnd {
-  if (currentSent(row, native)) return PlatformEnd.Sent;
+  const sent = currentSent(row, native);
+  if (sent) return sent.review ? REVIEW_END[sent.review] : PlatformEnd.Sent;
   if (native?.sending) return PlatformEnd.Sending;
   return native?.failed.some(forRow(row)) ? PlatformEnd.Failed : PlatformEnd.None;
 }
@@ -284,8 +298,12 @@ export function listingLine(
 ): string | null {
   if (!onlyApps(platforms) || !native || native.sending || native.sent.length === 0) return null;
   if (native.listing?.state === GenexListingState.Held) return WORDS.held;
-  return native.listing ? null : WORDS.notListed;
+  // Apps Genex turned down are never listed: their own lines say why.
+  if (native.listing || native.sent.every(turnedDown)) return null;
+  return WORDS.notListed;
 }
+
+const turnedDown = (sent: GenexNativeSent): boolean => sent.review === GenexBuildReview.Rejected;
 
 /**
  * Whether Publish has nothing new to send for a game with only apps: every app it would send is on
@@ -293,9 +311,21 @@ export function listingLine(
  */
 export function appsUpToDate(platforms: readonly PublishPlatform[], native: GenexNativeRecord | undefined): boolean {
   if (!onlyApps(platforms) || !native || native.sending) return false;
-  return platforms
-    .filter((row) => isNative(row) && row.uploads)
-    .every((row) => sendEnd(row, native) === PlatformEnd.Sent);
+  return platforms.filter((row) => isNative(row) && row.uploads).every((row) => ON_GENEX.has(sendEnd(row, native)));
+}
+
+/** The ends of an app Genex has: sending it again would change nothing. */
+const ON_GENEX: ReadonlySet<PlatformEnd> = new Set([PlatformEnd.Sent, PlatformEnd.Review]);
+
+const waitsForReview = (sent: GenexNativeSent): boolean => sent.review === GenexBuildReview.Pending;
+
+/**
+ * Whether a game with only apps waits for Genex's review: every app its last Publish sent is still
+ * reviewed, so players see none of it yet and the dialog sends it for review instead of celebrating.
+ */
+export function appsInReview(platforms: readonly PublishPlatform[], native: GenexNativeRecord | undefined): boolean {
+  if (!onlyApps(platforms) || !native || native.sending || native.sent.length === 0) return false;
+  return native.sent.every(waitsForReview);
 }
 
 /** Whether the game has no web build. */
@@ -351,17 +381,23 @@ export function reachLine(
  * without the notarizing its creator asked for, why.
  */
 export function failureLines(platforms: readonly PublishPlatform[], native: GenexNativeRecord | undefined): string[] {
-  const unsent = platforms
-    .filter((row) => isNative(row) && row.uploads && sendEnd(row, native) === PlatformEnd.Failed)
-    .map((row) => {
-      const error = native?.failed.find(forRow(row))?.error ?? "";
-      return WORDS.failedLine(WORDS.name[row.target], error);
-    });
-  const unnotarized = platforms
-    .map((row) => (isNative(row) && row.uploads ? currentSent(row, native)?.notarizeFailure : undefined))
+  const shown = platforms.filter((row) => isNative(row) && row.uploads);
+  const unsent = shown.flatMap((row) => failureLine(row, native));
+  const unnotarized = shown
+    .map((row) => currentSent(row, native)?.notarizeFailure)
     .filter((failure): failure is MacNotarizeFailure => failure !== undefined)
     .map((failure) => WORDS.notarizeFailed[failure]);
   return [...unsent, ...unnotarized];
+}
+
+/** A sent app's line when it did not reach players: not sent and why, or turned down by Genex and why. */
+function failureLine(row: PublishPlatform, native: GenexNativeRecord | undefined): string[] {
+  const end = sendEnd(row, native);
+  const name = WORDS.name[row.target];
+  if (end === PlatformEnd.Failed) return [WORDS.failedLine(name, native?.failed.find(forRow(row))?.error ?? "")];
+  if (end !== PlatformEnd.Rejected) return [];
+  const reason = native?.sent.find(forRow(row))?.reviewReason;
+  return [reason ? WORDS.rejectedLine(name, reason) : WORDS.rejected(name)];
 }
 
 /** The players a native row is for: "Mac", "Windows", "Linux". */

@@ -5,7 +5,7 @@
  * folder is ever handed to the CLI, a Linux one with its platform and program named. One app that fails is kept as that app's failure, in the CLI's own words.
  */
 import assert from "node:assert/strict";
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -14,6 +14,7 @@ import { realpath } from "node:fs/promises";
 import { after } from "node:test";
 import { GenexTools } from "../../src/plugins/genex/adapter.ts";
 import { saveClip } from "../../src/plugins/genex/clip.ts";
+import { saveShot } from "../../src/plugins/genex/cover.ts";
 import type { MacSigning, NotarizeOutcome } from "../../src/plugins/genex/mac-notarize.ts";
 import { GENEX_COVERS_DIR, MacNotarizeFailure } from "../../src/shared/genex.ts";
 import { type GenexFixtureApi, startGenexFixtureApi } from "../helpers/genex-fixture-api.ts";
@@ -39,16 +40,19 @@ const cover = (() => {
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   return Buffer.concat([signature, length, Buffer.from("IHDR"), header, Buffer.alloc(4)]);
 })();
-/** The host's still of an engine game's cover reel, as `observe` answers it. */
-const COVER_STILL_ANSWER = {
-  mimeType: "image/png",
-  width: 1920,
-  height: 1080,
-  source: "compositor",
-  view: { demo: "genex-cover" },
-  stats: { lumaMean: 0.45, lumaStdDev: 0.21, nearBlackFraction: 0.08, litFraction: 0.97 },
-  preview: Buffer.from("jpeg preview"),
-};
+/** The cover the engine game's agent kept, as genex__cover writes it into the plugin's storage. */
+const keepCover = (genex: GenexTools) =>
+  saveShot(
+    path.join(genex.root, GENEX_COVERS_DIR, "dust"),
+    {
+      image: cover,
+      mimeType: "image/png",
+      width: 1920,
+      height: 1080,
+      stats: { lumaMean: 0.45, lumaStdDev: 0.21, nearBlackFraction: 0.08, litFraction: 0.97 },
+    },
+    new Date().toISOString(),
+  );
 
 /** How `genex cover --clip --json` answers a clip Genex took, and one of a build it does not know. */
 const CLIP_APPLIED = { kind: "applied", clipUrl: "https://cdn.genex.technology/clips/dust.mp4", clipSource: "agent" };
@@ -244,6 +248,27 @@ describe("one app sent", () => {
     });
   });
 
+  it("keeps Genex's review of the build: waiting, or turned down and why", async () => {
+    const waiting = await sendNativeBuild(MAC, async () => ({
+      build: { ...BUILD, review: "pending" },
+      listing: { state: "published", slug: "dust-runners" },
+    }));
+    assert.equal("sent" in waiting ? waiting.sent.review : null, "pending");
+    assert.deepEqual(waiting.listing, { state: "held", detail: null }, "a game Genex reviews is not listed yet");
+    const approved = await sendNativeBuild(MAC, async () => ({
+      build: { ...BUILD, review: "approved" },
+      listing: { state: "published", slug: "dust-runners" },
+    }));
+    assert.deepEqual(approved.listing, { state: "published", detail: null });
+    const rejected = sentBuild({ build: { ...BUILD, review: "rejected", reviewReason: "It opens a shell." } });
+    assert.deepEqual([rejected?.review, rejected?.reviewReason], ["rejected", "It opens a shell."]);
+    assert.equal(
+      sentBuild({ build: { ...BUILD, review: "maybe" } })?.review,
+      undefined,
+      "an unknown review is dropped",
+    );
+  });
+
   it("keeps a failure in the CLI's own last words, and an answer without a build as a failure", async () => {
     const failed = await sendNativeBuild(MAC, async () => {
       throw new Error(
@@ -263,7 +288,8 @@ describe("one app sent", () => {
  * Genex's tools with a stand-in for the CLI: a preload that answers `genex init` and `genex native
  * publish` itself, as the real commands do (`--json`: one object, exit 1 for a refused listing), and
  * logs each run's arguments. An app whose path names "Broken" fails on stderr with a non-zero exit;
- * one naming "Held" or "Refused" gets that answer to its `--gallery` listing.
+ * one naming "Held" or "Refused" gets that answer to its `--gallery` listing, and one naming "Review" is
+ * listed with a build Genex still reviews.
  */
 async function toolsWithStandIn(
   sendsApps = true,
@@ -315,7 +341,8 @@ const listing = !args.includes("--gallery")
       ? { state: "held", category: null, detail: null }
       : { state: "published", slug: "dust-runners" };
 const system = args.includes("--platform") ? args[args.indexOf("--platform") + 1] : "windows";
-const build = { ...${JSON.stringify(answer)}, ...(windows ? { platform: system, arch: "x64" } : {}) };
+const review = target.includes("Review") ? { review: "pending" } : {};
+const build = { ...${JSON.stringify(answer)}, ...(windows ? { platform: system, arch: "x64" } : {}), ...review };
 process.stdout.write(JSON.stringify({ build, engine: "unity", ...(listing ? { listing } : {}) }));
 process.exit(listing?.state === "refused" ? 1 : 0);
 `,
@@ -463,6 +490,131 @@ describe("a game with only apps, published", () => {
     );
   });
 
+  /** A publish workspace already linked to `meta`, as an earlier publish left it. */
+  async function linkedTo(genex: GenexTools, meta: Record<string, unknown>) {
+    const workspace = path.join(genex.root, "publish", "dust");
+    await mkdir(path.join(workspace, ".genex"), { recursive: true });
+    await writeFile(path.join(workspace, ".genex", "project.json"), JSON.stringify(meta));
+    return workspace;
+  }
+
+  it("makes a new hosted project when the linked one is gone or isn't this account's, keeping the old link aside", async () => {
+    const answers: Record<string, () => object> = {
+      deleted: () => ({ error: "Not found" }),
+      // An admin's sign-in sees someone else's game: it is still not this account's to publish to.
+      "someone-elses": () => ({ project: { id: "p-other", slug: "someone-elses", owner: { id: "u-other" } } }),
+      replaced: () => ({ project: { id: "p-new", slug: "replaced", owner: { id: "u-me" } } }),
+    };
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      const slug = /^\/api\/projects\/by-slug\/([^/?]+)/.exec(req.url)?.[1] ?? "";
+      const answer = answers[slug];
+      if (answer) return reply.json(answer(), slug === "deleted" ? 404 : 200);
+    });
+    servers.push(server);
+    for (const [slug, id] of [
+      ["deleted", "p-old"],
+      ["someone-elses", "p-other"],
+      ["replaced", "p-old"],
+    ]) {
+      const { genex, runs } = await toolsWithStandIn(true, server.url);
+      const workspace = await linkedTo(genex, { slug, id, status: "published" });
+      await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+      const state = await genex.publishWait("dust");
+      assert.equal((await runs())[0]?.args[0], "init", `${slug}: a new hosted project is made first`);
+      assert.equal(state.job?.state, "done", `${slug}: ${JSON.stringify(state.job)}`);
+      assert.equal(state.slug, "dust-runners", slug);
+      const aside = (await readdir(path.join(workspace, ".genex"))).filter((name) =>
+        name.startsWith("project.unlinked-"),
+      );
+      assert.equal(aside.length, 1, `${slug}: the old link is kept aside, not deleted`);
+    }
+  });
+
+  it("keeps publishing to its hosted project while Genex says it is this account's, or can't be asked", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/mine"))
+        return reply.json({ project: { id: "p1", slug: "mine", status: "published", owner: { id: "u-me" } } });
+      if (req.url.startsWith("/api/projects/by-slug/flaky")) return reply.json({ error: "down" }, 503);
+    });
+    servers.push(server);
+    for (const slug of ["mine", "flaky"]) {
+      const { genex, runs } = await toolsWithStandIn(true, server.url);
+      await linkedTo(genex, { slug, id: "p1", status: "published" });
+      await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+      await genex.publishWait("dust");
+      assert.equal(
+        (await runs()).some((call) => call.args[0] === "init"),
+        false,
+        `${slug}: no new hosted project`,
+      );
+    }
+  });
+
+  it("keeps its link while the sign-in no longer holds, though Genex then reads every game as unknown", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: null });
+    });
+    servers.push(server);
+    const { genex, runs } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "mine", id: "p1", status: "published" });
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners").catch(() => null);
+    await genex.publishWait("dust");
+    assert.equal(
+      (await runs()).some((call) => call.args[0] === "init"),
+      false,
+      "no new hosted project",
+    );
+    assert.deepEqual(await readdir(path.join(workspace, ".genex")), ["project.json"], "the link stays");
+  });
+
+  it("puts back its own game set aside under another sign-in, instead of making a third", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/mine"))
+        return reply.json({ project: { id: "p1", slug: "mine", owner: { id: "u-me" } } });
+    });
+    servers.push(server);
+    const { genex, runs } = await toolsWithStandIn(true, server.url);
+    // The other sign-in's game is linked now; this account's own was set aside when it was made.
+    const workspace = await linkedTo(genex, { slug: "theirs", id: "p2", status: "draft" });
+    await writeFile(
+      path.join(workspace, ".genex", "project.unlinked-1793000000000.json"),
+      JSON.stringify({ slug: "mine", id: "p1", status: "published" }),
+    );
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    await genex.publishWait("dust");
+    assert.equal(
+      (await runs()).some((call) => call.args[0] === "init"),
+      false,
+      "no new hosted project",
+    );
+    const linked = JSON.parse(await readFile(path.join(workspace, ".genex", "project.json"), "utf8"));
+    assert.equal(linked.slug, "mine", "its own game is linked again");
+    const aside = (await readdir(path.join(workspace, ".genex"))).filter((name) =>
+      name.startsWith("project.unlinked-"),
+    );
+    assert.equal(aside.length, 1, "the other sign-in's link is set aside in its turn");
+  });
+
+  it("puts back no link set aside that Genex can't vouch for: a new game is made instead", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/flaky")) return reply.json({ error: "down" }, 503);
+    });
+    servers.push(server);
+    const { genex, runs } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "gone", id: "p3", status: "draft" });
+    await writeFile(
+      path.join(workspace, ".genex", "project.unlinked-1793000000000.json"),
+      JSON.stringify({ slug: "flaky", id: "p1", status: "published" }),
+    );
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    await genex.publishWait("dust");
+    assert.equal((await runs())[0]?.args[0], "init", "a new hosted project, not a link Genex didn't answer for");
+  });
+
   it("keeps the apps live but fails the publish when Genex refuses the listing, in its words", async () => {
     const { genex } = await toolsWithStandIn(true, await fixtureApi());
     await genex.publishAppsOnly("dust", [app("Refused")], "Dust Runners");
@@ -487,18 +639,20 @@ describe("a game with only apps, published", () => {
     assert.equal(failed.job?.error, "Couldn't get an upload token (HTTP 413).");
   });
 
-  it("takes the cover again as it starts and sends it once the apps are on Genex", async () => {
+  it("is held, never listed, while Genex reviews the app it went with", async () => {
+    const { genex } = await toolsWithStandIn(true, await fixtureApi());
+    await genex.publishAppsOnly("dust", [app("Review")], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    assert.equal(state.job?.state, "done", JSON.stringify(state.job));
+    assert.equal(state.native?.sent[0]?.review, "pending");
+    assert.deepEqual(state.native?.listing, { state: "held", detail: null });
+    assert.notEqual(state.status, "published", "its page is not found until Genex approves it");
+  });
+
+  it("sends the agent's kept cover once the apps are on Genex", async () => {
     const { genex, runs } = await toolsWithStandIn(true, await fixtureApi());
-    let shots = 0;
-    const lens = {
-      invokedAt: Date.now(),
-      shoot: async () => {
-        shots++;
-        return { still: { ...COVER_STILL_ANSWER, image: cover } };
-      },
-    };
-    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
-    assert.equal(shots, 1, "the cover is taken inside the press's own call");
+    await keepCover(genex);
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
     await genex.publishWait("dust");
     // The cover goes on its own after the job is recorded: wait for its send to be written.
     const sentCover = async () => (await runs()).some((call) => call.args[0] === "cover" && call.args[1] !== "--json");
@@ -515,11 +669,14 @@ describe("a game with only apps, published", () => {
   /** Publish a game with only apps that kept a clip, with the stand-in answering its clip `clipAnswer`. */
   async function publishWithClip(clipAnswer: typeof CLIP_APPLIED | typeof CLIP_STALE) {
     const { genex, runs } = await toolsWithStandIn(true, await fixtureApi(), clipAnswer);
-    const take = { video: Buffer.from("mp4 bytes"), mimeType: "video/mp4" as const, width: 960, height: 540 };
-    const clip = { ...take, durationMs: 5000, poster: cover, motion: 0.4 };
-    await saveClip(path.join(genex.root, GENEX_COVERS_DIR, "dust"), clip, new Date().toISOString());
-    const lens = { invokedAt: Date.now(), shoot: async () => ({ still: { ...COVER_STILL_ANSWER, image: cover } }) };
-    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
+    const clip = { video: Buffer.from("mp4 bytes"), mimeType: "video/mp4" as const, width: 960, height: 540 };
+    await saveClip(
+      path.join(genex.root, GENEX_COVERS_DIR, "dust"),
+      { ...clip, durationMs: 5500 },
+      new Date().toISOString(),
+    );
+    await keepCover(genex);
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
     const clipSend = async () => (await runs()).find((call) => call.args[0] === "cover" && call.args[1] === "--clip");
     for (let tries = 0; tries < 100 && !(await clipSend()); tries++) await sleep(50);
     for (let tries = 0; tries < 100 && !(await genex.publishWait("dust")).cover?.clipLast; tries++) await sleep(50);
@@ -542,13 +699,9 @@ describe("a game with only apps, published", () => {
     assert.equal(state.cover?.clipLast?.kind, "failed", "not settled: the next publish sends it again");
   });
 
-  it("publishes its apps with no cover sent when there is none to take", async () => {
+  it("publishes its apps with no cover sent when the agent kept none", async () => {
     const { genex, runs } = await toolsWithStandIn(true, await fixtureApi());
-    const lens = {
-      invokedAt: Date.now(),
-      shoot: async () => ({ stillProblem: { code: "view_unknown", available: [] } }),
-    };
-    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
     const state = await genex.publishWait("dust");
     assert.equal(state.job?.state, "done", JSON.stringify(state.job));
     assert.equal(state.cover?.shot, null);

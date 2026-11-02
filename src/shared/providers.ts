@@ -11,7 +11,8 @@ import { t } from "./i18n.ts";
 /**
  * How a provider signs in: Claude through a piped or embedded terminal plus status polling, Codex
  * through its native login reported from the in-app console, OpenCode through its own `auth login`
- * in the embedded terminal (which keeps every provider it signs in to), `none` for an engine with
+ * in the embedded terminal (which keeps every provider it signs in to), Grok Build and Cursor through
+ * their own sign-in command there (the person's account, in the browser), `none` for an engine with
  * no sign-in of its own (a local model, a local server, or OpenRouter, whose key is pasted in Settings).
  */
 export type LoginKind = "terminal" | "console" | "cli" | "none";
@@ -57,6 +58,8 @@ export interface ProviderInfo {
   readonly billing: Billing;
   /** Subscriptions only. */
   readonly signIn: SignInCopy | null;
+  /** Shipped before a live test proved it: Settings and the picker say Beta. */
+  readonly beta?: true;
 }
 
 /** The id of every engine the app knows (`Engine.id`). Persisted in settings and logs: never rename a value. */
@@ -68,6 +71,9 @@ export const EngineId = {
   OpenCode: "opencode",
   OpenRouter: "openrouter",
   LocalServer: "local-server",
+  Grok: "grok",
+  Cursor: "cursor",
+  Genex: "genex",
 } as const;
 export type EngineId = (typeof EngineId)[keyof typeof EngineId];
 
@@ -164,6 +170,39 @@ export const PROVIDERS = [
     signIn: null,
   },
   {
+    id: EngineId.Grok,
+    label: "Grok Build",
+    subscription: false,
+    login: "cli",
+    roles: "sessions",
+    billing: "metered",
+    signIn: null,
+  },
+  {
+    id: EngineId.Cursor,
+    label: "Cursor",
+    subscription: false,
+    login: "cli",
+    roles: "sessions",
+    // Cursor's own models draw on the plan's weekly pool, but Claude, GPT and Gemini in Cursor, and
+    // anything past the pool, are paid from the account's credit: only the person's pick runs it.
+    billing: "metered",
+    signIn: null,
+    beta: true,
+  },
+  {
+    // Claude Code on Genex credits: the app's own relay hands its calls to genex.games, which
+    // runs them on the three models it offers (`shared/genex-build.ts`). Nothing to install or
+    // sign in to beyond the person's Genex account.
+    id: EngineId.Genex,
+    label: "Genex",
+    subscription: false,
+    login: "none",
+    roles: "sessions",
+    billing: "metered",
+    signIn: null,
+  },
+  {
     id: EngineId.OpenRouter,
     label: "OpenRouter",
     subscription: false,
@@ -207,9 +246,22 @@ export function loginKind(id: string | null | undefined): LoginKind {
   return providerInfo(id)?.login ?? "none";
 }
 
+/**
+ * True for an engine whose sessions are Claude Code's: Claude Code itself, and Genex, which runs it
+ * on Genex credits. Their tools, permission modes and Auto are Claude Code's.
+ */
+export function runsClaudeCode(id: string | null | undefined): boolean {
+  return id === EngineId.ClaudeCode || id === EngineId.Genex;
+}
+
 /** True for a provider billed per token: the app never picks one on the person's behalf. */
 export function isMetered(id: string | null | undefined): boolean {
   return providerInfo(id)?.billing === "metered";
+}
+
+/** True for a provider that ships in beta: Settings and the model picker say so. */
+export function isBeta(id: string | null | undefined): boolean {
+  return providerInfo(id)?.beta === true;
 }
 
 /** True for a model this Mac runs itself: free, and never rate limited by anyone else. */

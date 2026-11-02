@@ -3,11 +3,11 @@ import { ModelCatalogState } from "../shared/model-catalog.ts";
  * The model picker's rows: every engine's models as choices keyed `engine::model`, and the
  * effort each role runs at once a model is picked.
  */
-import { EngineKind, isEngineReady, needsSignIn } from "../shared/engine-descriptor.ts";
+import { EngineKind, EngineStatusReason, isEngineReady, needsSignIn } from "../shared/engine-descriptor.ts";
 import { t } from "../shared/i18n.ts";
 import { ReasoningEffort } from "../shared/model-preferences.ts";
 import { crossesTo, resolveRoles, roleEffortCap } from "../shared/model-roles.ts";
-import { EngineId, isMetered } from "../shared/providers.ts";
+import { EngineId, isBeta, isMetered } from "../shared/providers.ts";
 import { modelKey, parseModelKey } from "./model-key.ts";
 import { modelBase, modelName, offersLineup, runnableModels, shownModels } from "./model-lineup.ts";
 import type { EngineDescriptor } from "./types.ts";
@@ -65,6 +65,7 @@ function engineChoices(
   runnable: ReadonlySet<string>,
 ): ModelChoice[] {
   const ready = isEngineReady(engine);
+  if (engine.id === EngineId.Genex) return genexChoices(engine);
   if (isLocalModelEngine(engine)) return ready ? engine.models.map((model) => localChoice(engine, model)) : [];
   // A paid provider is set up in Settings, never from the picker: until it is ready its models
   // (OpenRouter's catalog is public) are hidden rows, so a pick saved on one still resolves.
@@ -75,6 +76,19 @@ function engineChoices(
       : subscriptionModelChoices(engine, picker, runnable);
   if (models.length > 0) return models;
   return [subscriptionRow(engine, ready)];
+}
+
+/**
+ * Genex's three models, listed and pickable whether or not the account can build yet: sending on
+ * one says what is missing (a sign-in, Pro or credits) and holds the message until it is done. Only
+ * where genex.games offers no building with credits are they hidden, so a saved pick still resolves.
+ */
+function genexChoices(engine: EngineDescriptor): ModelChoice[] {
+  const offered = engine.status.reason !== EngineStatusReason.NotOffered;
+  return engine.models.map((model) => {
+    const { tag: _tag, ...row } = subscriptionChoice(engine, model, offered);
+    return { ...row, disabled: !offered };
+  });
 }
 
 function localTag(model: EngineModel): string {
@@ -162,6 +176,7 @@ function subscriptionChoice(engine: EngineDescriptor, model: EngineModel, shown:
     ...(model.providerDefault ? { providerDefault: true } : {}),
     ...(model.resolvedModel ? { resolvedModel: model.resolvedModel } : {}),
     ...(model.free ? { free: true } : {}),
+    ...(isBeta(engine.id) ? { beta: true } : {}),
     // Each vendor publishes its own reasoning dial; the effort page offers exactly what
     // the picked model accepts, so a run never dies on a value its CLI refuses.
     contextWindow: model.contextWindow,
@@ -199,6 +214,7 @@ function subscriptionRow(engine: EngineDescriptor, ready: boolean): ModelChoice 
     tag: subscriptionTag(engine, ready, signIn),
     disabled: !ready && !signIn,
     ...(engine.status.remedy ? { title: engine.status.remedy } : {}),
+    ...(isBeta(engine.id) ? { beta: true } : {}),
   };
 }
 

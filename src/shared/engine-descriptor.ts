@@ -26,11 +26,39 @@ export const EngineKind = {
 } as const;
 export type EngineKind = (typeof EngineKind)[keyof typeof EngineKind];
 
+/**
+ * Why an engine is not ready where its code alone does not say (`EngineStatus.reason`), so the app
+ * tells the cases apart without reading `detail`. Never rename a value.
+ */
+export const EngineStatusReason = {
+  NotSignedIn: "not_signed_in",
+  /** Signed in with an API key instead of the plan's own sign-in. */
+  ApiKeyLogin: "api_key_login",
+  /** A sign-in that a run or the CLI no longer accepts. */
+  AuthFailed: "auth_failed",
+  /** The CLI could not be asked whether anyone is signed in. */
+  CheckFailed: "check_failed",
+  CliMissing: "cli_missing",
+  /** Genex: the account has to verify its email on genex.games first. */
+  VerifyEmail: "verify_email",
+  /** Genex: building with credits needs Pro or a credit pack. */
+  NeedsPlan: "needs_plan",
+  /** Genex: the account has no credits left. */
+  OutOfCredits: "out_of_credits",
+  /** Genex: building with credits is paused on genex.games for now. */
+  Paused: "paused",
+  /** Genex: this genex.games does not offer building with credits, so the app hides it. */
+  NotOffered: "not_offered",
+} as const;
+export type EngineStatusReason = (typeof EngineStatusReason)[keyof typeof EngineStatusReason];
+
 export interface EngineStatus {
   code: EngineStatusCode;
   detail: string;
   /** What the UI should offer to do about it. */
   remedy?: string;
+  /** Why it is not ready, when the engine knows. */
+  reason?: EngineStatusReason;
 }
 
 /** Subscription engines only: which login Studio uses and the state of the external CLI. */

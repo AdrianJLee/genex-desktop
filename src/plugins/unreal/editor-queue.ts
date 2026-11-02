@@ -60,6 +60,11 @@ export const LoopTool = {
   PlayerState: "player_state",
   Mouse: "mouse",
   Pause: "pause",
+  WalkTo: "walk_to",
+  LookAt: "look_at",
+  Pilot: "pilot",
+  LightPlay: "light_play",
+  PilotStep: "pilot_step",
   GetProperties: ObjectTool.GetProperties,
   SetProperties: ObjectTool.SetProperties,
   SearchCVars: CVarTool.Search,
@@ -112,6 +117,11 @@ const DriveState = { Driving: "driving", Done: "done" } as const;
 /** What player_state reports of a step under way, by its key there. */
 const UnderWay = { Settle: "settle", Drive: "drive" } as const;
 type UnderWay = (typeof UnderWay)[keyof typeof UnderWay];
+/** What player_state reports of a walk or a look the computer started, by its key there. */
+export const PlayMotion = { Walk: "walk", Look: "look" } as const;
+export type PlayMotion = (typeof PlayMotion)[keyof typeof PlayMotion];
+/** The state a walk or a look reports while it goes on: its wire values. */
+const MOTION_GOING: Record<PlayMotion, string> = { [PlayMotion.Walk]: "walking", [PlayMotion.Look]: "looking" };
 
 /**
  * The one editor, as the queue reaches it; `call` answers the tool's return value or throws, and a
@@ -239,6 +249,8 @@ const CLASS_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const CRASH_POLL_MS = 2 * SECOND_MS;
 /** How often a wait in play reads the game's clock. */
 const GAME_POLL_MS = 250;
+/** A short wait polls the game's clock at least this often: half its length, never under this. */
+const MIN_GAME_POLL_MS = 40;
 /** The most a wait of some game seconds takes on the queue's clock (a slow editor's game time lags): this many times as long, plus the extra. */
 const WALL_CAP_FACTOR = 4;
 const WALL_CAP_EXTRA_MS = 10 * SECOND_MS;
@@ -410,9 +422,12 @@ async function waitForOwner(deps: QueueDeps, run: PartRun, port: EditorPort, lim
   throw new WaitFailedError(PartRunFailure.OwnerBusy, MESSAGE.OwnerBusy);
 }
 
-/** A play shot of what the player sees: the helper queues it, the file is waited for and read. */
-export async function shoot(deps: QueueDeps, port: EditorPort, name: string): Promise<Shot> {
-  const answer = record(await port.call(LoopTool.CapturePlay, { name, width: SHOT_WIDTH, height: SHOT_HEIGHT }));
+/**
+ * A play shot of what the player sees, with the game's on-screen UI when `ui` (the HUD, a menu, an
+ * inventory): the helper queues it, the file is waited for and read.
+ */
+export async function shoot(deps: QueueDeps, port: EditorPort, name: string, ui = false): Promise<Shot> {
+  const answer = record(await port.call(LoopTool.CapturePlay, { name, width: SHOT_WIDTH, height: SHOT_HEIGHT, ui }));
   const file = String(answer.file ?? "");
   if (!file || !(await pollUntil(deps, () => deps.fileReady(file), FILE_POLL_MS, SHOT_WAIT_MS)))
     throw new Error(MESSAGE.NoShot(name));
@@ -436,7 +451,31 @@ export async function playFor(deps: QueueDeps, port: EditorPort, seconds: number
   const start = (await gameClock(port)).gameSeconds;
   if (start === null) return deps.sleep(seconds * SECOND_MS);
   const reached = async () => ((await gameClock(port)).gameSeconds ?? Number.POSITIVE_INFINITY) >= start + seconds;
-  await pollUntil(deps, reached, GAME_POLL_MS, wallCapMs(seconds));
+  await pollUntil(deps, reached, pollEvery(seconds), wallCapMs(seconds));
+}
+
+/** How often a wait of `seconds` game seconds looks at the clock: a tap's tenth of a second is not kept a quarter. */
+const pollEvery = (seconds: number) => Math.max(MIN_GAME_POLL_MS, Math.min(GAME_POLL_MS, (seconds * SECOND_MS) / 2));
+
+/**
+ * Lets the game play on for `seconds` of its own time, as {@link playFor} does, but only while its
+ * clock moves: once it has stood still for `stillMs` (a game paused on its title menu) the wait ends.
+ */
+export async function playForWhileRunning(deps: QueueDeps, port: EditorPort, seconds: number, stillMs: number) {
+  const start = (await gameClock(port)).gameSeconds;
+  if (start === null) return deps.sleep(seconds * SECOND_MS);
+  const ends = deps.now() + wallCapMs(seconds);
+  let last = start;
+  let movedAt = deps.now();
+  while (deps.now() < ends) {
+    await deps.sleep(pollEvery(seconds));
+    const now = (await gameClock(port)).gameSeconds ?? last;
+    if (now >= start + seconds) return;
+    if (now > last) {
+      last = now;
+      movedAt = deps.now();
+    } else if (deps.now() - movedAt >= stillMs) return;
+  }
 }
 
 /** Calls one of the helper's play steps, which answers at once; throws its refusal (`{error}`). */
@@ -470,6 +509,29 @@ async function settle(deps: QueueDeps, port: EditorPort, seconds: number): Promi
     gameSeconds: numberOr(seen.last?.gameSeconds) ?? 0,
     speedCmS: numberOr(seen.last?.speedCmS),
   };
+}
+
+/**
+ * Starts a walk or a look in the helper and waits until player_state says it ended, at most
+ * {@link wallCapMs} of its game `seconds` on the queue's clock: the helper's last word on it, or
+ * `{error}` in the helper's words when it refused to start one.
+ */
+export async function followMotion(
+  deps: QueueDeps,
+  port: EditorPort,
+  start: { tool: LoopTool; key: PlayMotion; args: Record<string, unknown> },
+  seconds: number,
+): Promise<Record<string, unknown>> {
+  const started = record(await port.call(start.tool, start.args));
+  if (started.error !== undefined) return { error: String(started.error) };
+  const seen: { last: Record<string, unknown> | null } = { last: null };
+  const ended = async () => {
+    const value = record(await port.call(LoopTool.PlayerState, {}))[start.key];
+    seen.last = value && typeof value === "object" ? record(value) : null;
+    return seen.last?.state !== MOTION_GOING[start.key];
+  };
+  await pollUntil(deps, ended, GAME_POLL_MS, wallCapMs(seconds));
+  return seen.last ?? {};
 }
 
 /** A drive's frames, named on from `firstFrame`, and how it went. */

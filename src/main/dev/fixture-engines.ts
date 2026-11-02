@@ -1,6 +1,6 @@
 /**
- * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode, OpenRouter and
- * local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
+ * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode, Grok Build, Cursor,
+ * Genex, OpenRouter and local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
  * network, and start no vendor worker. Markers in
  * the user's words (`fixture:pending`, `fixture:stream`, `fixture:plan`, …) choose the script.
  */
@@ -9,6 +9,8 @@ import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts"
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { HOUR_MS } from "../../shared/duration.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { GENEX_HELPER_MODEL, GENEX_MODELS, GenexAccess, isGenexAccess } from "../../shared/genex-build.ts";
+import { genexStatus } from "../../substrate/engines/genex.ts";
 import { MODEL_LIMIT_PREFIX } from "../../shared/provider-usage.ts";
 import { type LocalServerInfo, LocalServerKind } from "../../shared/local-server.ts";
 import {
@@ -33,6 +35,9 @@ const FIXTURE_ENGINES = [
   EngineId.ClaudeCode,
   EngineId.Codex,
   EngineId.OpenCode,
+  EngineId.Grok,
+  EngineId.Cursor,
+  EngineId.Genex,
   EngineId.OpenRouter,
   EngineId.LocalServer,
 ] as const;
@@ -50,16 +55,27 @@ const FIXTURE_SERVER: LocalServerInfo = {
   kind: LocalServerKind.TabbyApi,
   hasKey: true,
 };
-/** The status each fixture starts with when the session names none: ready, but for the local server. */
-const DEFAULT_STATUS: Partial<Record<string, EngineStatus>> = { [EngineId.LocalServer]: NO_LOCAL_SERVER };
+/** Cursor's CLI is not on a fixture session's computer, so the picker's lists stay as they were. */
+const NO_CURSOR: EngineStatus = { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Cursor CLI" };
+/**
+ * The status each fixture starts with when the session names none: ready, but for the local server,
+ * Cursor and Genex, whose account is signed out until `STUDIO_FIXTURE_USAGE_FILE` says otherwise.
+ */
+const DEFAULT_STATUS: Partial<Record<string, EngineStatus>> = {
+  [EngineId.LocalServer]: NO_LOCAL_SERVER,
+  [EngineId.Cursor]: NO_CURSOR,
+  [EngineId.Genex]: genexStatus(GenexAccess.SignIn),
+};
 /**
  * How each subscription's plan limits answer, read again on every read so a reviewer can change it
  * while the window is open: a JSON file named by `STUDIO_FIXTURE_USAGE_FILE`, for example
  * `{"claude-code":"slow","codex":"failed"}`. `slow` answers after `SLOW_USAGE_MS`, `failed` throws,
- * `none` shares no limits, `signed_out` also makes the subscription signed out; anything else, or
- * no file, answers the fixed limits at once.
+ * `none` shares no limits, `signed_out` also makes the subscription signed out, `ready` makes a
+ * stand-in that starts not installed (Cursor's) or signed out (Genex's) ready; Genex also takes any of
+ * genex.games's access words (`needs_plan`, `out_of_credits`, `paused`, …); anything else, or no
+ * file, answers the fixed limits at once.
  */
-const FixtureUsage = { Slow: "slow", Failed: "failed", None: "none", SignedOut: "signed_out" } as const;
+const FixtureUsage = { Slow: "slow", Failed: "failed", None: "none", SignedOut: "signed_out", Ready: "ready" } as const;
 const SLOW_USAGE_MS = 8000;
 const SIGNED_OUT_STATUS: EngineStatus = { code: EngineStatusCode.NeedsLogin, detail: "AG-933 fixture; signed out" };
 
@@ -128,8 +144,8 @@ const COMMAND_MARKER = "fixture:command";
 const LATEST_MESSAGE = "LATEST USER MESSAGE:\n";
 
 /**
- * First launch: an empty library, Claude Code waiting for a sign-in, Codex and OpenCode not
- * installed, OpenRouter with no key, and no local server.
+ * First launch: an empty library, Claude Code waiting for a sign-in, Codex, OpenCode, Grok Build and
+ * Cursor not installed, OpenRouter with no key, and no local server.
  */
 export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
   [EngineId.ClaudeCode]: {
@@ -138,6 +154,8 @@ export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
   },
   [EngineId.Codex]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Codex app" },
   [EngineId.OpenCode]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no OpenCode CLI" },
+  [EngineId.Grok]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Grok Build CLI" },
+  [EngineId.Cursor]: NO_CURSOR,
   [EngineId.OpenRouter]: { code: EngineStatusCode.NeedsLogin, detail: "AG-933 fixture; no OpenRouter key" },
   [EngineId.LocalServer]: NO_LOCAL_SERVER,
 };
@@ -164,10 +182,7 @@ function fixtureEngine(
     supportsSessions: !(directChat && local),
     // Claude Code reads the person's messages mid-turn; Codex is interrupted and resumed instead.
     ...(id === EngineId.ClaudeCode ? { steersMidTurn: true } : {}),
-    status: async () =>
-      fixtureUsageMode(id) === FixtureUsage.SignedOut
-        ? SIGNED_OUT_STATUS
-        : (statuses[id] ?? DEFAULT_STATUS[id] ?? READY_STATUS),
+    status: async () => fixtureStatus(id, statuses),
     // A local server stand-in names its server only while the session has it ready.
     ...(id === EngineId.LocalServer
       ? {
@@ -175,27 +190,53 @@ function fixtureEngine(
             (statuses[id] ?? NO_LOCAL_SERVER).code === EngineStatusCode.Ready ? FIXTURE_SERVER : null,
         }
       : {}),
-    models: async () => [
-      {
-        id: FIXTURE_MODEL,
-        label: "Fixture v1",
-        efforts: [ReasoningEffort.Low, ReasoningEffort.Medium, ReasoningEffort.High],
-        defaultEffort: ReasoningEffort.Medium,
-        supportsFast: !direct,
-        contextWindow: 200000,
-        maxTokens: 8192,
-        supportsTools: true,
-        supportsVision: true,
-        supportsThinking: true,
-      },
-    ],
-    defaultModel: async () => FIXTURE_MODEL,
+    models: async () => (id === EngineId.Genex ? genexFixtureModels() : fixtureModels(direct)),
+    defaultModel: async () => (id === EngineId.Genex ? GENEX_HELPER_MODEL : FIXTURE_MODEL),
     // Deterministic plan limits so the composer's usage panel has something honest to show; only a
-    // subscription has a plan.
-    ...(isSubscriptionFixture(id) ? { readUsage: () => readFixtureUsage(id) } : {}),
+    // subscription has a plan, and Genex its monthly credits.
+    ...(isSubscriptionFixture(id) || id === EngineId.Genex ? { readUsage: () => readFixtureUsage(id) } : {}),
     complete: (request: CompleteRequest) => completeFixture(id, request),
     delegate: (request: DelegateRequest) => delegateFixture(id, request, pendingSessions),
   };
+}
+
+/** The one model every stand-in but Genex offers. */
+function fixtureModels(direct: boolean) {
+  return [
+    {
+      id: FIXTURE_MODEL,
+      label: "Fixture v1",
+      efforts: [ReasoningEffort.Low, ReasoningEffort.Medium, ReasoningEffort.High],
+      defaultEffort: ReasoningEffort.Medium,
+      supportsFast: !direct,
+      contextWindow: 200000,
+      maxTokens: 8192,
+      supportsTools: true,
+      supportsVision: true,
+      supportsThinking: true,
+    },
+  ];
+}
+
+/** Genex's three models, as genex.games lists them. */
+function genexFixtureModels() {
+  return GENEX_MODELS.map((model) => ({
+    ...model,
+    contextWindow: 200000,
+    maxTokens: 64000,
+    supportsTools: true,
+    supportsVision: true,
+    supportsThinking: true,
+  }));
+}
+
+/** A stand-in's status: as `STUDIO_FIXTURE_USAGE_FILE` sets it, else as the session names it, else its default. */
+function fixtureStatus(id: EngineId, statuses: Record<string, EngineStatus>): EngineStatus {
+  const mode = fixtureUsageMode(id);
+  if (id === EngineId.Genex && isGenexAccess(mode)) return genexStatus(mode);
+  if (mode === FixtureUsage.SignedOut) return SIGNED_OUT_STATUS;
+  if (mode === FixtureUsage.Ready) return READY_STATUS;
+  return statuses[id] ?? DEFAULT_STATUS[id] ?? READY_STATUS;
 }
 
 /** A subscription's stand-in: the only fixtures with plan limits. */
@@ -203,6 +244,11 @@ const isSubscriptionFixture = (id: EngineId): boolean => id === EngineId.ClaudeC
 
 function fixtureUsage(id: EngineId) {
   const inDays = (days: number) => new Date(Date.now() + days * DAY_MS).toISOString();
+  if (id === EngineId.Genex)
+    return {
+      measuredAt: new Date().toISOString(),
+      windows: [{ id: "credits", label: "Monthly credits", percent: 30, resetsAt: inDays(12) }],
+    };
   if (id === EngineId.Codex)
     return {
       measuredAt: new Date().toISOString(),
@@ -441,6 +487,7 @@ function interviewReply(id: EngineId, request: DelegateRequest) {
   const question = {
     name: "ask_user",
     args: {
+      recap: "A night scene needs a place first.",
       question: "Where should the scene take place?",
       options: "Ashlands (Recommended) | Open terrain and mushroom trees\nTown street | Buildings and lanterns",
     },

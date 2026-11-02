@@ -199,7 +199,7 @@ function Elsewhere({ game, standing }: { game: PlayGameDetail; standing: GameSta
   if (!standing.notHere) return null;
   const { title, line } = notHereWords(standing.notHere, platformsOf(game), standing.here);
   return (
-    <div className="game-elsewhere" data-game-note="elsewhere" role="status">
+    <div className="game-elsewhere" data-game-note="elsewhere" role="status" title={`${title}. ${line}`}>
       <span className="game-elsewhere-title">{title}</span>
       <span className="game-elsewhere-line">{line}</span>
     </div>

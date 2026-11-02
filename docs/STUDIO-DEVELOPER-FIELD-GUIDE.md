@@ -376,8 +376,8 @@ transport credentials from reports. No permanent monitor or performance threshol
 into `.studio-dev/builds/<build-id>`, creates fresh owned fixture state and returns actual
 readiness/identity JSON. `npm run studio:dev -- fixtures` lists the named fixtures. Among them:
 build-graph (two sword-in-ice runs: folded tries, an undone step, a lead-merged unjudged round),
-lead-graph (two Unreal lead runs: milestone columns, save points, sub-agents with their cards, the
-critic's advice on a round),
+lead-graph (two runs of the Unreal runner from before the one Loop, as a game's history keeps
+them: milestone columns, save points, sub-agents with their cards, the critic's advice on a round),
 chat-workers (a chat message's two workers on Builds and as chat lines, after an earlier Loop; three
 more games, written after the start so their Loops read as going: Fixture Loop with three workers,
 the lead's background work and the finish check not run yet; Fixture web Loop with build-graph's
@@ -518,11 +518,6 @@ Watch with `runs` and `status`; no new record for a long while, or a `lastFailur
 read `logs`. A run paused by an engine limit or a loop crash continues from
 `[data-run-resume="<runId>"]` once the limit resets. Never restart or drive the window while the
 owner is using it; leave the profile running at the end.
-
-Run overrides reach the harness from the studio's environment only by name (`harnessRunEnv`):
-`STUDIO_UNREAL_RUNNER=lead` sends a new Loop on an Unreal project, and the resume of a run that
-runner wrote, to the Unreal runner from before the one Loop. It is no run record field and not
-shown in the UI; set it on start and restart.
 
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket

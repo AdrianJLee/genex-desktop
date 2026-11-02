@@ -161,9 +161,7 @@ A building worker (any worker brief that writes) keeps no `toolAllow`: the host 
 (`workerBrief`), so a worker has every enabled plugin's tools, its jobs, `app_look` and the
 connectors its lead has, whatever worker type it was started with; a type is the kind of work (its
 brief's know-how and default isolation), never a fence. A reader keeps its type's list, and a
-reviewer its empty one. A run's sub-agent (a worktree session the developer-only Unreal runner's lead
-starts for one small job) is still narrowed by its
-delegation's `toolAllow`: it is offered only the plugin tools and connectors whose names start
+reviewer its empty one. A session so narrowed by its delegation's `toolAllow` is offered only the plugin tools and connectors whose names start
 with one of the entries, and the guidance, skills and skill reader of only the plugins those
 belong to (`substrate/plugins/tool-allow.ts`, `PluginRegistry.snapshot`). A call to any other host
 tool is refused as unknown before any consent, record or backend; an allowlist that is not a list
@@ -186,8 +184,7 @@ act on the worktree it leads (`DelegationSession.leads` as the binding's directo
 director's in its worktree, so a delivery is recorded as the build's and reaches the game when the
 run lands, and its brief says so without naming the build's path (`leadToolsNote`); a lead in place
 acts on the game folder it sits in and is told nothing of the kind, and its run's own consent covers
-its engine connector's calls (`liveRunOf`, `#runConsents`), as the Unreal runner's unattended lead's
-does. An in-place grant the host refuses to seat is dropped whole (`honouredDirector`): the session
+its engine connector's calls (`liveRunOf`, `#runConsents`). An in-place grant the host refuses to seat is dropped whole (`honouredDirector`): the session
 runs unattended, with no director, run tools or window. Only a web Loop's lead is lent the preview window (`directorWindowed`: never a lead in place,
 nor one whose engine record binds another engine; read from the seat, never the folder's facts at the
 turn, which a read failure or the run's own work may change); a connector that shares the project root works on
@@ -252,10 +249,9 @@ while it answers a turn on a harness that serves them (`HarnessDelegateParams.wo
 is made until the plan is approved, while a reader starts and reads in Plan.
 
 A run's lead starts run workers: the director's builders (its conflict worker included) and
-readers, the open Loop's lead its run pool's workers (of the plugins' worker types too), and the
-Unreal runner's lead its typed and generic workers, each delegated with
-`worker {id, title, runId}` (`loop/director/workers.ts`, `loop/facet/phases/build.ts`,
-`loop/workers/run-pool.ts`, `loop/unreal/agents.ts`), so they follow the mode of the chat the run
+readers, and the open Loop's lead its run pool's workers (of the plugins' worker types too), each
+delegated with `worker {id, title, runId}` (`loop/director/workers.ts`, `loop/facet/phases/build.ts`,
+`loop/workers/run-pool.ts`), so they follow the mode of the chat the run
 was started in. A classic Autopilot's builders carry none.
 
 A grant the host cannot confirm runs unattended exactly as before, so forging its absence only
@@ -350,11 +346,10 @@ so no snapshot, copy or merge is made; a reader starts. A start that names a wor
 that type declares, whatever isolation it asks for (a type the host does not know writes). A run's lead is judged by the chats the
 host's own records say the run was started in, and the grant's chat if it names one of this game's:
 any of them planning holds it, and a run whose chat the host cannot find holds it with that reason.
-A typed worker started before the chat switched to Plan may still land its delivery.
-A run's own workers (the director's builders, the run pool's, the Unreal runner's typed workers) that wait on the
+A run's own workers (the director's builders, the run pool's) that wait on the
 person are read from the chat's log too (`loop/workers/questions.ts`): their lead's status says so
-and its `worker_wait` wakes. A run's builder, the director's single worker and the Unreal runner's
-typed worker refused for room under the Settings ceiling wait for room until their deadline
+and its `worker_wait` wakes. A run's builder and the director's single worker
+refused for room under the Settings ceiling wait for room until their deadline
 (`withWorkerRoom`); a pool's worker so refused ends with the host's words, and its lead may wait
 (`worker_wait`) and start it again.
 
@@ -412,7 +407,7 @@ every sandboxed process); it may serve on localhost.
 
 A worker's job runs in its own folder; a lead's where its plugin calls act (`session.leads ??
 workCwd`: a web lead's in the build it leads, never the game folder it sits in; a lead in place's
-(the open Loop's, the Unreal runner's) in the game folder); the chat's own session's in the game folder. A session sees and stops only its
+(the open Loop's) in the game folder); the chat's own session's in the game folder. A session sees and stops only its
 chat's jobs; a worker only its own of its run or turn.
 
 The card (`askForJob`, `tool: "Job"`) follows the asker's terms: the chat's own session's ends with
@@ -771,9 +766,7 @@ Loop run must confirm the two known changes: builders can no longer read sibling
   Jobs have no outbound network in any mode: a download stays with the session's own shell or the
   "Install packages" button. A job's command is screened by its words, as a worker's; its box holds
   what the screen cannot see.
-- A Loop led in place snapshots the folder before its first turn. The Unreal runner behind its
-  switch takes its first snapshot at its first save point instead, so an in-place worker it starts
-  before then has only the chat's checkpoints behind it.
+- A Loop led in place snapshots the folder before its first turn.
 - A worker's seat rests on run and queue records the harness writes: an edited harness can make an
   unattended job ask in the chat for a run started there, in the chat's mode, never beyond it.
 - A harness `game.start` that names no chat is not held in Plan: an edited harness, or a kept older

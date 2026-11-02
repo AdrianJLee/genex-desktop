@@ -633,7 +633,11 @@ export function GamePage({
   const back = usePlay((s) => (s.view.page === PlayPage.Game ? s.view.back : null));
   // The viewer over the page holds the clip: nobody sees it play.
   const covered = usePlay((s) => s.viewer !== null);
-  useEffect(() => setClipsCovered(covered), [covered]);
+  useEffect(() => {
+    setClipsCovered(covered);
+    // A page that goes away while the viewer is open must not leave clips held.
+    return () => setClipsCovered(false);
+  }, [covered]);
   useEffect(() => {
     void studio().play.loadGame(slug);
     void studio().play.loadNative();

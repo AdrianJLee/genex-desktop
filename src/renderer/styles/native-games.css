@@ -589,8 +589,31 @@
   padding: 8px 56px 0;
 }
 /* In a light theme the picture's dark foot ends in an edge, not in the page: room below it. */
-:root[data-theme="light"] .game-hero:not([data-game-hero="none"]) + .game-body {
-  padding-block-start: 32px;
+/* In a light theme the picture's dark foot melts into the page below the words, as the dark
+   theme's does into its dark page. */
+:root[data-theme="light"] .game-hero:not([data-game-hero="none"]) {
+  --hero-melt: 120px;
+}
+:root[data-theme="light"] .game-hero:not([data-game-hero="none"]) .game-hero-foot {
+  padding-block-end: calc(52px + var(--hero-melt));
+}
+:root[data-theme="light"] .game-hero:not([data-game-hero="none"])::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  z-index: -1;
+  height: calc(var(--hero-melt) + 40px);
+  /* Eased stops: a straight fade from dark to light reads as a grey band. */
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--page) 6%, transparent) 15%,
+    color-mix(in srgb, var(--page) 22%, transparent) 32%,
+    color-mix(in srgb, var(--page) 50%, transparent) 52%,
+    color-mix(in srgb, var(--page) 80%, transparent) 74%,
+    var(--page)
+  );
+  pointer-events: none;
 }
 .game-facts {
   position: relative;

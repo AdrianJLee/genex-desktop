@@ -252,11 +252,11 @@ async function dropTurnReads(loopRun: LoopRun): Promise<void> {
 }
 
 /**
- * A resumed run the open Loop can't pick up, closed before anything of it runs: its start and its
- * close on the run's thread, paused for a Resume (another kind of Loop's journal) or for good (one no
- * version reads), with the person's words. Its journal and its earlier report are left as they were.
+ * A resumed run the open Loop can't pick up (another kind of Loop's journal), closed before anything
+ * of it runs: its start and its close on the run's thread, paused for a Resume, with the person's
+ * words. Its journal and its earlier report are left as they were.
  */
-export async function refuseResume(loopRun: LoopRun, because: string, paused: boolean): Promise<void> {
+export async function refuseResume(loopRun: LoopRun, because: string): Promise<void> {
   const { report, run, state } = loopRun;
   if (state.finished) return;
   state.finished = true;
@@ -266,15 +266,15 @@ export async function refuseResume(loopRun: LoopRun, because: string, paused: bo
     landed: false,
     stoppedBecause: because,
     finishedAt: new Date().toISOString(),
-    executionStatus: paused ? ExecutionStatus.Paused : ExecutionStatus.Completed,
-    ...(paused ? { paused: true } : {}),
+    executionStatus: ExecutionStatus.Paused,
+    paused: true,
   });
   const started = { runId: run.runId, goal: run.goal, project: run.project, budgets: run.budgets, resumed: true };
   const pausedRecord = { runId: run.runId, project: run.project };
   await appendClose(loopRun, [
     { type: EventKind.Custom, event_type: RunEvent.RunStarted, payload: started },
     { type: EventKind.Custom, event_type: RunEvent.RunFinished, payload: report },
-    ...(paused ? [{ type: EventKind.Custom, event_type: RunEvent.AutopilotPaused, payload: pausedRecord }] : []),
+    { type: EventKind.Custom, event_type: RunEvent.AutopilotPaused, payload: pausedRecord },
   ]);
 }
 

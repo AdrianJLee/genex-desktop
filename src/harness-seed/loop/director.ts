@@ -497,7 +497,7 @@ export async function runDirector(
   );
   const refused = loopRun.open?.refused;
   if (refused) {
-    await refuseResume(loopRun, refused, loopRun.open?.refusalPauses === true);
+    await refuseResume(loopRun, refused);
     return loopRun.report;
   }
   tracing = loopRun;

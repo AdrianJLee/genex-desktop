@@ -19,8 +19,6 @@ import { workerBrief } from "../../src/harness-seed/loop/workers/prompts.ts";
 import { CoreFact } from "../../src/harness-seed/loop/folder-facts.ts";
 import { toolCall } from "../../src/harness-seed/loop/model-roles.ts";
 import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
-import { leadBrief } from "../../src/harness-seed/loop/unreal/lead-prompts.ts";
-import { TemplateKind } from "../../src/harness-seed/loop/unreal/template-kind.ts";
 import { engineChoiceRule, UNREAL_NEW_GAME_TOOL } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
@@ -399,22 +397,6 @@ describe("who runs the brief", () => {
       placed,
       /folder `AI Games\/keep-site`; it holds a web game in `site\/`, an Unreal Engine project at its root/,
     );
-    const lead = leadBrief({
-      engine: CLAUDE,
-      project: "/games/keep/unreal/Keep.uproject",
-      goal: "g",
-      title: "Keep",
-      template: "",
-      templateKind: TemplateKind.ThirdPerson,
-      minutes: 60,
-      cpp: false,
-      offers: { blender: false, genex: false },
-      references: [],
-      handover: "",
-      notes: "",
-    });
-    assert.match(lead, IDENTITY);
-    assert.match(lead, /an Unreal Engine project/);
   });
 });
 
@@ -432,21 +414,6 @@ describe("every worker's brief", () => {
       baseCommit: null,
     } as never);
     assert.match(director, /plugins_find; plugins_suggest shows the person its card/);
-    const lead = leadBrief({
-      engine: CLAUDE,
-      project: "/games/keep/unreal/Keep.uproject",
-      goal: "g",
-      title: "Keep",
-      template: "",
-      templateKind: TemplateKind.ThirdPerson,
-      minutes: 60,
-      cpp: false,
-      offers: { blender: false, genex: false },
-      references: [],
-      handover: "",
-      notes: "",
-    });
-    assert.ok(lead.includes(PLUGINS_FIND) && lead.includes(PLUGINS_SUGGEST), "the Unreal lead's");
     const worker = workerBrief({
       identity: { folderLabel: "AI Games/keep", facts: [] },
       task: "read the level",

@@ -162,7 +162,6 @@ export interface HarnessHostOptions {
    * file's content, so the agent's edits are compiled afresh.
    */
   compileCache?: string;
-  env?: Record<string, string>;
   onNotify?: (type: string, payload: unknown) => void;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
   onStateChange?: (state: HarnessState) => void;
@@ -324,7 +323,6 @@ export class HarnessHost {
           ? { NODE_COMPILE_CACHE: longPath(this.options.compileCache, this.#platform) }
           : {}),
         ...this.#inbox?.env(),
-        ...this.options.env,
       },
     });
     this.#child = child;

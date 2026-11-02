@@ -205,8 +205,7 @@ export const PluginToolAudience = {
 export type PluginToolAudience = (typeof PluginToolAudience)[keyof typeof PluginToolAudience];
 /**
  * Why a plugin call answered without running (its answer, never an error, carries it as
- * `blocker`): the chat is in Plan mode. The seed's copy is `PluginCallBlocker` in
- * `loop/unreal/lead-steps.ts` (seed-contracts.test.ts). Never rename a value.
+ * `blocker`): the chat is in Plan mode. Never rename a value.
  */
 export const PluginCallBlocker = {
   PlanMode: "plan_mode",

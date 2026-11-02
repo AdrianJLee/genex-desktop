@@ -1,7 +1,7 @@
 /**
  * Room for a worker under the chat's Settings ceiling: the host refuses a worker's delegation past
  * the most workers the person allows at once, readers and writers alike
- * (`WorkerRefusal.TooManyWorkers`, read by its code). A run's builder, single worker or typed worker
+ * (`WorkerRefusal.TooManyWorkers`, read by its code). A run's builder or single worker
  * whose turn is refused waits for room and tries again, until its own deadline: a full chat is a
  * wait, never a broken build.
  */

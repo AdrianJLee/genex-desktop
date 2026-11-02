@@ -31,7 +31,6 @@ import {
 } from "./folder-facts.ts";
 import { leadsInPlace } from "./engine-seat.ts";
 import { OPEN_LAUNCH_WORDS, OPEN_LOOP_REFUSAL } from "./open-loop-prompts.ts";
-import { OLDER_LEAD_JOURNAL_KIND } from "./director/open/older-journal.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent, RunMode, RunState } from "./run-events.ts";
 import { HOUR_MS } from "./time.ts";
@@ -216,14 +215,14 @@ export async function startsNextOpenLoop(host: Host, action: QueueAction, run: R
 }
 
 /**
- * Whether a finished run's journal is a Loop that worked in the game folder itself (`director.open`,
- * or the Unreal runner's from before); null when there is no journal to read.
+ * Whether a finished run's journal is a Loop that worked in the game folder itself (`director.open`);
+ * null when there is no journal to read.
  */
 async function finishedInPlace(host: Host, threadId: string, run: RunRecord): Promise<boolean | null> {
   if (typeof run.runId !== "string") return null;
   const journal = await readJournal(host, threadId, run.runId).catch(() => null);
   if (!journal) return null;
-  return Boolean(journal.director?.open) || journal.kind === OLDER_LEAD_JOURNAL_KIND;
+  return Boolean(journal.director?.open);
 }
 
 /**

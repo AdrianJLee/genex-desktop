@@ -14,13 +14,11 @@ export const StatusLane = {
 export type StatusLane = (typeof StatusLane)[keyof typeof StatusLane];
 
 /**
- * Which loop conducts a run. Never persisted: `chooseRunner` decides whether the lead's session
- * (on a project of any kind) or the Unreal runner conducts it, or which words refuse it.
+ * Which loop conducts a run. Never persisted: `chooseRunner` decides whether the lead's session (on
+ * a project of any kind) conducts it, or which words refuse it.
  */
 export const RunnerKind = {
   Director: "director",
-  /** The Unreal runner from before the one Loop (`loop/unreal/lead.ts`), only when the internal switch names it. */
-  Unreal: "unreal",
   /** A Loop on an engine that keeps no session: refused with a typed reason. */
   NeedsSession: "needs_session",
 } as const;

@@ -28,7 +28,7 @@ import { closeUnderWay } from "./close-latch.ts";
 import { reopenCommits, reopenMarkOf } from "./reopen.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import { newOpenJournal, OPEN_WALL_CLOCK, type OpenClock, openJournalOf } from "./open/contract.ts";
-import { resumedOpenJournal } from "./open/older-journal.ts";
+import { OPEN_LOOP_REFUSAL } from "../open-loop-prompts.ts";
 import {
   type OpenedGame,
   openGame,
@@ -430,13 +430,14 @@ async function prepareOpenLoopRun(
   const inbox = ctx.runInbox ?? createRunInbox(ctx, { threadId, runId: run.runId });
   ctx.setStatus(`run ${run.runId} · lead in place`);
   const read = await readPriorJournal(ctx, threadId, run, resume);
-  // A run the Unreal runner paused goes on from its journal, turned into the one Loop's (older-journal.ts).
-  const resumed = resumedOpenJournal(read, clock.now());
-  const { prior: priorJournal, refused, spentBefore } = resumed;
+  // Only an open Loop's own journal goes on in place: any other (a web game's Loop, the Unreal runner's
+  // from before) stays paused, untouched.
+  const refused = read && !openJournalOf(read) ? OPEN_LOOP_REFUSAL.otherLoop : null;
+  const priorJournal = refused ? null : read;
   const saved = resume ? priorJournal?.director?.clock : null;
   const runClock = capClock({ saved, now: clock.now(), totalMs: openRunMs(run) });
   const game = await openGame(ctx, run);
-  if (!refused) recordCreditCap(run, spentBefore);
+  if (!refused) recordCreditCap(run);
   const report = loopRunReport(run, resume ? await earlierReport(ctx, threadId, run.runId) : null);
   if (!refused) await announceRunStart(ctx, threadId, run, { resume, profile: LoopProfile.Open });
   const baseCommit = refused ? null : await openStartingPoint(ctx, run, priorJournal);
@@ -451,7 +452,6 @@ async function prepareOpenLoopRun(
   restoreLoopRun(loopRun);
   if (refused) {
     open.refused = refused;
-    open.refusalPauses = resumed.staysPaused === true;
     return loopRun;
   }
   await loopRun.saveJournal();

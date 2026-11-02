@@ -43,7 +43,6 @@ import { FindNext, PluginOffer } from "../../src/shared/project-tools.ts";
 import { inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
-import { runUnrealLead } from "../../src/harness-seed/loop/unreal/lead.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { FinishCheckStep } from "../../src/harness-seed/loop/finish-contract.ts";
 import { GRACE_MS } from "../../src/harness-seed/loop/time-cap.ts";
@@ -69,7 +68,6 @@ import { copyOfExample, PLUGIN_SDK_BACKEND, personAllowsLocalTools } from "../he
 import { writeSkillExample } from "../helpers/plugin-author.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { Changes, until } from "../helpers/worker-chat.ts";
-import { buildsOnly, leadHost, RUN, textOf, type Turn } from "../helpers/unreal-lead-host.ts";
 import {
   CHAT_SESSION,
   gameRepo,
@@ -885,7 +883,7 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
     assert.deepEqual(kept, [], "every generated folder is ignored");
   });
 
-  it("the lead on an Unreal game starts Blender-model and texture workers in copies, with worker types from whichever plugin declares them; these succeed the Unreal lead's blender_model, blender_prep, genex_cast, sound and texture agents", async () => {
+  it("an Unreal game's worker types come from whichever plugin declares them: Blender models, textures, sounds, casts and C++", async () => {
     await lite.core.plugins.setEnabled(GENEX_PLUGIN, true);
     const types = await withUnrealOn(async () => {
       const { game } = await adopted(Project.UnrealGame);
@@ -897,31 +895,6 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
     assert.equal(declaredBy.texture, "genex", "Genex declares the texture worker");
     for (const kind of ["blender_prep", "genex_cast", "sound", "cpp"])
       assert.ok(declaredBy[kind], `${kind} is declared`);
-    const answers: string[] = [];
-    const startsWorkers: Turn = async ({ tool }) => {
-      answers.push(textOf(await tool(WORKER_START, { type: "blender_model", title: "Katana", task: "A katana." })));
-      answers.push(
-        textOf(await tool(WORKER_START, { type: "texture", title: "Moss", task: "A mossy stone texture." })),
-      );
-      return undefined;
-    };
-    const host = leadHost({ turns: [startsWorkers, buildsOnly, buildsOnly, buildsOnly], workerTypes: types });
-    await runUnrealLead(host.rec.ctx as never, {
-      threadId: "t1",
-      run: { ...RUN, budgets: { ...RUN.budgets, wallClockMs: 20 * 60_000 } } as never,
-      resume: false,
-      now: host.now,
-      sleep: host.sleep,
-    });
-    assert.match(answers[0] ?? "", /^Started worker blender_model-1/, answers.join("\n"));
-    assert.match(answers[1] ?? "", /^Started worker texture-1/, answers.join("\n"));
-    const copies = host.rec.paramsOf("engine.delegate").filter((p) => p.worker);
-    // A worker that has not delivered yet is woken again in the same copy.
-    assert.deepEqual(
-      [...new Set(copies.map((p) => String(p.cwd).split("/").at(-1)))],
-      ["agent-blender_model-1", "agent-texture-1"],
-      "each works in its own copy",
-    );
   });
   it(
     "a Loop on it is led by the chat's own session, under the editor lock, with workers in copies",
@@ -931,7 +904,9 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
       const host = await unrealLoopHost([
         async ({ tool }) => {
           await tool("save_point", { label: "One", summary: "the first room" });
-          answers.push(textOf(await tool(WORKER_START, { type: "cpp", title: "Door", task: "A door that opens." })));
+          answers.push(
+            answerText(await tool(WORKER_START, { type: "cpp", title: "Door", task: "A door that opens." })),
+          );
           await tool("finish", {
             review: "yes",
             summary: "The level is built and the door opens.",

@@ -1,6 +1,6 @@
 /**
  * A run's own worker pool: the generic workers a run's lead starts beside the workers of its own
- * method (the director's builders, the Unreal lead's typed workers). It opens on the first start,
+ * method (the director's builders). It opens on the first start,
  * keeps its records in the run's own artifact and its copies' work on the run's refs, answers the
  * worker tools for the ids it holds, and closes with the run. Its workers belong to the run: their
  * delegations carry `worker {id, title, runId}`, so the host seats them in the mode of the chat the

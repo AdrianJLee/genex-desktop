@@ -48,17 +48,17 @@ export const ROLE_LITERALS = [
   ["loop:worker", "You are a worker: the lead of this chat started you for one task"],
   ["loop:reviewer", "You are the reviewer of a Loop"],
   ["judge:second-opinion", "You give a second opinion on a project someone else is building"],
-  ["unreal:lead", "You lead this Unreal Loop on the game"],
-  ["unreal:worker", "You are a worker of the Unreal Loop"],
-  ["unreal:critic", "You give a second opinion on captures of a game being built in Unreal Engine"],
 ] as const satisfies readonly (readonly [string, string])[];
 
 /**
  * Roles whose briefs the seed no longer writes (phase 5 removed the classic pipeline, its judges and
- * the self-improvement stack). Past transcripts on disk still open with them, so the census still
- * names them; the census test holds that none is written by the seed any more.
+ * the self-improvement stack; the Unreal runner went later). Past transcripts on disk still open with
+ * them, so the census still names them; the census test holds that none is written by the seed any more.
  */
 export const RETIRED_ROLE_LITERALS = [
+  ["unreal:lead", "You lead this Unreal Loop on the game"],
+  ["unreal:worker", "You are a worker of the Unreal Loop"],
+  ["unreal:critic", "You give a second opinion on captures of a game being built in Unreal Engine"],
   ["director", "You are the DIRECTOR of run"],
   ["worker:base", "You are the BASE BUILDER for"],
   ["worker:facet", "You are building ONE FACET"],

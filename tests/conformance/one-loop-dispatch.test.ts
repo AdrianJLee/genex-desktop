@@ -1,12 +1,12 @@
 /**
  * Which Loop a run gets, through the run's start as the chat and Resume reach it: a project that
  * isn't a web game runs the one Loop on an engine that keeps a session and is told, before anything
- * is promised, that it needs one otherwise; classic and the gauntlet stay a web game's; the Unreal
- * runner from before runs only behind its internal switch; a run that runner paused goes on in the
- * one Loop; a finished one Loop starts the next; and the chat describes the one Loop truthfully.
+ * is promised, that it needs one otherwise; classic and the gauntlet stay a web game's; a paused
+ * Loop on an Unreal game goes on in the one Loop, and a run the Unreal runner from before paused is
+ * refused; a finished one Loop starts the next; and the chat describes the one Loop truthfully.
  */
 import assert from "node:assert/strict";
-import { after, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { afterLeadLoopRun, afterLoopRunGrant } from "../../src/harness-seed/loop/after-loop-run.ts";
 import { afterLoopRunNote } from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
@@ -14,8 +14,7 @@ import { launchFromIntake, startsNextOpenLoop } from "../../src/harness-seed/loo
 import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { launchRules } from "../../src/harness-seed/loop/launch-prompts.ts";
-import * as seedLoopSwitch from "../../src/harness-seed/loop/loop-switch.ts";
-import { unrealRunnerOn } from "../../src/harness-seed/loop/loop-switch.ts";
+import { EngineId } from "../../src/harness-seed/loop/model-roles.ts";
 import { OPEN_LAUNCH_WORDS, OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
@@ -25,10 +24,8 @@ import { runControlsFor } from "../../src/shared/chat-run.ts";
 import * as runDispatchParts from "../../src/harness-seed/loop/run-dispatch.ts";
 import { chooseRunner, handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { RunnerKind } from "../../src/harness-seed/loop/studio-state.ts";
-import { harnessRunEnv, UNREAL_RUNNER_ENV } from "../../src/shared/protocol.ts";
 import { CHAT_SESSION, gameRepo, type LoopHost, type LoopTurn, loopHost } from "../helpers/loop-host.ts";
 import { copyProject, Project } from "../helpers/project-fixtures.ts";
-import { reviewerAnswer } from "../helpers/reviewer.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const MINUTE = 60_000;
@@ -48,19 +45,13 @@ const DIRECT_WITH_SESSIONS = { id: "bonsai", label: "Bonsai", kind: "direct", su
 
 /** What Genex finds in a Godot project's folder that makes its Loop work in place, as the refusals name it. */
 const GODOT_FOUND = "godot-project at the folder's root";
+/** What Genex finds in an Unreal project's folder, as the refusals name it. */
+const UNREAL_FOUND = "unreal-project at the folder's root";
 /** The words a refused Loop on a direct engine closes with (flipped in phase 5: any Loop needs a session, and the chat goes on). */
 const NEEDS_SESSION =
   "A Loop on this project (Genex finds godot-project at the folder's root) needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); Ollama doesn't, so nothing was built. The chat still answers here.";
-const CANNOT_RESUME =
-  "This Loop was paused by an earlier version and can't be picked up. Start a new Loop: it goes on from the project as it is now, with every save point kept.";
 const OTHER_LOOP =
   "This Loop was paused as another kind of Loop than this project reads as now, so it can't go on now. It stays paused: once the project reads as it did, Resume picks it up.";
-
-const switchBefore = process.env[UNREAL_RUNNER_ENV];
-after(() => {
-  if (switchBefore === undefined) delete process.env[UNREAL_RUNNER_ENV];
-  else process.env[UNREAL_RUNNER_ENV] = switchBefore;
-});
 
 let runs = 0;
 
@@ -178,126 +169,22 @@ describe("which Loop a run gets", () => {
     },
   );
 
-  it(
-    "the Unreal runner runs only when the switch names it, and a run of the one Loop never goes to it",
-    TEST_TIMEOUT,
-    async () => {
-      const named = { [UNREAL_RUNNER_ENV]: "lead" };
-      const unreal = { facts: UNREAL };
-      assert.equal(unrealRunnerOn({ env: named, game: unreal, resume: false }), true);
-      assert.equal(unrealRunnerOn({ env: named, game: unreal, resume: true, journalKind: "unreal-lead" }), true);
-      assert.equal(unrealRunnerOn({ env: named, game: unreal, resume: true, journalKind: undefined }), false);
-      assert.equal(unrealRunnerOn({ env: named, game: { facts: GODOT }, resume: false }), false);
-      assert.equal(unrealRunnerOn({ env: {}, game: unreal, resume: false }), false);
-      assert.equal(unrealRunnerOn({ env: { [UNREAL_RUNNER_ENV]: "yes" }, game: unreal, resume: false }), false);
-
-      // A paused run of the one Loop, resumed with the switch on: the one Loop goes on with it.
-      const host = await hostOn(Project.UnrealGame, {
-        facts: UNREAL,
-        turns: [
-          ({ host }) => {
-            host.rec.cancel();
-            return undefined;
-          },
-        ],
-      });
-      await host.start();
-      host.turns.push(finishes);
-      host.rec.ctx.cancelled = false;
-      process.env[UNREAL_RUNNER_ENV] = "lead";
-      try {
-        await host.dispatch({ resume: true });
-      } finally {
-        delete process.env[UNREAL_RUNNER_ENV];
-      }
-      assert.equal(inPlaceLeads(host).length, 2, "both turns were the one Loop's");
-    },
-  );
-
-  it("the switch reaches the harness by name and nothing else does", () => {
-    assert.equal(seedLoopSwitch.UNREAL_RUNNER_ENV, UNREAL_RUNNER_ENV);
-    assert.deepEqual(harnessRunEnv({ [UNREAL_RUNNER_ENV]: "lead", HOME: "/Users/me" }), {
-      [UNREAL_RUNNER_ENV]: "lead",
+  it("a paused Loop on an Unreal game goes on in the one Loop on Resume", TEST_TIMEOUT, async () => {
+    const host = await hostOn(Project.UnrealGame, {
+      facts: UNREAL,
+      turns: [
+        ({ host }) => {
+          host.rec.cancel();
+          return undefined;
+        },
+      ],
     });
-    assert.deepEqual(harnessRunEnv({ STUDIO_UNREAL_LEAD: "lead" }), {});
+    await host.start();
+    host.turns.push(finishes);
+    host.rec.ctx.cancelled = false;
+    await host.dispatch({ resume: true });
+    assert.equal(inPlaceLeads(host).length, 2, "both turns were the one Loop's");
   });
-});
-
-describe("a run the Unreal runner paused", () => {
-  it(
-    "a run paused under the Unreal runner goes on in the one Loop: the chat's own session, its save points, the time it had left, its finish count",
-    TEST_TIMEOUT,
-    async () => {
-      // Through the run's start: the one Loop takes it, led by the chat's own session.
-      const through = await hostOn(Project.UnrealGame, { facts: UNREAL, turns: [finishes] });
-      through.artifacts.set(`autopilot_${through.run.runId}`, olderJournal(through));
-      await through.dispatch({ resume: true });
-      const [first] = inPlaceLeads(through);
-      assert.ok(first, "the one Loop led it");
-      assert.equal(first.resume, CHAT_SESSION);
-      assert.match(String(first.prompt), /"One"/);
-      assert.match(String(first.prompt), /"Two"/);
-
-      // On the Loop's own clock: the time it had left, a rewind to a save point it kept, its no's.
-      const host = await hostOn(Project.UnrealGame, {
-        facts: UNREAL,
-        turns: [
-          // A claim waits for the rewind its turn asked for: the next turn claims.
-          async ({ tool }) => {
-            await tool("rewind", { label: "One" });
-            return undefined;
-          },
-          finishes,
-          finishes,
-        ],
-      });
-      const id = `autopilot_${host.run.runId}`;
-      host.artifacts.set(id, olderJournal(host));
-      // The runner's no is on the run's record, where Genex counts the no's in a row.
-      const earlierNo = { runId: host.run.runId, round: 1, step: "rejected", reasons: ["the door does not open"] };
-      await host.rec.ctx.call("events.append", {
-        threadId: host.threadId,
-        batch: [{ type: "custom", event_type: "finish_check", payload: earlierNo }],
-      });
-      host.reviews.push(reviewerAnswer("no", ["the door still does not open"]));
-      const started = host.now();
-      await host.start({ resume: true });
-      const prompt = host.prompts()[0] ?? "";
-      const left = Number(/about (\d+) minutes of working time/.exec(prompt)?.[1]);
-      assert.ok(left > 100 && left <= 140, `the time it had left (${left} minutes)`);
-      const restored = host.rec.paramsOf("snapshot.restore").map((params) => params.snapshotId);
-      assert.deepEqual(restored, ["snap-old-1"], "the rewind went back to its own snapshot");
-      const journal = host.artifacts.get(id) as Record<string, any>;
-      assert.equal(journal.kind, undefined, "a director journal now");
-      assert.deepEqual(
-        journal.director.open.savePoints.slice(0, 2).map((point: { label: string }) => point.label),
-        ["One", "Two"],
-      );
-      assert.equal(journal.director.finishTally.rejections, 0, "the yes cleared the count");
-      const rejected = host
-        .appended("finish_check")
-        .filter((check) => check.step === "rejected")
-        .at(-1);
-      assert.equal(rejected?.rejections, 2, "a reviewer's no counted on from the run's one");
-      // Flipped: the cap is the time it had left, and the grace follows it (time-cap.ts).
-      const cap = Date.parse(journal.director.clock.softDeadline);
-      assert.ok(Math.abs(cap - started - 140 * MINUTE) < MINUTE, "140 of its 180 minutes were left");
-    },
-  );
-
-  it(
-    "a paused run whose journal it can't read is told it can't resume and that a new Loop goes on from the project as it is",
-    TEST_TIMEOUT,
-    async () => {
-      const host = await hostOn(Project.UnrealGame, { facts: UNREAL, turns: [finishes] });
-      host.artifacts.set(`autopilot_${host.run.runId}`, { ...olderJournal(host), savePoints: "lost" });
-      await host.dispatch({ resume: true });
-      const [closed] = host.appended("run_finished");
-      assert.equal(closed?.stoppedBecause, CANNOT_RESUME);
-      assert.equal(host.leadCalls().length, 0, "no lead ran");
-      assert.deepEqual(host.rec.paramsOf("hooks.fire"), [], "no moment of the project ran");
-    },
-  );
 });
 
 describe("kept older parts, finished Loops and the chat's words", () => {
@@ -347,6 +234,26 @@ describe("kept older parts, finished Loops and the chat's words", () => {
     assert.doesNotMatch(unreal, /look first/);
     assert.doesNotMatch(unreal, /builder|judge/i);
   });
+
+  it("the chat tells an Unreal game's Loop it is one lead building the whole game in the open editor with small helpers, not parts written in parallel", () => {
+    const rules = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot", hours: 3 }, GameEngine.Unreal);
+    const said = rules.join("\n");
+    assert.match(said, /one lead works in the open Unreal editor, with helpers in copies of the game/);
+    assert.doesNotMatch(said, /in parallel|as parts|one at a time/);
+    const open = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot" }, GameEngine.Unreal).join("\n");
+    assert.doesNotMatch(open, /judges/, "no judge decides an Unreal run's end");
+    const web = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot", hours: 3 }).join("\n");
+    assert.doesNotMatch(web, /look first/);
+  });
+
+  // Flipped (phase 5): the chat is not told how to write a goal (the look first, before mechanics).
+  it("the chat asks an Unreal game's Loop for the goal in the user's words, with no rule about the look", () => {
+    const said = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot", hours: 3 }, GameEngine.Unreal).join(
+      "\n",
+    );
+    assert.match(said, /with the goal in the user's words/);
+    assert.doesNotMatch(said, /look first|before mechanics|list of features/);
+  });
 });
 
 /** The studio a dispatch or a reopen reaches, over a host's recorder, as main.ts makes it. */
@@ -363,9 +270,6 @@ function studioOf(host: LoopHost) {
     scoped: () => ctx,
   };
 }
-
-/** The words the Unreal runner closes with on a game linked to no Unreal project: its own, no one Loop's. */
-const RUNNER_NOT_LINKED = "This game isn't linked to an Unreal project, so the Unreal Loop can't build it.";
 
 describe("the chat's launch tool", () => {
   it("names no method in its description, and answers an ∞ Loop as the project's Loop ends", async () => {
@@ -393,63 +297,34 @@ describe("the chat's launch tool", () => {
   });
 });
 
-describe("the Unreal runner behind its switch, through the run's start", () => {
-  it(
-    "a fresh run on an Unreal game goes to the runner with the switch on, and a saved runner journal resumes there",
-    TEST_TIMEOUT,
-    async () => {
-      const fresh = await hostOn(Project.UnrealGame, { facts: UNREAL, turns: [finishes] });
-      const resumed = await hostOn(Project.UnrealGame, { facts: UNREAL, turns: [finishes] });
-      resumed.artifacts.set(`autopilot_${resumed.run.runId}`, olderJournal(resumed));
-      process.env[UNREAL_RUNNER_ENV] = "lead";
-      try {
-        await fresh.dispatch();
-        await resumed.dispatch({ resume: true });
-      } finally {
-        delete process.env[UNREAL_RUNNER_ENV];
-      }
-      for (const host of [fresh, resumed]) {
-        assert.equal(inPlaceLeads(host).length, 0, "no lead of the one Loop");
-        assert.equal(host.appended("run_finished")[0]?.stoppedBecause, RUNNER_NOT_LINKED, "the runner's own close");
-      }
-    },
-  );
-});
-
 describe("a paused Loop's journal, read at its start", () => {
   it(
-    "a runner journal of any wrong shape closes the run with words, before anything of the project ran",
+    "a run the Unreal runner paused is refused on Resume like any journal the one Loop did not write, both where it is refused: it stays paused, its journal untouched, and nothing of the project runs",
     TEST_TIMEOUT,
     async () => {
-      const shapes: Array<[string, (journal: Record<string, any>) => void]> = [
-        ["no run", (journal) => delete journal.run],
-        ["worked time negative", (journal) => (journal.workedMs = -1)],
-        ["worked time fractional", (journal) => (journal.workedMs = 1.5)],
-        ["save points not a list", (journal) => (journal.savePoints = "lost")],
-        ["a save point with no label", (journal) => delete journal.savePoints[0].label],
-        ["a save point with no summary", (journal) => delete journal.savePoints[0].summary],
-        ["a save point with no snapshot", (journal) => delete journal.savePoints[0].snapshotId],
-        ["a save point with no autosave mark", (journal) => delete journal.savePoints[0].auto],
-        ["a finish count of the wrong shape", (journal) => (journal.finishTally = { round: "one" })],
-        ["carried lines not text", (journal) => (journal.digest.carried = [1])],
-        ["no credits spent", (journal) => delete journal.credits],
-      ];
       const outcomes: Array<Record<string, unknown>> = [];
-      for (const [label, spoil] of shapes) {
+      for (const how of ["in place", "at dispatch"] as const) {
         const host = await hostOn(Project.UnrealGame, { facts: UNREAL, turns: [finishes] });
-        const journal = olderJournal(host) as Record<string, any>;
-        spoil(journal);
-        host.artifacts.set(`autopilot_${host.run.runId}`, journal);
-        await host.start({ resume: true });
-        const touched = ["snapshot.create", "checkpoint.take", "hooks.fire", "engine.delegate"].filter(
-          (method) => host.rec.paramsOf(method).length > 0,
-        );
-        outcomes.push({ label, closed: host.appended("run_finished")[0]?.stoppedBecause, touched });
+        const journal = olderJournal(host);
+        host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
+        if (how === "in place") await host.start({ resume: true });
+        else await host.dispatch({ resume: true });
+        const [closed] = host.appended("run_finished");
+        outcomes.push({
+          how,
+          words: closed?.stoppedBecause,
+          status: closed?.executionStatus,
+          journalKept: JSON.stringify(host.artifacts.get(`autopilot_${host.run.runId}`)) === JSON.stringify(journal),
+          touched: ["snapshot.create", "snapshot.restore", "checkpoint.take", "hooks.fire", "engine.delegate"].filter(
+            (method) => host.rec.paramsOf(method).length > 0,
+          ),
+        });
       }
-      assert.deepEqual(
-        outcomes,
-        shapes.map(([label]) => ({ label, closed: CANNOT_RESUME, touched: [] })),
-      );
+      const kept = { status: "paused", journalKept: true, touched: [] };
+      assert.deepEqual(outcomes, [
+        { how: "in place", words: OTHER_LOOP, ...kept },
+        { how: "at dispatch", words: OPEN_LOOP_REFUSAL.webElsewhere(UNREAL_FOUND), ...kept },
+      ]);
     },
   );
 
@@ -579,22 +454,6 @@ describe("the credit cap a Loop in place keeps", () => {
         assert.equal((started?.budgets as Record<string, unknown> | undefined)?.creditCap, kept, String(asked));
         assert.equal(host.workers[0]?.params.creditCap, kept, `its worker carries it (${String(asked)})`);
       }
-    },
-  );
-
-  it(
-    "a run the Unreal runner paused goes on with what its jobs already spent taken off its cap",
-    TEST_TIMEOUT,
-    async () => {
-      const host = await hostOn(Project.UnrealGame, { facts: UNREAL, turns: [finishes] });
-      host.artifacts.set(`autopilot_${host.run.runId}`, olderJournal(host));
-      await host.start({ resume: true });
-      const [started] = host.appended("run_started");
-      assert.equal(
-        (started?.budgets as Record<string, unknown> | undefined)?.creditCap,
-        480,
-        "600 less the 120 it spent",
-      );
     },
   );
 });

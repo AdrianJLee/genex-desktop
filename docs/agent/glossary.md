@@ -172,8 +172,8 @@ Every project's Loop is the director's wake loop, in one of two profiles (`LoopP
 ## Three meanings of "loop"
 
 - **The Loop's start**: `start_autopilot` (`src/harness-seed/loop/start-autopilot.ts`), handed to
-  every chat turn on an engine that keeps a session; the agent decides when a request needs a Loop,
-  and the composer has no switch for it. The UI calls the roles Main agent (orchestrator), Workers
+  every chat turn on the person's words on an engine that keeps a session; the agent decides when a
+  request needs a Loop. The UI calls the roles Main agent (orchestrator), Workers
   and Reviewers (judge), sent as the message's `roles`; run copy says the lead, workers and
   reviewers.
 - **The `loop/` folder**: the harness's policy modules (`src/harness-seed/loop/`).

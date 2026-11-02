@@ -906,8 +906,8 @@ that need a value, malformed input warning rather than throwing, and no node imp
 
 `mcp-plumbing.test.ts` is the end-to-end proof on the rig: a saved fixture connector's tools arrive
 in the `claude-code` and `codex` delegations with their `inputSchema` intact and route back through
-`onLiveTool`; a read-only and a candidate session get none, a Loop chat gets them (and a build's
-lead, whose `readOnly` only marks its seat: `lead-sessions-host.test.ts`); the local harness's
+`onLiveTool`; a read-only and a candidate session get none, the chat's session gets them (and a
+build's lead, whose `readOnly` only marks its seat: `lead-sessions-host.test.ts`); the local harness's
 `createToolRegistry()` carries the full schema and executes through `mcp.invoke`; a disabled
 connector's tool is rejected; a `connector_tool` event lands in the thread log; and `core.api()`
 exposes no connector mutation method. `engine-delegated.test.ts` keeps its pinned literals and adds

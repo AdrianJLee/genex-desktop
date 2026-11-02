@@ -10,9 +10,7 @@ import { afterLeadLoopRun, holdsSession, resumeAfterReply, type AfterLoopRun } f
 import { conversationThrough, latestRun } from "./run-inbox.ts";
 import { eventsToMessages } from "./prompt.ts";
 import { EngineId, hasSessionRoles } from "./model-roles.ts";
-import { LoopProfile, loopProfileOf, openLoopBecause, ProjectStarter, startWebIfPending } from "./folder-facts.ts";
-import { leadsInPlace } from "./engine-seat.ts";
-import { OPEN_LOOP_REFUSAL } from "./open-loop-prompts.ts";
+import { ProjectStarter, startWebIfPending } from "./folder-facts.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent, RunState } from "./run-events.ts";
 import { HOUR_MS } from "./time.ts";
@@ -350,7 +348,6 @@ export async function launchFromIntake(
     });
   }
   await startWebIfPending(host, project, games);
-  const listed = games.find((g) => g.name === project) ?? null;
   // What the folder itself refuses (loopRunRefusal): a page that cannot load, a game that is
   // already compiled. Said in chat now, instead of found out at 3am.
   const readiness = await host.call(HostMethod.GameValidate, { project }).catch(() => null);
@@ -360,18 +357,13 @@ export async function launchFromIntake(
     readiness?.missing,
   );
   if (refusal) throw new Error(refusal);
-  // A promise the run cannot keep is worse than no promise: a second Loop for a game
-  // that already owns a run is refused below, and the only record of that refusal is an event
-  // no chat surface renders. Ask the same question here, before anything is promised — once a
-  // run that has closed there has settled, which a new run waits out.
+  // A second Loop for a game that already owns a run is refused as it starts, in an event no chat
+  // surface renders: asked here, the chat is told why — once a run that has closed there has
+  // settled, which a new run waits out.
   const busy = await runUnderWay(studio, action.threadId, project);
   if (busy) throw new Error(MESSAGE.alreadyBuilding(busy.run.project));
   // Stop while that pass was waited out was for this run too.
   if (ctx.cancelled) throw new Error(MESSAGE.stoppedBeforeLaunch);
-  // A Loop on a project that isn't a web game is led by the chat's own session in place: said now,
-  // before anything is promised, when the run's engine is none the host seats there.
-  const needsSession = await needsSessionRefusal(host, listed, spec);
-  if (needsSession) throw new Error(needsSession);
   // What the user sells in the Genex store rides the run's goal; the build lists each item once it
   // has drawn its picture, since the store takes none without one.
   const store = storeItemsOf(spec.storeItems);
@@ -394,23 +386,6 @@ export async function launchFromIntake(
       host.notify("run.failed", { error: String(err) });
     },
   );
-}
-
-/**
- * Why a Loop can't start on the run's engine, or null: every Loop is led by the chat's own session,
- * so it needs an engine that keeps one (`leadsInPlace`). An engine that keeps none (Ollama's tool loop)
- * stays plain chat.
- */
-async function needsSessionRefusal(host: Host, game: AnyRecord | null, spec: AnyRecord): Promise<string | null> {
-  const engine = typeof spec.engine === "string" ? spec.engine : EngineId.Ollama;
-  const listed = await host.call(HostMethod.EngineDescribe, {}).catch(() => []);
-  const described = (Array.isArray(listed) ? listed : []).find((e) => e.id === engine);
-  return leadsInPlace(described)
-    ? null
-    : OPEN_LOOP_REFUSAL.needsSession(
-        described?.label ?? engine,
-        game && loopProfileOf(game) === LoopProfile.Open ? openLoopBecause(game) : undefined,
-      );
 }
 
 /**

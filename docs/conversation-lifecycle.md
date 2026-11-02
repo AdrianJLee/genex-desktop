@@ -458,7 +458,7 @@ session, or the local tool loop, with no run controls.
   no resume: it moves the chat's bookmark to that engine, so a later Resume from Builds seats a fresh
   lead (or the lead's own session from before the pause).
 - **More work after a finished run.** A finished build is never started again. The chat's own
-  session is handed `start_autopilot` as every chat turn is (`delegated-turn.ts` `launchFor`): it
+  session is handed `start_autopilot` as every chat turn is (`delegated-turn.ts` `launches`): it
   makes a contained change itself and, for more than a reply holds, starts a new Loop from the game
   folder as it is now (`chat-dispatch.ts` `launchOrSayWhy`), a run of its own on the Builds graph.
   **Keep building** sends the finished build's open gaps as an ordinary message
@@ -620,25 +620,23 @@ of its own that a loop crash left open (RO3, RO3b); RO5c–RO5d a message after 
 was a session of its own (a question, no lead seated) and RO6 a command's result; NC1–NC5 one
 session answering every message (a classic paused build, a lead of its own, another engine,
 Ollama, and a message sent while a Loop prepares, handed to the lead alone); the always-launch rows
-every chat turn handed the Loop's start, and no direct engine. The Electron build smoke exercises
-Send during an active build, graph preservation, and a composer with no Mode button, without paid
-model calls.
+every chat turn on the person's words handed the Loop's start, and no direct engine. The Electron
+build smoke exercises Send during an active build and graph preservation, without paid model calls.
 
 ### Intake approval before a run exists
 
 Every chat turn goes to an ordinary contractor session in the game folder (its brief, tools,
 capture and host tools) with the Loop's start, `start_autopilot` (`loop/start-autopilot.ts`),
-bridged in as a tool it may call or not (`delegated-turn.ts` `launchFor`; never in a run's turn). An
-engine without sessions is handed none: the tool lives outside `tools/`, so the direct engines'
-tool loop never lists it. The tool's description says what a Loop is and that it starts from the
-folder as the reply leaves it; when to call it is the agent's own decision, and no rule asks it to
-wait for the person's words. It answers, researches, writes plans or edits the game itself, or
-starts a Loop for more than a reply holds, and the chat never says a Loop started unless that call
-answered. A recorded
-question is asked (after the preview health pass when game sources changed);A recorded
-question is asked (after the preview health pass when game sources changed); a recorded launch
-starts from the folder as the session left it; a turn that records neither is reported as a chat
-build. A non-launching turn that changed game sources takes the preview health pass and a
+bridged in as a tool it may call or not (`delegated-turn.ts` `launches`): never in a run's turn,
+and never on words Genex wrote itself (`origin`: a command's result, the cover step), except its
+word after the person's held Loop. An engine without sessions is handed none: the tool lives
+outside `tools/`, so the direct engines' tool loop never lists it. The tool's description says
+what a Loop is and that it starts from the folder as the reply leaves it; when to call it is the
+agent's own decision. It answers, researches, writes plans or edits the game itself, or starts a
+Loop for more than a reply holds, and the chat never says a Loop started unless that call
+answered. A recorded question is asked (after the preview health pass when game sources
+changed); a recorded launch starts from the folder as the session left it; a turn that records
+neither is reported as a chat build. A non-launching turn that changed game sources takes the preview health pass and a
 `build_observation`; one that only wrote docs/ or Markdown (a plan, research notes) takes neither
 (`game.contentStamp` `split`: both stamps from one walk). Nor does any turn on a game that is no web
 page (`holdsWebGame` in `loop/web-game.ts`): one linked to an Unreal project (`engine` on its

@@ -60,7 +60,6 @@ test("a command's result is sent with its origin, on the chat's model, with no L
   const model = {
     selected: "claude-code::opus",
     choices: [{ key: "claude-code::opus", engine: "claude-code", model: "opus", label: "Opus", disabled: false }],
-    roleOthers: [],
     studio: false,
     selectedEngine: { id: "claude-code" },
     plannerEffort: "low",

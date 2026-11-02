@@ -2,11 +2,11 @@
  * The game's Genex cover, made as a step of its own once a build lands, never by the agent in the
  * middle of building: when a run's close lands its build (`run_finished` with `landed`), the chat's
  * own agent is asked to make the cover in one message the transcript leaves out
- * (`MessageOrigin.CoverStep`), sent with the person's last message's engine, model and effort but
- * never their Loop, so the step starts no build. The ask names the goal only; how to make and keep
- * the cover is the Genex plugin's own (its cover tool's description and `cover` skill). Once per
- * landed run, and never ahead of a message the person wrote after the close. The host asks for any
- * game while the Genex plugin is on (studio-core.ts).
+ * (`MessageOrigin.CoverStep`), sent with the person's last message's engine, model and effort. As
+ * words Genex wrote, it is handed no Loop's start, so the step starts no build. The ask names the
+ * goal only; how to make and keep the cover is the Genex plugin's own (its cover tool's description
+ * and `cover` skill). Once per landed run, and never ahead of a message the person wrote after the
+ * close. The host asks for any game while the Genex plugin is on (studio-core.ts).
  *
  * It lives on the host, not in the harness seed, so a kept older seed cannot shadow it, and it
  * decides from typed fields only: the close's `landed` and execution status, and the queue's `origin`.
@@ -25,7 +25,7 @@ export interface CoverStepAsk {
   options: ComposerSendOptions;
 }
 
-/** The fields of the person's last message the cover step is sent with: never its Loop or Autopilot. */
+/** The fields of the person's last message the cover step is sent with. */
 const CARRIED = ["engine", "model", "effort", "preferences"] as const;
 
 /** The person's last message's engine, model and effort, as a send's options. */

@@ -59,7 +59,7 @@ export interface ChatDelta {
 export interface UiEventMap {
   // — chat and threads —
   "chat.message": { threadId?: string; role?: string; content?: string };
-  /** A message that did not reach its chat (`failure`), or reached it and was refused there (`refusal`). */
+  /** An error in the chat; a message that did not reach it says why (`failure`). */
   "chat.error": { threadId?: string; message?: string; failure?: SendFailure };
   "chat.delta": ChatDelta;
   "chat.stream.started": { threadId: string; streamId: string; afterEventId: string | null };

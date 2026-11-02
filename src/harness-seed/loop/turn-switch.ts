@@ -74,7 +74,7 @@ export function switchedSettings(
     model,
     effort: typeof item.effort === "string" ? item.effort : undefined,
     preferences: item.preferences,
-    roles: item.roles && typeof item.roles === "object" ? (item.roles as RunRoles) : undefined,
+    roles: item.roles,
   };
 }
 

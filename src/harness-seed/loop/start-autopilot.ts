@@ -1,13 +1,12 @@
 /**
  * The Loop's start: the one tool a chat's own session is handed to start a Loop (delegated-turn.ts
- * bridges it in every turn of the chat's own session; a run's turn and the Studio's chat never have
- * it). It lives here, outside `tools/`, so a direct engine's tool loop, which cannot lead a Loop,
+ * bridges it in each turn of the chat's own session on the person's words; a run's turn, words
+ * Genex wrote and the Studio's chat never have it). It lives here, outside `tools/`, so a direct engine's tool loop, which cannot lead a Loop,
  * is never handed it. The session decides when to call it; the tool says only what it does. The
  * harness runs it once the reply has ended (chat-dispatch.ts `launchFromIntake`), and every Loop
  * goes until its lead finishes it (`LOOP_BUDGETS` there).
  */
 import type { AnyRecord, HarnessTool, ToolCtx } from "../types/harness.d.ts";
-import { EngineId } from "./model-roles.ts";
 import { RunMode } from "./run-events.ts";
 import { storeItemsOf } from "./store-items.ts";
 import { TurnStop } from "./turn-record.ts";
@@ -105,7 +104,6 @@ export const startAutopilot: HarnessTool = {
   execute(args: AnyRecord, ctx: ToolCtx) {
     const goal = String(args.goal).trim();
     const frames = attachedFrames(ctx.stills);
-    const engine = ctx.engine ?? EngineId.Ollama;
     const run = {
       goal,
       // This slug only ever names a chat that has no folder yet: the launch stamps the chat's own
@@ -113,10 +111,10 @@ export const startAutopilot: HarnessTool = {
       project: slugProject(args.project || args.direction || args.goal),
       mode: RunMode.Autopilot,
       reference: { name: String(args.direction ?? "").trim() || goal, shots: [], ...(frames.length ? { frames } : {}) },
-      engine,
+      engine: ctx.engine,
       ...(ctx.model ? { model: ctx.model } : {}),
       // The composer's roles panel: orchestrator / workers / judges, applied at launch (model-roles.ts).
-      ...(ctx.roles && typeof ctx.roles === "object" ? { roles: ctx.roles } : {}),
+      ...(ctx.roles ? { roles: ctx.roles } : {}),
       ...storeArgs(args),
     };
     return { ok: true, content: `Building ${UNTIL_DONE_WORDS}.`, stopTurn: TurnStop.LaunchRun, details: { run } };

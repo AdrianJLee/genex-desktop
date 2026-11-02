@@ -512,7 +512,7 @@ Drive only through hooks: the welcome's `[data-onboarding-action="next"]`, then 
 `"skip"` means nothing is signed in: stop and ask; never sign in yourself); the home composer's
 `[aria-label="Model settings"]` role rows `[data-role]` and `[data-model-choice]`, the
 `[aria-label^="Effort:"]` pill, then arrow keys on `[data-effort-slider]`, and
-`textarea[aria-label="Prompt"]` (there is no Mode to set: the chat's agent starts the Loop). Answer a
+`textarea[aria-label="Prompt"]`. Answer a
 `[data-chat-question]`, plan review or permission card only as a recorded human intervention.
 Watch with `runs` and `status`; no new record for a long while, or a `lastFailure`, is the cue to
 read `logs`. A run paused by an engine limit or a loop crash continues from

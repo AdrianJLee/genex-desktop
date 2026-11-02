@@ -9,13 +9,7 @@
 import { appLanguage } from "./app-language.ts";
 import { GIT_TIMEOUT_MS, MIN_DELEGATE_TIMEOUT_MS } from "./config.ts";
 import { GIT, gitAt } from "./git.ts";
-import {
-  buildContractorBrief,
-  isContinueAsk,
-  lastContractorSession,
-  nameFromAsk,
-  resolveChatProject,
-} from "./chat-session.ts";
+import { buildContractorBrief, lastContractorSession, nameFromAsk, resolveChatProject } from "./chat-session.ts";
 // The Loop's start is bridged to the session (MCP for Claude, the bridge command for Codex) — one
 // definition, two transports.
 import { startAutopilot } from "./start-autopilot.ts";
@@ -77,16 +71,13 @@ import type {
   DelegateImage,
   DelegateResult,
   Message,
+  MessageOrigin,
   PluginKindOffer,
   StudioToolSpec,
 } from "../types/host-api.d.ts";
 
 /** How long a loaded preview settles before it is read, when the studio cannot say whether it is up. */
 const PREVIEW_SETTLE_MS = 1.5 * SECOND_MS;
-/** A bare ask is shorter than this many characters… */
-const BARE_ASK_CHARS = 24;
-/** …and has fewer than this many words. */
-const BARE_ASK_WORDS = 4;
 /**
  * Whose engine call a `messages` record's `usage` reports when it is not the chat's own
  * (`usage_source`). `delegation`: a delegated turn's reply carrying its contractor's report, which
@@ -108,7 +99,6 @@ function outageWords(engine: string, kind: string, detail: string | undefined): 
 
 /** What the chat is told. */
 const MESSAGE = {
-  bareAsk: "Hi! What should we make? Tell me about the game you have in mind — a sentence is enough to start.",
   delegationFailed: "delegation failed",
   alreadyBuilding: (detail: string) =>
     `${detail}. Your message was not sent to it — send it again once the current build finishes.`,
@@ -142,8 +132,8 @@ const MESSAGE = {
 interface Handoff {
   ask: string;
   messages: Message[];
-  /** The Loop's start, bridged in for the chat's own session; null in a run's own turn. */
-  launch: HarnessTool | null;
+  /** The chat's own session is handed the Loop's start (`launches`). */
+  launches: boolean;
   /** The contractor session this chat resumes, if any. */
   resume: string | null;
   /** The handover the chat's last compaction wrote, for a fresh session's brief; null when none. */
@@ -195,12 +185,7 @@ function stoppedBeforeWork(engine: string): DelegateResult {
 
 /** Run one chat turn on a delegated engine: the ask handed to its contractor. */
 export async function runDelegatedTurn(ctx: HarnessCtx, options: DelegatedOptions): Promise<TurnOutcome> {
-  const { turnId, engine } = options;
   const chat = await readChat(ctx, options);
-  if (isBareAskInFreshChat(chat)) {
-    await sayInTurn(ctx, turnId, MESSAGE.bareAsk);
-    return { stopped: TurnStop.Done, round: 0, engine };
-  }
   const handoff = await placeHandoff(ctx, options, chat);
   // A plugin of the game may hold the turn back before any engine works on it.
   const held = await turnStart(ctx, options, handoff);
@@ -397,7 +382,7 @@ async function seatOf(
   handoff: Handoff,
   briefFor: (resumed: boolean) => string,
 ): Promise<Seat> {
-  const asked = options.asked && typeof options.asked === "object" ? (options.asked as AnyRecord) : null;
+  const asked = options.asked ?? null;
   const switches = asked !== null && Boolean(options.steer) && !options.runId;
   const described = switches ? await ctx.call(HostMethod.EngineDescribe, {}).catch(() => []) : [];
   const taken = switches ? asked : null;
@@ -504,12 +489,11 @@ async function finishTurn(
   if (resume) return handBack(ctx, options, result, { resumeRun: resume });
   // The chat's own session may launch; one asked to choose its engine may ask.
   const question = handoff.questionCard ? recorded.find((c) => c.name === askUser.name) : undefined;
-  const launch = handoff.launch ? recorded.find((c) => c.name === handoff.launch?.name) : undefined;
+  const launch = handoff.launches ? recorded.find((c) => c.name === startAutopilot.name) : undefined;
   // A question is not approval to start. Even if the model also recorded a launch, wait for
   // the actual answer. The same persisted session receives that answer on the next turn.
   if (result.ok && question) return askInChat(ctx, options, handoff, result, question.args, change);
-  if (handoff.launch && launch)
-    return launchFromChat(ctx, options, handoff, handoff.launch, intakeId, result, launch.args);
+  if (launch) return launchFromChat(ctx, options, handoff, intakeId, result, launch.args);
   return reportBuild(ctx, options, handoff, result, change);
 }
 
@@ -746,7 +730,7 @@ async function readChat(ctx: HarnessCtx, options: DelegatedOptions): Promise<Cha
   return {
     ask,
     messages,
-    launch: launchFor(options),
+    launches: launches(options),
     resume,
     compacted,
     hasPriorAsk,
@@ -755,9 +739,20 @@ async function readChat(ctx: HarnessCtx, options: DelegatedOptions): Promise<Cha
   };
 }
 
-/** The Loop's start for the chat's own session: every turn of its own has it, a run's own turn never. */
-function launchFor(options: DelegatedOptions): HarnessTool | null {
-  return options.runId ? null : startAutopilot;
+/**
+ * Genex's word after a Loop the person started was held back before its first turn (held-start): it
+ * asks for the person's own Loop again, so it may launch one.
+ */
+const RETRIES_PERSONS_LOOP: MessageOrigin = "loop-held";
+
+/**
+ * Whether the chat's own session is handed the Loop's start: on the person's own words, never in a
+ * run's own turn and never on words Genex wrote itself (`origin`: a command's result, the cover step).
+ */
+function launches(options: DelegatedOptions): boolean {
+  if (options.runId) return false;
+  const origin = options.asked?.origin;
+  return origin == null || origin === RETRIES_PERSONS_LOOP;
 }
 
 /** The folder the chat's last contractor session worked in, while it still exists. */
@@ -765,19 +760,6 @@ function priorProject(prior: { project?: string } | null, games: readonly GamePr
   const project = prior?.project;
   if (!project || !games.some((g) => g.name === project)) return null;
   return project;
-}
-
-/**
- * A contractor session costs minutes and cannot ask anything back — the brief is one-way.
- * A tiny ask ("hi") in a genuinely fresh chat is never a brief: answer, don't build. But a
- * chat bound to a game, or one with an ask already behind it, is mid-iteration — "add fog"
- * there is an instruction, and deflecting it stalled every short follow-up.
- */
-function isBareAskInFreshChat(chat: ChatReading): boolean {
-  const freshChat = !chat.resume && !chat.project && !chat.hasPriorAsk;
-  if (!freshChat || isContinueAsk(chat.ask)) return false;
-  const words = chat.ask.split(/\s+/).filter(Boolean);
-  return chat.ask.length < BARE_ASK_CHARS && words.length < BARE_ASK_WORDS;
 }
 
 /** The folder the brief goes to: the chat's own, or a new one named from the ask. */
@@ -1059,7 +1041,7 @@ function questionCard(handoff: Handoff): StudioToolSpec[] {
  * engine question is asked, and after a run it led, the run's controls and a paused run's resume.
  */
 function sessionTools(options: DelegatedOptions, handoff: Handoff): AnyRecord {
-  const own = [...(handoff.launch ? [bridged(handoff.launch)] : []), ...questionCard(handoff)];
+  const own = [...(handoff.launches ? [bridged(startAutopilot)] : []), ...questionCard(handoff)];
   if (!options.afterLoopRun) return own.length ? { interviewTools: own } : {};
   const grant = afterLoopRunGrant(options.afterLoopRun);
   const interviewTools = [...own, ...(grant.interviewTools ?? [])];
@@ -1359,7 +1341,6 @@ async function launchFromChat(
   ctx: HarnessCtx,
   options: DelegatedOptions,
   handoff: Handoff,
-  launchTool: HarnessTool,
   intakeId: string,
   result: DelegateResult,
   args: AnyRecord | undefined,
@@ -1368,7 +1349,7 @@ async function launchFromChat(
   const summary = result.summary?.trim();
   if (summary) await sayInTurn(ctx, turnId, summary);
   if (!result.ok) await sayInTurn(ctx, turnId, MESSAGE.launchedAnyway(endingOf(result)));
-  return executeLaunch(ctx, options, handoff.project, launchTool, intakeId, args ?? {});
+  return executeLaunch(ctx, options, handoff.project, intakeId, args ?? {});
 }
 
 /** Execute the launch the chat recorded, logged as its own tool call. */
@@ -1376,7 +1357,6 @@ async function executeLaunch(
   ctx: HarnessCtx,
   options: DelegatedOptions,
   project: string,
-  launchTool: HarnessTool,
   intakeId: string,
   args: AnyRecord,
 ): Promise<TurnOutcome> {
@@ -1384,11 +1364,15 @@ async function executeLaunch(
   await ctx.call(HostMethod.TurnAppend, {
     turnId,
     batch: [
-      { type: EventKind.ToolRequested, tool_call_id: intakeId, request: { name: launchTool.name, arguments: args } },
+      {
+        type: EventKind.ToolRequested,
+        tool_call_id: intakeId,
+        request: { name: startAutopilot.name, arguments: args },
+      },
     ],
   });
   // The launch reads the engine, model, roles and pictures of the message off its ctx; it answers a record.
-  const toolResult = (await launchTool.execute(args, {
+  const toolResult = (await startAutopilot.execute(args, {
     engine,
     model,
     ...(options.roles ? { roles: options.roles } : {}),

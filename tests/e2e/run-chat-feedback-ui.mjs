@@ -141,8 +141,6 @@ try {
     await until(async () => (await snap()).state.room === "studio", "learning opens Studio");
     await click(`nav [data-thread="${learning.thread_id}"]`);
     await capture("outcome-and-learning");
-    // Intentionally flipped: after a finished build Mode held the chat's own Loop time; there is no Mode now.
-    assert.ok(!(await snap()).controls.some((c) => c.label === "Mode"), "the composer has no Mode button");
   });
   await check(
     "unavailable plans offer model recovery, preserve the request and retry on the chosen provider",
@@ -208,9 +206,6 @@ try {
     const handoff = events(thread).find((e) => e.data.event_type === "contractor_handoff").data.payload;
     assert.equal(handoff.engine, "codex");
     assert.equal(handoff.model, "fixture-v1");
-    // Intentionally flipped: the handoff named the Loop chat's launch tool; every chat turn has the
-    // Loop's start now, so the handoff names none.
-    assert.equal(handoff.launch, undefined);
     report.modelInheritance = { engine: handoff.engine, model: handoff.model };
     await capture("question");
   });
@@ -254,8 +249,6 @@ try {
     await answered();
     const log = events(thread);
     assert.ok(!log.some((e) => e.data.event_type === "run_started"));
-    // Intentionally flipped: the handoff named the Loop chat's launch tool; it names none now.
-    assert.equal(log.filter((e) => e.data.event_type === "contractor_handoff").at(-1).data.payload.launch, undefined);
     assert.match((await snap()).text, /Actually, a coast at night/);
     await capture("custom-answer");
   });

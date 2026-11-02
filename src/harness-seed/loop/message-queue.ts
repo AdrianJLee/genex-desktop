@@ -266,7 +266,7 @@ function newTurn(action: QueueAction, after: number, carried: QueueAction[]): Tu
   return {
     messageId: action.messageId as string,
     action,
-    // As it was sent: the dispatch may drop its Loop on routing, which never makes the person's same Loop a change.
+    // As it was sent: a message sent while the turn works is weighed against these (steer-switch.ts).
     settings: { ...action },
     after,
     expecting: false,
@@ -390,9 +390,9 @@ export class MessageQueue {
   /**
    * Put one unsettled message back on the queue, unless a restart has already cut it off twice. One
    * read by a turn a restart cut short goes in front of that turn's replay; one that switched how
-   * that turn ran (the Loop, another model) gets a turn of its own after it instead, with all that
-   * turn read after it: the replay runs on the turn's own settings, which the switch changed. A slash
-   * command it read stays read, never run twice (it may have cleared the session).
+   * that turn ran (another engine, model, effort or roles) gets a turn of its own after it instead,
+   * with all that turn read after it: the replay runs on the turn's own settings, which the switch
+   * changed. A slash command it read stays read, never run twice (it may have cleared the session).
    */
   async #restoreMessage(
     threadId: string,

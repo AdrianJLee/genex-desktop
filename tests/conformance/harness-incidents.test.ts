@@ -3325,9 +3325,10 @@ describe("a message after a finished build whose lead was a session of its own",
    * (`origin`). Sent while the chat's history was still loading, the renderer saw no build and gave it
    * the chat's Loop; queued before an upgrade, it replays with it. The harness kept that Loop for a
    * finished build, so a failing command's output — read as a request for a fix — reopened the build
-   * for hours though nobody asked. No message carries a Loop now, and nothing reopens a build.
+   * for hours though nobody asked. No message carries a Loop now, nothing reopens a build, and what
+   * the chat writes itself is handed no Loop's start.
    */
-  it("RO6. a command's result queued with the chat's Loop before the upgrade reopens nothing: an ordinary turn answers it", async () => {
+  it("RO6. a command's result, words the chat wrote itself, is handed no Loop's start: an ordinary turn answers it", async () => {
     const report = {
       ...ownMessage,
       model: undefined,
@@ -3341,7 +3342,11 @@ describe("a message after a finished build whose lead was a session of its own",
         recorded: [{ name: "reopen_run", args: { text: "fix the failing test" } }],
       });
       await handleUserMessage(chat.studio as never, { ...report } as never);
-      assert.deepEqual(recordable(chat.asked.sessions[0]), ["start_autopilot"], "no reopen is offered");
+      assert.equal(
+        chat.asked.sessions[0]?.interviewTools,
+        undefined,
+        "the chat's own session is offered no Loop's start",
+      );
       assert.equal((await chat.registered()).length, 1, "nothing reopened");
     }
   });

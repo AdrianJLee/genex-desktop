@@ -33,7 +33,7 @@ function workRules(loopRun: AfterLoopRun, engine: string | undefined): string[] 
   if (loopRun.state !== RunState.Paused) return [];
   if (!loopRun.onLeadEngine) return [PAUSED_OWN_WORK];
   return [
-    `- This build is paused. When the user asks to go on with that build itself — resume, continue, keep going, run it again, with new guidance for it or none — call ${toolCall(engine, "resume_run")} once, last, with their instruction as text, and edit nothing in that reply: when your reply ends the build resumes where it stopped. Going on, again or "rerun" is this resume; only a new Loop they ask for is a fresh start.`,
+    `- This build is paused. When the user asks to go on with that build itself — resume, continue, keep going, run it again, with new guidance for it or none — call ${toolCall(engine, "resume_run")} once, last, with their instruction as text, and edit nothing in that reply: when your reply ends the build resumes where it stopped. Going on, again or "rerun" is this resume.`,
     PAUSED_OWN_WORK,
   ];
 }
@@ -47,7 +47,7 @@ export function afterLoopRunNote(loopRun: AfterLoopRun, engine: string | undefin
   const goal = loopRun.goal ? ` ("${clip(loopRun.goal, CLIP_QUOTE)}")` : "";
   return [
     `THE BUILD IS OVER: run ${loopRun.runId}${goal} ${closedWords(loopRun)}. You are this chat's own session, back in the game folder with your hands: the build no longer runs, and you may read and edit the game here as in any turn of this chat.`,
-    "- Answer a question yourself: a question never restarts the build or starts one.",
+    "- Answer a question yourself: a question never restarts the build.",
     ...workRules(loopRun, engine),
     loopRun.inPlace ? inPlaceControls(engine) : buildControls(engine),
     "- Speak the user's terms: Live, Builds, the build, your game folder — never integration branch or worktree.",

@@ -39,8 +39,6 @@ app.whenReady().then(async()=>{
  const view=()=>js('document.querySelector("[data-model-view]")?.dataset.modelView??null');
  const open=label=>js('Boolean(document.querySelector("[data-slot=popover-content][aria-label=\\"'+label+'\\"][data-open]"))');
  check('empty Send is disabled',await element('[data-promptbar] [aria-label="Send"]','e.disabled'));
- // Intentionally flipped: the composer had a Mode button (∞ Loop by default); the agent decides when to build now.
- check('the composer has no Mode button',!(await element('[data-promptbar] [aria-label="Mode"]','true')));
  check('all toolbar buttons and nested icons have pointer cursors',await js('[...document.querySelectorAll("[data-composer-toolbar] button:enabled, [data-composer-toolbar] button:enabled svg")].every(e=>getComputedStyle(e).cursor==="pointer")'));
  check('Add is a filled 30px circle the size of Send',await js('(()=>{const a=document.querySelector("[aria-label=\\"Add images and more\\"]"),s=document.querySelector("[data-promptbar] [aria-label=Send]"),r=a.getBoundingClientRect(),q=s.getBoundingClientRect();return r.width===30&&q.width===30&&r.height===q.height&&getComputedStyle(a).backgroundColor!=="rgba(0, 0, 0, 0)"})()'));
  check('composer keeps a 7px bottom inset and a 26px radius',await element('[data-promptbar] .composer-panel','getComputedStyle(e).paddingBottom==="7px"&&getComputedStyle(e).borderTopLeftRadius==="26px"'));
@@ -178,8 +176,7 @@ app.whenReady().then(async()=>{
  await insertText('A quiet garden');await wait(400);check('text enables Send',await element('[data-promptbar] [aria-label="Send"]','!e.disabled && e.dataset.state==="ready"'));
  check('ready Send is filled with the ink color',await element('[data-promptbar] [aria-label="Send"]','getComputedStyle(e).backgroundColor===getComputedStyle(document.querySelector("[data-promptbar] textarea")).color'));
  await click('[data-promptbar] [aria-label="Send"]');
- // Intentionally flipped: the send carried the Loop's time (autopilot.hours); it carries no Loop commission now.
- check('send includes approval and no Loop commission',await element('#composer-settings','(()=>{const v=JSON.parse(e.textContent);return v.extras.reviewPlan===true && !("autopilot" in v.extras) && !("loop" in v.extras)})()'));
+ check('send includes approval',await element('#composer-settings','JSON.parse(e.textContent).extras.reviewPlan===true'));
  check('one effort is sent to every role at the closest level each model accepts',await element('#composer-settings','(()=>{const v=JSON.parse(e.textContent);return v.effort==="xhigh" && v.roles.efforts.planner==="xhigh" && v.roles.efforts.builder==="high" && v.roles.efforts.judge==="xhigh"})()'));
  const actionState=()=>js('[...document.querySelectorAll("[data-composer-specimen] [data-promptbar] button[aria-label=Send], [data-composer-specimen] [data-promptbar] button[aria-label=Stop]")].map(e=>e.getAttribute("aria-label")).join(",")');
  check('active work turns the same control into Stop',await actionState()==='Stop');
@@ -234,10 +231,6 @@ app.whenReady().then(async()=>{
  await click('[data-specimen-chat="b"]');await click('[data-specimen-chat="a"]');
  check('each chat keeps its own draft',await element('[data-promptbar] textarea','e.value==="A draft that stays"'));
  await element('[data-promptbar] textarea','(e.focus(),true)');await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'a',code:'KeyA',modifiers:4,commands:['selectAll']});await key('Backspace');
- // Intentionally flipped: a running, paused or finished build's Mode named its Loop time; no build shows a Mode now.
- const buildModes={};for(const id of ['running','paused','finished']){await click('[data-specimen-build="'+id+'"]');buildModes[id]=await element('[data-promptbar] [aria-label="Mode"]','true');}
- check('no build state shows a Mode button',Object.values(buildModes).every(v=>v===null),buildModes);
- await click('[data-specimen-build="none"]');
 
  win.setSize(1080,680);wc.setZoomFactor(2);await wait(350);await js('Object.assign(document.querySelector("[data-composer-specimen]").style,{position:"fixed",bottom:"16px",left:"16px",width:"calc(100% - 32px)"});document.querySelector("#composer-settings").style.display="none"');await element('[data-promptbar]','e.scrollIntoView({block:"center"})');
  const inside='[...document.querySelectorAll("[data-slot=popover-content]")].every(e=>{const r=e.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1&&r.top>=-1&&r.bottom<=innerHeight+1})';

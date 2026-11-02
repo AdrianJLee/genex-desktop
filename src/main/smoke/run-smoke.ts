@@ -1575,10 +1575,6 @@ async function checkPluginJobInGraph(buildSmoke: BuildSmoke, assetJobId: string)
 async function checkComposerDuringBuild(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, threadId, waitFor } = buildSmoke;
   const { core } = buildSmoke.ctx;
-  check(
-    "the composer has no Mode button",
-    await waitFor(`!document.querySelector('[data-promptbar] [aria-label="Mode"]')`),
-  );
   await wc.executeJavaScript(
     `(() => { const input = document.querySelector('textarea[aria-label="Prompt"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Is the river ready?'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,
   );

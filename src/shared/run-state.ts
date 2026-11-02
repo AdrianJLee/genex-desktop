@@ -121,6 +121,11 @@ export const RunState = {
 } as const;
 export type RunState = (typeof RunState)[keyof typeof RunState];
 
+/** Whether the chat's build keeps its own plan: one running or paused, so its follow-ups get no plan review. */
+export function keepsOwnPlan(build: { state: RunState } | null | undefined): boolean {
+  return build?.state === RunState.Running || build?.state === RunState.Paused;
+}
+
 /**
  * How the run's last close describes it (`executionStatus`), or running while it has none.
  * The harness writes these (its copy is `ExecutionStatus` in `loop/run-events.ts`): never rename a value.

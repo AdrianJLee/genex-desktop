@@ -119,7 +119,7 @@ export interface Run extends RunSpec {
 
 /**
  * The ctx a tool runs with: the turn's ctx plus the turn's own options — the game the chat is
- * pinned to, the commission an interview carries.
+ * pinned to, and the engine, model, roles and pictures of the message.
  */
 export interface ToolCtx extends HarnessCtx {
   project?: string | null;

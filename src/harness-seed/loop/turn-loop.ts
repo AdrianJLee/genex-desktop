@@ -60,6 +60,8 @@ export interface TurnOptions {
   steer?: SteerHandle;
   /** The run this chat's own session led is over: it answers with the run's controls (after-loop-run.ts). */
   afterLoopRun?: AfterLoopRun;
+  /** The message whose settings the turn follows, as it was sent (chat-dispatch.ts). */
+  asked?: AnyRecord;
   [option: string]: unknown;
 }
 

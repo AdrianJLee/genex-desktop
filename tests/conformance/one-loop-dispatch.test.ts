@@ -77,22 +77,10 @@ describe("which Loop a run gets", () => {
     assert.equal(host.appended("run_finished").length, 1);
   });
 
-  it("on an engine without sessions it says it needs one, before any promise in the chat", TEST_TIMEOUT, async () => {
+  it("on an engine without sessions the Loop closes saying it needs one", TEST_TIMEOUT, async () => {
     const host = await hostOn(Project.GodotGame, { facts: GODOT, run: { engine: "ollama" } });
     host.rec.handle("engine.describe", () => [DIRECT]);
-    const studio = { host: host.rec.ctx, activeRuns: new Map(), startingRuns: new Map() };
-    await assert.rejects(
-      launchFromIntake(studio as never, host.rec.ctx as never, { threadId: "t1", project: host.game.name } as never, {
-        goal: "A level the player walks through.",
-        engine: "ollama",
-        mode: "autopilot",
-      }),
-      (err: Error) => err.message === NEEDS_SESSION,
-    );
-    assert.ok(!JSON.stringify(host.rec.paramsOf("events.append")).includes("Building until about"), "nothing promised");
-    assert.equal(host.rec.paramsOf("engine.delegate").length, 0);
-
-    await host.dispatch({ resume: true });
+    await host.dispatch();
     const [closed] = host.appended("run_finished");
     assert.equal(closed?.stoppedBecause, NEEDS_SESSION);
     assert.equal(closed?.landed, false);
@@ -714,19 +702,9 @@ describe("a run's route when its journal, its folder or the game list can't be r
       ];
       const host = await hostOn(Project.GodotGame, { facts, run: { engine: "ollama" } });
       host.rec.handle("engine.describe", () => [DIRECT]);
-      const studio = {
-        host: host.rec.ctx,
-        activeRuns: new Map(),
-        startingRuns: new Map(),
-      };
-      await assert.rejects(
-        launchFromIntake(studio as never, host.rec.ctx as never, { threadId: "t1", project: host.game.name } as never, {
-          goal: "A level the player walks through.",
-          engine: "ollama",
-          mode: "autopilot",
-        }),
-        (err: Error) => err.message === OPEN_LOOP_REFUSAL.needsSession("Ollama", "godot-project in assets/pack"),
-      );
+      await host.dispatch();
+      const [closed] = host.appended("run_finished");
+      assert.equal(closed?.stoppedBecause, OPEN_LOOP_REFUSAL.needsSession("Ollama", "godot-project in assets/pack"));
     },
   );
 });

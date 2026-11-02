@@ -723,10 +723,7 @@ describe("raw Codex lane", () => {
 // ── the Genex app lane ──────────────────────────────────────────────────────────────────
 
 describe("Genex app lane", () => {
-  const defaults: ProductDefaults = {
-    commission: { autopilot: {} },
-    permissionMode: PermissionMode.Auto,
-  };
+  const defaults: ProductDefaults = { permissionMode: PermissionMode.Auto };
   const report = (spec: EvalLaneSpec, change: Partial<EvalLaneReport> = {}): EvalLaneReport => ({
     schema: EVAL_LANE_REPORT_SCHEMA,
     runId: spec.runId,
@@ -787,11 +784,7 @@ describe("Genex app lane", () => {
       supervisor: machine.deps,
       run: async () => ({
         code: 0,
-        stdout: JSON.stringify({
-          extras: { autopilot: { hours: null, frames: [] } },
-          permissionMode: "auto",
-          addedGlobals: [],
-        }),
+        stdout: JSON.stringify({ permissionMode: defaults.permissionMode, addedGlobals: [] }),
         stderr: "",
       }),
       resolveElectron: () => "/fake/electron",
@@ -811,7 +804,7 @@ describe("Genex app lane", () => {
   it("writes the spec from the build's own defaults, launches the smoke sub-runner and reads the report", async () => {
     const { result, spec, spawned, req } = await runGenex({});
     assert.ok(spec && spawned);
-    assert.deepEqual(spec.commission, defaults.commission);
+    assert.deepEqual(spec.commission, {});
     assert.equal(spec.permissionMode, PermissionMode.Auto);
     assert.equal(spec.codexHostSkillSuppression, false);
     assert.equal(spec.userDataRoot, path.join(req.workRoot, "userdata"));
@@ -833,10 +826,9 @@ describe("Genex app lane", () => {
     assert.equal(result.contaminationClean, true);
   });
 
-  it("sends no commission on a Loop-off lane and suppresses host skills for Codex", async () => {
+  it("suppresses host skills for Codex", async () => {
     const { spec } = await runGenex({}, "genex-codex-auto");
     assert.ok(spec);
-    assert.deepEqual(spec.commission, {});
     assert.equal(spec.codexHostSkillSuppression, true);
   });
 

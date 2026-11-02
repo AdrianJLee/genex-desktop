@@ -154,13 +154,6 @@ export const RunState = {
 } as const;
 export type RunState = (typeof RunState)[keyof typeof RunState];
 
-/** Which run an interview commissions: an Autopilot run, or the unattended loop. */
-export const InterviewMode = {
-  Autopilot: "autopilot",
-  Loop: "loop",
-} as const;
-export type InterviewMode = (typeof InterviewMode)[keyof typeof InterviewMode];
-
 /**
  * Who wrote a `run_steering` event other than the user (`source`): the director steering its own
  * worker. The user's steering carries no source. Never rename a value.

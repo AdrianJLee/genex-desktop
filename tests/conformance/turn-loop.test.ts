@@ -807,8 +807,7 @@ describe("engine fallback (M2)", () => {
     };
     rig.core.engines.register(vendor);
 
-    // Long enough to be a brief: with no Loop commission a fresh chat's two-word ask is answered as a bare one.
-    await rig.core.sendUserMessage("recreate the MACBA plaza in Barcelona after the rain", { engine: "vendor" });
+    await rig.core.sendUserMessage("recreate MACBA", { engine: "vendor" });
     const events = await waitForLog(
       rig.core,
       (log) => log.some((e) => e.data.type === "turn_ended"),
@@ -939,7 +938,7 @@ describe("chat intake", () => {
     }
   });
 
-  it("a short ask in a chat bound to a game is an instruction, not smalltalk", async () => {
+  it("a short ask in a chat bound to a game reaches its contractor", async () => {
     const rig = await turnRig([]);
     const briefs: string[] = [];
     const vendor: Engine = {
@@ -967,36 +966,6 @@ describe("chat intake", () => {
 
     assert.equal(briefs.length, 1, "the short follow-up reached the contractor");
     assert.match(briefs[0]!, /add fog/);
-    const messages = await rig.core.store.listMessages(rig.core.mainThread);
-    assert.ok(
-      !messages.some((m) => m.content?.includes("What should we make?")),
-      "a bound chat must never get the smalltalk deflection",
-    );
-  });
-
-  it("a fresh unbound chat still deflects smalltalk instead of scaffolding", async () => {
-    const rig = await turnRig([]);
-    let delegations = 0;
-    const vendor: Engine = {
-      id: "vendor",
-      label: "Vendor",
-      kind: "delegated",
-      status: async () => ({ code: "ready", detail: "signed in" }),
-      models: async () => [],
-      delegate: async () => {
-        delegations++;
-        return { ok: true, engine: "vendor", summary: "done", turns: 1, usage: { input_tokens: 0, output_tokens: 0 } };
-      },
-    };
-    rig.core.engines.register(vendor);
-
-    await rig.core.sendUserMessage("hi", { engine: "vendor" });
-    await waitForLog(rig.core, (log) => log.some((e) => e.data.type === "turn_ended"), 30_000, "turn_ended");
-
-    assert.equal(delegations, 0, "'hi' is not a brief");
-    assert.equal((await rig.core.games.list()).length, 0, "'hi' must never become a project");
-    const messages = await rig.core.store.listMessages(rig.core.mainThread);
-    assert.match(messages.at(-1)?.content ?? "", /What should we make\?/);
   });
 });
 

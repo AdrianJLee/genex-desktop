@@ -104,8 +104,6 @@ export type DraftSource = (typeof DraftSource)[keyof typeof DraftSource];
 export const HomeLeftTo = { Game: "game", Harness: "harness", Other: "other" } as const;
 export type HomeLeftTo = (typeof HomeLeftTo)[keyof typeof HomeLeftTo];
 
-/** How a launch's first message runs: as a Loop, or answered in the chat. */
-
 /** The launch step that stopped. */
 export const LaunchStage = { Naming: "naming", Creating: "creating", Opening: "opening" } as const;
 export type LaunchStage = (typeof LaunchStage)[keyof typeof LaunchStage];

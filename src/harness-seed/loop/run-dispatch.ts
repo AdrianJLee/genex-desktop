@@ -217,7 +217,7 @@ function closesRun(event: HarnessEvent | null | undefined, runId: string): boole
   return data?.type === EventKind.Custom && data.event_type === RunEvent.RunFinished && data.payload?.runId === runId;
 }
 
-/** Did this record register `runId` (a start, or a resume or reopen starting it again)? */
+/** Did this record register `runId` (a start, or a Resume starting it again)? */
 function registersRun(event: HarnessEvent | null | undefined, runId: string): boolean {
   const data = event?.data;
   return data?.type === EventKind.Custom && data.event_type === RunEvent.RunRegistered && data.payload?.runId === runId;
@@ -648,8 +648,8 @@ async function closeFailedRun(host: Host, ctx: HarnessCtx, run: Run, err: any): 
     // going, and a notify dies with the window while the log survives the run. But the
     // run may have written its own run_finished before dying, and a second closure would
     // overwrite its outcome in every reader that keeps the last word. Only this session's close
-    // counts: a run started again (a Resume, a finished build reopened) has an earlier
-    // session's close in the log, which is not this one's.
+    // counts: a run started again (a Resume) has an earlier session's close in the log, which is
+    // not this one's.
     const events = await host.call(HostMethod.EventsList, { threadId }).catch(() => []);
     const alreadyClosed = closedThisSession(events, run.runId);
     const closing = customEvent(RunEvent.RunFinished, {

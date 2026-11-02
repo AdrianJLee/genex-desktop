@@ -3,7 +3,7 @@
  * plan's inbox, plan review, or the chat's queue with a bubble that shows at once.
  */
 import { PlanReviewState } from "../../shared/composer.ts";
-import { RunState } from "../../shared/run-state.ts";
+import { keepsOwnPlan } from "../../shared/run-state.ts";
 import { EntryAction, EntryKind } from "../chat-entries.ts";
 import { noteSentWords, type ReplyAbout } from "../reply-about.ts";
 import { type Notify, ToastTone } from "../state/toasts.ts";
@@ -60,10 +60,9 @@ async function sendNote(about: ReplyAbout, text: string, onNotice: Notify): Prom
  * after a plan, while no build of the chat is running or paused (that build keeps its own plan).
  */
 function toPlanReview(chat: ChatThread, work: ChatWorkView, extras?: ComposerExtras): boolean {
-  const runOpen = Boolean(chat.run) && chat.run?.state !== RunState.Finished;
   const review = work.plan.review;
   const reviewTakes = Boolean(review && REVIEW_TAKES_MESSAGE.has(review.state));
-  return !chat.isStudioThread && !runOpen && Boolean(extras?.reviewPlan || reviewTakes);
+  return !chat.isStudioThread && !keepsOwnPlan(chat.run) && Boolean(extras?.reviewPlan || reviewTakes);
 }
 
 /** What a send waits behind: the chat's own work, or its running build unless that build's lead takes it now. */

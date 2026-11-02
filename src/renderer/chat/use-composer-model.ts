@@ -10,7 +10,7 @@ import { MODEL_PICKER_WORDS } from "../words.ts";
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../shared/i18n.ts";
-import { normalizeRoles, takesRoles } from "../../shared/model-roles.ts";
+import { normalizeRoles } from "../../shared/model-roles.ts";
 import { supportedPreferences, type ModelPreferences } from "../../shared/model-preferences.ts";
 import {
   autoChoice,
@@ -32,7 +32,7 @@ import { ModelCatalogState } from "../../shared/model-catalog.ts";
 import { EngineKind, EngineStatusCode, splitsRoles } from "../../shared/engine-descriptor.ts";
 import { modelKey as keyOf, parseModelKey } from "../model-key.ts";
 import type { ComposerSendOptions } from "../../shared/composer.ts";
-import type { ComposerExtras, ComposerModelProps, ModelChoice, RoleGroup, RoleRecord } from "../ui/PromptBar.tsx";
+import type { ComposerExtras, ComposerModelProps, ModelChoice, RoleRecord } from "../ui/PromptBar.tsx";
 import { EffortRefOther, ModelReplaced, ModelSetting, SendBlock } from "../analytics/chat-vocabulary.ts";
 import { chatMemory } from "../analytics/chat-memory.ts";
 import { effortRef, engineRef, modelPickedProperties } from "../analytics/chat-properties.ts";
@@ -118,11 +118,6 @@ export interface ComposerModelView {
   /** Game chats on an engine that splits roles (`splitsRoles`) give each job its own model. */
   rolesApply: boolean;
   roleModels: Array<{ id: string; label: string }>;
-  /**
-   * The other ready engines that take roles, and their models: each job may go to those it crosses
-   * to (`crossesTo`), never the orchestrator.
-   */
-  roleOthers: RoleGroup[];
   /** The roles a send carries, efforts resolved (`effectiveRoles`); null where roles do not apply. */
   roles: RoleRecord | null;
 }
@@ -131,14 +126,7 @@ const modelRow = (m: { id: string; label: string }) => ({
   id: m.id,
   label: m.id === "default" ? t("Default") : m.label,
 });
-/**
- * Another engine can take the builder or judge role: it takes roles (a session engine, or a
- * completion-only local one), is ready, and has models.
- */
-const canTakeRoles = (engine: EngineDescriptor) =>
-  takesRoles(engine.id) && engine.status.code === EngineStatusCode.Ready && engine.models.length > 0;
-
-type RoleView = Pick<ComposerModelView, "choices" | "selected" | "selectedEngine" | "rolesApply" | "roleOthers">;
+type RoleView = Pick<ComposerModelView, "choices" | "selected" | "selectedEngine" | "rolesApply">;
 
 /**
  * The roles as picked: preserve explicit provider/model choices across sign-in failures,
@@ -252,13 +240,7 @@ export function resolveComposerModel(input: {
   const rolesApply = Boolean(
     !input.studio && selectedEngine && splitsRoles(selectedEngine) && selectedEngine.models.length > 0,
   );
-  const roleOthers: RoleGroup[] =
-    rolesApply && selectedEngine
-      ? input.engines
-          .filter((engine) => engine.id !== selectedEngine.id && canTakeRoles(engine))
-          .map((engine) => ({ engine: engine.id, label: engine.label, models: engine.models.map(modelRow) }))
-      : [];
-  const view: RoleView = { choices, selected, selectedEngine, rolesApply, roleOthers };
+  const view: RoleView = { choices, selected, selectedEngine, rolesApply };
   // One effort for every role: the control offers the orchestrator's levels, and each worker and
   // judge model runs at the closest level it accepts.
   const picks = rolePicks(view, input.roles ?? null);

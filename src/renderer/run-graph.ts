@@ -1279,7 +1279,6 @@ function onRunStarted(graph: GraphDraft, entry: RunEntry): void {
   // Its first start record is the message it answers; a resume or a later steer is not.
   if (run.startedAt === null) run.asked = graph.answering;
   run.startedAt = entry.event.created_at;
-  // Absent budgets leave the earlier value; an ∞ build has only a safety ceiling, never a duration.
   const reference = record(payload.reference);
   run.reference = reference ? { name: str(reference.name, "reference"), kind: strOrNull(reference.kind) } : null;
   run.referenceFrames = reference ? strings(reference.frames) : [];

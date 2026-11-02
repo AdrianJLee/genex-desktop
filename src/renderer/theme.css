@@ -8027,7 +8027,7 @@ a:focus-visible {
 .picker-seg > button[aria-checked="true"] {
   color: var(--control-text-hover, var(--ink));
 }
-/* A choice the control shows but can't take (Mode's Loop in an Unreal game); dims like the stepper's ends. */
+/* A choice the control shows but can't take; dims like the stepper's ends. */
 .picker-seg > button:disabled {
   opacity: 0.4;
 }

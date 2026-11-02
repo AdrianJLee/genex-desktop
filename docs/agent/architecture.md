@@ -323,9 +323,9 @@ questions and plan reviews pin above the composer (`chat/ChatQuestion.tsx`); onl
 confirmation calls the consent, permission or plan IPC.
 
 **Questions and Studio chat.** `ask_user` records a durable `interview_question` through both the
-direct tool registry and a Loop chat's delegated bridge; the provider turn ends, the answer arrives
-through the normal message queue and resumes the same session, and a question never launches a
-run by itself. Its commissioning options live in a thread artifact referenced by `intakeId`.
+direct tool registry and the delegated bridge, which hands it to a chat's session only for a new
+game's engine question; the provider turn ends, the answer arrives through the normal message
+queue and resumes the same session, and a question never launches a run by itself.
 Explicit Studio messages bypass game chats: `loop/studio-chat.ts` calls `engine.complete`
 with no tools, a bounded window, current attachments and host-owned `studio.context`; it never
 delegates or edits games, settings or harness files, and a blank reply is a durable error.
@@ -806,7 +806,7 @@ at 4 KiB. Connector tool results, call errors and stderr health messages are red
 values (materialized env and headers, launch `secrets`, OAuth tokens) and then token shapes, through
 [`src/shared/redact.ts`](../../src/shared/redact.ts), the one redactor for the event log, the dev
 control and MCP. Collisions shorten a tool name's base so the suffixed name stays within 48
-characters (`uniqueToolName`). Judges, critics and read-only sessions get no connectors; the Auto chat, a Loop chat and a build's lead get them.
+characters (`uniqueToolName`). Judges, critics and read-only sessions get no connectors; the chat's session and a build's lead get them.
 
 **Connector trust.** A stdio connector is trusted native code: `studio:mcp.save` computes a launch
 digest over command, args, cwd and variable names, and a mismatch needs the native trust dialog

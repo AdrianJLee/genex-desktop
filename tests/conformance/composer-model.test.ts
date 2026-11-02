@@ -208,11 +208,6 @@ describe("what the composer derives", () => {
       view.roleModels.map((m) => m.label),
       ["Default", "opus", "sonnet"],
     );
-    assert.deepEqual(
-      view.roleOthers.map((group) => group.engine),
-      ["codex", "ollama"],
-      "another ready engine that takes roles, never a signed-out one",
-    );
     assert.equal(
       resolveComposerModel({ studio: false, engines: [claude], modelKey: "claude-code::opus", effort: "max" }).effort,
       undefined,
@@ -239,7 +234,6 @@ describe("what the composer derives", () => {
       effort: null,
     });
     assert.equal(view.rolesApply, true, "a completion-only engine still gives each job its own model");
-    assert.deepEqual(view.roleOthers, [], "its workers and reviewers stay on it");
     assert.equal(view.effortApplies, false);
     const toolless = { ...local, models: [model("tiny", { supportsTools: false })] };
     assert.equal(

@@ -211,9 +211,8 @@ export interface EvalCliHomes {
 }
 
 /**
- * The composer options an eval lane forwards with the brief. This build has no Loop switch, so its
- * default sends none of an older build's commission: the chat's agent decides whether to start a
- * Loop (`scripts/evals/lanes/genex-app.ts` reads an older build's own default from its modules).
+ * The composer options an eval lane forwards with the brief. A build has no Loop switch, so a send
+ * commissions none: the chat's agent decides whether to start a Loop.
  */
 export type EvalCommission = Pick<ComposerSendOptions, "reviewPlan" | "preferences">;
 

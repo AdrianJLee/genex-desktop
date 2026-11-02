@@ -37,10 +37,9 @@ export { loopRunRefusal } from "./run-dispatch.ts";
 const IDLE_STATUS = "idle";
 
 /**
- * What this self can dispatch, reported in the bootstrap's ready message. A stale copy of this
- * file simply lacks the property — that absence is how the host knows not to hand an unattended
- * commission to a loop that predates the feature. Keep this list honest when editing dispatch
- * below.
+ * What this self can dispatch, reported in the bootstrap's ready message: the host asks a loop only
+ * for what it lists (a Resume, the message queue, workers). Keep this list honest when editing
+ * dispatch below.
  */
 const CAPABILITIES = [
   "autopilot",
@@ -117,7 +116,6 @@ export async function createStudio(host: Host) {
 
   return {
     status: () => status.summarize(),
-    // A build whose jobs cross to or from a local engine only when every part it needs serves it.
     capabilities: CAPABILITIES,
 
     async healthcheck() {

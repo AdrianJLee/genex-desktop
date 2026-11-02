@@ -566,8 +566,8 @@ read and its profile (`loopProfileOf`): a web game keeps the director on an engi
 session and classic Autopilot on a direct engine or `run.classic`; any other project runs the open
 Loop on any engine that keeps a session, which the host seats in place (`leadsInPlace`: Claude Code,
 Codex, OpenCode, and a local model's session — Bonsai, OpenRouter, a local server — alike), and on
-one with no session of its own (Ollama) closes at once saying it needs one (`RunnerKind.NeedsSession`), which the chat's launch says before it promises anything
-(`launchFromIntake`). Classic is a web game's internal only, and the gauntlet works on web games only
+one with no session of its own (Ollama) closes at once saying it needs one (`RunnerKind.NeedsSession`).
+Classic is a web game's internal only, and the gauntlet works on web games only
 (`RunnerKind.WebOnly`). A resume
 refused at its start stays paused and keeps its earlier report (`refusedRun` writes its close over the
 latest one, keeping only what was built, `KEPT_ON_REFUSAL`: never how that session stopped, its provider
@@ -910,8 +910,9 @@ An ask to stop and start a new Loop is `wrap_up` with `next_goal`:
 the new Loop rides on the same `run_control` record (`next-loop-record.ts`), and once the run has
 closed `handleRunStart` starts it on the same game with the run's engine, model and roles, as a
 launch from the chat would (`next-loop.ts`); a Stop pressed since starts nothing. Outside a run, the
-chat's own turn always holds the Loop's start (`loop/start-autopilot.ts`, `delegated-turn.ts`
-`launchFor`), after a run it led too, finished or paused; the agent decides when to call it, and
+chat's own turn holds the Loop's start on the person's words (`loop/start-autopilot.ts`,
+`delegated-turn.ts` `launches`), after a run it led too, finished or paused; the agent decides when
+to call it, and
 every Loop it starts goes until its lead finishes, under the day's ceiling (`chat-dispatch.ts`
 `LOOP_BUDGETS`).
 

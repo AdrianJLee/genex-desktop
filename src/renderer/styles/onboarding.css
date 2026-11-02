@@ -162,8 +162,6 @@
   pointer-events: none;
   animation: onboarding-blink 1s step-end infinite;
 }
-/* Loop is on: the composer's own Mode button. Its ∞ draws itself once as the bar appears and a
-   light passes over the word once, then both rest. */
 .onboarding-letters {
   position: absolute;
   max-width: 470px;

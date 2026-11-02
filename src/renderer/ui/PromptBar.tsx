@@ -21,7 +21,6 @@ import {
   shortModelName,
   type ModelChoice,
   type ModelMenuHandle,
-  type RoleGroup,
   type RoleKey,
   type RoleRecord,
   type RoleRow,
@@ -42,7 +41,7 @@ import { useAsyncEffect } from "../use-async-effect.ts";
 import { selectedCompact } from "../chat/compact-control.ts";
 import { useToolbarFit } from "./toolbar-fit.ts";
 import { composerPlaceholder, PLAN_PLACEHOLDER } from "../composer-placeholder.ts";
-import { RunState } from "../../shared/run-state.ts";
+import { keepsOwnPlan, type RunState } from "../../shared/run-state.ts";
 import { parseModelKey } from "../model-key.ts";
 import { chatMemory, noteComposed } from "../analytics/chat-memory.ts";
 import { sendBlockedProperties, stopRequestedProperties } from "../analytics/chat-properties.ts";
@@ -62,7 +61,7 @@ import {
   sentMentions,
 } from "../../shared/prompt-mention.ts";
 export { shortModelName };
-export type { ModelChoice, RoleGroup, RoleRecord, RoleRow };
+export type { ModelChoice, RoleRecord, RoleRow };
 /** What a send carries besides its text: plan review, the pictures, and the tags. */
 export interface ComposerExtras {
   reviewPlan?: boolean;
@@ -140,8 +139,7 @@ function usePlanReview(props: PromptBarProps) {
   useLayoutEffect(() => {
     setReviewPlan(false);
   }, [conversationKey, coordinating]);
-  const state = props.build?.state;
-  const planAvailable = !coordinating && state !== RunState.Running && state !== RunState.Paused;
+  const planAvailable = !coordinating && !keepsOwnPlan(props.build);
   // What the bulb, Add's row and the box show: plan review that this chat's next send will carry.
   const planOn = reviewPlan && planAvailable;
   return { setReviewPlan, planAvailable, planOn };

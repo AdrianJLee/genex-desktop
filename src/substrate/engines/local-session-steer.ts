@@ -48,8 +48,8 @@ export function localInbox(signal: AbortSignal): LocalInbox {
 }
 
 /**
- * Whether this session reads messages mid-turn. An interview does not: a message read after its
- * question's or launch's tool result would be answered by a turn that had already decided.
+ * Whether this session reads messages mid-turn. An interview (handed the question card) does not: a
+ * message read after its question's tool result would be answered by a turn that had already decided.
  */
 export function takesSteer(request: DelegateRequest): boolean {
   return !isInterview(request.interviewTools);

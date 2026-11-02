@@ -891,8 +891,6 @@ Auto, its line says Claude asks first. Its Plan is Claude Code's plan mode (it r
 separate from Add's Plan mode (the studio's plan review), and shows no bulb. Choosing Bypass opens "Bypass permissions?" (it acts
 anywhere on this Mac, "this computer" on Windows and Linux; Rewind restores only the game folder)
 with ghost Cancel focused and a destructive **Bypass permissions**; focus returns to the pill.
-There is no Mode button: the chat's agent decides when a request needs a Loop, so the toolbar
-offers no Loop switch or time limit, with or without a build.
 The model panel (300px) lists three jobs as rows: **Main agent**, **Workers** ⓘ and **Reviewers** ⓘ,
 each naming its model with a ›; the ⓘ tooltips say what the job does and close when the pointer
 leaves. Workers and Reviewers always read quieter and stay choosable. A row opens
@@ -1057,7 +1055,7 @@ It does not sign into a real account or download model weights.
 Use `node tests/e2e/run-promptbar-ui.mjs` for composer behavior changes; a local visual edit
 can use a focused rendered review instead. It uses production components
 with deterministic gallery models and tests the composer metrics (30px Add/Send, 7px bottom
-inset, 26px radius), tooltips, Plan mode, no Mode button in any build state, toolbar order (ring,
+inset, 26px radius), tooltips, Plan mode, toolbar order (ring,
 model, effort, Send), no Fast control, the roles panel (Orchestrator/Workers/Judge rows, ⓘ tooltips,
 quiet worker and reviewer rows), the side model list (focus, groups, Add more models, chat-side placement, arrow keys,
 Escape closing the list before the panel), the effort slider (keys, pointer snap, nearest level per

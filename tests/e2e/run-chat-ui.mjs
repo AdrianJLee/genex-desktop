@@ -218,7 +218,6 @@ try {
     // The build is its one card: the part at work in one line, and on the right its clock. Intentionally
     // flipped: the clock was followed by the Loop's cap ("up to 30m"); a Loop has no time the person set now.
     assert.match(s.text, /BuildingWooden bridge across the river · working\d+[hms]/);
-    assert.doesNotMatch(s.text, /up to \d/);
     // Only the build runs now (the question is answered): chat shows the build row, not its own working status.
     assert.ok(!s.chatLayout.some((row) => row.kind === "status"), "a running build is not chat work");
     const build = await op("snapshot", {
@@ -227,9 +226,6 @@ try {
       limit: 20,
     });
     assert.match(build.text, /^Building/);
-    // Intentionally flipped: Mode named the running build's Loop ("30m Loop"); the composer has no Mode now.
-    const composer = await op("snapshot", { surface: "desktop", scope: "[data-promptbar]", limit: 40 });
-    assert.ok(!composer.controls.some((c) => c.label === "Mode"), "the composer has no Mode button");
     assert.ok(
       build.controls.some((c) => c.text === "Building" && c.title === "Open in Builds"),
       "the build card opens Builds",

@@ -2,14 +2,14 @@
 
 ## From a request to a game
 
-Auto edits directly or starts a Loop when asked; Loop: the chat leads and builds beside workers.
-Judges answer only when the lead asks. Other
-projects' Loops run [in place](projects-engines.md#loops-in-place). Loop hours are a soft cap (the
-lead's finish ends it early, in place after the lead's named gaps; 15 minutes' grace).
+There is no mode to set: the chat's agent answers, edits directly or starts a Loop, as the
+request needs. In a Loop the chat leads and builds beside workers. Judges answer only when the lead
+asks. Other projects' Loops run [in place](projects-engines.md#loops-in-place). A Loop goes on
+until its lead finishes it (in place, after the lead's named gaps), within a day's ceiling.
 Acceptance survives workers and restarts. External blockers pause the run at its
-checkpoint. ∞ ends on the lead's finish. Asked to finish, the lead lets
-rounds end, then lands. Finish overrides the clock
-([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
+checkpoint. Asked to finish, the lead lets rounds end, then lands
+([details](../harness-runtime.md#goal-completion-and-worker-approvals)). A local model's chat
+(Ollama) answers and edits; it starts no Loop.
 
 An active run opens Builds once; a build shown from chat, or empty Builds, opens Live. Files and images opened from chat get closable tabs.
 
@@ -47,10 +47,8 @@ throws nothing uncaught, is not blank.
 
 ## Continuation and interruption
 
-After a chat-led build, its session takes follow-ups: edits, resuming a paused run
-with its time left, starting over only when asked. With Loop on, small changes are made directly;
-more work reopens the build until checked (other projects start anew); a chat that cannot
-(Ollama's) answers as with Loop off, saying so once. **Stop** interrupts at once, keeping finished
+After a chat-led build, its session takes follow-ups: edits, resuming a paused run, or a
+new Loop for more work than a reply holds. **Stop** interrupts at once, keeping finished
 work: a stopped Loop shows one Stopped line with Resume, and Builds or chat makes it live. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
 pauses wait. A crash or restart settles abandoned activity from saved state.
 

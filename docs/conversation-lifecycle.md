@@ -7,10 +7,9 @@ there is no second agent beside them. Studio's app-wide chat uses tool-free mode
 conversation and recorded Studio activity. Historical game runs in an older Studio thread must not
 bind a new Studio question to that game's run.
 
-The failure this addresses: with Autopilot enabled — the switch the user now reads as
-**Loop** (the redesigned composer groups it under Mode), while the harness keeps the word (`start_autopilot`, `AutopilotCommission`,
-`autopilot_<runId>`) — every follow-up re-entered the intake interview with `start_autopilot`
-available. The existing run and a new run could then share a thread, cancellation flag, live
+The failure this addresses: once a chat had started Autopilot — the Loop, while the harness keeps
+the word (`start_autopilot`, `autopilot_<runId>`) — every follow-up re-entered the intake interview
+with `start_autopilot` available. The existing run and a new run could then share a thread, cancellation flag, live
 project, and graph: a request to wait for the remaining workers could start a second run.
 
 ## Ownership
@@ -49,9 +48,8 @@ project, and graph: a request to wait for the remaining workers could start a se
   ([one session](#live-chat-during-a-build)).
 - After a run its lead led, the chat goes on in that same session with its hands back
   ([after the build](#after-the-build-the-same-session)): it answers, after a finished run does
-  requested work itself (Loop off, or a contained change with Loop on) or, with Loop on, reopens the
-  same run for more work, until the ask is checked (a new run only when asked to start over),
-  resumes a paused one when asked to go on with it (other work it makes itself, and the build stays
+  requested work itself or starts a new Loop for more, resumes a paused one when asked to go on with
+  it (other work it makes itself, and the build stays
   paused), and shows or
   lands the build. Questions alone do not restart builders. Sending a message needs no Keep going
   button.
@@ -59,7 +57,7 @@ project, and graph: a request to wait for the remaining workers could start a se
   at boot as paused, keyed on its journal artifact rather than on `mode`, so a director run is
   resumable too. A resumed
   director run goes on from its journal with the working time it had left — never a fresh
-  budget (only a finished run reopened with Loop gets one), and time spent paused
+  budget — and time spent paused
   does not count (a run whose worked time used its working time
   gets only its wrap-up) — with the workers, the defects nobody owns and the news from before the
   pause in its lead's first digest
@@ -114,8 +112,7 @@ composer's and Builds' alone; Resume (`autopilot.resume`) goes on with a paused 
 After a stop, `resume_run` is for going on with that build itself; other work the chat's own
 session makes itself, and the build stays paused.
 `resume_run` can only resume a paused journal and cannot create a replacement run; a finished
-run is reopened by the harness itself once a Loop message's reply recorded `reopen_run`, never
-through it ([reopening a finished run](#after-the-build-the-same-session)).
+run is never started again: more work is a new Loop ([after the build](#after-the-build-the-same-session)).
 
 In a director run (a session-capable engine's Autopilot, including managed Bonsai) the workers are the
 director's, not the plan's: a steer without a facet wakes a resting director at once and opens
@@ -168,7 +165,7 @@ was never given consent to version. A finished run is never "inactive" for these
 
 The run and chat have separate status lanes. Chat completion cannot clear a worker's status.
 Send and Stop share one composer slot: a sendable draft shows Send, otherwise active work shows
-Stop. Selecting Auto in Mode is not cancellation. **Plan mode** (Add) is an explicit one-message choice
+Stop. **Plan mode** (Add) is an explicit one-message choice
 and resets after submission and when work starts. In the permissions pill's Plan, a build the chat's
 session records waits for the plan's approval, and `resume_run` and `land_build` do not run
 ([permissions](tool-permissions.md)).
@@ -178,8 +175,8 @@ requested plan; sending a revision never approves it.
 
 ## Steering the chat's turn
 
-A message sent while the chat's own turn works — the chat's own session (a Loop chat's, and after a
-run, too) — is delivered into that turn instead of waiting for it to end. The queue decides what
+A message sent while the chat's own turn works — the chat's own session (after a run, too) — is
+delivered into that turn instead of waiting for it to end. The queue decides what
 joins, the host how the session takes it, and the log records where it was read. Build steering
 (`worker_steer`, the director's inbox) is
 unchanged: while a run of this chat or its game is starting or running nothing is steered into a
@@ -191,8 +188,7 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   run's), a message sent meanwhile joins it unless something sent before the turn began still
   waits, a build runs, or it is a fresh build asked for or Studio's chat (`steer-switch.ts`
   `joinKindOf`). It joins as **words** when it settles what the turn runs on the same way (engine,
-  model, effort and Loop — on or off, hours, roles, plan review); otherwise, or with a new mood
-  board or slash text, as a **switch**, which only a runner that says so takes (`steer.open({
+  model, effort and roles); otherwise, or with slash text, as a **switch**, which only a runner that says so takes (`steer.open({
   switches, takes })`: the chat's own delegated turn when the dispatch names the message it follows,
   `asked`; never a run's builder). A switch to an engine
   that turn cannot go on with (one without sessions, or another engine than the lead's after its
@@ -236,8 +232,9 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   plugin's ask it shows (`desktop-assist.ts`) is queued `from: genex`, and every message keeps its
   sender on the way in: the turn it opens, its steer and its `run_steering` say Genex wrote it.
 - **Cut at the next step and resume.** Any other session — Codex (`codex exec` closes stdin at
-  spawn), OpenCode, an older Claude Code, and every Loop chat (a message folded in at its
-  question's or launch's tool result would be answered by a turn that had already decided) — and
+  spawn), OpenCode, an older Claude Code, and every session handed `ask_user` (a message folded in
+  at its question's tool result would be answered by a turn that had already decided; the Loop's
+  start alone does not count, `studio-tool-prompts.ts` `isInterview`) — and
   any switch (`native: false`) is cut (`steered`, never read as a Stop), but only between tool
   calls: the host defers the abort until no tool the session started is in flight
   (`main/core/steer-cut.ts`), so no tool's result is lost. `loop/chat-steer.ts` `steeredCall`
@@ -248,25 +245,23 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   leg's — Genex's line among the person's, the person's after a Genex turn's own message — wait for
   the leg after it, in the order sent. A switch first moves the turn onto the message's settings (`TurnSwitches.
   apply`, `turn-switch.ts` `switchedSettings`: a turn started with that message would have run on
-  them — the after-run session's engine kept, a reopen's rules kept, the next Loop after one in the
-  game folder started from a plain chat turn) and the resumed leg opens with what changed
+  them, the after-run session's engine kept) and the resumed leg opens with what changed
   (`steer-switch-prompts.ts`): another model or effort resumes the same session; another engine
-  starts a new one told the brief and everything the turn was told. A Loop switch drops a launch or
-  question the cut leg recorded (the session is told); another keeps it, on its settings. Slash
+  starts a new one told the brief and everything the turn was told. A launch or question the cut
+  leg recorded is kept, on the new settings. Slash
   text runs as a leg of its own, the command alone in the same session; the words sent with it
   follow as they wrote them, then Genex's line that it ran carries the work it cut short on. Messages reach it in the order they were sent.
 - **Not read.** Whatever a session took but did not read — a Stop (checked again before every
-  resumed leg), a turn that ended first, a Loop chat that had already asked its question or
+  resumed leg), a turn that ended first, a turn that had already asked its question or
   launched, a leg that failed or was stopped before it read its prompt (with anything an earlier
   cut-off leg forwarded to it), a command not yet run — is `coordinator_message_requeued` in the
   order it was sent, before the turn's `handled`, and gets a turn of its own, so a Stop still leaves
   every unread message an answer.
-- **A Loop switched on.** A turn whose session launches the Loop it was switched to hands its
-  workers on (`workers/carry.ts`): a Loop in the game folder takes the turn's pool over (its run's
-  pool is the same pool re-scoped to the run, `run-pool.ts` `runPool`), so they keep going as the
-  run's; for a Loop on a copy, or a turn with a writer in the game folder, the session is told to
-  wait for them and mark their work before it launches, and the launch waits only for a writer in
-  the game folder (`LAND_WAIT_MS`); any other still at work stops, a copy's work kept on its ref.
+- **A turn that starts a Loop.** A turn whose session launches a Loop hands its workers on
+  (`workers/carry.ts`): a Loop in the game folder takes the turn's pool over (its run's pool is the
+  same pool re-scoped to the run, `run-pool.ts` `runPool`), so they keep going as the run's; for a
+  Loop on a copy the launch waits only for a writer in the game folder (`LAND_WAIT_MS`); any other
+  still at work stops, a copy's work kept on its ref.
   A pool no run takes within `CARRY_TAKE_MS`, or whose launch failed, closes. The launch takes the
   settings of the message the turn followed last (`details.followed`, `chat-dispatch.ts`
   `followedSettings`).
@@ -399,7 +394,7 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   on, those words in its history.
 - **Close and Stop.** The chat waits for a run's close (`ActiveRun.closed`, `done`, set when its
   runner returns), not for the learning pass that follows: the chat answers during that pass, and
-  a new build or a reopen waits the pass out. A resumed or reopened run's
+  a new build waits the pass out. A resumed run's
   report carries its earlier sessions' workers, rounds, verdicts and notes (`setup.ts`
   `loopRunReport`, from the last `run_finished`), its `judge_N`/`play_N` folders number on from the
   journal, and a session that kept no new round skips the pass (`run-dispatch.ts` `keptNewRounds`).
@@ -414,8 +409,8 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   a message its lead heard or gave back. An app quit gives nothing back: a message the lead never
   heard stays with its run, the chat does not answer it on its own, and a Resume tells it to the
   resumed lead. Stop during the learning pass is the run's own (`ActiveRun.stopped`): the chat's
-  next message does not set the pass going again, and a new build or a reopen that waited for the
-  pass does not start.
+  next message does not set the pass going again, and a new build that waited for the pass does not
+  start.
 
 ## After the build: the same session
 
@@ -431,16 +426,14 @@ session, or the local tool loop, with no run controls.
   the turn's record and options both take it: the message's engine, else the lead's; the model the
   message names, else on the lead's engine the lead's (`plannerModel`), so the same session goes
   on on the same model, and a Resume's lead continues it (`continuesChat`). The lead's model is
-  borrowed only on the lead's engine. A Loop that came with
-  the message does not move the turn to its planner (`turn-loop.ts` `turnModel`), and a throttled
-  turn never falls back to another engine (`delegated-turn.ts` `fallsBack`).
+  borrowed only on the lead's engine, and a throttled chat turn never falls back to another engine
+  (`delegated-turn.ts`).
 - **Its hands back.** It is an ordinary chat turn (`runDelegatedTurn`) resuming the chat's
   bookmark in the game folder, no longer read-only: each of its turns, while that run is the
   chat's latest, opens with a note in place of "pick up where you left off" (`afterLoopRunNote`) — the
   build is over, how it ended, what it keeps.
-  After a finished run with Loop off (Auto) requested work is its own, done in the game folder
-  like any chat change (preview health pass and all): no builder follow-up, no new run. With Loop
-  on it goes to the same run, reopened (below).
+  After a finished run requested work is its own, done in the game folder like any chat change
+  (preview health pass and all), or a new Loop (below).
 - **The run's controls, live.** The delegation carries `runControls {runId, messageId}`; the host
   honours it only for the chat's own session (`honouredRunControls`: never a director, builder,
   read-only session or build worktree) and adds `run_status`,
@@ -450,7 +443,7 @@ session, or the local tool loop, with no run controls.
   in `run_status`, nor a contractor building in the folder it lands into; a dirty folder is refused.
 - **Resuming a paused run.** After a paused run, on the lead's engine (`AfterLoopRun.onLeadEngine`),
   `resume_run` is bridged in as a recorded tool
-  (`interviewTools`, like a Loop chat's launch), without its `runId`: only the instruction (`text`)
+  (`interviewTools`, beside the Loop's start), without its `runId`: only the instruction (`text`)
   is taken (`resumeAsked`), so it resumes the run it answers after. The session's reply ends
   first, then the chat does it (`resumeAfterReply`) through the host's `run.control` `resume_run`, which
   records the instruction as a `run_steering` of that message and resumes the journal; a reply that
@@ -464,84 +457,16 @@ session, or the local tool loop, with no run controls.
   alone resumes nothing; Stop during the reply resumes nothing. A turn on another engine is offered
   no resume: it moves the chat's bookmark to that engine, so a later Resume from Builds seats a fresh
   lead (or the lead's own session from before the pause).
-- **Reopening a finished run.** A message the person sends with Loop on after a finished run
-  keeps its commission when the chat's own session may reopen it — a turn on the build's own
-  engine (`chat-dispatch.ts` `afterLoopRunFor`), never on another — (`reopen-run.ts`
-  `keepsCommission`); every
-  other message for a run drops it, so a paused run's is answered as with Loop off. Words the chat
-  writes itself (an `origin`: a command's result) drop theirs once a run exists, before the answering session is chosen, and
-  their run is never `reopenable`, so a question's Loop they would inherit reopens nothing either
-  (`chat-dispatch.ts` `chatWrote`); the renderer gives a command's result the chat's Loop only while
-  no build is the chat's (`loop-setting.ts` `reportCommissions`), a typed message after a finished
-  one too (`loopCommissions`). The session is handed `reopen_run {text}` first, then the Loop's
-  launch tool and `ask_user` (`sessionTools`); after any other run no launch tool is bridged. Its
-  note words the rules (`reopenRules`, `loop/reopen-run-prompts.ts`): Loop allows the build to go
-  on and never orders it. A contained change (a fix, a tweak, one feature) is the session's own edit,
-  and its report ends "Small change — made directly, no build." (`delegated-turn.ts` `reportBuild`);
-  more work records `reopen_run` once, last, editing nothing; a question is answered and reopens
-  nothing; only an explicit start over calls the launch tool, which launches a new run from the
-  folder; an unclear ask is a question with the session's estimate in each choice. A question recorded beside it wins, and a reopen beats a launch. Once the reply
-  ends the chat reopens (`reopenAfterReply`): it reads the journal, waits out the finished run's
-  learning pass, then refuses — "The build was not reopened: …" — on a Stop since (it stays
-  finished), a run under way, no journal, or a log whose latest run is not this one finished
-  (`finishedClose`; the journal is not asked, since a rewound reopen leaves it paused on withdrawn
-  work). Otherwise it rewrites the journal (`director/reopen.ts` `reopenedJournal`). The run takes
-  the Loop's time as a launch gives it, never the finished build's, always as a `goal` commission
-  (`reopenBudgets`: the hours held to the run limits, or ∞ the day's ceiling until satisfied): it
-  works until the ask is checked and the lead may finish then. The ask goes on the run as `asks`,
-  the latest first, and the lead and its judges read it ahead of the commission, winning
-  where they conflict (`goal-prompts.ts` `workingGoal`); `goal` stays what the Builds graph shows.
-  It takes the message's picks as a launch from it takes them (`reopenedRun`): the
-  finished run's stamps (`model`, `roles`, `rolesApplied`, `builderEngine`, `judgeEngine`,
-  `judgeModel`, `effort`, `preferences`, `readiness`) dropped, `model-roles.ts` `withRoles` resolves
-  the model the session answers on, the Loop's roles (`reopenAsked`: the message's commission, or
-  the question's it answers) and the message's effort and preferences (`chat-dispatch.ts`
-  `commissionedWith`, as `intakeRun`); engine and plan are kept, and the planner is the session's
-  model, else the finished planner, else `default` — never the builders'. The run drops `director.clock`,
-  `director.wake`, the last health pass, its verified checkpoints (`firstVerifiedCheckpoint`,
-  `latestVerifiedCheckpoint`) and progress review (`softReviewAt`), records `goals: null`, and takes
-  `integrationHead` from the log's close and the mark `director.reopened {at, finishedHead}`. The
-  chat records the ask (the session's `text`, else the message) as that message's `run_steering`
-  once per close for the same words — a replayed message finds the one its first answer recorded
-  since the close it reopens, never a lead's hand-over record (one with a `how`); restated words are
-  recorded anew — clears the mood board, says until
-  when the build goes on, and starts the same run through `handleRunStart` as a resume (`keepStop`)
-  whose inbox reads from the record just before the ask (`RunStart.reopen.after`, from
-  `askTheBuild`), so a steer from before it, an ask a Stop left behind too, is never told.
-  Its outcomes are the ask's: `director/journal.ts` `restoreLoopRun` reads `goals: null` as waiting
-  for the next plan (a journal with no `goals` key, from before outcomes were kept, takes its
-  plan's) and saves keep it null until set, so a Resume before the lead plans never makes the old
-  plan's parts its outcomes (nor does a kept older `journal.ts`: `director/reopen.ts`
-  `outcomesAwaitPlan` sets those aside); a goal commission with none refuses `worker_start`
-  (`director/workers.ts` `goalRefusal`), a reopened ∞ lead's first digest says to plan first
-  (`reopenClosing(goal)`), and the first plan taken posts its card and freezes its outcomes — a
-  refused plan sets none.
-  The run keeps its runId, plan, workers and defects nobody owns; this same session leads it
-  (`leadSeat`); it forks from the
-  game folder as it is now when the finished build is in it, else from the finished build
-  (`reopenCommits`); its first digest reads THE BUILD GOES ON AT, the earlier workers are the
-  finished build's, and new workers join the same Builds graph. The renderer counts its time from
-  the reopen (`RunExecution.openedAt`), forgets the first close until the next one (`forgetClose`,
-  `reopenAfterClose`), and the earlier result card offers no Resume (`superseded`). A reopen that
-  crashes still writes its own close (`closeFailedRun` counts only this session's), and a resumed
-  or reopened run whose loop dies while the app lives on is closed by the reborn loop
-  (`boot-notice.ts` `runsIn`: a run registered or started again after a close is open again — unless
-  the reborn loop runs it again itself, `runsItAgain`). A
-  quit after it registers but before the run saves its journal is repaired at boot as finished
-  (the journal still says "done"); after the save, as paused.
-- **No Loop to go on with.** A finished build no Loop can go on from — no lead seated (the long turn,
-  the classic pipeline, a gauntlet, no journal), a message on another engine than the build's (a Keep
-  building tap too), or an engine without sessions — is answered as with Loop off, and the chat says so once per finished
-  build while the loop lives (`firstLoopUnused`, `MESSAGE.loopUnused`). A Loop that worked in the
-  game folder itself (any project that isn't a web game) is not one of these: a Loop message the
-  person sends after its finished run goes to no run, as
-  [before a run exists](#intake-approval-before-a-run-exists), and the session's launch starts the
-  next Loop (`chat-dispatch.ts` `startsNextOpenLoop`). The finished run's own journal decides
-  (`director.open`), whatever the folder reads as now; the folder's kind only when there is no
-  journal. Mode still offers Loop after any finished build. Not solved, an owner decision: a chat
-  whose finished build cannot be continued (the classic pipeline or a gauntlet, as on a local model
-  without sessions) has no way to start another timed build there, since "Start a new build" was
-  removed.
+- **More work after a finished run.** A finished build is never started again. The chat's own
+  session is handed `start_autopilot` as every chat turn is (`delegated-turn.ts` `launchFor`): it
+  makes a contained change itself and, for more than a reply holds, starts a new Loop from the game
+  folder as it is now (`chat-dispatch.ts` `launchOrSayWhy`), a run of its own on the Builds graph.
+  **Keep building** sends the finished build's open gaps as an ordinary message
+  (`keep-building.ts` `keepBuildingAsk`), which the session answers the same way. After the long
+  turn, the classic pipeline, a gauntlet or a run with no journal the chat's turn is a plain one
+  with the same Loop start; an engine without sessions (Ollama) is handed none, and answers and
+  edits. The finished run's own journal decides whether its Loop led in place (`director.open`),
+  whatever the folder reads as now; the folder's kind only when there is no journal.
 
 ## Sending and rewinding
 
@@ -579,8 +504,7 @@ every agent-edited file reads the shortened conversation; the renderer also read
 Resumed sessions keep their id and remember the withdrawn turns, so metadata `contractor` is
 cleared, and the harness view drops session
 ids recorded before the rewind (run mirrors' always, rewound or not). Held follow-ups are removed
-through the queue and return to the composer with the message. The harness `rewind` action
-(capability `rewind`) only resets the in-memory Loop mood board.
+through the queue and return to the composer with the message.
 
 Before each processed message main saves the game folder: `events.append` starts the checkpoint
 and `turn.begin` waits for it (30 s at most; a late one is not kept), so the queue lock is never
@@ -680,59 +604,41 @@ conflict given to a worker, a conflict worker that leaves markers, the studio's 
 (its uncommitted edits committed as its work, the game folder played from a worktree), showing, landing and changing the game
 after a finished run, a paused run a question leaves alone and an instruction resumes with
 the same lead, a message sent during that resuming reply held for the resumed run, Stop in that
-window keeping it paused, and a message naming no engine or another engine — the chat's own
-session there with the run's controls (S10), and with Loop on no reopen (S7b, S10b) — and a
-finished run reopened with Loop on — one
-run, a fresh budget, the same lead, no steer from before the ask, forking from the folder as
-changed since — beside a start over that launches a new run and a question that reopens nothing
-(S11–S13);
+window keeping it paused, a message naming no engine or another engine — the chat's own
+session there with the run's controls (S10) — and after a finished run a Loop the session starts
+as a new run and a question that starts nothing (S12, S13);
 `after-loop-run.test.ts` (A1–A14) which runs the chat's own session answers after and on which
 engine and model, its note, its grant, its recorded resume (hostile rows too), the hold and Stop,
-and the reopen's tools, rules, recording (the Loop's roles too), fallback and model;
-`reopen-run.test.ts` (R1–R11) the reopen's budgets and policy, eligibility, the message's picks
-(R3; R11 against a start over from the same message), journal rewrite, refusals, learning-pass
-wait, rewound reopen, a replay's ask and cursor once per close (R8, R8b), the queue-to-run path,
-a command's result (R9c); `director-journal.test.ts` (K18–K28)
-the reopened run's clock, fork, journal read-back, words and worker ids, and its outcomes: set by
-its plan for the ask, the finished run's never gating a build reopened with hours, asked of its
-plan again by a Resume before it plans; the art director's review and once-only turned-back finish
-are per commission (K28); `command-report.test.ts` and `composer-model.test.ts` a
-command's result's Loop (`reportCommissions`); `chat-feedback.test.ts` one row per run control;
+and the Loop's start beside them; `chat-feedback.test.ts` one row per run control;
 `lead-sessions-host.test.ts` covers the lead's grant, lock and bookmark on the host, hostile roots
 and links too, and the run's controls (only for the chat's own session, the asker's own hold, a
 dirty folder, another run); `harness-incidents.test.ts`
 OS1–OS6 the markers a conflict worker leaves, a lead's uncommitted edits committed as its work, a first turn refused while the
 lead's lock is held, and a landing over the game folder's uncommitted changes (named, blamed on
-nobody, a merge of the user's own under way never undone), and a run started again after a close of its own (a crashed reopen still
-closes, and a loop crash under it too, RO3; its inbox from the ask on, RO2 after a replay and
-beside a lead's record of the same words); RO1 a reopened build's outcomes, RO4 its picks, RO5c–RO5e
-a Loop message after a build whose lead was a session of its own (a question, no lead seated, a
-model without sessions) and RO6 a command's result; NC1–NC5 one session answering every message (a
-classic paused build, a lead of its own, another engine, Ollama, and a message sent while a Loop
-prepares, handed to the lead alone). The Electron build smoke exercises Send during an active build, graph
-preservation, and a finished chat's Mode back on its own Loop, with no new-build choice, without
-paid model calls.
+nobody, a merge of the user's own under way never undone), and a run started again after a close
+of its own that a loop crash left open (RO3, RO3b); RO5c–RO5d a message after a build whose lead
+was a session of its own (a question, no lead seated) and RO6 a command's result; NC1–NC5 one
+session answering every message (a classic paused build, a lead of its own, another engine,
+Ollama, and a message sent while a Loop prepares, handed to the lead alone); the always-launch rows
+every chat turn handed the Loop's start, and no direct engine. The Electron build smoke exercises
+Send during an active build, graph preservation, and a composer with no Mode button, without paid
+model calls.
 
 ### Intake approval before a run exists
 
-Before a run exists, a Loop message goes to an ordinary contractor session in the game folder
-(the Auto chat's brief, tools, capture and host tools) with the launch tool (`start_autopilot`,
-or `start_unattended_run`) and `ask_user` bridged in. It answers, researches, writes plans or
-edits the game itself and launches a build only when the ask is to build or substantially change
-the game (`loop/launch-prompts.ts`): Loop grants a build budget, not an obligation. A wish for speed
-does not make a new game a contained change. Before it launches, the session must know what the
-game is and how it should look, from the conversation, attached stills or the game in the folder;
-when either is missing it asks one `ask_user` question with a recommended answer, even when the user
-asks for speed, and launches after the answer (the question the write-less interviewer used to
-ask). The direct engines' briefing (`turn-prompts.ts`) carries the same rule. With Loop off (Auto),
-the chat's own turn has `start_autopilot` bridged in too (`delegated-turn.ts` `autoLaunchFor`; never in
-a run's turn), for a Loop the user
-asks for in words: its `hours` argument is the hours they named, none runs until done
-(`auto-loop-prompts.ts` `autoLoopRule`), and the chat never says a Loop started unless that call
+Every chat turn goes to an ordinary contractor session in the game folder (its brief, tools,
+capture and host tools) with the Loop's start, `start_autopilot` (`loop/start-autopilot.ts`),
+bridged in as a tool it may call or not (`delegated-turn.ts` `launchFor`; never in a run's turn). An
+engine without sessions is handed none: the tool lives outside `tools/`, so the direct engines'
+tool loop never lists it. The tool's description says what a Loop is and that it starts from the
+folder as the reply leaves it; when to call it is the agent's own decision, and no rule asks it to
+wait for the person's words. It answers, researches, writes plans or edits the game itself, or
+starts a Loop for more than a reply holds, and the chat never says a Loop started unless that call
 answered. A recorded
+question is asked (after the preview health pass when game sources changed);A recorded
 question is asked (after the preview health pass when game sources changed); a recorded launch
-starts from the folder as the session left it; a turn that records neither is reported like an
-Auto chat build. A non-launching turn that changed game sources takes the preview health pass and a
+starts from the folder as the session left it; a turn that records neither is reported as a chat
+build. A non-launching turn that changed game sources takes the preview health pass and a
 `build_observation`; one that only wrote docs/ or Markdown (a plan, research notes) takes neither
 (`game.contentStamp` `split`: both stamps from one walk). Nor does any turn on a game that is no web
 page (`holdsWebGame` in `loop/web-game.ts`): one linked to an Unreal project (`engine` on its
@@ -749,15 +655,14 @@ Unreal ones (`loop/unreal-prompts.ts`), with no capture tool, window or web chec
 tools, guidance and connectors by the game's facts ([scope by facts](plugins.md#scope-by-facts)): no
 web-only skills, and the Unreal editor's tools only for a game that holds an Unreal project. A game with
 no kind yet, on any fresh brief until it has one, while an engine plugin offers a kind (`plugins.tools`'s `kinds`), is
-briefed to ask Web or that engine first, unless the message names one, with `ask_user` bridged in even with Loop off,
+briefed to ask Web or that engine first, unless the message names one, with `ask_user` bridged in,
 and each kind offered by the readiness its plugin gives the host (`kinds[].ready`, `note`; Unreal's
 from `engine-status`); the recorded
-question is asked like a Loop chat's, and the next turn resumes the same session, which calls
+question is asked, and the next turn resumes the same session, which calls
 `unreal__new-game` for Unreal. A chat turn whose game's served facts changed (a port, or files it
 wrote) goes on by itself in the same session, with the tools and a fresh brief writer for the new
 kind (`continueOnNewFacts`, [plugins](plugins.md#scope-by-facts)), told to go on with what it said
-it would build; with Loop on it is told instead to decide by its Loop rules and to start a build of
-the game with its launch tool, never building it itself (`factsReadyPrompt`); when the new kind's plugins hook
+it would build (`factsReadyPrompt`); when the new kind's plugins hook
 `health` (an Unreal project linked or switched), it first waits until nothing is pending. A delegation that gave
 a game with no kind its kind by files it wrote tells the app the game changed when it ends. The health pass waits on the page's own readiness (`preview.ready`
 with `gesture: false`, so the user's window is never clicked): up to the project's boot budget
@@ -771,12 +676,9 @@ which the [evals](evals.md) read as time to first preview. `buildInterviewBrief`
 interview of older harnesses, stays exported because a seed upgrade keeps an edited
 `delegated-turn.ts`.
 
-A follow-up such as “nice recommendations, keep going” retains the explicitly selected
-Autopilot/Loop mode and its launch tool when no run exists. Text matching alone must not strip
-launch authority from an unfinished Loop chat. Once a run exists, a follow-up carries no launch
-tool — the chat's own session after the run — except beside the chat's own
-session's reopen of a finished run, for an explicit start over
-([reopening a finished run](#after-the-build-the-same-session)), and never commissions a
-duplicate run.
+A follow-up such as “nice recommendations, keep going” is handed the Loop's start as every chat
+turn is (`intake-continuation.test.ts`); no text match takes it away. While a run is under way a
+follow-up goes to its lead; after the run the chat's own session has the Loop's start again, for a
+new run, and nothing commissions a duplicate run while one owns the project.
 
-The Loop chat uses `ask_user` for necessary questions. The question card answers on one press of an answer button (⌘↩ presses the recommended one), and the composer takes custom text. The selected answer remains an ordinary durable user message, and commission settings are restored from the question artifact for that reply; reference images are not duplicated in the chat context. No worker or native provider turn waits while the question is open. Routine decisions, repairs and failure reports never become answer forms. Handoff/session bookkeeping is recorded as `contractor_handoff` diagnostics rather than assistant prose.
+A chat asks with `ask_user` when it is handed it (a new game's engine question). The question card answers on one press of an answer button (⌘↩ presses the recommended one), and the composer takes custom text. The selected answer remains an ordinary durable user message; reference images are not duplicated in the chat context. No worker or native provider turn waits while the question is open. Routine decisions, repairs and failure reports never become answer forms. Handoff/session bookkeeping is recorded as `contractor_handoff` diagnostics rather than assistant prose.

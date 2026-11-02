@@ -284,10 +284,10 @@ the [feature map](feature-map.md). A file a chat names links once main confirms 
 (`renderer/chat-files.ts`, `main/chat-files.ts`); programs are only shown.
 
 **Composer.** What the composer's controls show is specified in the
-[prompt composer design](design.md#prompt-composer). Each chat keeps its own Loop
-(`storageKeyFor.threadLoop`, [`loop-setting.ts`](../../src/renderer/loop-setting.ts)), pinned on open
-from the last pick (`studio.composer.loop`, `studio.autopilotHours`); Mode around a build is in the
-[feature map](feature-map.md) (∞ is `budgets.untilSatisfied`, its 24 h `wallClockMs` a ceiling). The
+[prompt composer design](design.md#prompt-composer). It has no Loop control: a send carries
+text, pictures, plan review and the message's `roles`, and the chat's agent decides whether to start
+a Loop (`start_autopilot`), which runs `budgets.untilSatisfied` under a 24 h `wallClockMs` ceiling
+(`chat-dispatch.ts` `LOOP_BUDGETS`). The
 permissions pill (`ComposerPermissionMenu`) sets a Claude chat's mode. A
 saved `fast` preference is dropped. One composer effort (`ComposerEffort`,
 `effortScale`/`unifiedEffort` over the orchestrator's levels) is mapped per role by `nearestEffort`
@@ -438,9 +438,9 @@ critic: `roleEngine(run, role)` names the engine and `modelOn`/`plannerModel` a 
 knows. The lead (session engines only) stays on the
 orchestrator's engine; workers go to the workers' engine; second opinions and reviewers go to the
 judges' engine. A worker's `usage_limit`/`rate_limit` becomes `state.workerLimit` (never
-`state.limit`, which pauses the run), reported as `workersEngineLimit`. A reopen resolves its
-message's picks with `withRoles`, planned on the session's model (`reopenedRun`). An unready provider's remembered pick is kept; a Loop send with it is
-refused (`requireAvailableRoles`). Stored roles are versioned; another preset table's record is
+`state.limit`, which pauses the run), reported as `workersEngineLimit`. An unready provider's
+remembered pick is kept, and a send carries it in its `roles` without blocking the message: a role
+model that is missing never stops the chat. Stored roles are versioned; another preset table's record is
 replaced once. `tests/conformance/director-cross-engine.test.ts` runs a crossed run end to end.
 
 **One engine voice.** `toolCall(engine, name)` and `toolSyntax(engine)` in the seed's
@@ -583,21 +583,21 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
   whose turn changed something is woken again at once); each wake appends `director_continued`.
 - The full journal (`loop/director/journal.ts`): each save writes the run's record on
   `journal.director` (clock with `workedMs`, health, recent log, wake state). A Resume gets the
-  working time left (`loopRunClock`, paused time excluded), a reopen (`director/reopen.ts`) a fresh
-  clock, and reads the rest back (`restoreLoopRun`).
+  working time left (`loopRunClock`, paused time excluded) and reads the rest back
+  (`restoreLoopRun`).
 - The chat's messages reach the lead as written, each with its sender, once per steer and run:
   mid-turn one steer each, and after a cut the resume of one sender's words at a time (the
   person's `from: person`); Genex's own messages and lines said into a turn go `from: genex`
   (`MessageFrom`), which each engine shows as not the person's. A wake's digest still carries them
   under THE USER SAYS.
 - Live chat (`loop/live-chat.ts`, `director/lead-line.ts`) and one session
-  (`director/lead-session.ts`, `after-loop-run.ts`, `reopen-run.ts`, the host's `#leadRoot`): the
+  (`director/lead-session.ts`, `after-loop-run.ts`, the host's `#leadRoot`): the
   lead is the chat's own session, one per chat, which goes on after the close
   ([live chat](../conversation-lifecycle.md#live-chat-during-a-build),
   [after the build](../conversation-lifecycle.md#after-the-build-the-same-session)).
 - Each turn of the lead's session ends with a host-written `session_activity` (`completed`,
   `interrupted` or `failed`), never a `turn_ended`, so the chat shows the build between turns.
-- The hours are a soft cap (`loop/time-cap.ts`); both closes are one function (`closeTheLoopRun`).
+- The Loop's time is a soft cap (`loop/time-cap.ts`); both closes are one function (`closeTheLoopRun`).
 
 **Refs and the user's repository.** Everything a run must find later lives on the studio's refs:
 `refs/studio/runs/<runId>/integration`, its workers' copies' refs and `refs/studio/snap/<id>`
@@ -1084,7 +1084,7 @@ Scope and commands are in [verification](verification.md). Suites that hold the 
 | UI events and custom events | `ui-events.test.ts` |
 | Seed copies and the provider table | `seed-contracts.test.ts`, `providers.test.ts` |
 | Engine voice and crossed roles | `engine-voice.test.ts`, `director-cross-engine.test.ts` |
-| One session: the lead is the chat's session | `director-one-session.test.ts`, `after-loop-run.test.ts`, `reopen-run.test.ts`, `lead-sessions-host.test.ts` |
+| One session: the lead is the chat's session | `director-one-session.test.ts`, `after-loop-run.test.ts`, `lead-sessions-host.test.ts` |
 | Renderer stores and words | `renderer-state.test.ts`, `words.test.ts` |
 | Harness loop incidents | `harness-incidents.test.ts` (`npm run verify:harness`) |
 | Boundaries and import cycles | `npm run verify:architecture` |

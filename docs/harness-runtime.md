@@ -121,8 +121,7 @@ for what needs no run, the wake loop that drives the lead's session — `wake.ts
 `wake-schedule.ts` (when it is woken, a pure leaf) and `wake-prompts.ts` (what it is told) — and
 the full journal — `journal.ts` (the run's record every save writes to the run journal, the
 clock a Resume keeps, and what a resumed run reads back) — and one session — `lead-session.ts` (whose session the lead is, and the
-chat's bookmark), and `lead-session-prompts.ts` (the chat's own session as lead, building in the integration worktree) — and a finished build reopened — `reopen.ts` (the journal
-the chat rewrites, where the run forks) and `reopen-prompts.ts` (its words) — the parts never import `director.ts`, which re-exports it) — and share
+chat's bookmark), and `lead-session-prompts.ts` (the chat's own session as lead, building in the integration worktree) — the parts never import `director.ts`, which re-exports it) — and share
 primitives instead of copies of them: `git.ts` builds and runs every git command line (a
 conformance test finds no other), `health-check.ts` is the one health check (the host's `preview.observe`, in a window of its own),
 `config.ts` holds the shared waits and the light effort a
@@ -379,8 +378,8 @@ held, records the round's `checking` step, runs the reviewer as `engine.delegate
 `readOnly` and `reviewer {runId, reads}`, reads its yes or no (`reviewerVerdict`,
 `shared/finish-check.ts`) and holds it until the harness settles the round (`finish.settle`). The
 harness may settle a held answer as no answer (a yes that lapsed, a turn that ended), never as a
-yes; the host counts the no's in a row from its own records (`rejectionsInRow`, since the run was
-last opened: a reopened run starts over, a resumed one goes on), writes the outcome, and no row of no's stops a Loop: a no records `timeLeft` when the settle names
+yes; the host counts the no's in a row from its own records (`rejectionsInRow`; a resumed run goes
+on counting), writes the outcome, and no row of no's stops a Loop: a no records `timeLeft` when the settle names
 working time left (`timeLeftMs`, from `time-cap.ts` `timeLeftOf`; an ∞ Loop names none). A run's start, pause or close drops its held round: a review or settle still
 waiting then records nothing more and starts no reviewer. `finish_check` is a
 host-only record: a harness batch carrying one is refused whole. The
@@ -417,12 +416,9 @@ own reason and Resume. A Stop while a web Loop first looks at the game ends that
 the host's whole deadline, and the run closes as the user's stop instead of waiting it out. Keep
 building is offered on the
 chat's newest card until the person writes again, and on Builds' newest ended build, while nothing runs
-or waits paused. It sends through the composer's Loop (`loopOn`) marked `keepBuilding`, and goes once
-it went out. That mark reopens the finished build, or launches the next Loop as the launch tool would (an
-Autopilot run on the base goal plus what is left, its reference, ∞ under `MAX_RUN_HOURS`), with no
-turn deciding (chat-dispatch.ts `keepBuildingNow`); a tap always takes a turn of its own. On another
-engine than the build's it reopens nothing: like a typed message there, it is answered as with Loop
-off. A review
+or waits paused. It sends what the build left undone as an ordinary message (`keep-building.ts`
+`keepBuildingAsk`), and goes once it went out; the chat's own session answers it as any message, so
+it may start a new Loop or make the change itself. A review
 is asked only with `review=yes`: yes ends the Loop, and a no goes back to the lead with both and
 decides nothing (the host still counts the no's, which close nothing); after `MAX_FINISH_REJECTIONS`
 (3) in a row, a review asked on proof that names no file made since the last no is turned back before
@@ -439,8 +435,7 @@ turn ends while the run goes on (`abandoned`) is settled as no answer, and eithe
 reviewer is stopped (`engine.abort {reviewer}`). A yes the caller finds no longer stands (`lapsed`) is
 settled as no answer, the count untouched. The caller keeps the
 `FinishTally` in its journal (`tallyOf`, saved as a round starts), so a resumed Loop goes on
-counting; a finished run reopened for a new ask starts its no's over, its round numbers going on;
-a round's number also goes on past the newest the run's log holds, whatever journal kept the count.
+counting; a round's number also goes on past the newest the run's log holds, whatever journal kept the count.
 Chat turns get no check.
 
 The leads claim through `finish`. A web lead's `finish` (`director/integrate.ts`) needs a summary;
@@ -468,7 +463,8 @@ turns, carried lines) and the run's worker pool (`runPool`, the Workers role, th
 one git-write queue for its merges and the lead's saves, a worker's end a `worker_ended` line). No
 scaffold, contract, preview, ledger or integration worktree: `integrationWorktree` is the game folder
 and the journal's `integrationHead` is null, so the host reads the folder for the run's files, and
-after the Loop the chat's own session keeps `run_status` alone (`runControls.inPlace`), never a reopen.
+after the Loop the chat's own session keeps `run_status` alone (`runControls.inPlace`), and starts a
+new Loop for more work.
 `run.prepare` fires as for any run; a plugin's block closes the Loop before any turn with its reason
 and "Then start the Loop again." (a resumed Loop stays paused, its working time as it was, also on the
 app's clock through the close's `workedUntil`, and Genex's own hold says to press Resume), keeping
@@ -575,11 +571,11 @@ one with no session of its own (Ollama) closes at once saying it needs one (`Run
 (`RunnerKind.WebOnly`). A resume
 refused at its start stays paused and keeps its earlier report (`refusedRun` writes its close over the
 latest one, keeping only what was built, `KEPT_ON_REFUSAL`: never how that session stopped, its provider
-limit included; a refused reopen of a landed build keeps its outcome and the chat says why). A journal the host can't read, or a game list it can't give, refuses
+limit included). A journal the host can't read, or a game list it can't give, refuses
 the run with words (a resume stays paused), and the refusals name what makes the project's Loop work
 in place (`openLoopBecause`). A resume goes on in its journal's profile (`resumedProfile`): a Loop that worked in place goes on in place whatever the folder reads as
 now; any other journal is a web Loop's, and on a folder that reads otherwise stays paused (a
-finished one's reopen is refused before any promise, and a Loop message starts the next Loop there), its journal untouched;
+chat's Loop start makes a new Loop there after a finished one), its journal untouched;
 a run the Unreal runner paused (`kind: "unreal-lead"`) is such a journal. A Loop in place runs no self-improvement pass, and Genex's `web.ready` gate reaches only a web
 game's Loop. ∞ runs an open Loop until a reviewer accepts its finish, 24 hours at most: the lead may
 claim at any time, a lead that ended a turn rests, and a time-out with no yes closes in the Loop's own words with
@@ -910,13 +906,14 @@ wrap-up invites no claim). `finish user_asked=` still stops everything at once. 
 `wrap_up` too, and starts no worker once anybody asked to finish; its wrap-up starts when the turn
 that recorded the ask ends.
 
-An ask to stop and start a new Loop is `wrap_up` with `next_goal` (and `next_hours` when named):
+An ask to stop and start a new Loop is `wrap_up` with `next_goal`:
 the new Loop rides on the same `run_control` record (`next-loop-record.ts`), and once the run has
 closed `handleRunStart` starts it on the same game with the run's engine, model and roles, as a
 launch from the chat would (`next-loop.ts`); a Stop pressed since starts nothing. Outside a run, the
-chat's own turn always holds the Loop's start for one asked in words (`delegated-turn.ts`
-`autoLaunchFor`), with the Loop switch on or off and after a run it led, finished or paused: the
-hours named win, else the switch's, else until done.
+chat's own turn always holds the Loop's start (`loop/start-autopilot.ts`, `delegated-turn.ts`
+`launchFor`), after a run it led too, finished or paused; the agent decides when to call it, and
+every Loop it starts goes until its lead finishes, under the day's ceiling (`chat-dispatch.ts`
+`LOOP_BUDGETS`).
 
 Worker plugin approvals are recorded in the run owner's conversation, resolved from host
 call attribution and persisted run starts. The original worker remains the cancellation
@@ -926,7 +923,7 @@ Codex engine home, never inside it, where a folder would read as a sign-in, or l
 markers) are released before a session starts in that folder, with hostile-path checks.
 The first independently verified milestone and latest checkpoint are retained in the journal
 and report, with immutable Git refs so later integration and cleanup cannot discard them. A one-time 30-minute review reports verified outcomes and blockers without ending
-healthy work. A reopen earns the checkpoints and the review anew. Existing Show build and safe
+healthy work. Existing Show build and safe
 landing operations can recover the saved commit;
 Stop does not overwrite the game folder.
 

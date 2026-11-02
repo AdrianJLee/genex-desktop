@@ -89,10 +89,6 @@ is product copy, not this glossary.
   session answers the chat with its hands back and the run's controls — `run_status`,
   `show_build`, `land_build` (`runControls`) and a paused run's recorded `resume_run`
   (`loop/after-loop-run.ts`).
-- **Reopen**: a finished build whose journal seated a lead, started again as the same run when a
-  Loop message asks for more: the chat's own session, on the build's own engine, records
-  `reopen_run` (workers and judges then take the message's picks); the chat rewrites the journal with the Loop's fresh budget (`loop/reopen-run.ts`,
-  `loop/director/reopen.ts`).
 - **Run journal**: the durable artifact `autopilot_<runId>` a run resumes from. A director run
   keeps its whole record there (`loop/director/journal.ts`): the time it has worked, so a Resume
   goes on with what the budget has left, the log and the wake loop's state.
@@ -167,18 +163,19 @@ Every project's Loop is the director's wake loop, in one of two profiles (`LoopP
   `finish_check` record (`src/main/core/finish-review.ts`). A yes closes the run as reviewed; a no
   goes back to the lead and decides nothing. Builds draws it as Checking, Not yet, Done or Stopped
   (`FinishCheckState`, `FinishLook` in `src/renderer/run-tree.ts`).
-- **Soft cap**: a timed Loop's hours (`loop/time-cap.ts`): a heads-up 15 minutes before, time's up
+- **Soft cap**: a Loop's time (`loop/time-cap.ts`): a heads-up 15 minutes before, time's up
   at the cap (no new workers then), 15 minutes' grace (`GRACE_MS`), then Genex closes it with what
   is and isn't done ("not checked by a reviewer" when no claim reached one since it last opened);
-  an ∞ Loop's cap is 24 hours. The lead's finish ends it early.
+  a Loop the chat starts runs until its lead finishes, under a 24-hour cap (a timed Loop from an
+  older version keeps its hours). The lead's finish ends it early.
 
 ## Three meanings of "loop"
 
-- **Loop mode**: the composer switch that makes a message start a run (after a finished build that
-  seated a lead, reopen it)
-  (`src/renderer/ui/ComposerModeMenu.tsx`; `src/renderer/ui/PromptBar.tsx` sends it as
-  `autopilot`). UI "Auto" means Loop off. The UI calls the roles Main agent (orchestrator),
-  Workers and Reviewers (judge); run copy says the lead, workers and reviewers.
+- **The Loop's start**: `start_autopilot` (`src/harness-seed/loop/start-autopilot.ts`), handed to
+  every chat turn on an engine that keeps a session; the agent decides when a request needs a Loop,
+  and the composer has no switch for it. The UI calls the roles Main agent (orchestrator), Workers
+  and Reviewers (judge), sent as the message's `roles`; run copy says the lead, workers and
+  reviewers.
 - **The `loop/` folder**: the harness's policy modules (`src/harness-seed/loop/`).
 - **The Loop**: a run, its lead's session and the workers it may start (above).
 

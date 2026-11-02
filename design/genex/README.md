@@ -122,7 +122,7 @@ Workers remain compact 32px rows with 6px insets/gaps, named tasks and disclosed
 Successful tools need no repeated status. Code uses mono; tool labels, filenames and prose
 use the body font. A shown path is not repeated in the result.
 
-Working status belongs to the chat's own work (a turn, a plan, Stop, a pending permission). While only a build runs, chat shows one build card instead, and nothing under it: an 8px-inset 16px-radius composer-colored surface with the lead's latest non-black frame (88×55, 10px radius, omitted until one exists), "Building" and a chevron at 15px, one line of what is happening now at 14px ink-3 (the part at work, "and N more" when several are, else what the lead is doing — never "Running a tool"), and its clock on the right at 14px: the elapsed time, and under it in ink-3 the most it was given ("up to 10h", a cap, never "of 10h": a build may finish inside it; an ∞ build shows only the clock). The finished build is the same card: its capture, the outcome and chevron, one line of failed checks, parts added and duration ("4 parts added · 5h 17m"; orange and led by "1 check failed" when one failed), and Play on the right in the model pill's fill (`pill-quiet`, as every result button, “See it” included) with a filled play glyph. Nothing wraps under it. The whole card is one button to the build's graph on Builds (its title stretched over the card, tooltip "Open in Builds"): the pointer on it steps the card to composer-panel with a line-strong ring and inks the nudging chevron; keyboard focus rings the card in accent; Play sits above it, and the pointer on Play leaves the card unlit. Studio learning after a build is a static line. The composer placeholder during a build reads "Talk to the lead while it builds…" when its lead takes the chat (live chat), else "Sends when the build finishes…". A message sent during a build never takes the card's place: one the lead takes opens above the card, any other waits below it, and the card holds still. The card stands 32px below the last line above it.
+Working status belongs to the chat's own work (a turn, a plan, Stop, a pending permission). While only a build runs, chat shows one build card instead, and nothing under it: an 8px-inset 16px-radius composer-colored surface with the lead's latest non-black frame (88×55, 10px radius, omitted until one exists), "Building" and a chevron at 15px, one line of what is happening now at 14px ink-3 (the part at work, "and N more" when several are, else what the lead is doing — never "Running a tool"), and its clock on the right at 14px: the elapsed time alone (a Loop runs until its lead finishes, so the card names no cap). The finished build is the same card: its capture, the outcome and chevron, one line of failed checks, parts added and duration ("4 parts added · 5h 17m"; orange and led by "1 check failed" when one failed), and Play on the right in the model pill's fill (`pill-quiet`, as every result button, “See it” included) with a filled play glyph. Nothing wraps under it. The whole card is one button to the build's graph on Builds (its title stretched over the card, tooltip "Open in Builds"): the pointer on it steps the card to composer-panel with a line-strong ring and inks the nudging chevron; keyboard focus rings the card in accent; Play sits above it, and the pointer on Play leaves the card unlit. Studio learning after a build is a static line. The composer placeholder during a build reads "Talk to the lead while it builds…" when its lead takes the chat (live chat), else "Sends when the build finishes…". A message sent during a build never takes the card's place: one the lead takes opens above the card, any other waits below it, and the card holds still. The card stands 32px below the last line above it.
 The current status names the latest running tool, falling back to the actual task. Explicit
 reply, tool and waiting phases retain priority. The live status line (home's Naming and Opening
 too) is 12/18 type after a 14px halftone plasma orb (the Live loader's, `ui/StatusOrb.tsx`), 8px
@@ -678,7 +678,7 @@ new drawing (a loading, empty or being-made state, an icon with depth) follows t
 With no runs, Activity shows only that empty state, centred: **A self-improving harness**, “Runs and
 improvements will show up here.” and **Start building** (the last game chat, composer focused), or
 **New game** when the library is empty.
-Timed runs start from the composer's Mode menu. **Settings → Harness** holds **Maximum concurrent workers**
+Loops start from a game's chat. **Settings → Harness** holds **Maximum concurrent workers**
 and **Apply suggestions automatically** with how suggestions are tested. The evaluation explanation
 distinguishes instruction comparisons from game-quality evidence.
 Use the existing content font for Harness prose and controls, code font only for technical text,
@@ -716,8 +716,7 @@ explained once under the list.
 The welcome (`renderer/onboarding/`, styles in `styles/onboarding.css`) is one full-window layer
 in the app's own roles, above the inert shell and below dialogs, so the Codex sign-in window can
 open over it. The Genex wordmark is 142px wide. The welcome's composer is a copy of the game
-composer: the same panel, Add circle, borderless ∞ Loop button (as the bar appears its ∞
-draws itself once and a light passes over the word once) and Send circle. The first step waits
+composer: the same panel, Add circle and Send circle. The first step waits
 1.4 s with a blinking caret, types 50 ms a letter, lets the prompt be read, then the pointer moves
 to Send and presses it. Its stage is a fixed 760×380 drawing scaled between 0.5× and 1.2× to fit;
 the second step shows **Your agent leads** (the prompt lands on a translucent sheet in midair; a pen
@@ -800,7 +799,7 @@ this Mac?") with Cancel, which takes focus, and a destructive Delete. Closing or
 jobs. Harness holds **Maximum concurrent workers** (a ceiling the lead chooses under, default 4, maximum 8: the pool's own limit)
 and **Apply suggestions automatically** with how suggestions are tested. The game model list's
 Add more models opens Model Providers. First-launch and Studio setup links open the corresponding
-section. Timed runs start from the composer's Mode menu; MCP stays in Plugins. Permissions lists
+section. Loops start from a game's chat; MCP stays in Plugins. Permissions lists
 the always-allow rules chats saved, under each game's title: one mono rule per row with a ghost
 trash button, **Stop allowing** (focus moves to the rule taking its place); with none, one ink-3
 line says Always allow in a chat adds one. Each chat's mode stays in its composer.
@@ -824,7 +823,7 @@ choice is saved apart from game chats (it starts from the last game pick once) a
 the model new games inherit. It accepts image drop/paste and has no Loop, permission, tool or
 context-ring controls. Provider setup is offered when no model is available.
 
-The game composer has one text area and one toolbar: a filled 30px Add circle, a Mode pill, the
+The game composer has one text area and one toolbar: a filled 30px Add circle, the
 permissions pill (Claude orchestrators only), flexible space, a 16px context ring (2px stroke), a
 model pill naming the orchestrator, an effort pill, and one 30px Send/Stop circle. With no AI model
 at all (home or a game), the model pill's place is **Connect AI model** in the accent tint, which
@@ -883,7 +882,7 @@ The permissions pill shows one glyph per mode: shield (Auto), help (Manual), pen
 edits), plan (Plan) and shield-off (Bypass permissions, orange in the pill and its row). Auto is
 the glyph alone, its tooltip "Auto permissions"; another mode adds its label. The model's name keeps
 its room (`ui/toolbar-fit.ts`, measured): when it would be cut short the label goes first (the
-tooltip names the mode), then Mode's ∞ or time, then in the narrowest chat the pill (never Bypass). Its 360px panel opens
+tooltip names the mode), then in the narrowest chat the pill (never Bypass). Its 360px panel opens
 above, start-aligned, and shifts to stay over the chat, never the native game. Under a
 **Permissions** label, five rows in Claude Code's order show glyph, label, one ink-3 description
 line, a check on the current mode and number hints 1–5 (digits pick while it is open; arrows,
@@ -892,17 +891,11 @@ Auto, its line says Claude asks first. Its Plan is Claude Code's plan mode (it r
 separate from Add's Plan mode (the studio's plan review), and shows no bulb. Choosing Bypass opens "Bypass permissions?" (it acts
 anywhere on this Mac, "this computer" on Windows and Linux; Rewind restores only the game folder)
 with ghost Cancel focused and a destructive **Bypass permissions**; focus returns to the pill.
-Mode holds Loop mode, one control: Off, ∞ (until the build passes), 30 m, 1 h, 2 h
-and Custom. Custom shows a ±15-minute stepper that also accepts typed times ("1h 15m", "90m",
-"1:45") from 15 minutes to 24 hours. The trigger says **∞ Loop** (the ∞ draws itself once as
-it is picked), the limit in muted mono before the word (**2h Loop**, **1h15 Loop**) or **Auto** when
-off. Segments and stepper sit in a darker well, in mono.
-While the chat's build runs or is paused, Mode names that build's limit, does not open and is dimmed
-to 45% like a disabled composer icon, in both themes; after a finished build it is the chat's own
-Loop again (Off: "Each message runs one turn."). There is no new-build choice.
+There is no Mode button: the chat's agent decides when a request needs a Loop, so the toolbar
+offers no Loop switch or time limit, with or without a build.
 The model panel (300px) lists three jobs as rows: **Main agent**, **Workers** ⓘ and **Reviewers** ⓘ,
 each naming its model with a ›; the ⓘ tooltips say what the job does and close when the pointer
-leaves. Workers and Reviewers always read quieter and stay choosable in Auto and Loop. A row opens
+leaves. Workers and Reviewers always read quieter and stay choosable. A row opens
 its model list (240px) to the right of the panel, else its left, else above; over a running game
 the game hides while the list is open. The list groups
 models under ChatGPT, Claude, then Local models, each group's name
@@ -1064,10 +1057,9 @@ It does not sign into a real account or download model weights.
 Use `node tests/e2e/run-promptbar-ui.mjs` for composer behavior changes; a local visual edit
 can use a focused rendered review instead. It uses production components
 with deterministic gallery models and tests the composer metrics (30px Add/Send, 7px bottom
-inset, 26px radius), tooltips, Plan mode, the Loop control (presets, Custom stepper and typed
-times, arrow keys, Off keeping the saved time), toolbar order (ring, model, effort, Send), no Fast
-control, the roles panel (Orchestrator/Workers/Judge rows, ⓘ tooltips, quiet Loop-off rows with
-Turn on), the side model list (focus, groups, Add more models, chat-side placement, arrow keys,
+inset, 26px radius), tooltips, Plan mode, no Mode button in any build state, toolbar order (ring,
+model, effort, Send), no Fast control, the roles panel (Orchestrator/Workers/Judge rows, ⓘ tooltips,
+quiet worker and reviewer rows), the side model list (focus, groups, Add more models, chat-side placement, arrow keys,
 Escape closing the list before the panel), the effort slider (keys, pointer snap, nearest level per
 role), context-window preferences and plan limits (order, roles, levels, usage link), Add density,
 plugin status actions and setup route, plugin row hover, Settings and name opening the plugin's
@@ -1075,7 +1067,7 @@ page, full-composer Add anchoring, @ mentions (filter, insert,
 Escape, focus kept in the text),
 Named model rows without search, provider-default or empty local placeholders; High defaults in both displayed and submitted role settings; Send state/payload, the ink-filled Send/Stop cross-fade, exclusive Send/Stop transitions during work (including whitespace, clearing,
 follow-up submission, post-send guard and pointer/keyboard Stop), 200% zoom and reduced motion. Captures and results are in
-`.studio-dev/evidence/composer/` (override with `COMPOSER_EVIDENCE` for a follow-up pass). `promptbar-redesign.test.ts` covers durable Auto/Loop
+`.studio-dev/evidence/composer/` (override with `COMPOSER_EVIDENCE` for a follow-up pass). `promptbar-redesign.test.ts` covers durable plan
 approval, revision, cancellation, retry, duplicate approval and the real host dispatch boundary.
 No fixture authenticates a vendor or starts a paid generation. Native preview layering remains
 covered by the full Build smoke and agentic-readiness gates.

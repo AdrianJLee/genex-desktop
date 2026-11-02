@@ -100,8 +100,9 @@ no file fails the zero-files guard. A failure is a typed `harnessFailure`.
 ### Genex lanes (A, D)
 
 The runner builds the SHA under test once into `$GENEX_EVALS_HOME/builds/<sha>` (`git archive`,
-`npm ci`, `node scripts/build.mjs`), reads the commission and permission mode from that build's
-own `loop-setting.ts` and `permissions.ts`, writes `lane-spec.json` in the lane root and launches
+`npm ci`, `node scripts/build.mjs`), reads the permission mode from that build's own
+`permissions.ts` (and a build from before the composer lost its Loop control, its commission from
+`loop-setting.ts`), writes `lane-spec.json` in the lane root and launches
 `electron <build> --studio-smoke --userdata=<lane root>/userdata --studio-eval-lane=<spec>`
 (`--studio-eval-fixture` selects the scripted fixture engines). A live spec pins `executables` to
 the CLIs the raw lanes resolve; a fixture spec pins none.

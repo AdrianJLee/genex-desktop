@@ -26,7 +26,7 @@ Except for web games at the folder's root (Blender files allowed), the chat lead
 place (Claude Code, Codex or OpenCode). It keeps save points, starts workers, pauses if blocked,
 finishes on its word (a reviewer reads it only if asked). Plugins add steps, reviewer
 pictures and editor locks: while you use an editor, agents wait. A linked engine game is no web
-game; Unreal and Godot projects outside it get no Loop or Rewind.
+game; an Unreal or Godot project outside it is not held by save points or Rewind.
 
 ## Unreal
 

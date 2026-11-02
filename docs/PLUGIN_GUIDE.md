@@ -162,7 +162,7 @@ inline and put a long guide in a file:
   `[my-plugin/level-kit] <summary> Read it with my-plugin__skill {"name":"level-kit"} before that
   work.` Write the summary so an agent knows *when* to read the file. Studio adds the
   `my-plugin__skill` tool itself and answers it from your package, never through your backend, so
-  do not declare a tool named `skill`.
+  do not declare a tool named `skill`. Its description lists the file skills that reach the game.
 - The file and each reference are `.md` paths inside the package: no `..`, no absolute path, no
   dot file or dot folder (packing leaves those out), no link. The agent passes a reference as
   `file` exactly as you listed it; long files come back in pages it continues with `offset`.
@@ -177,7 +177,9 @@ inline and put a long guide in a file:
   `"makes": ["toy-project"]`: it is refused while a run of the game is going, Genex snapshots the
   game before it runs, records the web game it replaced as the game's `portedFrom`, and tells the
   session to end its reply, which then goes on with your tools. A game with no kind yet is served as
-  a web game (`web-game`); a folder of a kind Genex can't name is served by no fact. The
+  a web game (`web-game`); a folder of a kind Genex can't name is served by no fact. So a tool that
+  makes a project of your kind names `"facts": ["web-game"]`: a game with no kind yet and a web game
+  get it, a game of another kind never does; scope your other tools to your own fact. The
   older `"engines": ["web"]` / `["unreal"]` still works and reads as `web-game` / `unreal-project`;
   anything that names neither reaches every game.
 - The trust dialog lists your skills, and an update marks each new or changed one and names each

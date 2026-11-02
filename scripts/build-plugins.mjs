@@ -175,6 +175,7 @@ async function buildUnreal(root, resources, sdk) {
   await mkdir(unreal, { recursive: true });
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/unreal", file), path.join(unreal, file));
+  await cp(path.join(root, "src/plugins/unreal/skills"), path.join(unreal, "skills"), { recursive: true });
   await copyLocales(path.join(root, "src/plugins/unreal"), unreal);
   // Genex's own type goes in as data: a panel can load no font from anywhere else.
   const panel = await inlinePanelSdk(

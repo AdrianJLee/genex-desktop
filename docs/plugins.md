@@ -223,14 +223,15 @@ it is not. Studio serves it from the installed package and never writes it into 
   reads as `web-game` and `unreal` as `unreal-project` (`skillScope`); `facts` wins when both are
   given. Without either a skill reaches every game. A Unity or Godot game's web export in `web/`
   is its engine's build, so a skill reaches the game through it for no fact
-  (`withoutEngineWebVersion`). The bundled Local Blender skill (GLTFLoader)
-  and Genex's three.js multiplayer, embed sign-in, publishing, play-time model and shop skills say
-  `["web"]`; the Unreal editor skill names `unreal-project` and its three editor tools. API 1 and
-  2 ignore the keys.
+  (`withoutEngineWebVersion`), as a tool does. Genex's three.js multiplayer, embed sign-in,
+  publishing, play-time model and shop skills say `["web"]`; the Unreal editor skill names
+  `unreal-project` and its nine editor tools. Every bundled plugin's skills are file skills. API 1
+  and 2 ignore the keys.
 
 **The `<plugin>__skill` tool.** A plugin with a file skill gets a synthetic tool, `<plugin>__skill`
 (`name`, optional `file`, optional `offset`), answered by the host and never by the backend; such a
-manifest may not declare its own tool named `skill`. It reads only a file the skill lists, spelled
+manifest may not declare its own tool named `skill`. Its description lists the file skills that
+reach the session's game. It reads only a file the skill lists, spelled
 exactly as listed, through an opened handle that refuses links and oversized files, and answers
 `{plugin, skill, file, references, text, offset, nextOffset?}` in pages of 24,000 characters. It
 answers only while the plugin is live, checked again after the read, and writes nothing. The Skills
@@ -749,7 +750,7 @@ hooked tool must. `open-editor` and `quit-editor` hold the `editor` lock. `use-p
 that isn't set up and is open in Unreal sends Unreal's normal quit (Unreal asks about unsaved work:
 the project has no helper to save through), waits up to 90 s for it to close, sets it up and links
 it, then opens it again; two editors, or one that stays open, are refused in words for the person.
-It holds no lock (one would reach every game, web games too, since it has no `facts`), so it refuses
+It holds no lock (one would reach web games too, since it names `web-game`), so it refuses
 to quit while a run going now (`game.engine.runs`) has that project. A
 linked project with no set-up record in this profile (another profile set it up; its record stays in
 that profile's storage) is recorded as it is when its files are set up (`adoptSetUp`: plugins,
@@ -1456,7 +1457,9 @@ each press of the panel is an agent tool under the action's own name: `setup`, `
 (a card, though its press has none: an agent never closes Studio unasked), `do-it-for-me`,
 `open-studio`, `cancel-get-studio` and `places` (no card; `places` lists open Studios and Studio's
 recent files, never Documents), beside `use-project`, `new-game`, `publish-update` and
-`first-publish`. Their answers, the connection's refusals ("isn't open for this game", "isn't
+`first-publish`. A game with no place yet gets only the way in (`new-game`, `use-project`,
+`finish-setup`, `get-studio`, `cancel-get-studio`, `show-steps`; `show-steps` says to do what is
+left with `finish-setup`); the rest reach a game that holds a place. Their answers, the connection's refusals ("isn't open for this game", "isn't
 answering", "isn't linked") and the engine question's words name the tool for the next step,
 never a click for the person; only signing in, macOS's own prompts and Studio's or Roblox's own
 questions stay theirs. `do-it-for-me` starts the MCP switch's click itself when Studio is open,
@@ -1608,9 +1611,9 @@ reads, Choose your place asking each Studio for its place); a mark older than 30
 The `viewport` [observer](#observers) runs `hero-shots` and shows Live's `stills`.
 
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
-`engines`): the inline `roblox-studio` (scripts are files, play goes through `computer`, a Loop's lead
+`engines`), all file skills read through `roblox__skill`: `roblox-studio` (scripts are files, play goes through `computer`, a Loop's lead
 may ask a judge for a second opinion on its pictures with `judge`, the desktop tool never builds or play-tests in Studio, Roblox's AI tools, uploads and
-inserts ask) and the file skills `luau`, `remotes` (server-authoritative), `player-data`
+inserts ask), `luau`, `remotes` (server-authoritative), `player-data`
 (session-locked, `UpdateAsync`, `BindToClose`), `purchases` (idempotent `ProcessReceipt`),
 `ui-scale` (`UIScale`, `ScreenInsets`, touch targets), `assets` (Roblox's mesh and texture rules)
 and `get-started`, adapted from Roblox's MIT `roblox-get-started` skill
@@ -2293,25 +2296,33 @@ A tool, a skill or a plugin's MCP server may name the facts it is for (`facts`, 
 ids, each once); one that names none reaches every game. A session gets it when one of its game's
 **served facts** is named: the game's facts, or `web-game` at the root while it has no kind yet
 (`kindPending`); a folder of a kind Genex can't name (`holds` `own-files` or `unreadable`) is served
-by none, so it gets no web-only tool or skill and no Publish.
+by none, so it gets no web-only tool or skill and no Publish. Tools and skills read a Unity or Godot
+game without its web export in `web/` (`withoutEngineWebVersion`): that build is its engine's, and
+no tool or skill for web games reaches the game through it.
 `registry.snapshot(facts, offered?)` applies the rule (`pluginReach` in `shared/plugins.ts`) to the
 tools, the guidance and the applied skills a delegated session is handed; the capability facts, the
 composer's tool count for a game and `plugins.tools {project}` (the local harness) read the same
 rule, and `mcp.toolsFor(project, {facts})` leaves out a server that does not reach. A skill that
 names `tools` reaches only while one of them does. A skill that applies only below the root says
 where after its name: `[example/page] (for site/)`. A tool's `makes` (1–4 fact ids, agent tools
-only) says which facts it makes in the game's folder; the snapshot lists the reaching ones as
-`kinds` (`{plugin, name, tool, makes, asksReady?, scaffold?, label?}`, `asksReady` when the tool
-declares `ready`; one per reaching scaffold when the plugin declares [scaffolds](#scaffolds)). For a game with no kind yet, `plugins.tools {project}`
+only) says which facts it makes in the game's folder; the snapshot lists what the plugins that are
+on make, as a game with no kind yet is offered it, as `kinds` (`{plugin, name, tool, makes,
+asksReady?, scaffold?, label?}`, `asksReady` when the tool declares `ready`; one per reaching
+scaffold when the plugin declares [scaffolds](#scaffolds)). For a game with no kind yet, `plugins.tools {project}`
 asks each kind tool's `ready` harness tool (5 s at most, `main/core/kind-readiness.ts`) and adds
 its answer as `ready` (a boolean) and `note` (the words the engine card offers the kind with); an
 answer that is late, throws or is odd leaves both out. The card offers each scaffold by its label,
 and one kind for a plugin with none: the one that answered, else one whose tool asks
 (`asksReady`), else the first; beside a plugin's note it names the tool as the session calls it (a
-plugin's note words its first kind; a later scaffold is offered by its own tool). An agent never sees `facts`, `makes` or `ready`. The Unreal
-plugin's editor tools, skill and connector name `unreal-project`, so a web game's sessions get only
-`use-project`, `show-steps`, `new-game` and `new-plugin` (`use-project` and `new-game` declare
-`makes: ["unreal-project"]`, `new-plugin` also `unreal-plugin`). Publish goes by the same facts: a game served as a web game at its root may be
+plugin's note words its first kind; a later scaffold is offered by its own tool). An agent never sees `facts`, `makes` or `ready`.
+
+Every agent tool of a bundled engine plugin names facts. Its way in (`new-game`, `new-plugin`,
+`use-project`, `show-steps`, Unreal's `install-unreal`, Roblox's `get-studio`, `finish-setup` and
+`cancel-get-studio`) names `web-game`, so a game with no kind yet and a web game (a port) get it,
+and also its own fact where it works in its own games too (`new-game` and `new-plugin` never do);
+its other tools name only its own fact. A game of one engine is handed no tool of another, and
+`genex__package` names `web-game`. Unreal's `use-project` and `new-game` declare
+`makes: ["unreal-project"]`, `new-plugin` also `unreal-plugin`. Publish goes by the same facts: a game served as a web game at its root may be
 published, an Unreal project is refused as before, and any other kind is refused with its own code
 (`not-web-game`).
 
@@ -2659,8 +2670,8 @@ that path. The handler's trouble is a note, never a block.
 
 The plugin makes, sets up and opens that project itself (`backend.ts`), with no sign-in of its own:
 
-- `new-game` (`makes: ["unity-project"]`, `ready: "engine-status"`, the scaffold `Unity game`)
-  writes an empty project into the game's folder as `unity/` (`new-project.ts`): `Assets/`,
+- `new-game` (`facts: ["web-game"]`, `makes: ["unity-project"]`, `ready: "engine-status"`, the
+  scaffold `Unity game`) writes an empty project into the game's folder as `unity/` (`new-project.ts`): `Assets/`,
   `ProjectSettings/ProjectVersion.txt` naming the newest installed Unity 6, and
   `Packages/manifest.json` asking for the Pipeline package at the version this plugin was run
   against (`PIPELINE_VERSION`), the built-in modules of Unity's own empty 3D project that this
@@ -2673,7 +2684,7 @@ The plugin makes, sets up and opens that project itself (`backend.ts`), with no 
   for (`editor-life.ts` `firstSetup`). The harness tool `engine-status` answers the engine
   question's `{ready, note}`: ready with a Unity 6 installed, else that the agent calls
   `show-steps` and ends its reply.
-- `show-steps` puts the Unity setup card in the game's chat (`game.engine.steps`) while a step is
+- `show-steps` (`facts: ["web-game", "unity-project"]`) puts the Unity setup card in the game's chat (`game.engine.steps`) while a step is
   open. Its `steps` action answers the rows (`setup-steps.ts`): Unity Hub (`/Applications/Unity
   Hub.app`), the person's sign-in (a license file exists: `~/Library/Unity/licenses/
   UnityEntitlementLicense.xml` or `/Library/Application Support/Unity/Unity_lic.ulf`; never read)

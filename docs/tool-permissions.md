@@ -50,8 +50,7 @@ never `permissions`, when:
   no lead in place (`#runRunning`). On an engine that does not ask about every call, a lead in place
   is handed `permissions` in the chat's mode as that engine honours it instead
   (`ChatPermissionService.forPlacedLead`): Plan starts it elsewhere or read-only, its questions go
-  to the chat, and it keeps the fence that engine's chat session keeps (the other games denied, no
-  `mainAgentReachNote`);
+  to the chat, and it keeps the fence that engine's chat session keeps (the other games denied);
 - the thread is this game's open chat.
 
 A lead is the chat's main agent, so only the chat's mode and the rules the person
@@ -122,9 +121,12 @@ host shows beside the picker.
 
 Every session runs on Claude Code's own system prompt (`claudeCodeSystemPrompt`: the `claude_code`
 preset, which the Agent SDK otherwise replaces with an empty one), with what holds for the session's
-whole life appended once (`DelegateRequest.system`: where it reaches, its plugins, their guidance
-and connectors, and for the session answering the person `personSessionNote`), never repeated in
-each message ([delegation](../src/main/core/delegation.ts) `#brief`).
+whole life appended once (`DelegateRequest.system`: the harness's context, `chatContext` for the
+chat's own session and its lead, then its plugins, their guidance and connectors, and on Windows the
+line naming its shell), never repeated in each message ([delegation](../src/main/core/delegation.ts)
+`#brief`); Codex gets the same text as its developer instructions. Claude Code 2.1.314 records a
+session's system prompt as it starts and sends that record on every resume until a compaction, so a
+resumed session reads the text it started with.
 
 No session gets Claude Code's own sub-agents (`Agent`, `Task`), in any mode or seat: Genex runs the
 workers, under the person's ceiling and the chat's mode (`disallowedToolsFor`).
@@ -148,14 +150,10 @@ granted folders and the person's fence (`protectWrites` included), with no sibli
 list, as the chat's own session. The lead's prompt still leaves the game's changes to its builders
 while the build runs.
 
-Every session the person answers on an engine that asks about every call (the chat's own, a lead:
-`SessionReach.reachesMac`) reads, right after its brief, the host's
-`mainAgentReachNote` ([`delegation-prompts.ts`](../src/main/core/delegation-prompts.ts)): it is the
-chat's main agent on the person's Mac, looks and works anywhere on it when asked (their Downloads,
-other folders, what fills the disk), and only the chat's mode decides each call. The brief
-(`loop/chat-session.ts`) says where the game's work goes, never that the session may not read
-other folders. The note is the host's, so neither an agent-edited seed kept on upgrade nor a resumed
-transcript that holds an older brief narrows it. An unattended session reads none of it.
+A session the person answers on an engine that asks about every call (the chat's own, a lead) reaches
+the person's whole computer, limited only by the chat's mode, and reads no note saying so: Claude
+Code knows its own environment and mode, and its context (`loop/chat-session.ts` `chatContext`)
+names the game's folder, never that the session may not read other folders.
 
 A building worker (any worker brief that writes) keeps no `toolAllow`: the host drops it
 (`workerBrief`), so a worker has every enabled plugin's tools, its jobs, `app_look` and the
@@ -537,9 +535,8 @@ thread keeps the mode the person picked, so a chat moved back to Claude Code fin
 | Ollama, a new engine | Auto | its harness tool loop keeps its sandbox |
 
 The chat's own session on any engine is handed `permissions` (`#personSession`, no
-`permissionPrompts` needed); only an engine with `permissionPrompts` gets the person's reach
-(`reachesMac`: no sibling-folder deny list, `mainAgentReachNote`) and a lead's
-`leadAsks`. Another engine's chat session, and a Loop's lead in place on it, keeps the unattended
+`permissionPrompts` needed); only an engine with `permissionPrompts` gets the person's reach (no
+sibling-folder deny list) and a lead's `leadAsks`. Another engine's chat session, and a Loop's lead in place on it, keeps the unattended
 fence and the same denied paths (only named in its brief in Codex's and Grok Build's Bypass, which
 have no sandbox).
 
@@ -583,9 +580,10 @@ only hands an agent has ([computer use](computer-use.md)).
 A plan on an engine that ends its turn with it (`plansByTurn`: Bonsai, Codex) is approved by the
 host ([`plan-approval.ts`](../src/main/core/plan-approval.ts) `withPlanApproval`): a Plan reply
 with words, a session id and no studio tool call becomes the `ExitPlanMode` card. Approved, the same
-session resumes in the chosen mode (`planApprovedNote`), which the permission service keeps on the
-chat; sent back with words, it plans again (`planRevisionNote`); a bare deny, a withdrawn card or a
-Stop ends the turn with the plan. The card offers only modes the engine honours
+session resumes in the chosen mode, which the permission service keeps on the chat, told Genex's one
+line that the person approved it (`planApprovedNote`, `from: genex`); sent back with words, it
+resumes still in Plan with the person's words as they wrote them (`from: person`); a bare deny, a
+withdrawn card or a Stop ends the turn with the plan. The card offers only modes the engine honours
 (`planContinuations`).
 
 On every engine that honours Plan, Claude Code included, a build the chat's own session recorded to

@@ -263,12 +263,9 @@ is named. The tools are the same for every engine. A session with host tools als
 skill lines, one line for each plugin it is handed: its name, the prefix of its tools (`<id>__`)
 when it has any, and its description on one line, cut at 200 characters (`handedPluginsNote`). A
 plugin that declares an `account` whose state (`PluginAccountState`) is anything but `unlocked`
-adds that it is not set up yet and the person still has to connect its account on its page.
-The plugins and skills a session was handed ride its `tool_registry_applied` event; a resumed
-session that has since lost some is told first to ignore their earlier instructions and not to call
-their tools, and one handed a plugin it was not handed before is told first, once, that it was
-turned on and its tools are there now (`addedNotice`). A new session, or one with nothing recorded,
-gets no such notice: the list names what is on (`delegation-prompts.ts`).
+adds that it is not set up yet and the person still has to connect its account on its page. The
+list is the session's system text (`delegation-prompts.ts`): no notice tells a resumed session a
+plugin was turned on or off since it last ran, since its tools are what it is handed now.
 
 ### Toolbar contributions
 
@@ -2336,9 +2333,10 @@ in the folder as the reference and no longer count as a kind; the app is told th
 the answer gains a note telling the session to end its reply (after a text answer's words, or under
 `genex`). When the chat's own turn ends with the game's served facts different from its start's (a
 port, or project files it wrote; a folder with no kind that took the web starter is no change), the
-harness continues the same session by itself with the tools and the brief for the new kind
-(`continueOnNewFacts` in `loop/delegated-turn.ts`, told `factsReadyPrompt`); a session that can't
-be resumed starts afresh from a brief for the new kind. A run's turn never continues.
+harness continues the same session by itself with the tools and the context for the new kind
+(`continueOnNewFacts` in `loop/delegated-turn.ts`), told Genex's one line of the project's new kind
+(`factsReadyNotice`, `from: genex`); a session that can't be resumed starts afresh with the same
+line and the chat so far. A run's turn never continues.
 
 ### Finding and suggesting a plugin
 
@@ -2544,15 +2542,11 @@ computer's paths taken out; after a restart, idle with the app found on disk. Pu
 app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole
 build (no program inside a Windows build's folder is a build of its own, and Unreal's
 `UEPrereqSetup` is a helper) and never a project's own `Binaries` beside its `.uproject`, which hold
-no cooked content. A chat build of a game still with no kind, with the plugin on, first asks the
-user Web or Unreal Engine with `ask_user`, unless the message names one
-(`loop/unreal-prompts.ts` `engineChoiceRule`: one option per scaffold, else per plugin, among
-`plugins.tools`'s `kinds` (Unreal's are `Unreal game` and `Unreal plugin`), each in its plugin's
-readiness `note`, and the web answer calls `start_web_game`). The
-Unreal kind's `note` comes from `engine-status`, so with no Unreal installed the agent points to the
-Unreal button instead of `new-game`; any kind whose plugin says `ready: false` is never made: the
-person finishes its setup from that plugin's button first. A host that lists no kinds offers no
-question. When a chat turn changed the game's kind and the new kind's plugins hook `health`, the
+no cooked content. A chat build of a game still with no kind, with the plugin on, is handed the
+question card (`ask_user`) while `plugins.tools`'s `kinds` offer a kind (Unreal's are `Unreal game`
+and `Unreal plugin`, each with its label and its plugin's readiness `note`), beside the kind tools
+and `start_web_game`: which kind to make, and whether to ask, is the session's. A host that lists
+no kinds bridges no card. When a chat turn changed the game's kind and the new kind's plugins hook `health`, the
 chat waits on Genex's `health` moment before the same session goes on: it says the first pending
 reason once (and on the status line), asks again every 5 s for up to 20 minutes, says a step's block
 and stops there, and Stop ends the wait (`loop/delegated-turn.ts` `continueOnNewFacts`). A game from New game counts while it has no facts and nobody has answered in its chat;

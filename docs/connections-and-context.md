@@ -40,9 +40,8 @@ or a sidebar game returns without a reload. Skills has these sections, in order
   `studio:plugins.skill`; a plugin’s page shows what its last update added, changed or removed.
 
 A plugin’s switch, here and in the composer’s Add menu (hint “All games”), turns it on or off for
-every game. When a plugin or skill a resumed builder session was given has been withdrawn since,
-that session’s next brief opens with a notice to ignore its earlier instructions and not to call
-its tools. Discovery does not execute skills, import hooks/MCP servers or prove use in a
+every game. A session's plugins are its tool list and system text on each launch: no notice says
+one was turned on or off since it last ran. Discovery does not execute skills, import hooks/MCP servers or prove use in a
 conversation. Refresh skills rechecks the inventory; errors are distinct from an empty list.
 Studio archives remain excluded; Claude shared-skill links are confined to known skill roots.
 
@@ -531,6 +530,14 @@ missing `--ignore-user-config`. A handshake refusal falls back to exec and the b
 turn and the engine's lifetime; resumed sessions, older CLIs and the default keep exec. The
 session's `system/init` event records `tool_delivery` (`dynamic_tools` or `file_bridge`).
 
+Genex's context for a Codex session (`DelegateRequest.system`) is its developer instructions:
+`developerInstructions` on `thread/start` and `thread/resume`, `-c developer_instructions=…` in
+`codex exec`'s own option scope (a root `-c` is dropped when the nested command has its own),
+never stdin. The message's parts follow in order (`#delegateTexts`): Genex's notices under its
+mark (`genex-mark-prompts.ts`), the prompt as its sender wrote it, then Codex's own per-turn notes
+(the bridge's tools, plan or read-only, the off-limits paths), each its own text item on the app
+server and apart by blank lines on exec's stdin.
+
 A read-only follow-up that leaves the game's content unchanged does not reload the preview or
 warn about an untouched empty scaffold. The bounded content stamp includes Git-ignored runtime
 assets/build output as well as tracked files. Tool bookkeeping is excluded. An unknown stamp or
@@ -620,14 +627,14 @@ model switched back to after another one answered starts a fresh session, since 
 those turns, and Compact now works on that latest session only. A session the engine cannot
 resume — it throws, or answers that it has no such conversation (another account's, one never
 saved) — is replaced by a fresh one in the same turn (`loop/chat-steer.ts`), so the chat never
-stays stuck on it. A fresh session mid-conversation
-is briefed with the original request, the latest instruction, the last messages verbatim
-(`loop/brief-window.ts`: 20 messages, at most 18,000 characters) and the latest written summary
-(`compactedSummary`, which reads past a Codex compaction's sealed one). When that brief cannot
-carry everything since the last written summary, the log is first summarised on the new model
-(`briefSummary`, `loop/compact.ts`), which ends the earlier sessions as any written summary does;
-a short chat costs nothing extra. The new model gets the conversation, not the previous model's
-own context (files it read, commands it ran): it reads the game's folder as it needs.
+stays stuck on it. The person's words always go alone, as they wrote them; a fresh session
+mid-conversation is also told the chat so far as one Genex notice (`historyNotice`): the latest
+written summary (`compactedSummary`, which reads past a Codex compaction's sealed one), then the
+last messages verbatim (`loop/brief-window.ts`: 20 messages, at most 18,000 characters). No extra
+model call summarises the chat first. The new model gets the conversation, not the previous
+model's own context (files it read, commands it ran): it reads the game's folder as it needs. A
+switch of model or effort mid-turn is the next leg's option alone; another engine starts a new
+session told the chat so far.
 
 A Bonsai response stopped by its output limit cannot dispatch partial tool arguments. The session
 retains usage and existing work, asks for a smaller edit at most twice, then reports a recoverable

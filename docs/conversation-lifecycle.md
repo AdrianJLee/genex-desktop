@@ -186,9 +186,10 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   run's), a message sent meanwhile joins it unless something sent before the turn began still
   waits, a build runs, or it is a fresh build asked for or Studio's chat (`steer-switch.ts`
   `joinKindOf`). It joins as **words** when it settles what the turn runs on the same way (engine,
-  model, effort and roles); otherwise, or with slash text, as a **switch**, which only a runner that says so takes (`steer.open({
+  model, effort and roles); otherwise as a **switch**, which only a runner that says so takes (`steer.open({
   switches, takes })`: the chat's own delegated turn when the dispatch names the message it follows,
-  `asked`; never a run's builder). A switch to an engine
+  `asked`; never a run's builder). Slash text never joins: it waits for a turn of its own, as a
+  command typed while Claude Code works runs once its turn ends. A switch to an engine
   that turn cannot go on with (one without sessions, or another engine than the lead's after its
   run, `turn-switch.ts` `endsTurnFor`) waits for a turn of its own; one that cannot join holds back
   nothing sent after it. Its receipt then carries `coordinator_message_steering {messageId, into}`,
@@ -243,16 +244,15 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   leg's — Genex's line among the person's, the person's after a Genex turn's own message — wait for
   the leg after it, in the order sent. A switch first moves the turn onto the message's settings (`TurnSwitches.
   apply`, `turn-switch.ts` `switchedSettings`: a turn started with that message would have run on
-  them, the after-run session's engine kept) and the resumed leg opens with what changed
-  (`steer-switch-prompts.ts`): another model or effort resumes the same session; another engine
-  starts a new one told the brief and everything the turn was told. A launch or question the cut
-  leg recorded is kept, on the new settings. Slash
-  text runs as a leg of its own, the command alone in the same session; the words sent with it
-  follow as they wrote them, then Genex's line that it ran carries the work it cut short on. Messages reach it in the order they were sent.
+  them, the after-run session's engine kept), which the next leg runs on as its options, never as
+  words: another model or effort resumes the same session with the words alone; another engine
+  starts a new one with the turn's words, everything the turn was told and the chat so far as one
+  Genex notice. A launch or question the cut leg recorded is kept, on the new settings. Messages
+  reach it in the order they were sent.
 - **Not read.** Whatever a session took but did not read — a Stop (checked again before every
   resumed leg), a turn that ended first, a turn that had already asked its question or
   launched, a leg that failed or was stopped before it read its prompt (with anything an earlier
-  cut-off leg forwarded to it), a command not yet run — is `coordinator_message_requeued` in the
+  cut-off leg forwarded to it) — is `coordinator_message_requeued` in the
   order it was sent, before the turn's `handled`, and gets a turn of its own, so a Stop still leaves
   every unread message an answer.
 - **A turn that starts a Loop.** A turn whose session launches a Loop hands its workers on
@@ -427,9 +427,8 @@ session, or the local tool loop, with no run controls.
   borrowed only on the lead's engine, and a throttled chat turn never falls back to another engine
   (`delegated-turn.ts`).
 - **Its hands back.** It is an ordinary chat turn (`runDelegatedTurn`) resuming the chat's
-  bookmark in the game folder, no longer read-only: each of its turns, while that run is the
-  chat's latest, opens with a note in place of "pick up where you left off" (`afterLoopRunNote`) — the
-  build is over, how it ended, what it keeps.
+  bookmark in the game folder, no longer read-only: the person's words as they wrote them, and no
+  note of the build, which the session led itself; what it keeps of the run are its tools.
   After a finished run requested work is its own, done in the game folder like any chat change
   (preview health pass and all), or a new Loop (below).
 - **The run's controls, live.** The delegation carries `runControls {runId, messageId}`; the host
@@ -643,22 +642,19 @@ page (`holdsWebGame` in `loop/web-game.ts`): one linked to an Unreal project (`e
 ([project facts](plugins.md#project-facts); an older descriptor's `web: false`), or one with no kind
 yet (no facts: nothing to look at until its first message picks one). The pass goes by the game as the turn ends, read from
 `game.list` again, so the turn that links the game through `unreal__new-game` takes none either; a
-host that cannot answer leaves the descriptor the turn started with. A brief's rules, capture tool,
-contract check and checkpoint line go by the folder's facts (`servedAsWeb` in `loop/folder-facts.ts`:
-a web game at the root, or no kind yet; never a folder of a kind Genex can't name): a Godot folder
-gets none of the web's. An Unreal game's brief swaps the web template's rules for the
-Unreal ones (`loop/unreal-prompts.ts`), with no capture tool, window or web checkpoint line, and plugin
-tools, guidance and connectors by the game's facts ([scope by facts](plugins.md#scope-by-facts)): no
-web-only skills, and the Unreal editor's tools only for a game that holds an Unreal project. A game with
-no kind yet, on any fresh brief until it has one, while an engine plugin offers a kind (`plugins.tools`'s `kinds`), is
-briefed to ask Web or that engine first, unless the message names one, with `ask_user` bridged in,
-and each kind offered by the readiness its plugin gives the host (`kinds[].ready`, `note`; Unreal's
-from `engine-status`); the recorded
-question is asked, and the next turn resumes the same session, which calls
+host that cannot answer leaves the descriptor the turn started with. A session's capture tool and
+contract check go by the folder's facts (`servedAsWeb` in `loop/folder-facts.ts`: a web game at the
+root, or no kind yet; never a folder of a kind Genex can't name): a Godot folder gets none of the
+web's. Its context (`chatContext`) names what the folder holds and, for an Unreal game, where its
+work lands (`loop/linked-project-prompts.ts`), and plugin tools, guidance and connectors go by the
+game's facts ([scope by facts](plugins.md#scope-by-facts)): no web-only skills, and the Unreal
+editor's tools only for a game that holds an Unreal project. A game with no kind yet, while an
+engine plugin offers a kind (`plugins.tools`'s `kinds`), is handed `ask_user` beside the kind tools;
+a recorded question is asked, and the next turn resumes the same session, which calls
 `unreal__new-game` for Unreal. A chat turn whose game's served facts changed (a port, or files it
-wrote) goes on by itself in the same session, with the tools and a fresh brief writer for the new
-kind (`continueOnNewFacts`, [plugins](plugins.md#scope-by-facts)), told to go on with what it said
-it would build (`factsReadyPrompt`); when the new kind's plugins hook
+wrote) goes on by itself in the same session, with the tools and the context for the new kind
+(`continueOnNewFacts`, [plugins](plugins.md#scope-by-facts)), told Genex's one line of the
+project's new kind (`factsReadyNotice`); when the new kind's plugins hook
 `health` (an Unreal project linked or switched), it first waits until nothing is pending. A delegation that gave
 a game with no kind its kind by files it wrote tells the app the game changed when it ends. The health pass waits on the page's own readiness (`preview.ready`
 with `gesture: false`, so the user's window is never clicked): up to the project's boot budget

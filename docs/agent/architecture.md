@@ -875,9 +875,9 @@ aborts it), with the kept `genex-clip` clip after it, or by `genex__cover-set` (
 applied plugin/skill set from one live view, so a brief's tools and skill lines agree; a file skill
 contributes an index line (`skill-prompts.ts`) and the host-answered `<id>__skill` tool, which reads
 only declared files through a checked handle, pages at 24,000 characters and writes nothing.
-Skills are served from the installed package, never written into games. Once a session
-answers, delegation records its applied set on `tool_registry_applied` by session id; a resume
-folds that back (`ConnectionService.lastApplied`) and prepends `withdrawnNotice` for withdrawals. Updates and hot reloads
+Skills are served from the installed package, never written into games. A session's plugins are
+its tool list and system text on each launch; delegation records only the revision it took
+(`tool_registry_applied`). Updates and hot reloads
 diff skills (`lastSkillChange`, scan `skillDigests`) for the trust dialog and plugin page.
 
 **Genex host tools.** A manifest tool with `host` (bundled `genex`, API 3 only) runs through the

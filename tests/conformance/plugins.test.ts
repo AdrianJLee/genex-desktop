@@ -1858,6 +1858,36 @@ test("a newer bundled seed replaces the installed copy at launch, keeping it off
   }
 });
 
+for (const [turnedOff, enabled] of [
+  [false, true],
+  [true, false],
+] as const)
+  test(`a newer seed laid over an older copy that failed to load is ${enabled ? "on" : "off"} as the person left it`, async () => {
+    const f = await fixture();
+    try {
+      if (turnedOff) await f.registry.setEnabled("example", false);
+      f.registry.cancel();
+      // This build refuses the older copy (an API version it no longer supports), and ships a newer seed.
+      const [copy] = await readdir(path.join(f.registry.root, "packages", "example"));
+      const installedManifest = path.join(f.registry.root, "packages", "example", copy!, "plugin.json");
+      const older = JSON.parse(await readFile(installedManifest, "utf8"));
+      older.apiVersion = 99;
+      await writeFile(installedManifest, JSON.stringify(older));
+      await bumpExampleSeed(f, "9.0.0");
+      const next = await reopened(f, f.registry.root);
+      try {
+        const example = next.list()[0]!;
+        assert.equal(example.manifest.version, "9.0.0");
+        assert.equal(example.error, undefined);
+        assert.equal(example.enabled, enabled, "the refusal's off is not the person's");
+      } finally {
+        next.cancel();
+      }
+    } finally {
+      await f.close();
+    }
+  });
+
 test("an update left waiting when Studio closed never replaces this build's newer seed", async () => {
   const f = await fixture();
   try {

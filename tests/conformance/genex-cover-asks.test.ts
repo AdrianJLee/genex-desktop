@@ -35,6 +35,9 @@ const record = (over: Partial<GenexCoverRecord> = {}): GenexCoverRecord => ({
   shot: shot(OLD, AT - MINUTE_MS),
   last: null,
   sending: false,
+  candidates: [],
+  clip: null,
+  agentTook: {},
   ...over,
 });
 const asked = (kind: CoverKind = CoverKind.Picture, took: CoverAskMemory["took"] = {}): CoverAskMemory => ({

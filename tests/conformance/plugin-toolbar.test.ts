@@ -4,8 +4,6 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { rendererBuildOptions } from "../../scripts/renderer-build.mjs";
 import {
-  MultiplayerPress,
-  multiplayerPress,
   showsMultiplayer,
   takesEngineMultiplayer,
   ToolbarPlace,
@@ -279,10 +277,6 @@ test("a plugin change re-asks every button; a plugin's toolbar event updates its
   assert.equal(toolbarReaction({ type: UiEvent.GameArchived, payload: {} } as UiEvent, [entry], "game"), null);
 });
 
-test("Multiplayer brings Genex in, and otherwise asks the game's chat", () => {
-  assert.equal(multiplayerPress(undefined), MultiplayerPress.SetUp, "Genex off or not installed");
-  assert.equal(multiplayerPress(plugin("genex", [item()])), MultiplayerPress.Ask);
-});
 test("Multiplayer stands beside Publish only on a built single-player game with something in it, whose page is its own", () => {
   const game = {
     publish: true,

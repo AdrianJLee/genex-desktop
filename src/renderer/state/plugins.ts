@@ -5,7 +5,7 @@
  * answer.
  *
  * A plugin's update is a newer release in the plugin index: `pluginUpdates` lists them,
- * `installPluginUpdate` installs one, and the store's `updateAll` installs them all. A bundled
+ * `studio:plugins.update` installs one, and the store's `updateAll` installs them all. A bundled
  * plugin has none: it updates with Studio at launch.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
@@ -92,14 +92,6 @@ export function chosenUpdates(updates: readonly PluginUpdate[], skipped: Readonl
 }
 
 /**
- * Install one update. Main shows the plugin's trust dialog first, and a "no" there rejects as the
- * person's (`isUserCancelled`).
- */
-export function installPluginUpdate(api: Pick<StudioApi, "pluginUpdate">, update: PluginUpdate): Promise<void> {
-  return api.pluginUpdate(update.plugin.manifest.id);
-}
-
-/**
  * The failures of a run, the first of each distinct words, each with its own code: one cause (no
  * connection) refuses every update alike, and is said once.
  */
@@ -147,7 +139,7 @@ export function createPluginsStore(
     try {
       for (const update of chosenUpdates(pluginUpdates(state.list, state.index), skipped)) {
         // One refusal (a release withdrawn since the index was read) leaves the others to install.
-        await installPluginUpdate(api, update).catch((error: unknown) => {
+        await api.pluginUpdate(update.plugin.manifest.id).catch((error: unknown) => {
           if (isUserCancelled(error)) declined += 1;
           else failures.push(error);
         });

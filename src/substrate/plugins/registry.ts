@@ -83,7 +83,7 @@ import { pluginWorkspaces } from "./workspace-manifest.ts";
 import { pluginFolderPaths, pluginWorkerTypes, workerTypeOffered } from "./worker-manifest.ts";
 import type { WorkerType } from "../../shared/workers.ts";
 import type { PluginWorkspace } from "../../shared/project-workspace.ts";
-import { canonicalSourceRepo } from "./marketplace.ts";
+import { canonicalSourceRepo, isNewerVersion } from "./marketplace.ts";
 import { containedReal } from "../paths.ts";
 import { SessionCredentials } from "../session-credentials.ts";
 import { PluginCallCutOff, type PluginHostEnv, type PluginInvocation, PluginProcess } from "./process.ts";
@@ -608,19 +608,11 @@ interface Unlisted {
  * server gets the bare token from `credential()` instead.
  */
 const CREDENTIAL_FILE_VARIABLE = "GENEX_TOKEN";
-const newerVersion = (next: string, current: string) =>
-  next
-    .split(".")
-    .some(
-      (part, i, parts) =>
-        Number(part) > Number(current.split(".")[i]) &&
-        parts.slice(0, i).every((n, j) => Number(n) === Number(current.split(".")[j])),
-    );
 /** Whether this build's seed replaces an installed copy: an older version of a bundled plugin the person did not remove. */
 const seedSupersedes = (seed: PluginManifest, installed: Installed): boolean =>
   installed.source === PluginSourceKind.Bundled &&
   !installed.removed &&
-  newerVersion(seed.version, installed.manifest.version);
+  isNewerVersion(seed.version, installed.manifest.version);
 /**
  * What the host needs to launch one plugin's MCP servers. Everything here is a function: the
  * storage root, the settings and above all the credential are read at launch, so a disabled
@@ -1052,13 +1044,15 @@ export class PluginRegistry {
         mode: constants.COPYFILE_FICLONE,
       });
       this.onInitStep?.(PluginInitStep.Seed, id);
+      // A copy that failed to load was switched off by its refusal (`#refuse`), not by the person.
+      const switched = this.#errors.has(id) ? undefined : previous;
       this.#errors.delete(id);
       const p: Installed = {
         rememberAccount: previous?.rememberAccount,
         directory: copy,
         manifest,
         source: PluginSourceKind.Bundled,
-        enabled: previous ? previous.enabled : this.seedEnabled[id] !== false,
+        enabled: switched ? switched.enabled : !previous?.turnedOff && this.seedEnabled[id] !== false,
         removed: false,
         origin: { kind: PluginSourceKind.Bundled },
         identity: pluginIdentity(manifest, bundled),

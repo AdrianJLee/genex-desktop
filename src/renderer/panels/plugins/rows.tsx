@@ -14,7 +14,6 @@ import {
   trackedPluginInstall,
 } from "../../analytics/plugins-page.ts";
 import { isOwnPlugin } from "../../analytics/plugins-ref.ts";
-import { installPluginUpdate } from "../../state/plugins.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon, type IconName } from "../../ui/icons.tsx";
 import { PluginIcon, type PluginIconSize } from "../../ui/PluginIcon.tsx";
@@ -123,12 +122,12 @@ export const installListed = (
  * Install a plugin's waiting update, reported as the page's Update. The person's no in its trust
  * dialog is reported as cancelled and says nothing on the page.
  */
-export const updatePlugin = (plugin: PluginInfo, update: Parameters<typeof installPluginUpdate>[1]): Promise<void> =>
-  trackedPluginAction(pagePress(PluginAction.Update, plugin), () => installPluginUpdate(window.studio, update)).catch(
-    (error: unknown) => {
-      if (!isUserCancelled(error)) throw error;
-    },
-  );
+export const updatePlugin = (plugin: PluginInfo): Promise<void> =>
+  trackedPluginAction(pagePress(PluginAction.Update, plugin), () =>
+    window.studio.pluginUpdate(plugin.manifest.id),
+  ).catch((error: unknown) => {
+    if (!isUserCancelled(error)) throw error;
+  });
 
 /** Run one of a plugin's account actions (connect, cancel) through the shared review, then re-read the account. */
 async function runAccountAction(plugin: PluginInfo, page: PluginsPage, name: string): Promise<void> {
@@ -327,7 +326,7 @@ function PluginRow({
         <Button
           disabled={page.busy}
           aria-label={t("Update {name}", { name })}
-          onClick={() => void page.act(() => updatePlugin(plugin, update))}
+          onClick={() => void page.act(() => updatePlugin(plugin))}
         >
           {t("Update to {version}", { version: update.version })}
         </Button>

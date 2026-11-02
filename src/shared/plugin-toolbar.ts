@@ -119,18 +119,6 @@ const ENGINE_MULTIPLAYER: ReadonlySet<string> = new Set([CoreFact.GodotProject, 
 export const takesEngineMultiplayer = (game: GameKind): boolean =>
   game.facts.some((fact) => ENGINE_MULTIPLAYER.has(fact.id));
 
-/** What Multiplayer's press does, by where Genex stands. */
-export const MultiplayerPress = { SetUp: "set-up", Ask: "ask" } as const;
-export type MultiplayerPress = (typeof MultiplayerPress)[keyof typeof MultiplayerPress];
-
-/**
- * Multiplayer's press with `genex`, the Genex plugin while it is on (undefined while off or not
- * installed): bring Genex in, or ask the game's chat.
- */
-export function multiplayerPress(genex: PluginInfo | undefined): MultiplayerPress {
-  return genex ? MultiplayerPress.Ask : MultiplayerPress.SetUp;
-}
-
 /** A button's tooltip lines: a dot's word first, since the dot alone doesn't say it, then the plugin's title. */
 export function toolbarTip(status: PluginToolbarStatus | undefined): string[] {
   const word = status?.dot ? status.badge : undefined;

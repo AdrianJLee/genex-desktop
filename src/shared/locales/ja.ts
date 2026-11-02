@@ -4386,8 +4386,6 @@ export default {
   "Update and play": "アップデートしてプレイ",
   "Update needed": "アップデートが必要",
   "Update ready — restart": "アップデートの準備完了 — 再起動",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "アプリを公開するには、「プラグイン」でGenexプラグインをアップデートしてください。",
   "Update to {version}": "{version}にアップデート",
   "Update {count}": "{count}件をアップデート",
   "Update {name}": "{name}をアップデート",

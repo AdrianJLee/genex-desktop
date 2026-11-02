@@ -40,7 +40,7 @@ const measurable = (ms: number): boolean => Number.isFinite(ms) && ms > 0 && ms 
  */
 function answeredAt(ask: CoverAsk, record: GenexCoverRecord): number | null {
   const clip = ask.kind === CoverKind.Clip;
-  const at = Date.parse((clip ? record.agentTook?.clip : record.agentTook?.shot) ?? "");
+  const at = Date.parse((clip ? record.agentTook.clip : record.agentTook.shot) ?? "");
   return at > ask.at ? at : null;
 }
 

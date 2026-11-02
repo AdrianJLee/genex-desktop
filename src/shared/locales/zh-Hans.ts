@@ -4115,7 +4115,6 @@ export default {
   "Update and play": "更新并游玩",
   "Update needed": "需要更新",
   "Update ready — restart": "更新已就绪——重启",
-  "Update the Genex plugin in Plugins to publish apps.": "要发布应用，请在“插件”中更新 Genex 插件。",
   "Update to {version}": "更新到 {version}",
   "Update {count}": "更新 {count} 个",
   "Update {name}": "更新 {name}",

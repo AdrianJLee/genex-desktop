@@ -17,8 +17,6 @@ import {
   type PluginToolbarEntry,
   toolbarReaction,
   toolbarStatusFrom,
-  MultiplayerPress,
-  multiplayerPress,
   showsMultiplayer,
   takesEngineMultiplayer,
   ToolbarPlace,
@@ -460,7 +458,6 @@ const REPEAT_PRESS_MS = 1.5 * SECOND_MS;
  */
 function useMultiplayer(project: string | null, shown: boolean, genex: PluginToolbarEntry | undefined) {
   const genexOn = Boolean(genex);
-  const pressed = multiplayerPress(genex?.plugin);
   const [setup, setSetup] = useState(false);
   const asked = useRef(Number.NEGATIVE_INFINITY);
   const ask = useCallback(() => {
@@ -470,16 +467,16 @@ function useMultiplayer(project: string | null, shown: boolean, genex: PluginToo
     composeInChat({ project, text: GENEX_WORDS.multiplayer.prompt, send: true });
   }, [project]);
   const press = useCallback(() => {
-    if (pressed === MultiplayerPress.Ask) ask();
+    if (genexOn) ask();
     else setSetup(true);
-  }, [pressed, ask]);
+  }, [genexOn, ask]);
   const close = useCallback(() => setSetup(false), []);
   // Genex came on while its dialog was up: the press goes on as it would now.
   useEffect(() => {
     if (!setup || !genexOn) return;
     setSetup(false);
-    press();
-  }, [setup, genexOn, press]);
+    ask();
+  }, [setup, genexOn, ask]);
   useEffect(() => {
     if (setup && !shown) setSetup(false);
   }, [setup, shown]);

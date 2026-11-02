@@ -4353,8 +4353,6 @@ export default {
   "Update and play": "Обновить и играть",
   "Update needed": "Нужно обновление",
   "Update ready — restart": "Обновление готово — перезапусти",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "Чтобы публиковать приложения, обнови плагин Genex в «Плагинах».",
   "Update to {version}": "Обновить до {version}",
   "Update {count}": "Обновить {count}",
   "Update {name}": "Обновить {name}",

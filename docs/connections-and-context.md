@@ -495,10 +495,8 @@ Genex's ledger/admission/recovery remains authoritative. Its optional hosted Ble
 requires a configured remote URL and account; it does not replace the independent Local Blender
 plugin. That local plugin uses the public API 3 managed-runtime/job services and needs no account.
 
-Bundled plugin changes carry a new package version, and bundled plugins update with Studio: at
-launch, after the last run's waiting updates, the registry lays the shipped seed over an older copy
-the person did not remove, keeping its settings, account and data. The persistent removed
-preference still wins over a bundled seed.
+Bundled plugin changes carry a new package version, and bundled plugins update with Studio at
+launch ([plugins](plugins.md#removal-and-reinstall-by-recorded-origin)).
 
 ## Model setup and activity
 

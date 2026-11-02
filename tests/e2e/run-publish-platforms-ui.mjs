@@ -152,10 +152,6 @@ app.whenReady().then(async()=>{
   assert.equal(soon.primaryDisabled,true);
   assert.equal(soon.rows[1].end,'Coming soon');
   assert.equal(soon.reach,'Publishing Mac, Windows and Linux apps comes with the next Genex update.');
-  // An app Studio can send, through a Genex plugin from before apps: the line says to update it.
-  const oldPlugin=await step('unityOldPlugin','window.platformsRig.open({scene:"unityOldPlugin"})');
-  assert.equal(oldPlugin.primaryDisabled,true);
-  assert.equal(oldPlugin.reach,'Update the Genex plugin in Plugins to publish apps.');
   // A web game with no app: the dialog as it was, no rows.
   const plain=await step('web','window.platformsRig.open({scene:"web"})');
   assert.equal(plain.listed,false);

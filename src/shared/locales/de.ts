@@ -4481,8 +4481,6 @@ export default {
   "Update and play": "Aktualisieren und spielen",
   "Update needed": "Update nötig",
   "Update ready — restart": "Update bereit – neu starten",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "Aktualisiere das Genex-Plugin unter „Plugins“, um Apps zu veröffentlichen.",
   "Update to {version}": "Auf {version} aktualisieren",
   "Update {count}": "{count} aktualisieren",
   "Update {name}": "{name} aktualisieren",

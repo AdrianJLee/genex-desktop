@@ -3376,9 +3376,8 @@ Genex:
   approved (a line under the rows gives Genex's reason), and players get it once it is approved. A draft sends no app,
   and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
-  The dialog sends apps only through an installed Genex plugin whose record says it can
-  (`native.supported`, `gateByPlugin`): a profile still on a plugin from before apps is told to
-  update it in Plugins. The plugin's `publishing-apps` skill tells the game's agent how to build an
+  The dialog sends apps only while the Genex plugin's record says it can (`native.supported`,
+  `gateByPlugin`). The plugin's `publishing-apps` skill tells the game's agent how to build an
   app or a web version (in `web/`) for Publish, how to make an app open in a window, and never to
   send the person to another store. A Unity web version is built from a full-window template the
   agent writes in `Assets/WebGLTemplates/Genex/`: Unity's own templates draw a fixed 960x600 box.

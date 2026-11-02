@@ -544,14 +544,14 @@ export interface GenexCoverRecord {
   last: GenexCoverSent | null;
   /** A send is running for this game right now. */
   sending: boolean;
-  /** The recent frames the person can flip between, newest first, the kept shot among them. Absent from older plugins. */
-  candidates?: GenexCoverShot[];
-  /** The kept cover clip, or null; absent from a plugin older than clips. */
-  clip?: GenexCoverClip | null;
+  /** The recent frames the person can flip between, newest first, the kept shot among them. */
+  candidates: GenexCoverShot[];
+  /** The kept cover clip, or null. */
+  clip: GenexCoverClip | null;
   /** How the last clip send went; null before any. */
   clipLast?: GenexCoverSent | null;
   /** When the agent itself last kept a shot and a clip (covers/<project>/agent.json). */
-  agentTook?: GenexCoverAgentTook;
+  agentTook: GenexCoverAgentTook;
 }
 
 /**
@@ -599,20 +599,11 @@ export interface GenexPublishState {
   /** Non-blocking conditions: reported, never a refusal. Missing git or git-lfs is a refusal, not one of these. */
   warnings?: string[];
   job?: GenexPublishJob;
-  /**
-   * The game's Genex cover, which publish-status answers beside the record and never stores in it.
-   * Absent from a Genex plugin older than covers.
-   */
+  /** The game's Genex cover, which publish-status answers beside the record and never stores in it. */
   cover?: GenexCoverRecord;
-  /**
-   * The game's Mac, Windows and Linux apps as its last publish sent them, answered beside the record like
-   * the cover. Absent from a Genex plugin older than native builds.
-   */
+  /** The game's Mac, Windows and Linux apps as its last publish sent them, answered beside the record like the cover. */
   native?: GenexNativeRecord;
-  /**
-   * The game's project as remixers get it, answered beside the record like the cover. Absent from a
-   * Genex plugin older than remixing from the app.
-   */
+  /** The game's project as remixers get it, answered beside the record like the cover. */
   remix?: GenexRemixRecord;
 }
 

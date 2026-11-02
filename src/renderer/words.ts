@@ -3831,8 +3831,6 @@ export const PUBLISH_PLATFORM_WORDS = {
   rebuildAsk: (players: string, title: string) =>
     t("Build the {players} app of {title} again so I can publish it.", { players, title }),
   rebuildFirst: (app: string) => t("The {app} is older than your last change: build it again, then publish.", { app }),
-  /** The installed Genex plugin is from before apps: its update sends them. */
-  updateGenex: t("Update the Genex plugin in Plugins to publish apps."),
   notListed: t("The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it."),
 } as const;
 

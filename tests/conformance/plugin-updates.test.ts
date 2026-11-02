@@ -1,7 +1,7 @@
 /**
  * Plugin updates as the renderer holds them (src/renderer/state/plugins.ts): which installed
- * plugins have a newer version waiting, the call that installs each, Update plugins (which installs
- * them all, one after another) and how the studio keeps the plugin index current. Driven through a
+ * plugins have a newer version waiting, Update plugins (which installs them all, one after another)
+ * and how the studio keeps the plugin index current. Driven through a
  * fake `StudioApi` in Node, no window.
  */
 import assert from "node:assert/strict";
@@ -16,7 +16,6 @@ import {
 import {
   chosenUpdates,
   createPluginsStore,
-  installPluginUpdate,
   PLUGIN_INDEX_POLL_MS,
   pluginUpdates,
   updateKey,
@@ -100,19 +99,6 @@ describe("choosing which updates to take", () => {
     const [newer] = pluginUpdates(list, index(["blender", "2.1.0"]));
     assert.ok(newer);
     assert.deepEqual(chosenUpdates([newer], skipped), [newer], "2.1.0 was never unticked");
-  });
-});
-
-describe("installing a plugin's update", () => {
-  it("installs an index release through update", async () => {
-    const fake = fakeStudioApi();
-    const [release] = pluginUpdates([plugin("genex"), plugin("blender")], index(["blender", "2.0.0"]));
-    assert.ok(release);
-    await installPluginUpdate(fake.api, release);
-    assert.deepEqual(
-      fake.calls.map((call) => [call.method, ...call.args]),
-      [["pluginUpdate", "blender"]],
-    );
   });
 });
 

@@ -3855,7 +3855,6 @@ export const MESSAGES = [
   "Update and play",
   "Update needed",
   "Update ready — restart",
-  "Update the Genex plugin in Plugins to publish apps.",
   "Update to {version}",
   "Update {count}",
   "Update {name}",

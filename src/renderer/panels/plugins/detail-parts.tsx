@@ -289,7 +289,7 @@ export function UpdateButton({ detail, page }: { detail: PluginInfo; page: Plugi
   const update = page.updates.get(detail.manifest.id);
   if (!update) return null;
   return (
-    <Button disabled={page.busy} onClick={() => void page.act(() => updatePlugin(detail, update))}>
+    <Button disabled={page.busy} onClick={() => void page.act(() => updatePlugin(detail))}>
       {t("Update to {version}", { version: update.version })}
     </Button>
   );

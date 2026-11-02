@@ -4273,8 +4273,6 @@ export default {
   "Update and play": "업데이트하고 플레이",
   "Update needed": "업데이트 필요",
   "Update ready — restart": "업데이트 준비 완료 — 다시 시작",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "앱을 게시하려면 ‘플러그인’에서 Genex 플러그인을 업데이트하세요.",
   "Update to {version}": "{version} 버전으로 업데이트",
   "Update {count}": "{count}개 업데이트",
   "Update {name}": "{name} 업데이트",

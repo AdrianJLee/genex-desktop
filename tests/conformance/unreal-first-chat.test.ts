@@ -235,12 +235,19 @@ describe("the turn that makes a game's Unreal project", () => {
     assert.equal(ready.healthCalls.length, 1);
   });
 
-  it("says plainly why when a step blocks, and doesn't go on", async (t) => {
+  // Flipped on purpose: a blocked step used to end the turn with the plugin's words asking the person
+  // to open the editor, though the agent opens, quits and restarts editors itself.
+  it("says plainly why when a step blocks, then the same session goes on, told to get the app ready itself", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     for (const healths of [[Health.Blocked], [Health.Pending, Health.Pending, Health.Blocked]]) {
       const blocked = await turnOn({ healths, timers: t.mock.timers });
-      assert.equal(blocked.delegated.length, 1, healths.join(","));
+      assert.equal(blocked.delegated.length, 2, healths.join(","));
       assert.ok(blocked.said.includes(NOT_OPENED), healths.join(","));
+      assert.deepEqual(
+        [blocked.delegated[1]?.resume, blocked.delegated[1]?.prompt],
+        ["s1", factsReadyPrompt(servedFactsOf(game(true) as never), undefined, NOT_OPENED)],
+        healths.join(","),
+      );
     }
   });
 
@@ -251,7 +258,9 @@ describe("the turn that makes a game's Unreal project", () => {
       onHealth: () => t.mock.timers.tick(READY_WAIT_MS),
       timers: t.mock.timers,
     });
-    assert.equal(waited.delegated.length, 1, "nothing goes on while it's pending");
+    // Flipped on purpose: the session goes on, told the app is still opening, as with a block.
+    assert.equal(waited.delegated.length, 2, "the agent goes on, told it is still opening");
+    assert.equal(waited.delegated[1]?.prompt, factsReadyPrompt(servedFactsOf(game(true) as never), undefined, OPENING));
     assert.ok(waited.said.includes(READY_WORDS.timedOut(OPENING)), waited.said.join(" | "));
     assert.ok(!waited.said.includes(NOT_OPENED));
   });
@@ -360,7 +369,7 @@ describe("the engine question, told how each kind stands", () => {
 
   it("a host that lists no kinds offers no Unreal kind", async () => {
     const none = await engineQuestion([]);
-    assert.doesNotMatch(none.prompt, /FIRST, THE ENGINE|unreal__new-game/);
+    assert.doesNotMatch(none.prompt, /THE ENGINE:|unreal__new-game/);
   });
 });
 

@@ -64,7 +64,6 @@ import {
 } from "./hooks.ts";
 import { EngineFailure, StopReason } from "./outage.ts";
 import { HostMethod } from "./host-methods.ts";
-import { StudioContract } from "./page-contract.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
 import { clip, CLIP_BRIEF, CLIP_GAME_TITLE } from "./text.ts";
 import { SECOND_MS, sleep } from "./time.ts";
@@ -597,7 +596,9 @@ function endedWithSession(options: DelegatedOptions, turn: FinishedTurn): boolea
  * turn, so the same session goes on by itself, with the tools and a brief for the new kind. A turn
  * that linked the game to an engine project, or switched its link to another, first waits until the
  * game's plugins say its apps are ready (`health`, `waitUntilReady`): that project's editor may still
- * be opening. Any other change goes on at once, whatever `health` would say. A run's turn, a turn
+ * be opening. One that never gets ready (a step blocks, or the wait's cap passes) goes on too, told
+ * why: the agent opens, reopens or waits for its app itself; only while the person is using the app
+ * (Genex's own hold) does nothing go on. Any other change goes on at once, whatever `health` would say. A run's turn, a turn
  * that did not end as it should, one whose facts are the same (a folder with no kind that took the
  * web starter included) and one whose game still has no facts end as they did.
  */
@@ -610,13 +611,14 @@ async function continueOnNewFacts(ctx: HarnessCtx, seat: Seat, turn: FinishedTur
   // A plugin's web build (Godot exporting its game for the web) leaves the game the kind it was.
   if (kindKey(servedFactsOf(handoff.descriptor)) === kindKey(servedFactsOf(game))) return turn.outcome;
   const next = await withFactsNow(ctx, handoff, game);
-  const waited = linkedAnew(handoff.descriptor, game) ? await waitUntilReady(ctx, options, next) : ReadyWait.Ready;
-  if (waited === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
-  if (waited === ReadyWait.Ended) return turn.outcome;
+  const waited = linkedAnew(handoff.descriptor, game) ? await waitUntilReady(ctx, options, next) : READY;
+  if (waited.wait === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
+  if (waited.wait === ReadyWait.Held) return turn.outcome;
   const launch = next.launchTool ? toolCall(options.engine, next.launchTool.name) : undefined;
   // The seat runs on the new kind from now on: a switch sent meanwhile starts from it.
   Object.assign(seat, { handoff: next, briefFor: await briefWriter(ctx, options, next) });
-  return goOnInSession(ctx, seat, turn, factsReadyPrompt(servedFactsOf(game), launch));
+  const notReady = waited.wait === ReadyWait.NotReady ? waited.reason : undefined;
+  return goOnInSession(ctx, seat, turn, factsReadyPrompt(servedFactsOf(game), launch, notReady));
 }
 
 /** The engine project a game is linked to, or null: a web game, or a folder whose project isn't linked. */
@@ -628,25 +630,32 @@ function linkedAnew(before: Handoff["descriptor"], after: Handoff["descriptor"])
   return link !== null && link !== engineLinkOf(before) && hooksOn(after, HookEvent.Health);
 }
 
-/** How a wait until the game's apps are ready ended: ready, Stop, or not ready (the chat was told why). */
-const ReadyWait = { Ready: "ready", Stopped: "stopped", Ended: "ended" } as const;
+/**
+ * How a wait until the game's apps are ready ended: ready, Stop, not ready (the chat was told why), or
+ * held for the person, who is using the app.
+ */
+const ReadyWait = { Ready: "ready", Stopped: "stopped", NotReady: "not-ready", Held: "held" } as const;
 type ReadyWait = (typeof ReadyWait)[keyof typeof ReadyWait];
+/** A wait's end, with why the apps aren't ready when they aren't. */
+type ReadyEnd = { wait: ReadyWait; reason?: string };
+const READY: ReadyEnd = { wait: ReadyWait.Ready };
 
 /**
  * Waits until the game's apps are ready, as its plugins' `health` steps say, up to `READY_WAIT_MS`:
  * the first reason a step gives for not being ready yet is said once in the chat (and on the
- * status line). Unless they are ready, the chat has been told why it doesn't go on.
+ * status line). Unless they are ready, the chat has been told why, and the answer carries it for
+ * the agent.
  */
-async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<ReadyWait> {
+async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<ReadyEnd> {
   const scope: HookScope = { project: handoff.project, threadId: options.threadId };
   const clock = { now: () => Date.now(), sleep };
   const until = Date.now() + READY_WAIT_MS;
   const first = await fireHooks(ctx, handoff.descriptor, HookEvent.Health, scope);
   if (first.blocked) {
     await sayInTurn(ctx, options.turnId, first.blocked.reason);
-    return ReadyWait.Ended;
+    return { wait: ReadyWait.NotReady, reason: first.blocked.reason };
   }
-  if (!first.pending) return ReadyWait.Ready;
+  if (!first.pending) return READY;
   const notReady = pendingLine(first.pending);
   await sayInTurn(ctx, options.turnId, notReady);
   ctx.setStatus?.(`waiting: ${notReady}`);
@@ -654,11 +663,11 @@ async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handof
   const ready = await waitReady(ctx, handoff.descriptor, scope, clock, until);
   if (ctx.cancelled) {
     await sayInTurn(ctx, options.turnId, READY_WORDS.stopped);
-    return ReadyWait.Stopped;
+    return { wait: ReadyWait.Stopped };
   }
-  if (ready.ok) return ReadyWait.Ready;
+  if (ready.ok) return READY;
   await sayInTurn(ctx, options.turnId, ready.timedOut ? READY_WORDS.timedOut(ready.reason) : ready.reason);
-  return ReadyWait.Ended;
+  return { wait: ready.held ? ReadyWait.Held : ReadyWait.NotReady, reason: ready.reason };
 }
 
 /**
@@ -914,7 +923,7 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
   const extraReads = Array.isArray(options.extraReads) ? options.extraReads : [];
   if (chat.project) {
     // The folder's own descriptor, not just its path: a chat build is briefed about the shape it
-    // is working in, the way every run brief already is (autopilot.ts, director.ts).
+    // is working in, the way every run brief already is (director/briefs.ts).
     const descriptor = games.find((g) => g.name === chat.project) ?? null;
     const projectDir = descriptor?.dir ?? null;
     const offer = await pluginOffer(ctx, chat.project, descriptor);
@@ -1038,7 +1047,6 @@ async function briefWriter(
   handoff: Handoff,
 ): Promise<(resumed: boolean) => string> {
   const { ask, messages, folderLabel, descriptor } = handoff;
-  const missing = await contractMissing(ctx, handoff);
   // A reopen's rules live in the after-run note: a change goes to the build, not to a launch.
   const launch = handoff.reopening ? null : launchGrant(handoff);
   const workers = Object.keys(chatWorkersGrant(options.threadId, options.steer?.messageId));
@@ -1055,7 +1063,6 @@ async function briefWriter(
       fresh: handoff.fresh,
       shape: descriptor?.shape ?? null,
       ownShape: descriptor?.built === true,
-      contractMissing: missing,
       // The one thing in the brief that is spelled per engine (M4.8b): a Codex session cannot
       // call an mcp__ name and a Claude session cannot run the bridge command.
       engine: options.engine,
@@ -1103,20 +1110,6 @@ function launchGrant(handoff: Handoff): LaunchGrant | null {
     frameCount: (commission?.frames ?? []).length,
     project: handoff.project,
   };
-}
-
-/**
- * A game the user brought that never loads the studio contract cannot be judged by anyone
- * (M2.6): the run's first step wires it in, and a chat build is the faster way to the same
- * place, so its brief says so before the ask. Only for a folder that is somebody's own game
- * — the studio's template already has it — and only when a brief is actually written: a
- * resumed session keeps the context it already has.
- */
-async function contractMissing(ctx: HarnessCtx, handoff: Handoff): Promise<boolean> {
-  const briefForBuiltGame = !handoff.resume && handoff.descriptor?.built === true;
-  if (!briefForBuiltGame || !servedAsWeb(handoff.descriptor)) return false;
-  const readiness = await ctx.call(HostMethod.GameValidate, { project: handoff.project }).catch(() => null);
-  return readiness?.contract === StudioContract.Missing;
 }
 
 /** "Claude Code (opus) · high effort": who the contractor is, as the handoff names it. */
@@ -1223,7 +1216,6 @@ function senses(options: DelegatedOptions, handoff: Handoff): AnyRecord {
       project,
       root: projectDir,
       ...(options.runId ? { runId: options.runId, facetId: "build", iteration: options.iteration ?? 0 } : {}),
-      ...(options.setup ? { setup: options.setup } : {}),
       label: options.runId ? "builder" : project,
     },
   };
@@ -1276,10 +1268,14 @@ function messageStills(options: DelegatedOptions): DelegateImage[] {
 }
 
 /**
- * The Loop mood board reaches a new session once; a resumed one already has it, and a Loop chat
+ * The pictures a Loop was commissioned with reach a new session once; a resumed one already has it, and a Loop chat
  * may run many turns before (or without) a build. The message's own stills replace it.
  */
-function moodBoard(options: DelegatedOptions, handoff: Handoff, resumeId: string | null | undefined): DelegateImage[] {
+function commissionPictures(
+  options: DelegatedOptions,
+  handoff: Handoff,
+  resumeId: string | null | undefined,
+): DelegateImage[] {
   if (options.stills || resumeId) return [];
   return handoff.commission?.frames ?? [];
 }
@@ -1295,7 +1291,7 @@ function delegate(
 ): Promise<DelegateResult> {
   const { engine, threadId, model, effort } = options;
   const { extraReads } = handoff;
-  const pictures = [...images, ...moodBoard(options, handoff, resumeId)];
+  const pictures = [...images, ...commissionPictures(options, handoff, resumeId)];
   return ctx.call(HostMethod.EngineDelegate, {
     engine,
     project: handoff.project,
@@ -1374,9 +1370,9 @@ async function handleDelegateFailure(
   // Auth is a sign-in problem, not a failover: swapping in the local model hides the
   // button the user needs. Rate limits still fall back so an unattended run survives a throttle.
   if (kind === EngineFailure.Auth) return askToSignIn(ctx, turnId, engine, engineLabel, err?.message ?? "");
-  // A run's build turn answers to the gauntlet's own engine-health policies (strikes,
-  // throttle waits, usage_limit preservation) — rethrow anything it must count, and let
-  // only the fallback case through so a run survives a throttle.
+  // A run's build turn answers to the run's own engine-health policies (throttle waits,
+  // usage_limit preservation) — rethrow anything it must count, and let only the fallback case
+  // through so a run survives a throttle.
   if (options.runId && !canFallBack(kind, fallbacks)) throw err;
   if (kind === EngineFailure.UsageLimit) {
     await sayInTurn(ctx, turnId, MESSAGE.outOfUsage(engine, err?.message));
@@ -1672,7 +1668,7 @@ const NOTHING_SEEN: PreviewCheck = Object.freeze({
  * What the preview showed of a finished turn: it is looked at when it changed the game's sources
  * and the game is a web page as the turn ends. A game that is no web page (linked to Unreal, or a
  * folder with no web game in it) has nothing for the preview to show: a black canvas would tell
- * the user to fix a screen that was never there and teach SkillOpt failed builds, so it gets no
+ * the user to fix a screen that was never there and record a failed build, so it gets no
  * health pass and no `build_observation`.
  */
 async function previewOfTurn(
@@ -1821,9 +1817,8 @@ function healthLine(
 }
 
 /**
- * The build becomes food for self-improvement: SkillOpt mines these observations the same
- * way it mines run iterations, so chat builds teach the studio too. `ok` is the whole truth —
- * the contractor's word AND what the screen showed — so a black build is a lesson, not a win.
+ * The turn's build is recorded as an observation. `ok` is the whole truth — the contractor's word
+ * AND what the screen showed — so a black build is not counted as a win.
  */
 async function recordBuildObservation(
   ctx: HarnessCtx,

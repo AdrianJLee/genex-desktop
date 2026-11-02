@@ -69,18 +69,20 @@ const MESSAGE = {
 } as const;
 
 export interface ModelsIpcDeps {
-  core: Pick<StudioCore, "engines">;
+  core: Pick<StudioCore, "engines" | "fastDecisions">;
   subscription(id: string): SubscriptionEngine | null;
   pushUiEvent(event: UiEvent): void;
   /** OpenRouter's browser sign-in, which hands the key it gets to the engine. */
   openRouterLogin: OpenRouterLogin;
+  /** The isolated UI smoke supplies a catalog machine without probing the host. */
+  readHardware?: typeof hardwareReport;
   /** The subscriptions' plan limits, kept live (`core/provider-usage.ts`). */
   usage: Pick<ProviderUsageService, "snapshot" | "refresh">;
 }
 
 export function registerModelsIpc(
   handle: IpcHandle,
-  { core, subscription, pushUiEvent, openRouterLogin, usage }: ModelsIpcDeps,
+  { core, subscription, pushUiEvent, openRouterLogin, usage, readHardware = hardwareReport }: ModelsIpcDeps,
 ): void {
   handle("studio:engines", async () => core.engines.describe());
   handle("studio:models.refresh", async (payload) => {
@@ -98,7 +100,7 @@ export function registerModelsIpc(
     void usage.refresh().catch(() => {});
     return usage.snapshot();
   });
-  handle("studio:hardware", async () => hardwareReport());
+  handle("studio:hardware", async () => readHardware());
   handle("studio:engines.recheck", async (payload) => {
     const ids = payload?.engine ? [payload.engine] : [...SUBSCRIPTION_ENGINES, ...RECHECKED_BY_MODELS];
     for (const id of ids) {
@@ -182,8 +184,8 @@ export function registerModelsIpc(
 }
 
 /**
- * The OpenRouter key, pasted or got by the browser sign-in: checked with OpenRouter, kept in the OS
- * secret store, never sent back.
+ * The OpenRouter key, pasted or got by the browser sign-in, and the TypeSafe key pilots' fast
+ * decisions use: each checked with its service, kept in the OS secret store, never sent back.
  */
 function registerApiKeyIpc(
   handle: IpcHandle,
@@ -204,6 +206,9 @@ function registerApiKeyIpc(
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
     return status;
   });
+  handle("studio:typesafe.key.status", async () => core.fastDecisions.status());
+  handle("studio:typesafe.key.save", async (payload) => core.fastDecisions.save(payload?.key));
+  handle("studio:typesafe.key.clear", async () => core.fastDecisions.clear());
   handle("studio:openrouter.signin", async () => {
     const engine = keyEngine();
     const result = await openRouterLogin.start((key) => engine.saveKey(key));

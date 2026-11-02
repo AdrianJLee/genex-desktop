@@ -7,7 +7,8 @@ its file a second time about a second later. Every high-resolution shot freezes 
 it renders, so shots meant to show motion must be spaced by the game clock (genex_build.shots).
 
 Python tools are synchronous and the shot is taken on a later frame, so capture_play queues it
-and returns the file; the host waits for the file to appear.
+and returns the file; the host waits for the file to appear. With ui, the shot is cut from a shot
+of the editor's window, where Slate draws the game's UI over the play view (genex_play.screen).
 """
 
 import os
@@ -16,7 +17,7 @@ import unreal
 
 from genex_loop import editor, paths
 from genex_loop.errors import Refused
-from genex_play import play
+from genex_play import play, screen
 
 CAPTURES = 'captures'
 WIDTH_RANGE = (320, 3840)
@@ -53,13 +54,16 @@ def console_shot(file: str, width: int, height: int) -> None:
     unreal.SystemLibrary.execute_console_command(world, f'HighResShot {width}x{height} filename="{file}"', controller)
 
 
-def capture_play(name: str, width: int, height: int) -> dict:
-    """Queues a high-resolution shot of the play view; {queued, file}."""
+def capture_play(name: str, width: int, height: int, ui: bool = False) -> dict:
+    """Queues a shot of the play view, with the game's on-screen UI when `ui`; {queued, file, ui}."""
     file = capture_file(name)
     if editor.play_world() is None:
         raise Refused(MESSAGE['not_playing'], name=name)
     os.makedirs(os.path.dirname(file), exist_ok=True)
     if os.path.lexists(file):
         os.remove(file)
-    console_shot(file, _size(width, DEFAULT_SIZE[0], WIDTH_RANGE), _size(height, DEFAULT_SIZE[1], HEIGHT_RANGE))
-    return {'queued': True, 'file': file}
+    size = (_size(width, DEFAULT_SIZE[0], WIDTH_RANGE), _size(height, DEFAULT_SIZE[1], HEIGHT_RANGE))
+    if ui:
+        return screen.take(file, size[0], lambda target: console_shot(target, *size))
+    console_shot(file, *size)
+    return {'queued': True, 'file': file, 'ui': False}

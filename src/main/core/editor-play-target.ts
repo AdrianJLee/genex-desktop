@@ -14,22 +14,29 @@
  * What the target can do is what the engine's plugin declares (`editorCapabilities`), narrowed by
  * what the opened play says of itself. A play of several players addresses one at a time; player 1
  * is never named on the wire, so an engine with one player sees exactly what it always has. A
- * picture is the engine's JPEG or PNG, refused over `MAX_PLAY_SHOT_BYTES`; a pause the engine
+ * picture is the engine's JPEG or PNG, re-encoded as a smaller JPEG over `MAX_PLAY_SHOT_BYTES` (and refused only
+ * when even that does not fit); a pause the engine
  * cannot do is asked once, then the clock is known to run on.
  */
+import { setTimeout as sleep } from "node:timers/promises";
 import { SECOND_MS } from "../../shared/duration.ts";
+import type { FastDecider } from "../../shared/fast-decisions.ts";
+import { runPilot } from "./editor-pilot.ts";
 import {
   ENGINE_PLAY_VIEW,
   type EnginePlayMouse,
+  EnginePlayOptionalTool,
   EnginePlayRefusal,
   EnginePlayTool,
   isEnginePlayRefused,
+  lookedOf,
   MAX_PLAY_INPUT_SECONDS,
   MAX_PLAY_SHOT_BYTES,
   MouseButtonCode,
   narrowCapabilities,
   playerArgs,
   playInputArgs,
+  walkedOf,
 } from "../../shared/engine-play.ts";
 import { ClockLevel, EDITOR_CAPABILITIES, InputRoute, type TargetCapabilities } from "../../shared/computer-target.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -56,7 +63,10 @@ const BUTTON_CODE = {
 type Hold = { keys: string[]; seconds: number; mouse?: EnginePlayMouse };
 
 /** Calls one of the game's engine plugin's play tools, under the session's hold on the editor. */
-export type EnginePlayCall = (tool: EnginePlayTool, args: Record<string, unknown>) => Promise<unknown>;
+export type EnginePlayCall = (
+  tool: EnginePlayTool | EnginePlayOptionalTool,
+  args: Record<string, unknown>,
+) => Promise<unknown>;
 
 /** Bytes in a megabyte, as a picture's size is said. */
 const MEGABYTE = 1_000_000;
@@ -74,7 +84,11 @@ function megabytes(bytes: number): string {
 }
 
 /** A play tool's answer, or the refusal's words as an error. */
-async function answered(call: EnginePlayCall, tool: EnginePlayTool, args: Record<string, unknown> = {}) {
+async function answered(
+  call: EnginePlayCall,
+  tool: EnginePlayTool | EnginePlayOptionalTool,
+  args: Record<string, unknown> = {},
+) {
   const answer = await call(tool, args);
   if (isEnginePlayRefused(answer)) throw new Error(answer.message);
   return answer;
@@ -156,21 +170,32 @@ export interface EditorPlayTarget extends ComputerTarget {
   readonly caps: TargetCapabilities;
 }
 
-/** A play shot's picture: its bytes and how they are encoded (a JPEG only when the engine says so). */
-function shotOf(answer: unknown): TargetShot {
+/** Re-encodes a picture too large to show as a smaller JPEG. */
+export type ShrinkShot = (picture: Buffer) => Promise<Buffer>;
+
+/**
+ * A play shot's picture: its bytes and how they are encoded (a JPEG only when the engine says so).
+ * One over the size a model can be shown is shrunk to a JPEG when the source can; refused when it
+ * can't, or when even the JPEG doesn't fit.
+ */
+async function shotOf(answer: unknown, shrink: ShrinkShot | undefined): Promise<TargetShot> {
   const data = field(answer, "data") ?? field(answer, "png");
   if (typeof data !== "string") throw new Error(MESSAGE.noAnswer(EnginePlayTool.Shot));
   const bytes = Buffer.from(data, "base64");
-  if (bytes.length > MAX_PLAY_SHOT_BYTES) throw new Error(MESSAGE.tooLarge(bytes.length));
   const mime = field(answer, "mime") === StillMimeType.Jpeg ? StillMimeType.Jpeg : StillMimeType.Png;
-  return { jpeg: bytes, mime, stats: null, surface: null };
+  if (bytes.length <= MAX_PLAY_SHOT_BYTES) return { jpeg: bytes, mime, stats: null, surface: null };
+  const smaller = shrink ? await shrink(bytes) : bytes;
+  if (smaller.length > MAX_PLAY_SHOT_BYTES) throw new Error(MESSAGE.tooLarge(bytes.length));
+  return { jpeg: smaller, mime: StillMimeType.Jpeg, stats: null, surface: null };
 }
 
 function editorPlayTarget(
   call: EnginePlayCall,
   view: { width: number; height: number },
   opened: TargetCapabilities,
+  extras: { shrink: ShrinkShot | undefined; decider: (() => Promise<FastDecider | null>) | undefined },
 ): EditorPlayTarget {
+  const { shrink } = extras;
   let caps = opened;
   let player = 1;
   // The play's own pause: a judge's game stands still while it looks; no exact step. An engine
@@ -193,7 +218,7 @@ function editorPlayTarget(
     selectPlayer: (next) => {
       player = next;
     },
-    screenshot: async () => shotOf(await answered(call, EnginePlayTool.Shot, { ...playerArgs(player) })),
+    screenshot: async () => shotOf(await answered(call, EnginePlayTool.Shot, { ...playerArgs(player) }), shrink),
     input: async (actions) => {
       let applied = 0;
       for (const action of actions) {
@@ -207,6 +232,24 @@ function editorPlayTarget(
     },
     state: () => answered(call, EnginePlayTool.State, { ...playerArgs(player) }),
     clock: { pause: () => setPaused(true), start: () => setPaused(false) },
+    walk: async (spec) => {
+      const args = { target: spec.target, ...(spec.seconds ? { seconds: spec.seconds } : {}), ...playerArgs(player) };
+      return {
+        walked: walkedOf(await answered(call, EnginePlayOptionalTool.Walk, args), spec.target),
+        route: InputRoute.Editor,
+      };
+    },
+    look: async (spec) => {
+      const answer = await answered(call, EnginePlayOptionalTool.Look, { target: spec.target, ...playerArgs(player) });
+      return { looked: lookedOf(answer, spec.target), route: InputRoute.Editor };
+    },
+    pilot: async (spec) => {
+      // Optional: no decider (no key, or a fixture) and the pilot plays by its own order.
+      const decider = (await extras.decider?.().catch(() => null)) ?? null;
+      const playerCall: EnginePlayCall = (tool, args) => call(tool, { ...args, ...playerArgs(player) });
+      const deps = { call: playerCall, decider, now: Date.now, sleep: (ms: number) => sleep(ms) };
+      return { piloted: await runPilot(deps, spec), route: InputRoute.Editor };
+    },
   };
 }
 
@@ -239,17 +282,18 @@ function askedCapabilities(declared: TargetCapabilities, asked: number): TargetC
  * The editor target's source. `call` reaches the plugin's play tools (each under the editor lock);
  * `caps` is what the engine's plugin declares its play can do (the editor's own when absent), and
  * `players` how many players to open (one when absent, never more than declared); `frame` puts a
- * picture on the agent's screen; `fresh` asks for a play started over, never one joined mid-level
- * (a judge's or a playtester's, who judge the game from its start); `afterOpen` runs once, with the
- * open's answer, right after the session's play first opens and before any move (a judge's probe).
+ * picture on the agent's screen; `afterOpen` runs once, with the open's answer, right after the
+ * session's play first opens and before any move; `shrink` re-encodes a shot too large to show;
+ * `decider` is the fast decision model a pilot's asks go to, when one is set up (optional).
  */
 export function editorPlaySource(options: {
   call: EnginePlayCall;
   caps?: TargetCapabilities;
   players?: number;
+  shrink?: ShrinkShot;
   frame?: (target: EditorPlayTarget, jpeg: Buffer | null, caption: string, act: ScreenAct) => Promise<void>;
-  fresh?: boolean;
   afterOpen?: (opened: unknown) => Promise<void>;
+  decider?: () => Promise<FastDecider | null>;
 }): EditorPlaySource {
   const caps = askedCapabilities(options.caps ?? EDITOR_CAPABILITIES, options.players ?? 1);
   const players = caps.players ?? 1;
@@ -265,13 +309,13 @@ export function editorPlaySource(options: {
   const load = async (_root: string, force: boolean): Promise<TargetLoad<EditorPlayTarget> & { fresh: boolean }> => {
     if (open && !force) return { target: open, problem: null, note: null, fresh: false };
     try {
-      const asked = { ...(players > 1 ? { players } : {}), ...(options.fresh ? { fresh: true } : {}) };
+      const asked = players > 1 ? { players } : {};
       const opened = await answered(call, EnginePlayTool.Open, asked);
       const view = { width: sizeOf(opened, "width"), height: sizeOf(opened, "height") };
       // The play's own word on what it can do, and how many players joined: it only ever narrows.
       const joined = { players: field(opened, "players") };
       const played = narrowCapabilities(narrowCapabilities(caps, field(opened, "capabilities")), joined);
-      open = editorPlayTarget(call, view, played);
+      open = editorPlayTarget(call, view, played, { shrink: options.shrink, decider: options.decider });
       const after = afterOpen;
       afterOpen = undefined;
       await after?.(opened);

@@ -10,8 +10,9 @@
  *
  * The action vocabulary is Anthropic's `computer_toolset_20260801` (screenshot, zoom,
  * left_click …, key, type, scroll, wait) so both models already know how to hold it, plus the
- * studio verbs a game needs: `camera` (a named studio viewpoint), `state` (the game's own
- * numbers), `reload` (rebuild + reload after edits), `console` (errors since load).
+ * studio verbs a target may have: `state` (what it reports about itself), `reload` (rebuild +
+ * reload after edits), `console` (errors since load), `recap` (what the session's moves amounted
+ * to), and `camera` (a named viewpoint; no target offers one today).
  *
  * Electron-free: this file parses the flat arguments the bridge shim and the MCP schema
  * deliver and maps an action onto {@link PreviewInputAction}s. The port that executes them
@@ -45,7 +46,6 @@ import {
   COMPUTER_PARAMETER_TEXT,
   computerToolDescription,
   type ComputerToolRole,
-  knownCamerasLine,
 } from "./computer-tool-prompts.ts";
 
 export const COMPUTER_TOOL_NAME = "computer";
@@ -84,8 +84,12 @@ export const COMPUTER_HOST_ACTIONS = [
   "state",
   "reload",
   "console",
+  "recap",
   "batch",
   "act",
+  "walk_to",
+  "look_at",
+  "pilot",
   "web_open",
   "web_read",
   "web_click",
@@ -101,6 +105,9 @@ export const ComputerVerb = {
   Reload: "reload",
   Act: "act",
   Look: "look",
+  WalkTo: "walk_to",
+  LookAt: "look_at",
+  Pilot: "pilot",
   BringToFront: "bring_to_front",
   OpenPage: "open_page",
 } as const;
@@ -135,8 +142,7 @@ export type ScrollDirection = "up" | "down" | "left" | "right";
 
 /**
  * What an input action brings back with its answer: a picture of the whole screen, of only the
- * canvas, or nothing. Absent lets the session decide by role (a playtester and a judge look after
- * every move; a builder does not).
+ * canvas, or nothing. Absent lets the session decide (`observeByDefault`).
  */
 export const ComputerObserve = { Screenshot: "screenshot", Canvas: "canvas", None: "none" } as const;
 export type ComputerObserve = (typeof ComputerObserve)[keyof typeof ComputerObserve];
@@ -191,8 +197,6 @@ export const COMPUTER_VIEW = { width: 960, height: 600 } as const;
 const DEFAULT_SCROLL_NOTCHES = 3;
 /** Seconds a wait or a held key lasts when it names none. */
 const DEFAULT_DURATION_S = 1;
-/** How many camera names the tool description lists. */
-const MAX_LISTED_CAMERAS = 12;
 /** How much of an unknown surface word the note quotes back. */
 const MAX_QUOTED_SURFACE_CHARS = 40;
 /** How much of typed text a caption quotes. */
@@ -435,6 +439,9 @@ const ACTION_NEEDS: Partial<Record<ComputerAction, (request: ComputerRequest) =>
   camera: (r) => (r.text ? null : COMPUTER_ARG_PROBLEM.cameraNeedsName),
   look: (r) => (r.dx !== undefined || r.dy !== undefined ? null : COMPUTER_ARG_PROBLEM.lookNeedsDelta),
   act: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.actNeedsName),
+  walk_to: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.targetNeeded(r.action)),
+  look_at: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.targetNeeded(r.action)),
+  pilot: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.pilotNeedsFile),
   web_open: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.webOpenNeedsUrl),
   web_click: (r) => (r.ref ? null : COMPUTER_ARG_PROBLEM.webNeedsRef(r.action)),
   web_type: (r) => (r.ref && r.text !== undefined ? null : COMPUTER_ARG_PROBLEM.webTypeNeedsRefAndText),
@@ -540,6 +547,19 @@ function pointerInput(request: ComputerRequest): PreviewInputAction[] {
  * An input action → the preview's HID plan. Coordinates are pixels of the last screenshot
  * (origin top-left), clamped by the port; a click without a coordinate lands on the pointer.
  */
+/** Input that only points (hovering, scrolling): a game may rightly not answer it at all. */
+const POINTING_ONLY: ReadonlySet<ComputerAction> = new Set<ComputerAction>(["mouse_move", "scroll"]);
+
+/** Whether a move presses something a game should answer: a key, a click, typing, a look or a named action; in a batch, any step. */
+export function pressesSomething(request: ComputerRequest): boolean {
+  if (request.action === ComputerVerb.Batch) return (request.steps ?? []).some(pressesSomething);
+  if (request.action === ComputerVerb.Act || request.action === ComputerVerb.WalkTo) return true;
+  if (request.action === ComputerVerb.LookAt || request.action === ComputerVerb.Pilot) return true;
+  return (
+    (COMPUTER_INPUT_ACTIONS as readonly ComputerAction[]).includes(request.action) && !POINTING_ONLY.has(request.action)
+  );
+}
+
 export function computerToInput(request: ComputerRequest, pointer: { x: number; y: number }): PreviewInputAction[] {
   const click = CLICKS[request.action];
   if (click) {
@@ -599,6 +619,9 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
   scroll: (caps) => caps.pointer !== PointerLevel.None,
   cursor_position: (caps) => canPoint(caps),
   act: (caps) => caps.actions,
+  walk_to: (caps) => caps.walk === true,
+  look_at: (caps) => caps.walk === true,
+  pilot: (caps) => caps.pilot === true,
   state: (caps) => hasState(caps),
   console: (caps) => caps.console,
   reload: (caps) => caps.reload,
@@ -653,7 +676,6 @@ export interface ComputerToolSchema {
 export function computerToolDefinition(
   options: {
     role?: ComputerToolRole;
-    cameras?: string[];
     capabilities?: TargetCapabilities;
     view?: { width: number; height: number };
     observeByDefault?: boolean;
@@ -662,7 +684,6 @@ export function computerToolDefinition(
   } = {},
 ): ComputerToolSchema {
   const capabilities = options.capabilities ?? BROWSER_CAPABILITIES;
-  const cameras = knownCamerasLine((options.cameras ?? []).slice(0, MAX_LISTED_CAMERAS));
   const text = COMPUTER_PARAMETER_TEXT;
   const view = options.view ?? COMPUTER_VIEW;
   return {
@@ -670,7 +691,6 @@ export function computerToolDefinition(
     description: computerToolDescription({
       role: options.role ?? "builder",
       view,
-      cameras,
       capabilities,
       ...(options.observeByDefault ? { observeByDefault: true } : {}),
     }),
@@ -726,11 +746,15 @@ const ACTION_DEED: Record<ComputerAction, ScreenDeed> = {
   camera: ScreenDeed.Look,
   state: ScreenDeed.Look,
   console: ScreenDeed.Look,
+  recap: ScreenDeed.Look,
   wait: ScreenDeed.Wait,
   reload: ScreenDeed.Reload,
   batch: ScreenDeed.Press,
   look: ScreenDeed.Move,
   act: ScreenDeed.Press,
+  walk_to: ScreenDeed.Move,
+  look_at: ScreenDeed.Move,
+  pilot: ScreenDeed.Move,
   web_open: ScreenDeed.Load,
   web_read: ScreenDeed.Look,
   web_click: ScreenDeed.Click,
@@ -800,6 +824,12 @@ function describeStudioAction(request: ComputerRequest): string {
       return `zoom ${request.region?.map(Math.round).join(",")}`;
     case "camera":
       return `camera ${request.text}`;
+    case "walk_to":
+      return `walk to ${String(request.text ?? "").slice(0, MAX_CAPTION_TEXT_CHARS)}`;
+    case "look_at":
+      return `look at ${String(request.text ?? "").slice(0, MAX_CAPTION_TEXT_CHARS)}`;
+    case "pilot":
+      return `pilot ${String(request.text ?? "").slice(0, MAX_CAPTION_TEXT_CHARS)}`;
     case "batch":
       return `batch: ${(request.steps ?? []).map(describeAction).join(", ")}`;
     case "look":
@@ -842,8 +872,6 @@ function describeWebAction(request: ComputerRequest): string {
 export type { PreviewSetup };
 
 const MAX_SETUP_ACTIONS = 24;
-/** The longest demo name a setup keeps. */
-const MAX_DEMO_CHARS = 80;
 /** The longest settle a setup may ask for. */
 const MAX_SETTLE_MS = 10 * SECOND_MS;
 /** The longest note a setup keeps. */
@@ -869,25 +897,12 @@ function normalizeGesture(raw: unknown): PreviewSetup["gesture"] | undefined {
   };
 }
 
-/** A setup's verify: a plain dotted state path, and what it should hold. */
-function normalizeVerify(raw: unknown): PreviewSetup["verify"] | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const v = raw as Record<string, unknown>;
-  if (typeof v.path !== "string" || !/^[a-zA-Z_$][\w$]*(\.[a-zA-Z_$][\w$]*)*$/.test(v.path)) return undefined;
-  if (v.path.split(".").some((key) => MACHINERY_KEYS.has(key))) return undefined;
-  return {
-    path: v.path,
-    ...("equals" in v ? { equals: v.equals } : {}),
-    ...(v.truthy === true ? { truthy: true } : {}),
-  };
-}
-
 /** A non-blank string, trimmed and cut to \`max\`; undefined for anything else. */
 function trimmedText(value: unknown, max: number): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, max) : undefined;
 }
 
-/** Untrusted JSON (a scout's answer, a journal) → a setup the studio will run, or null. */
+/** Untrusted JSON (a harness's setup, a journal) → a setup the studio will run, or null. */
 export function normalizeSetup(raw: unknown): PreviewSetup | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -899,51 +914,9 @@ export function normalizeSetup(raw: unknown): PreviewSetup | null {
     const actions = capActions(o.actions).slice(0, MAX_SETUP_ACTIONS);
     if (actions.length) setup.actions = actions;
   }
-  const demo = trimmedText(o.demo, MAX_DEMO_CHARS);
-  if (demo) setup.demo = demo;
   const settle = Number(o.settleMs);
   if (Number.isFinite(settle) && settle > 0) setup.settleMs = Math.min(MAX_SETTLE_MS, Math.round(settle));
-  const verify = normalizeVerify(o.verify);
-  if (verify) setup.verify = verify;
   const note = trimmedText(o.note, MAX_SETUP_NOTE_CHARS);
   if (note) setup.note = note;
-  return setup.actions || setup.demo || setup.verify || setup.gesture ? setup : null;
-}
-
-/** Path segments that would read the object machinery rather than the game's own state. */
-const MACHINERY_KEYS: ReadonlySet<string> = new Set(["__proto__", "prototype", "constructor"]);
-
-/** A dotted path read through own fields only: never the prototype chain, never its machinery. */
-function lookupPath(state: unknown, path: string): unknown {
-  let current: unknown = state;
-  for (const key of path.split(".")) {
-    if (typeof current !== "object" || current === null || MACHINERY_KEYS.has(key)) return undefined;
-    if (!Object.hasOwn(current, key)) return undefined;
-    current = (current as Record<string, unknown>)[key];
-  }
-  return current;
-}
-
-/** Did the state land? `null` when the state itself is unreadable (no contract, no answer). */
-export function setupReached(verify: PreviewSetup["verify"], state: unknown): boolean | null {
-  if (!verify) return null;
-  const readable = typeof state === "object" && state !== null && !(state as { __missing?: boolean }).__missing;
-  if (!readable) return null;
-  const value = lookupPath(state, verify.path);
-  if ("equals" in verify)
-    return value !== undefined && (value === verify.equals || String(value) === String(verify.equals));
-  if (verify.truthy) return Boolean(value);
-  return value !== undefined;
-}
-
-/** The same test as a harness probe expression, so the board can carry it as a check. */
-export function setupVerifyExpr(verify: PreviewSetup["verify"]): string | null {
-  if (!verify) return null;
-  if ("equals" in verify) {
-    const v = verify.equals;
-    const literal = typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(String(v));
-    return `has(${JSON.stringify(verify.path)}) && ${verify.path} == ${literal}`;
-  }
-  if (verify.truthy) return `has(${JSON.stringify(verify.path)}) && ${verify.path}`;
-  return `has(${JSON.stringify(verify.path)})`;
+  return setup.actions || setup.gesture ? setup : null;
 }

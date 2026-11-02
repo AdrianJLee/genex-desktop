@@ -28,6 +28,8 @@ import { mkdtempSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
+import { FastDecisions } from "../../src/main/core/fast-decisions.ts";
+import { memoryKeyStore } from "../../src/substrate/provider-keys.ts";
 import type { CodexLoginState } from "../../src/shared/codex-login.ts";
 import { OpenRouterSignInProblem } from "../../src/shared/openrouter-login.ts";
 import { ModelPullProblem } from "../../src/shared/model-install.ts";
@@ -36,6 +38,7 @@ import { EngineError } from "../../src/substrate/engines/types.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
 import { RestartAnswer, UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
+import { recommendModels, type HardwareInfo } from "../../src/substrate/hardware.ts";
 
 type Listener = (event: IpcSender, payload: unknown) => Promise<IpcResult>;
 const studio = { sender: "studio", senderFrame: "main-frame" };
@@ -809,6 +812,39 @@ describe("both sign-in paths go through the controllers", () => {
   });
 });
 
+describe("local model hardware in isolated acceptance", () => {
+  it("uses the supplied machine and its catalog without detecting the host", async () => {
+    const hardware: HardwareInfo = {
+      cpu: "Fixture Apple Silicon",
+      ramBytes: 32 * 1024 ** 3,
+      ramGb: 32,
+      usableModelGb: 23,
+      platform: "darwin",
+      arch: "arm64",
+      appleSilicon: true,
+    };
+    const report = { hardware, recommendation: await recommendModels(hardware) };
+    let reads = 0;
+    const core = { engines: {} } as ModelsIpcDeps["core"];
+    const { handle, invoke } = registrar();
+    registerModelsIpc(handle, {
+      core,
+      subscription: () => null,
+      pushUiEvent: () => {},
+      openRouterLogin: noSignIn,
+      readHardware: async () => {
+        reads++;
+        return report;
+      },
+      usage: noUsage,
+    });
+    assert.deepEqual(await invoke("studio:hardware"), { ok: true, value: report });
+    assert.equal(reads, 1);
+    for (const model of ["bonsai-2:27b-pq2_0", "bonsai-2:27b-ptq1_0"])
+      assert.ok(report.recommendation.picks.some((pick) => pick.model === model && pick.fits));
+  });
+});
+
 describe("the composer's plan limits", () => {
   it("answer with the limits as they stand at once, and push each subscription's fresh read", async () => {
     const usage = {
@@ -953,7 +989,7 @@ it("model refresh validates provider identities before invoking discovery", asyn
     },
   });
   // Only the registrar's engine registry is needed; no profile or credentials are opened.
-  const core = { engines };
+  const core = { engines, fastDecisions: noFastDecisions };
   const { handle, invoke } = registrar();
   registerModelsIpc(handle, {
     core,
@@ -1057,7 +1093,7 @@ it("model refresh and recheck reach OpenCode and OpenRouter, which have no subsc
   const events: UiEvent[] = [];
   const { handle, invoke } = registrar();
   registerModelsIpc(handle, {
-    core: { engines },
+    core: { engines, fastDecisions: noFastDecisions },
     subscription: () => null,
     usage: noUsage,
     pushUiEvent: (event) => events.push(event),
@@ -1071,6 +1107,8 @@ it("model refresh and recheck reach OpenCode and OpenRouter, which have no subsc
 
 /** A browser sign-in that is never started: the registrars under test do not reach it. */
 /** No subscription's limits: the tests that use it never ask for them. */
+/** No TypeSafe key: the fast decision model is optional, and these tests never reach TypeSafe. */
+const noFastDecisions = new FastDecisions(memoryKeyStore());
 const noUsage: ModelsIpcDeps["usage"] = { snapshot: () => [], refresh: async () => {} };
 
 const noSignIn: ModelsIpcDeps["openRouterLogin"] = {
@@ -1098,7 +1136,7 @@ it("the OpenRouter key is saved and forgotten through the engine, and only its s
     const events: UiEvent[] = [];
     const { handle, invoke } = registrar();
     registerModelsIpc(handle, {
-      core: { engines },
+      core: { engines, fastDecisions: noFastDecisions },
       subscription: () => null,
       usage: noUsage,
       pushUiEvent: (event) => events.push(event),
@@ -1166,7 +1204,7 @@ it("the browser sign-in hands its key to the engine, and only how it ended comes
     const { handle, invoke } = registrar();
     let login = returning("sk-or-v1-refused-refused-refused");
     registerModelsIpc(handle, {
-      core: { engines },
+      core: { engines, fastDecisions: noFastDecisions },
       subscription: () => null,
       usage: noUsage,
       pushUiEvent: (event) => events.push(event),

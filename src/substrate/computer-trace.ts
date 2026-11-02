@@ -7,6 +7,8 @@
  * Electron-free and pure: the session decides what goes in a row; this module only shapes it.
  */
 import type { ComputerTraceSummary, InputRoute } from "../shared/computer-target.ts";
+import type { EnginePlayFinding } from "../shared/engine-play.ts";
+import type { StillKind } from "./computer-response.ts";
 
 /** The file every session's trace is written to, beside its frames. */
 export const TRACE_FILE = "trace.jsonl";
@@ -36,6 +38,10 @@ export interface TraceRow {
   failed?: string;
   /** Set on the action after which the studio verified the session's goal was reached. */
   reached?: true;
+  /** Set on a move that pressed something the game took, yet left its state as it was (`computer-response.ts`). */
+  still?: StillKind;
+  /** What the game's own bug detectors told with this action's state read. */
+  findings?: EnginePlayFinding[];
 }
 
 /** What a finished session's trace adds up to (`shared/computer-target.ts`). */

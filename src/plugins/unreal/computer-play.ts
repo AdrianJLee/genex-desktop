@@ -16,26 +16,40 @@
 import {
   ENGINE_PLAY_VIEW,
   type EnginePlayInputAnswer,
+  type EnginePlayLooked,
+  EnginePlayLookState,
   type EnginePlayOpened,
+  EnginePlayOptionalTool,
   EnginePlayRefusal,
   type EnginePlayRefused,
   type EnginePlayShot,
   EnginePlayTool,
+  type EnginePlayWalked,
+  EnginePlayWalkState,
+  lookedOf,
   MAX_PLAY_INPUT_SECONDS,
   MouseButtonCode,
+  PilotPhase,
   playerArg,
   playInputKeys,
+  walkedOf,
 } from "../../shared/engine-play.ts";
+import { realpath, stat } from "node:fs/promises";
+import path from "node:path";
+import { SECOND_MS } from "../../shared/duration.ts";
 import { StillMimeType } from "../../shared/preview-contract.ts";
 import type { PluginContext } from "../../plugin-sdk/index.d.ts";
 import { type AgentPlayMarker, agentPlayFolder, agentPlayMarker, agentPlaying, NO_AGENT_PLAY } from "./agent-play.ts";
 import {
   type EditorQueue,
+  followMotion,
   gameClock,
   type GiveBack,
   LoopTool,
   liftThrottle,
+  PlayMotion,
   playFor,
+  playForWhileRunning,
   playing,
   type QueueDeps,
   shoot,
@@ -43,11 +57,25 @@ import {
   startStep,
   stopPlay,
 } from "./editor-queue.ts";
+import { linkedProject } from "./editor-port.ts";
+import { writeRunRecord } from "./playtest-record.ts";
+import { ensureStarterPilot } from "./starter-pilot.ts";
 
 /** How long a play this session starts runs before the first look, in game seconds, as the play-check's does. */
 const WARMUP_SECONDS = 2;
+/** A play whose clock stands still this long has paused itself (a title menu): it is warm. */
+const WARMUP_STILL_MS = 1.5 * SECOND_MS;
 /** The shortest hold the helper takes, in game seconds: about a tap. */
 const MIN_HOLD_SECONDS = 0.05;
+/** A walk's most game seconds when the call names none, the most it may name, and how near it stops (m). */
+const WALK_SECONDS = 20;
+const MAX_WALK_SECONDS = 120;
+const WALK_WITHIN_M = 1.2;
+/** A turn of the view's most game seconds: a slow editor takes a few game seconds for its frames. */
+const LOOK_SECONDS = 6;
+/** A pilot's game seconds when the call names none, and the most it may name (the helper's own cap). */
+const PILOT_SECONDS = 60;
+const MAX_PILOT_SECONDS = 300;
 /** A play shot's name: the helper takes 1 to 64 letters, digits, `_` or `-`. */
 const SHOT_PREFIX = "genex-computer";
 
@@ -106,8 +134,13 @@ const MESSAGE = {
   onePlayer: "Unreal plays one player here; play with one.",
 } as const;
 
+/** Unreal's own names for the keys the table maps to. */
+const UNREAL_KEY_NAMES: ReadonlySet<string> = new Set(Object.values(UNREAL_KEYS));
+
 /** Unreal's name for a web key code, or null when Unreal has none. */
 export function unrealKey(code: string): string | null {
+  // Unreal's own name for a key (LeftMouseButton, SpaceBar, E), as an agent who read the game's code writes it.
+  if (UNREAL_KEY_NAMES.has(code) || /^[A-Z]$/.test(code)) return code;
   const letter = /^Key([A-Z])$/.exec(code);
   if (letter) return letter[1] ?? null;
   const digit = /^Digit([0-9])$/.exec(code);
@@ -179,6 +212,132 @@ async function endForFresh(
   return null;
 }
 
+/**
+ * What a new play session takes from the editor and gives back when it ends: the background throttle,
+ * and the full rendering (an agent's play renders lighter, so a heavy game plays at a usable rate). An
+ * older helper without the light switch is left as it renders.
+ */
+async function liftThrottleAndLight(
+  port: ReturnType<QueueDeps["editor"]>,
+  platform: NodeJS.Platform | undefined,
+): Promise<GiveBack> {
+  const throttle = await liftThrottle(port, platform);
+  const lit = await port.call(LoopTool.LightPlay, { on: true }).catch(() => null);
+  const lightened = typeof lit === "object" && lit !== null && Reflect.get(lit, "light") === true;
+  return async () => {
+    if (lightened) await port.call(LoopTool.LightPlay, { on: false }).catch(() => undefined);
+    await throttle();
+  };
+}
+
+/** Where a call's game plays: its queue's clock and its editor's port. */
+type PortOf = (
+  storage: string,
+  context: PluginContext,
+) => { game: string; queueDeps: QueueDeps; port: ReturnType<QueueDeps["editor"]> };
+
+/** The play tools that walk the player and turn its view by themselves, through the helper. */
+function motionHandlers(portOf: PortOf) {
+  const walk = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { queueDeps, port } = portOf(storage, context);
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    const target = typeof args.target === "string" ? args.target.trim() : "";
+    const asked = numberArg(args.seconds);
+    const seconds = Math.min(MAX_WALK_SECONDS, asked > 0 ? asked : WALK_SECONDS);
+    const start = { tool: LoopTool.WalkTo, key: PlayMotion.Walk, args: { target, within: WALK_WITHIN_M, seconds } };
+    const last = await followMotion(queueDeps, port, start, seconds);
+    const answer: EnginePlayWalked =
+      typeof last.error === "string"
+        ? walkedOf({ state: EnginePlayWalkState.Failed, reason: last.error }, target)
+        : walkedOf(last, target);
+    return answer;
+  };
+
+  const look = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { queueDeps, port } = portOf(storage, context);
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    const target = typeof args.target === "string" ? args.target.trim() : "";
+    const start = { tool: LoopTool.LookAt, key: PlayMotion.Look, args: { target, seconds: LOOK_SECONDS } };
+    const last = await followMotion(queueDeps, port, start, LOOK_SECONDS);
+    const answer: EnginePlayLooked =
+      typeof last.error === "string"
+        ? lookedOf({ state: EnginePlayLookState.Failed, reason: last.error }, target)
+        : lookedOf(last, target);
+    return answer;
+  };
+  return { walk, look, ...pilotHandlers(portOf) };
+}
+
+/**
+ * The pilot file the helper is given: a `.py` of the game folder (Genex's own, `pilots/<goal>.py`, so
+ * writing one changes nothing of the game) by its real path, when it is a plain file there with no
+ * link on the way; otherwise the text as it came, which the helper reads relative to the project.
+ */
+export async function pilotFileFor(file: string, gameFolder: string | undefined): Promise<string> {
+  const plain = file.endsWith(".py") && !path.isAbsolute(file) && !file.split(/[\\/]/).includes("..");
+  if (!plain || !gameFolder) return file;
+  try {
+    const root = await realpath(gameFolder);
+    const wanted = path.join(root, file);
+    const real = await realpath(wanted);
+    const inside = real === wanted && !path.relative(root, real).startsWith("..");
+    return inside && (await stat(real)).isFile() ? real : file;
+  } catch {
+    return file; // not in the game folder: the project's own, or nothing the helper will find
+  }
+}
+
+/**
+ * The play tools that run a pilot through the helper: start it, then step it. The decisions'
+ * loop is the studio's (`main/core/editor-play-target.ts`); these only carry its calls to the play.
+ */
+function pilotHandlers(portOf: PortOf) {
+  const pilot = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { port } = portOf(storage, context);
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    const file = await pilotFileFor(typeof args.file === "string" ? args.file.trim() : "", context.directory);
+    const asked = numberArg(args.seconds);
+    const seconds = Math.min(MAX_PILOT_SECONDS, asked > 0 ? asked : PILOT_SECONDS);
+    return port.call(LoopTool.Pilot, { file, seconds, decide: args.decide === true });
+  };
+  const pilotStep = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { game, port } = portOf(storage, context);
+    const answer = typeof args.answer === "string" ? args.answer : "";
+    const step = await port.call(LoopTool.PilotStep, { answer, stop: args.stop === true });
+    return recorded(step, context.directory, () => linkedProject(storage, game));
+  };
+  return { pilot, pilotStep };
+}
+
+/**
+ * A step that says the run is over gets the run's record written into the game folder (whatever the
+ * agent does next), and the record's path in its report; a record that cannot be written leaves the
+ * step as it was.
+ */
+async function recorded(step: unknown, gameFolder: string | undefined, project: () => Promise<string | undefined>) {
+  const report: unknown = typeof step === "object" && step !== null ? Reflect.get(step, "report") : undefined;
+  const over = typeof step === "object" && step !== null && Reflect.get(step, "phase") === PilotPhase.Over;
+  if (!over || !gameFolder || typeof report !== "object" || report === null) return step;
+  try {
+    const record = await writeRunRecord(gameFolder, await project(), report);
+    if (record) Reflect.set(report, "record", record);
+  } catch {
+    // The run's report reaches the agent with or without its record.
+  }
+  return step;
+}
+
+/** The optional play tools (walking, looking, pilots), each for player 1 only. */
+function optionalHandlers(portOf: PortOf) {
+  const { walk, look, pilot, pilotStep } = motionHandlers(portOf);
+  return {
+    [EnginePlayOptionalTool.Walk]: onePlayerOnly("player", walk),
+    [EnginePlayOptionalTool.Look]: onePlayerOnly("player", look),
+    [EnginePlayOptionalTool.Pilot]: onePlayerOnly("player", pilot),
+    [EnginePlayOptionalTool.PilotStep]: onePlayerOnly("player", pilotStep),
+  } as const;
+}
+
 /** The play tools over the queue's own editor port and clock. */
 export function createComputerPlay(deps: {
   queueDeps(storage: string): QueueDeps;
@@ -204,17 +363,19 @@ export function createComputerPlay(deps: {
     const joined = await playing(port);
     // A session that is already open keeps what it owes; only a new one lifts the throttle.
     const known = sessions.get(key);
-    const giveBack = known?.giveBack ?? (await liftThrottle(port, queueDeps.platform));
+    const giveBack = known?.giveBack ?? (await liftThrottleAndLight(port, queueDeps.platform));
     if (!joined) {
       // Marked before play starts: a probe between the two would read the play as the person's.
       await markerOf(storage, game, queueDeps).started();
       await startPlay(queueDeps, port);
       // UE 5.8 has nothing to capture in a play's first moments.
-      await playFor(queueDeps, port, WARMUP_SECONDS);
+      await playForWhileRunning(queueDeps, port, WARMUP_SECONDS, WARMUP_STILL_MS);
     }
     // A play the agent's mark still claims is the agent's own, left by a session whose plugin restarted.
     const agents = joined && !known && (await agentPlaying(storage, game, queueDeps.now()));
     sessions.set(key, { giveBack, started: (known?.started ?? false) || !joined || agents });
+    // A game with no pilot yet gets Genex's starter, so a playtest can start playing at once.
+    await ensureStarterPilot(context.directory);
     const opened: EnginePlayOpened = { ...ENGINE_PLAY_VIEW, joined };
     return opened;
   };
@@ -242,7 +403,10 @@ export function createComputerPlay(deps: {
     const { queueDeps, port } = portOf(storage, context);
     if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
     shots += 1;
-    const taken = await shoot(queueDeps, port, `${SHOT_PREFIX}-${shots}`);
+    const name = `${SHOT_PREFIX}-${shots}`;
+    // What the player sees, its HUD and menus included: a UI-only change shows in it. A project's
+    // older helper takes no UI shot: the 3D frame alone still shows the game.
+    const taken = await shoot(queueDeps, port, name, true).catch(() => shoot(queueDeps, port, name, false));
     // The helper captures PNG; `png` stays beside `data` for a studio that reads only the older name.
     const answer: EnginePlayShot = { data: taken.data, mime: StillMimeType.Png, png: taken.data, ...ENGINE_PLAY_VIEW };
     return answer;
@@ -251,7 +415,8 @@ export function createComputerPlay(deps: {
   const state = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {
     const { port } = portOf(storage, context);
     if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
-    return port.call(LoopTool.PlayerState, {});
+    // Only the computer's own read takes the detectors' findings: the plugin's polls only peek.
+    return port.call(LoopTool.PlayerState, { take_findings: true });
   };
 
   const pause = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
@@ -284,6 +449,7 @@ export function createComputerPlay(deps: {
     [EnginePlayTool.State]: onePlayerOnly("player", state),
     [EnginePlayTool.Pause]: pause,
     [EnginePlayTool.Close]: close,
-  } as const satisfies Record<EnginePlayTool, PlayHandler>;
+    ...optionalHandlers(portOf),
+  } as const satisfies Record<EnginePlayTool | EnginePlayOptionalTool, PlayHandler>;
   return { handlers };
 }

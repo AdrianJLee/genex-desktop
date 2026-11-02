@@ -2,7 +2,7 @@
  * What a plugin may declare about Genex's moments and its locks, and what Genex refuses.
  */
 import assert from "node:assert/strict";
-import { ENGINE_PLAY_TOOLS } from "../../src/shared/engine-play.ts";
+import { ENGINE_PLAY_TOOLS, EnginePlayOptionalTool } from "../../src/shared/engine-play.ts";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -342,7 +342,7 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
   it("the bundled Unreal manifest is valid and its lock's probe needs no lock", () => {
     const raw = JSON.parse(readFileSync("src/plugins/unreal/plugin.json", "utf8")) as PluginManifest;
     const unreal = validateManifest(raw);
-    assert.equal(unreal.version, "0.18.2");
+    assert.equal(unreal.version, "0.46.0");
     assert.deepEqual(unreal.locks, [
       { id: "editor", label: "Unreal", per: LockScope.Project, personFirst: "editor-activity" },
     ]);
@@ -380,7 +380,7 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
     const raw = JSON.parse(readFileSync("src/plugins/roblox/plugin.json", "utf8")) as PluginManifest;
     const roblox = validateManifest(raw);
     // A change to the plugin raises its version above the one dev has (check-plugin-versions).
-    assert.equal(roblox.version, "0.1.31", "a step above the version dev has");
+    assert.equal(roblox.version, "0.1.32", "a step above the version dev has");
     assert.deepEqual(roblox.locks, [
       { id: "studio", label: "Roblox Studio", per: LockScope.Project, personFirst: "studio-activity" },
     ]);
@@ -538,4 +538,6 @@ const UNREAL_EDITOR_STEPS = [
   "quit-editor",
   // The computer's play in the editor (`shared/engine-play.ts`): each call waits for the lock.
   ...ENGINE_PLAY_TOOLS,
+  // Flipped on purpose: Unreal's play also walks the player and turns its view by itself.
+  ...Object.values(EnginePlayOptionalTool),
 ];

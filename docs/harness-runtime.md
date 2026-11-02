@@ -379,8 +379,7 @@ held, records the round's `checking` step, runs the reviewer as `engine.delegate
 `shared/finish-check.ts`) and holds it until the harness settles the round (`finish.settle`). The
 harness may settle a held answer as no answer (a yes that lapsed, a turn that ended), never as a
 yes; the host counts the no's in a row from its own records (`rejectionsInRow`; a resumed run goes
-on counting), writes the outcome, and no row of no's stops a Loop: a no records `timeLeft` when the settle names
-working time left (`timeLeftMs`, from `time-cap.ts` `timeLeftOf`; an ∞ Loop names none). A run's start, pause or close drops its held round: a review or settle still
+on counting), writes the outcome, and no row of no's stops a Loop; a settle names no time. A run's start, pause or close drops its held round: a review or settle still
 waiting then records nothing more and starts no reviewer. `finish_check` is a
 host-only record: a harness batch carrying one is refused whole. The
 host seats the reviewer in a fresh home of its own (a folder no box writes), reading the lead's folder and the run's captures, with
@@ -398,17 +397,14 @@ The lead's `remaining` (what it says is not done yet, one item a line, `remainin
 `REMAINING_MAX` items of `REMAINING_ITEM_CHARS`) comes before its claim and is never clipped with it,
 and the brief asks the reviewer to open pictures of its own choosing in the folder and to judge how
 a thing looks only from a close front or side picture.
-In a Loop in place, a claim that names what remains while more than `GAPS_FIRST_MIN_MS` (20 min) of
-working time is left reaches no reviewer: the lead is told to work on what remains first
-(`open/finish.ts` `gapsFirst`), and nothing is recorded.
 It answers `{"verdict":"yes"|"no","reasons":[…],"done":[…],"notDone":[…]}`: `reasons` say what it
 checked and found, met or not, `done` and `notDone` are short checklist items of what the proof shows
 and what it doesn't show yet; they stay apart in the record and the answer, and only `notDone` is
 what is still to fix on the "Almost there" card, in Builds' "Final look" and in the report
 (`notDoneOf`; a record that names none falls back to its reasons). The chat says nothing per round.
 Every Loop's close that is neither a yes nor a pause writes `run_finished.stillToFix` (`stillToFixOf`):
-the last no's `done` and `notDone`, why it stopped (`StopWhy`: its time, the no's, another end) and
-its hours (`loopHoursOf`); a time-out with no no lists nothing and still has the card. The chat's card
+the last no's `done` and `notDone` and why it stopped (`StopWhy`: the person's Stop or another end;
+`time` with its `hours`, and `stuck`, only on a record an earlier version wrote). The chat's card
 reads only that, so a page that lost the run's start still shows it. A Stop pauses every Loop (a web
 finish whose landing it refused too; one after the landing ends nothing more), and a pause keeps its
 own reason and Resume. A Stop while a web Loop first looks at the game ends that look at once
@@ -427,9 +423,8 @@ that says neither, a failed session or a Stop neither counts nor breaks the row.
 `finish_check` record the host writes (`checking`, then `accepted`, `rejected` or `unanswered`, with
 the round, the reasons, the count and the reviewer); a claim no engine here can review, or one whose
 model can't hold the brief, asks nothing and records nothing. The whole check fits inside the lead's one call (`LEAD_CALL_MS`,
-the bridge's deadline, or the lead's turn when it ends first): a claim with less than
-`FINISH_REVIEW_MIN_MS` left for the reviewer after the observers, the margin and the close is no
-claim and records nothing (its answer says whether the call or the turn left no time). A claim on a
+the bridge's deadline): a claim with less than `FINISH_REVIEW_MIN_MS` left for the reviewer after
+the observers, the margin and the close is no claim and records nothing. A claim on a
 run already closing opens no round; a check whose run closes under it settles nothing, one whose
 turn ends while the run goes on (`abandoned`) is settled as no answer, and either way the run's
 reviewer is stopped (`engine.abort {reviewer}`). A yes the caller finds no longer stands (`lapsed`) is
@@ -455,7 +450,7 @@ can hold is said so and ends nothing. No row of no's stops a Loop.
 
 The open Loop. `runDirector(ctx, { …, profile: LoopProfile.Open })` runs the director's wake loop on a
 project that isn't a web game, led in place (`loop/director/open/`). `prepareLoopRun` branches inside `director/setup.ts` (`prepareOpenLoopRun`, its state helpers
-being that module's): the game as `game.list` lists it, its hours held to `MAX_RUN_HOURS`, the run's
+being that module's): the game as `game.list` lists it, the run's
 `budgets.creditCap` set to `DEFAULT_CREDIT_CAP` (600) before `run_started` when the record names none,
 `autopilot_started.profile: "open"`, Genex's snapshot of the folder before the first turn (`run
 <id>: before the Loop`), `journal.director.open` (`OpenJournal`: save points, what to do between
@@ -466,17 +461,17 @@ and the journal's `integrationHead` is null, so the host reads the folder for th
 after the Loop the chat's own session keeps `run_status` alone (`runControls.inPlace`), and starts a
 new Loop for more work.
 `run.prepare` fires as for any run; a plugin's block closes the Loop before any turn with its reason
-and "Then start the Loop again." (a resumed Loop stays paused, its working time as it was, also on the
-app's clock through the close's `workedUntil`, and Genex's own hold says to press Resume), keeping
+and "Then start the Loop again." (a resumed Loop stays paused, adding no worked time on the app's
+clock through the close's `workedUntil`, and Genex's own hold says to press Resume), keeping
 nothing; so does a Stop while it prepares, and a Stop before it fires no plugin's `run.prepare`. The lead is the chat's own session with `director.inPlace` and the
 game folder as `root` (no `cwd`, no `readOnly`; the host's in-place seat), every delegation carrying
-the run's credit cap; its brief (`openBrief`) names the goal, the time, the folder's facts, what the
+the run's credit cap; its brief (`openBrief`) names the goal, the folder's facts, what the
 plugins said at the start, `references/`, the plugins' worker types and its finish, and, when no
 plugin hooks `checkpoint.before`, that Genex's save points keep the files on disk only. Its tools are
 the director's `note` and `run_status` by name, the six worker tools through the pool (a copy's
 `worker_mark used` merges into the game folder, refused over the lead's uncommitted edits of the same
 files) and its own `finish` (`summary`, `proof`): the finish moment, then `checkFinish` on the game
-folder, its review ending `OPEN_CLOSE_MS` before the call's and the turn's end (no answer when the
+folder, its review ending `OPEN_CLOSE_MS` before the call's end (no answer when the
 claim's turn ended or a recovery took the folder back meanwhile); a yes or the stopping no closes in
 place inside the call, which answers that the Loop is closing should the close outlast it
 (`closeInPlace`: the pool closed, the last work kept in a checkpoint when the folder changed or a
@@ -488,34 +483,18 @@ and says so; a completed close names a rewind or restart it came before. The wak
 counts the pool's running workers and the run's running jobs for it (`open/active-work.ts`), and
 `run.end` stays the teardown's, which removes no worktree.
 
-The open Loop's turns. A turn lasts at most `OPEN_TURN_MS` (45 minutes; `wake.ts` `turnDeadline`):
-one cut there is no failure (`TurnFacts.capped`, judged when the session returned; a turn a plugin
-held back never is) → `TurnEnd.Continue` and the lead is woken at once with `WakeCause.TurnCap`; a
-web lead's turns keep no cap. A rate limit or an outage is waited out against the working time, on the Loop's clock, the retry
-with a fresh cap. A turn that did something (`TurnFacts.worked`, from what the lead did: a rewind or
-restart newly asked, a claim turned down, a worker marked, or the folder's content changed since the
-turn began (a tree of it, `OpenFolderMark`, read again at the turn's start after a rest); a save point
-over unchanged content is none; a change nobody else made is the lead's when its own session acted in
-the turn (a tool call, `OpenLoop.sessionActed`) or it kept a save point, and at most
-`MAX_FOLDER_ONLY_TURNS` in a row when its session only answered; a change made while a writer in place,
-a job one of them started or a recovery may have written (`open/writers.ts`; the lead's own jobs and a
-copy worker's or reader's are not; who waits on the person is read from the chat's log at each turn's
-edge) counts only while none of them can still write (a writer waiting on the person can't),
-`MAX_UNCLEAR_TURNS` in a row, and beside only jobs ended writers left running the lead's own save point
-counts (it hears which job holds it and `job_stop`); a turn whose edges git read two ways counts as
-unclear when the lead acted; a turn in which a recovery took the folder back counts only the lead's own
-acts and save points; an autosave only when it kept what the turn's end didn't show; a nested
-repository's own changes count (with the folder's ignore rules), and no read writes into the game's
-object store: the run's reads share a store of their own in the game's git folder, removed at the close)
-goes on at once (`TurnEnd.CarryOn`, its message headed "Your turn ended."); neither it nor `TurnCap` counts in the
-hourly wake cap. Any other turn end rests the lead until the person speaks or asks to finish, a worker or job
-ends or the working time does: nothing asks it what next and a quiet lead is never wrapped up for being quiet
-(`afterTurn`). The wrap-up says why it began (`openClosing` by `WrapCause`: the time, a failed turn, the
-person's finish). The person's finish reaching a resting lead opens its last turn. A lead whose game folder
-another chat's turn holds waits for it within its working time, outside the outage ladder
+The open Loop's turns, as every Loop's (see [What ends a Loop](#what-ends-a-loop)): a turn has no time
+limit, and an outage is waited out on the Loop's clock. A turn that ends with nothing at work (no
+worker's run, no running job, no recovery of the project's app: `hasWorkAtHand`) and nothing to wake
+the lead for closes the Loop; with something at work the lead rests until it ends, the person speaks or
+asks to finish, or a rewind or restart it asked for has run at the turn's end (`NoteKind.AskDone`):
+nothing asks it what next. The wrap-up says why it began (`openClosing` by `WrapCause`: a failed turn,
+the person's finish). The person's finish reaching a resting lead opens its last turn. A lead whose game
+folder another chat's turn holds waits for it until it is free, outside the outage ladder
 (`waitsForFolder`), never a failed turn; a Stop during the wait opens no session, and one before any
-session of this attempt worked keeps nothing and spends none of its hours. Its wrap-up asks for a claim only
-if the goal is reached. Its wake messages are
+session of this attempt worked keeps nothing. Its wrap-up asks for a claim only if the goal is reached.
+An earlier seed's reads of the folder at a turn's edge left a store in the game's git folder; the close
+removes it (`FOLDER_GIT.dropTurnStore`). Its wake messages are
 `openDigest` (`open/digest.ts`: the person's words first, news no turn took, the lines Genex carried,
 its latest save points with the rest counted, its own
 wrap-up). `save_point {label, summary, shows?}` is Genex's checkpoint on the git-write
@@ -534,9 +513,10 @@ settles first, and no recovery starts during it) first autosaves a turn that kep
 folder changed, or `onlyIfUnsaved` where a plugin saves the app; never while a writer in place works),
 then restores the save point (`snapshot.restore`, then `waitReady`; Plan mode holds it even where no
 plugin hooks `restore.*`) or fires `restore.before` and `restore.after` with no file changed, both
-waiting while a writer in place works, each outcome a carried line. No judge plays between turns
+waiting while a writer in place works; what came of the rewind or the restart is a line that wakes
+the lead (`NoteKind.AskDone`), and the autosave's a carried line. No judge plays between turns
 (Loop phase 4); no judge plays the game for the lead. `finish` waits for that turn's
-end and for a writer in place, and a timed Loop's claim waits for its last turn. The health
+end and for a writer in place. The health
 watch (`open/health.ts`) rides the wake loop's rounds and a turn's, one look at a time beside them
 (never awaited): `health` every `HEALTH_POLL_MS` when hooked, never once the Loop closes or its
 finish is checked; a block says so at once (`NoteKind.AppStopping`, which wakes no one),
@@ -557,8 +537,8 @@ closing Loop's lead hears no more news. While a turn works, `open/news.ts` steer
 worker's end and question (`NoteKind.WorkerAsks`), a job's end, the app's crash
 (`NoteKind.AppCrashed`); a line the
 session read (`DelegateResult.steered`) is not told again, one it never read rides the next digest:
-an engine that can't read mid-turn (Codex, Bonsai) hears news only when its turn ends, at most
-`OPEN_TURN_MS` later. The person's words do cut such a turn, its first included
+an engine that can't read mid-turn (Codex, Bonsai) hears news only when its turn ends. The person's
+words do cut such a turn, its first included
 ([hearing it](conversation-lifecycle.md#live-chat-during-a-build)).
 
 One Loop for every project. Run dispatch (`conductRun`) takes the game from the list it already
@@ -577,9 +557,7 @@ in place (`openLoopBecause`). A resume goes on in its journal's profile (`resume
 now; any other journal is a web Loop's, and on a folder that reads otherwise stays paused (a
 chat's Loop start makes a new Loop there after a finished one), its journal untouched;
 a run the Unreal runner paused (`kind: "unreal-lead"`) is such a journal. A Loop in place runs no self-improvement pass, and Genex's `web.ready` gate reaches only a web
-game's Loop. ∞ runs an open Loop until a reviewer accepts its finish, 24 hours at most: the lead may
-claim at any time, a lead that ended a turn rests, and a time-out with no yes closes in the Loop's own words with
-no reviewer asked. The chat's launch words and its launch promise describe the lead building in place, workers in
+game's Loop. The chat's launch words and its launch promise describe the lead building in place, workers in
 copies and a reviewer checking its finish (`loop/open-loop-prompts.ts`). Through the real studio (`one-loop-projects.test.ts`), a Loop on the toy
 plugin's project, and on a copy of that plugin with every tool renamed, runs the plugin's steps at its
 moments, its worker type and its observer, and ends on the lead's claim with no seed change; a Loop
@@ -867,28 +845,32 @@ Windows/Linux.
 
 ### Goal completion and worker approvals
 
-A Loop's hours are a soft cap, one rule for every Loop (`loop/time-cap.ts` `capClock`,
-`director/cap-lines.ts`): the cap is the hours in working time, ∞ capped at `UNTIL_DONE_CAP_MS` (24
-hours). `HEADS_UP_MS` (15 minutes) before it the lead hears mid-turn, as a line of Genex's (`from: genex`), that little is left (none for a
-Loop of 15 minutes or less); at the cap it hears that the time is up, and `worker_start` is refused
-from then on. A turn whose engine reads that line goes on into `GRACE_MS` (15 minutes) of grace; one
-whose engine can't is cut short (never inside a tool call or a claim's check), and its wrap-up turn
-opens with the line, as does any turn that never took a line it was due. A wrap-up that began before
-the cap (the person's Finish, a failed turn) hears no line and is never cut for it, and
-a turn that may run to the grace's end is the run's last for a claim. At the grace's end Genex closes
-the Loop; its report's `notDone` holds the reviewer's last no, else, when no claim reached a reviewer
-since the run last opened, that no reviewer read one, which its summary says too; an open Loop keeps
-its last save point. Whether the time ran out, and whether a worker may start, are read on the run's
-own clock (the wake loop's). The time's-up tells the lead to call finish, claiming the goal only if it
-is reached. A Resume past the cap gets the grace only; a clock
-a kept older setup made (`journal.ts` `loopRunClock`, its wrap-up inside the hours) hears no lines.
+#### What ends a Loop
+
+A Loop has no clock, one rule for every Loop (`director/wake.ts`, `wake-schedule.ts` `afterTurn`):
+no time limit of Genex's own ends a turn, wakes the lead or closes the run, and a lead's turn is
+delegated with no `timeoutMs`. The lead's `finish` ends it. A lead turn that ends with nothing at work
+(no worker's run, no running job of the run, no recovery of the project's app: `hasWorkAtHand`) and
+nothing to wake it for closes it, as a bare agent's turn ends: its last message is the summary, with no
+wrap-up turn after it. With workers or jobs at work the lead rests, and Genex wakes it when one ends
+(a job's end read again at once before the Loop is done, so none is missed). The person's Finish, and a
+failed turn, give the lead its one wrap-up turn at once (`dueAfter` returns a `WakeCause.WrapUp`
+wake; `WRAP_UP_SPEC` holds the stop/finish rule), and the Loop closes after it. The person's Stop ends
+it at once (paused, for a Resume). A lead's rate limit, an outage past the ladder, a lost sign-in and
+the lead's `pause` pause it; the host's auto-resume resumes a limit's pause at its reset. A Loop an
+earlier seed paused resumes with no clock: its journal's `director.clock`, its run's hours and a
+wrap-up begun at its old working deadline are read by nothing. The run's own clock (`loop-run.ts`
+`keepRunClock`, `runNow`) stays injectable for what reads the time outside the wake loop (`wrap_up`
+stamps the person's ask with it).
+
+#### Claims, the person's finish and worker approvals
+
 A claim (`victory=yes`) may come whenever the goal is reached and closes the Loop on the lead's
 word (Loop phase 4); with `review=yes` a reviewer reads it first (`open/finish.ts`): a yes closes it as reviewed, while a no, no answer, no time or no reviewer to seat
-goes back to the lead and decides nothing (no row of no's closes a run). A `finish` that claims
-nothing is refused while working time remains unless the user asked: Finish, or `user_asked` quoting
-the user's own words from a message delivered into the run (`integrate.ts` `userQuoted`, checked
-against the run inbox's steers). No judge's word turns a claim back. However a run ends — the lead's `finish`, the clock, the user's
-Finish — the close asks no judge: it lands a web game's head when that moved beyond the start and
+goes back to the lead and decides nothing (no row of no's closes a run). `user_asked` quotes the
+user's own words from a message delivered into the run (`integrate.ts` `userQuoted`, checked
+against the run inbox's steers). No judge's word turns a claim back. However a run ends — the lead's `finish`, a turn with
+nothing at work, the user's Finish — the close asks no judge: it lands a web game's head when that moved beyond the start and
 passed its health check, and a Stop before or during the close lands nothing. `landingResult` says
 what the landing may claim (`fresh-health-pass` or `no-fresh-look`), and `finish` tells the lead.
 
@@ -941,7 +923,7 @@ A provider that stops answering is no verdict on anybody's work: the run pauses 
 up and land a build nobody could check. The engines call a revoked or disabled access a sign-in
 failure (`auth`): Claude Code from the CLI's own error code on the reply (`authentication_failed`,
 `oauth_org_not_allowed`, `account_on_hold`, `billing_error`) or the access words both engines share
-(`engines/common.ts` `isAccessLost`), also when the result's subtype says success. A lead turn a lost provider ended — a sign-in, a limit it will not wait out,
+(`engines/common.ts` `isAccessLost`), also when the result's subtype says success. A lead turn a lost provider ended — a sign-in, a limit,
 an outage the patience ladder could not outlast, a 529 or an unreachable network (`ENOTFOUND`) the session returned included — pauses the
 run (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
 or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and no learning pass
@@ -952,9 +934,7 @@ and a sign-in any engine of the run lost pauses the run at the lead's next turn 
 round the provider failed (`facet/provider.ts`) is recorded as `facet_provider_outage` with
 `lost`, never judged, struck or rolled back: its build or
 verification waits for the provider and runs again, a run's stop keeps it on its `…-stopped` ref,
-and a usage cap still stops the worker with its limit for the lead. While it waits a director's
-worker's clock stands still (`facet/paused-clock.ts`): its deadline moves on by what the wait took,
-up to the run's working deadline, as the outage ladder's waits do. A worker the provider ended before
+and a usage cap still stops the worker with its limit for the lead. A worker the provider ended before
 any round of it was judged gives its goal attempt back (`attempt-refund.ts` `refundProviderAttempt`), so a
 restart is never refused for progress it never had the chance to make.
 
@@ -1010,8 +990,7 @@ fields only, never a close's words. A resume goes through the Resume button's ow
 `resumeAutopilot`, after a host-only `run_auto_resumed` (`cause`, `attempt`) that bounds it. None
 happens after `AUTO_RESUMES_MAX` (2) automatic resumes of the run, after the user's Stop (in that
 chat, or of the run through `studio:run.stop`, `StudioCore.stopRun`) or a Finish since the run last
-started, once a newer run started in that chat or another run is running (`superseded`), with under
-ten minutes of working time left, for a
+started, once a newer run started in that chat or another run is running (`superseded`), for a
 reset more than 12 hours away, or after ten minutes past its time without a ready harness or 1 GB
 of free memory (read only once the resume is due). While a resume waits, main holds the Mac awake
 with its own blocker (`onAutoResumePending`, apart from the run-active `keepAwake`), and a quit or a

@@ -5,13 +5,12 @@
  * reviewer that did none of the work for a second opinion first (`../../finish-check.ts`), reading
  * the game folder, the lead's proof and the observers' captures: a yes closes the Loop as reviewed,
  * and a no comes back with its reasons and decides nothing. A finish the person asked for needs no
- * claim. Everything runs on the Loop's clock, inside the lead's call
- * and its turn, which the close's own time (`OPEN_CLOSE_MS`) shares: a close that outlasts the call
- * goes on after the lead is told it was accepted. A claim whose turn ended while the reviewer read,
- * or whose folder went back to a save point meanwhile, gets no answer. No claim is made while Genex
- * brings the project's app back, nor while a rewind or restart the lead asked for waits for the turn's end,
- * nor while a worker writes in the folder in place, nor while the lead names what remains and has
- * time for it; one before the Loop's cap is checked like any other.
+ * claim. Everything runs on the Loop's clock, inside the lead's call, which the close's own time
+ * (`OPEN_CLOSE_MS`) shares: a close that outlasts the call goes on after the lead is told it was
+ * accepted. A claim whose turn ended while the reviewer read, or whose folder went back to a save
+ * point meanwhile, gets no answer. No claim is made while Genex brings the project's app back, nor
+ * while a rewind or restart the lead asked for waits for the turn's end, nor while a worker writes in
+ * the folder in place.
  */
 import type { AnyRecord } from "../../../types/harness.d.ts";
 import type { DelegateResult } from "../../../types/host-api.d.ts";
@@ -30,7 +29,6 @@ import { remainingOf } from "../../finish-remaining.ts";
 import { fireHooks, HookEvent, runScope } from "../../hooks.ts";
 import { HOOK_PROMPTS } from "../../hooks-prompts.ts";
 import { CLIP_REASON, clipMarked, hasText } from "../../text.ts";
-import { timeLeftOf } from "../../time-cap.ts";
 import { SECOND_MS, sleep } from "../../time.ts";
 import { yes } from "../args.ts";
 import { closeUnderWay, holdFinish, releaseFinish } from "../close-latch.ts";
@@ -44,15 +42,12 @@ import { asksPending, OPEN_CLOSE_MS, type OpenClock } from "./contract.ts";
 import { OPEN_WORDS } from "./prompts.ts";
 import { writersInPlace } from "./writers.ts";
 
-/** Why the Loop ended when its lead's claim was accepted, the person asked it to finish, or its time ran out. */
+/** Why the Loop ended when its lead's claim was accepted, the person asked it to finish, or its lead's session ended. */
 export const MESSAGE = {
   goalReached: "the reviewer accepted that the goal is reached",
   /** The lead claimed the goal is reached and asked no reviewer: its word closes the Loop. */
   leadClaimed: "the lead says the goal is reached",
   personFinished: "the person asked the Loop to finish",
-  timeUpNoClaim: "the Loop's time ran out; here is where it stands",
-  /** The Loop's time ran out while a reviewer still checked the lead's claim. */
-  timeUpUnderReview: "the Loop's time ran out while a reviewer checked the lead's claim; here is where it stands",
   /** The lead's session ended before it claimed the goal (`how`: how it ended). */
   sessionEnded: (how: string) => `the lead's session ended (${how}) before it claimed the goal`,
   /** The person asked to finish, and the lead did not claim the goal in its last turn. */
@@ -104,10 +99,7 @@ function lapsedSince(loopRun: LoopRun): () => Promise<string | null> {
   return async () => ((loopRun.open?.restores ?? 0) !== restores ? MESSAGE.wentBackUnderReview : null);
 }
 
-/**
- * Ask the reviewer about the claim, on the Loop's clock, from the call's start, within the lead's
- * turn: a yes leaves the close its time (`OPEN_CLOSE_MS`) before the turn's cap.
- */
+/** Ask the reviewer about the claim, on the Loop's clock, from the call's start: a yes leaves the close its time (`OPEN_CLOSE_MS`). */
 async function check(loopRun: LoopRun, claim: FinishClaim, started: number): Promise<FinishOutcome> {
   const { ctx, gameFacts, inbox, projectDir, run, threadId } = loopRun;
   const clock = clockOf(loopRun);
@@ -125,13 +117,11 @@ async function check(loopRun: LoopRun, claim: FinishClaim, started: number): Pro
       sleep: clock.sleep,
       callStarted: started,
       closeMs: OPEN_CLOSE_MS,
-      ...(turn ? { endsBy: turn.endsBy - OPEN_CLOSE_MS } : {}),
       said: log.said,
       relayed: log.relayed,
       ended: () => closing(loopRun),
       abandoned: () => turnLost(loopRun, turn),
       lapsed: lapsedSince(loopRun),
-      timeLeft: () => timeLeftOf(run, loopRun.softDeadline, clock.now()),
       workMark: async () => workMarkOf(loopRun),
       keep: () => loopRun.saveJournal(),
     },
@@ -232,12 +222,9 @@ async function reviewedClaim(
   };
   const outcome = await checked(loopRun, claim, started);
   await loopRun.saveJournal().catch(() => {});
-  // The Loop closed while the reviewer read (its clock, a Stop): nothing more is ended here.
+  // The Loop closed while the reviewer read (a Stop, a pause): nothing more is ended here.
   if (closing(loopRun)) return OPEN_WORDS.ending;
   const ends = endOf(outcome);
-  // Turned down with the Loop going on: the lead's turn did something, whatever else it changed.
-  const turnedDown = "step" in outcome && outcome.step === FinishCheckStep.Rejected;
-  if (!ends && turnedDown && loopRun.open) loopRun.open.claimTurnedDown = true;
   if (!ends) return reviewAnswer(outcome);
   // Told how it ended and that the Loop closes, though the close outlasts the call: never "carry on".
   if (await closeWithinCall(loopRun, ends.end, started)) return ends.told;
@@ -262,32 +249,16 @@ const endedHow = (result: Partial<DelegateResult>): string =>
 
 /**
  * Why an open Loop its lead left open ended, in its own words (the lead, never the director's), for
- * the closes whose words are the Loop's own: the person's finish, the time running out
- * under a claim's review, a session that ended. Null for the rest (a Stop, a lost provider, a turn
- * Genex's moments held back), whose words are every Loop's.
+ * the closes whose words are the Loop's own: the person's finish, a session that ended. Null for the
+ * rest (a Stop, a lost provider, a turn Genex's moments held back), whose words are every Loop's.
  */
 export function openEndWords(
   loopRun: LoopRun,
   result: Partial<DelegateResult>,
   wrapCause: WrapCause | null,
 ): string | null {
-  const { ctx, softDeadline, state } = loopRun;
+  const { ctx, state } = loopRun;
   if (ctx.cancelled || state.limit || heldTurnEnding(result) !== null) return null;
   if (wrapCause === WrapCause.Finish) return MESSAGE.finishAsked;
-  const onTheClock = wrapCause !== WrapCause.Failed && clockOf(loopRun).now() >= softDeadline;
-  if (onTheClock && state.finishTally?.checking) return MESSAGE.timeUpUnderReview;
-  if (onTheClock) return MESSAGE.timeUpNoClaim;
   return MESSAGE.sessionEnded(endedHow(result));
-}
-
-/**
- * Did the Loop's time run out with no reviewer's yes (its wrap-up was the clock's, or its clock is
- * past its working time), and nothing else ended it: no Stop, no lost provider, no claim still under
- * review? Then it closes in its own words (`MESSAGE.timeUpNoClaim`), and no reviewer is asked.
- */
-export function timeUpWithoutYes(loopRun: LoopRun, wrapCause: WrapCause | null): boolean {
-  const { ctx, softDeadline, state } = loopRun;
-  if (ctx.cancelled || state.limit || state.finishTally?.checking) return false;
-  if (wrapCause === WrapCause.Deadline) return true;
-  return wrapCause === null && clockOf(loopRun).now() >= softDeadline;
 }

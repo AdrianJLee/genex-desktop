@@ -1,12 +1,11 @@
 /**
- * The run before its lead's first turn (`prepareLoopRun`): the run object itself, its clock, its
- * report and journal, and where the lead builds. A web game's Loop forks an integration worktree from
+ * The run before its lead's first turn (`prepareLoopRun`): the run object itself, its report and
+ * journal, and where the lead builds. A web game's Loop forks an integration worktree from
  * the game folder as it stands (a snapshot first), and opens the run's worker pool on it: a copy
  * worker forks from the integration head and its work merges back there. A Loop on any other project
  * works in the project's own folder (open/setup.ts). Nothing is built for the lead and nothing is
  * asked of the game: the lead decides how to start.
  */
-import { DEFAULT_WALL_CLOCK_MS } from "../config.ts";
 import { commitAll, gitAt, GIT, gitlinks, headOf } from "../git.ts";
 import { HostMethod } from "../host-methods.ts";
 import { factsOfGame, LoopProfile, ProjectStarter } from "../folder-facts.ts";
@@ -15,7 +14,6 @@ import { runRef } from "../repo.ts";
 import { EventKind, JournalPhase, RunEvent, RunMode } from "../run-events.ts";
 import { createRunInbox } from "../run-inbox.ts";
 import { isCommit } from "../shell.ts";
-import { capClock, capHoursMs } from "../time-cap.ts";
 import { MAX_WORKERS_AT_ONCE, WorkerIsolation } from "../workers/contract.ts";
 import { folderLabelOf } from "../workers/identity.ts";
 import { RUN_POOL_WORDS } from "../workers/prompts.ts";
@@ -32,7 +30,6 @@ import {
   openGame,
   openLoopOf,
   openLoopPool,
-  openRunMs,
   openStartingPoint,
   recordCreditCap,
   settledAcrossPause,
@@ -70,7 +67,7 @@ async function readPriorJournal(
   return (await ctx.call(HostMethod.ArtifactRead, { threadId, artifactId: `autopilot_${run.runId}` })) ?? null;
 }
 
-/** The record a resumed or reopened run's earlier session closed with (its last `run_finished`), or null. */
+/** The record a resumed run's earlier session closed with (its last `run_finished`), or null. */
 async function earlierReport(ctx: HarnessCtx, threadId: string, runId: string): Promise<AnyRecord | null> {
   const events = await ctx.call(HostMethod.EventsList, { threadId }).catch(() => []);
   const close = events.findLast(
@@ -82,7 +79,7 @@ async function earlierReport(ctx: HarnessCtx, threadId: string, runId: string): 
 /** A list from an earlier record, or none. */
 const listOf = (value: unknown): unknown[] => (Array.isArray(value) ? [...value] : []);
 
-/** The report a run leaves behind, as it starts: a resumed or reopened run's carries its earlier sessions' notes and verdicts. */
+/** The report a run leaves behind, as it starts: a resumed run's carries its earlier sessions' notes and verdicts. */
 export function loopRunReport(run: Run, earlier: AnyRecord | null = null): AnyRecord {
   const report: AnyRecord = {
     runId: run.runId,
@@ -206,8 +203,6 @@ async function openIntegration(loopRun: LoopRun, forkCommit: string | null): Pro
 function loopRunState(
   facts: Pick<LoopRunState, "run" | "threadId" | "projectDir" | "baseCommit" | "integrationWorktree"> & {
     forkCommit: string | null;
-    softDeadline: number;
-    finalDeadline: number;
   },
 ): LoopRunState {
   return {
@@ -224,8 +219,6 @@ function loopRunState(
     finish: null,
     finished: false,
     judges: 0,
-    softDeadline: facts.softDeadline,
-    finalDeadline: facts.finalDeadline,
   };
 }
 
@@ -264,12 +257,6 @@ export async function prepareLoopRun(
   const inbox = ctx.runInbox ?? createRunInbox(ctx, { threadId, runId: run.runId });
   ctx.setStatus(`run ${run.runId} · lead`);
   const priorJournal = await readPriorJournal(ctx, threadId, run, resume);
-  // A Resume goes on with the working time the run had left; the hours are a soft cap (time-cap.ts).
-  const clock = capClock({
-    saved: resume ? priorJournal?.director?.clock : null,
-    now: Date.now(),
-    totalMs: capHoursMs(run, run.budgets?.wallClockMs ?? DEFAULT_WALL_CLOCK_MS),
-  });
   const report = loopRunReport(run, resume ? await earlierReport(ctx, threadId, run.runId) : null);
   await announceRunStart(ctx, threadId, run, { resume });
   const projectDir = await readyTheGame(loopRun);
@@ -279,10 +266,6 @@ export async function prepareLoopRun(
   const nestedRepos = forkCommit ? await gitlinks(ctx, { project: run.project }, forkCommit).catch(() => []) : [];
   const known = {
     inbox,
-    started: clock.started,
-    softDeadline: clock.softDeadline,
-    finalDeadline: clock.finalDeadline,
-    clock,
     priorJournal,
     report,
     projectDir,
@@ -297,8 +280,6 @@ export async function prepareLoopRun(
       baseCommit,
       integrationWorktree,
       forkCommit,
-      softDeadline: clock.softDeadline,
-      finalDeadline: clock.finalDeadline,
     }),
     journal: loopRunJournal(run, baseCommit, forkCommit, priorJournal),
     profile: LoopProfile.Web,
@@ -373,17 +354,12 @@ function openLoopRunData(
   start: { run: Run; threadId: string; priorJournal: AnyRecord | null; inbox: LoopRunData["inbox"] },
   game: OpenedGame,
   baseCommit: string | null,
-  clock: { started: number; softDeadline: number; finalDeadline: number },
   report: AnyRecord,
 ): Omit<LoopRunData, "ctx" | "threadId" | "run" | "resume"> {
   const { run, threadId, priorJournal, inbox } = start;
   const { projectDir } = game;
   return {
     inbox,
-    started: clock.started,
-    softDeadline: clock.softDeadline,
-    finalDeadline: clock.finalDeadline,
-    clock,
     priorJournal,
     report,
     projectDir,
@@ -398,8 +374,6 @@ function openLoopRunData(
       baseCommit,
       integrationWorktree: projectDir,
       forkCommit: null,
-      softDeadline: clock.softDeadline,
-      finalDeadline: clock.finalDeadline,
     }),
     journal: loopRunJournal(run, baseCommit, null, priorJournal),
     ...loopRunCounters(),
@@ -407,8 +381,8 @@ function openLoopRunData(
 }
 
 /**
- * The run of an open Loop (a project that isn't a web game): the game as listed, its hours and
- * credit cap on the run's record, Genex's snapshot of the folder before the first turn, the Loop's
+ * The run of an open Loop (a project that isn't a web game): the game as listed, its credit cap on
+ * the run's record, Genex's snapshot of the folder before the first turn, the Loop's
  * own record and the run's worker pool. The lead works in place.
  */
 async function prepareOpenLoopRun(
@@ -421,14 +395,12 @@ async function prepareOpenLoopRun(
   const inbox = ctx.runInbox ?? createRunInbox(ctx, { threadId, runId: run.runId });
   ctx.setStatus(`run ${run.runId} · lead in place`);
   const priorJournal = await readPriorJournal(ctx, threadId, run, resume);
-  const saved = resume ? priorJournal?.director?.clock : null;
-  const runClock = capClock({ saved, now: clock.now(), totalMs: openRunMs(run) });
   const game = await openGame(ctx, run);
   recordCreditCap(run);
   const report = loopRunReport(run, resume ? await earlierReport(ctx, threadId, run.runId) : null);
   await announceRunStart(ctx, threadId, run, { resume, profile: LoopProfile.Open });
   const baseCommit = await openStartingPoint(ctx, run, priorJournal);
-  Object.assign(loopRun, openLoopRunData({ run, threadId, priorJournal, inbox }, game, baseCommit, runClock, report));
+  Object.assign(loopRun, openLoopRunData({ run, threadId, priorJournal, inbox }, game, baseCommit, report));
   loopRun.gameFacts = game.facts;
   loopRun.game = { hookEvents: game.hookEvents };
   const journal = openJournalOf(priorJournal);

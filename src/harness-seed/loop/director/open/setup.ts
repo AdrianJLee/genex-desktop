@@ -1,17 +1,14 @@
 /**
  * The open Loop's first steps, which the director's setup (`../setup.ts` `prepareLoopRun`) takes in
  * place of the web method's: the game as Genex lists it (its folder, its facts, the moments its
- * plugins hook), the run's time and credit cap on its own record, Genex's snapshot of the folder
+ * plugins hook), the run's credit cap on its own record, Genex's snapshot of the folder
  * before the Loop, the Loop's own record on the run, and the run's worker pool. No scaffold, no
  * contract, no preview, no copy of the game for the lead: it works in the game folder itself.
  */
 import type { AnyRecord, HarnessCtx, Run } from "../../../types/harness.d.ts";
-import { DEFAULT_WALL_CLOCK_MS, MAX_RUN_HOURS } from "../../config.ts";
 import { type FactRef, factsOfGame, type FolderHolds } from "../../folder-facts.ts";
 import { HostMethod } from "../../host-methods.ts";
 import { modelOn, RoleKey, roleEffort, roleEngine } from "../../model-roles.ts";
-import { HOUR_MS } from "../../time.ts";
-import { UNTIL_DONE_CAP_MS } from "../../time-cap.ts";
 import { folderLabelOf } from "../../workers/identity.ts";
 import { RUN_POOL_WORDS } from "../../workers/prompts.ts";
 import { type RunPoolSeat, runPool } from "../../workers/run-pool.ts";
@@ -51,14 +48,6 @@ export async function openGame(ctx: HarnessCtx, run: Run): Promise<OpenedGame> {
     holds: typeof game?.holds === "string" ? (game.holds as FolderHolds) : null,
     hookEvents: Array.isArray(game?.hookEvents) ? game.hookEvents.map(String) : [],
   };
-}
-
-/** An open Loop's hours: its record's, held to the most a Loop runs; ∞ runs until its finish, `UNTIL_DONE_CAP_MS` at most. */
-export function openRunMs(run: Run): number {
-  if (run.budgets?.untilSatisfied === true) return UNTIL_DONE_CAP_MS;
-  const asked = run.budgets?.wallClockMs;
-  const total = typeof asked === "number" && asked > 0 ? asked : DEFAULT_WALL_CLOCK_MS;
-  return Math.min(total, MAX_RUN_HOURS * HOUR_MS);
 }
 
 /** The run's credit cap on its own record: its own whole number, or the default where it names none (or none Genex can read). */
@@ -108,26 +97,13 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     journal,
     halted: null,
     turnSavedFrom: journal.savePoints.length,
-    turnWorked: false,
-    turnMark: null,
-    turnMarkAt: null,
-    turnStart: null,
-    unclearStreak: 0,
-    folderOnlyStreak: 0,
-    sessionActed: false,
     sessionWorked: false,
-    treeUnread: false,
     betweenTurns: false,
-    askPending: false,
-    claimTurnedDown: false,
     gitWrite: gitQueue(),
     clock,
     pool: null,
     jobsRunning: 0,
     jobsReadAt: null,
-    writerJobsRunning: 0,
-    writerJobEndSeq: 0,
-    leftoverJobs: [],
     since: clock.now(),
     heard: new Set(),
     asked: new Set(),

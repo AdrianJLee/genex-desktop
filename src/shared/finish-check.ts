@@ -10,7 +10,6 @@
  * Renderer-safe: no Node.
  */
 import type { RunScope } from "./custom-events.ts";
-import { MINUTE_MS } from "./duration.ts";
 
 /** Where one round of a finish check stands (`finish_check.step`). Persisted: never rename a value. */
 export const FinishCheckStep = {
@@ -69,11 +68,6 @@ export const MAX_FINISH_REJECTIONS = 3;
 export const MAX_FINISH_REASONS = 6;
 /** How long one reason (or why a check got no answer) reads, in characters. */
 export const FINISH_REASON_CHARS = 300;
-/**
- * With more of a timed Loop's working time left than this, no row of the reviewer's no's stops it:
- * its lead keeps working on what isn't done. An ∞ Loop names no time left, and its no's stop it.
- */
-export const FINISH_TIME_LEFT_MS = 20 * MINUTE_MS;
 /** A clip ends at the last space within its cap, when that space leaves at least this share of the cap. */
 const CLIP_AT_WORD_SHARE = 0.8;
 /** How many `{` of a reply the verdict reader tries as an answer's start, and how many stray `}` after one it skips. */
@@ -107,8 +101,6 @@ export interface FinishCheckPayload extends RunScope {
   rejections?: number;
   /** This no was the last one the Loop takes: it stops. */
   stopped?: boolean;
-  /** On a no: the timed Loop had more than `FINISH_TIME_LEFT_MS` left, so no row of no's stopped it. */
-  timeLeft?: boolean;
   /** Why the reviewer could not answer. */
   why?: string;
   reviewer?: { engine: string; model?: string };
@@ -128,8 +120,6 @@ export interface FinishRecord {
   done: string[];
   why: string | null;
   stopped: boolean;
-  /** A no the Loop had time left at: it went on whatever the row of no's. */
-  timeLeft: boolean;
   rejections: number | null;
 }
 
@@ -178,7 +168,6 @@ export function finishRecordOf(payload: Record<string, unknown>): FinishRecord |
     done: reasonsOf(payload.done) ?? [],
     why: textOrNull(payload.why),
     stopped: payload.stopped === true,
-    timeLeft: payload.timeLeft === true,
     rejections: isCount(payload.rejections) ? payload.rejections : null,
   };
 }

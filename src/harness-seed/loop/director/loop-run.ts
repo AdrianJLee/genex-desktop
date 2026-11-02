@@ -1,6 +1,6 @@
 /**
  * The Loop's run as one explicit object, and the functions of it every part shares. `prepareLoopRun`
- * (setup.ts) builds it: the run and its clock, the folder the lead builds in (a web game's
+ * (setup.ts) builds it: the run, the folder the lead builds in (a web game's
  * integration worktree, or the project's own folder for a Loop in place), `state` (the heads, the
  * log, the close), the journal and the report. Every function of the run takes it as its first
  * argument; `bindLoopRun` puts each on the object as well, so a function reaches the others through
@@ -22,12 +22,10 @@ import type { AnyRecord, HarnessCtx, Run } from "../../types/harness.d.ts";
 import type { EngineLimit } from "../outage.ts";
 import type { RunInbox } from "../run-inbox.ts";
 import type { FinishAsk } from "./wrap-up.ts";
-import type { LoopRunClock } from "./journal.ts";
 import type { LeadSeat } from "./lead-session.ts";
 import type { OpenLoop } from "./open/contract.ts";
 import type { NoteKind } from "./wake-schedule.ts";
 import type { FinishTally } from "../finish-check.ts";
-import type { StopWhy } from "../finish-contract.ts";
 import type { WorkerPool } from "../workers/pool.ts";
 import type * as integrateFunctions from "./integrate.ts";
 import type * as loopRunFunctions from "./loop-run.ts";
@@ -71,14 +69,10 @@ export interface LoopRunState {
   finished: boolean;
   /** How many second opinions the lead asked for: their pictures are filed by it. */
   judges: number;
-  softDeadline: number;
-  finalDeadline: number;
   /** The end number of the run's last job end the lead has had (`jobs.list`, loop/jobs/watch.ts). */
   jobsCursor?: number;
   /** Where an open Loop's finish checks stand (open/finish.ts); absent until the lead claims the goal. */
   finishTally?: FinishTally;
-  /** Why the run stopped short of its goal, as the close that ends it said; its result card reads it. */
-  endedWhy?: StopWhy;
   /** The user's ask to finish, as the lead recorded it with `wrap_up` (wrap-up.ts). */
   finishAsk?: FinishAsk | null;
   /** The last judge the lead asked about the integration branch. */
@@ -92,11 +86,6 @@ export interface LoopRunData {
   run: Run;
   resume: boolean;
   inbox: RunInbox;
-  started: number;
-  softDeadline: number;
-  finalDeadline: number;
-  /** The run's own clock (journal.ts `loopRunClock`), which the journal keeps and a Resume goes on with. */
-  clock?: LoopRunClock;
   priorJournal: AnyRecord | null;
   /** What the game's folder holds once it is ready (`game.list`'s `facts`). */
   gameFacts?: FactRef[];
@@ -165,6 +154,19 @@ const MAX_LOOP_RUN_LOG = 400;
 /** The report keeps this many verdicts, the most recent. */
 const MAX_REPORT_VERDICTS = 200;
 
+/** Each run's own clock (the wake loop's), by its run object. */
+const RUN_CLOCKS = new WeakMap<object, () => number>();
+
+/** The run's own clock, for what reads the time outside the wake loop (`wrap_up` stamps the person's ask with it). */
+export function keepRunClock(loopRun: LoopRun, now: () => number): void {
+  RUN_CLOCKS.set(loopRun, now);
+}
+
+/** Now on the run's own clock, else the wall clock. */
+export function runNow(loopRun: LoopRun): number {
+  return RUN_CLOCKS.get(loopRun)?.() ?? Date.now();
+}
+
 /** One custom event on the run's thread, stamped with the run (run-events.ts: a failed write is logged, never thrown). */
 export function appendRun(loopRun: LoopRun, event_type: RunEvent, payload: AnyRecord): Promise<unknown> {
   const { ctx, run, threadId } = loopRun;
@@ -195,11 +197,11 @@ export async function protectHead(loopRun: LoopRun, head: string | null | undefi
 
 /**
  * Save the run's journal, with the run's record on it (journal.ts `recordLoopRun`): what a Resume
- * goes on from. A save that would write what the last one wrote (the worked time aside) is not made.
+ * goes on from. A save that would write what the last one wrote is not made.
  */
 export async function saveJournal(loopRun: LoopRun): Promise<number | void> {
   const { ctx, journal, run, threadId } = loopRun;
-  recordLoopRun(loopRun, loopRun.open?.clock.now());
+  recordLoopRun(loopRun);
   const seq = loopRun.logSeq;
   const text = journalText(journal);
   const heldUpTo = () => {

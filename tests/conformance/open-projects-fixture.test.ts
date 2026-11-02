@@ -10,8 +10,6 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { MESSAGE as OPEN_END } from "../../src/harness-seed/loop/director/open/finish.ts";
-import { TIME_CAP_WORDS } from "../../src/harness-seed/loop/time-cap-prompts.ts";
 import {
   OPEN_PROJECTS,
   openLoopWaitNotice,
@@ -37,8 +35,12 @@ import { AppLookAccessKind } from "../../src/shared/jobs.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 
 const GAME = "fixture-game";
-/** The in-place Loop's close when its time ran out with no reviewer's yes, as the seed writes it. */
-const OPEN_TIME_UP = OPEN_END.timeUpNoClaim;
+/**
+ * The in-place Loop's close when its time ran out with no reviewer's yes, and what its report listed,
+ * as an earlier seed wrote them: the fixture's record is an old chat's history (a Loop has no clock now).
+ */
+const OPEN_TIME_UP = "the Loop's time ran out; here is where it stands";
+const NOT_CHECKED = "The time ran out.";
 
 describe("the open-projects dev fixture", () => {
   let lite: CoreLite;
@@ -114,10 +116,10 @@ describe("the open-projects dev fixture", () => {
     });
     assert.equal(closes.length, 1);
     assert.equal(closes[0]?.profile, LoopProfile.Open);
-    assert.deepEqual(closes[0]?.notDone, [TIME_CAP_WORDS.notChecked]);
+    assert.deepEqual(closes[0]?.notDone, [NOT_CHECKED]);
     const result = toEntries(await chat(OPEN_PROJECTS.godot)).find((entry) => entry.kind === EntryKind.Morning);
     assert.ok(result?.kind === EntryKind.Morning);
-    assert.ok(result.summary?.includes(TIME_CAP_WORDS.notChecked), "the result card says no reviewer read a claim");
+    assert.ok(result.summary?.includes(NOT_CHECKED), "the result card says no reviewer read a claim");
     // As the in-place Loop writes it: timed in `budgets`, closed in its own words with its lead's row.
     assert.equal(closes[0]?.stoppedBecause, OPEN_TIME_UP);
     assert.deepEqual(Object.keys((closes[0] as { facets?: object } | undefined)?.facets ?? {}), ["lead"]);

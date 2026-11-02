@@ -1,6 +1,5 @@
 /**
- * What the open Loop's lead reads: its brief (who it is, the goal, its time, the folder and what it
- * holds, its workers, its finish, what wakes it), how its Loop works, and its tools' answers. Engine
+ * What the open Loop's lead reads: its brief (who it is, the goal, the folder and what it holds, its workers, its finish, what wakes it), how its Loop works, and its tools' answers. Engine
  * neutral: a project's own words come from its facts, its plugins and its skills, never from here.
  * Model-facing: the lead reads them as written.
  */
@@ -10,12 +9,10 @@ import { resumeHeldWords, runHeldWords } from "../held-words.ts";
 import { FACT_ROOT, type FactRef, type FolderHolds } from "../../folder-facts.ts";
 import { SECOND_OPINION_TOOL } from "../../second-opinion.ts";
 import { appIdentity } from "../../project-prompts.ts";
-import { MINUTE_MS, minutes } from "../../time.ts";
-import { JobTool } from "../../jobs/contract.ts";
 import { WorkerTool } from "../../workers/contract.ts";
 import { REASON_WORDS } from "../wake-prompts.ts";
 import { WakeCause, type WakeReason, WrapCause } from "../wake-schedule.ts";
-import { OPEN_TURN_MS, OpenTool, type OpenSavePoint } from "./contract.ts";
+import { OpenTool, type OpenSavePoint } from "./contract.ts";
 
 /** How many references the brief names at most. */
 const MAX_REFERENCES = 12;
@@ -71,11 +68,6 @@ export interface OpenBriefFacts {
   /** Whether a restart also rebuilds the game's C++ (a project with an Unreal project in it). */
   cppRestart: boolean;
   savePoints: readonly OpenSavePoint[];
-  now: number;
-  softDeadline: number;
-  finalDeadline: number;
-  /** The Loop runs until its lead finishes it (within its hours), not for its hours. */
-  untilFinish: boolean;
   /** The names of the workspace's skills that reach this project, read on demand. */
   skills: readonly string[];
 }
@@ -83,17 +75,6 @@ export interface OpenBriefFacts {
 /** One fact as the brief names it: its id, and where in the folder it was found. */
 const factLine = (fact: FactRef): string =>
   `${fact.id} ${fact.path === FACT_ROOT ? "at the folder's root" : `in ${fact.path}`}`;
-
-/**
- * The brief's time paragraph: how long the Loop runs (its hours are a cap: the lead's finish ends it
- * sooner, a short grace follows them), and how much working time is left.
- */
-function timeWords(facts: OpenBriefFacts): string {
-  const hours = Math.max(1, Math.round((facts.softDeadline - facts.now) / (60 * MINUTE_MS)));
-  const span = facts.untilFinish ? `until you finish it, at most ${hours} hours` : `for up to ${hours} hours`;
-  const left = Math.max(0, minutes(facts.softDeadline - facts.now));
-  return `TIME: this Loop runs ${span}; the time is a cap, not a quota. You have about ${left} minutes of working time left. Genex tells you shortly before the time is up and when it is.`;
-}
 
 /** The project paragraph: what the folder holds, what its plugins said, its references and save points. */
 function projectWords(facts: OpenBriefFacts): string[] {
@@ -134,15 +115,14 @@ function savePointWords(facts: Pick<OpenBriefFacts, "restart" | "cppRestart">): 
 
 /**
  * The open lead's brief: Genex's identity first (a fresh session reads this brief alone), then that
- * it is this chat's own session leading a Loop in the project's own folder, with the goal whole, its
- * time, what the folder holds, its workers, its finish and how it is woken.
+ * it is this chat's own session leading a Loop in the project's own folder, with the goal whole, what
+ * the folder holds, its workers, its finish and how it is woken.
  */
 export function openBrief(facts: OpenBriefFacts): string {
   return [
     appIdentity({ folderLabel: facts.folderLabel, facts: facts.facts, holds: facts.holds }),
     `YOU LEAD THIS LOOP. You are this chat's own session, and you lead a Loop on the project in ${facts.folder}, in the project's own folder. Genex took a snapshot of the folder before the Loop began.`,
     `THE GOAL: ${facts.goal}`,
-    timeWords(facts),
     ...projectWords(facts),
     workerWords(facts.workerTypes),
     savePointWords(facts),
@@ -161,7 +141,7 @@ export function openBrief(facts: OpenBriefFacts): string {
 export function openWakeRules(): string {
   return [
     "HOW THIS LOOP WORKS:",
-    `- End your turn when you decide to; a turn lasts at most ${minutes(OPEN_TURN_MS)} minutes, and one cut there goes on at once. Between your turns nothing of yours runs; your workers and jobs keep working.`,
+    "- End your turn when you decide to. Between your turns nothing of yours runs; your workers and jobs keep working.",
     "- Genex wakes you in this same session when something happens — the person speaks or asks to finish, a worker ends or asks, a job ends, the project's app stops. News that comes while you work reaches you mid-turn when your session can take it in, otherwise when your turn ends.",
     `- Each wake opens with what happened. Use ${WorkerTool.Wait} only when you need a worker's answer within this turn.`,
   ].join("\n");
@@ -214,12 +194,11 @@ export const OPEN_WORDS = {
   /** A save point or a finish while Genex brings the project's app back: nothing is kept or checked. */
   recovering:
     "Genex is bringing the project's app back; nothing was kept or checked. Try again once it says the app is back.",
-  saved: (label: string, notes: readonly string[], minutesLeft: number, shows: string | null = null) =>
+  saved: (label: string, notes: readonly string[], shows: string | null = null) =>
     [
       `Saved save point "${label}".`,
       ...(notes.length ? [`The project's plugins said: ${notes.join(" ")}`] : []),
       ...(shows ? [shows] : []),
-      `About ${minutesLeft} minutes of working time left.`,
     ].join(" "),
   notSaved: (why: string) => `No save point was made, and nothing was kept: ${clause(why)}.`,
   rewindLater: (label: string) =>
@@ -274,9 +253,6 @@ export const OPEN_NEWS = {
     `Genex stopped ${ids.join(", ")} first: it wrote in the folder in place, and the folder went back under it.`,
   /** Why a writer in place was stopped, as its end record says it. */
   writerStoppedWhy: "Genex stopped it while it brought back the project's app, which had stopped answering",
-  /** Why a turn beside a job a writer in place left running counted for nothing, and what the lead can do. */
-  leftoverJobs: (titles: readonly string[]) =>
-    `A job a worker in place left running (${titles.join(", ")}) may still write in the game folder, so Genex can't tell your changes from its: keep a ${OpenTool.SavePoint} of your work, or stop the job with ${JobTool.Stop}.`,
   rewindDropped: (label: string) =>
     `Before the Loop paused you asked to go back to save point "${label}"; it paused first, so nothing went back. Ask again if you still want it.`,
   restartDropped:
@@ -297,8 +273,6 @@ export interface OpenDigestFacts {
   reasons: readonly WakeReason[];
   /** The first message of a resumed Loop. */
   resumed: boolean;
-  now: number;
-  softDeadline: number;
   userSays: readonly string[];
   happened: readonly string[];
   carried: readonly string[];
@@ -308,11 +282,9 @@ export interface OpenDigestFacts {
   closing: string;
 }
 
-/** The digest's first line: a resumed Loop, a turn its cap cut, or what woke the lead. */
+/** The digest's first line: a resumed Loop, or what woke the lead. */
 function digestHeading(facts: OpenDigestFacts): string {
   if (facts.resumed) return "The Loop picks up where it paused; Genex kept its save points.";
-  if (facts.reasons.includes(WakeCause.TurnCap)) return `Your turn reached its ${minutes(OPEN_TURN_MS)} minutes.`;
-  if (facts.reasons.length === 1 && facts.reasons[0] === WakeCause.CarryOn) return "Your turn ended.";
   const why = facts.reasons.map((reason) => REASON_WORDS[reason] ?? reason);
   return `Genex woke you: ${why.join("; ") || REASON_WORDS[WakeCause.News]}.`;
 }
@@ -329,48 +301,37 @@ function digestBody(facts: OpenDigestFacts): string[] {
 }
 
 /**
- * The open lead's wake message: why it was woken, its time, the person's words first and verbatim,
+ * The open lead's wake message: why it was woken, the person's words first and verbatim,
  * the news (workers', jobs', the app's), what Genex did between turns, its save points, and how the
  * message ends (`openClosing`).
  */
 export function openDigest(facts: OpenDigestFacts): string {
   const said = facts.userSays.length ? [["THE PERSON SAYS (their own words):", ...facts.userSays].join("\n")] : [];
-  return [
-    digestHeading(facts),
-    `About ${Math.max(0, minutes(facts.softDeadline - facts.now))} minutes of working time left.`,
-    ...said,
-    ...digestBody(facts),
-    facts.closing,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  return [digestHeading(facts), ...said, ...digestBody(facts), facts.closing].filter(Boolean).join("\n\n");
 }
 
-/** Why the open Loop wraps up, as its last turn's message opens: its time, or what ended it sooner. */
+/** Why the open Loop wraps up, as its last turn's message opens: its last turn failed, or the person asked to finish. */
 const WRAP_OPENING = {
-  [WrapCause.Deadline]: "YOUR WORKING TIME IS OVER",
   [WrapCause.Failed]: "YOUR LAST TURN FAILED, SO THE LOOP WRAPS UP",
   [WrapCause.Finish]: "THE PERSON ASKED THE LOOP TO FINISH",
 } as const satisfies Record<WrapCause, string>;
 
 /**
  * How the wrap-up's finish goes: `finish` says the goal is reached, so it is called only then (the
- * Loop otherwise closes on its time, with the lead's last words) — and once the person asked to
+ * Loop otherwise closes as the turn ends, with the lead's last words) — and once the person asked to
  * finish, it closes as it stands, with no check.
  */
 const WRAP_FINISH = {
   claim:
-    "Only if the goal is reached, call finish with your summary; otherwise end this turn saying what you built and what remains, and the Loop closes on its time.",
+    "Only if the goal is reached, call finish with your summary; otherwise end this turn saying what you built and what remains, and the Loop closes as it ends.",
   asked:
     "Call finish with your summary: the person asked to finish, so the Loop closes as it stands, with no reviewer's check.",
 } as const;
 
 /** How an open wake message ends: the wrap-up (saying why), or the ordinary closing. */
-export function openClosing(how: { wrapping: boolean; wrapCause?: WrapCause | null }): string {
-  if (how.wrapping) {
-    const cause = how.wrapCause ?? WrapCause.Deadline;
-    const finish = cause === WrapCause.Finish ? WRAP_FINISH.asked : WRAP_FINISH.claim;
-    return `${WRAP_OPENING[cause]}: this is your last turn. ${finish}`;
-  }
-  return "Act on it, and end your turn when you are done.";
+export function openClosing(how: { wrapping: boolean; wrapCause: WrapCause | null }): string {
+  const cause = how.wrapping ? how.wrapCause : null;
+  if (!cause) return "Act on it, and end your turn when you are done.";
+  const finish = cause === WrapCause.Finish ? WRAP_FINISH.asked : WRAP_FINISH.claim;
+  return `${WRAP_OPENING[cause]}: this is your last turn. ${finish}`;
 }

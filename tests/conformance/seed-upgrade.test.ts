@@ -876,11 +876,6 @@ describe("seed upgrade across the harness step flag", () => {
       ["loop/director.ts", "LoopProfile.Open", /LoopProfile\.Open/],
       ["loop/director/wake.ts", "activeWork(", /activeWork/],
       ["loop/director/loop-run.ts", "open?: OpenLoop", /OpenLoop/],
-      ["loop/director/loop-run.ts", "open?.clock.now()", /open\?\.clock\.now\(\)/],
-      ["loop/director/wake-schedule.ts", "TurnEnd.Continue", /TurnEnd\.Continue/],
-      ["loop/director/wake-schedule.ts", "turn.worked", /turn\.worked/],
-      ["loop/director/wake.ts", "TurnEnd.Continue", /TurnEnd\.Continue/],
-      ["loop/director/wake.ts", "turnReturnedAt", /turnReturnedAt/],
       // After a Loop in place: a resume in its journal's kind, and the chat's status alone.
       ["loop/run-dispatch.ts", "resumedProfile(", /resumedProfile/],
       ["loop/after-loop-run.ts", "inPlace", /inPlace/],

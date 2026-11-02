@@ -17,8 +17,6 @@ import { HostMethod } from "../../host-methods.ts";
 import { EventKind, ExecutionStatus, JournalPhase, RunEvent, writeRunArtifact } from "../../run-events.ts";
 import { CLIP_REASON, clip } from "../../text.ts";
 import { SECOND_MS, sleep } from "../../time.ts";
-import { loopHoursOf } from "../../time-cap.ts";
-import { TIME_CAP_WORDS } from "../../time-cap-prompts.ts";
 import { closeRunPool } from "../../workers/run-pool.ts";
 import { latchClose } from "../close-latch.ts";
 import type { LoopRun } from "../loop-run.ts";
@@ -32,10 +30,6 @@ export interface OpenEnd {
   victory: boolean;
   because: string;
   notDone?: readonly string[];
-  /** Its time ran out before any claim was checked: the report says no reviewer read one (time-cap.ts). */
-  unchecked?: boolean;
-  /** Why it stopped short of the goal, for its result card: its time ran out, or the no's stopped it (else a Stop or another end). */
-  why?: StopWhy;
   /** A reviewer's check ended it (a yes, or the no's that stop a Loop): never a pause, whatever else holds. */
   checked?: boolean;
   /** The Loop pauses for a Resume whatever else holds (the project's app couldn't be brought back). */
@@ -44,7 +38,7 @@ export interface OpenEnd {
   keepNothing?: boolean;
   /**
    * No turn of the lead's ran this time (its start was held back or stopped while the plugins prepared
-   * it): the journal keeps the working time the Loop came with, so the attempt spends none of its hours.
+   * it): the app counts none of the attempt as the run's worked time.
    */
   unworked?: boolean;
   /** A new Loop a plugin's step held back before its first turn: the report says so, and the app tells the chat's agent. */
@@ -118,12 +112,12 @@ function limitRecord(limit: AnyRecord): AnyRecord {
 
 /**
  * What a close that is neither the goal reached nor a pause leaves for its result card: the last
- * no's lists, why the Loop stopped (its own `why`, else the person's Stop or another end), its hours.
+ * no's lists, and why the Loop stopped (the person's Stop, or another end).
  */
 function leftToFix(loopRun: LoopRun, end: OpenEnd, paused: boolean): AnyRecord {
   if (paused || end.victory) return {};
-  const why = end.why ?? (loopRun.ctx.cancelled ? StopWhy.Person : StopWhy.Ended);
-  const left = stillToFixOf(loopRun.state.finishTally, { why, hours: loopHoursOf(loopRun.run) });
+  const why = loopRun.ctx.cancelled ? StopWhy.Person : StopWhy.Ended;
+  const left = stillToFixOf(loopRun.state.finishTally, why);
   return left ? { stillToFix: left } : {};
 }
 
@@ -142,15 +136,14 @@ function finishReport(
   if (dropped) journal.between = { rewind: null, restart: false };
   const extra = [wentBack ? MESSAGE.wentBack(wentBack) : "", dropped ? MESSAGE.askDropped : ""].filter(Boolean);
   const close = extra.length ? { ...opened, summary: [opened.summary, ...extra].join(" ") } : opened;
-  const notDone = end.unchecked ? [TIME_CAP_WORDS.notChecked] : [...(end.notDone ?? [])];
-  const notDoneSaid = end.unchecked ? TIME_CAP_WORDS.notChecked : FINISH_REPORT.summaryNotDone(notDone);
+  const notDone = [...(end.notDone ?? [])];
   Object.assign(report, {
     profile: LoopProfile.Open,
     victory: end.victory,
     stoppedBecause: end.because,
     landed: close.landed,
     facets: close.facets,
-    summary: notDone.length ? `${close.summary} ${notDoneSaid}` : close.summary,
+    summary: notDone.length ? `${close.summary} ${FINISH_REPORT.summaryNotDone(notDone)}` : close.summary,
     savePoints: journal.savePoints.map(({ label, snapshotId }) => ({ label, snapshotId })),
     ...(kept ? { lastCheckpoint: kept } : {}),
     ...(notDone.length ? { notDone } : {}),
@@ -198,26 +191,15 @@ async function announce(loopRun: LoopRun, paused: boolean): Promise<void> {
   await writeRunArtifact(ctx, run.runId, "report.json", report);
 }
 
-/** How long the Loop had worked when this attempt began: its paused journal's count, or none for a new Loop. */
-function workedBefore(loopRun: LoopRun): number {
-  const worked = loopRun.resume ? loopRun.priorJournal?.director?.clock?.workedMs : 0;
-  return typeof worked === "number" && Number.isFinite(worked) && worked >= 0 ? worked : 0;
-}
-
 /**
- * An attempt that ran no turn spends none of the Loop's hours: its clock is set back so the journal
- * counts the working time the Loop came with, and its close says its working time ended as it began
- * (`workedUntil`), so the app's count of the run's working time, which runs from the run's start
- * record to its close, adds none of this attempt either.
+ * An attempt that ran no turn adds nothing to the run's worked time in the app, which runs from the
+ * run's start record to its close: its close says its worked time ended as it began (`workedUntil`),
+ * when the Loop took the project up, on the wall clock the app's records keep.
  */
-function chargeNothing(loopRun: LoopRun): void {
-  const { clock, open, report } = loopRun;
-  if (!clock || !open) return;
-  const before = workedBefore(loopRun);
-  // When this attempt began, on the Loop's clock, then on the wall clock the app's records keep.
-  const began = clock.started + before;
-  report.workedUntil = new Date(Date.now() - Math.max(0, open.clock.now() - began)).toISOString();
-  clock.started = open.clock.now() - before;
+function workedNothing(loopRun: LoopRun): void {
+  const { open, report } = loopRun;
+  if (!open) return;
+  report.workedUntil = new Date(Date.now() - Math.max(0, open.clock.now() - open.since)).toISOString();
 }
 
 /** The close itself, once: workers settled, the last work kept, the report, journal, graph and thread. */
@@ -234,7 +216,7 @@ async function closeNow(loopRun: LoopRun, end: OpenEnd): Promise<void> {
   // A Stop or a lost provider with no reviewer's word pauses the Loop: Resume goes on from the folder.
   const paused = end.paused === true || (end.checked !== true && (ctx.cancelled === true || Boolean(state.limit)));
   finishReport(loopRun, end, { kept, paused, wentBack });
-  if (end.unworked) chargeNothing(loopRun);
+  if (end.unworked) workedNothing(loopRun);
   state.finished = true;
   journal.phase = paused ? JournalPhase.Paused : JournalPhase.Done;
   await loopRun.saveJournal();

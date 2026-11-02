@@ -1374,7 +1374,7 @@ describe("the Open Game sheet", () => {
         engine: "codex",
         goal: "make it prettier",
         reference: { name: "arcade", shots: [] },
-        budgets: { wallClockMs: 60_000 },
+        budgets: {},
       },
     });
     const log = await waitForLog(

@@ -299,11 +299,13 @@ describe("autoResumePlan: when a paused build resumes on its own", () => {
       now: DUE,
       want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
     },
+    // Flipped (no clock): a run whose start named little working time left was not resumed
+    // (`AutoResumeSkip.NoTimeLeft`); a run has no working time, so an old record's hours change nothing.
     {
-      name: "too little working time left is not worth a resume",
-      events: () => [registered(T0, { wallClockMs: 65 * MINUTE_MS }), ...limitPause(PAUSED_AT, rateLimit)],
-      now: DUE,
-      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NoTimeLeft },
+      name: "a run an older start record gave an hour, which worked 55 minutes, resumes at its reset all the same",
+      events: () => [registered(T0, { wallClockMs: HOUR_MS }), ...limitPause(T0 + 55 * MINUTE_MS, rateLimit)],
+      now: T0 + 55 * MINUTE_MS + RESET_MS + LIMIT_RESET_MARGIN_MS,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
     },
     {
       name: "a run until satisfied has no clock to run out",

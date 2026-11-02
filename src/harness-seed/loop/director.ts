@@ -14,8 +14,6 @@
 import path from "node:path";
 import { plannerModel, roleEffort, RoleKey } from "./model-roles.ts";
 import { GIT, gitAt } from "./git.ts";
-import { MIN_DELEGATE_TIMEOUT_MS } from "./config.ts";
-import { StopWhy } from "./finish-contract.ts";
 import { closeSettled, closeUnderWay, latchClose } from "./director/close-latch.ts";
 import { fireHooks, HookEvent, holdOf, notesText, runScope } from "./hooks.ts";
 import { type HeldBack, heldTurnEnding, runHeldWords } from "./director/held-words.ts";
@@ -25,7 +23,7 @@ import { closeRunPool } from "./workers/run-pool.ts";
 import { leadsOpenLoop } from "./director/open/active-work.ts";
 import { briefWriter } from "./director/open/brief.ts";
 import { closeInPlace } from "./director/open/close.ts";
-import { MESSAGE as OPEN_END, openEndWords, timeUpWithoutYes } from "./director/open/finish.ts";
+import { openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
 import { creditCapOf, OPEN_WALL_CLOCK, restartsApp } from "./director/open/contract.ts";
 import { settleRecovery } from "./director/open/health.ts";
@@ -37,8 +35,6 @@ import { EngineFailure, engineLimitOf } from "./outage.ts";
 import { isProviderLoss, noteProviderLoss, pauseDecision, pauseEnding } from "./provider-loss.ts";
 import { isCommit } from "./shell.ts";
 import { CLIP_QUOTE } from "./text.ts";
-import { SECOND_MS } from "./time.ts";
-import { noClaimRead } from "./time-cap.ts";
 import { NotLandedReason } from "./verdict.ts";
 import * as loopRunFunctions from "./director/loop-run.ts";
 import * as toolFunctions from "./director/tools.ts";
@@ -73,8 +69,6 @@ const LOOP_RUN_MODULES = [loopRunFunctions, toolFunctions, integrateFunctions];
 
 /** How many reference stills the lead's first turn carries. */
 const MAX_REFERENCE_IMAGES = 8;
-/** A session that ended within this of its deadline ran out of time. */
-const OUT_OF_TIME_MS = 60 * SECOND_MS;
 /** How much of a crash's message the report keeps. */
 const FAILURE_CHARS = 500;
 /** How much of an engine limit's message the decision card quotes. */
@@ -93,10 +87,10 @@ function referenceImages(run: Run): DelegateImage[] {
 }
 
 /**
- * One turn of the lead's session, on its own engine and model. The lead is its chat's own session:
- * it sits in the game folder (no `cwd`); its grant names the folder it builds in (`root`: a web
- * game's integration worktree, or the game folder itself for a Loop in place), and its paid jobs are
- * held to the credit cap its run record names.
+ * One turn of the lead's session, on its own engine and model, with no time limit. The lead is its
+ * chat's own session: it sits in the game folder (no `cwd`); its grant names the folder it builds in
+ * (`root`: a web game's integration worktree, or the game folder itself for a Loop in place), and its
+ * paid jobs are held to the credit cap its run record names.
  */
 function delegateTurn(
   loopRun: LoopRun,
@@ -104,7 +98,6 @@ function delegateTurn(
   tools: LiveToolSpec[],
   { prompt, from }: LeadAsk,
   sessionId: string | null | undefined,
-  timeoutMs: number,
 ): Promise<DelegateResult> {
   const { ctx, integrationWorktree, lead, run, threadId } = loopRun;
   const creditCap = creditCapOf(run);
@@ -117,7 +110,6 @@ function delegateTurn(
     ...(plannerModel(run) ? { model: plannerModel(run) } : {}),
     effort: roleEffort(run, RoleKey.Planner),
     preferences: run.preferences,
-    timeoutMs: Math.max(MIN_DELEGATE_TIMEOUT_MS, timeoutMs),
     ...(sessionId ? { resume: sessionId } : {}),
     ...(creditCap === null ? {} : { creditCap }),
     // The lead answers the chat while its build runs: what the person sends reaches its turn under way.
@@ -165,10 +157,10 @@ export function directorTalk(loopRun: LoopRun, images: DelegateImage[], tools: L
   };
   const talk: DirectorTalk = {
     sessionId: lead ? lead.sessionId : (loopRun.priorJournal?.director?.sessionId ?? null),
-    session: async (prompt, sid, timeoutMs, said) => {
+    session: async (prompt, sid, said) => {
       try {
         const pictures = [...stillsFor(sid), ...(said?.images ?? [])];
-        return await delegateTurn(loopRun, pictures, tools, await leadAsk(loopRun, prompt, sid, said), sid, timeoutMs);
+        return await delegateTurn(loopRun, pictures, tools, await leadAsk(loopRun, prompt, sid, said), sid);
       } catch (err: any) {
         if (!isProviderLoss(err?.kind)) throw err;
         state.limit = engineLimitOf(err);
@@ -244,8 +236,6 @@ async function webBrief(loopRun: LoopRun, start: StartOfRun): Promise<() => stri
     [
       directorBrief({
         run: loopRun.run,
-        softDeadline: loopRun.softDeadline,
-        finalDeadline: loopRun.finalDeadline,
         integrationWorktree: loopRun.integrationWorktree,
         baseCommit: loopRun.state.integrationHead,
         gameFolder: loopRun.projectDir,
@@ -261,67 +251,39 @@ async function webBrief(loopRun: LoopRun, start: StartOfRun): Promise<() => stri
 }
 
 /** Why the session ended, in the sentence the report keeps. */
-function sessionEndWords(
-  loopRun: LoopRun,
-  result: Partial<DelegateResult>,
-  at: number,
-  wrapCause: WrapCause | null,
-): string {
-  const { ctx, softDeadline, state } = loopRun;
+function sessionEndWords(loopRun: LoopRun, result: Partial<DelegateResult>, wrapCause: WrapCause | null): string {
+  const { ctx, state } = loopRun;
   if (ctx.cancelled) return "stopped by the user";
   if (state.limit) return pauseEnding(state.limit.kind, String(state.limit.message).slice(0, CLIP_QUOTE));
   const held = heldTurnEnding(result);
   if (held) return held;
   if (wrapCause === WrapCause.Finish) return WAKE_ENDING[wrapCause];
-  if (wrapCause !== WrapCause.Failed && at >= softDeadline - OUT_OF_TIME_MS)
-    return "the lead ran out of time without calling finish";
   return `the lead's session ended (${result?.stopReason ?? (result?.ok ? "on its own" : "failed")}) before it called finish`;
 }
 
-/** Whether a web run's session ended on its clock: no Stop, limit, held turn, finish or failed turn ended it first. */
-function endedOnTheClock(
-  loopRun: LoopRun,
-  result: Partial<DelegateResult>,
-  at: number,
-  wrapCause: WrapCause | null,
-): boolean {
-  const { ctx, softDeadline, state } = loopRun;
-  if (ctx.cancelled || state.limit || heldTurnEnding(result)) return false;
-  if (wrapCause === WrapCause.Finish || wrapCause === WrapCause.Failed) return false;
-  return at >= softDeadline - OUT_OF_TIME_MS;
-}
-
 /**
- * The run the lead left open: the harness closes it the way `finish` does — a web game's branch lands
- * when it passes its health check; a Loop in place closes there. A run a lost provider paused lands
- * nothing: Resume carries it on.
+ * The run the lead left open — its turn ended with nothing at work, its wrap-up ended, or a lost
+ * provider paused it: the harness closes it the way `finish` does — a web game's branch lands when it
+ * passes its health check; a Loop in place closes there. A run a lost provider paused lands nothing:
+ * Resume carries it on.
  */
 export async function closeLeftOpen(
   loopRun: LoopRun,
   result: Partial<DelegateResult>,
   wrapCause: WrapCause | null = null,
-  now: number = Date.now(),
 ): Promise<void> {
   const { ctx, state } = loopRun;
-  const why = sessionEndWords(loopRun, result, now, wrapCause);
+  const why = sessionEndWords(loopRun, result, wrapCause);
   const halted = loopRun.open?.halted;
   if (halted) return closeInPlace(loopRun, { victory: false, because: halted, paused: true });
   if (leadsOpenLoop(loopRun)) {
-    const timeUp = !heldTurnEnding(result) && timeUpWithoutYes(loopRun, wrapCause);
-    const because = timeUp ? OPEN_END.timeUpNoClaim : (openEndWords(loopRun, result, wrapCause) ?? why);
-    return closeInPlace(loopRun, {
-      victory: false,
-      because,
-      notDone: [],
-      unchecked: timeUp && noClaimRead(state.finishTally),
-      ...(timeUp ? { why: StopWhy.Time } : {}),
-    });
+    const because = openEndWords(loopRun, result, wrapCause) ?? why;
+    return closeInPlace(loopRun, { victory: false, because, notDone: [] });
   }
   const paused = Boolean(state.limit);
   await loopRun.closeTheLoopRun({
     land: !paused,
     paused,
-    ...(endedOnTheClock(loopRun, result, now, wrapCause) ? { ended: StopWhy.Time } : {}),
     because: (landed: AnyRecord) =>
       ctx.cancelled
         ? why
@@ -400,7 +362,7 @@ async function wakeLoopRun(
   await line.release();
   if (loopRun.state.finished) return;
   if (stoppedBeforeAnyTurn(loopRun)) return closeStoppedStart(loopRun);
-  await closeLeftOpen(loopRun, outcome.failed ?? outcome.result, outcome.wrapCause, clock.now());
+  await closeLeftOpen(loopRun, outcome.failed ?? outcome.result, outcome.wrapCause);
 }
 
 /** An open Loop the person stopped before any session of its lead's read its message this time. */
@@ -457,7 +419,7 @@ async function closeHeldStart(loopRun: LoopRun, start: StartOfRun): Promise<void
 /** A run the person stopped before its first turn closes as their stop. */
 async function closeStoppedStart(loopRun: LoopRun): Promise<void> {
   if (!leadsOpenLoop(loopRun)) return closeLeftOpen(loopRun, {});
-  const because = sessionEndWords(loopRun, {}, Date.now(), null);
+  const because = sessionEndWords(loopRun, {}, null);
   return closeInPlace(loopRun, { victory: false, because, keepNothing: true, unworked: true });
 }
 

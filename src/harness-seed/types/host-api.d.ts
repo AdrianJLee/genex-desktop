@@ -1909,12 +1909,10 @@ export interface HarnessHostApi {
    * End the held round of a run: the host records its outcome and counts the no's in a row from its
    * own records (`stopped` once they reach the cap). `unanswered` turns the held answer into no
    * answer, with why (a yes that lapsed, a turn that ended); nothing turns a no or no answer into a yes.
-   * `timeLeftMs`, a timed Loop's working time left: with more than `FINISH_TIME_LEFT_MS` no row of
-   * no's stops it (`timeLeft`); an ∞ Loop names none.
    */
   "finish.settle": {
-    params: { project: string; runId: string; round: number; unanswered?: string | null; timeLeftMs?: number | null };
-    result: FinishRoundAnswer & { rejections: number; stopped: boolean; timeLeft?: boolean };
+    params: { project: string; runId: string; round: number; unanswered?: string | null };
+    result: FinishRoundAnswer & { rejections: number; stopped: boolean };
   };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
@@ -2145,17 +2143,12 @@ export interface RunSpec {
   project: string;
   /** "autopilot": the wire name of a Loop's run, kept for the records it is in. */
   mode?: "autopilot";
-  /** What the run aims at: a named game's stills, or a direction in words. Completion is controlled by budgets. */
+  /** What the run aims at: a named game's stills, or a direction in words. A run has no time limit. */
   reference: RunReference;
   /** observationDelays: backoff (ms) before re-trying a blind camera — a test/ops knob. */
   budgets: {
-    wallClockMs: number;
-    /** The composer's ∞: run until what was asked is verified and nothing blocks it; `wallClockMs` is then only the safety ceiling. */
-    untilSatisfied?: boolean;
     /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
     creditCap?: number;
-    /** Explicit intent; absent records retain legacy untilSatisfied semantics. */
-    completionPolicy?: "goal" | "duration";
     maxIterations?: number;
     observationDelays?: number[];
     /** v2 loop knobs: the pre-evidence code review (default on) and its model half (default on for delegated engines). */

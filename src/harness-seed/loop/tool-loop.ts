@@ -46,7 +46,6 @@ const ContextPolicyMode = {
 const MESSAGE = {
   cancelled: "cancelled",
   maxRounds: (rounds: number) => `turn stopped after ${rounds} tool rounds`,
-  deadline: "the run's wall clock ran out mid-turn — stopping with the progress so far",
   contextTooLarge: (percent: number, reason: string | undefined) =>
     `Context cannot fit the chosen ${percent}% threshold: ${reason ?? "recent work and fixed instructions remain too large"}. Increase the threshold or shorten the request. Existing work is preserved.`,
   outOfUsage: (engine: string, detail: string | undefined) =>
@@ -130,7 +129,7 @@ async function recordError(ctx: HarnessCtx, turnId: string, message: string): Pr
   await ctx.call(HostMethod.TurnAppend, { turnId, batch: [{ type: EventKind.Error, message }] });
 }
 
-/** The reasons a turn ends before its next round: out of rounds, stopped, or out of time. */
+/** The reasons a turn ends before its next round: out of rounds, or stopped. */
 async function stopBeforeRound(
   ctx: HarnessCtx,
   options: TurnOptions,
@@ -145,13 +144,6 @@ async function stopBeforeRound(
   if (ctx.cancelled) {
     await recordError(ctx, turnId, MESSAGE.cancelled);
     return { stopped: TurnStop.Cancelled, round };
-  }
-  // A run's clock reaches inside the turn: a local build owes the deadline the same respect
-  // a delegated one already pays via timeoutMs. Everything done so far is durable — in the
-  // log and on disk — so stopping between rounds loses nothing.
-  if (options.deadlineMs && Date.now() > options.deadlineMs) {
-    await recordError(ctx, turnId, MESSAGE.deadline);
-    return { stopped: TurnStop.Deadline, round };
   }
   return null;
 }
@@ -231,7 +223,6 @@ async function complete(
       messages: await withPictures(ctx, state, prompt.messages),
       tools: tools.definitions(),
       toolRegistryRevision: tools.toolRegistryRevision,
-      ...(options.deadlineMs ? { timeoutMs: Math.max(1, options.deadlineMs - Date.now()) } : {}),
       ...(options.effort ? { effort: options.effort } : {}),
       ...(options.preferences ? { preferences: options.preferences } : {}),
     });

@@ -1,6 +1,6 @@
 /**
  * The open Loop's own names: a Loop on a project that isn't a web game, led in place by the chat's
- * own session. Its tools, its clocks and caps, its journal (`journal.director.open`) and what the
+ * own session. Its tools, its clock and caps, its journal (`journal.director.open`) and what the
  * run object carries for it (`LoopRun.open`). A module new to the seed, so the shipped parts that
  * read it (director.ts, setup.ts, wake.ts) need no new name from a module an agent may have kept.
  */
@@ -15,8 +15,6 @@ import type { WorkerPool } from "../../workers/pool.ts";
 export const OpenTool = { SavePoint: "save_point", Rewind: "rewind", Restart: "restart", Pause: "pause" } as const;
 export type OpenTool = (typeof OpenTool)[keyof typeof OpenTool];
 
-/** A turn of the open lead's lasts at most this long; it goes on at once after. */
-export const OPEN_TURN_MS = 45 * MINUTE_MS;
 /** How often Genex asks the project's app whether it is well, when a plugin hooks `health`. */
 export const HEALTH_POLL_MS = 15 * SECOND_MS;
 /** Genex reopens a stopped app at most this many times before it goes back to the last save point. */
@@ -130,50 +128,6 @@ export interface OpenClock {
  */
 export const OPEN_WALL_CLOCK: OpenClock = { now: () => Date.now(), sleep: (ms) => idle(ms, undefined, { ref: false }) };
 
-/**
- * The game folder at a turn's edge: its commit, and its content as one tree id (every file git
- * doesn't ignore, as a commit would take it), so a second edit of a file already changed still
- * reads as a change; null where git couldn't say.
- */
-export interface OpenFolderMark {
-  head: string | null;
-  tree: string | null;
-}
-
-/**
- * What the lead's turn began with (`writers.ts`), held against its end: how many workers the pool had
- * and how many of them the lead had marked, its writers in place at work and those waiting on the
- * person, the run's jobs that write beside the lead running and the last of their ends, whether a
- * recovery of the project's app was under way, and how many had started and taken the folder back.
- */
-export interface TurnStart {
-  records: number;
-  marked: number;
-  writers: string[];
-  waiting: string[];
-  writerJobs: number;
-  writerJobEndSeq: number;
-  recovering: boolean;
-  recoveries: number;
-  restores: number;
-}
-
-/**
- * A turn whose work is read only from the folder's content while someone else may have written in it
- * (`between.ts`) is the lead's at most this many times in a row: after that the lead rests while that
- * writer works, or is asked what next.
- */
-export const MAX_UNCLEAR_TURNS = 2;
-
-/**
- * A turn whose only sign of work is the folder's content changing while the lead's own session shows
- * no act of its own (no tool call: `sessionActed`; no save point of its own; nobody else known to
- * write) is the lead's at most this many times in a row: something outside the run may be writing
- * there (the project's own app or tools, the person, another chat). A session that acted, a save point
- * of its own, or any other act of the lead's, starts the count again.
- */
-export const MAX_FOLDER_ONLY_TURNS = 4;
-
 /** What a run leading an open Loop carries for it (`LoopRun.open`). */
 export interface OpenLoop {
   /** What the game's folder holds, and whether Genex could read it. */
@@ -186,40 +140,13 @@ export interface OpenLoop {
   halted: string | null;
   /** The save point count when the lead's turn under way began: a turn that saved none is autosaved. */
   turnSavedFrom: number;
-  /** The lead's last turn did something (`between.ts`): it was no idle turn. */
-  turnWorked: boolean;
-  /** The game folder as the lead's turn under way began (`between.ts`); null before its first turn. */
-  turnMark: OpenFolderMark | null;
-  /** When `turnMark` was read, on the Loop's clock: one read long before the turn began is read again. */
-  turnMarkAt: number | null;
-  /** What the turn under way began with (`writers.ts`): who else may write in the folder; null before its first turn. */
-  turnStart: TurnStart | null;
-  /**
-   * How many turns in a row whose work was read only from the folder's content while someone else may
-   * have written in it counted as the lead's (`MAX_UNCLEAR_TURNS`).
-   */
-  unclearStreak: number;
-  /** How many turns in a row whose only sign of work was the folder's content counted as the lead's (`MAX_FOLDER_ONLY_TURNS`). */
-  folderOnlyStreak: number;
-  /**
-   * The lead's session in the turn under way took an act of its own (`news.ts` reads it from each of
-   * the turn's session calls: a tool call, or a cut at its cap): a change of the folder in that turn,
-   * nobody else known to write, is its work.
-   */
-  sessionActed: boolean;
   /**
    * A session of the lead's read its message in this attempt (`news.ts`): a Stop before any did is a
-   * stopped start (nothing kept, none of the Loop's hours spent), however long the first turn waited.
+   * stopped start (nothing kept), however long the first turn waited.
    */
   sessionWorked: boolean;
-  /** Genex couldn't read the folder's content at a turn's edge, and said so once on the run's feed. */
-  treeUnread: boolean;
   /** Genex's work between the lead's turns is under way: no recovery of the project's app starts meanwhile. */
   betweenTurns: boolean;
-  /** A rewind or restart was still waiting as the turn began (a recovery held it back): asked again, it is no new work. */
-  askPending: boolean;
-  /** A claim of this turn's a reviewer turned down, the Loop going on (`finish.ts`): the turn did something. */
-  claimTurnedDown: boolean;
   /** Chains a git write to the game folder after the one before it: the lead's saves, the workers' merges. */
   gitWrite: <T>(write: () => Promise<T>) => Promise<T>;
   clock: OpenClock;
@@ -228,11 +155,6 @@ export interface OpenLoop {
   /** How many of the run's jobs ran when they were last read, and when (`active-work.ts`). */
   jobsRunning: number;
   jobsReadAt: number | null;
-  /** How many of those may write in the game folder beside the lead (`writesBeside`), and the last of their ends (`endSeq`). */
-  writerJobsRunning: number;
-  writerJobEndSeq: number;
-  /** The titles of those running jobs whose writer in place has ended (`active-work.ts`): only the lead can stop them now. */
-  leftoverJobs: string[];
   /** When the Loop (this process) took the project up: unsaved work and fresh eyes count from here at the least. */
   since: number;
   /** The log lines a turn under way took mid-turn, by sequence number: no digest tells them again (`news.ts`). */

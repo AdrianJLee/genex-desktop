@@ -12,7 +12,6 @@ import type { AnyRecord } from "../../../types/harness.d.ts";
 import type { CheckpointAnswer, HookImage } from "../../../types/host-api.d.ts";
 import { type CheckpointAsk, notesText, runScope, takeCheckpoint } from "../../hooks.ts";
 import { clip, hasText } from "../../text.ts";
-import { minutes } from "../../time.ts";
 import type { LoopRun } from "../loop-run.ts";
 import { MAX_SAVE_POINT_LABEL, newOpenJournal, type OpenJournal, type OpenSavePoint } from "./contract.ts";
 import { savePointRound } from "./graph.ts";
@@ -90,8 +89,7 @@ export async function savePointTool(loopRun: LoopRun, args: AnyRecord): Promise<
   if (!("snapshot" in taken)) return OPEN_WORDS.notSaved(notKept(taken));
   const shown = picture && "image" in picture ? { rel, image: picture.image } : null;
   const point = await recordSavePoint(loopRun, { label, summary, auto: false }, taken, shown);
-  const left = minutes(Math.max(0, loopRun.softDeadline - nowOf(loopRun)));
-  return OPEN_WORDS.saved(point.label, point.notes, left, showsWords(rel, picture));
+  return OPEN_WORDS.saved(point.label, point.notes, showsWords(rel, picture));
 }
 
 /** What the save point's answer says of its `shows`: nothing when it kept the picture or named none, else why not. */

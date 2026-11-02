@@ -1,13 +1,11 @@
 /**
  * The run's record in its run journal (`autopilot_<runId>`, the harness's own and durable): what a
- * run needs to go on after a restart, a crash or a pause — its own clock and the time it has worked,
- * the integration's last health check, the log and how much of it the lead has heard, and the wake
+ * run needs to go on after a restart, a crash or a pause — the integration's last health check, the log and how much of it the lead has heard, and the wake
  * loop's own state. Every save writes it (`recordLoopRun`, called by loop-run.ts `saveJournal`); a
  * resumed run reads it back (`restoreLoopRun`, called by setup.ts `prepareLoopRun`). Its functions
  * take the run explicitly; they are not bound onto it.
  */
 import { tallyOf } from "../finish-check.ts";
-import { MINUTE_MS } from "../time.ts";
 import { DirectorLoop, WAKE_WINDOW_MS } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { LoopRun, LoopRunLogEntry } from "./loop-run.ts";
@@ -18,21 +16,6 @@ export const SERVES_LEAD = true;
 
 /** How many of the run's log lines the journal keeps, the newest. */
 export const JOURNAL_LOG_LINES = 60;
-
-/** The wrap-up reserve: a tenth of the run, never less than five minutes nor more than fifteen. */
-const WRAP_RESERVE_MIN_MS = 5 * MINUTE_MS;
-const WRAP_RESERVE_MAX_MS = 15 * MINUTE_MS;
-const WRAP_RESERVE_SHARE = 0.1;
-
-/**
- * The run's own clock: when its working time ends and when it ends. `started` is when the run
- * would have started had it never paused, so the time it has worked is always `now - started`.
- */
-export interface LoopRunClock {
-  started: number;
-  softDeadline: number;
-  finalDeadline: number;
-}
 
 /** What the wake loop takes back from the journal on a Resume. */
 export interface RestoredWake {
@@ -56,59 +39,21 @@ function msOf(value: unknown): number | null {
 /** A count from the journal. */
 const countOf = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
-/** The session ends this long before the hard deadline; a wrap-up session gets the rest. */
-export function wrapReserveMs(total: number): number {
-  return Math.max(WRAP_RESERVE_MIN_MS, Math.min(WRAP_RESERVE_MAX_MS, Math.round(total * WRAP_RESERVE_SHARE)));
-}
-
-/**
- * The run's clock. A new run starts one; a resumed run goes on with the working time it had left —
- * the budget less the time its journal counts it worked, never the wall clock. A run whose worked
- * time used its working time gets only its wrap-up.
- */
-export function loopRunClock({ saved, now, totalMs }: { saved: unknown; now: number; totalMs: number }): LoopRunClock {
-  const reserve = wrapReserveMs(totalMs);
-  const workedRaw = (saved as AnyRecord | null | undefined)?.workedMs;
-  const worked = typeof workedRaw === "number" && Number.isFinite(workedRaw) && workedRaw >= 0 ? workedRaw : 0;
-  const started = now - worked;
-  const clock = { started, softDeadline: started + totalMs - reserve, finalDeadline: started + totalMs };
-  if (worked === 0 || now < clock.softDeadline) return clock;
-  return { started, softDeadline: now, finalDeadline: now + reserve };
-}
-
 /** The newest lines of the run's log, as the journal keeps them. */
 function logRecord(log: readonly LoopRunLogEntry[]): LoopRunLogEntry[] {
   return log.slice(-JOURNAL_LOG_LINES).map(({ at, seq, text, kind }) => ({ at, seq, text, ...(kind ? { kind } : {}) }));
 }
 
-/** The run's own clock: the one prepareLoopRun kept on it, else the one it runs on. */
-function clockOf(loopRun: LoopRun): LoopRunClock {
-  return (
-    loopRun.clock ?? {
-      started: loopRun.started,
-      softDeadline: loopRun.softDeadline,
-      finalDeadline: loopRun.finalDeadline,
-    }
-  );
-}
-
 /**
- * Put the run's record on its journal (`journal.director`), as every save does: its clock and the
- * time it has worked, the integration's last health check, the log and how much of it the lead has
- * heard, and where its job ends and its finish checks stand.
+ * Put the run's record on its journal (`journal.director`), as every save does: the integration's
+ * last health check, the log and how much of it the lead has heard, and where its job ends and its
+ * finish checks stand.
  */
-export function recordLoopRun(loopRun: LoopRun, now = Date.now()): void {
+export function recordLoopRun(loopRun: LoopRun): void {
   const director = loopRun.journal?.director;
   if (!director || !loopRun.state) return;
   const { state } = loopRun;
-  const clock = clockOf(loopRun);
   Object.assign(director, {
-    clock: {
-      started: iso(clock.started),
-      softDeadline: iso(clock.softDeadline),
-      finalDeadline: iso(clock.finalDeadline),
-      workedMs: Math.max(0, now - clock.started),
-    },
     integrationHealthy: state.integrationHealthy,
     log: logRecord(state.log),
     logSeq: loopRun.logSeq,
@@ -119,15 +64,10 @@ export function recordLoopRun(loopRun: LoopRun, now = Date.now()): void {
   });
 }
 
-/**
- * The journal as a save compares it with what the last save wrote: all of it but the count of
- * worked time, which moves every moment. Null when it cannot be read as JSON; it is then written.
- */
+/** The journal as a save compares it with what the last save wrote; null when it cannot be read as JSON (it is then written). */
 export function journalText(journal: AnyRecord): string | null {
-  const clock = journal?.director?.clock;
-  const director = clock ? { ...journal.director, clock: { ...clock, workedMs: undefined } } : journal?.director;
   try {
-    return JSON.stringify({ ...journal, director });
+    return JSON.stringify(journal);
   } catch {
     return null;
   }
@@ -168,8 +108,7 @@ function restoreLog(loopRun: LoopRun, saved: AnyRecord): void {
 /**
  * A resumed run reads its journal back: the last health check, the log and how much of it the lead
  * had heard, its judges' count, its job cursor and its finish checks. The integration head comes back
- * through `startingCommits` (setup.ts), the clock through `capClock`. Called before the run writes a
- * line of its own.
+ * through `startingCommits` (setup.ts). Called before the run writes a line of its own.
  */
 export function restoreLoopRun(loopRun: LoopRun): void {
   if (!resumedFromJournal(loopRun)) return;

@@ -38,8 +38,6 @@ const RESTART_TIMEOUT_MS = 45 * SECOND_MS;
 const RESTART_LOG_TIMEOUT_MS = 5 * SECOND_MS;
 /** How long a Loop asked of the local engine has to be refused. */
 const LOOP_REFUSAL_TIMEOUT_MS = 60 * SECOND_MS;
-/** The wall clock a refused Loop would have had. */
-const LOOP_WALL_CLOCK_MS = 30 * 60 * SECOND_MS;
 /** A scaffolded game must draw a new frame on its own within this long. */
 const ANIMATION_DEADLINE_MS = 5 * SECOND_MS;
 const POLL_MS = 200;
@@ -641,7 +639,7 @@ async function checkLoopRefusedLocally({ core, check }: SelfTest): Promise<void>
     mode: "autopilot",
     engine: EngineId.Ollama,
     reference: { name: "neon rings", shots: [] },
-    budgets: { wallClockMs: LOOP_WALL_CLOCK_MS },
+    budgets: {},
   });
   const finishedLog = await waitForAll(
     core,

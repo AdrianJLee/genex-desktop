@@ -31,8 +31,6 @@ export interface FinishRound {
   claim: string | null;
   /** this no was the last one the Loop takes: it stopped */
   stopped: boolean;
-  /** a no the Loop had time left at: it went on whatever the count */
-  timeLeft: boolean;
 }
 
 /** What the finish check's node says, from its rounds. */
@@ -67,7 +65,6 @@ export function foldFinishRecord(ledger: FinishLedger, record: FinishRecord): vo
     why: record.why,
     claim: record.claim ?? prior?.claim ?? null,
     stopped: record.step === FinishCheckStep.Rejected && record.stopped,
-    timeLeft: record.step === FinishCheckStep.Rejected && record.timeLeft,
   });
 }
 

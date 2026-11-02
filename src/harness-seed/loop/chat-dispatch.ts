@@ -13,11 +13,9 @@ import { EngineId, hasSessionRoles } from "./model-roles.ts";
 import { ProjectStarter, startWebIfPending } from "./folder-facts.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent, RunState } from "./run-events.ts";
-import { HOUR_MS } from "./time.ts";
 import { handleRunStart, loopRunRefusal } from "./run-dispatch.ts";
 import { runUnderWay } from "./live-chat.ts";
 import { type ActiveRun, StatusLane, type Studio } from "./studio-state.ts";
-import { MAX_RUN_HOURS } from "./config.ts";
 import { CLIP_GAME_TITLE } from "./text.ts";
 import { type StoreItem, storeItemsOf, storeLaunchWords, storeScopeItems } from "./store-items.ts";
 import { closeCarriedPool } from "./workers/carry.ts";
@@ -380,12 +378,10 @@ export async function launchFromIntake(
   // The launch is handled here, so a restart cannot replay it. Synchronous run
   // reservation keeps later queued messages behind the build until it saves and settles.
   // A Stop since this message is for this build: the start keeps it (`keepStop`).
-  void handleRunStart(studio, { type: "run_start", threadId: action.threadId, run }, { keepStop: true }).catch(
-    (err: unknown) => {
-      void closeCarriedPool(action.threadId);
-      host.notify("run.failed", { error: String(err) });
-    },
-  );
+  void handleRunStart(studio, { type: "run_start", threadId: action.threadId, run }, { keepStop: true })
+    .catch((err: unknown) => host.notify("run.failed", { error: String(err) }))
+    // The workers the turn left for this build stop once it is over, if its run never took them (refused at its start).
+    .finally(() => closeCarriedPool(action.threadId));
 }
 
 /**
@@ -411,9 +407,6 @@ function intakeProject(action: QueueAction, spec: AnyRecord, games: readonly { n
   return named || FALLBACK_PROJECT;
 }
 
-/** What a Loop is given: until its lead finishes it, under the run's day ceiling. */
-const LOOP_BUDGETS: RunSpec["budgets"] = Object.freeze({ wallClockMs: MAX_RUN_HOURS * HOUR_MS, untilSatisfied: true });
-
 /** The goal a launch runs: the chat's goal, and what it sells in the Genex store when it sells anything. */
 function intakeGoal(spec: AnyRecord, store: readonly StoreItem[]): string {
   const goal = String(spec.goal ?? "").trim();
@@ -433,7 +426,7 @@ function intakeRun(
     goal: intakeGoal(spec, store),
     project,
     reference: spec.reference,
-    budgets: { ...LOOP_BUDGETS },
+    budgets: {},
     ...(spec.mode ? { mode: spec.mode } : {}),
     ...(spec.engine ? { engine: spec.engine } : {}),
     ...(spec.model ? { model: spec.model } : {}),

@@ -1,22 +1,17 @@
 /**
- * What an open Loop's lead has at work while it rests: its pool's running workers and the run's
- * running jobs (the director's own builders too, should a run have any), and which of those jobs may
- * write in the game folder beside the lead (`writesBeside`). The wake loop reads it for
- * an open Loop only, so a lead whose workers or jobs run is not asked what next, and its heartbeat
- * keeps time while they do; a web Loop counts its builders as it always did. Jobs are read from the
- * host at most every `JOB_POLL_MS`. A module new to the seed, so the shipped wake.ts needs no new
- * name from a module an agent may have kept.
+ * What a Loop's lead has at work while it rests: its pool's running workers and the run's running
+ * jobs, and for an open Loop a recovery of the project's app under way. A lead with nothing at work
+ * and nothing to be woken for is done: its Loop closes, as a bare agent's turn ends (wake.ts). An
+ * open Loop's jobs are read from the host at most every `JOB_POLL_MS`, or at once at a turn's edge.
  */
 import type { HarnessCtx } from "../../../types/harness.d.ts";
 import type { JobView } from "../../../types/host-api.d.ts";
 import { HostMethod } from "../../host-methods.ts";
-import { JobRole, JobState } from "../../jobs/contract.ts";
+import { JobState } from "../../jobs/contract.ts";
 import { JOB_POLL_MS } from "../../jobs/watch.ts";
 import { LoopProfile } from "../../folder-facts.ts";
-import { WorkerIsolation } from "../../workers/contract.ts";
-import { isWorking, runningRecords, type WorkerRecord } from "../../workers/records.ts";
+import { runningRecords } from "../../workers/records.ts";
 import type { LoopRun } from "../loop-run.ts";
-import type { OpenLoop } from "./contract.ts";
 
 /** Whether the run leads an open Loop. */
 export const leadsOpenLoop = (loopRun: Pick<LoopRun, "profile" | "open">): boolean =>
@@ -30,38 +25,6 @@ async function jobsNow(ctx: HarnessCtx, project: string, runId: string): Promise
   } catch {
     return null;
   }
-}
-
-/**
- * Whether a job's owner may write in the game folder beside the lead: a worker of the run's pool that
- * works there in place (isolation lock), or a worker the pool doesn't know. Never the lead's own job,
- * nor one a worker in a copy or a reader started.
- */
-export function writesBeside(job: Pick<JobView, "role" | "worker">, records: readonly WorkerRecord[]): boolean {
-  if (job?.role !== JobRole.Worker) return false;
-  const named = records.filter((record) => record.title === job.worker);
-  return !named.length || named.some((record) => record.isolation === WorkerIsolation.Lock);
-}
-
-/**
- * Whether a job that writes beside the lead was left running by its writer in place, which has ended
- * (a server, a run of the game): nobody works on with it but the lead, who may keep it or stop it.
- */
-function leftBehind(job: Pick<JobView, "worker">, records: readonly WorkerRecord[]): boolean {
-  const named = records.filter((record) => record.title === job.worker);
-  return named.length > 0 && !named.some(isWorking);
-}
-
-/** The jobs read into the open Loop: how many run, how many of those write beside the lead, those left behind, and its writers' last end. */
-function readJobs(open: OpenLoop, jobs: readonly JobView[]): void {
-  const records = open.pool?.state.records ?? [];
-  const beside = jobs.filter((job) => writesBeside(job, records));
-  const running = beside.filter((job) => job.state === JobState.Running);
-  open.jobsRunning = jobs.filter((job) => job?.state === JobState.Running).length;
-  open.writerJobsRunning = running.length;
-  open.leftoverJobs = running.filter((job) => leftBehind(job, records)).map((job) => job.title || job.id);
-  const ends = beside.flatMap((job) => (typeof job.endSeq === "number" ? [job.endSeq] : []));
-  open.writerJobEndSeq = Math.max(open.writerJobEndSeq, ...ends);
 }
 
 /**
@@ -86,7 +49,24 @@ export async function activeWork(loopRun: LoopRun, now: number, { fresh = false 
   if (open && stale) {
     open.jobsReadAt = now;
     const jobs = await jobsNow(loopRun.ctx, loopRun.run.project, loopRun.run.runId);
-    if (jobs !== null) readJobs(open, jobs);
+    if (jobs !== null) open.jobsRunning = runningJobs(jobs);
   }
   return workAtHand(loopRun);
+}
+
+/** How many of the jobs run now. */
+const runningJobs = (jobs: readonly JobView[]): number => jobs.filter((job) => job?.state === JobState.Running).length;
+
+/**
+ * Whether the lead has anything at work (the module's header): a worker until its run has settled
+ * (the line of its end, which wakes the lead, is that run's last step), and the run's jobs, an open
+ * Loop's read again at once at a turn's edge (`edge`), which must not miss a job the turn just
+ * started; a web Loop's every time.
+ */
+export async function hasWorkAtHand(loopRun: LoopRun, now: number, edge: boolean): Promise<boolean> {
+  const pool = loopRun.pool ?? loopRun.open?.pool ?? null;
+  if (pool?.state.runs.size || loopRun.runningWorkers().length) return true;
+  if (leadsOpenLoop(loopRun)) return (await activeWork(loopRun, now, { fresh: edge })) > 0;
+  const jobs = await jobsNow(loopRun.ctx, loopRun.run.project, loopRun.run.runId);
+  return runningJobs(jobs ?? []) > 0;
 }

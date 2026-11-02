@@ -1,6 +1,6 @@
 /**
  * An open Loop's wake message, read from the run at the moment of the wake (`openDigest`): what woke
- * the lead, its time, the person's words, the news, the lines Genex carried for it (what it did
+ * the lead, the person's words, the news, the lines Genex carried for it (what it did
  * between turns, what the project's plugins said), its save points, and the work at hand. The carried lines are told
  * once: the message takes them off the journal. Also how such a message ends (`openClosing`).
  */
@@ -11,7 +11,6 @@ import { openClosing, openDigest } from "./prompts.ts";
 
 /** What the wake loop read for this message. */
 export interface OpenWake {
-  now: number;
   reasons: readonly WakeReason[];
   userSays: readonly string[];
   happened: readonly string[];
@@ -25,8 +24,6 @@ export function openDigestOf(loopRun: LoopRun, wake: OpenWake): string {
   return openDigest({
     reasons: wake.reasons,
     resumed: wake.resumed === true,
-    now: wake.now,
-    softDeadline: loopRun.softDeadline,
     userSays: wake.userSays,
     happened: wake.happened,
     carried: open ? open.journal.carried.splice(0) : [],

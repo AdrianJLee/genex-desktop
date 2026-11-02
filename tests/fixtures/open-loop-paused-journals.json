@@ -1,0 +1,150 @@
+{
+  "midRun": {
+    "runId": "run-paused-mid",
+    "run": {
+      "runId": "run-paused-mid",
+      "goal": "A small level the player can walk through, with a door that opens.",
+      "project": "godot-game",
+      "mode": "autopilot",
+      "engine": "claude-code",
+      "reference": {
+        "name": "Level",
+        "shots": []
+      },
+      "budgets": {
+        "wallClockMs": 10800000,
+        "completionPolicy": "goal",
+        "creditCap": 600
+      }
+    },
+    "mode": "director",
+    "phase": "paused",
+    "director": {
+      "sessionId": "chat-session-1",
+      "baseCommit": "0e22c2ba5b3340a39585b07e212c9ddfdaee1df7",
+      "integrationHead": null,
+      "notes": [],
+      "open": {
+        "version": 1,
+        "savePoints": [
+          {
+            "label": "One",
+            "summary": "the first room",
+            "snapshotId": "snap-2",
+            "auto": false,
+            "at": 0,
+            "notes": []
+          }
+        ],
+        "between": {
+          "rewind": null,
+          "restart": false
+        },
+        "carried": [],
+        "crashes": 0
+      },
+      "clock": {
+        "started": "2026-11-02T19:04:37.530Z",
+        "softDeadline": "2026-11-02T22:04:37.530Z",
+        "finalDeadline": "2026-11-02T22:19:37.530Z",
+        "workedMs": 2468357
+      },
+      "integrationHealthy": null,
+      "log": [],
+      "logSeq": 0,
+      "heardSeq": 0,
+      "judges": 0,
+      "jobsCursor": 0,
+      "lead": {
+        "chatSession": true
+      },
+      "wake": {
+        "loop": "wake",
+        "freshSessions": 0,
+        "wrapCause": null,
+        "wakes": 0,
+        "wakesAt": [],
+        "lastWakeAt": null,
+        "asleepSince": null
+      }
+    }
+  },
+  "inGrace": {
+    "runId": "run-paused-grace",
+    "run": {
+      "runId": "run-paused-grace",
+      "goal": "A small level the player can walk through, with a door that opens.",
+      "project": "godot-game",
+      "mode": "autopilot",
+      "engine": "claude-code",
+      "reference": {
+        "name": "Level",
+        "shots": []
+      },
+      "budgets": {
+        "wallClockMs": 3600000,
+        "completionPolicy": "goal",
+        "creditCap": 600
+      }
+    },
+    "mode": "director",
+    "phase": "paused",
+    "director": {
+      "sessionId": "chat-session-1",
+      "baseCommit": "eeb0e52d0246a39450f37a0421e2c01b4d6dd8b6",
+      "integrationHead": null,
+      "notes": [],
+      "open": {
+        "version": 1,
+        "savePoints": [
+          {
+            "label": "One",
+            "summary": "the first room",
+            "snapshotId": "snap-2",
+            "auto": false,
+            "at": 0,
+            "notes": []
+          }
+        ],
+        "between": {
+          "rewind": null,
+          "restart": false
+        },
+        "carried": [],
+        "crashes": 0,
+        "unclearStreak": 1,
+        "folderOnlyStreak": 2,
+        "turnMark": {
+          "head": null,
+          "tree": "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+        }
+      },
+      "clock": {
+        "started": "2026-11-02T19:04:37.962Z",
+        "softDeadline": "2026-11-02T20:04:37.962Z",
+        "finalDeadline": "2026-11-02T20:19:37.962Z",
+        "workedMs": 3850458
+      },
+      "integrationHealthy": null,
+      "log": [],
+      "logSeq": 0,
+      "heardSeq": 0,
+      "judges": 0,
+      "jobsCursor": 0,
+      "lead": {
+        "chatSession": true
+      },
+      "wake": {
+        "loop": "wake",
+        "freshSessions": 0,
+        "wrapCause": "deadline",
+        "wakes": 1,
+        "wakesAt": [
+          "2026-11-02T20:06:17.273Z"
+        ],
+        "lastWakeAt": "2026-11-02T20:06:17.273Z",
+        "asleepSince": "2026-11-02T20:06:17.272Z"
+      }
+    }
+  }
+}

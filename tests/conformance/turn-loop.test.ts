@@ -12,7 +12,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { EngineError, type Engine } from "../../src/substrate/engines/types.ts";
-import { nameFromAsk, runTurn } from "../../src/harness-seed/loop/turn-loop.ts";
+import { nameFromAsk } from "../../src/harness-seed/loop/turn-loop.ts";
 import { loadSkills } from "../../src/harness-seed/loop/skills.ts";
 import { SecretStore, plaintextBackend } from "../../src/substrate/secrets.ts";
 import { customEvents, startLearningRig, startRig, waitForLog, type Rig } from "../helpers/studio-rig.ts";
@@ -227,43 +227,6 @@ describe("turn loop", () => {
       "round limit",
     );
     assert.ok(events.some((e) => e.data.type === "error"));
-  });
-});
-
-describe("run deadline inside a turn", () => {
-  it("an already-expired deadline ends the turn cleanly without another model call", async () => {
-    // The gauntlet's wall clock used to stop at the loop head only: a build turn that started
-    // near the wire could keep buying tool rounds long past the budget. The deadline now reads
-    // between rounds, so the turn ends where the log already holds everything it did.
-    const calls: Array<{ method: string; payload: unknown }> = [];
-    const ctx = {
-      workspace: "/nonexistent",
-      cancelled: false,
-      call: async (method: string, payload?: unknown) => {
-        calls.push({ method, payload });
-        if (method === "engine.describe") {
-          return [
-            { id: "ollama", label: "Ollama", kind: "direct", status: { code: "ready" }, models: [], defaultModel: "m" },
-          ];
-        }
-        if (method === "turn.append") return {};
-        throw new Error(`unexpected substrate call: ${method}`);
-      },
-      notify: () => {},
-      setStatus: () => {},
-    };
-
-    const outcome = await runTurn(ctx as never, {
-      threadId: "t1",
-      turnId: "turn1",
-      engine: "ollama",
-      deadlineMs: Date.now() - 1,
-    });
-
-    assert.equal((outcome as { stopped: string }).stopped, "deadline");
-    assert.ok(!calls.some((c) => c.method === "engine.complete"), "an expired clock must not buy another completion");
-    const note = calls.find((c) => c.method === "turn.append");
-    assert.match(JSON.stringify(note?.payload ?? {}), /wall clock/, "the stop leaves a note in the thread");
   });
 });
 
@@ -650,7 +613,9 @@ describe("engine fallback (M2)", () => {
     await delegate({ engine: "vendor", project: "pong", prompt: "now tweak it" });
   });
 
-  it("a delegation without a time budget gets the studio's chat ceiling, an explicit one passes through", async () => {
+  // Flipped (no clock): a delegation without a time budget got a six-hour ceiling
+  // (`DEFAULT_CHAT_DELEGATION_TIMEOUT_MS`); it has none, as a bare agent's turn has none.
+  it("a delegation without a time budget has none, an explicit one passes through", async () => {
     const rig = await turnRig([]);
     const budgets: Array<number | undefined> = [];
     const vendor: Engine = {
@@ -674,8 +639,7 @@ describe("engine fallback (M2)", () => {
       timeoutMs?: number;
     }) => Promise<unknown>;
     await delegate({ engine: "vendor", project: "pong", prompt: "build it" });
-    // Six hours: generous slack for a chat build with no commission, but never unbounded.
-    assert.equal(budgets[0], 6 * 3_600_000);
+    assert.equal(budgets[0], undefined, "no time limit of Genex's own");
     await delegate({ engine: "vendor", project: "pong", prompt: "again", timeoutMs: 123_456 });
     assert.equal(budgets[1], 123_456, "a caller's own budget is not overridden");
   });

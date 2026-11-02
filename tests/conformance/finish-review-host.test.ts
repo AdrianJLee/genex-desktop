@@ -11,7 +11,6 @@ import { MINUTE_MS } from "../../src/shared/duration.ts";
 import {
   clipReason,
   FINISH_REASON_CHARS,
-  FINISH_TIME_LEFT_MS,
   FinishCheckStep,
   type FinishRecord,
   MAX_FINISH_REASONS,
@@ -173,65 +172,22 @@ describe("the reviewer's verdict is the app's", () => {
     assert.equal(last?.rejections, 3);
   });
 
-  it("a timed Loop goes on past any row of no's, with time left or without", {
+  // Flipped (no clock): a settle named a timed Loop's time left (`timeLeftMs`), and a no with more
+  // than `FINISH_TIME_LEFT_MS` left recorded `timeLeft`; a Loop has no working time now.
+  it("a settle names no time: one that names its time left is refused, and no record says any", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
-    const chat = await workerChat();
-    reviewerSays(chat, [
-      reviewerAnswer("no", NO_REASONS),
-      reviewerAnswer("no", NO_REASONS),
-      reviewerAnswer("no", NO_REASONS),
-      reviewerAnswer("no", NO_REASONS),
-    ]);
-    const plenty = FINISH_TIME_LEFT_MS + MINUTE_MS;
-    const counts: Array<[unknown, unknown, unknown]> = [];
-    for (const [round, timeLeftMs] of [
-      [1, plenty],
-      [2, plenty],
-      [3, plenty],
-      [4, FINISH_TIME_LEFT_MS],
-    ] as const) {
-      await review(chat);
-      const settled = await settle(chat, { round, timeLeftMs });
-      counts.push([settled.rejections, settled.stopped, settled.timeLeft === true]);
-    }
-    // Flipped: the fourth no, with little time left, used to stop the Loop.
-    assert.deepEqual(counts, [
-      [1, false, true],
-      [2, false, true],
-      [3, false, true],
-      [4, false, false],
-    ]);
-    const ends = (await checks(chat)).filter((check) => check.step === FinishCheckStep.Rejected);
-    assert.deepEqual(
-      ends.map((check) => [check.stopped === true, check.timeLeft === true]),
-      [
-        [false, true],
-        [false, true],
-        [false, true],
-        [false, false],
-      ],
-      "each no records whether the Loop had time left",
-    );
-  });
-
-  it("a settle's time left is a count of milliseconds, or nothing", { timeout: CASE_TIMEOUT_MS }, async () => {
     const chat = await workerChat();
     reviewerSays(chat, [reviewerAnswer("no", NO_REASONS)]);
     await review(chat);
     const recorded = (await checks(chat)).length;
-    for (const [label, timeLeftMs] of [
-      ["negative", -1],
-      ["not whole", 1.5],
-      ["text", "an hour"],
-      ["a list", [MINUTE_MS]],
-    ] as const) {
-      await assert.rejects(settle(chat, { round: 1, timeLeftMs }), Error, `${label}: refused`);
-      assert.equal((await checks(chat)).length, recorded, `${label}: nothing recorded`);
-    }
-    const settled = await settle(chat, { round: 1, timeLeftMs: null });
+    await assert.rejects(settle(chat, { round: 1, timeLeftMs: MINUTE_MS }), Error, "refused");
+    assert.equal((await checks(chat)).length, recorded, "nothing recorded");
+    const settled = await settle(chat, { round: 1 });
     assert.equal(settled.step, FinishCheckStep.Rejected);
-    assert.equal(settled.timeLeft, undefined, "no time named: the no's count as they always have");
+    assert.equal("timeLeft" in settled, false);
+    const no = (await checks(chat)).find((check) => check.step === FinishCheckStep.Rejected);
+    assert.equal(no?.timeLeft, undefined);
   });
 
   it("what isn't done and what is are kept apart from the reviewer's reasons, in the answer and the record", {
@@ -523,7 +479,6 @@ describe("the app's reading of a reviewer's answer", () => {
       done: [],
       why: null,
       stopped: false,
-      timeLeft: false,
       rejections: null,
     });
     const { Accepted, Checking, Rejected, Unanswered } = FinishCheckStep;

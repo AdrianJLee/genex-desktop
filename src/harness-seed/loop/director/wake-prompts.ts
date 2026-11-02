@@ -1,11 +1,10 @@
 /**
- * What a Loop's lead reads when it is woken (wake.ts): why, its time, the person's words verbatim,
+ * What a Loop's lead reads when it is woken (wake.ts): why, the person's words verbatim,
  * what happened, the workers, the integration's last health check, and how the message ends. Also the
  * first message's rules and a fresh session's opening. Model-facing: the lead reads it as written.
  */
 import { shortSha } from "../git.ts";
 import { clip, clipMarked } from "../text.ts";
-import { minutes } from "../time.ts";
 import { LEAD_FRESH_START } from "./lead-session-prompts.ts";
 import { NoteKind, WakeCause, type WakeReason, WrapCause } from "./wake-schedule.ts";
 
@@ -31,12 +30,11 @@ export const REASON_WORDS = {
   [NoteKind.WorkerAsks]: "a worker asks the person something",
   [NoteKind.AppCrashed]: "the project's app stopped",
   [NoteKind.AppStopping]: "the project's app stopped answering",
+  [NoteKind.AskDone]: "what you asked for at your turn's end has run",
   [WakeCause.UserMessage]: "the user spoke",
   [WakeCause.FinishRequested]: "the user asked to finish",
   [WakeCause.News]: "news",
-  [WakeCause.WrapUp]: "the working time is over",
-  [WakeCause.TurnCap]: "your turn reached its cap",
-  [WakeCause.CarryOn]: "your turn ended",
+  [WakeCause.WrapUp]: "the wrap-up starts",
 } as const satisfies Record<WakeReason, string>;
 
 /** One worker as the web digest names it. */
@@ -56,9 +54,6 @@ export interface DigestFacts {
   userSays: readonly string[];
   finishNew: boolean;
   happened: readonly string[];
-  softDeadline: number;
-  finalDeadline: number;
-  wrapping: boolean;
   integrationHead: string | null;
   integrationHealthy: boolean | null;
   workers: readonly DigestWorker[];
@@ -105,19 +100,15 @@ function healthWords(healthy: boolean | null): string {
   return "not checked yet";
 }
 
-/** Where the run stands: its time, the integration head, the workers. */
+/** Where the run stands: the integration head, the workers. */
 function standsSection(facts: DigestFacts): string {
-  const { now, softDeadline, finalDeadline, wrapping } = facts;
-  const time = wrapping
-    ? `- time: wrapping up — ${minutes(finalDeadline - now)} minutes left, until ${utc(finalDeadline)}`
-    : `- time: ${minutes(softDeadline - now)} working minutes left, until ${utc(softDeadline)}`;
   const head = facts.integrationHead
     ? `- integration: ${shortSha(facts.integrationHead)}, ${healthWords(facts.integrationHealthy)}`
     : "- integration: nothing committed yet";
   const workers = facts.workers.map(
     (w) => `- worker ${w.id} "${w.title}": ${w.state}${w.verdict ? ` (marked ${w.verdict})` : ""}`,
   );
-  return ["WHERE THE RUN STANDS:", time, head, ...workers].join("\n");
+  return ["WHERE THE RUN STANDS:", head, ...workers].join("\n");
 }
 
 /** A web game's lead's wake message: why it was woken, the person's words, the news, where the run stands, the closing. */
@@ -153,17 +144,15 @@ export function carryOn(): string {
   return "Act on it, and end your turn when you are done; Genex wakes you when something happens.";
 }
 
-/** Why a wrap-up that is not the deadline's started. */
+/** Why the wrap-up started. */
 const WRAP_LEADS = {
-  [WrapCause.Deadline]: "",
   [WrapCause.Failed]: "Your last turn failed, so the wrap-up starts now.",
   [WrapCause.Finish]: "The user asked to finish, so the wrap-up starts now.",
 } as const satisfies Record<WrapCause, string>;
 
-/** The wrap-up prompt, with why it started when that was not the deadline. */
+/** The wrap-up prompt, with why it started. */
 export function wrapLead(cause: WrapCause, wrapUp: string): string {
-  const lead = WRAP_LEADS[cause];
-  return lead ? `${lead}\n${wrapUp}` : wrapUp;
+  return `${WRAP_LEADS[cause]}\n${wrapUp}`;
 }
 
 /** Why a fresh session carries the run, in the words its first line gives (`freshStart`). */
@@ -209,7 +198,6 @@ export function wakeRules(): string {
   return [
     "HOW THIS LOOP WORKS:",
     "- worker_start answers at once; workers work in the background while you go on. To wait for one, call worker_wait or end your turn.",
-    "- Genex wakes you in this same session when something happens — the user speaks or asks to finish, a worker ends or asks the person something, the working time ends. Each message opens with what happened.",
-    "- Ending a turn only rests you: the Loop stays open until you call finish or the working time ends.",
+    "- Genex wakes you in this same session when something happens — the user speaks or asks to finish, a worker ends or asks the person something. Each message opens with what happened.",
   ].join("\n");
 }

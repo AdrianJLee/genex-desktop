@@ -14,7 +14,7 @@ import { callProjectTool, ProjectToolSeat, projectTools } from "./project-tools.
 import { ProjectTool } from "../../shared/project-tools.ts";
 import { ChatActivityPhase, SessionActivityRole, delegationActivityScope } from "../../shared/chat-activity.ts";
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
-import { HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
+import { MINUTE_MS } from "../../shared/duration.ts";
 import {
   DelegationRefusal,
   EngineFailureKind,
@@ -113,13 +113,6 @@ import { type RunCreditCap, runCreditCap } from "./run-credits.ts";
 import { checkpointWords } from "./plugin-hooks.ts";
 import { CHECKPOINT_TOOL } from "../../substrate/engines/studio-tool-prompts.ts";
 import { HookEvent } from "../../shared/plugin-hooks.ts";
-
-/**
- * Ceiling for a delegation that arrives without its own time budget. Generous — a chat build
- * has no commission and may legitimately run for hours — but a ceiling all the same: no
- * contractor keeps a workspace locked forever because nobody was watching the clock.
- */
-export const DEFAULT_CHAT_DELEGATION_TIMEOUT_MS = 6 * HOUR_MS;
 
 /** Engines whose own system prompt takes a session's lasting context (`DelegateRequest.system`). */
 const SYSTEM_CONTEXT_ENGINES: ReadonlySet<string> = new Set([ProviderId.ClaudeCode]);
@@ -2353,9 +2346,8 @@ export class DelegationService {
       ...(p.effort ? { effort: p.effort } : {}),
       ...(p.preferences ? { preferences: p.preferences } : {}),
       ...(p.maxTurns ? { maxTurns: p.maxTurns } : {}),
-      // Every delegation carries a wall-clock ceiling: a caller's own budget, or the
-      // chat default when none was given.
-      timeoutMs: p.timeoutMs ?? DEFAULT_CHAT_DELEGATION_TIMEOUT_MS,
+      // A delegation has a time limit only when its caller gives one: a chat turn, a lead and a worker have none.
+      ...(p.timeoutMs !== undefined ? { timeoutMs: p.timeoutMs } : {}),
       ...(p.resume ? { resume: p.resume } : {}),
       ...(p.compact ? { compact: true } : {}),
       ...(extraReads.length ? { extraReads } : {}),

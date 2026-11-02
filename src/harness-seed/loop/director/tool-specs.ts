@@ -35,7 +35,7 @@ export type DirectorTool = (typeof DirectorTool)[keyof typeof DirectorTool];
 /** `run_status` as the lead's engine sees it. */
 export const RUN_STATUS_SPEC: LiveToolSpec = {
   name: DirectorTool.RunStatus,
-  description: "Where the run stands: its time, the integration branch and its last health check, and the workers.",
+  description: "Where the run stands: the integration branch and its last health check, and the workers.",
   parameters: { type: "object", properties: {} },
 };
 

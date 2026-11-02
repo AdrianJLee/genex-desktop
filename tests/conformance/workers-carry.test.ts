@@ -10,7 +10,6 @@ import { describe, it } from "node:test";
 import { personWrote } from "../../src/harness-seed/loop/person-wrote.ts";
 import { WAIT_ENDED } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
 import {
-  CARRY_TAKE_MS,
   carriedEnd,
   carryPool,
   closeCarriedPool,
@@ -39,6 +38,18 @@ import {
 const COPY = { title: "Boss fight", task: "Build the boss.", isolation: "copy" };
 /** A writer in the game folder itself. */
 const IN_PLACE = { title: "Level", task: "Shape the level.", isolation: "lock" };
+
+/** A clock a wait moves at once by what it asks, yielding to what else runs: an hour passes in a moment. */
+function steppingClock() {
+  let now = 1_000_000;
+  return {
+    now: () => now,
+    sleep: async (ms: number) => {
+      now += ms;
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+  };
+}
 
 /** The run's seat over the same game folder, as an open Loop opens its pool. */
 function runSeat(host: ReturnType<typeof poolHost>, repo: string, runId: string) {
@@ -123,15 +134,21 @@ describe("a Loop launched from a turn whose workers still work", () => {
     await closeRunPool("run_carry");
   });
 
-  it("a carried pool no run takes in time closes, its workers stopped as a turn's would be", async () => {
+  // Flipped (no clock): a carried pool no run took within ten minutes (`CARRY_TAKE_MS`) closed, its
+  // workers stopped; it waits for its run however long that run takes to start, and only a launch
+  // that did not start (or was refused at its start) closes it.
+  it("a carried pool waits for its run however long that run takes to start: no clock stops its workers", async () => {
     const repo = await gameRepo();
     const host = poolHost(repo);
     const pool = await chatPool(host, repo);
     await start(pool, COPY);
+    pool.state.scope.clock = steppingClock();
     carryPool(THREAD, TURN, pool);
-    await pool.state.scope.clock.sleep(CARRY_TAKE_MS);
+    await pool.state.scope.clock.sleep(60 * 60_000);
     await settle();
-    assert.equal(pool.state.closing, true);
+    assert.equal(pool.state.closing, false, "an hour on, still waiting for its run");
+    assert.equal(pool.state.records[0]?.state, "running");
+    await closeCarriedPool(THREAD);
     assert.equal(pool.state.records[0]?.state, "stopped");
   });
 
@@ -173,11 +190,16 @@ describe("a Loop launched from a turn whose workers still work", () => {
     const host = poolHost(repo);
     const pool = await chatPool(host, repo);
     const id = await start(pool, IN_PLACE);
+    pool.state.scope.clock = steppingClock();
     const statuses: string[] = [];
     const landing = landWorkers(pool, { cancelled: false, setStatus: (status) => statuses.push(status) });
     await settle();
     assert.equal(pool.state.closing, false, "still waiting for the writer");
     assert.equal(statuses.length, 1, "the chat says why it waits");
+    // Flipped (no clock): the wait ended after half an hour (`LAND_WAIT_MS`), stopping the writer.
+    await pool.state.scope.clock.sleep(60 * 60_000);
+    await settle();
+    assert.equal(pool.state.closing, false, "an hour on, the writer is still waited for");
     host.sessionOf(id).end({ ok: true, sessionId: "s" });
     await landing;
     assert.equal(pool.state.records[0]?.state, "done", "it finished its part");

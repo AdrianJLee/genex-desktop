@@ -136,7 +136,6 @@ async function firstHalf(loopRun: LoopRun): Promise<EventData[]> {
       engine: EngineId.ClaudeCode,
       model: FIXTURE_MODEL,
       reference: { name: "Skyrim frozen tundra, the Master Sword pedestal", kind: "direction" },
-      budgets: { wallClockMs: 3_600_000 },
     }),
     run(CustomEvent.AutopilotStarted, { director: true, maxParallel: 3, facets: [] }),
     worker(loopRun, "sword", "Sword, ice and light", "single", "running"),

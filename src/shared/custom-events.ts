@@ -25,7 +25,6 @@ import type { Usage } from "./event-log.ts";
 import type { LoopProfile } from "./project-facts.ts";
 import type { BuildObservation, HealthFinding, ReadyResult, ReadyVia } from "./preview-contract.ts";
 import type { EngineLinkedPayload, EngineLinkUndonePayload, EngineStepsPayload } from "./game-engine.ts";
-import type { RunSpec } from "./protocol.ts";
 import type { PluginSuggestedPayload } from "./project-tools.ts";
 import type { AppLookAccessPayload, JobEndedPayload, JobStartedPayload } from "./jobs.ts";
 import type { AgentWentAheadPayload } from "./plugin-hooks.ts";
@@ -232,8 +231,14 @@ export interface RunScope {
   iteration?: number;
 }
 
-/** The part of a run's budgets its start records carry for the app to read back (the eval lane's report). */
-export type RecordedRunBudgets = Partial<Pick<RunSpec["budgets"], "wallClockMs" | "untilSatisfied">>;
+/**
+ * The time a run's start records named before runs had no clock, read back from old records (the eval
+ * lane's report, the sharing facts): no run writes them now.
+ */
+export interface RecordedRunBudgets {
+  wallClockMs?: number;
+  untilSatisfied?: boolean;
+}
 
 export interface InterviewChoice {
   id: string;

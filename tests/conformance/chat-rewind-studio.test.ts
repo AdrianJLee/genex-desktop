@@ -595,7 +595,7 @@ it("rewinding over a running build stops it first; the build leaves the chat and
     engine: "codex",
     goal: "Build a village",
     reference: { name: "village", shots: [] },
-    budgets: { wallClockMs: 7200000, maxIterations: 5 },
+    budgets: { maxIterations: 5 },
   };
   building = true;
   const running = rig.core.host.dispatch({ type: "run_start", threadId: thread, run });
@@ -699,7 +699,7 @@ it("a rewind over a running build waits for the build's jobs to end, and their l
       engine: "codex",
       goal: "Build a village",
       reference: { name: "village", shots: [] },
-      budgets: { wallClockMs: 7200000, maxIterations: 5 },
+      budgets: { maxIterations: 5 },
     },
   });
   try {
@@ -799,7 +799,7 @@ it("a build that does not close in time fails the rewind, and the queue its Stop
       engine: "codex",
       goal: "Build a village",
       reference: { name: "village", shots: [] },
-      budgets: { wallClockMs: 7200000, maxIterations: 5 },
+      budgets: { maxIterations: 5 },
     },
   });
   try {

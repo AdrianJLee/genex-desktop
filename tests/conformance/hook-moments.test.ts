@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { handler as directorTool } from "../../src/harness-seed/loop/director/tools.ts";
-import { HELD_TURN_WAIT_MS, MAX_HELD_TURNS, whileTurnHeld } from "../../src/harness-seed/loop/director/turn-hold.ts";
+import { HELD_TURN_WAIT_MS, whileTurnHeld } from "../../src/harness-seed/loop/director/turn-hold.ts";
 import { runHeldWords, turnsHeldWords as directorTurnsHeld } from "../../src/harness-seed/loop/director/held-words.ts";
 import {
   endOfTurnCheckpoint,
@@ -383,15 +383,20 @@ describe("a director's turn a plugin keeps holding back", () => {
     assert.equal(clock.now(), 2 * HELD_TURN_WAIT_MS, "it waited between asks");
   });
 
-  it("gives up with the hold's reason after the cap, or at once when the run can't wait", async () => {
+  // Flipped (no clock): a turn held through `MAX_HELD_TURNS` asks (about five minutes) gave up and
+  // failed; a held turn waits until the plugin lets it start, or the run can't wait (a Stop, its wrap-up).
+  it("waits for as long as the plugin holds it, and gives up with the hold's reason only when the run can't wait", async () => {
     const clock = steppingClock();
     let asked = 0;
     const always = async () => {
       asked += 1;
       return REASON;
     };
-    assert.equal(await whileTurnHeld(always, clock, () => false), REASON);
-    assert.equal(asked, MAX_HELD_TURNS);
+    // The person's Stop comes after a hundred asks: far past the five that used to end the wait.
+    const held = await whileTurnHeld(always, clock, () => asked >= 100);
+    assert.equal(held, REASON, "the person's Stop ends the wait with the hold's reason");
+    assert.equal(asked, 100);
+    assert.equal(clock.now(), 99 * HELD_TURN_WAIT_MS, "it waited between every ask");
     asked = 0;
     assert.equal(await whileTurnHeld(always, steppingClock(), () => true), REASON, "a wrap-up or a run that is over");
     assert.equal(asked, 1);

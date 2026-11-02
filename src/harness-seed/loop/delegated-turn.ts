@@ -7,7 +7,7 @@
  * records is handed back for the chat to do once the reply ends.
  */
 import { appLanguage } from "./app-language.ts";
-import { GIT_TIMEOUT_MS, MIN_DELEGATE_TIMEOUT_MS } from "./config.ts";
+import { GIT_TIMEOUT_MS } from "./config.ts";
 import { GIT, gitAt } from "./git.ts";
 import { buildContractorBrief, lastContractorSession, nameFromAsk, resolveChatProject } from "./chat-session.ts";
 // The Loop's start is bridged to the session (MCP for Claude, the bridge command for Codex) — one
@@ -1085,10 +1085,6 @@ function delegate(
     ...(images.length ? { images } : {}),
     // The Loop's start and the question card; after a run it led, the run's controls and what it may record.
     ...sessionTools(options, handoff),
-    // A run's contractor gets what is left on the run's clock — never less than a minute,
-    // so a build started at the wire still gets to report something. Chat builds carry no
-    // deadline and fall to the studio's default ceiling.
-    ...(options.deadlineMs ? { timeoutMs: Math.max(MIN_DELEGATE_TIMEOUT_MS, options.deadlineMs - Date.now()) } : {}),
     // This session is the chat's current turn: what the person sends meanwhile reaches it.
     ...(options.steer ? { chatTurn: { messageId: options.steer.messageId } } : {}),
     // The chat's own turn may run workers while its pool is open (workers/chat-workers.ts).

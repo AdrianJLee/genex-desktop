@@ -118,11 +118,8 @@ describe("the runs a live profile's operator sees", () => {
     assert.equal(paused.phase, "running");
     assert.equal(paused.stoppedBecause, "Claude's session limit; resets at 06:10");
     assert.equal(paused.integrationHead, "abc123");
-    assert.deepEqual(paused.clock, {
-      softDeadline: "2026-10-06T05:00:00.000Z",
-      finalDeadline: "2026-10-06T05:30:00.000Z",
-      workedMs: 1_200_000,
-    });
+    // Flipped (no clock): the journal's clock (its deadlines and worked time) was reported; runs have none.
+    assert.equal("clock" in paused, false);
     // The run's own newest record, never a later chat message of the person's.
     assert.equal(paused.lastEventType, CustomEvent.AutopilotPaused);
     assert.equal(paused.lastEventAt, "2026-10-06T01:20:00.000Z");

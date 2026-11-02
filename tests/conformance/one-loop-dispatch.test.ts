@@ -23,8 +23,6 @@ import { CHAT_SESSION, gameRepo, type LoopHost, type LoopTurn, loopHost } from "
 import { copyProject, Project } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
 /** No Loop here may hang the suite: each is over in a few seconds when it works. */
 const TEST_TIMEOUT = { timeout: 60_000 };
 
@@ -297,7 +295,7 @@ describe("the credit cap a Loop in place keeps", () => {
       for (const [asked, kept] of caps) {
         const host = await hostOn(Project.GodotGame, {
           facts: GODOT,
-          run: { budgets: { wallClockMs: 3 * HOUR, completionPolicy: "goal", creditCap: asked } },
+          run: { budgets: { creditCap: asked } },
           turns: [
             async ({ tool, host }) => {
               await tool("worker_start", { title: "Survey", task: "Read the scenes", isolation: "read" });
@@ -340,7 +338,7 @@ describe("after a Loop in place", () => {
   });
 
   it(
-    "a Loop in place launches with no promise of when it ends: until its lead finishes it, whatever hours its start named",
+    "a Loop in place launches with no promise of when it ends and no time limit, whatever hours its start named",
     TEST_TIMEOUT,
     async () => {
       const host = await hostOn(Project.GodotGame, { facts: GODOT });
@@ -362,8 +360,9 @@ describe("after a Loop in place", () => {
       // Flipped: the chat promised "Building until about …, keep the app open"; it promises nothing now.
       assert.deepEqual(said, [], "no promise in the chat");
       const budgets = host.appended("run_registered")[0]?.budgets as Record<string, unknown> | undefined;
-      assert.equal(budgets?.untilSatisfied, true);
-      assert.equal(budgets?.wallClockMs, 24 * HOUR);
+      // Flipped (no clock): the launch registered `untilSatisfied: true` under a 24-hour `wallClockMs`.
+      assert.equal(budgets?.untilSatisfied, undefined);
+      assert.equal(budgets?.wallClockMs, undefined);
     },
   );
 });

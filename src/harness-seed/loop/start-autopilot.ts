@@ -3,8 +3,8 @@
  * bridges it in each turn of the chat's own session on the person's words; a run's turn, words
  * Genex wrote and the Studio's chat never have it). It lives here, outside `tools/`, so a direct engine's tool loop, which cannot lead a Loop,
  * is never handed it. The session decides when to call it; the tool says only what it does. The
- * harness runs it once the reply has ended (chat-dispatch.ts `launchFromIntake`), and every Loop
- * goes until its lead finishes it (`LOOP_BUDGETS` there).
+ * harness runs it once the reply has ended (chat-dispatch.ts `launchFromIntake`), and no Loop has a
+ * time limit.
  */
 import type { AnyRecord, HarnessTool, ToolCtx } from "../types/harness.d.ts";
 import { RunMode } from "./run-events.ts";

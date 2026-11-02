@@ -8,13 +8,12 @@
 import { HostMethod } from "../host-methods.ts";
 import { EventKind, RunEvent } from "../run-events.ts";
 import { RunControlAction } from "../run-inbox.ts";
-import { runNow } from "./cap-lines.ts";
 import { closeUnderWay } from "./close-latch.ts";
 import { leadsOpenLoop } from "./open/active-work.ts";
 import { WRAP_UP_WORDS } from "./wrap-up-prompts.ts";
 import { nextLoopFrom } from "../next-loop-record.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
-import type { LoopRun } from "./loop-run.ts";
+import { type LoopRun, runNow } from "./loop-run.ts";
 
 /** The fewest characters of the user's own words that stand for their message (`userQuoted`). */
 const MIN_USER_QUOTE_CHARS = 8;

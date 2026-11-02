@@ -2,9 +2,8 @@
  * The open lead's brief from what the run knows as its first turn opens: the goal, the folder and
  * what it holds, what the project's plugins said at the start, the person's references, the kinds of
  * worker the plugins declare, whether a plugin saves the project's app before Genex's checkpoint, the
- * save points kept so far, the workspace's skills whose facts reach the folder (`loopSkills`: never
- * the web method) and the Loop's clock (read again each time the brief is written: a fresh session
- * later in the run reads the time it has then).
+ * save points kept so far, and the workspace's skills whose facts reach the folder (`loopSkills`:
+ * never the web method).
  */
 import { readdir } from "node:fs/promises";
 import path from "node:path";
@@ -37,11 +36,8 @@ async function skillsFor(loopRun: LoopRun): Promise<string[]> {
   return skills.map((skill) => skill.slug);
 }
 
-/** What the brief does not read from the clock, gathered once as the Loop opens. */
-type OpenBriefBase = Omit<OpenBriefFacts, "now" | "softDeadline" | "finalDeadline">;
-
 /** The brief's parts that hold for the whole session: what `briefWriter` writes from. */
-async function briefBase(loopRun: LoopRun, startNotes: readonly string[]): Promise<OpenBriefBase> {
+async function briefBase(loopRun: LoopRun, startNotes: readonly string[]): Promise<OpenBriefFacts> {
   const { game, gameFacts, open, projectDir, run } = loopRun;
   return {
     goal: run.goal,
@@ -57,15 +53,12 @@ async function briefBase(loopRun: LoopRun, startNotes: readonly string[]): Promi
     restart: restartsApp(game),
     cppRestart: (gameFacts ?? []).some((fact) => fact.id === CoreFact.UnrealProject),
     savePoints: open?.journal.savePoints ?? [],
-    untilFinish: run.budgets?.untilSatisfied === true,
     skills: await skillsFor(loopRun),
   };
 }
 
-/** The open lead's brief writer: the session's parts gathered now, the clock read each time it writes. */
+/** The open lead's brief writer: the session's parts gathered once, the same brief each time it writes. */
 export async function briefWriter(loopRun: LoopRun, startNotes: readonly string[]): Promise<() => string> {
   const base = await briefBase(loopRun, startNotes);
-  const now = () => loopRun.open?.clock.now() ?? Date.now();
-  return () =>
-    openBrief({ ...base, now: now(), softDeadline: loopRun.softDeadline, finalDeadline: loopRun.finalDeadline });
+  return () => openBrief(base);
 }

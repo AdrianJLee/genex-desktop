@@ -515,12 +515,10 @@ export interface HarnessHostApi {
    * End the held round of a run: the host records its outcome and counts the no's in a row from its
    * own records (`stopped` once they reach the cap). `unanswered` turns the held answer into no
    * answer, with why (a yes that lapsed, a turn that ended); nothing turns a no or no answer into a yes.
-   * `timeLeftMs`, a timed Loop's working time left: with more than `FINISH_TIME_LEFT_MS` no row of
-   * no's stops it (`timeLeft`); an ∞ Loop names none.
    */
   "finish.settle": {
-    params: { project: string; runId: string; round: number; unanswered?: string | null; timeLeftMs?: number | null };
-    result: FinishRoundAnswer & { rejections: number; stopped: boolean; timeLeft?: boolean };
+    params: { project: string; runId: string; round: number; unanswered?: string | null };
+    result: FinishRoundAnswer & { rejections: number; stopped: boolean };
   };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
@@ -926,7 +924,6 @@ export const HARNESS_PARAM_SCHEMAS = {
       .min(1)
       .max(FINISH_REASON_CHARS + 1)
       .nullish(),
-    timeLeftMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullish(),
   }),
   "desktop.computer": z.object({ project }),
   "game.setCover": z.object({ project }),

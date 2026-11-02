@@ -110,7 +110,7 @@ export function chooseRunner(run: Run, described: readonly EngineDescriptor[]): 
 /**
  * What a refusal's close keeps of the run's earlier close: what was built and where it stands (its
  * build, its landing, its workers, rounds and notes). How that session stopped (a provider's limit,
- * its stop code, its failure, where its working time ended) is never kept: the refusal is the stop
+ * its stop code, its failure, where its worked time ended) is never kept: the refusal is the stop
  * now, read in its own words.
  */
 const KEPT_ON_REFUSAL = [

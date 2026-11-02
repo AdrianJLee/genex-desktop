@@ -1,9 +1,10 @@
 /**
  * How a message sent while the chat's turn works joins that turn (steer). Most join as words: read
  * at the session's next step. One that changes how the turn runs — another engine, model, effort or
- * roles, or a slash command — joins as a switch: the session is cut at its next step and the turn
- * goes on with that message's settings (chat-steer.ts), which only a runner that says it can take
- * switches does. A fresh build asked for and Studio's own chat never join.
+ * roles — joins as a switch: the session is cut at its next step and the turn goes on with that
+ * message's settings (chat-steer.ts), which only a runner that says it can take switches does. A
+ * slash command, a fresh build asked for and Studio's own chat never join: each waits for a turn of
+ * its own, as a command typed while Claude Code works runs once its turn ends.
  */
 import type { AnyRecord } from "../types/harness.d.ts";
 
@@ -18,25 +19,25 @@ export const JoinKind = {
 } as const;
 export type JoinKind = (typeof JoinKind)[keyof typeof JoinKind];
 
-/** Slash text is a command to the session, never words to fold into its turn. */
+/** Slash text is a command to the session, never words to fold into its turn: it gets a turn of its own. */
 export const isSlashText = (text: unknown): boolean =>
   String(text ?? "")
     .trimStart()
     .startsWith("/");
 
 /**
- * A fresh build asked for (`newRun`, a New build queued before the composer dropped it) or Studio's
- * chat: it gets a turn of its own, never one already answering something else.
+ * A slash command, a fresh build asked for (`newRun`, a New build queued before the composer dropped
+ * it) or Studio's chat: it gets a turn of its own, never one already answering something else.
  */
 function ownTurn(item: AnyRecord, action: AnyRecord): boolean {
-  return Boolean(item.newRun || item.studioThread || action.studioThread);
+  return isSlashText(item.text) || Boolean(item.newRun || item.studioThread || action.studioThread);
 }
 
 /** The engine, model, effort and roles a message is answered on, as one comparable string. */
 const answeredOn = (message: AnyRecord): string =>
   JSON.stringify([message.engine ?? null, message.model ?? null, message.effort ?? null, message.roles ?? null]);
 
-/** Does `item` change what a turn answering `asked` runs on: its engine, model, effort or roles? Slash text is not a setting. */
+/** Does `item` change what a turn answering `asked` runs on: its engine, model, effort or roles? */
 export function changesSettings(item: AnyRecord, asked: AnyRecord): boolean {
   return answeredOn(item) !== answeredOn(asked);
 }
@@ -47,8 +48,7 @@ export function changesSettings(item: AnyRecord, asked: AnyRecord): boolean {
  */
 export function joinKindOf(item: AnyRecord, action: AnyRecord | null | undefined): JoinKind {
   if (!action || ownTurn(item, action)) return JoinKind.Own;
-  const switches = isSlashText(item.text) || changesSettings(item, action);
-  return switches ? JoinKind.Switch : JoinKind.Words;
+  return changesSettings(item, action) ? JoinKind.Switch : JoinKind.Words;
 }
 
 /** What a runner that takes switches says as its session opens (`SteerHandle.open`). */

@@ -195,14 +195,11 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   { file: "loop/director/setup.ts", marker: "kind: ProjectStarter.Web" },
   { file: "tools/game-tools.ts", marker: "HostMethod.GameStart" },
   // Not host calls: the web rules moved to their own file, which a kept local prompt never reads
-  // and kept rules still repeat for every turn; and a kept brief tells an empty new game nothing of
-  // its first step.
+  // and kept rules still repeat for every turn.
   { file: "loop/prompt.ts", marker: '"prompts/operating-rules-web.md"' },
-  { file: "loop/chat-session.ts", marker: "pendingKindRule(" },
   { file: "loop/main.ts", marker: '"workers"' },
   { file: "loop/delegated-turn.ts", marker: "withChatWorkers(" },
   { file: "loop/delegated-turn.ts", marker: "chatWorkersGrant(" },
-  { file: "loop/chat-session.ts", marker: "WORKERS_BRIEF_LINE" },
   { file: "loop/director/tool-specs.ts", marker: "WorkerTool." },
   { file: "loop/director/tools.ts", marker: "WorkerTool." },
   { file: "loop/director/wake-prompts.ts", marker: "worker_wait" },
@@ -268,7 +265,6 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   // alone (`inPlace`).
   { file: "loop/run-dispatch.ts", marker: "resumedProfile(" },
   { file: "loop/after-loop-run.ts", marker: "inPlace" },
-  { file: "loop/after-loop-run-prompts.ts", marker: "inPlaceControls(" },
   { file: "loop/studio-state.ts", marker: "NeedsSession" },
   // Loop phase 4: judges inform and decide nothing. A claim closes on the lead's word, a reviewer
   // reads it only when asked (`review=yes`) and its no decides nothing, and the open Loop's judges

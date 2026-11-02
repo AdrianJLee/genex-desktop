@@ -31,6 +31,9 @@ import { openStartHeld } from "./director/open/prompts.ts";
 import { openTools } from "./director/open/tool-specs.ts";
 import { openHandler } from "./director/open/tools.ts";
 import { HostMethod } from "./host-methods.ts";
+import { appLanguage } from "./app-language.ts";
+import { chatContext } from "./chat-session.ts";
+import { folderLabelOf } from "./workers/identity.ts";
 import { EngineFailure, engineLimitOf } from "./outage.ts";
 import { isProviderLoss, noteProviderLoss, pauseDecision, pauseEnding } from "./provider-loss.ts";
 import { isCommit } from "./shell.ts";
@@ -105,6 +108,8 @@ function delegateTurn(
     engine: run.engine,
     prompt,
     ...(from ? { from } : {}),
+    // The chat's own context: the session it continues reads one system text, its cache kept.
+    ...(loopRun.context ? { system: loopRun.context } : {}),
     project: run.project,
     threadId,
     ...(plannerModel(run) ? { model: plannerModel(run) } : {}),
@@ -370,13 +375,26 @@ async function wakeLoopRun(
 const stoppedBeforeAnyTurn = (loopRun: LoopRun): boolean =>
   leadsOpenLoop(loopRun) && loopRun.ctx.cancelled === true && !loopRun.open?.halted && !loopRun.open?.sessionWorked;
 
-/** Seat the run's lead (director/lead-session.ts): the chat's own session, continued when it can be. */
+/**
+ * Seat the run's lead (director/lead-session.ts): the chat's own session, continued when it can be,
+ * with the chat's own context as its system text.
+ */
 async function seatTheLead(loopRun: LoopRun): Promise<void> {
   const { ctx, journal, projectDir, run, threadId } = loopRun;
   const events = await ctx.call(HostMethod.EventsList, { threadId }).catch(() => []);
   loopRun.lead = leadSeat({ events, run, folder: projectDir });
+  loopRun.context = await leadContext(loopRun);
   journal.director.lead = { chatSession: true };
   await loopRun.saveJournal();
+}
+
+/** Genex's context for the lead: the one its chat's own turns send (chat-session.ts `chatContext`), for the game as listed. */
+async function leadContext(loopRun: LoopRun): Promise<string> {
+  const { ctx, run } = loopRun;
+  const games = await ctx.call(HostMethod.GameList, {});
+  const game = Array.isArray(games) ? (games.find((g) => g.name === run.project) ?? null) : null;
+  const folderLabel = folderLabelOf(game?.dir ?? null, run.project);
+  return chatContext(game, { folderLabel, appLanguage: await appLanguage(ctx) });
 }
 
 /** The run's host timings, a resumed run's earlier spans first, on its journal and its report. */

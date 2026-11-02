@@ -191,12 +191,13 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     q.queue.stop();
   });
 
-  it("a Genex turn whose saved session is gone starts fresh still saying it is Genex's", async () => {
+  // Flipped: a new session got a fresh brief of its own; it gets the same words (Genex's context and
+  // the chat so far are the caller's system text and notices).
+  it("a Genex turn whose saved session is gone starts fresh with the same words, still saying it is Genex's", async () => {
     const calls: unknown[] = [];
     await steeredCall({ cancelled: false }, null, {
       prompt: "COVER",
       resume: "gone",
-      fresh: () => "FRESH COVER",
       from: "genex",
       call: async (prompt, resume, _images, from) => {
         calls.push([prompt, resume, from]);
@@ -206,7 +207,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     });
     assert.deepEqual(calls, [
       ["COVER", "gone", "genex"],
-      ["FRESH COVER", null, "genex"],
+      ["COVER", null, "genex"],
     ]);
   });
 
@@ -643,7 +644,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       await steeredCall({ cancelled: false }, steer, {
         prompt: "PROMPT",
         resume: "prior",
-        fresh: () => "FRESH",
         call: async (prompt, resume) => {
           calls.push({ prompt, resume });
           if (calls.length === 1) {
@@ -666,7 +666,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       calls.map((c) => c.resume),
       ["prior", "s1", null],
     );
-    assert.equal(calls[2].prompt, "FRESH\n\nand ducks");
+    assert.equal(calls[2].prompt, "PROMPT\n\nand ducks");
     q.queue.stop();
   });
 
@@ -676,7 +676,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       prompt: "PROMPT",
       resume: "prior",
       images: [{ label: "pond", mimeType: "image/png", data: "p" }],
-      fresh: () => "FRESH",
       call: async (prompt, resume, images) => {
         calls.push({ prompt, resume, images: images.length });
         if (calls.length === 1) throw new Error("No conversation found with session ID: prior");
@@ -685,7 +684,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     });
     assert.deepEqual(calls, [
       { prompt: "PROMPT", resume: "prior", images: 1 },
-      { prompt: "FRESH", resume: null, images: 1 },
+      { prompt: "PROMPT", resume: null, images: 1 },
     ]);
     assert.equal(result.summary, "done");
     assert.equal("steered" in result, false, "the result is the engine's, untouched");
@@ -704,7 +703,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     const result = await steeredCall({ cancelled: false }, undefined, {
       prompt: "PROMPT",
       resume: "aa932c8a-f6c0-463c-8fa0-87a9ae52895c",
-      fresh: () => "FRESH",
       call: async (prompt, resume) => {
         calls.push({ prompt, resume });
         return calls.length === 1 ? lost : ok("done", "s2");
@@ -714,7 +712,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       calls.map((c) => [c.prompt, c.resume]),
       [
         ["PROMPT", "aa932c8a-f6c0-463c-8fa0-87a9ae52895c"],
-        ["FRESH", null],
+        ["PROMPT", null],
       ],
     );
     assert.equal(result.summary, "done");
@@ -725,7 +723,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     const answer = await steeredCall({ cancelled: false }, undefined, {
       prompt: "PROMPT",
       resume: "s1",
-      fresh: () => "FRESH",
       call: async (_prompt, resume) => {
         once.push(resume);
         return capped;

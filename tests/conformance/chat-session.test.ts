@@ -1,17 +1,12 @@
 /**
- * Chat = one folder + one contractor session. These helpers are the load-bearing shape:
- * a follow-up never guesses a sibling game, and "keep going" without a session still
- * carries the original ask instead of briefing a blank new job.
+ * Chat = one folder + one contractor session. These helpers are the load-bearing shape: a follow-up
+ * never guesses a sibling game, the person's words reach the session as they wrote them, and what
+ * the session knows of Genex is its system text (`chatContext`), the same on every turn while the
+ * game is the same.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildContractorBrief,
-  isContinueAsk,
-  lastContractorSession,
-  originalAsk,
-  resolveChatProject,
-} from "../../src/harness-seed/loop/chat-session.ts";
+import { chatContext, lastContractorSession, resolveChatProject } from "../../src/harness-seed/loop/chat-session.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { fencedCommand } from "../../src/shared/terminal.ts";
@@ -19,15 +14,11 @@ import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
 type ChatMessage = { role: string; content: string };
 
-describe("chat session helpers", () => {
-  it("recognises keep-going phrasing, including a stretched keep", () => {
-    assert.equal(isContinueAsk("keeep going plz"), true);
-    assert.equal(isContinueAsk("Keep going from where we left off."), true);
-    assert.equal(isContinueAsk("continue"), true);
-    assert.equal(isContinueAsk("resume the build"), true);
-    assert.equal(isContinueAsk("I want a rainy night city"), false);
-  });
+/** The context of a game as `game.list` lists it, in the folder the chats name. */
+const contextOf = (game: Record<string, unknown>, appLanguage: { tag: string; name: string } | null = null) =>
+  chatContext(game, { folderLabel: "AI Games/blame", appLanguage });
 
+describe("chat session helpers", () => {
   it("never guesses a project from preview or newest-game", () => {
     const games = [
       { name: "older", dir: "/games/older" },
@@ -37,45 +28,6 @@ describe("chat session helpers", () => {
     assert.equal(resolveChatProject({ project: "missing" }, games), null);
     assert.equal(resolveChatProject({ newProject: true, project: "older" }, games), null);
     assert.equal(resolveChatProject({ project: "older" }, games), "older");
-  });
-
-  it("skips keep-going lines when finding the original ask", () => {
-    assert.equal(
-      originalAsk([
-        { role: "user", content: "Keep going" },
-        { role: "user", content: "Build a megastructure of rusted walkways" },
-        { role: "user", content: "Keep going from where we left off." },
-      ] as ChatMessage[]),
-      "Build a megastructure of rusted walkways",
-    );
-  });
-
-  it("a keep-going brief without resume includes the original ask", () => {
-    const brief = buildContractorBrief({
-      ask: "Keep going",
-      messages: [
-        { role: "user", content: "Make Blame! — a vertical megastructure" },
-        { role: "assistant", content: "Handing this to the contractor." },
-        { role: "user", content: "Keep going" },
-      ] as ChatMessage[],
-      folderLabel: "AI Games/blame",
-    });
-    assert.match(brief, /Make Blame!/);
-    assert.match(brief, /Latest instruction:\nKeep going/);
-    assert.match(brief, /this workspace \(folder `AI Games\/blame`\)/);
-    assert.doesNotMatch(brief, /You are resuming your own session/);
-  });
-
-  it("a resume brief is a short pickup, not a re-brief of the original job", () => {
-    const brief = buildContractorBrief({
-      ask: "Keep going",
-      messages: [{ role: "user", content: "Make Blame!" }] as ChatMessage[],
-      resume: true,
-      folderLabel: "AI Games/blame",
-    });
-    // Flipped: the person's words alone, never an order to pick up where it left off.
-    assert.ok(brief.startsWith("Keep going"), brief);
-    assert.doesNotMatch(brief, /Original request/);
   });
 
   it("reads the last contractor session from the log, newest last", () => {
@@ -101,189 +53,157 @@ describe("chat session helpers", () => {
     assert.deepEqual(found, { sessionId: "ses_ok", engine: "vendor", project: "older" });
   });
 
-  it("tells a chat build to hand a blocked step to the user in a block the chat can run", () => {
-    const brief = buildContractorBrief({ ask: "Add engine sounds" });
-    const fence = /one command on a single line in a ```(\w+) block/.exec(brief)?.[1];
-    assert.ok(fence, "the brief names the fence a command for the user goes in");
+  it("tells the session how the chat runs a blocked step for the person: a block the chat can run", () => {
+    const context = contextOf({ facts: [{ id: "web-game", path: "." }] });
+    const fence = /A one-line ```(\w+) block in your reply shows the person a Run button/.exec(context)?.[1];
+    assert.ok(fence, "the context names the fence a command for the person goes in");
     assert.equal(fencedCommand("brew install ffmpeg", fence), "brew install ffmpeg");
   });
 
-  it("talks like a person first: small talk gets a short reply, no tools and nothing about the studio", () => {
-    for (const brief of [
-      buildContractorBrief({ ask: "Hello", fresh: true }),
-      buildContractorBrief({ ask: "hi", ownShape: true, shape: { main: "src/game.ts" } }),
-    ]) {
-      const talk = brief.search(/greeting/i);
-      assert.ok(talk >= 0, "the brief says how to answer a greeting");
-      assert.ok(talk < brief.search(/checkpoint|its own shape/), "before any rule about building");
-    }
+  it("opens with who runs the session and the folder, then who the person is, before any fact about the game", () => {
+    const context = contextOf({
+      facts: [{ id: "web-game", path: "." }],
+      built: true,
+      shape: { build: "npm run build" },
+    });
+    const identity = context.indexOf("You are working inside Genex");
+    const person = context.search(/may not be a programmer/);
+    const build = context.indexOf("npm run build");
+    assert.equal(identity, 0);
+    assert.ok(identity < person && person < build, context);
+    assert.match(context, /`AI Games\/blame`/);
   });
 
-  it("briefs a brand-new game's first message as a blank page, and a built one's as code to continue", () => {
-    const fresh = buildContractorBrief({ ask: "Hello", fresh: true, folderLabel: "AI Games/untitled-game" });
-    assert.doesNotMatch(fresh, /existing code/);
-    assert.match(fresh, /nothing has been built/i);
-    assert.match(buildContractorBrief({ ask: "Hello", folderLabel: "AI Games/arena" }), /existing code/);
-  });
-});
-
-describe("a chat's first message in a game", () => {
-  /** The brief a game's first message is delegated with, its folder at `commits` commits and `changes` uncommitted. */
-  async function briefFor({
-    commits,
-    changes = "",
-    prior = [] as ChatMessage[],
-  }: {
-    commits: string;
-    changes?: string;
-    prior?: ChatMessage[];
-  }) {
-    const prompts: string[] = [];
+  it("a Russian app language is the context's, never the words'", async () => {
+    const russian = { tag: "ru", name: "Русский" };
+    assert.match(contextOf({ facts: [] }, russian), /Русский \(ru\)/);
     const recorder = ctxRecorder({
       threadId: "t1",
       unknown: { value: null },
       handlers: {
-        "events.messages": () => [...prior, { role: "user", content: "Hello" }],
+        "events.messages": () => [{ role: "user", content: "Hello" }],
         "events.list": () => [],
-        "game.list": () => [{ name: "untitled-game", title: "Untitled game", dir: "/g/untitled-game" }],
+        "studio.language": () => russian,
+        "game.list": () => [{ name: "g", title: "G", dir: "/g/g", facts: [{ id: "web-game", path: "." }] }],
         "game.contentStamp": () => ({ all: "same", source: "same" }),
-        "run.exec": (params) => {
-          const command = String(params.command);
-          if (command.includes("rev-list")) return { code: 0, stdout: `${commits}\n`, stderr: "" };
-          if (command.includes("status")) return { code: 0, stdout: changes, stderr: "" };
-          return { code: 1, stdout: "", stderr: "unexpected" };
-        },
-        "engine.delegate": (params) => {
-          prompts.push(String(params.prompt));
-          return { ok: true, engine: "claude-code", turns: 1, usage: {}, sessionId: "s1", summary: "Hi!" };
-        },
+        "engine.delegate": () => ({
+          ok: true,
+          engine: "claude-code",
+          turns: 1,
+          usage: {},
+          sessionId: "s1",
+          summary: "Hi!",
+        }),
       },
     });
-    await runDelegatedTurn(recorder.ctx as never, {
+    const turn = { threadId: "t1", turnId: "turn-1", text: "Hello", engine: "claude-code", engineLabel: "Claude Code" };
+    await runDelegatedTurn(recorder.ctx as never, { ...turn, project: "g" });
+    const [delegated] = recorder.paramsOf("engine.delegate");
+    assert.equal(delegated?.prompt, "Hello");
+    assert.match(String(delegated?.system), /Русский \(ru\)/);
+  });
+});
+
+describe("a chat's message in a game", () => {
+  /** One chat turn on a game the studio made; what the builder was handed. */
+  async function handed(text: string, asked: Record<string, unknown> = {}, prior: ChatMessage[] = []) {
+    const recorder = ctxRecorder({
       threadId: "t1",
-      turnId: "turn-1",
-      text: "Hello",
-      engine: "claude-code",
-      engineLabel: "Claude Code",
-      project: "untitled-game",
+      unknown: { value: null },
+      handlers: {
+        "events.messages": () => [...prior, { role: "user", content: text }],
+        "events.list": () => [],
+        "game.list": () => [{ name: "untitled-game", title: "Untitled game", dir: "/g/untitled-game", facts: [] }],
+        "game.contentStamp": () => ({ all: "same", source: "same" }),
+        "engine.delegate": () => ({
+          ok: true,
+          engine: "claude-code",
+          turns: 1,
+          usage: {},
+          sessionId: "s1",
+          summary: "Done.",
+        }),
+      },
     });
-    return prompts[0] ?? "";
+    await runDelegatedTurn(
+      recorder.ctx as never,
+      {
+        threadId: "t1",
+        turnId: "turn-1",
+        text,
+        engine: "claude-code",
+        engineLabel: "Claude Code",
+        project: "untitled-game",
+        asked: { threadId: "t1", text, ...asked },
+      } as never,
+    );
+    const [delegated] = recorder.paramsOf("engine.delegate");
+    assert.ok(delegated, "the message reached the builder");
+    return delegated;
   }
 
-  it("is a blank page when nothing has been made in the game since the studio made it", async () => {
-    assert.match(await briefFor({ commits: "1" }), /nothing has been built/i);
+  // Flipped: a first message was briefed as a blank page ("nothing has been built", or "continue
+  // from the existing code"). The session sees the folder itself, and reads the words alone.
+  it("a greeting reaches the session as written, with nothing about where the game stands", async () => {
+    const delegated = await handed("Hello");
+    assert.equal(delegated.prompt, "Hello");
+    assert.doesNotMatch(String(delegated.system), /nothing has been built|existing code|greeting/i);
   });
 
-  it("a message the chat wrote itself goes to the session as Genex's; the person's as a brief, from nobody", async () => {
-    const froms: unknown[] = [];
-    const recorder = ctxRecorder({
-      threadId: "t1",
-      unknown: { value: null },
-      handlers: {
-        "events.messages": () => [{ role: "user", content: "Make the cover" }],
-        "events.list": () => [],
-        "game.list": () => [{ name: "untitled-game", title: "Untitled game", dir: "/g/untitled-game" }],
-        "game.contentStamp": () => ({ all: "same", source: "same" }),
-        "run.exec": () => ({ code: 0, stdout: "3\n", stderr: "" }),
-        "engine.delegate": (params) => {
-          froms.push(params.from);
-          return { ok: true, engine: "claude-code", turns: 1, usage: {}, sessionId: "s1", summary: "Done." };
-        },
-      },
-    });
-    const turn = (asked: Record<string, unknown>) =>
-      runDelegatedTurn(
-        recorder.ctx as never,
-        {
-          threadId: "t1",
-          turnId: "turn-1",
-          text: String(asked.text),
-          engine: "claude-code",
-          engineLabel: "Claude Code",
-          project: "untitled-game",
-          asked: { threadId: "t1", ...asked },
-        } as never,
-      );
-    await turn({ text: "Make the cover", origin: "cover-step", from: "genex" });
-    await turn({ text: "a night street race" });
-    assert.deepEqual(froms, ["genex", undefined]);
+  it("a message the chat wrote itself goes to the session as Genex's; the person's as theirs", async () => {
+    assert.equal((await handed("Make the cover", { origin: "cover-step", from: "genex" })).from, "genex");
+    assert.equal((await handed("a night street race")).from, "person");
   });
 
-  it("continues from the code once anything has been made, or the chat is already talking", async () => {
-    assert.match(await briefFor({ commits: "3" }), /existing code/);
-    assert.match(await briefFor({ commits: "1", changes: " M src/main.js\n" }), /existing code/);
-    assert.doesNotMatch(
-      await briefFor({ commits: "1", prior: [{ role: "user", content: "Make a fishing game" }] }),
-      /nothing has been built/i,
-    );
+  // Flipped: a keep-going brief without a session quoted the original ask and the latest instruction.
+  it("a follow-up with no session to resume reads the words alone, and the chat so far as one notice", async () => {
+    const delegated = await handed("Keep going", {}, [{ role: "user", content: "Make Blame!" }]);
+    assert.equal(delegated.prompt, "Keep going");
+    const [history] = (delegated.notices as string[] | undefined) ?? [];
+    assert.match(String(history), /user: Make Blame!/);
+    assert.doesNotMatch(String(history), /Keep going/, "the words it answers are its prompt");
   });
 });
 
-describe("the brief of a game that builds in Unreal", () => {
+describe("the context of a game that builds in Unreal", () => {
   const PROJECT = "/Users/me/Unreal Projects/Valley/Valley.uproject";
-  const SHAPE = { entry: "index.html", main: "src/main.ts", build: "npm run build" };
+  const UNREAL = {
+    engine: { kind: GameEngine.Unreal, project: PROJECT, linkedAt: "" },
+    facts: [{ id: "unreal-project", path: "unreal", source: "link" }],
+  };
   /** The web page's contract, its engine and its randomness rule: none of it is an Unreal game's. */
-  const WEB_PAGE = /window\.__studio|three\.?js|installStudio|Math\.random|deterministic/i;
+  const WEB_PAGE = /window\.__studio|three\.?js|installStudio|Math\.random|deterministic|Reload/i;
 
-  it("builds in the open Unreal Editor through the Unreal tools, into the linked project", () => {
-    const brief = buildContractorBrief({
-      ask: "Add a lighthouse",
-      folderLabel: "AI Games/fog-valley",
-      engine: "claude-code",
-      gameEngine: GameEngine.Unreal,
-      engineProject: PROJECT,
-    });
-    assert.ok(
-      brief.includes("the Unreal editor connector's tools, as the Unreal plugin's skill describes"),
-      "names the editor connector, whose tools the plugin's skill describes",
-    );
-    assert.doesNotMatch(brief, /unreal-editor__/, "never spells a connector tool's name");
-    assert.ok(brief.includes(PROJECT), "says the work lands in the linked project");
-    assert.match(brief, /NOTES\.md/);
-    assert.match(brief, /Blueprint/);
-    assert.match(brief, /file watchers/);
-    assert.doesNotMatch(brief, WEB_PAGE);
+  it("says where its work lands, the linked project in the person's open editor, and nothing of a web page", () => {
+    const context = contextOf(UNREAL);
+    assert.ok(context.includes(PROJECT), "the work lands in the linked project");
+    assert.match(context, /open Unreal Editor/);
+    assert.doesNotMatch(context, /unreal-editor__/, "never a connector tool's name: the plugin's guidance has them");
+    assert.doesNotMatch(context, WEB_PAGE);
   });
 
-  it("a resumed Unreal session is reminded where its work lands", () => {
-    const brief = buildContractorBrief({
-      ask: "Keep going",
-      resume: true,
-      folderLabel: "AI Games/fog-valley",
-      gameEngine: GameEngine.Unreal,
-      engineProject: PROJECT,
-    });
-    assert.ok(brief.includes(PROJECT));
-    assert.doesNotMatch(brief, WEB_PAGE);
+  it("a project found in the folder and not linked yet is said to be not linked", () => {
+    const found = { facts: [{ id: "unreal-project", path: "unreal", source: "core" }] };
+    assert.match(contextOf(found), /The Unreal project in `unreal\/` is not linked to this game yet\./);
   });
 
-  it("no brief says when to start a Loop: the Loop's start describes itself", () => {
-    for (const gameEngine of [GameEngine.Unreal, GameEngine.Web]) {
-      const brief = buildContractorBrief({
-        ask: "make me a survival game in a misty valley",
-        folderLabel: "AI Games/fog-valley",
-        engine: "claude-code",
-        gameEngine,
-        engineProject: gameEngine === GameEngine.Unreal ? PROJECT : null,
-      });
-      assert.doesNotMatch(brief, /start_autopilot|Loop is on|asks? (for one )?in words|You start Loops/);
-    }
+  it("no context says when to start a Loop, use workers or checkpoint: those are tools", () => {
+    for (const game of [UNREAL, { facts: [{ id: "web-game", path: "." }] }, { facts: [] }])
+      assert.doesNotMatch(contextOf(game), /start_autopilot|Loop|worker|checkpoint/);
   });
 
-  it("a web game's brief is the web brief, word for word", () => {
-    const briefs = [
-      { ask: "a pong game", scaffolded: true, folderLabel: "AI Games/pong", engine: "claude-code" },
-      { ask: "add fog", shape: SHAPE, ownShape: true, contractMissing: true, engine: "codex" },
-      { ask: "Keep going", resume: true, folderLabel: "AI Games/pong" },
-    ];
-    for (const options of briefs) {
-      const web = buildContractorBrief(options);
-      assert.equal(buildContractorBrief({ ...options, gameEngine: GameEngine.Web }), web);
-      assert.doesNotMatch(web, /Unreal/);
-    }
-    // Flipped: the starter's page is the game's to build, with no harness contract to keep.
-    const template = buildContractorBrief(briefs[0]!);
-    assert.match(template, /Genex serves its index\.html in the Live view/);
-    assert.doesNotMatch(template, /window\.__studio/);
+  it("a game in its own shape is told the build Genex runs before every preview; the starter, nothing more", () => {
+    const own = contextOf({ facts: [{ id: "web-game", path: "." }], built: true, shape: { build: "npm run build" } });
+    assert.match(own, /Genex runs `npm run build` before every preview/);
+    const starter = contextOf({ facts: [{ id: "web-game", path: "." }], built: false });
+    assert.doesNotMatch(starter, /Genex runs `|window\.__studio|Unreal/);
+  });
+
+  it("a game linked to a Godot project says where its work lands", () => {
+    const godot = {
+      engine: { kind: GameEngine.Godot, project: "/Users/me/Games/Moss/project.godot", linkedAt: "" },
+      facts: [],
+    };
+    assert.match(contextOf(godot), /Its work lands in its Godot project in `\/Users\/me\/Games\/Moss\/`/);
   });
 });

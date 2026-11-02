@@ -30,9 +30,7 @@ import { runWakeLoop, type DirectorTalk } from "../../src/harness-seed/loop/dire
 import { landIntegration } from "../../src/harness-seed/loop/director/integrate.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { chatWaitsFor, leadDoor, stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
-import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
 import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
-import { switchedTurnPrompt } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
 import { steerFeed, steerSession, userFrame } from "../../src/substrate/engines/claude-steer.ts";
 import { openLeadLine } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
@@ -326,29 +324,31 @@ describe("the modeller in the loop (AG-930)", () => {
     const [request] = requests;
     assert.ok(request, "the builder was asked");
     const tools = request.liveTools?.some((t) => t.name === "genex__asset") ?? false;
-    const guidance = request.prompt.includes("[genex/genex-tool-model]");
+    // An engine with no system channel reads its system text as a new session's first notice.
+    const guidance = [...(request.notices ?? []), request.prompt].join("\n\n").includes("[genex/genex-tool-model]");
     assert.equal(guidance, tools, "a brief never names a skill whose tools it lacks, nor tools it never explains");
     assert.equal(tools, true, "both come from the plugins as the session began");
   });
 
-  it("T-Withdrawn. a resumed builder session is told first which plugins and skills were withdrawn since it last ran", async () => {
+  // Flipped (T-Withdrawn, T-Withdrawn-Failed, T-Withdrawn-Interleaved): a resumed session was told
+  // first which plugins and skills were withdrawn since it last ran. Its tools are what it is handed
+  // on each launch; no notice says what changed, and nothing is recorded to compare against.
+  it("T-Withdrawn. a resumed builder session after a plugin was turned off reads its words alone, without that plugin's tools", async () => {
     const rig = await startRig();
     rigs.push(rig);
     const requests: DelegateRequest[] = [];
-    const hooks: FakeEngineHooks = {
+    registerFakeEngine(rig, {
       complete: () => null,
       delegate: async (request) => {
         requests.push(request);
         return { sessionId: "ses" };
       },
-    };
-    registerFakeEngine(rig, hooks);
-    registerFakeEngine(rig, hooks, "fake-other");
+    });
     await rig.core.games.scaffold("withdrawn-world");
     const threadId = await rig.core.createGameThread("withdrawn-world");
-    const delegate = async (engine: string, resume?: string) => {
+    const delegate = async (resume?: string) => {
       await apiOf(rig)["engine.delegate"]!({
-        engine,
+        engine: "fake-delegate",
         project: "withdrawn-world",
         threadId,
         prompt: "build",
@@ -356,94 +356,16 @@ describe("the modeller in the loop (AG-930)", () => {
       });
       const request = requests.at(-1);
       assert.ok(request);
-      return request.prompt;
+      return request;
     };
-    const notice = (prompt: string) => (prompt.startsWith("build") ? null : (prompt.split("\n\n")[0] ?? ""));
-
-    assert.equal(notice(await delegate("fake-delegate")), null, "a first session has nothing withdrawn");
+    const genexTools = (request: DelegateRequest) =>
+      request.liveTools?.some((t) => t.name.startsWith("genex__")) ?? false;
+    assert.equal(genexTools(await delegate()), true, "a first session is handed the Genex plugin");
     await rig.core.plugins.setEnabled("genex", false);
-    assert.equal(notice(await delegate("fake-other", "ses")), null, "another engine never had the Genex plugin");
-
-    const resumed = notice(await delegate("fake-delegate", "ses"));
-    assert.ok(resumed, "the resumed session is told before its brief");
-    assert.match(resumed, /plugins: genex\b/);
-    assert.match(resumed, /genex\/genex-tool-model/);
-    assert.match(resumed, /ignore/i);
-
-    assert.equal(notice(await delegate("fake-delegate", "ses")), null, "the notice is given once");
-  });
-
-  it("T-Withdrawn-Failed. a resumed attempt that fails before the session answers keeps the notice for the next resume", async () => {
-    const rig = await startRig();
-    rigs.push(rig);
-    const prompts: string[] = [];
-    let failNext = false;
-    registerFakeEngine(rig, {
-      complete: () => null,
-      delegate: async (request) => {
-        prompts.push(request.prompt);
-        if (failNext) {
-          failNext = false;
-          throw new Error("rate limited before the turn ran");
-        }
-        return { sessionId: request.resume ?? "ses" };
-      },
-    });
-    await rig.core.games.scaffold("withdrawn-retry");
-    const threadId = await rig.core.createGameThread("withdrawn-retry");
-    const delegate = (resume?: string) =>
-      apiOf(rig)["engine.delegate"]!({
-        engine: "fake-delegate",
-        project: "withdrawn-retry",
-        threadId,
-        prompt: "build",
-        ...(resume ? { resume } : {}),
-      });
-    const told = () => !(prompts.at(-1) ?? "build").startsWith("build");
-
-    await delegate();
-    await rig.core.plugins.setEnabled("blender", false);
-    failNext = true;
-    await assert.rejects(delegate("ses"));
-    assert.equal(told(), true, "the failed attempt was sent the notice");
-    await delegate("ses");
-    assert.equal(told(), true, "the session never answered, so the next resume is told again");
-    await delegate("ses");
-    assert.equal(told(), false, "once a resume answered, the notice is not repeated");
-  });
-
-  it("T-Withdrawn-Interleaved. a fresh session on the same thread and engine does not hide what an older session was handed", async () => {
-    const rig = await startRig();
-    rigs.push(rig);
-    const prompts: string[] = [];
-    let sessions = 0;
-    registerFakeEngine(rig, {
-      complete: () => null,
-      delegate: async (request) => {
-        prompts.push(request.prompt);
-        sessions += request.resume ? 0 : 1;
-        return { sessionId: request.resume ?? `ses${sessions}` };
-      },
-    });
-    await rig.core.games.scaffold("withdrawn-interleaved");
-    const threadId = await rig.core.createGameThread("withdrawn-interleaved");
-    const delegate = (resume?: string) =>
-      apiOf(rig)["engine.delegate"]!({
-        engine: "fake-delegate",
-        project: "withdrawn-interleaved",
-        threadId,
-        prompt: "build",
-        ...(resume ? { resume } : {}),
-      });
-    const told = () => !(prompts.at(-1) ?? "build").startsWith("build");
-
-    await delegate(); // ses1, handed Blender
-    await rig.core.plugins.setEnabled("blender", false);
-    await delegate(); // ses2, a fresh builder on the same thread and engine, never handed Blender
-    assert.equal(told(), false, "a fresh session has nothing withdrawn");
-    await delegate("ses1");
-    assert.equal(told(), true, "ses1 is still told Blender is gone");
-    assert.match(prompts.at(-1) ?? "", /\bblender\b/);
+    const resumed = await delegate("ses");
+    assert.equal(resumed.prompt, "build");
+    assert.equal(resumed.notices, undefined, "no notice of what changed");
+    assert.equal(genexTools(resumed), false, "its tools are what is on now");
   });
 });
 
@@ -875,19 +797,25 @@ describe("a paused build from an earlier version (old-pause)", () => {
  * stays paused: only going on with that build itself resumes it.
  */
 describe("a change after a paused build (stale-pause)", () => {
-  it("stale-pause words. after a paused build, only going on with that build resumes it; other work is made in the chat", async () => {
-    const { afterLoopRunNote } = await import("../../src/harness-seed/loop/after-loop-run-prompts.ts");
+  // Flipped: the session read an after-run note restating when to resume. It led the build itself,
+  // and the resume is its tool's to say: the session is handed it while the build is paused.
+  it("stale-pause words. after a paused build, only going on with that build resumes it: the resume tool says so", async () => {
+    const { afterLoopRunGrant } = await import("../../src/harness-seed/loop/after-loop-run.ts");
     const paused = {
       runId: "run_paused",
       state: "paused",
       goal: "a photoreal plaza",
+      landed: null,
       stoppedBecause: "stopped by the user",
+      engine: "claude-code",
+      onLeadEngine: true,
+      model: null,
     };
-    const note = afterLoopRunNote(paused as never, "claude-code");
-    assert.doesNotMatch(note, /new instruction after a stop is a request to continue/i);
-    assert.doesNotMatch(note, /or with work for it/);
-    assert.doesNotMatch(note, /requests further work, including a new instruction after Stop/);
-    assert.match(note, /stays paused/, "the session's own work leaves the build paused");
+    const resume = afterLoopRunGrant(paused).interviewTools?.find((tool) => tool.name === "resume_run");
+    const words = String(resume?.description);
+    assert.match(words, /go on with that build/);
+    assert.doesNotMatch(words, /new instruction after a stop is a request to continue/i);
+    assert.match(words, /Questions alone do not resume work/);
   });
 });
 
@@ -2783,7 +2711,6 @@ describe("messages without a queue", () => {
               return ok("On it.", "s1") as never;
             },
             newSession: false,
-            notes: ["You now run on sonnet."],
           }),
         },
       });
@@ -2804,11 +2731,8 @@ describe("messages without a queue", () => {
     });
     assert.ok(await settleOn(() => legs.length === 2));
     const states = () => [...messageQueueState(log as never).messages.values()].map((m) => [m.action?.text, m.state]);
-    assert.deepEqual(legs[1], {
-      prompt: switchedTurnPrompt(["You now run on sonnet."], "use sonnet for it"),
-      resume: "s1",
-      switched: true,
-    });
+    // Flipped: the leg opened with "You now run on sonnet." The model is its call's option alone.
+    assert.deepEqual(legs[1], { prompt: "use sonnet for it", resume: "s1", switched: true });
     assert.ok(
       await settleOn(
         () =>
@@ -4011,28 +3935,19 @@ describe("a tool called with arguments its schema refuses", () => {
 describe("the chat's main agent asked to read the owner's Downloads", () => {
   // Flipped: every brief said "Stay inside this workspace. Do not list or read
   // sibling folders", and the chat's own session, in Auto, refused to read the owner's Downloads
-  // without trying. Where the game's work goes is the brief's to say; what it may reach is its
-  // permissions'.
-  it("keeps the game's work in its folder without forbidding the rest of the Mac", async () => {
-    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const folderLabel = "AI Games/blame";
-    const messages = [
-      { role: "user", content: "Make Blame!" },
-      { role: "user", content: "What is in my Downloads?" },
-    ];
-    const briefs = {
-      fresh: buildContractorBrief({ ask: "Make Blame!", folderLabel }),
-      "a follow-up": buildContractorBrief({ ask: "What is in my Downloads?", messages, folderLabel }),
-      resumed: buildContractorBrief({ ask: "What is in my Downloads?", messages, resume: true, folderLabel }),
-    };
-    for (const [label, brief] of Object.entries(briefs)) {
-      assert.match(brief, /`AI Games\/blame`/, `${label}: names the game's folder`);
-      assert.doesNotMatch(
-        brief,
-        /stay inside|do not (list|search|read|explore)[^.]*(folder|project)/i,
-        `${label}: forbids no other folder`,
-      );
-    }
+  // without trying. Where the game's work goes is the context's to say; what it may reach is its
+  // permissions', and the person's question reaches it as they wrote it.
+  it("names the game's folder without forbidding the rest of the Mac", async () => {
+    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const context = chatContext(
+      { facts: [{ id: "web-game", path: "." }] },
+      { folderLabel: "AI Games/blame", appLanguage: null },
+    );
+    assert.match(context, /`AI Games\/blame`/, "names the game's folder");
+    assert.doesNotMatch(
+      context,
+      /stay inside|do not (list|search|read|explore)[^.]*(folder|project)|stays in this workspace/i,
+    );
   });
 });
 
@@ -4041,26 +3956,21 @@ describe("the chat's agent briefed like plain Claude Code (lean chat)", () => {
   // rules (window.__studio, no Math.random, NOTES.md upkeep, .studio/ helpers, video frames, sandbox
   // shell syntax for a session with no sandbox), and every follow-up, a question too, ended with
   // "Pick up exactly where you left off and finish the remaining work" — so a person asking what the
-  // build was doing watched it keep building.
-  it("answers a question to a resumed chat instead of telling it to finish the remaining work", async () => {
-    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const facts = [{ id: "web-game", path: "index.html" }];
-    const resumed = buildContractorBrief({ ask: "How do I play it?", resume: true, facts });
-    assert.ok(resumed.startsWith("How do I play it?"), resumed);
-    assert.doesNotMatch(resumed, /left off|remaining work/i, `told to keep going: ${resumed}`);
-  });
-
-  it("gives a new web game none of the judge-era template rules", async () => {
-    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
+  // build was doing watched it keep building. Flipped: the words now go alone (chat brief, CB-1).
+  it("gives a web game's context none of the judge-era template rules, nor any order to keep building", async () => {
+    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
     for (const facts of [[], [{ id: "web-game", path: "index.html" }]]) {
-      const brief = buildContractorBrief({
-        ask: "Make a 2D platformer where a cat collects fish.",
-        facts,
-        fresh: true,
-      });
-      for (const rule of [/__studio/, /Math\.random/, /NOTES\.md/, /\.studio\//, /TMPDIR/, /statically analyze/]) {
-        assert.doesNotMatch(brief, rule, `${rule}: ${brief}`);
-      }
+      const context = chatContext({ facts }, { folderLabel: "AI Games/cat", appLanguage: null });
+      for (const rule of [
+        /__studio/,
+        /Math\.random/,
+        /NOTES\.md/,
+        /\.studio\//,
+        /TMPDIR/,
+        /statically analyze/,
+        /left off|remaining work/i,
+      ])
+        assert.doesNotMatch(context, rule, `${rule}: ${context}`);
     }
   });
 });
@@ -4068,24 +3978,40 @@ describe("the chat's agent briefed like plain Claude Code (lean chat)", () => {
 describe("an engine's plugin turned on from the chat's card (mp-unity)", () => {
   // A chat asked for a Unity game while the Unity plugin was off; its card turned the plugin on and
   // the same session resumed with "Go on with what I asked". The resumed brief carried no kind rules,
-  // so the lead never heard "When the request names Unity, call unity__new-game" and launched a Loop:
-  // the Loop gave the kindless folder the web starter, and unity__new-game was refused under the run.
-  it("tells a resumed session of a folder with no kind yet which tool makes each kind on offer", async () => {
-    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const { toolCall } = await import("../../src/harness-seed/loop/model-roles.ts");
-    const engine = "claude-code";
+  // so the lead never heard "When the request names Unity, call unity__new-game" and launched a Loop.
+  // Flipped: no words restate a kind tool; a folder with no kind yet is handed each engine's
+  // way-in tools (tool scoping), and the question card stays bridged while kinds are on offer.
+  it("a resumed session of a folder with no kind yet keeps the question card and reads the person's words alone", async () => {
+    const { runDelegatedTurn } = await import("../../src/harness-seed/loop/delegated-turn.ts");
+    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
     const unity = { plugin: "unity", name: "Unity", tool: "unity__new-game", makes: ["unity-project"] };
     const ask = "I turned on the Unity plugin from your card. Go on with what I asked.";
-    const resumed = buildContractorBrief({ ask, resume: true, engine, facts: [], kinds: [unity] });
-    assert.ok(resumed.includes(`When the request names Unity, call ${toolCall(engine, unity.tool)}`), resumed);
-    const made = buildContractorBrief({
-      ask,
-      resume: true,
-      engine,
-      facts: [{ id: "unity-project", path: "unity" }],
-      kinds: [unity],
+    const recorder = ctxRecorder({
+      unknown: { value: null },
+      handlers: {
+        "events.messages": () => [{ role: "user", content: ask }],
+        "game.contentStamp": () => ({ all: null, source: null }),
+        "game.list": () => [
+          { name: "dodger", title: "Dodger", dir: "/games/dodger", shape: null, built: false, facts: [] },
+        ],
+        "plugins.tools": () => ({ tools: [], guidance: "", revision: 1, kinds: [unity] }),
+        "engine.describe": () => [],
+        "engine.delegate": () => ({
+          ok: true,
+          engine: "claude-code",
+          turns: 1,
+          usage: {},
+          sessionId: "s",
+          summary: "ok",
+        }),
+      },
     });
-    assert.ok(!made.includes(toolCall(engine, unity.tool)), "a folder that has its kind is not told again");
+    const turn = { threadId: "t", turnId: "turn-2", text: ask, engine: "claude-code", engineLabel: "Claude Code" };
+    await runDelegatedTurn(recorder.ctx as never, { ...turn, project: "dodger", resume: "session-1" } as never);
+    const [delegated] = recorder.paramsOf("engine.delegate");
+    assert.equal(delegated?.prompt, ask);
+    const bridged = (delegated?.interviewTools as Array<{ name: string }> | undefined)?.map((tool) => tool.name) ?? [];
+    assert.ok(bridged.includes("ask_user"), "the card is still there to call");
   });
 });
 
@@ -4142,7 +4068,9 @@ describe("an Unreal game is never checked as a web page", () => {
       models: async () => [],
       defaultModel: async () => "vendor-model",
       delegate: async (request: DelegateRequest) => {
-        prompts.push(request.prompt);
+        // What the session reads: its notices (an engine with no system channel reads its context
+        // there on a new session), then the words.
+        prompts.push([...(request.notices ?? []), request.prompt].join("\n\n"));
         requests.push(request);
         await writeFile(path.join(request.cwd, "src/lighthouse.js"), "export const lighthouse = 1;\n");
         return {
@@ -4171,9 +4099,9 @@ describe("an Unreal game is never checked as a web page", () => {
     await rig.core.sendUserMessage("Add a lighthouse", { engine: "vendor", project: GAME });
     const { events, said } = await afterTurn(rig);
     assert.equal(prompts.length, 1);
-    // The Unreal plugin is off in this rig: the build is briefed for an Unreal project without its tools.
-    assert.match(prompts[0]!, /it holds an Unreal Engine project/, "the build is briefed for Unreal");
-    assert.match(prompts[0]!, /no Unreal tools/, "with the plugin off, without its tools");
+    // The Unreal plugin is off in this rig. Flipped: the brief also said it had no Unreal tools; its
+    // tool list says so, and Genex infers no plugin from the facts.
+    assert.match(prompts[0]!, /it holds an Unreal Engine project/, "the build is told it is an Unreal game");
     assert.doesNotMatch(prompts[0]!, /window\.__studio/, "and not as a web page");
     assert.equal(customEvents(events, "build_observation").length, 0, "no web observation of an Unreal game");
     assert.doesNotMatch(said, /black screen|loads clean|console error/, "no web verdict in the chat");
@@ -4191,9 +4119,11 @@ describe("an Unreal game is never checked as a web page", () => {
     const told = rig.core.plugins.snapshot(GameEngine.Unreal).applied.skills;
     const webOnly = web.filter((skill) => !told.includes(skill));
     assert.ok(webOnly.includes("genex/genex-threejs-multiplayer"), "the web has skills an Unreal game does not");
-    for (const skill of webOnly) assert.ok(!request.prompt.includes(`[${skill}]`), `${skill} stays out of its brief`);
+    const read = [...(request.notices ?? []), request.prompt].join("\n\n");
+    assert.match(read, /\[genex\//, "the plugin's guidance it does get is there to read");
+    for (const skill of webOnly) assert.ok(!read.includes(`[${skill}]`), `${skill} stays out of its context`);
     assert.equal(request.onCapture, undefined, "no capture of a folder that holds notes");
-    assert.doesNotMatch(request.prompt, /lights the user's Reload/, "no web preview Reload to light");
+    assert.doesNotMatch(read, /lights the user's Reload/, "no web preview Reload to light");
   });
 });
 
@@ -4306,17 +4236,15 @@ describe("a Loop on a vehicle template", () => {
   });
 });
 
-/** How the engine question opens in a brief, whatever words each kind's plugin offers it with. */
-const ENGINE_QUESTION = "THE ENGINE:";
-
 /**
  * New game makes the game before the chat's first ask, as an empty folder with no kind; with the
  * Unreal plugin on, the delegated turn finds a project that already exists. A folder with no kind
- * yet (the host's facts) is asked with the question card, exactly as a game the turn makes itself,
- * and not again in the session that asked: the answer comes back to it, the card still at hand.
+ * yet (the host's facts) is handed the question card, exactly as a game the turn makes itself, and
+ * keeps it in the session that asked: the answer comes back to it, the card still at hand.
+ * Flipped: the first build's brief asked web or Unreal in words; the words go alone now.
  */
 describe("a game New game made is asked its engine on its chat's first ask", () => {
-  it("with the Unreal plugin on, a game New game made is empty, its chat's first build asks web or Unreal with the question card, and its next does not", async () => {
+  it("with the Unreal plugin on, a game New game made is empty, its chat's builds read the words alone with the question card at hand", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     await rig.core.plugins.setEnabled("unreal", true);
@@ -4356,14 +4284,13 @@ describe("a game New game made is asked its engine on its chat's first ask", () 
     await turnsEnded(2);
     const [first, next] = requests;
     assert.ok(first && next, "both messages reached the builder");
-    const asks = (prompt: string) => prompt.split("\n").some((line) => line.startsWith(ENGINE_QUESTION));
-    assert.ok(asks(first.prompt), "the first build asks the engine first");
+    assert.equal(first.prompt, "Make me a small arcade racing game with a neon city track.");
     assert.deepEqual(
       first.interviewTools?.map((tool) => tool.name),
       ["start_autopilot", "ask_user"],
       "with the question card bridged in beside Auto's Loop start (flipped: auto-loop)",
     );
-    assert.ok(!asks(next.prompt), "a later message is never asked again");
+    assert.equal(next.prompt, "Web, please");
     assert.deepEqual(
       next.interviewTools?.map((tool) => tool.name),
       ["start_autopilot", "ask_user"],
@@ -4423,10 +4350,14 @@ describe("a game linked to Unreal during its turn", () => {
  * answer small talk.
  */
 describe("a Hello in a brand-new game", () => {
-  it("HG-1. a greeting in a game the studio just made is briefed as a blank page, talking like a person first", async () => {
+  // Flipped: the greeting was briefed as a blank page with a rule for small talk ahead of the build
+  // rules. It reaches the model as written; the context says who the person is, and nothing of where
+  // the game stands, which the session sees in the folder.
+  it("HG-1. a greeting in a game the studio just made reaches the model as written, with no rule about greetings", async () => {
     const { runDelegatedTurn } = await import("../../src/harness-seed/loop/delegated-turn.ts");
     const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
     const prompts: string[] = [];
+    const systems: string[] = [];
     const recorder = ctxRecorder({
       threadId: "t1",
       unknown: { value: null },
@@ -4442,6 +4373,7 @@ describe("a Hello in a brand-new game", () => {
         }),
         "engine.delegate": (params) => {
           prompts.push(String(params.prompt));
+          systems.push(String(params.system));
           return { ok: true, engine: "claude-code", turns: 1, usage: {}, sessionId: "s1", summary: "Hi!" };
         },
       },
@@ -4454,12 +4386,9 @@ describe("a Hello in a brand-new game", () => {
       engineLabel: "Claude Code",
       project: "untitled-game",
     });
-    const brief = prompts[0] ?? "";
-    assert.doesNotMatch(brief, /Continue from the existing code/);
-    assert.match(brief, /nothing has been built/i);
-    const talk = brief.search(/greeting/i);
-    const building = brief.search(/start_web_game|serves its index\.html|checkpoint/);
-    assert.ok(talk >= 0 && talk < building, "how to answer a greeting comes before how to build");
+    assert.deepEqual(prompts, ["Hello"]);
+    assert.doesNotMatch(systems[0] ?? "", /Continue from the existing code|nothing has been built|greeting/i);
+    assert.match(systems[0] ?? "", /may not be a programmer: talk with them about their game/);
   });
 });
 
@@ -4643,11 +4572,13 @@ describe("a local model that cannot see images (issue #47)", () => {
 });
 
 describe("a chat whose turn made the game's project (an Unreal game)", () => {
-  // Flipped: with Loop on the session was told to start the build with its launch tool; it decides itself now.
-  it("LL1. the session that goes on is told to go on with what it said, and no rule about a Loop", () => {
-    const unreal = [{ id: "unreal-project", path: "unreal" }];
-    assert.match(factsReadyPrompt(unreal), /Go on with what you said you would do/);
-    assert.doesNotMatch(factsReadyPrompt(unreal), /start_autopilot|Loop/);
+  // Flipped: the session was told to go on with what it said it would do. Genex's line says the
+  // project's new kind alone; the session goes on in its own words.
+  it("LL1. the session that goes on is told the project's new kind, and no rule about a Loop or what to do", async () => {
+    const { factsReadyNotice } = await import("../../src/harness-seed/loop/project-prompts.ts");
+    const notice = factsReadyNotice([{ id: "unreal-project", path: "unreal" }]);
+    assert.match(notice, /now holds an Unreal Engine project in `unreal\/`/);
+    assert.doesNotMatch(notice, /start_autopilot|Loop|Go on with/);
   });
 });
 
@@ -4657,7 +4588,6 @@ describe("a chat whose saved session is gone (another account, or never saved)",
     const result = await steeredCall({ cancelled: false }, undefined, {
       prompt: "PROMPT",
       resume: "aa932c8a-f6c0-463c-8fa0-87a9ae52895c",
-      fresh: () => "FRESH",
       call: async (_prompt, resume) => {
         calls.push(resume);
         if (resume)
@@ -5004,15 +4934,14 @@ describe("a run whose every role was set to think at max effort", () => {
 });
 
 describe("a chat in a game linked to an engine other than Unreal", () => {
-  it("EG1. its brief never gives web-page rules, the preview's Reload or the web Loop, whether or not the host lists facts", async () => {
-    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const toy = { ask: "make the garden", gameEngine: "toy-engine", engineProject: "/g/garden/Garden.toyproj" };
-    const webWords = [/window\.__studio/, /Reload/, /holds a web game/, /builders working in parallel/];
-    for (const [name, brief] of [
-      ["with facts", buildContractorBrief({ ...toy, facts: [{ id: "toy-project", path: "." }] })],
-      ["an older caller that names only the engine", buildContractorBrief(toy)],
-    ] as const)
-      for (const words of webWords) assert.doesNotMatch(brief, words, `${name}: ${words}`);
+  // Flipped: an older caller that named only the engine was briefed too; every caller hands the facts.
+  it("EG1. its context never gives web-page rules, the preview's Reload or the web Loop", async () => {
+    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const engine = { kind: "toy-engine", project: "/g/garden/Garden.toyproj", linkedAt: "2026-11-01T00:00:00.000Z" };
+    const toy = { facts: [{ id: "toy-project", path: "." }], engine };
+    const context = chatContext(toy, { folderLabel: "AI Games/garden", appLanguage: null });
+    for (const words of [/window\.__studio/, /Reload/, /holds a web game/, /builders working in parallel/])
+      assert.doesNotMatch(context, words, String(words));
   });
 });
 
@@ -5093,11 +5022,12 @@ describe("a Loop whose lead lost what its goal needs (claude-code-and-chatgpt)",
 });
 
 describe("a tool the user asked for that can't run here (claude-code-and-chatgpt)", () => {
-  it("MK2. the contractor saw Blender was too old to run, said Unity was ready and queued a 24-hour build that never used Blender: its brief says to tell the user with the fix first", async () => {
-    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const brief = buildContractorBrief({ ask: "Make a Unity fighting game. Use blender." });
-    assert.match(brief, /never carry on without it in silence/);
-    assert.match(brief, /__install/);
+  // Flipped: the brief carried a rule to tell the user with the fix first. The tools' own refusals
+  // say why they can't run, and the person's words, naming Blender, reach the session as written.
+  it("MK2. the contractor saw Blender was too old to run, said Unity was ready and queued a 24-hour build that never used Blender: the words naming Blender reach it as written, with no rule beside them", async () => {
+    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const context = chatContext({ facts: [] }, { folderLabel: "AI Games/fight", appLanguage: null });
+    assert.doesNotMatch(context, /never carry on without it in silence|can't run here/);
   });
 });
 
@@ -5136,25 +5066,6 @@ describe("the reviewer's no's in a Loop that still has time", () => {
     const report = await host.start();
     assert.equal(report.executionStatus, "paused", "a Stop pauses the Loop for a Resume");
     assert.equal(report.stillToFix, undefined);
-  });
-});
-
-/**
- * A request that names an engine none of the engine question's options covers is never asked that
- * question: it goes through `plugins_find`, as the question's own words say before they ask.
- */
-describe("a request naming an engine the engine question doesn't offer", () => {
-  it("with only Unity on, a request for a Godot game is sent to plugins_find before the question is asked, never offered Web or Unity", async () => {
-    const { engineChoiceRule } = await import("../../src/harness-seed/loop/unreal-prompts.ts");
-    const { toolCall } = await import("../../src/harness-seed/loop/model-roles.ts");
-    const unity = { plugin: "unity", name: "Unity", tool: "unity__new-game", makes: ["unity-project"] };
-    for (const engine of ["claude-code", "codex", undefined]) {
-      const rule = engineChoiceRule(engine, null, [unity]);
-      const find = rule.indexOf(toolCall(engine, "plugins_find"));
-      const ask = rule.indexOf(toolCall(engine, "ask_user"));
-      assert.ok(find >= 0, `${engine}: another engine goes through plugins_find`);
-      assert.ok(find < ask, `${engine}: before the question is asked`);
-    }
   });
 });
 
@@ -5199,15 +5110,11 @@ describe("a resumed chat session on a game with no kind yet", () => {
 });
 
 describe("the language of Genex's own turns", () => {
-  it("AL1. a resume or continue is Genex's own English words, and the agent answered a Russian chat in English: the brief names the app's language as the fallback", async () => {
-    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
+  it("AL1. a resume or continue is Genex's own English words, and the agent answered a Russian chat in English: the context names the app's language as the fallback for a turn of Genex's", async () => {
+    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
     const russian = { tag: "ru", name: "Русский" };
-    for (const resume of [false, true])
-      assert.match(
-        buildContractorBrief({ ask: "Continue", resume, appLanguage: russian }),
-        /Genex's own rather than the user's[\s\S]*Русский \(ru\)/,
-        resume ? "a resumed session" : "a new session",
-      );
+    const context = chatContext({ facts: [] }, { folderLabel: "AI Games/x", appLanguage: russian });
+    assert.match(context, /a line marked as Genex's rather than the user's[\s\S]*Русский \(ru\)/);
   });
 });
 
@@ -5395,15 +5302,151 @@ describe("pictures of a Loop's builds (Loop phase 5)", () => {
 });
 
 describe("an engine app the chat finds not ready", () => {
-  it("UR1. a chat that linked an Unreal project whose editor wasn't running ended with words asking the person to open it: the agent is told the reason and gets its app ready itself", async () => {
+  // Flipped: the agent was also told to get the app ready with its own tools before it used it.
+  // Genex's line now says only the fact; what the agent does with it is its own.
+  it("UR1. a chat that linked an Unreal project whose editor wasn't running ended with words asking the person to open it: the agent is told the reason, and only the reason", async () => {
     const { MOMENT_WORDS } = await import("../../src/plugins/unreal/hook-answers.ts");
     const { CoreFact } = await import("../../src/harness-seed/loop/folder-facts.ts");
+    const { factsReadyNotice } = await import("../../src/harness-seed/loop/project-prompts.ts");
     const reason = MOMENT_WORDS.NotReady("WalkLab");
     assert.doesNotMatch(reason, /button|send a message/i, "where Unreal stands, never an errand for the person");
     const facts = [{ id: CoreFact.UnrealProject, path: "WalkLab", source: "link" }] as never;
-    const prompt = factsReadyPrompt(facts, reason);
-    assert.ok(prompt.includes(reason), prompt);
-    assert.match(prompt, /Get it ready with your own tools/);
-    assert.doesNotMatch(factsReadyPrompt(facts), /isn't ready/, "a ready app adds nothing");
+    const notice = factsReadyNotice(facts, reason);
+    assert.ok(notice.includes(reason), notice);
+    assert.doesNotMatch(notice, /Get it ready|before you use it|Go on with/, "a fact, never an instruction");
+    assert.doesNotMatch(factsReadyNotice(facts), /isn't ready/, "a ready app adds nothing");
+  });
+});
+
+/**
+ * A Unity chat's every resumed message reached the model with ~2.5K characters of Genex's rules
+ * after the person's words, and its first with ~3.7K: the Loop, the workers, the checkpoint, the
+ * Run button, where the work stays, the language. The person's words now go alone, as they wrote
+ * them; Genex's context rides the session's system prompt, the same text on every turn while the
+ * game is the same, so Claude Code's prompt cache keeps it.
+ */
+describe("the person's words reach the chat's own session as they wrote them (chat brief)", () => {
+  const UNITY_GAME = {
+    name: "keep",
+    title: "Keep",
+    dir: "/games/keep",
+    shape: null,
+    built: false,
+    facts: [{ id: "unity-project", path: ".", source: "plugin:unity" }],
+  };
+  /** The chat's bookmark of its session, as an earlier turn left it in the log. */
+  const bookmark = (sessionId: string) => ({
+    data: {
+      type: "custom",
+      event_type: "contractor_session",
+      payload: { project: "keep", engine: "claude-code", sessionId },
+    },
+  });
+  const answered = { ok: true, engine: "claude-code", turns: 1, usage: {}, sessionId: "s1", summary: "ok" };
+
+  /** One chat turn on the Unity game; what the builder was handed, each delegation in order. */
+  async function chatTurn(
+    text: string,
+    options: {
+      events?: unknown[];
+      messages?: Array<{ role: string; content: string }>;
+      delegate?: (params: Record<string, unknown>) => unknown;
+    } = {},
+  ) {
+    const { runDelegatedTurn } = await import("../../src/harness-seed/loop/delegated-turn.ts");
+    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
+    const recorder = ctxRecorder({
+      threadId: "t1",
+      unknown: { value: null },
+      handlers: {
+        "events.messages": () => options.messages ?? [{ role: "user", content: text }],
+        "events.list": () => options.events ?? [],
+        "game.list": () => [UNITY_GAME],
+        "game.contentStamp": () => ({ all: "same", source: "same" }),
+        "plugins.tools": () => ({ tools: [], guidance: "", revision: 1, kinds: [] }),
+        "engine.describe": () => [],
+        "engine.delegate": options.delegate ?? (() => answered),
+      },
+    });
+    await runDelegatedTurn(
+      recorder.ctx as never,
+      {
+        threadId: "t1",
+        turnId: "turn-1",
+        text,
+        engine: "claude-code",
+        engineLabel: "Claude Code",
+        project: "keep",
+      } as never,
+    );
+    return { delegated: recorder.paramsOf("engine.delegate"), recorder };
+  }
+
+  it("CB-1. a Unity chat's first and resumed messages reached the model wrapped in Genex's rules: the words go alone, Genex's context in a system text the same on both turns", async () => {
+    const first = (await chatTurn("Make a castle game")).delegated[0];
+    const resumed = (
+      await chatTurn("hdrp или urp?", {
+        events: [bookmark("s1")],
+        messages: [
+          { role: "user", content: "Make a castle game" },
+          { role: "assistant", content: "Built the keep." },
+          { role: "user", content: "hdrp или urp?" },
+        ],
+      })
+    ).delegated[0];
+    assert.equal(first?.prompt, "Make a castle game", "the first message, as written");
+    assert.equal(resumed?.prompt, "hdrp или urp?", "a resumed message, as written");
+    assert.equal(resumed?.resume, "s1");
+    assert.equal(first?.from, MessageFrom.Person, "the person wrote it");
+    assert.match(String(first?.system), /inside Genex/, "Genex's context is the system text");
+    assert.match(String(first?.system), /Unity project/);
+    assert.equal(resumed?.system, first?.system, "byte-identical while the game is the same");
+    for (const told of [/worker_start/, /checkpoint/, /stays in this workspace/, /can't run here/])
+      assert.doesNotMatch(String(first?.system), told, `${told}: the tools say it, or nobody needs it`);
+    assert.equal(resumed?.notices, undefined, "a resumed session is told nothing beside the words");
+  });
+
+  it("CB-2. a session that could not be resumed started afresh from a brief quoting the chat: it gets the same words, and the chat so far as one Genex notice", async () => {
+    const { delegated } = await chatTurn("Add a moat", {
+      events: [bookmark("gone")],
+      messages: [
+        { role: "user", content: "Make a castle game" },
+        { role: "assistant", content: "Built the keep." },
+        { role: "user", content: "Add a moat" },
+      ],
+      delegate: (params) => {
+        if (params.resume) throw new Error("No conversation found with session ID: gone");
+        return { ...answered, sessionId: "s2", summary: "Moat added." };
+      },
+    });
+    assert.equal(delegated.length, 2, "the resume, then a new session");
+    const [lost, fresh] = delegated;
+    assert.equal(lost?.notices, undefined, "the resumed leg is told nothing beside the words");
+    assert.equal(fresh?.resume, undefined, "a new session");
+    assert.equal(fresh?.prompt, "Add a moat", "the same words, as written");
+    assert.equal(fresh?.system, lost?.system, "the same system text");
+    const [history, ...more] = (fresh?.notices as string[] | undefined) ?? [];
+    assert.deepEqual(more, [], "one notice");
+    assert.match(String(history), /user: Make a castle game/);
+    assert.match(String(history), /assistant: Built the keep\./);
+    assert.doesNotMatch(String(history), /user: Add a moat/, "the words it answers are its prompt, not its history");
+  });
+
+  it("CB-3. the Loop's lead continued the chat's own session with no Genex context: it sends the chat's own system text, so the session reads one", async () => {
+    const { loopHost, gameRepo } = await import("../helpers/loop-host.ts");
+    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const { folderLabelOf } = await import("../../src/harness-seed/loop/workers/identity.ts");
+    const dir = await tmpDir("lead-context-");
+    await writeFile(path.join(dir, "project.godot"), "[application]\n");
+    await gameRepo(dir);
+    const host = loopHost({ dir, facts: [{ id: "godot-project", path: "." }], turns: [async () => undefined] });
+    await host.start();
+    const [lead] = host.leadCalls();
+    assert.ok(lead, "the lead took a turn");
+    const chat = chatContext(host.game as never, {
+      folderLabel: folderLabelOf(dir, host.game.name),
+      appLanguage: null,
+    });
+    assert.equal(lead.system, chat, "the lead's system text is the chat's own");
   });
 });

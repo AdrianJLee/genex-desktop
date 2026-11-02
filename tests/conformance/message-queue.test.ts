@@ -624,7 +624,8 @@ test("a message joins the running turn as words, as a switch of its settings, or
   assert.equal(kind({ ...same, effort: "low" }), "switch", "another effort");
   assert.equal(kind({ ...same, model: "sonnet" }), "switch", "another model");
   assert.equal(kind({ ...same, engine: "codex" }), "switch", "another engine");
-  assert.equal(kind({ ...same, text: "/review" }), "switch", "a slash command");
+  // Flipped: a slash command joined as a switch and cut the turn; it waits for a turn of its own.
+  assert.equal(kind({ ...same, text: "/review" }), "own", "a slash command");
   assert.equal(kind({ ...same, newRun: true }), "own", "a fresh build asked for");
   assert.equal(kind(same, { ...same, studioThread: true }), "own", "Studio's own chat");
   assert.equal(joinKindOf({ text: "x" }, null), "own", "no turn");

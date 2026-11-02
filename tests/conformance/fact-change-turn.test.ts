@@ -13,7 +13,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
-import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
+import { factsReadyNotice } from "../../src/harness-seed/loop/project-prompts.ts";
 import { EventKind } from "../../src/shared/event-log.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
@@ -426,18 +426,23 @@ describe("the end of a turn that changed what the project is", () => {
   it("a turn whose project changed kind goes on in the same session with a brief for the new kind", async () => {
     const delegated = await turnOn({ before: WEB, after: GODOT });
     assert.equal(delegated.length, 2, "one build, then one continuation");
+    // Genex's line, said as Genex's: the project's new kind and nothing else.
     assert.deepEqual(
-      [delegated[1]?.resume, delegated[1]?.prompt],
-      ["s1", factsReadyPrompt([{ id: "godot-project", path: "." }])],
+      [delegated[1]?.resume, delegated[1]?.prompt, delegated[1]?.from],
+      ["s1", factsReadyNotice([{ id: "godot-project", path: "." }]), "genex"],
     );
+    assert.match(String(delegated[1]?.system), /it holds a Godot project/, "the context for the new kind");
     assert.equal(Boolean(delegated[1]?.selfCapture), false, "no web capture for a Godot project");
 
     const fresh = await turnOn({ before: WEB, after: GODOT, resumeFails: true });
     assert.equal(fresh.length, 3, "the resume failed, so a fresh session was started");
-    const brief = String(fresh[2]?.prompt);
     assert.equal(fresh[2]?.resume ?? null, null);
-    assert.ok(brief.includes(factsReadyPrompt([{ id: "godot-project", path: "." }])), "the fresh brief goes on");
-    assert.ok(!brief.includes("window.__studio"), "the fresh brief is for the new kind, not the web game");
+    assert.equal(fresh[2]?.prompt, factsReadyNotice([{ id: "godot-project", path: "." }]), "the same line goes on");
+    assert.match(
+      String(fresh[2]?.system),
+      /it holds a Godot project/,
+      "its context is for the new kind, not the web game",
+    );
 
     const rows: Record<string, Parameters<typeof turnOn>[0]> = {
       "a game with no kind that took the web starter": { before: [], after: WEB },
@@ -504,9 +509,9 @@ describe("the end of a turn that changed what the project is", () => {
       for (let n = 0; n < 2000 && legs < 3; n++) await new Promise((resolve) => setImmediate(resolve));
       const delegated = recorder.paramsOf("engine.delegate");
       assert.equal(delegated.length, 3, "the session went on after the cut");
-      const prompt = String(delegated[2]?.prompt);
-      assert.ok(prompt.startsWith("While you were working, the user changed how you work"), prompt);
-      assert.match(prompt, /use sonnet for it/);
+      // Flipped: the leg opened with what changed. The model is the leg's option; the words go alone.
+      assert.equal(delegated[2]?.prompt, "use sonnet for it");
+      assert.equal(delegated[2]?.model, "sonnet");
       const switched = [...messageQueueState(log as never).messages.values()].find(
         (m) => m.action?.text === "use sonnet for it",
       );

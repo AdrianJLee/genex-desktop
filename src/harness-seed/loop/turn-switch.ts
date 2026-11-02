@@ -1,11 +1,10 @@
 /**
  * A chat turn that goes on with the settings of a message the person sent while it worked
  * (steer-switch.ts): the engine, model, effort and roles it answers on, worked out as the turn would
- * have started with that message — the after-run session's engine kept — and the lines that tell
- * the session what changed (steer-switch-prompts.ts).
+ * have started with that message — the after-run session's engine kept. They reach the session as
+ * its engine's options, never as words.
  */
 import { supportsSessions } from "./model-roles.ts";
-import { SWITCH_NOTES } from "./steer-switch-prompts.ts";
 import type { AfterLoopRun } from "./after-loop-run.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
 import type { RunRoles } from "../types/host-api.d.ts";
@@ -76,18 +75,4 @@ export function switchedSettings(
     preferences: item.preferences,
     roles: item.roles,
   };
-}
-
-/** "Claude Code (opus) · high effort": who answers, as the session is told. */
-function whoAnswers(settings: TurnSettings): string {
-  const model = settings.model && settings.model !== "default" ? ` (${settings.model})` : "";
-  const effort = settings.effort ? ` · ${settings.effort} effort` : "";
-  return `${settings.engineLabel}${model}${effort}`;
-}
-
-/** The line a switch opens the next leg with: another engine, or another model or effort; none otherwise. */
-export function switchNotes(before: TurnSettings, after: TurnSettings): string[] {
-  if (after.engine !== before.engine) return [SWITCH_NOTES.engine(whoAnswers(after))];
-  if (after.model !== before.model || after.effort !== before.effort) return [SWITCH_NOTES.model(whoAnswers(after))];
-  return [];
 }

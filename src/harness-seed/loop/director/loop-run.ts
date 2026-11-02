@@ -112,6 +112,8 @@ export interface LoopRunData {
   resting?: boolean;
   /** The lead: its chat's own session, in the game folder (lead-session.ts). */
   lead?: LeadSeat | null;
+  /** Genex's context, the lead's system text: the same as its chat's own turns send (chat-session.ts `chatContext`). */
+  context?: string;
   /** The log's sequence number the journal's last save holds (`saveJournal`). */
   journaledSeq?: number;
   /** The journal as its last save wrote it (journal.ts `journalText`). */

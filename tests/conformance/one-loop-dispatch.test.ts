@@ -9,7 +9,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { afterLeadLoopRun, afterLoopRunGrant } from "../../src/harness-seed/loop/after-loop-run.ts";
-import { afterLoopRunNote } from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
 import { launchFromIntake } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { startAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
@@ -316,7 +315,8 @@ describe("the credit cap a Loop in place keeps", () => {
 });
 
 describe("after a Loop in place", () => {
-  it("the chat keeps its status alone, and is told nothing of a build to show or land", TEST_TIMEOUT, async () => {
+  // Flipped: an after-run note was also checked to name no build to show or land; no note is written now.
+  it("the chat keeps its status alone, with no tool to show or land a build", TEST_TIMEOUT, async () => {
     const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
     await host.start();
     const run = {
@@ -334,8 +334,6 @@ describe("after a Loop in place", () => {
       runControlsFor(grant.runControls).map((tool) => tool.name),
       ["run_status"],
     );
-    const note = afterLoopRunNote(after as never, "claude-code");
-    assert.doesNotMatch(note, /show_build|land_build/);
   });
 
   it(

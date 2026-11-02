@@ -18,7 +18,6 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { engineChoiceRule } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import type { PluginContext, PluginScalar } from "../../src/plugin-sdk/index.d.ts";
 import { agentsAt, readAgentMarks } from "../../src/plugins/roblox/agent-marks.ts";
 import { createRobloxBackend, type RobloxDeps } from "../../src/plugins/roblox/backend.ts";
@@ -626,7 +625,6 @@ describe("the engine choice", () => {
         kinds.map((kind) => [kind.tool, kind.label, kind.asksReady]),
         [["roblox__new-game", "Roblox game", true]],
       );
-      assert.match(engineChoiceRule("claude-code", null, kinds), /"Roblox game"/);
     } finally {
       registry.cancel();
     }

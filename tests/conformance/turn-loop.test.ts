@@ -504,8 +504,9 @@ describe("engine fallback (M2)", () => {
     assert.equal(games.length, 1);
     assert.equal(games[0]!.name, "tiny-pong");
     assert.ok(briefs[0]!.cwd.endsWith(games[0]!.name), "the contractor works inside the game workspace");
-    assert.ok(briefs[0]!.prompt.includes("Build a tiny pong game"));
-    assert.ok(briefs[0]!.prompt.includes("CLAUDE.md"), "the brief points at the workspace contract");
+    // Flipped: the brief pointed at the workspace's CLAUDE.md. The words go as written; the
+    // session finds the folder's own instructions itself.
+    assert.equal(briefs[0]!.prompt, "Build a tiny pong game", "the ask, as written");
 
     // The transcript reads like a delegate_to_contractor tool call plus a normal reply.
     const requested = events.find((e) => e.data.type === "tool_requested")!;

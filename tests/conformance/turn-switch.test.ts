@@ -1,17 +1,11 @@
 /**
  * A chat turn that goes on with the settings of a message sent while it worked (turn-switch.ts):
- * the settings it ends up on are those a turn started with that message would have, and the lines
- * that tell the session what changed say only what did.
+ * the settings it ends up on are those a turn started with that message would have, which reach
+ * the session as its next leg's options, never as words.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  endsTurnFor,
-  switchedSettings,
-  switchNotes,
-  type TurnSettings,
-} from "../../src/harness-seed/loop/turn-switch.ts";
-import { SWITCH_NOTES } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
+import { endsTurnFor, switchedSettings, type TurnSettings } from "../../src/harness-seed/loop/turn-switch.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { MessageQueue } from "../../src/harness-seed/loop/message-queue.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
@@ -46,7 +40,6 @@ describe("the settings a switch goes on with", () => {
     );
     assert.equal("autopilot" in next, false);
     assert.equal("loop" in next, false);
-    assert.deepEqual(switchNotes(loopOff, next), [SWITCH_NOTES.model("Claude Code (haiku) · low effort")]);
   });
 
   it("after a lead's run the session stays the after-run one, on the lead's engine", () => {
@@ -65,18 +58,6 @@ describe("the settings a switch goes on with", () => {
     const after: TurnSettings = { ...loopOff, afterLoopRun: finishedInPlace as never };
     assert.equal(endsTurnFor(after, { engine: "codex" }, described), true);
     assert.equal(endsTurnFor(after, { engine: "claude-code" }, described), false);
-  });
-});
-
-describe("what a switch tells the session", () => {
-  it("only what changed: the engine, or the model and effort", () => {
-    assert.deepEqual(switchNotes(loopOff, { ...loopOff, effort: "low" }), [
-      SWITCH_NOTES.model("Claude Code (opus) · low effort"),
-    ]);
-    assert.deepEqual(switchNotes(loopOff, { ...loopOff, engine: "codex", engineLabel: "Codex", model: undefined }), [
-      SWITCH_NOTES.engine("Codex · xhigh effort"),
-    ]);
-    assert.deepEqual(switchNotes(loopOff, { ...loopOff, roles: { builder: "sonnet" } }), []);
   });
 });
 
@@ -368,8 +349,16 @@ describe("the engine a switched turn's session is on", () => {
       assert.ok(goesOn.length > 0, "the turn went on with the new kind");
       for (const request of goesOn) {
         assert.equal(request.engine, "codex");
-        assert.equal(request.resume ?? null, null, "never Claude Code's session on Codex");
+        assert.notEqual(request.resume, "claude-session", "never Claude Code's session on Codex");
       }
+      // Genex's line about the new kind starts Codex's session; the person's words, theirs, go on in it.
+      assert.deepEqual(
+        goesOn.map((request) => [request.resume ?? null, request.from]),
+        [
+          [null, "genex"],
+          ["codex-session", "person"],
+        ],
+      );
     } finally {
       turn.cut();
       turn.queue.stop();

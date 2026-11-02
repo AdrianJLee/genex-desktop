@@ -1,14 +1,10 @@
 /**
- * The words of Genex's worker pool: the brief a worker starts from (Genex's identity first), the
- * one line a lead's brief says about workers, and every answer the six worker tools give the lead.
+ * The words of Genex's worker pool: the brief a worker starts from (Genex's identity first), and
+ * every answer the six worker tools give the lead.
  */
 import { CoreFact, type FactRef, type FolderHolds, ProjectTool } from "../folder-facts.ts";
 import { appIdentity } from "../project-prompts.ts";
 import { MAX_WORKERS_AT_ONCE, WorkerIsolation, WorkerTool } from "./contract.ts";
-
-/** The one line a lead's brief says about its workers, the same on every engine. */
-export const WORKERS_BRIEF_LINE =
-  "You can start workers (worker_start): readers in place, writers in their own copy that you merge with worker_mark, or one writer in place. As many at once as worker_start says; they follow this chat's permission mode.";
 
 /** What a worker may do about Genex's plugins: look, and tell the lead; the card is the lead's to show. */
 const WORKER_PLUGIN_SEARCH = `To look for a Genex plugin, call ${ProjectTool.PluginsFind} and say in your report what it found; only the lead shows the person a plugin's card.`;

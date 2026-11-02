@@ -157,8 +157,11 @@ it("rewinds a game chat: the message and its answer leave, files come back, and 
   await waitForLog(rig.core, handled(thread, 3), 20000, "answer after the rewind");
   const fresh = delegations[2]!;
   assert.equal(fresh.resume, undefined, "the next turn does not resume a session that remembers the withdrawn turn");
-  assert.match(fresh.prompt, /Make a platformer/);
-  assert.doesNotMatch(fresh.prompt, /Add a boss/);
+  // Flipped: the chat so far rode in the prompt; it is one Genex notice now, beside the words alone.
+  assert.equal(fresh.prompt, "Add a dragon instead");
+  const told = (fresh.notices ?? []).join("\n");
+  assert.match(told, /Make a platformer/);
+  assert.doesNotMatch(told, /Add a boss/);
 
   // A restart does not bring the withdrawn message back.
   await rig.core.host.restart();
@@ -893,7 +896,7 @@ it("tells the chat once when a checkpoint leaves a file out for its size", async
     status: async () => ({ code: "ready", detail: "" }),
     models: async () => [],
     delegate: async (request) => {
-      prompts.push(request.prompt);
+      prompts.push([...(request.notices ?? []), request.prompt].join("\n\n"));
       const step = prompts.length;
       await writeFile(path.join(request.cwd ?? dir, `step-${step}.js`), `step ${step}\n`);
       // The third answer grows a saved file past the limit.
@@ -932,8 +935,8 @@ it("tells the chat once when a checkpoint leaves a file out for its size", async
     { file: "intro.mp4", bytes: tooLarge },
     { file: "theme.wav", bytes: tooLarge },
   ]);
-  assert.match(prompts[0] ?? "", /^Studio notice: Rewind cannot bring back these files.*intro\.mp4 \(50 MB\)/);
-  assert.doesNotMatch(prompts[1] ?? "", /Rewind cannot bring back/, "told once, then used up");
+  assert.match(prompts[0] ?? "", /Rewind can't bring them back: intro\.mp4 \(50 MB\)/);
+  assert.doesNotMatch(prompts[1] ?? "", /Rewind can't bring them back/, "told once, then used up");
 
   // A rewind that leaves a file as it is says so too.
   const music = bubble(events, "Add music");

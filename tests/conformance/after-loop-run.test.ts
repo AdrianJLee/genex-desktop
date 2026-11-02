@@ -17,8 +17,6 @@ import {
 } from "../../src/harness-seed/loop/after-loop-run.ts";
 import { handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import type { Studio } from "../../src/harness-seed/loop/studio-state.ts";
-import { afterLoopRunNote } from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
-import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import * as delegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
 import * as turnLoop from "../../src/harness-seed/loop/turn-loop.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
@@ -240,51 +238,6 @@ describe("what the chat's own session is told and handed after a run", () => {
   /** A paused run answered on another engine than its lead's: the chat's bookmark moves there. */
   const pausedElsewhere = { ...paused, onLeadEngine: false };
 
-  it("A3. the note: the build is over, its hands are back, a question never restarts it, and the controls spelled for its engine", () => {
-    const note = afterLoopRunNote(finished as never, "claude-code");
-    assert.match(note, /THE BUILD IS OVER/);
-    assert.match(note, /a dusk plaza/);
-    assert.match(note, /edit/i);
-    assert.match(note, /never restarts/);
-    assert.match(note, /mcp__studio__run_status/);
-    assert.match(note, /mcp__studio__show_build/);
-    assert.match(note, /mcp__studio__land_build/);
-    assert.match(note, /yourself/, "a finished run's change is the session's own to make");
-    assert.doesNotMatch(note, /resume_run/, "nothing to resume after a finished run");
-    const pausedNote = afterLoopRunNote(paused as never, "codex");
-    assert.match(pausedNote, /PAUSED/);
-    assert.match(pausedNote, /stopped by the user/);
-    assert.match(pausedNote, /\.studio\/bridge\/tool\.mjs resume_run/, "a paused run's resume, spelled for Codex");
-    const elsewhereNote = afterLoopRunNote(pausedElsewhere as never, "codex");
-    assert.match(elsewhereNote, /PAUSED/);
-    assert.match(elsewhereNote, /the build stays paused/);
-    assert.doesNotMatch(elsewhereNote, /resume_run/, "no resume on another engine than its lead's");
-  });
-
-  it("A4. the brief carries the note in place of 'pick up where you left off', resumed or fresh", () => {
-    const note = afterLoopRunNote(finished as never, "codex");
-    const resumed = buildContractorBrief({
-      ask: "why dusk?",
-      resume: true,
-      engine: "codex",
-      afterLoopRun: note,
-    } as never);
-    assert.ok(resumed.startsWith("why dusk?"), resumed);
-    assert.ok(resumed.includes(note), resumed);
-    assert.doesNotMatch(resumed, /Pick up exactly where you left off/);
-    const fresh = buildContractorBrief({
-      ask: "why dusk?",
-      messages: [
-        { role: "user", content: "make a dusk plaza" },
-        { role: "assistant", content: "Building until about 07:10." },
-      ],
-      engine: "codex",
-      afterLoopRun: note,
-    } as never);
-    assert.ok(fresh.includes(note), fresh);
-    assert.match(fresh, /Original request:\nmake a dusk plaza/);
-  });
-
   it("A5. handed the run's controls for this run and message; a paused run's resume is bridged on its lead's engine, a finished one's is not", () => {
     const finishedGrant = afterLoopRunGrant({ ...finished, messageId: "m1" } as never);
     assert.deepEqual(finishedGrant, { runControls: { runId: RUN, messageId: "m1" } });
@@ -432,6 +385,7 @@ describe("the chat's own session after a build it led: the Loop's start, never a
   /** What the session was handed (`engine.delegate`): its prompt and model, its bridged tools, the run's controls. */
   type Handed = {
     prompt?: string;
+    system?: string;
     model?: string;
     runControls?: unknown;
     interviewTools?: Array<{ name: string; parameters: { properties: Record<string, unknown> } }>;
@@ -488,6 +442,16 @@ describe("the chat's own session after a build it led: the Loop's start, never a
   /** The names of the tools a request bridged in. */
   const offered = (request: Handed | undefined): string[] => (request?.interviewTools ?? []).map((tool) => tool.name);
 
+  // Flipped (A3, A4, A12): the session read "THE BUILD IS OVER" and the run's controls in words on
+  // each turn after its run. It led the run itself; its controls and a paused run's resume are tools.
+  it("A3. after a run the session reads the person's words alone, with no note of the build", async () => {
+    for (const loopRun of [finished, paused]) {
+      const { request } = await sessionTurn({ loopRun });
+      assert.equal(request?.prompt, "add enemies", loopRun.state);
+      assert.doesNotMatch(String(request?.system), /THE BUILD IS OVER|run_status|resume_run|PAUSED/, loopRun.state);
+    }
+  });
+
   it("A9. after a finished build the session holds the Loop's start beside the run's controls; after a paused one the resume too; never a reopen", async () => {
     const rows = [
       { label: "a finished build", loopRun: finished, tools: ["start_autopilot"] },
@@ -526,15 +490,6 @@ describe("the chat's own session after a build it led: the Loop's start, never a
     const reopened = await sessionTurn({ loopRun: finished, recorded: [{ name: "reopen_run", args: { text: "x" } }] });
     assert.equal(reopened.outcome.stopped, "done");
     assert.equal(reopened.outcome.details, undefined);
-  });
-
-  it("A12. the note after a finished build names no rule about Loops; a paused build's resume promises no working time", () => {
-    const own = afterLoopRunNote(finished as never, "claude-code");
-    assert.match(own, /you may read and edit the game here as in any turn of this chat/);
-    assert.doesNotMatch(own, /New build|you do not start one|reopen_run|no build starts|in words/);
-    const resume = afterLoopRunNote(paused as never, "codex");
-    assert.match(resume, /\.studio\/bridge\/tool\.mjs resume_run/);
-    assert.doesNotMatch(resume, /working time/);
   });
 
   it("A13. a throttled chat turn never falls back to another engine, after a run or not: only a run's own turn does", async () => {

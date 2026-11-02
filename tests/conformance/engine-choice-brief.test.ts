@@ -1,148 +1,27 @@
 /**
- * Which engine a new game builds in. With the Unreal plugin on, a chat's first build of a game with no
- * kind yet first asks the user one question with the question card: the web or Unreal Engine, unless
- * the ask already named one. The web answer starts Genex's web starter (`start_web_game`); Unreal
- * goes through the plugin's `new-game` tool. With the plugin off nothing about Unreal reaches the
- * brief, and a game that has a kind is never asked. The signal is typed (`handoff.scaffolded`, the
- * host's facts for the folder, the kinds the host lists while the plugin is on); the words live in
- * `loop/unreal-prompts.ts`.
+ * Which engine a new game builds in is the chat's own session's to ask or choose, with the question
+ * card bridged in while the folder has no kind yet and a plugin on offers one; the person's words
+ * reach it as they wrote them, and no words restate the kinds (the kind tools are its tools). A game
+ * that has a kind is never handed the card. The end of a turn that linked the game to Unreal reads
+ * the game again: no web preview pass for a folder that now holds an Unreal project.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
-import { toolCall } from "../../src/harness-seed/loop/model-roles.ts";
 import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
-import {
-  engineChoiceRule,
-  offersUnrealGame,
-  UNREAL_NEW_GAME_TOOL,
-} from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
 const CLAUDE = "claude-code";
-const CODEX = "codex";
-const ENGINES = [CLAUDE, CODEX, undefined];
 const ASK = "make a rally racing game";
 const PROJECT = "/Users/me/AI Games/rally/unreal/Rally.uproject";
 const SHAPE = { entry: "index.html", main: "src/main.js", build: null };
 /** What every chat's own session is handed: the Loop's start. */
 const AUTO_LOOP = "start_autopilot";
+/** The Unreal plugin's tool that makes a game's Unreal project, as the host serves it. */
+const UNREAL_NEW_GAME_TOOL = "unreal__new-game";
 /** The Unreal plugin's kind, as the host lists it while the plugin is on. */
 const UNREAL_KIND = { plugin: "unreal", name: "Unreal Editor", tool: UNREAL_NEW_GAME_TOOL, makes: ["unreal-project"] };
-
-/** What a web brief varies by: the engine reading it, fresh or not, own shape, follow-up, resumed. */
-const WEB_BRIEF_AXES: Record<string, readonly unknown[]> = {
-  engine: ENGINES,
-  scaffolded: [false, true],
-  ownShape: [false, true],
-  messages: [[], [{ role: "user", content: "make pong" }]],
-  resume: [false, true],
-};
-
-/** Every web brief shape a chat writes: each combination of the axes. */
-function webBriefs(): Array<Parameters<typeof buildContractorBrief>[0]> {
-  const base: Record<string, unknown> = { ask: "add fog", shape: SHAPE };
-  return Object.entries(WEB_BRIEF_AXES).reduce(
-    (all, [axis, values]) => all.flatMap((options) => values.map((value) => ({ ...options, [axis]: value }))),
-    [base],
-  );
-}
-
-const lines = (brief: string) => brief.split("\n");
-
-describe("the engine question in a chat's brief", () => {
-  it("a kind offered in its plugin's own words still names its tool the way this session calls it", () => {
-    const note = `Offer "Unreal Engine"; when the answer is Unreal Engine, call ${UNREAL_NEW_GAME_TOOL} with a template and a name.`;
-    for (const engine of [CLAUDE, CODEX]) {
-      for (const ready of [true, false]) {
-        const rule = engineChoiceRule(engine, null, [{ ...UNREAL_KIND, ready, note }]);
-        assert.ok(rule.includes(note), `${engine}: the plugin's words`);
-        assert.ok(rule.includes(toolCall(engine, UNREAL_NEW_GAME_TOOL)), `${engine}, ready ${ready}: its spelling`);
-      }
-    }
-  });
-
-  it("offers a plugin's kind tool that answers its readiness before another, even when the answer was late", () => {
-    const switcher = { ...UNREAL_KIND, tool: "unreal__use-project" };
-    // A late answer: neither kind carries `ready`; the host lists the kind that asks first.
-    const late = engineChoiceRule(CLAUDE, null, [{ ...UNREAL_KIND, asksReady: true }, switcher]);
-    assert.ok(late.includes(toolCall(CLAUDE, UNREAL_NEW_GAME_TOOL)), late);
-    assert.ok(!late.includes("unreal__use-project"), "never the tool that switches to an existing project");
-    const reversed = engineChoiceRule(CLAUDE, null, [switcher, { ...UNREAL_KIND, asksReady: true }]);
-    assert.ok(reversed.includes(toolCall(CLAUDE, UNREAL_NEW_GAME_TOOL)), reversed);
-    assert.ok(!reversed.includes("unreal__use-project"));
-  });
-
-  it("a web brief is byte for byte the brief it was without the question", () => {
-    for (const options of webBriefs())
-      assert.equal(buildContractorBrief({ ...options, engineChoice: false }), buildContractorBrief(options));
-  });
-
-  it("a fresh web game asks web or Unreal first, naming both tools the way this session calls them", () => {
-    for (const engine of ENGINES) {
-      const brief = buildContractorBrief({
-        ask: ASK,
-        scaffolded: true,
-        engine,
-        engineChoice: true,
-        kinds: [UNREAL_KIND],
-      });
-      const rule = engineChoiceRule(engine, null, [UNREAL_KIND]);
-      assert.ok(lines(brief).includes(rule), `the rule is a line of the ${engine ?? "local"} brief`);
-      assert.ok(rule.includes(toolCall(engine, "ask_user")), "it asks with the question card");
-      assert.ok(rule.includes(toolCall(engine, UNREAL_NEW_GAME_TOOL)), "Unreal goes through the plugin's new-game");
-      const rest = buildContractorBrief({ ask: ASK, scaffolded: true, engine });
-      assert.deepEqual(
-        lines(brief).filter((line) => line !== rule),
-        lines(rest),
-        "the rest of the brief is the web brief",
-      );
-    }
-    assert.ok(
-      !engineChoiceRule(CLAUDE, null, [UNREAL_KIND]).includes("tool.mjs"),
-      "a Claude session is never told to run the bridge",
-    );
-    assert.ok(
-      !engineChoiceRule(CODEX, null, [UNREAL_KIND]).includes("mcp__"),
-      "a Codex session is never told an mcp__ name",
-    );
-    assert.equal(engineChoiceRule(CLAUDE), "", "no kind on offer: no question");
-  });
-
-  it("is never in an Unreal game's brief, nor in a resumed session's pickup", () => {
-    for (const engine of ENGINES) {
-      const rule = engineChoiceRule(engine, null, [UNREAL_KIND]);
-      const unreal = buildContractorBrief({
-        ask: ASK,
-        engine,
-        gameEngine: GameEngine.Unreal,
-        engineProject: PROJECT,
-        engineChoice: true,
-      });
-      assert.ok(!lines(unreal).includes(rule));
-      const resumed = buildContractorBrief({ ask: ASK, scaffolded: true, resume: true, engine, engineChoice: true });
-      assert.ok(!lines(resumed).includes(rule));
-    }
-  });
-
-  it("an Unreal game's brief carries no web checkpoint line: the Reload it lights is the web preview's", () => {
-    for (const engine of [CLAUDE, CODEX]) {
-      const checkpoint = toolCall(engine, "checkpoint");
-      const web = buildContractorBrief({ ask: ASK, scaffolded: true, engine });
-      assert.ok(web.includes(checkpoint), "a web game keeps it");
-      const unreal = buildContractorBrief({ ask: ASK, engine, gameEngine: GameEngine.Unreal, engineProject: PROJECT });
-      assert.ok(!unreal.includes(checkpoint));
-    }
-  });
-
-  it("the seed reads a new Unreal game as offered only from the plugin's own tool name", () => {
-    assert.equal(offersUnrealGame([{ name: UNREAL_NEW_GAME_TOOL }]), true);
-    for (const tools of [null, undefined, [], [{ name: "unreal__use-project" }], [{ name: "new-game" }]])
-      assert.equal(offersUnrealGame(tools as never), false, JSON.stringify(tools));
-  });
-});
 
 /** A descriptor as `game.list` answers it. */
 function game(name: string, extra: Record<string, unknown> = {}) {
@@ -181,7 +60,11 @@ function chatTurn(options: {
         tools: options.tools ?? [],
         guidance: "",
         revision: 1,
-        kinds: offersUnrealGame(options.tools as never) ? [UNREAL_KIND] : [],
+        kinds: (options.tools as Array<{ name?: string }> | undefined)?.some(
+          (tool) => tool.name === UNREAL_NEW_GAME_TOOL,
+        )
+          ? [UNREAL_KIND]
+          : [],
       }),
       "engine.describe": () => [],
       // The preview answers at once, so no turn waits out the settle of a studio that cannot.
@@ -209,38 +92,35 @@ function handed(recorder: ReturnType<typeof chatTurn>) {
   return { prompt: String(delegated.prompt), bridged, capture: Boolean(delegated.selfCapture) };
 }
 
-describe("a chat turn and the engine question", () => {
-  const RULE = engineChoiceRule(CLAUDE, null, [UNREAL_KIND]);
-
-  it("with the Unreal plugin off, a new game's builder hears nothing about Unreal and gets no question card", async () => {
+describe("a chat turn and the question card", () => {
+  // Flipped: the brief asked web or Unreal first in words; the session reads the person's words alone.
+  it("with the Unreal plugin off, a new game's builder gets the words alone and no question card", async () => {
     const recorder = chatTurn({ tools: [OTHER_TOOL] });
     await runDelegatedTurn(recorder.ctx as never, NEW_CHAT);
     const { prompt, bridged } = handed(recorder);
-    assert.ok(!lines(prompt).includes(RULE));
-    assert.doesNotMatch(prompt, /Unreal/);
+    assert.equal(prompt, ASK);
     assert.deepEqual(bridged, [AUTO_LOOP]);
   });
 
-  it("with it on, a new game's builder asks web or Unreal first, with the question card bridged in", async () => {
+  it("with it on, a new game's builder gets the words alone, with the question card bridged in", async () => {
     const recorder = chatTurn({ tools: [OTHER_TOOL, NEW_GAME_TOOL] });
     await runDelegatedTurn(recorder.ctx as never, NEW_CHAT);
     const { prompt, bridged, capture } = handed(recorder);
-    assert.ok(lines(prompt).includes(RULE));
+    assert.equal(prompt, ASK);
     assert.deepEqual(bridged, [AUTO_LOOP, "ask_user"]);
     assert.equal(capture, true, "it is still a web game until the user chooses");
   });
 
-  it("a game linked to Unreal is never asked, and its builder gets no web capture", async () => {
+  it("a game linked to Unreal gets no card, and its builder gets no web capture", async () => {
     const linked = game("rally", { engine: { kind: GameEngine.Unreal, project: PROJECT, linkedAt: "" } });
     const recorder = chatTurn({ games: [linked], tools: [NEW_GAME_TOOL] });
     await runDelegatedTurn(recorder.ctx as never, { ...TURN, project: "rally" });
-    const { prompt, bridged, capture } = handed(recorder);
-    assert.ok(!lines(prompt).includes(RULE));
+    const { bridged, capture } = handed(recorder);
     assert.deepEqual(bridged, [AUTO_LOOP]);
     assert.equal(capture, false, "its folder holds notes, not a page to capture");
   });
 
-  it("a web game is never asked, even with the plugin on", async () => {
+  it("a web game gets no card, even with the plugin on", async () => {
     const web = { facts: [{ id: "web-game", path: ".", source: "core" }] };
     for (const existing of [
       game("rally", web),
@@ -248,8 +128,7 @@ describe("a chat turn and the engine question", () => {
     ]) {
       const recorder = chatTurn({ games: [existing], tools: [NEW_GAME_TOOL] });
       await runDelegatedTurn(recorder.ctx as never, { ...TURN, project: "rally" });
-      const { prompt, bridged, capture } = handed(recorder);
-      assert.ok(!lines(prompt).includes(RULE));
+      const { bridged, capture } = handed(recorder);
       assert.deepEqual(bridged, [AUTO_LOOP]);
       assert.equal(capture, true);
     }
@@ -282,7 +161,6 @@ describe("a chat turn and the engine question", () => {
  * the chat's first ask is a chat with no reply, no session and no run; both together ask.
  */
 describe("a game the app made before the chat's first ask", () => {
-  const RULE = engineChoiceRule(CLAUDE, null, [UNREAL_KIND]);
   const PENDING = { facts: [] };
   const madeGame = (extra: Record<string, unknown> = {}) => game("made-game", { ...PENDING, ...extra });
   const ON_ITS_GAME = { ...TURN, project: "made-game" };
@@ -294,14 +172,13 @@ describe("a game the app made before the chat's first ask", () => {
     return handed(recorder);
   }
 
-  it("with nothing built in it and the plugin on, the chat's first build asks web or Unreal first", async () => {
-    const { prompt, bridged, capture } = await turnOn({});
-    assert.ok(lines(prompt).includes(RULE));
+  it("with nothing built in it and the plugin on, the chat's first build is handed the card", async () => {
+    const { bridged, capture } = await turnOn({});
     assert.deepEqual(bridged, [AUTO_LOOP, "ask_user"]);
     assert.equal(capture, true, "it is still a web game until the user chooses");
   });
 
-  it("is never asked once it has a kind, the game is linked to Unreal, or the plugin is off", async () => {
+  it("gets no card once it has a kind, the game is linked to Unreal, or the plugin is off", async () => {
     const linked = madeGame({
       engine: { kind: GameEngine.Unreal, project: PROJECT, linkedAt: "" },
       facts: [{ id: "unreal-project", path: ".", source: "link" }],
@@ -313,31 +190,29 @@ describe("a game the app made before the chat's first ask", () => {
       "the plugin off": { tools: [OTHER_TOOL] },
     };
     for (const [label, options] of Object.entries(cases)) {
-      const { prompt, bridged } = await turnOn(options);
-      assert.ok(!lines(prompt).includes(RULE), label);
+      const { bridged } = await turnOn(options);
       assert.deepEqual(bridged, [AUTO_LOOP], label);
     }
   });
 
-  it("is never asked on a resumed session or a run's own turn, and asked again on a later message while the folder has no kind", async () => {
+  it("keeps the card on a resumed session and a later message while the folder has no kind, never on a run's own turn", async () => {
     const turns: Record<string, [Parameters<typeof chatTurn>[0], Record<string, unknown>, string[]]> = {
       // Flipped: a resumed session that still has no kind keeps the card its first brief named.
       "a resumed session": [{}, { ...ON_ITS_GAME, resume: "session-1" }, [AUTO_LOOP, "ask_user"]],
       "a run's own turn": [{}, { ...ON_ITS_GAME, runId: "run-1" }, []],
     };
     for (const [label, [options, turn, expected]] of Object.entries(turns)) {
-      const { prompt, bridged } = await turnOn(options, turn);
-      assert.ok(!lines(prompt).includes(RULE), label);
+      const { bridged } = await turnOn(options, turn);
       assert.deepEqual(bridged, expected, label);
     }
-    // A greeting first never loses the card: the folder still has no kind, so a fresh brief asks.
+    // A greeting first never loses the card: the folder still has no kind.
     const replied = [
       { role: "user", content: "hi" },
       { role: "assistant", content: "Hello! What shall we make?" },
       { role: "user", content: ASK },
     ];
     const later = await turnOn({ messages: replied }, ON_ITS_GAME);
-    assert.ok(lines(later.prompt).includes(RULE), "a later message");
+    assert.equal(later.prompt, ASK, "the words alone");
     assert.deepEqual(later.bridged, [AUTO_LOOP, "ask_user"], "a later message");
   });
 });

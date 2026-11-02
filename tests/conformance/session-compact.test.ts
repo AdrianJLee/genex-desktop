@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
+import { historyNotice } from "../../src/harness-seed/loop/chat-continuity.ts";
 import * as delegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
 import { freshChat } from "../../src/harness-seed/loop/director/lead-session.ts";
 import { compactedSummary, endedByCompaction } from "../../src/harness-seed/loop/compaction-log.ts";
@@ -46,23 +46,19 @@ describe("what a session is briefed with after its chat was compacted", () => {
     assert.equal(endedByCompaction([ended, native], "ses-2"), false, "the provider compacted it in place");
   });
 
-  it("a fresh session is given the handover beside the recent conversation; a resumed one is not", () => {
+  // Flipped: the handover and the recent conversation were glued into a fresh session's brief. They
+  // are one Genex notice now (`historyNotice`), which only a leg with no session to resume is given.
+  it("a fresh session's notice holds the handover, then the latest messages, never the words it answers", () => {
     const messages = [
       { role: "user", content: "Build a plaza with a fountain." },
       { role: "assistant", content: "Done." },
       { role: "user", content: "Now add the market stalls." },
     ];
-    const fresh = buildContractorBrief({ ask: "Now add the market stalls.", messages, compacted: HANDOVER });
-    assert.match(fresh, /Where this chat stands/);
-    assert.ok(fresh.includes(HANDOVER));
-    assert.match(fresh, /Recent conversation/);
-    const resumed = buildContractorBrief({
-      ask: "Now add the market stalls.",
-      messages,
-      resume: true,
-      compacted: HANDOVER,
-    });
-    assert.ok(!resumed.includes(HANDOVER), "a session that remembers needs no handover");
+    const notice = historyNotice(messages, "Now add the market stalls.", HANDOVER);
+    assert.match(notice, /Where this chat stands/);
+    assert.ok(notice.indexOf(HANDOVER) < notice.indexOf("user: Build a plaza with a fountain."), "the handover first");
+    assert.ok(!notice.includes("user: Now add the market stalls."), "the words it answers are its prompt");
+    assert.equal(historyNotice([{ role: "user", content: "hi" }], "hi", null), "", "nothing came before");
   });
 
   it("after a paused build's chat is compacted, its next turn is a fresh session that keeps the run's controls and reads the handover", async () => {
@@ -106,7 +102,11 @@ describe("what a session is briefed with after its chat was compacted", () => {
     assert.ok(request, "the turn ran");
     assert.equal(request.resume, undefined, "a fresh session");
     assert.deepEqual(request.runControls, { runId: RUN, messageId: "m1" }, "the run's controls are granted per turn");
-    assert.ok(String(request.prompt).includes(HANDOVER), "briefed with the handover");
+    assert.equal(request.prompt, "add enemies", "the words alone");
+    assert.ok(
+      String((request.notices as string[] | undefined)?.[0]).includes(HANDOVER),
+      "told the handover as a notice",
+    );
   });
 
   it("a lead seated fresh after the compaction is told the handover before the chat's latest messages", async () => {

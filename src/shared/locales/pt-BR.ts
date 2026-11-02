@@ -2198,7 +2198,6 @@ export default {
   "Made Blueprint {blueprint}": "Blueprint {blueprint} criado",
   "Made by {name}": "Feito por {name}",
   "Made material {material}": "Material {material} criado",
-  "Made with {engine}": "Feito com {engine}",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "{name} foi criado na pasta deste jogo e vinculado, mas o Roblox Studio não abriu: {why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -5524,7 +5523,6 @@ export default {
   "{count} files couldn’t be added": "Não foi possível adicionar {count} arquivos",
   "{count} files didn’t go in": "{count} arquivos não couberam",
   "{count} finished": "{count, plural, one {# concluído} other {# concluídos}}",
-  "{count} likes": "{count} curtidas",
   "{count} more": "mais {count}",
   "{count} more waiting": "Mais {count} esperando",
   "{count} newly passing": "{count} passando agora",
@@ -6225,4 +6223,11 @@ export default {
     "O TypeSafe não aceitou essa chave. Confira e cole de novo.",
   "TypeSafe key": "Chave do TypeSafe",
   "Unreal play-tests pick their moves with Jev": "Os testes no Unreal escolhem as jogadas com o Jev",
+  "Made with": "Feito com",
+  "Runs on": "Roda em",
+  Shots: "Capturas",
+  "{n, plural, one {{count} play} other {{count} plays}}":
+    "{n, plural, one {{count} partida} other {{count} partidas}}",
+  "{n, plural, one {{count} like} other {{count} likes}}":
+    "{n, plural, one {{count} curtida} other {{count} curtidas}}",
 } satisfies LocaleCatalog;

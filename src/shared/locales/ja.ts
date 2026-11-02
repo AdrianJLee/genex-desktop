@@ -2148,7 +2148,6 @@ export default {
   "Made Blueprint {blueprint}": "ブループリント{blueprint}を作成しました",
   "Made by {name}": "{name}で作成",
   "Made material {material}": "マテリアル{material}を作成しました",
-  "Made with {engine}": "{engine}で制作",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "このゲームのフォルダーに{name}を作ってリンクしましたが、Roblox Studioが開きませんでした：{why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -5451,7 +5450,6 @@ export default {
   "{count} files couldn’t be added": "{count}個のファイルを追加できませんでした",
   "{count} files didn’t go in": "{count}個のファイルが入りませんでした",
   "{count} finished": "{count}件完了",
-  "{count} likes": "いいね{count}件",
   "{count} more": "ほか{count}件",
   "{count} more waiting": "ほかに{count}件待機中",
   "{count} newly passing": "新たに{count}件合格",
@@ -6148,4 +6146,9 @@ export default {
     "TypeSafe がそのキーを受け付けませんでした。確認してもう一度貼り付けてね。",
   "TypeSafe key": "TypeSafe キー",
   "Unreal play-tests pick their moves with Jev": "Unreal のプレイテストが Jev でムーブを選びます",
+  "Made with": "エンジン",
+  "Runs on": "対応OS",
+  Shots: "スクリーンショット",
+  "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, other {{count}回プレイ}}",
+  "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, other {いいね{count}件}}",
 } satisfies LocaleCatalog;

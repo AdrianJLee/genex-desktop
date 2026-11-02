@@ -2019,7 +2019,6 @@ export default {
   "Made Blueprint {blueprint}": "已创建蓝图 {blueprint}",
   "Made by {name}": "由 {name} 制作",
   "Made material {material}": "已创建材质 {material}",
-  "Made with {engine}": "使用 {engine} 制作",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "已在这个游戏的文件夹中创建 {name} 并完成关联，但 Roblox Studio 没有打开：{why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -5145,7 +5144,6 @@ export default {
   "{count} files couldn’t be added": "有 {count} 个文件无法添加",
   "{count} files didn’t go in": "有 {count} 个文件没放进去",
   "{count} finished": "{count} 个已完成",
-  "{count} likes": "{count} 个赞",
   "{count} more": "还有 {count} 个",
   "{count} more waiting": "还有 {count} 个在等待",
   "{count} newly passing": "新通过 {count} 项",
@@ -5805,4 +5803,9 @@ export default {
   "TypeSafe didn't accept that key. Check it and paste it again.": "TypeSafe 没有接受这个密钥。检查一下再粘贴。",
   "TypeSafe key": "TypeSafe 密钥",
   "Unreal play-tests pick their moves with Jev": "Unreal 试玩用 Jev 选动作",
+  "Made with": "引擎",
+  "Runs on": "支持平台",
+  Shots: "截图",
+  "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, other {{count} 次游玩}}",
+  "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, other {{count} 个赞}}",
 } satisfies LocaleCatalog;

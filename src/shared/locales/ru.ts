@@ -2153,7 +2153,6 @@ export default {
   "Made Blueprint {blueprint}": "Создан Blueprint {blueprint}",
   "Made by {name}": "Создаёт {name}",
   "Made material {material}": "Создан материал {material}",
-  "Made with {engine}": "Сделано на {engine}",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "Плейс {name} создан в папке этой игры и привязан, но Roblox Studio не открылся: {why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -5486,7 +5485,6 @@ export default {
   "{count} files didn’t go in":
     "{count, plural, one {# файл не поместился} few {# файла не поместились} many {# файлов не поместилось} other {# файла не поместилось}}",
   "{count} finished": "готово: {count}",
-  "{count} likes": "Лайки: {count}",
   "{count} more": "ещё {count}",
   "{count} more waiting": "Ещё {count} в очереди",
   "{count} newly passing": "теперь проходят: {count}",
@@ -6192,4 +6190,11 @@ export default {
     "TypeSafe не принял этот ключ. Проверь его и вставь снова.",
   "TypeSafe key": "Ключ TypeSafe",
   "Unreal play-tests pick their moves with Jev": "Плей-тесты в Unreal выбирают ходы с Jev",
+  "Made with": "Движок",
+  "Runs on": "Работает на",
+  Shots: "Скриншоты",
+  "{n, plural, one {{count} play} other {{count} plays}}":
+    "{n, plural, one {{count} запуск} few {{count} запуска} many {{count} запусков} other {{count} запуска}}",
+  "{n, plural, one {{count} like} other {{count} likes}}":
+    "{n, plural, one {{count} лайк} few {{count} лайка} many {{count} лайков} other {{count} лайка}}",
 } satisfies LocaleCatalog;

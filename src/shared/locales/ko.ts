@@ -2097,7 +2097,6 @@ export default {
   "Made Blueprint {blueprint}": "블루프린트 {blueprint} 만들었어요",
   "Made by {name}": "제작: {name}",
   "Made material {material}": "머티리얼 {material} 만들었어요",
-  "Made with {engine}": "{engine}로 제작",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "이 게임 폴더에 {name} 플레이스를 만들고 연결했지만 Roblox Studio가 열리지 않았어요: {why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -5324,7 +5323,6 @@ export default {
   "{count} files couldn’t be added": "파일 {count}개를 추가하지 못했어요",
   "{count} files didn’t go in": "파일 {count}개가 들어가지 않았어요",
   "{count} finished": "{count}개 완료",
-  "{count} likes": "좋아요 {count}개",
   "{count} more": "{count}개 더",
   "{count} more waiting": "{count}개 더 대기 중",
   "{count} newly passing": "새로 통과 {count}개",
@@ -6011,4 +6009,9 @@ export default {
     "TypeSafe가 그 키를 받지 않았어요. 확인하고 다시 붙여 넣어 줘.",
   "TypeSafe key": "TypeSafe 키",
   "Unreal play-tests pick their moves with Jev": "Unreal 플레이 테스트가 Jev로 행동을 골라요",
+  "Made with": "엔진",
+  "Runs on": "지원 OS",
+  Shots: "스크린샷",
+  "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, other {플레이 {count}회}}",
+  "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, other {좋아요 {count}개}}",
 } satisfies LocaleCatalog;

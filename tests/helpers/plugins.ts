@@ -8,6 +8,10 @@ import path from "node:path";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { PluginServices } from "../../src/substrate/plugins/services.ts";
 import { type PluginManifest, type PluginSource, PluginSourceKind } from "../../src/shared/plugins.ts";
+import { planningCapabilities } from "../../src/main/planning-capabilities.ts";
+import { mcpScopeCovers } from "../../src/shared/mcp.ts";
+import type { GameKind } from "../../src/shared/project-facts.ts";
+import type { StudioCore } from "../../src/main/studio-core.ts";
 
 const repo = path.resolve(import.meta.dirname, "../..");
 /** The bundled example plugin's source folder. */
@@ -188,4 +192,24 @@ export async function accountFixture() {
       await rm(base, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * The capability facts a plan reads for `project`, from the same inputs connections.ts
+ * `capabilityFacts` reads: the core's plugins, the chat's connections and the enabled connectors that
+ * reach that game's kind.
+ */
+export async function capabilityFactsOf(core: StudioCore, threadId: string, project: string): Promise<string> {
+  const game: GameKind = (await core.games.list()).find((g) => g.name === project) ?? { facts: [] };
+  const connections = await core.connectionSnapshot(threadId, project);
+  const connectors = (await core.mcp.list(project))
+    .filter((v) => v.connector.enabled && mcpScopeCovers(v.connector.scope, project))
+    .filter((v) => core.mcp.reaches(v.connector.id, game.facts, game.holds))
+    .map((v) => ({
+      id: v.connector.id,
+      name: v.connector.name,
+      health: v.health,
+      tools: core.mcp.planningToolNames(v.connector.id, project),
+    }));
+  return planningCapabilities(1, core.plugins.list(), connections, connectors, false, game);
 }

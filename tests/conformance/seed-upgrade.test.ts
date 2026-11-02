@@ -922,7 +922,6 @@ describe("seed upgrade across the harness step flag", () => {
     const older: ReadonlyArray<readonly [string, string, RegExp]> = [
       ["loop/run-dispatch.ts", "loopProfileOf(", /loopProfileOf/],
       ["loop/chat-dispatch.ts", "startsNextOpenLoop(", /startsNextOpenLoop/],
-      ["loop/reopen-run.ts", "director?.open", /director\?\.open/],
       ["loop/launch-prompts.ts", "openBuildWords(", /openBuildWords/],
       ["loop/chat-session.ts", "loopProfileOf(", /loopProfileOf/],
       ["loop/studio-state.ts", "NeedsSession", /NeedsSession/],

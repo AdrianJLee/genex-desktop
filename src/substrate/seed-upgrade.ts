@@ -292,7 +292,6 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   // launch words describe it, and the runner vocabulary names the refusals.
   { file: "loop/run-dispatch.ts", marker: "loopProfileOf(" },
   { file: "loop/chat-dispatch.ts", marker: "startsNextOpenLoop(" },
-  { file: "loop/reopen-run.ts", marker: "director?.open" },
   { file: "loop/reopen-run.ts", marker: "OPEN_LOOP_REFUSAL.notReopenable" },
   // A Loop in place is told its launch in its own words (refused there when kept parts can't lead
   // it), a finished run's journal says what comes next, a resume goes on in its journal's kind, and

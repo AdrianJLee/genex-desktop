@@ -311,7 +311,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
   });
 
   it("a message to a run whose engine answers with a session shows Sending… while that session is set up, though the message names no engine", async () => {
-    // The run's coordinator is Claude Code; the messages name no engine, so the turn's engine is the run's.
+    // The run's engine is Claude Code; the messages name no engine, so the turn's engine is the run's.
     const events: any[] = [
         {
           id: "0001",
@@ -333,7 +333,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
         if (method === "events.list") return events;
         if (method === "engine.describe") return [];
         if (method === "turn.begin") {
-          // The coordinator's session is being set up: this test ends the turn here.
+          // The turn's session is being set up: this test ends the turn here.
           settingUp.resolve();
           await release.promise;
           throw new Error("the turn ends here");
@@ -626,8 +626,8 @@ describe("steered session: an engine without input mid-turn is interrupted and r
   });
 });
 
-/** A chat whose game has a finished run: its messages are answered by the run's coordinator. */
-async function coordinatorChat(rig: Rig, project: string, engine: string): Promise<string> {
+/** A chat whose game has a finished run (no lead journal): its messages are the chat's own plain turns. */
+async function finishedRunChat(rig: Rig, project: string, engine: string): Promise<string> {
   await rig.core.games.scaffold(project);
   const thread = await rig.core.createGameThread(project);
   await rig.core.append(
@@ -651,7 +651,7 @@ describe("steer through the host and the harness process", () => {
   it("an engine that reads input mid-turn gets the message in the running session, recorded where it read it", async () => {
     const rig = await startRig();
     rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-native", "claude-code");
+    const thread = await finishedRunChat(rig, "steer-native", "claude-code");
     const calls: DelegateRequest[] = [],
       handed = deferred<SteerMessage>();
     rig.core.engines.register({
@@ -708,7 +708,7 @@ describe("steer through the host and the harness process", () => {
   it("Codex fallback: the session is interrupted and resumed with the message in front, never read as a Stop", async () => {
     const rig = await startRig();
     rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-codex", "codex");
+    const thread = await finishedRunChat(rig, "steer-codex", "codex");
     const calls: DelegateRequest[] = [],
       started = deferred();
     rig.core.engines.register({
@@ -965,118 +965,10 @@ describe("steer through the host and the harness process", () => {
     }
   });
 
-  it("a message steered into a turn that continues the build reaches the builder, restated or not", async () => {
-    for (const restate of [false, true]) {
-      const rig = await startRig();
-      rigs.push(rig);
-      const thread = await coordinatorChat(rig, `steer-continue-${restate}`, "claude-code");
-      const builders: DelegateRequest[] = [],
-        handed = deferred<SteerMessage>();
-      let started = 0;
-      rig.core.engines.register({
-        id: "claude-code",
-        label: "Claude",
-        kind: "delegated",
-        steersMidTurn: true,
-        status: async () => ({ code: "ready", detail: "" }),
-        models: async () => [],
-        delegate: async (request) => {
-          if (!request.coordinator) {
-            builders.push(request);
-            return ok("Built it.", "builder");
-          }
-          started++;
-          request.steer?.ready((message) => {
-            handed.resolve(message);
-            return true;
-          });
-          await request.onLiveTool!("continue_build", { text: "Make the sky red" });
-          const message = await handed.promise;
-          request.onEvent?.({ type: "steer_delivered", payload: { id: message.id } });
-          if (restate) await request.onLiveTool!("continue_build", { text: "Make the sky red and add rain" });
-          return ok("On it.", "coordinator", { steered: [message.id] });
-        },
-      });
-      await rig.core.sendUserMessage("Make the sky red", { thread, engine: "claude-code" });
-      await waitForLog(rig.core, () => started === 1, 15000);
-      await rig.core.sendUserMessage("And add rain", { thread, engine: "claude-code" });
-      await waitForLog(rig.core, handledCount(thread, 1), 20000);
-      assert.equal(builders.length, 1, `restated: ${restate}`);
-      assert.match(builders[0]!.prompt, /Make the sky red/);
-      assert.match(builders[0]!.prompt, /add rain/i, "the steered request is built, not only answered");
-      assert.equal(
-        (builders[0]!.prompt.match(/add rain/gi) ?? []).length,
-        1,
-        "once, whether or not the coordinator restated it",
-      );
-    }
-  });
-
-  it("a replayed turn that continues the build hands the builder what it had read, once", async () => {
-    const rig = await startRig();
-    rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-replay-continue", "codex");
-    const builders: DelegateRequest[] = [];
-    rig.core.engines.register({
-      id: "codex",
-      label: "Codex",
-      kind: "delegated",
-      status: async () => ({ code: "ready", detail: "" }),
-      models: async () => [],
-      delegate: async (request) => {
-        if (!request.coordinator) {
-          builders.push(request);
-          return ok("Built it.", "builder");
-        }
-        await request.onLiveTool!("continue_build", { text: "Make the sky red" });
-        return ok("On it.", "coordinator");
-      },
-    });
-    const action = (messageId: string, text: string) => ({
-      messageId,
-      type: "user_message",
-      threadId: thread,
-      project: "steer-replay-continue",
-      text,
-      engine: "codex",
-    });
-    await rig.core.append(
-      [
-        { type: "messages", messages: [{ role: "user", content: "Make the sky red" }] },
-        {
-          type: "custom",
-          event_type: "coordinator_message_queued",
-          payload: { messageId: "sky", action: action("sky", "Make the sky red") },
-        },
-        { type: "custom", event_type: "coordinator_message_processing", payload: { messageId: "sky" } },
-        { type: "messages", messages: [{ role: "user", content: "And add rain" }] },
-        {
-          type: "custom",
-          event_type: "coordinator_message_queued",
-          payload: { messageId: "rain", action: action("rain", "And add rain") },
-        },
-        {
-          type: "custom",
-          event_type: "coordinator_message_delivered",
-          payload: { messageId: "rain", into: "sky", how: "interrupt" },
-        },
-      ],
-      thread,
-    );
-    await rig.core.host.dispatch({ type: "boot_notice", notice: { reason: "crash_restart" } });
-    await waitForLog(rig.core, handledCount(thread, 1), 20000);
-    assert.equal(builders.length, 1);
-    assert.equal(
-      (builders[0]!.prompt.match(/And add rain/g) ?? []).length,
-      1,
-      "carried into the builder once, not twice",
-    );
-  });
-
   it("restart: a turn cut short is answered once more with the message it had read, and nothing twice", async () => {
     const rig = await startRig();
     rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-replay", "codex");
+    const thread = await finishedRunChat(rig, "steer-replay", "codex");
     const prompts: string[] = [];
     rig.core.engines.register({
       id: "codex",
@@ -1133,9 +1025,9 @@ describe("steer through the host and the harness process", () => {
     await rig.core.host.dispatch({ type: "boot_notice", notice: { reason: "cold_start" } });
     await settle(300);
     assert.equal(prompts.length, 2, "the cut-short turn once, the unread message once");
-    assert.match(prompts[0]!, /LATEST USER MESSAGE:\nBuild a pond/);
+    assert.match(prompts[0]!, /^Build a pond/, "the chat's own turn asks the message first");
     assert.match(prompts[0]!, /address it too:\n> And ducks/, "the message it had read rides with it");
-    assert.match(prompts[1]!, /LATEST USER MESSAGE:\nMake it run/);
+    assert.match(prompts[1]!, /^Make it run/);
     const events = await rig.core.store.listEvents(thread);
     assert.deepEqual(
       ["pond", "ducks", "night"].map((id) => messageQueueState(events as never).messages.get(id)!.state),

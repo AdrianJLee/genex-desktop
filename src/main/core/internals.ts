@@ -23,7 +23,6 @@ import type { AssetCall } from "./asset-calls.ts";
 import type { AssetService } from "./assets.ts";
 import type { ChatPermissionService } from "./chat-permissions.ts";
 import type { SteerDoor } from "./chat-steer.ts";
-import type { CapabilityAudience } from "../planning-capabilities.ts";
 import type { ConversationService } from "./conversation.ts";
 import type { CutOffCall } from "./cut-off-calls.ts";
 import type { UnsavedFile } from "./unsaved-files.ts";
@@ -272,11 +271,7 @@ export interface CoreChecks {
   assertNoLinkBelow(base: string, target: string): Promise<void>;
   /** Abort the connector calls in scope: a Stop's (`stop`, the default), or a turn's end (`turn`), which a lead's call outlives. */
   cancelConnectorCalls(binding?: { project?: string; threadId?: string }, by?: "stop" | "turn"): void;
-  capabilityFacts(
-    threadId: string,
-    project: string | null | undefined,
-    audience: CapabilityAudience,
-  ): Promise<{ revision: number; text: string }>;
+  capabilityFacts(threadId: string, project: string | null | undefined): Promise<{ revision: number; text: string }>;
   indexEvent(event: EventEnvelope): void;
   readyProject(project: GameProject): Promise<GameProject>;
   recordToolRevision(threadId: string, engine: string, revision?: number): Promise<void>;

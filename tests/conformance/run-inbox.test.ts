@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
-import { createRunInbox } from "../../src/harness-seed/loop/run-inbox.ts";
+import { conversationThrough, createRunInbox, latestRun } from "../../src/harness-seed/loop/run-inbox.ts";
 import type { AnyRecord, HarnessEvent } from "../../src/harness-seed/types/harness.d.ts";
 
 const RUN = "r";
@@ -113,4 +113,93 @@ describe("a run's inbox, read from the log", () => {
     const resumed = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
     assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), ["add a boss, from the chat"]);
   });
+});
+
+describe("addressed run inbox", () => {
+  it("retains planning-time guidance, filters targets/questions/other runs, and drains at a boundary", async () => {
+    const events: any[] = [
+      { id: "1", data: { type: "messages", messages: [{ role: "user", content: "Is it ready?" }] } },
+      {
+        id: "2",
+        data: {
+          type: "custom",
+          event_type: "run_steering",
+          payload: { runId: "r", text: "Use warm light", facetId: "light" },
+        },
+      },
+      {
+        id: "3",
+        data: { type: "custom", event_type: "run_steering", payload: { runId: "other", text: "Destroy it" } },
+      },
+      {
+        id: "4",
+        data: { type: "custom", event_type: "run_steering", payload: { runId: "r", text: "Keep walking peaceful" } },
+      },
+      // The director's own steer to a worker is not the user speaking.
+      {
+        id: "4b",
+        data: {
+          type: "custom",
+          event_type: "run_steering",
+          payload: { runId: "r", text: "fix the floating drums", facetId: "contact", source: "director" },
+        },
+      },
+    ];
+    const inbox = createRunInbox(
+      {
+        call: async (_: string, p: any) =>
+          p.after ? events.slice(events.findIndex((e) => e.id === p.after) + 1) : events,
+      } as never,
+      { threadId: "t", runId: "r" },
+    );
+    assert.deepEqual(await inbox.steering("river"), ["Keep walking peaceful"]);
+    assert.deepEqual(await inbox.backlog(), ["Use warm light"]);
+    assert.deepEqual(
+      await inbox.steering("contact"),
+      ["Keep walking peaceful"],
+      "the director's own steer never comes back as an instruction",
+    );
+    assert.deepEqual(await inbox.steering("light"), ["Use warm light", "Keep walking peaceful"]);
+    assert.equal(await inbox.finishing(), false);
+    events.push({
+      id: "5",
+      data: { type: "custom", event_type: "run_control", payload: { runId: "r", action: "finish" } },
+    });
+    assert.equal(await inbox.finishing(), true);
+    assert.deepEqual(await inbox.backlog(), []);
+  });
+  it("keeps paused and finished identity after an app restart", () => {
+    const es = [
+      { data: { type: "custom", event_type: "run_started", payload: { runId: "r", project: "village" } } },
+      { data: { type: "custom", event_type: "run_finished", payload: { runId: "r" } } },
+      { data: { type: "custom", event_type: "autopilot_paused", payload: { runId: "r" } } },
+    ];
+    assert.equal(latestRun(es as never)?.state, "paused");
+    const replaced = [
+      ...es,
+      { data: { type: "custom", event_type: "run_started", payload: { runId: "empty-replacement" } } },
+    ];
+    assert.equal(
+      latestRun(replaced as never, "r")?.state,
+      "paused",
+      "the registrar can still address an older saved run",
+    );
+  });
+});
+
+it("future queued messages stay out of an earlier turn prompt", () => {
+  const es = [
+    { id: "1", data: { type: "messages", messages: [{ role: "user", content: "first" }] } },
+    { id: "2", data: { type: "custom", event_type: "coordinator_message_queued", payload: { messageId: "a" } } },
+    { id: "3", data: { type: "messages", messages: [{ role: "user", content: "second" }] } },
+    { id: "4", data: { type: "custom", event_type: "coordinator_message_queued", payload: { messageId: "b" } } },
+  ];
+  assert.deepEqual(
+    (conversationThrough(es as never, "a") as typeof es).filter((e) => e.data.type === "messages").map((e) => e.id),
+    ["1"],
+  );
+  assert.deepEqual(
+    (conversationThrough(es as never, "b") as typeof es).filter((e) => e.data.type === "messages").map((e) => e.id),
+    ["1", "3"],
+  );
 });

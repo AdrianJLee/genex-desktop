@@ -146,10 +146,7 @@ describe("app_look", () => {
     await chat.core.setPermissionMode(chat.threadId, PermissionMode.Auto);
     const reader = await looksIn(chat, chat.runWorker("r1", chat.worktree, { readOnly: true }), []);
     assert.deepEqual(toolsOf(reader.request), [APP_LOOK_TOOL_NAME], "a reader gets no other host tool");
-    const none: Array<[string, Record<string, unknown>, string?]> = [
-      ["an unseated builder", { cwd: chat.worktree }],
-      ["the coordinator", { coordinator: { runId: RUN_ID }, readOnly: true }],
-    ];
+    const none: Array<[string, Record<string, unknown>, string?]> = [["an unseated builder", { cwd: chat.worktree }]];
     for (const [label, brief, engine] of none) {
       const { request } = await looksIn(chat, brief, [], engine);
       assert.ok(!toolsOf(request).includes(APP_LOOK_TOOL_NAME), label);

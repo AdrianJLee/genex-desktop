@@ -10,22 +10,13 @@ import { describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   commissionHours,
-  finishedLoopRun,
   keepsCommission,
   reopenAfterReply,
   reopenedRun,
   reopens,
-  servesReopen,
 } from "../../src/harness-seed/loop/reopen-run.ts";
-import { coordinatorReopens, handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
-import { coordinatorPrompt } from "../../src/harness-seed/loop/coordinator-prompts.ts";
-import * as coordinator from "../../src/harness-seed/loop/coordinator.ts";
-import * as coordinatorPrompts from "../../src/harness-seed/loop/coordinator-prompts.ts";
+import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { steersInto } from "../../src/harness-seed/loop/message-queue.ts";
-import * as afterLoopRunPrompts from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
-import * as delegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
-import * as runDispatch from "../../src/harness-seed/loop/run-dispatch.ts";
-import * as turnLoop from "../../src/harness-seed/loop/turn-loop.ts";
 import { HOUR_MS } from "../../src/harness-seed/loop/time.ts";
 import { plannerModel } from "../../src/harness-seed/loop/model-roles.ts";
 
@@ -180,7 +171,7 @@ describe("which messages and runs a reopen is for", () => {
       { label: "a finished build the chat may reopen", existing: launched, after: finished, keeps: true },
       { label: "a finished build a kept part does not serve", existing: launched, after: notMarked, keeps: false },
       { label: "a paused build", existing: launched, after: paused, keeps: false },
-      { label: "the coordinator's (no lead of the chat's own)", existing: launched, after: null, keeps: false },
+      { label: "a plain turn (no lead seated)", existing: launched, after: null, keeps: false },
     ];
     assert.deepEqual(
       rows.map(({ label, existing, after }) => ({ label, keeps: keepsCommission(existing, after as never) })),
@@ -198,14 +189,6 @@ describe("which messages and runs a reopen is for", () => {
       [2, 0.5, null, null, null, null, null],
     );
     assert.equal(commissionHours(null), null);
-
-    const parts = [turnLoop, delegatedTurn, afterLoopRunPrompts, runDispatch];
-    assert.equal(servesReopen(parts), true);
-    assert.equal(
-      servesReopen([turnLoop, delegatedTurn, { afterLoopRunNote: afterLoopRunPrompts.afterLoopRunNote }]),
-      false,
-    );
-    assert.equal(servesReopen([{ ...runDispatch, SERVES_REOPEN: "yes" }]), false);
   });
 
   it("R3. the run a reopen registers: the Loop's budgets, its builders and judges resolved from the message's picks as a launch resolves them, planned on the model the session answers on, the launch's readiness dropped", () => {
@@ -280,81 +263,6 @@ describe("which messages and runs a reopen is for", () => {
     const plannerless = { ...saved, roles: { planner: undefined, builder: undefined, judge: undefined } };
     const lead = reopenedRun(plannerless, budgets, { model: null, roles: { builder: "gpt-5.6-sol" } });
     assert.equal(plannerModel(lead), "default");
-  });
-});
-
-describe("a finished build the run's coordinator answers for", () => {
-  it("R12. its continue_build may reopen a finished run that seated a lead, with the build's own models; the coordinator is told the Loop only when its parts serve it", async () => {
-    const hostWith = (journal: Json | null) => ({
-      call: async (method: string, params: Json) =>
-        method === "artifact.read" && params.artifactId === `autopilot_${RUN}` ? journal : null,
-    });
-    const finished = { ...launched, state: "finished", landed: true };
-    const rows: Array<{ label: string; run: Json; journal: Json | null; reopens: boolean }> = [
-      {
-        label: "a lead of its own",
-        run: finished,
-        journal: { director: { lead: { chatSession: false } } },
-        reopens: true,
-      },
-      {
-        label: "the chat's own session",
-        run: finished,
-        journal: { director: { lead: { chatSession: true } } },
-        reopens: true,
-      },
-      {
-        label: "a paused run",
-        run: { ...finished, state: "paused" },
-        journal: { director: { lead: { chatSession: false } } },
-        reopens: false,
-      },
-      { label: "no journal", run: finished, journal: null, reopens: false },
-      {
-        label: "the classic pipeline (no director)",
-        run: finished,
-        journal: { phase: "done", facets: {} },
-        reopens: false,
-      },
-      {
-        label: "the long turn (no lead seated)",
-        run: finished,
-        journal: { director: { sessionId: "d-1" } },
-        reopens: false,
-      },
-      { label: "a lead record that is not one", run: finished, journal: { director: { lead: null } }, reopens: false },
-    ];
-    for (const row of rows) {
-      const loopRun = await finishedLoopRun(hostWith(row.journal), THREAD, row.run, "m9");
-      assert.equal(loopRun !== null, row.reopens, row.label);
-      if (loopRun)
-        assert.deepEqual(
-          {
-            engine: loopRun.engine,
-            model: loopRun.model,
-            messageId: loopRun.messageId,
-            reopenable: loopRun.reopenable,
-          },
-          { engine: "codex", model: null, messageId: "m9", reopenable: true },
-          `${row.label}: the build's own models, the message it answers`,
-        );
-    }
-
-    const prompt = (reopen: { hours: number | null } | null) =>
-      coordinatorPrompt({
-        events: [],
-        run: launched,
-        text: "add enemies",
-        journal: null,
-        history: "",
-        reopen,
-      });
-    assert.match(prompt({ hours: 2 }), /Loop is on[\s\S]*continue_build reopens it[\s\S]*up to 2 h/);
-    assert.match(prompt({ hours: null }), /until its lead calls finish/);
-    assert.doesNotMatch(prompt(null), /Loop is on/, "no Loop, no reopen: continue_build hands the work to a builder");
-
-    assert.equal(coordinatorReopens(), true);
-    assert.equal(servesReopen([coordinator, { ...coordinatorPrompts, SERVES_REOPEN: undefined }, runDispatch]), false);
   });
 });
 

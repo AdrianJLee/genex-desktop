@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CapabilityAudience, planningCapabilities } from "../../src/main/planning-capabilities.ts";
+import { planningCapabilities } from "../../src/main/planning-capabilities.ts";
 import type { PluginInfo, PluginManifest } from "../../src/shared/plugins.ts";
 import type { ConnectionSnapshot } from "../../src/shared/connections.ts";
 
@@ -59,25 +59,21 @@ test("a file skill reaches the facts as an index entry naming the tool that read
     ];
     const plugin = { manifest, enabled: true, removed: false } as PluginInfo;
     const connections = { sources: [] } as unknown as ConnectionSnapshot;
-    for (const audience of Object.values(CapabilityAudience)) {
-      const facts = planningCapabilities(1, [plugin], connections, [], false, audience);
-      const [entry] = JSON.parse(facts.split("\n\n")[2] ?? "{}").plugins;
-      assert.deepEqual(
-        entry.skills.at(-1),
-        { name: "card", summary: "How to play the card game.", readWith: "cards__skill" },
-        audience,
-      );
-      assert.equal(entry.skills[0].name, "greeting", "an inline skill keeps its text");
-      assert.match(entry.skills[0].text, /example__greet/);
-      assert.ok(
-        entry.tools.some((t: { name: string }) => t.name === "cards__skill"),
-        "the skill tool is listed with the builders' tools",
-      );
-      assert.doesNotMatch(facts, new RegExp(sentinel));
-      assert.doesNotMatch(facts, /for this game/, "a plugin is enabled for every game, not this one");
-    }
-    const conversation = planningCapabilities(1, [plugin], connections, [], false, CapabilityAudience.Conversation);
-    assert.match(conversation, /enabled for all games/);
+    const facts = planningCapabilities(1, [plugin], connections, [], false);
+    const [entry] = JSON.parse(facts.split("\n\n")[2] ?? "{}").plugins;
+    assert.deepEqual(entry.skills.at(-1), {
+      name: "card",
+      summary: "How to play the card game.",
+      readWith: "cards__skill",
+    });
+    assert.equal(entry.skills[0].name, "greeting", "an inline skill keeps its text");
+    assert.match(entry.skills[0].text, /example__greet/);
+    assert.ok(
+      entry.tools.some((t: { name: string }) => t.name === "cards__skill"),
+      "the skill tool is listed with the builders' tools",
+    );
+    assert.doesNotMatch(facts, new RegExp(sentinel));
+    assert.doesNotMatch(facts, /for this game/, "a plugin is enabled for every game, not this one");
   } finally {
     await rm(base, { recursive: true, force: true });
   }

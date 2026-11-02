@@ -14,7 +14,7 @@ import { isBelow } from "./paths.ts";
 
 /**
  * The seed generation that archives on upgrade; a manifest records the last one it reached. Epoch 2
- * removed the run's coordinator: an install below it archives once more.
+ * has one session answer every chat message: an install below it archives once more.
  */
 export const ARCHIVE_EPOCH = 2;
 

@@ -3,8 +3,8 @@
  * offers and the Allow / Deny questions it asks, answered in the chat instead of a terminal. Every
  * engine's chat session follows the chat's mode as far as it can (`permissionModesFor`).
  *
- * Whoever answers the person in a game chat asks: the chat's own session, and a build's lead or the
- * run's coordinator on Claude Code while it answers a message the person sent. Workers of the
+ * Whoever answers the person in a game chat asks: the chat's own session, and a build's lead on
+ * Claude Code while it answers a message the person sent. Workers of the
  * chat's lead follow the chat's mode: Bypass in a box that writes the home folder too, Auto, Accept
  * edits and Manual in a box that writes only their folders, Plan read-only; their questions wait in the chat, naming the
  * worker, until the person answers, and "always" counts for the whole chat. A Codex worker cannot

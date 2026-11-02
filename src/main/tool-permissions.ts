@@ -3,7 +3,7 @@
  * the person's answer in the chat. Modelled on the plugin consent ledger, with one difference:
  * the chat's own session has no timeout. Claude Code waits for the person, so this does too; the
  * delegation's own deadline and Stop still end the wait through the signal and `cancel()`. Only a
- * build's lead or the run's coordinator asks with a `timeoutMs`: nobody may be looking at its
+ * build's lead asks with a `timeoutMs`: nobody may be looking at its
  * card, and a run must not wait on it (a run's worker asks as it does). Its card also outlives the chat's turns (`outlivesTurn`):
  * the lead is not the chat's turn, so another message's turn ending is not its end. Settles each
  * request exactly once and never touches disk or the event log: the permission service records
@@ -33,7 +33,7 @@ export interface ToolPermissionRequest {
   /** Withdraw the request after this long (`by: 'timeout'`); none waits for the person. */
   timeoutMs?: number;
   /**
-   * A build's lead's or the run's coordinator's card: no turn of the chat's ending withdraws it
+   * A build's lead's card: no turn of the chat's ending withdraws it
    * (`cancel` with `by: 'turn'`); its own session's end, a Stop, the answer or `timeoutMs` do.
    */
   outlivesTurn?: boolean;

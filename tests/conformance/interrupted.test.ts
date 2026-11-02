@@ -211,7 +211,7 @@ describe("every death leaves a durable trace", () => {
  * `refs/studio/runs/<id>/integration` with nobody told they existed.
  */
 it("a director's run the app died inside is paused with the head it reached, not buried", async () => {
-  const { latestRun } = await import("../../src/shared/coordinator.ts");
+  const { latestRun } = await import("../../src/shared/chat-run.ts");
   const userData = path.join(await tmpDir("studio-director-interrupted-"), "userData");
   const runId = "run_paused";
   const base = "a".repeat(40);
@@ -349,8 +349,8 @@ it("a run that merged nothing is paused without promising a build", async () => 
  * Wrap up is a durable ask for the run's current session. A press that lands after the run is
  * over is refused: the Stop sheet stays open when the run ends under it, and there is nothing
  * running to wrap up. A resumed run registers again and ignores asks made before it
- * (`finishRequested`), so even a stale ask could not make it skip every builder. Both doors —
- * the sheet's IPC and the coordinator's `finish_run` — go through this one guard.
+ * (`finishRequested`), so even a stale ask could not make it skip every builder. Builds' Wrap up
+ * goes through this guard.
  */
 it("a wrap-up asked of a build that is already over is refused, so a Resume cannot inherit it", async () => {
   const userData = path.join(await tmpDir("studio-wrapup-"), "userData");

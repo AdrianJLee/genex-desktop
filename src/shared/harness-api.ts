@@ -178,11 +178,10 @@ export interface HarnessCompleteParams {
 
 /** What `engine.delegate` takes: a delegation's serializable half plus the routing fields. */
 export interface HarnessDelegateParams {
-  coordinator?: { runId: string; messageId?: string };
   /**
-   * The chat's own session after a run it led: the run's controls it keeps (`run_status`,
-   * `show_build`, `land_build`, shared/coordinator.ts `RunControl`), answered by the host for this
-   * run and message as the coordinator's tools are. Honoured only for the chat's own session.
+   * The chat's own session after a closed Loop run: the run's controls it keeps (`run_status`,
+   * `show_build`, `land_build`, shared/chat-run.ts `RunControl`), answered by the host for this
+   * run and message (`run.control`). Honoured only for the chat's own session.
    */
   /**
    * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
@@ -353,8 +352,6 @@ export interface HarnessHostApi {
     params: { project: string; threadId: string; plugin: string; reason?: string };
     result: PluginsSuggestAnswer;
   };
-  /** What this game's builders can use, for a conversation that cannot call it (the local coordinator). */
-  "capabilities.describe": { params: { threadId: string; project?: string }; result: string };
   "plugins.invoke": {
     params: {
       project: string;
@@ -531,7 +528,11 @@ export interface HarnessHostApi {
     params: { threadId: string; into: string; messages: SteerMessage[]; interrupt?: boolean; native?: boolean };
     result: { how: SteerDelivery | null; accepted: string[] };
   };
-  "coordinator.tool": {
+  /**
+   * One of the run's controls, or the resume a chat's own session recorded, for this run and the
+   * message asking (shared/chat-run.ts `HostRunTool`): recorded in the chat, answered with words.
+   */
+  "run.control": {
     params: { threadId: string; runId: string; messageId?: string; name: string; args?: Record<string, unknown> };
     result: string;
   };
@@ -740,7 +741,6 @@ export const HostMethod = {
   PluginsWorkerTypes: "plugins.workerTypes",
   PluginsFind: "plugins.find",
   PluginsSuggest: "plugins.suggest",
-  CapabilitiesDescribe: "capabilities.describe",
   PluginsInvoke: "plugins.invoke",
   McpTools: "mcp.tools",
   McpInvoke: "mcp.invoke",
@@ -761,7 +761,7 @@ export const HostMethod = {
   FinishReview: "finish.review",
   FinishSettle: "finish.settle",
   EngineSteer: "engine.steer",
-  CoordinatorTool: "coordinator.tool",
+  RunControl: "run.control",
   EngineDelegations: "engine.delegations",
   EngineHardware: "engine.hardware",
   GameList: "game.list",
@@ -845,7 +845,6 @@ export const HARNESS_PARAM_SCHEMAS = {
   "snapshot.diff": z.object({ workspace: optionalText }),
   "snapshot.worktree": z.object({ project, commit: optionalText, name: text, runId: optionalText }),
   "snapshot.removeWorktree": z.object({ project, path: text }),
-  "capabilities.describe": z.object({ project: optionalText }),
   "plugins.tools": z.object({ project: optionalText }).nullish(),
   "plugins.workerTypes": z.object({ project }),
   "jobs.list": z.object({ project, runId: optionalText, endedAfter: z.number().nullish() }),

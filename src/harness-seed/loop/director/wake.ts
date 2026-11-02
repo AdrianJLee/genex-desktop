@@ -57,8 +57,6 @@ import {
   wakeRules,
   wrapLead,
 } from "./wake-prompts.ts";
-import * as liveChat from "../live-chat.ts";
-import * as messageQueue from "../message-queue.ts";
 import {
   afterTurn,
   nextWake,
@@ -1330,21 +1328,10 @@ export async function runWakeLoop(
 
 /**
  * The wrap-up began: the lead still hears the chat, and what is sent from now on stays the chat's to
- * answer once the run closes (`LeadLine.wrapUp`). Only when the chat's door and queue both keep what
- * the lead is told then: a kept older copy of either would deliver it to a run that is ending, and
- * nobody would answer it. Otherwise, or with a kept older lead-line.ts, the line shuts and what is
- * sent waits for the run to close.
+ * answer once the run closes (`LeadLine.wrapUp`).
  */
 function wrapUpLine(line: LeadLine | null): void {
-  if (typeof line?.wrapUp === "function" && wrapUpKeeps()) line.wrapUp();
-  else line?.shut();
-}
-
-/** Do the chat's door (live-chat.ts) and queue (message-queue.ts) keep what a lead in its wrap-up is told? */
-export function wrapUpKeeps(): boolean {
-  const door: { DOOR_KEEPS_IN_WRAP_UP?: unknown } = liveChat;
-  const queue: { QUEUE_KEEPS_TOLD?: unknown } = messageQueue;
-  return door.DOOR_KEEPS_IN_WRAP_UP === true && queue.QUEUE_KEEPS_TOLD === true;
+  line?.wrapUp();
 }
 
 /**

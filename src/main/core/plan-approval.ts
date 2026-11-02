@@ -15,7 +15,7 @@
  * it or a failed turn drops it.
  */
 import { randomUUID } from "node:crypto";
-import { BuildLaunch, isBuildLaunch } from "../../shared/coordinator.ts";
+import { BuildLaunch, isBuildLaunch } from "../../shared/chat-run.ts";
 import {
   engineMode,
   PermissionDecision,

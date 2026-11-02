@@ -35,7 +35,7 @@ import type { BackdropShaderRequest, BackdropShaderResult } from "../shared/back
 import type { GameLocation, GameName, GameNameRequest, PlayEngine } from "../shared/game-project.ts";
 import { StudioPlatform } from "../shared/boot.ts";
 import type { GameSoundRequest } from "../shared/game-sound.ts";
-import { latestRun } from "../shared/coordinator.ts";
+import { latestRun } from "../shared/chat-run.ts";
 import { validateCoverSurface } from "../shared/cover-shader.ts";
 import { coverLookName, coverRecipeFromTool } from "../shared/cover-recipe.ts";
 import { CustomEvent, customEventData } from "../shared/custom-events.ts";

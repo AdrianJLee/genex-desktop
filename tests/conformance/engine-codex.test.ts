@@ -174,18 +174,6 @@ describe("codex engine", () => {
     assert.equal(result.summary, "Partial work");
   });
 
-  it("keeps a read-only coordinator in its stable host-owned directory across resumes", async () => {
-    const { fn, seen } = fakeExec(successRun);
-    const { engine, root } = await signedInEngine(fn);
-    const cwd = path.join(root, "coordinator");
-    await mkdir(cwd, { recursive: true });
-    const first = await engine.delegate({ prompt: "Report build progress", cwd, readOnly: true, coordinator: true });
-    await engine.delegate({ prompt: "Report checks", cwd, readOnly: true, coordinator: true, resume: first.sessionId });
-    assert.equal(seen[0]!.cwd, cwd);
-    assert.equal(seen[1]!.cwd, cwd);
-    assert.ok(seen[1]!.argv.includes("resume"));
-    assert.ok(seen[1]!.argv.includes(first.sessionId!));
-  });
   it("runs the contractor sandboxed, non-interactive, and on the studio's own credential home", async () => {
     const { fn, seen } = fakeExec(successRun);
     const { engine, root } = await signedInEngine(fn);

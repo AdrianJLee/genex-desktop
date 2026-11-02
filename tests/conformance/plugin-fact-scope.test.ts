@@ -22,7 +22,7 @@ import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import type { ToolOffered } from "../../src/substrate/plugins/tool-allow.ts";
 import { coreLite } from "../helpers/core-lite.ts";
-import { copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
+import { capabilityFactsOf, copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 // biome-ignore lint/suspicious/noExplicitAny: a hostile manifest is any shape a writer may send.
@@ -372,8 +372,7 @@ test("whether a connector reaches a game is the one rule its listing, capability
   const kite = await core.games.scaffold(web);
   await writeFile(path.join(harbor.dir, "Harbor.uproject"), "{}");
   const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
-  const describe = async (project: string) =>
-    String(await api["capabilities.describe"]?.({ project, threadId: await core.createGameThread(project) }));
+  const describe = async (project: string) => capabilityFactsOf(core, await core.createGameThread(project), project);
   assert.doesNotMatch(await describe(web), /Unreal · editor/, "a web game's capability facts");
   assert.match(await describe(harbor.name), /Unreal · editor/, "a game holding an Unreal project's");
 

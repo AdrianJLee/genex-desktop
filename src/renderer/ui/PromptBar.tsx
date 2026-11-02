@@ -608,7 +608,7 @@ interface PromptBarProps {
   ref?: Ref<PromptBarHandle>;
   /** A reply about something on the Builds graph: the chip above the prompt, and its hint. */
   about?: ReplyAboutChip | null;
-  /** A run already belongs to this chat. Messages go to its coordinator. */
+  /** A build of this chat is running: messages go to its lead or wait for it. */
   coordinating?: boolean;
   /** That run's lead takes the chat while it builds (chat/live-chat.ts): a message reaches it now. */
   leadListens?: boolean;

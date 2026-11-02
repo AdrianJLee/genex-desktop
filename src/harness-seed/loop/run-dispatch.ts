@@ -47,19 +47,12 @@ export const RunStartRefusal = {
 } as const;
 export type RunStartRefusal = (typeof RunStartRefusal)[keyof typeof RunStartRefusal];
 
-/**
- * This start reads a reopened run's inbox from its ask (`RunStart.reopen`), and closes a crashed
- * reopen (`closeFailedRun`): the chat reopens a finished build only when every part it depends on
- * says so (reopen-run.ts).
- */
-export const SERVES_REOPEN = true;
-
 /** This start leads a Loop on a project of any kind: the chat's launch reads it by namespace (`open-loop-parts.ts`). */
 export const SERVES_OPEN_LOOP = true;
 
 /** What the chat and the run record are told. */
 const MESSAGE = {
-  runOwnsThread: "A run already owns this thread or project. Message its coordinator instead.",
+  runOwnsThread: "A run already owns this thread or project.",
   noJournal: "no resumable journal for this run — it may predate Autopilot or have been archived",
   alreadyBuilding: (project: string) =>
     `A build is already running for **${project}** — nothing new was started. Ask here about the one that is running, or stop it first.`,
@@ -362,7 +355,7 @@ export async function handleRunStart(
   // A run the chat's own session asked to resume, stopped since its reply ended: the reservation
   // below clears the thread's Stop, so it is asked first (after-loop-run.ts).
   if (resumeStopped(studio, action)) return;
-  // Reserve before the first await, including resumed runs dispatched by the coordinator.
+  // Reserve before the first await, including resumed runs.
   let settle: (value?: unknown) => void = () => {};
   const settled = new Promise((resolve) => {
     settle = resolve;
@@ -448,8 +441,8 @@ async function startReservedRun(
   }
   // One pick, three jobs: the spec arrives with the composer's model and leaves here with
   // its planner, builders and critics resolved (model-roles.ts). A resumed run keeps the
-  // roles it was launched with; a reopened one arrives with them already resolved — its
-  // message's picks, or the build's own for the coordinator's reopen (reopen-run.ts `reopenedRun`).
+  // roles it was launched with; a reopened one arrives with them already resolved from its
+  // message's picks (reopen-run.ts `reopenedRun`).
   const run = withRoles(action.run as Run);
   if (studio.cancels.has(threadId)) {
     // The chat was promised a build: it is told that none started.

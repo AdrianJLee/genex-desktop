@@ -46,10 +46,10 @@ import { EventKind, type EventData, type EventEnvelope, type Message, ThreadKind
 import { messageQueueState } from "../../shared/message-queue.ts";
 import { DispatchActionType, HarnessCapability, HarnessState, type ReferenceFrame } from "../../shared/protocol.ts";
 import { RunState } from "../../shared/run-state.ts";
-import { latestRun } from "../../shared/coordinator.ts";
+import { latestRun } from "../../shared/chat-run.ts";
 import type { PlacedRule } from "../../shared/project-workspace.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
-import { listDirs, pathExists } from "../../substrate/fsx.ts";
+import { pathExists } from "../../substrate/fsx.ts";
 import { isUuid } from "../../substrate/ids.ts";
 import { toolchain } from "../../substrate/toolchain.ts";
 import {
@@ -85,9 +85,6 @@ const LOG_DETAIL_CHARS = 300;
 const MESSAGE_ID = /^[\w-]{1,80}$/;
 /** A reference picture a message saved: one file directly in the game's `references/`. */
 const REFERENCE_FILE = /^references\/[^/]+$/;
-/** The artifacts a run coordinator keeps its session in, one per run. */
-const COORDINATOR_ARTIFACT_PREFIX = "coordinator_";
-
 /**
  * What the person reads when Genex itself kept their Rewind from the game's app (its lock), by the
  * hold and the app's label: never the words written for agents. Their own action never waits for
@@ -609,7 +606,7 @@ export class ChatRewindService {
   /**
    * A rewind lands between answers, never under one: a running answer would outlive it. A running
    * build is no answer: the rewind stops it first, with whatever this chat's turns do for it
-   * meanwhile (its lead, its coordinator, its workers). Returns that build.
+   * meanwhile (its lead, its workers). Returns that build.
    */
   async #assertRewindable(threadId: string, meta: RewindMeta): Promise<string | null> {
     if (meta?.kind !== ThreadKind.Game) throw new CodedError(RewindBlock.NotGameChat, MESSAGE.OnlyGameChat());
@@ -917,7 +914,6 @@ export class ChatRewindService {
         () => {},
         (err: unknown) => this.#log(MESSAGE.tidyFailed(threadId, what, err)),
       );
-    await tidy("clearing coordinator sessions", () => this.#clearCoordinatorSessions(threadId));
     const rewindId = undoOf(applied.restored);
     const marker = customEventData(CustomEvent.ConversationRewound, {
       ...applied.planned.rewind,
@@ -998,18 +994,6 @@ export class ChatRewindService {
       throw err;
     }
     return restored.files;
-  }
-
-  /** A run coordinator's saved session remembers the withdrawn turns: the next one starts fresh. */
-  async #clearCoordinatorSessions(threadId: string): Promise<void> {
-    const store = this.#core.store;
-    for (const artifact of await listDirs(store.artifactsDir(threadId)).catch(() => [] as string[])) {
-      if (!artifact.startsWith(COORDINATOR_ARTIFACT_PREFIX)) continue;
-      const prior = await store
-        .readArtifact<{ sessionId?: string | null; engine?: string }>(threadId, artifact)
-        .catch(() => null);
-      if (prior?.sessionId) await store.writeArtifact(threadId, artifact, { ...prior, sessionId: null });
-    }
   }
 
   async #tellHarness(threadId: string, applied: AppliedRewind): Promise<void> {

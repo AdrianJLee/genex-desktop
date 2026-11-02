@@ -271,7 +271,7 @@ describe("a chat's own Claude session asks the person", () => {
   });
 
   it("a read-only brief stays read-only, whatever else it carries", async () => {
-    // Upstream's read-only sessions (a waking run's lead, the coordinator, a playtester) are never
+    // Upstream's read-only sessions (a waking run's lead, a playtester) are never
     // the person's own: the host hands them no `permissions` (a lead the person talks to gets
     // `leadAsks`, below), and the engine keeps them read-only anyway.
     const { fn, seen } = fakeQuery();
@@ -853,7 +853,7 @@ describe("a chat's own Claude session asks the person", () => {
 });
 
 /**
- * A build's lead (and the run's coordinator) is read-only and unattended, until the host hands it
+ * A build's lead is read-only and unattended, until the host hands it
  * `leadAsks`: then it keeps what the chat's own session keeps, starts in the chat's Auto, Accept
  * edits or Bypass, else in Manual so every edit and command reaches `canUseTool`, the host answers
  * for the chat's mode, and the picker switches it mid-turn. Everything else about its session stays

@@ -2,7 +2,7 @@
  * Claude Code permissions in a game chat, from the host's side: only the session answering a
  * message the person sent in this game's own chat is handed a mode and a way to ask; every other
  * delegation (builders, anything the harness shapes on its own) keeps the sandboxed contract, and
- * a build's lead or the run's coordinator asks from its own seat (lead-sessions-host.test.ts). A question lands in the chat as a pending card and its answer as a
+ * a build's lead asks from its own seat (lead-sessions-host.test.ts). A question lands in the chat as a pending card and its answer as a
  * settled one; a Stop, the turn's end or a restart withdraws it without anyone's click; and the
  * harness can neither forge the person's chat nor write their questions.
  */
@@ -160,7 +160,6 @@ describe("game chat permissions", () => {
       { readOnly: true },
       { class: "improvement" },
       { ownership: { facetId: "world", owns: ["src/world"], ownsMain: false } },
-      { coordinator: { runId: "run-c" }, readOnly: true, timeoutMs: 300_000 },
     ];
     for (const extra of unattended) {
       const request = await brief(extra);

@@ -2129,7 +2129,7 @@ function chatMode(request: DelegateRequest): PermissionMode | null {
  * included. The only place it can write is the studio's bridge there.
  */
 function startsElsewhere(request: DelegateRequest): boolean {
-  const readOnly = Boolean(request.readOnly) && !request.coordinator;
+  const readOnly = Boolean(request.readOnly);
   return readOnly || chatMode(request) === PermissionMode.Plan || request.worker?.mode === PermissionMode.Plan;
 }
 

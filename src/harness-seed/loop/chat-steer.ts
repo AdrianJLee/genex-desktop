@@ -5,8 +5,7 @@
  * read a message mid-turn is interrupted and resumed with it in front.
  *
  * Generic on purpose: whichever session is the chat's current turn — the contractor (a Loop
- * chat's too, and the chat's own session after a run it led), or a run's coordinator — runs
- * through here unchanged. A runner that can go on with another message's settings hands its
+ * chat's too, and the chat's own session after a run) — runs through here unchanged. A runner that can go on with another message's settings hands its
  * `switches` (steer-switch.ts): a message that changes how the turn runs then joins it too, and the
  * next leg runs on its settings; a slash command runs as a leg of its own, then the turn carries on.
  */

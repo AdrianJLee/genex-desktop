@@ -22,7 +22,7 @@ export type ChatActivityPhase = (typeof ChatActivityPhase)[keyof typeof ChatActi
 
 /** Whose session a `session_activity` record reports (`delegationActivityScope`). Persisted: never rename a value. */
 export const SessionActivityRole = {
-  /** The conversation's own session: the director or the coordinator. */
+  /** The conversation's own session: the chat's own, or a run's lead. */
   Planner: "planner",
   /** A read-only checker: a reviewer, a reader. */
   Reviewer: "reviewer",
@@ -47,7 +47,6 @@ interface ActivityEvent {
 /** What a delegated session was started for, as `delegationActivityScope` reads it. */
 interface DelegatedSession {
   director?: { runId?: string } | null;
-  coordinator?: { runId?: string } | null;
   selfCapture?: { runId?: string; facetId?: string } | null;
   ownership?: unknown;
   readOnly?: boolean;
@@ -60,7 +59,7 @@ interface DelegatedSession {
  * reviews; a session that owns work builds; anything else plans.
  */
 function sessionRole(input: DelegatedSession): SessionActivityRole {
-  if (input.director || input.coordinator) return SessionActivityRole.Planner;
+  if (input.director) return SessionActivityRole.Planner;
   if (input.worker) return SessionActivityRole.Builder;
   if (input.readOnly) return SessionActivityRole.Reviewer;
   const ownsWork = Boolean(input.selfCapture?.runId || input.ownership);
@@ -71,7 +70,7 @@ function sessionRole(input: DelegatedSession): SessionActivityRole {
 export function delegationActivityScope(input: DelegatedSession) {
   return {
     role: sessionRole(input),
-    runId: input.director?.runId ?? input.coordinator?.runId ?? input.selfCapture?.runId,
+    runId: input.director?.runId ?? input.selfCapture?.runId,
     facetId: input.selfCapture?.facetId,
   };
 }

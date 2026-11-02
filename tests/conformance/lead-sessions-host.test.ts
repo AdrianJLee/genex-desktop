@@ -192,11 +192,6 @@ describe("a run's sessions never take the chat's bookmark", () => {
         sessionId: "builder-1",
         extra: { selfCapture: { project: game, root, runId: "run_x", facetId: "prep", iteration: 0, label: "prep" } },
       },
-      {
-        label: "the run's coordinator",
-        sessionId: "coordinator-1",
-        extra: { coordinator: { runId: "run_x" }, readOnly: true },
-      },
     ];
     const seen: Array<{ label: string; bookmark: unknown; harness: unknown }> = [];
     for (const { label, sessionId, extra } of runSessions) {
@@ -516,8 +511,8 @@ async function closedLoopRun(core: CoreLite["core"], project: { name: string; di
 
 /**
  * The same agent after the build: once a lead's run is over, the chat's own session — in the game
- * folder, its hands back — keeps the run's controls (`runControls`), answered by the host as the
- * coordinator's tools are. Nothing else is given them, and a control never reaches another run.
+ * folder, its hands back — keeps the run's controls (`runControls`), answered by the host
+ * (`run.control`). Nothing else is given them, and a control never reaches another run.
  */
 describe("the chat's own session after a lead's run", () => {
   /** A delegated engine whose session calls `calls` while it holds its folder, and keeps each answer. */
@@ -673,7 +668,7 @@ describe("the chat's own session after a lead's run", () => {
   });
 });
 
-/** What a build's lead or the run's coordinator reads when its chat was closed (archived). */
+/** What a build's lead reads when its chat was closed (archived). */
 const CLOSED =
   "This chat was closed, so nobody can approve this and it was not allowed. Do not retry it; say in your reply what you needed.";
 
@@ -812,14 +807,13 @@ async function leadChat({ leadAskTimeoutMs }: { leadAskTimeoutMs?: number } = {}
 
 /**
  * Whoever answers the person asks: while a build runs, the person's messages go to its lead (live
- * chat), and a lead or the run's coordinator answering them asks as the chat's own session would,
+ * chat), and a lead answering them asks as the chat's own session would,
  * in the person's mode, whether or not the person is talking to it: a card nobody answers is
  * withdrawn after five minutes.
  */
-describe("a build's lead and the run's coordinator ask the person they answer", () => {
-  it("hands a way to ask only to the lead answering its chat and the coordinator of its run", async () => {
-    const { core, game, threadId, worktree, runId, seen, delegate, leadBrief, personSays } = await leadChat();
-    const said = await personSays();
+describe("a build's lead asks the person it answers", () => {
+  it("hands a way to ask only to the lead answering its chat", async () => {
+    const { core, game, threadId, worktree, runId, seen, delegate, leadBrief } = await leadChat();
     const other = await core.games.scaffold("lead-asks-other");
     const otherChat = await core.threadForGame(other.name);
     const secondChat = await core.store.createThread({
@@ -829,16 +823,6 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
     const forged = await core.store.createThread({ title: "x" });
     const cases: Array<{ label: string; extra: Record<string, unknown>; thread?: string; asks: boolean }> = [
       { label: "the lead answering its chat", extra: leadBrief(), asks: true },
-      {
-        label: "the run's coordinator answering a message",
-        extra: { coordinator: { runId, messageId: said }, readOnly: true, timeoutMs: 300_000 },
-        asks: true,
-      },
-      {
-        label: "a coordinator answering a message the person never sent",
-        extra: { coordinator: { runId, messageId: "m" }, readOnly: true, timeoutMs: 300_000 },
-        asks: false,
-      },
       { label: "a lead not answering its chat", extra: leadGrant(threadId, game, runId, worktree), asks: false },
       {
         label: "a director with its own hands",
@@ -874,11 +858,6 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
           cwd: worktree,
           readOnly: true,
         },
-        asks: false,
-      },
-      {
-        label: "a coordinator of a run this chat never started",
-        extra: { coordinator: { runId: "run_elsewhere", messageId: "m" }, readOnly: true },
         asks: false,
       },
       { label: "the lead in another chat of its game", extra: leadBrief(secondChat), thread: secondChat, asks: false },
@@ -1100,36 +1079,6 @@ describe("a build's lead and the run's coordinator ask the person they answer", 
     );
   });
 
-  it("the coordinator asks in the chat's mode, while it answers the person's message and after", async () => {
-    const { core, threadId, runId, asking, personSays, queue, delegate, seen } = await leadChat();
-    await core.setPermissionMode(threadId, "default");
-    const message = await personSays();
-    await queue(message, "coordinator_message_queued");
-    await queue(message, "coordinator_message_processing");
-    const coordinator = {
-      coordinator: { runId, messageId: message },
-      readOnly: true,
-      timeoutMs: 300_000,
-      chatTurn: { messageId: message },
-    };
-    const command = { tool: "Bash", input: { command: "ls ~/Desktop" } };
-    const { card, done } = await asking(command, coordinator, { waitForCard: true });
-    assert.ok(card, "a card in the chat");
-    core.answerPermission(card.requestId, { decision: "allow" });
-    assert.deepEqual((await done()).answer, { decision: "allow" });
-    // Flipped: once its message was handled, its question was denied at once,
-    // with no card. The chat's mode decides it now, for as long as the session runs.
-    const handled = () => queue(message, "coordinator_message_handled").then(() => {});
-    const after = await asking(command, coordinator, { waitForCard: true, first: handled });
-    assert.ok(after.card, "still a card: the chat's mode decides");
-    core.answerPermission(after.card.requestId, { decision: "allow" });
-    assert.deepEqual((await after.done()).answer, { decision: "allow" });
-    // Its seat is a message the host noted as the person's and not yet answered, as the chat's own
-    // session's: a coordinator started for one already handled runs unattended.
-    await delegate(coordinator);
-    assert.equal(seen.at(-1)!.leadAsks, undefined, "no seat without the person's message");
-  });
-
   it("a message handed to the lead never makes the chat's own session ask, heard or not", async () => {
     const { seen, delegate, personSays, handToLead, heard } = await leadChat();
     const own = await personSays();
@@ -1214,8 +1163,8 @@ function heldSession() {
 }
 
 /**
- * The composer's picker reached only the chat's own session. A lead or the run's coordinator took the
- * chat's mode when its session started: started in Manual it went on carding once the chat moved to
+ * The composer's picker reached only the chat's own session. A lead took the chat's mode when its
+ * session started: started in Manual it went on carding once the chat moved to
  * Auto or Accept edits, and started in another mode its screen asked first for every call once the
  * chat left it, until its next session. The picker switches a running lead now, as the chat's own
  * session, beside it on the same chat; only a lead whose switch fails asks first.
@@ -1223,55 +1172,36 @@ function heldSession() {
 describe("the picker switches a lead's running session", () => {
   const command = { tool: "Bash", input: { command: "ls ~/Downloads" } };
 
-  it("switches the lead, the coordinator and the chat's own session on one chat, each to its mode for the chat's", async () => {
-    const { core, threadId, runId, delegate, leadBrief, personSays, queue, whileRunning, seen } = await leadChat();
+  it("switches the lead and the chat's own session on one chat, each to its mode for the chat's", async () => {
+    const { core, threadId, delegate, leadBrief, personSays, whileRunning, seen } = await leadChat();
     // Started in Auto, a lead that was not switched would ask first while the chat is elsewhere.
     await core.setPermissionMode(threadId, "auto");
     const lead = heldSession();
-    const coordinator = heldSession();
     const chat = heldSession();
     whileRunning(async (request) => {
-      const held = request.coordinator ? coordinator : request.leadAsks ? lead : chat;
+      const held = request.leadAsks ? lead : chat;
       await held.run(request);
     });
     const turns = [delegate(leadBrief())];
     await lead.started;
-    const asked = await personSays();
-    await queue(asked, "coordinator_message_queued");
-    await queue(asked, "coordinator_message_processing");
-    turns.push(
-      delegate({
-        coordinator: { runId, messageId: asked },
-        readOnly: true,
-        timeoutMs: 300_000,
-        chatTurn: { messageId: asked },
-      }),
-    );
-    await coordinator.started;
     turns.push(delegate({ chatTurn: { messageId: await personSays() } }));
     await chat.started;
-    const leadAsks = seen.find((request) => request.leadAsks && !request.coordinator)!.leadAsks!;
-    const coordinatorAsks = seen.find((request) => request.coordinator)!.leadAsks!;
+    const leadAsks = seen.find((request) => request.leadAsks)!.leadAsks!;
     assert.ok(
       seen.some((request) => request.permissions),
-      "the chat's own session runs beside them",
+      "the chat's own session runs beside it",
     );
-    assert.deepEqual([leadAsks.mode, coordinatorAsks.mode], ["auto", "auto"]);
+    assert.equal(leadAsks.mode, "auto");
 
     for (const mode of ["acceptEdits", "plan", "default", "bypassPermissions", "auto"] as const) {
       await core.setPermissionMode(threadId, mode);
-      for (const [label, asks] of [
-        ["lead", leadAsks],
-        ["coordinator", coordinatorAsks],
-      ] as const)
-        assert.equal(await asks.screen(command), null, `${mode}: the ${label} runs in it, so nothing asks first`);
+      assert.equal(await leadAsks.screen(command), null, `${mode}: the lead runs in it, so nothing asks first`);
     }
     assert.deepEqual(chat.modes, ["acceptEdits", "plan", "default", "bypassPermissions", "auto"]);
     // Plan is Manual for a lead, the host denying for the chat's mode (a build is approved work); a
     // session already in the mode it needs is left alone.
     const leadModes = ["acceptEdits", "default", "bypassPermissions", "auto"];
     assert.deepEqual(lead.modes, leadModes, "the lead follows the picker");
-    assert.deepEqual(coordinator.modes, leadModes, "and so does the coordinator");
 
     // The chat's own session that will not switch is still the picker's to show, lead or no lead.
     chat.refusing(() => "unreachable");
@@ -1281,18 +1211,15 @@ describe("the picker switches a lead's running session", () => {
 
     // The chat's own turn ends while the build goes on: the lead is still the picker's.
     chat.end();
-    await turns[2];
+    await turns[1];
     await core.setPermissionMode(threadId, "default");
     assert.equal(lead.modes.at(-1), "default", "the lead outlives the chat's own session in the picker's reach");
-    assert.equal(coordinator.modes.at(-1), "default");
     assert.equal(chat.modes.at(-1), "auto", "a session that ended is not switched");
 
     lead.end();
     await turns[0];
     await core.setPermissionMode(threadId, "acceptEdits");
     assert.equal(lead.modes.at(-1), "default", "nor is a lead whose session ended");
-    assert.equal(coordinator.modes.at(-1), "acceptEdits", "the session still running is");
-    coordinator.end();
     await Promise.all(turns);
   });
 
@@ -1590,10 +1517,9 @@ describe("a lead has the chat's own session's plugins and connectors, on the bui
     assert.equal(phases.includes("connecting"), false, "and none says it is connecting tools");
   });
 
-  it("still gives none to a read-only session that leads nothing, an older harness's playtest grant or the coordinator", async () => {
-    const { core, threadId, game, runId, worktree, delegate, personSays, seen } = await leadChat();
+  it("still gives none to a read-only session that leads nothing, or an older harness's playtest grant", async () => {
+    const { core, threadId, game, runId, worktree, delegate, seen } = await leadChat();
     standInHostTools(core);
-    const said = await personSays();
     const cases: Array<[string, Record<string, unknown>]> = [
       ["a read-only session in the game folder", { readOnly: true }],
       [
@@ -1612,7 +1538,6 @@ describe("a lead has the chat's own session's plugins and connectors, on the bui
           readOnly: true,
         },
       ],
-      ["the run's coordinator", { coordinator: { runId, messageId: said }, readOnly: true, timeoutMs: 300_000 }],
       [
         "a lead's grant for a worktree that is not this game's run's",
         leadGrant(threadId, game, runId, await tmpDir("lead-not-a-worktree-")),
@@ -1982,19 +1907,6 @@ describe("a lead's edit in the game folder is the chat's mode's to decide", () =
     }
   });
 
-  it("leaves the coordinator's edit in the game folder to the mode too", async () => {
-    const { core, project, runId, threadId, delegate, seen, personSays, queue } = await leadChat();
-    await core.setPermissionMode(threadId, "bypassPermissions");
-    const message = await personSays();
-    await queue(message, "coordinator_message_queued");
-    await queue(message, "coordinator_message_processing");
-    await delegate({ coordinator: { runId, messageId: message }, readOnly: true, chatTurn: { messageId: message } });
-    const coordinator = seen.at(-1)!.leadAsks!;
-    const edit = { tool: "Write", input: { file_path: path.join(project.dir, "src", "main.js") } };
-    assert.equal(await coordinator.screen(edit), null);
-    assert.equal(await coordinator.screen({ tool: "Bash", input: { command: "ls ~/Desktop" } }), null);
-  });
-
   it("reaches what the chat's own session reaches: no deny list for the person's other games", async () => {
     const { core, worktree, runId, game, delegate, leadBrief, seen } = await leadChat();
     const other = await core.games.scaffold("lead-asks-sibling");
@@ -2015,10 +1927,10 @@ describe("a lead's edit in the game folder is the chat's mode's to decide", () =
   });
 
   // The harness names `extraReads` freely, and a folder read is a folder Accept edits (and Auto,
-  // inside its working folders) writes without asking: a lead or coordinator reads the folders the
+  // inside its working folders) writes without asking: a lead reads the folders the
   // host derived itself and those the chat recorded, as the chat's own session, never the brief's.
   it("reads the folders the host derived and the chat recorded, never a folder the brief names", async () => {
-    const { core, project, worktree, runId, threadId, delegate, leadBrief, seen, personSays } = await leadChat();
+    const { core, worktree, threadId, delegate, leadBrief, seen } = await leadChat();
     await core.setPermissionMode(threadId, "acceptEdits");
     const recorded = await tmpDir("lead-recorded-");
     await core.store.updateThread(threadId, { metadata: { extraReads: [recorded] } });
@@ -2033,18 +1945,13 @@ describe("a lead's edit in the game folder is the chat's mode's to decide", () =
     for (const dir of hostile) assert.equal(lead.includes(path.resolve(dir)), false, `the lead never reads ${dir}`);
     assert.ok(lead.includes(path.resolve(recorded)), "the chat's recorded folder");
     assert.ok(lead.includes(await realpath(worktree)), "the worktree it leads, by the real path its seat checked");
-    const said = await personSays();
-    const coordinator = await reads({ coordinator: { runId, messageId: said }, readOnly: true, timeoutMs: 300_000 });
-    for (const dir of hostile)
-      assert.equal(coordinator.includes(path.resolve(dir)), false, `the coordinator never reads ${dir}`);
-    assert.ok(coordinator.includes(path.resolve(project.dir)), "the coordinator reads its game");
   });
 });
 
 /**
  * A lead's card lasted only as long as the chat's current turn: a picture or a slash command the
  * person sent took a turn of its own, and its end withdrew the lead's question (review L5). A lead
- * or coordinator is not that turn; its card ends with its own session, a Stop, an answer, or the
+ * is not that turn; its card ends with its own session, a Stop, an answer, or the
  * five minutes.
  */
 describe("a lead's card outlives the chat's other turns", () => {

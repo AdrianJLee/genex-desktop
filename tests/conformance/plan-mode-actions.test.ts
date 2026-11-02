@@ -1,7 +1,7 @@
 /**
  * Plan mode is for planning (B2): while a game chat is in Plan, no plugin or connector action runs
  * on its behalf, whoever asks (the chat's session, a build's lead, a worker) and whatever was saved
- * as "always allow", and no run's coordinator or run control starts, goes on with or lands a build.
+ * as "always allow", and no run control goes on with or lands a build.
  * A plugin's skill is still readable. Leaving Plan lifts it.
  */
 import assert from "node:assert/strict";
@@ -121,7 +121,7 @@ it("in Plan mode a plugin action answers the agent that it waits for the plan, a
   }
 });
 
-it("in Plan mode a run's coordinator and the chat's run controls cannot land, continue or resume a build", async () => {
+it("in Plan mode the chat's run controls cannot land or resume a build", async () => {
   const lite = await coreLite();
   try {
     const project = "planning-run";
@@ -139,13 +139,13 @@ it("in Plan mode a run's coordinator and the chat's run controls cannot land, co
       dispatched++;
     };
     const tool = (name: string) =>
-      lite.api()["coordinator.tool"]!({ threadId, runId: "run_a", name, args: { text: "Add a boss" } }).then(
+      lite.api()["run.control"]!({ threadId, runId: "run_a", name, args: { text: "Add a boss" } }).then(
         String,
         (error: unknown) => `refused: ${String(error)}`,
       );
     const before = (await lite.core.listAllEvents()).length;
     await lite.core.setPermissionMode(threadId, PermissionMode.Plan);
-    for (const name of ["land_build", "continue_build", "resume_run"]) {
+    for (const name of ["land_build", "resume_run"]) {
       const answer = await tool(name);
       assert.match(answer, /Plan mode, so this did not run/, `${name}: ${answer}`);
     }

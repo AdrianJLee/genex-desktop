@@ -1,13 +1,12 @@
 /**
- * The conversation coordinator's contract with the host: the tools a game chat's coordinator may
- * call on a run, the run a conversation is on as the coordinator sees it, the state it reads
- * back from `run_status`, and the slice of the conversation a queued message may see.
+ * The chat's run, as the host and the chat's own session share it: the run's controls that session
+ * keeps after a closed Loop run (`RunControl`, answered by `main/core/conversation.ts` `runControl`),
+ * the builds it records to start, the run a conversation is on, the state `run_status` reads back,
+ * and the slice of the conversation a queued message may see.
  *
- * The host is authoritative for these: it hands the tools to the coordinator session, answers
- * them (`main/core/conversation.ts`) and builds the chat transcript. The harness keeps its own
- * copy in `src/harness-seed/loop/run-inbox.ts` for its run inbox — the app must not load the
- * agent's editable code — and `tests/conformance/seed-contracts.test.ts` holds the two to the
- * same tool list and the same readings of the same logs.
+ * The harness keeps its own copy of the run readings in `src/harness-seed/loop/run-inbox.ts` — the
+ * app must not load the agent's editable code — and `tests/conformance/seed-contracts.test.ts` holds
+ * the two to the same readings of the same logs.
  */
 import { CustomEvent, customRecord, type CustomEventData } from "./custom-events.ts";
 import type { StudioToolSpec } from "./engine-requests.ts";
@@ -19,28 +18,8 @@ import { RUN_START_EVENTS } from "./run-state.ts";
 export const RunControlAction = {
   /** Wrap up: let the current attempts finish, then integrate and show what is ready. */
   Finish: "finish",
-  /** Stop the run once the chat's reply ends (the coordinator's `stop_run`), and with `restart` go on again. */
-  Stop: "stop",
 } as const;
 export type RunControlAction = (typeof RunControlAction)[keyof typeof RunControlAction];
-
-/**
- * The coordinator's tools, by name, in menu order: the host's own tools a run's coordinator calls,
- * some of which the chat's own session keeps after a run it led (`RunControl`). The model calls
- * them by these names, and the log records them so: never rename one (the harness's copy of the
- * specs is `loop/run-inbox.ts` `coordinatorTools`).
- */
-export const CoordinatorTool = {
-  RunStatus: "run_status",
-  SteerRun: "steer_run",
-  FinishRun: "finish_run",
-  StopRun: "stop_run",
-  ResumeRun: "resume_run",
-  ContinueBuild: "continue_build",
-  ShowBuild: "show_build",
-  LandBuild: "land_build",
-} as const;
-export type CoordinatorTool = (typeof CoordinatorTool)[keyof typeof CoordinatorTool];
 
 /**
  * The tool name a game chat's delegation is logged under (`tool_requested` … `tool_result`), from
@@ -49,81 +28,28 @@ export type CoordinatorTool = (typeof CoordinatorTool)[keyof typeof CoordinatorT
  */
 export const DELEGATE_TOOL = "delegate_to_contractor";
 
-/** Durable run identity and addressed control messages: the coordinator's tools, in menu order. */
-export const coordinatorTools: readonly StudioToolSpec[] = [
+/**
+ * The run's controls the chat's own session keeps after a closed Loop run (`runControls`), answered
+ * live by the host. The model calls them by these names, and the log records them so: never rename
+ * one. Its `resume_run` is not one: the harness bridges it in and does it once the reply ends, since
+ * the resumed run's lead may be that same session.
+ */
+export const RunControl = {
+  RunStatus: "run_status",
+  ShowBuild: "show_build",
+  LandBuild: "land_build",
+} as const;
+export type RunControl = (typeof RunControl)[keyof typeof RunControl];
+
+/** The run's controls as the chat's own session is handed them, in menu order. */
+export const runControlTools: readonly StudioToolSpec[] = [
   {
-    name: CoordinatorTool.RunStatus,
+    name: RunControl.RunStatus,
     description: "Read the current run and its workers' progress. This does not start or stop work.",
     parameters: { type: "object", properties: {} },
   },
   {
-    name: CoordinatorTool.SteerRun,
-    description:
-      "Send a concrete instruction to the existing workers. Use only for requested changes, not questions or status requests.",
-    parameters: {
-      type: "object",
-      properties: {
-        text: { type: "string", description: "The user's requested change, with enough context for a worker." },
-        facetId: { type: "string", description: "Optional worker id; omit to address every worker." },
-      },
-      required: ["text"],
-    },
-  },
-  {
-    name: CoordinatorTool.FinishRun,
-    description:
-      "Let the workers at work end, then integrate what they made and show it live. No new work starts, no reset, no cancellation. Use when the user asks to wrap up or wait for the remaining workers and show what is ready.",
-    parameters: { type: "object", properties: {} },
-  },
-  {
-    name: CoordinatorTool.StopRun,
-    description:
-      "Stop the build when your reply ends: its workers stop, what it built is kept, and it pauses. With restart true it goes on again as soon as it has stopped, with text as the user's instruction for it. Use when the user asks to stop, cancel, kill or halt the build or its workers, or to restart it; never steer_run for that, and never send the user to a button.",
-    parameters: {
-      type: "object",
-      properties: {
-        restart: { type: "boolean", description: "true to start the build again once it has stopped." },
-        text: { type: "string", description: "With restart: the user's instruction for the build as it goes on." },
-      },
-    },
-  },
-  {
-    name: CoordinatorTool.ResumeRun,
-    description:
-      "Continue a paused run with its completed work when the user asks to go on with that build — resume, continue, keep going, run it again — including new guidance for it after Stop. Supply that instruction as text before builders resume. Questions alone do not resume work, and other work asked for after a stop is continue_build with build false.",
-    parameters: {
-      type: "object",
-      properties: {
-        runId: {
-          type: "string",
-          description: "Optional run id from availableRuns, when resuming an earlier paused build.",
-        },
-        text: {
-          type: "string",
-          description: "The latest requested change or continuation, preserving the user's intent.",
-        },
-      },
-    },
-  },
-  {
-    name: CoordinatorTool.ContinueBuild,
-    description:
-      "Continue implementation in this game's existing conversation after the run has finished, or make a contained change (build false) after a paused run, which stays paused. Use for a requested change or unfinished work, never a question. The conversation and results are retained; this does not create a new timed run.",
-    parameters: {
-      type: "object",
-      properties: {
-        text: { type: "string", description: "What to implement next, incorporating the latest user message." },
-        build: {
-          type: "boolean",
-          description:
-            "false for a contained change (a fix, a tweak, one feature): one builder makes it in this chat and the build stays finished or paused. Omit to continue a finished build itself.",
-        },
-      },
-      required: ["text"],
-    },
-  },
-  {
-    name: CoordinatorTool.ShowBuild,
+    name: RunControl.ShowBuild,
     description:
       "Open a build in Live, the game view on the right of this chat, without changing the game folder: integration (what the run built, landed or not), live (the game folder as it is), or a commit hash. Use only when the user asks to see, run, play or launch what a run made, including after the run has finished or paused; never to show your own edits, which the stage's Reload button offers by itself. Afterwards say what it answered: open in Live, or waiting behind Reload while the user watches Live.",
     parameters: {
@@ -132,9 +58,9 @@ export const coordinatorTools: readonly StudioToolSpec[] = [
     },
   },
   {
-    name: CoordinatorTool.LandBuild,
+    name: RunControl.LandBuild,
     description:
-      "Put a build in the game folder: merge what the run built (integration, the default) or a named commit into the folder the user plays from; Live shows it at once or through its Reload button, as the answer says. Only for a run that has finished or paused; use finish_run while it is running. Refuses when the game folder has uncommitted edits.",
+      "Put a build in the game folder: merge what the run built (integration, the default) or a named commit into the folder the user plays from; Live shows it at once or through its Reload button, as the answer says. Only for a run that has finished or paused. Refuses when the game folder has uncommitted edits.",
     parameters: {
       type: "object",
       properties: { build: { type: "string", description: "integration (default) or a commit hash." } },
@@ -142,32 +68,7 @@ export const coordinatorTools: readonly StudioToolSpec[] = [
   },
 ];
 
-const COORDINATOR_TOOLS: ReadonlySet<string> = new Set<string>(Object.values(CoordinatorTool));
-
-/** Is this one of the coordinator's tools? */
-export function isCoordinatorTool(name: string): name is CoordinatorTool {
-  return COORDINATOR_TOOLS.has(name);
-}
-
-/**
- * The run's controls the chat's own session keeps after a run it led (`runControls`), answered
- * live by the host: some of the coordinator's tools, by their names there. Its `resume_run` is not
- * one: the harness bridges it in and does it once the reply ends, since the resumed run's lead is
- * that same session.
- */
-export const RunControl = {
-  RunStatus: CoordinatorTool.RunStatus,
-  ShowBuild: CoordinatorTool.ShowBuild,
-  LandBuild: CoordinatorTool.LandBuild,
-} as const satisfies Partial<Record<keyof typeof CoordinatorTool, CoordinatorTool>>;
-export type RunControl = (typeof RunControl)[keyof typeof RunControl];
-
 const RUN_CONTROLS: ReadonlySet<string> = new Set<string>(Object.values(RunControl));
-
-/** The run's controls as the chat's own session is handed them: the coordinator's own specs. */
-export const runControlTools: readonly StudioToolSpec[] = coordinatorTools.filter((tool) =>
-  RUN_CONTROLS.has(tool.name),
-);
 
 /** Is this one of the run's controls the chat's own session keeps? */
 export function isRunControl(name: string): name is RunControl {
@@ -198,7 +99,7 @@ export const BuildLaunch = {
   StartAutopilot: "start_autopilot",
   StartUnattendedRun: "start_unattended_run",
   ReopenRun: "reopen_run",
-  ResumeRun: CoordinatorTool.ResumeRun,
+  ResumeRun: "resume_run",
 } as const;
 export type BuildLaunch = (typeof BuildLaunch)[keyof typeof BuildLaunch];
 
@@ -209,13 +110,21 @@ export function isBuildLaunch(name: string): name is BuildLaunch {
   return BUILD_LAUNCHES.has(name);
 }
 
-/** The coordinator's reading of a run: its start payload merged with later closes, and a state. */
-export type CoordinatorRunState = "running" | "paused" | "finished";
-export type CoordinatorRun = Record<string, unknown> & {
+/** The run tools the host itself answers and records (`conversation.ts` `runControl`): the run's controls and the resume. */
+export type HostRunTool = RunControl | typeof BuildLaunch.ResumeRun;
+
+/** Is this a run tool the host answers and records? */
+export function isHostRunTool(name: string): name is HostRunTool {
+  return isRunControl(name) || name === BuildLaunch.ResumeRun;
+}
+
+/** The chat's reading of a run: its start payload merged with later closes, and a state. */
+export type ChatRunState = "running" | "paused" | "finished";
+export type ChatRun = Record<string, unknown> & {
   runId?: string;
   project?: string;
   goal?: string;
-  state: CoordinatorRunState;
+  state: ChatRunState;
 };
 
 type LogRecord = { readonly id: string; readonly data: CustomEventData };
@@ -223,28 +132,24 @@ type LogRecord = { readonly id: string; readonly data: CustomEventData };
 /**
  * The run a conversation is on — the one started last, or the named one — with the fields its
  * start and its close carried. A close is `finished` whatever it says; a pause and a resume move
- * it between `paused` and `running`. This is the coordinator's view, not the Builds graph's
+ * it between `paused` and `running`. This is the chat's view, not the Builds graph's
  * (`run-state.ts` `runExecution` reads a paused close as paused); the two answer different
  * questions and are kept apart on purpose.
  */
-export function latestRun(events: readonly LogRecord[], targetRunId: string | null = null): CoordinatorRun | null {
-  let run: CoordinatorRun | null = null;
+export function latestRun(events: readonly LogRecord[], targetRunId: string | null = null): ChatRun | null {
+  let run: ChatRun | null = null;
   for (const event of events) {
     const custom = customRecord(event.data);
     if (!custom) continue;
     if (targetRunId && custom.payload.runId !== targetRunId) continue;
-    run = coordinatorRunStep(run, custom.event_type, custom.payload);
+    run = chatRunStep(run, custom.event_type, custom.payload);
   }
   return run;
 }
 
-/** One record applied to the coordinator's run: a start, a close, a pause or a resume. */
-function coordinatorRunStep(
-  run: CoordinatorRun | null,
-  event_type: string,
-  p: Record<string, unknown>,
-): CoordinatorRun | null {
-  const started: CoordinatorRun | null = RUN_START_EVENTS.has(event_type)
+/** One record applied to the chat's run: a start, a close, a pause or a resume. */
+function chatRunStep(run: ChatRun | null, event_type: string, p: Record<string, unknown>): ChatRun | null {
+  const started: ChatRun | null = RUN_START_EVENTS.has(event_type)
     ? { ...(run && run.runId === p.runId ? run : {}), ...p, state: "running" }
     : run;
   if (p.runId !== started?.runId) return started;
@@ -285,8 +190,8 @@ const NOT_PROGRESS: ReadonlySet<string> = new Set([CustomEvent.DirectorContinued
 const isProgress = (eventType: string): boolean => PROGRESS.test(eventType) && !NOT_PROGRESS.has(eventType);
 
 export interface RunSnapshot {
-  run: CoordinatorRun | { runId: string | undefined; state: "superseded" } | null;
-  availableRuns: Array<{ runId: unknown; project: unknown; goal: unknown; state: CoordinatorRunState | undefined }>;
+  run: ChatRun | { runId: string | undefined; state: "superseded" } | null;
+  availableRuns: Array<{ runId: unknown; project: unknown; goal: unknown; state: ChatRunState | undefined }>;
   progress: Array<Record<string, unknown> & { type: string }>;
 }
 
@@ -317,7 +222,7 @@ export function runSnapshot(events: readonly LogRecord[], runId: string | undefi
 /**
  * The conversation as a queued message may see it: messages removed from the queue are left out,
  * and so is everything queued after `messageId` (future input must not leak into an earlier
- * coordinator turn's prompt). A message edited in the queue reads with its edited text.
+ * turn's prompt). A message edited in the queue reads with its edited text.
  */
 export function conversationThrough<T extends { readonly id: string; readonly data: EventData }>(
   events: readonly T[],

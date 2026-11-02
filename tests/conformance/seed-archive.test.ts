@@ -163,25 +163,25 @@ describe("the archive on upgrade", () => {
     assert.equal(await exists(path.join(install.ws, "library/contract-lessons.md")), true);
   });
 
-  it("an install that reached epoch 1 archives once more into epoch 2: the chat's coordinator and its routing go", async () => {
+  it("an install that reached epoch 1 archives once more into epoch 2: a changed file and a retired one go", async () => {
     const install = await olderInstall({
-      v1: { "loop/chat-dispatch.ts": "export const routes = 1;\n", "loop/coordinator.ts": "export const c = 1;\n" },
+      v1: { "loop/chat-dispatch.ts": "export const routes = 1;\n", "loop/retired.ts": "export const c = 1;\n" },
       edits: {
         "loop/chat-dispatch.ts": "export const routes = 1; // the agent's own\n",
-        "loop/coordinator.ts": "export const c = 1; // the agent's own\n",
+        "loop/retired.ts": "export const c = 1; // the agent's own\n",
       },
     });
     const manifest = JSON.parse(await readFile(install.manifestFile, "utf8")) as Record<string, unknown>;
     await writeFile(install.manifestFile, JSON.stringify({ ...manifest, archiveEpoch: 1 }));
     const report = await upgrade(install, { "loop/chat-dispatch.ts": "export const routes = 2;\n" });
     assert.equal(report.archive?.dir, ARCHIVE);
-    assert.deepEqual([...(report.archive?.edits ?? [])].sort(), ["loop/chat-dispatch.ts", "loop/coordinator.ts"]);
+    assert.deepEqual([...(report.archive?.edits ?? [])].sort(), ["loop/chat-dispatch.ts", "loop/retired.ts"]);
     assert.equal(
-      await readFile(path.join(install.ws, ARCHIVE, "loop/coordinator.ts"), "utf8"),
+      await readFile(path.join(install.ws, ARCHIVE, "loop/retired.ts"), "utf8"),
       "export const c = 1; // the agent's own\n",
     );
     assert.equal(await readFile(path.join(install.ws, "loop/chat-dispatch.ts"), "utf8"), "export const routes = 2;\n");
-    assert.equal(await exists(path.join(install.ws, "loop/coordinator.ts")), false, "the seed no longer ships it");
+    assert.equal(await exists(path.join(install.ws, "loop/retired.ts")), false, "the seed no longer ships it");
     assert.deepEqual(report.kept, []);
     const upgraded = JSON.parse(await readFile(install.manifestFile, "utf8")) as { archiveEpoch?: number };
     assert.equal(upgraded.archiveEpoch, 2);

@@ -43,7 +43,6 @@ import { NotLandedReason } from "./verdict.ts";
 import * as loopRunFunctions from "./director/loop-run.ts";
 import * as toolFunctions from "./director/tools.ts";
 import * as integrateFunctions from "./director/integrate.ts";
-import { servesLiveChat } from "./live-chat-served.ts";
 import { prepareLoopRun } from "./director/setup.ts";
 import { reopenMarkOf } from "./director/reopen.ts";
 import { reopenNote } from "./director/reopen-prompts.ts";
@@ -52,7 +51,6 @@ import { directors, directorTools } from "./director/tool-specs.ts";
 import { runWakeLoop, SYSTEM_CLOCK, WAKE_ENDING } from "./director/wake.ts";
 import { WrapCause } from "./director/wake-schedule.ts";
 import { openLeadLine, type LeadLine } from "./director/lead-line.ts";
-import * as leadLineParts from "./director/lead-line.ts";
 import { bookmarkLead, freshChat, leadSeat } from "./director/lead-session.ts";
 import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
@@ -368,10 +366,16 @@ async function tearDown(loopRun: LoopRun): Promise<void> {
   ctx.setStatus("idle");
 }
 
-/** The line the lead takes the chat on (live chat), open from the moment the run exists. */
-function leadLine(loopRun: LoopRun): LeadLine {
-  const { ctx, report, run, state, threadId } = loopRun;
-  return openLeadLine(run.runId, threadId, () => !state.finished && !ctx.cancelled && !report.failure, ctx);
+/**
+ * The line the lead takes the chat on (live chat), open from the moment the run exists: what is sent
+ * while the run prepares its start is handed to its lead, which reads it in its first turn's input.
+ */
+function leadLine(ctx: HarnessCtx, run: Run, threadId: string, prepared: () => LoopRun | undefined): LeadLine {
+  const live = (): boolean => {
+    const loopRun = prepared();
+    return !ctx.cancelled && !loopRun?.state.finished && !loopRun?.report.failure;
+  };
+  return openLeadLine(run.runId, threadId, live, ctx);
 }
 
 /** The wake loop's run, and the close of whatever its lead left open. */
@@ -474,11 +478,6 @@ async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, 
   }
 }
 
-/** Mark the run's lead as preparing (lead-line.ts `expectLeadLine`): a message sent meanwhile waits for it. */
-function expectLine(runId: string): () => void {
-  return typeof leadLineParts.expectLeadLine === "function" ? leadLineParts.expectLeadLine(runId) : () => {};
-}
-
 /**
  * Run a Loop under its lead. Returns the report (also written as run_finished). A Loop on a project
  * that isn't a web game (`profile` Open) is led in place by the chat's own session and closes there.
@@ -495,34 +494,36 @@ export async function runDirector(
 ): Promise<AnyRecord> {
   const open = profile === LoopProfile.Open;
   const clock = ownClock ?? (open ? OPEN_WALL_CLOCK : SYSTEM_CLOCK);
-  const liveChat = servesLiveChat();
   const timings: HostTimings = {};
   let tracing: LoopRun | undefined;
   const measured = tracedContext(ctx, run, (span) =>
     retainSpan(timings, { ...span, goal: null, head: tracing?.state.integrationHead ?? null }),
   );
-  const prepared = liveChat ? expectLine(run.runId) : () => {};
+  const line = leadLine(measured, run, threadId, () => tracing);
   let loopRun: LoopRun;
+  let talk: DirectorTalk;
   try {
     loopRun = await prepareLoopRun(
       measured,
-      { threadId, run, resume, liveChat, ...(open ? { profile, clock } : {}) },
+      { threadId, run, resume, ...(open ? { profile, clock } : {}) },
       LOOP_RUN_MODULES,
     );
-  } finally {
-    prepared();
+    const refused = loopRun.open?.refused;
+    if (refused) {
+      await line.release({ heardNone: true });
+      await refuseResume(loopRun, refused, loopRun.open?.refusalPauses === true);
+      return loopRun.report;
+    }
+    tracing = loopRun;
+    loopRun.sleep = clock.sleep;
+    keepTimings(loopRun, timings);
+    await seatTheLead(loopRun);
+    talk = directorTalk(loopRun, referenceImages(run), seatTools(loopRun));
+  } catch (err) {
+    // No lead takes what the line was handed: it goes back to the chat.
+    await line.release({ heardNone: true });
+    throw err;
   }
-  const refused = loopRun.open?.refused;
-  if (refused) {
-    await refuseResume(loopRun, refused, loopRun.open?.refusalPauses === true);
-    return loopRun.report;
-  }
-  tracing = loopRun;
-  loopRun.sleep = clock.sleep;
-  keepTimings(loopRun, timings);
-  await seatTheLead(loopRun);
-  const tools = seatTools(loopRun);
-  const talk = directorTalk(loopRun, referenceImages(run), tools);
-  await leadTheRun(loopRun, talk, leadLine(loopRun), clock);
+  await leadTheRun(loopRun, talk, line, clock);
   return loopRun.report;
 }

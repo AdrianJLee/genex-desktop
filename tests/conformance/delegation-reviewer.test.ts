@@ -68,7 +68,7 @@ describe("a Loop's reviewer", () => {
     assert.equal(runHomes.size, 1, "the same run's reviewers share one home");
   });
 
-  it("a reviewer is fenced off the rest of Genex's data: other runs' folders and captures, jobs, chats' homes, exports", {
+  it("a reviewer is fenced off the rest of Genex's data: other runs' folders and captures, jobs, exports", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const { core, project, seen, delegate, copyOf } = await workerChat();
@@ -76,7 +76,6 @@ describe("a Loop's reviewer", () => {
     const others = [
       path.join(scratch, "autopilot", "run_other", "integration"),
       path.join(runs, "run_other"),
-      path.join(scratch, "coordinators", "abc"),
       path.join(jobs, "some-game"),
       exports,
     ];
@@ -89,7 +88,6 @@ describe("a Loop's reviewer", () => {
       for (const fenced of [
         path.join(scratch, "autopilot", "run_other"),
         path.join(runs, "run_other"),
-        path.join(scratch, "coordinators"),
         jobs,
         exports,
       ]) {

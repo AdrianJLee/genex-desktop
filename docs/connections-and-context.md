@@ -550,7 +550,7 @@ provider reports running.
 Studio's app-wide conversation has no tool, role or context menu. It uses the resolved single
 model's completion API, recorded user/assistant messages, current images and a host snapshot of
 recent activity/settings/proposals. The conversation is windowed automatically for each request;
-the full history remains saved. It does not resume a native game coordinator or expose project tools.
+the full history remains saved. It does not resume a game chat's native session or expose project tools.
 The session checkpoint controls below describe game conversations and delegated build sessions.
 
 Auto-compaction policy is host-owned, by model or by chat-and-model; the composer states only that
@@ -987,7 +987,7 @@ build is not packaged acceptance. Preserve the normal profile and harness edits.
 
 Smoke windows allow dimensions larger than the active macOS display so the requested 900px
 viewport is actually exercised; normal windows keep their platform behavior. The exact viewport
-assertions remain required. Coordinator milestone waits race the run's terminal result so a
+assertions remain required. Milestone waits race the run's terminal result so a
 pre-worker failure (including `spawn git EAGAIN`) fails with its recorded reason instead of
 hanging indefinitely. A later isolated pass does not erase the original infrastructure failure.
 

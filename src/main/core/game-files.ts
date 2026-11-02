@@ -14,7 +14,7 @@ import {
   type ChatFileRef,
 } from "../../shared/chat-files.ts";
 import { rewindsOf, withoutRewound } from "../../shared/chat-rewind.ts";
-import { latestRun } from "../../shared/coordinator.ts";
+import { latestRun } from "../../shared/chat-run.ts";
 import { ThreadKind } from "../../shared/event-log.ts";
 import type { GameFile } from "../../shared/game-file.ts";
 import { t } from "../../shared/i18n.ts";

@@ -10,13 +10,6 @@ import { RunState } from "./run-events.ts";
 import { clip, CLIP_QUOTE } from "./text.ts";
 import type { AfterLoopRun } from "./after-loop-run.ts";
 
-/**
- * This note words a finished build's reopen when the turn grants it (`reopenRules`), and no longer
- * sends a finished build's change to the composer. chat-dispatch.ts asks before it offers the reopen
- * (`servesReopen`): a kept copy from before would word the old rules.
- */
-export const SERVES_REOPEN = true;
-
 /** What the chat is told when the studio did not resume the run the session asked for. */
 export const MESSAGE = {
   notResumed: (why: string) => `The build was not resumed: ${why}`,

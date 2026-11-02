@@ -336,7 +336,7 @@ test("a running web lookup says it is looking something up", () => {
 
 test("a run control the host records itself is one row, and a recorded resume shows once, when it runs", () => {
   // The chat's own session after a run calls run_status live: the engine mirrors the call, and
-  // the host records its own request and result (conversation.ts `coordinatorTool`).
+  // the host records its own request and result (conversation.ts `runControl`).
   const mirrored = (id: number, name: string, callId: string, engine = "claude-code") =>
     custom(id, `delegated.${engine}`, {
       kind: "assistant",

@@ -17,8 +17,3 @@ function fallback(app: AppLanguage | null | undefined): string {
 export function languageRule(app: AppLanguage | null | undefined): string {
   return `Write everything the user reads (your replies, questions, plans and progress notes) in the language the user writes to you in.${fallback(app)} Code, file names and commit messages stay in English.`;
 }
-
-/** The Loop chat coordinator's rule, the same in its own voice. */
-export function coordinatorLanguageRule(app: AppLanguage | null | undefined): string {
-  return `Reply in the language the user writes to you in.${fallback(app)}`;
-}

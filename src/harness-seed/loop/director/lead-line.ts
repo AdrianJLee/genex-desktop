@@ -4,12 +4,8 @@
  * run is over, and the lead's own loop hears it (wake.ts): at once in a turn under way, or as the
  * reason for its next wake. What the lead heard is recorded on the run's log, so a later run of
  * the run never tells it again (run-inbox.ts). What it never heard when its run ends goes back to
- * the chat, where it waits for a turn of its own — so Stop still hands over to it.
- *
- * A module of its own, importing only leaves: the director (director.ts), the wake loop and the
- * chat's queue all read it, and a seed upgrade keeps an older copy of any of them the agent edited,
- * which never exported it. A run whose director.ts predates live chat opens no line, and the
- * chat's messages wait for it as they always did.
+ * the chat, where it waits for a turn of its own — so Stop still hands over to it. A message sent
+ * before the line opens (the run still prepares its start) waits for it.
  */
 import { HostMethod } from "../host-methods.ts";
 import { EventKind, RunEvent } from "../run-events.ts";
@@ -41,7 +37,7 @@ export interface LeadLine {
   readonly threadId: string;
   /** It takes the chat's messages now: its run goes on, and its wrap-up has not begun. */
   open(): boolean;
-  /** No more messages: the run is over for its lead (an older wake loop shuts it as the wrap-up begins). */
+  /** No more messages: the run is over for its lead. */
   shut(): void;
   /**
    * The wrap-up began: the lead still hears what the person sends, but every message from now on
@@ -73,8 +69,6 @@ export interface LeadLine {
 
 /** The lines open now, by run. */
 const lines = new Map<string, LeadLine>();
-/** The runs whose lead will take the chat once their start is ready (`expectLeadLine`), by run. */
-const preparing = new Set<string>();
 /** Settles when a line opens or shuts: what waits for a lead looks again. */
 let changed = signal();
 
@@ -163,28 +157,9 @@ export function openLeadLine(
       if (first) await first.giveBack(unheard.map(({ item }) => item)).catch(() => {});
     },
   };
-  preparing.delete(runId);
   lines.set(runId, line);
   announce();
   return line;
-}
-
-/**
- * A run whose lead will take the chat once its start is ready (a waking director preparing it):
- * until its line opens, the chat answers what is sent (live-chat.ts `chatWaitsFor`). Answers the
- * call that ends the wait without a line (the start failed, was stopped or refused).
- */
-export function expectLeadLine(runId: string): () => void {
-  preparing.add(runId);
-  announce();
-  return () => {
-    if (preparing.delete(runId)) announce();
-  };
-}
-
-/** Is this run's lead still preparing its start, its line not open yet (`expectLeadLine`)? */
-export function leadPreparing(runId: string): boolean {
-  return preparing.has(runId) && !lines.has(runId);
 }
 
 /** The line to the lead of this run, while it is open. */

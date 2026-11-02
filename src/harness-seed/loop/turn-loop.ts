@@ -31,28 +31,10 @@ import type { ModelPreferences, ReferenceFrame } from "../types/host-api.d.ts";
 import type { SteerHandle } from "./message-queue.ts";
 import type { AfterLoopRun } from "./after-loop-run.ts";
 
-/**
- * This runner passes the chat's turn the run its own session answers after (`afterLoopRun`) on the
- * engine and model it names, and returns the resume that turn records (after-loop-run.ts).
- * chat-dispatch.ts asks before it sends the chat there (`servesAfterLoopRun`): a kept copy from before
- * may do neither.
- */
-export const SERVES_AFTER_LOOP_RUN = true;
-
-/**
- * This runner keeps the chat's own session after its run on the model it answers on, also when a
- * Loop came with the message (`turnModel`): the run it reopens then seats that same session
- * (reopen-run.ts). chat-dispatch.ts asks before it offers the reopen (`servesReopen`): a kept copy
- * from before would move the session to the commission's planner.
- */
-export const SERVES_REOPEN = true;
-
 /** One turn's options: who is asked, where, with what, and — inside a run — under which clock. */
 export interface TurnOptions {
   threadId: string;
   turnId: string;
-  /** The run whose finished work the coordinator's continue_build hands this builder turn (chat-dispatch.ts). */
-  followupOf?: string;
   text?: string;
   engine?: string;
   model?: string;
@@ -133,13 +115,10 @@ export async function runTurn(ctx: HarnessCtx, requested: TurnOptions): Promise<
   return runToolLoop(ctx, { ...options, engine, model, contextWindow: contextWindowOf(model), loop, autopilot });
 }
 
-/**
- * A chat turn that may answer an interview question: no commission, run, Studio thread or
- * coordinator's follow-up of its own — the builder a continue_build hands work to never commissions.
- */
+/** A chat turn that may answer an interview question: no commission, run or Studio thread of its own. */
 function plainChat(options: TurnOptions): boolean {
   const commissioned = Boolean(options.autopilot || options.loop);
-  return !commissioned && !options.runId && !options.followupOf && !options.studioThread;
+  return !commissioned && !options.runId && !options.studioThread;
 }
 
 /**

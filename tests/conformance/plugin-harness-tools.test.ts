@@ -1,8 +1,8 @@
 /**
  * A plugin tool only Genex's harness calls (`tools[].audience: "harness"`, API 3), such as the
  * Unreal Loop runner's editor-queue steps. No agent is handed it: not a chat's or a builder's
- * delegated session, not the local harness's tool registry, not the capability facts a plan or a
- * chat reads, not the composer's tool count. An agent that names it anyway is refused, and the
+ * delegated session, not the local harness's tool registry, not the capability facts a plan reads,
+ * not the composer's tool count. An agent that names it anyway is refused, and the
  * harness's own `plugins.invoke` step (`step: true`) still reaches it. The field is typed, checked where a
  * manifest is parsed, and refused in any other shape.
  */
@@ -19,7 +19,7 @@ import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { coreLite } from "../helpers/core-lite.ts";
-import { copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
+import { capabilityFactsOf, copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 // biome-ignore lint/suspicious/noExplicitAny: a hostile manifest is any shape a writer may send.
@@ -199,7 +199,7 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   assert.deepEqual((await localTools({ project })).sort(), [...AGENT_TOOLS].sort(), "the local harness's agents");
   assert.deepEqual((await localTools(undefined)).sort(), [...AGENT_TOOLS].sort(), "no game named: a web game's");
 
-  const facts = String(await api["capabilities.describe"]?.({ threadId, project }));
+  const facts = await capabilityFactsOf(core, threadId, project);
   for (const name of AGENT_TOOLS) assert.ok(facts.includes(name), `the facts name ${name}`);
   for (const name of [...RUNNER_TOOLS, ...UNREAL_PROJECT_TOOLS.slice(AGENT_TOOLS.length)])
     assert.ok(!facts.includes(name), `a web game's facts never name ${name}`);
@@ -212,7 +212,7 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   await delegate({});
   assert.deepEqual(sessions.at(-1)?.tools.sort(), [...UNREAL_PROJECT_TOOLS].sort(), "the chat of an Unreal project");
   assert.deepEqual((await localTools({ project })).sort(), [...UNREAL_PROJECT_TOOLS].sort());
-  const unrealFacts = String(await api["capabilities.describe"]?.({ threadId, project }));
+  const unrealFacts = await capabilityFactsOf(core, threadId, project);
   for (const name of UNREAL_PROJECT_TOOLS) assert.ok(unrealFacts.includes(name), `the facts name ${name}`);
   for (const name of RUNNER_TOOLS) assert.ok(!unrealFacts.includes(name), `the facts never name ${name}`);
   const counted = (await core.connectionSnapshot(threadId, project)).sources.find((s) => s.id === "unreal");

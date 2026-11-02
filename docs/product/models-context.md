@@ -60,6 +60,6 @@ isolation.
 
 Start at [ModelsSection](../../src/renderer/panels/ModelsSection.tsx) and
 [PromptBar](../../src/renderer/ui/PromptBar.tsx); see [Local models](../local-models.md),
-[continuation](../conversation-coordinator.md),
+[continuation](../conversation-lifecycle.md),
 [composer design](../agent/design.md#prompt-composer) and
 [judge evaluation](../judge-evaluation.md).

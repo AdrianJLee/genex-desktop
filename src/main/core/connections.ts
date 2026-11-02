@@ -14,7 +14,7 @@ import { CoreFact, type GameKind, hasFact } from "../../shared/project-facts.ts"
 import type { ThreadFold } from "../../substrate/event-store.ts";
 import type { EventEnvelope } from "../../substrate/types.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
-import { CapabilityAudience, planningCapabilities } from "../planning-capabilities.ts";
+import { planningCapabilities } from "../planning-capabilities.ts";
 import type { StudioCore } from "../studio-core.ts";
 
 type ConnectionsCore = Pick<StudioCore, "mcp" | "plugins" | "games" | "append" | "emit" | "store">;
@@ -108,11 +108,10 @@ export class ConnectionService {
     };
   }
 
-  /** The builders' plugins, accounts and connectors, for a session that cannot call them itself. */
+  /** The builders' plugins, accounts and connectors, for the planning step, which cannot call them itself. */
   async capabilityFacts(
     threadId: string,
     project: string | null | undefined,
-    audience: CapabilityAudience,
   ): Promise<{ revision: number; text: string }> {
     const revision = this.#revision;
     const connections = await this.snapshot(threadId, project);
@@ -125,20 +124,8 @@ export class ConnectionService {
       connections,
       connectors,
       usesStudioTemplate(game),
-      audience,
       kind,
     );
-    if (audience === CapabilityAudience.Conversation)
-      await this.#core.append(
-        [
-          {
-            type: EventKind.Custom,
-            event_type: CustomEvent.ConversationCapabilitiesApplied,
-            payload: { revision, scope: audience, project: project ?? null },
-          },
-        ],
-        threadId,
-      );
     return { revision, text };
   }
 

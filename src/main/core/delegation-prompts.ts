@@ -226,8 +226,7 @@ export function leadToolsNote(): string {
 export const computerWord = (platform: NodeJS.Platform): string => (platform === "win32" ? "Windows PC" : "Mac");
 
 /**
- * Beside the brief of a session the person answers (the chat's own, a build's lead, the run's
- * coordinator): it reaches the whole Mac, limited only by the chat's permission mode
+ * Beside the brief of a session the person answers (the chat's own, a build's lead): it reaches the whole Mac, limited only by the chat's permission mode
  * (chat-permissions.ts). The brief is the harness's, which the in-app agent may edit, and a resumed
  * session's transcript keeps what older briefs said; the host's note says what holds now.
  */

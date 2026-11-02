@@ -60,6 +60,6 @@ pauses wait. A crash or restart settles abandoned activity from saved state.
   [PreviewPanel](../../src/renderer/panels/PreviewPanel.tsx) its tabs; [run-steps](../../src/renderer/run-steps.ts)
   folds steps that [RunGraph](../../src/renderer/panels/RunGraph.tsx) and
   [RunInspector](../../src/renderer/panels/RunInspector.tsx) draw.
-- [Conversation coordinator](../conversation-coordinator.md): queue, continuation and Stop.
+- [Conversation lifecycle](../conversation-lifecycle.md): queue, continuation and Stop.
 - [Architecture](../agent/architecture.md) and [Verification](../agent/verification.md): the run,
   preview and recovery contracts.

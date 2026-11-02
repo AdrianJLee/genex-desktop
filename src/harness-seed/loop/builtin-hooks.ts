@@ -20,9 +20,6 @@ import {
 } from "./folder-facts.ts";
 import { GENEX, HookEvent } from "./hooks.ts";
 
-/** This part serves a Loop on a project of any kind: a run reads it by namespace before it leads one. */
-export const SERVES_OPEN_LOOP = true;
-
 /** Genex's own gates, by the name a block carries as its step. Never rename a value. */
 export const BuiltinGate = { WebReady: "web.ready" } as const;
 export type BuiltinGate = (typeof BuiltinGate)[keyof typeof BuiltinGate];

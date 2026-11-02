@@ -119,7 +119,7 @@ test("the capability facts a session without plugin tools reads carry only the s
   const manifest = validateManifest(withSkills(SKILLS));
   const plugins = [{ manifest, enabled: true, removed: false } as PluginInfo];
   const skillsIn = (engine?: GameEngine) => {
-    const text = planningCapabilities(1, plugins, { sources: [] } as never, [], true, engine);
+    const text = planningCapabilities(1, plugins, { sources: [] } as never, [], engine);
     const facts = JSON.parse(text.split("\n\n")[2] ?? "{}") as { plugins: Array<{ skills: Array<{ name: string }> }> };
     return facts.plugins[0]?.skills.map((s) => s.name);
   };
@@ -380,7 +380,7 @@ test("a Roblox game's chat lists the Roblox skills and a web game's does not", a
   );
   /** The skill names the capability facts list for the plugin `roblox`. */
   const robloxSkills = async (project: string) => {
-    const text = await capabilityFactsOf(core, await core.createGameThread(project), project);
+    const text = await capabilityFactsOf(core, project);
     const facts = text
       .split("\n\n")
       .map((part) => {

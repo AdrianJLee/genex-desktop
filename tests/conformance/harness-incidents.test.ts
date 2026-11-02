@@ -1117,7 +1117,7 @@ describe("one session answers the chat (no-coordinator)", () => {
     );
   });
 
-  it("NC3. a Loop message on another engine than the build's is the chat's own session there, with the run's controls and no reopen", async () => {
+  it("NC3. a message on another engine than the build's is the chat's own session there, with the run's controls: no reopen, no resume", async () => {
     const chat = ownSessionChat({
       chatSession: true,
       recorded: [{ name: "reopen_run", args: { text: "add enemies" } }],
@@ -1136,6 +1136,27 @@ describe("one session answers the chat (no-coordinator)", () => {
     assert.equal(recordable(answer).includes("reopen_run"), false, "another engine never reopens the build");
     assert.equal(loopUnusedWords(chat.asked.said).length, 1, "the chat says once that the Loop can't continue it");
     assert.equal((await chat.registered()).length, 1, "nothing reopened");
+
+    // A paused build: that turn moves the chat's bookmark to its engine, so no resume of it would
+    // continue the lead's session. Builds' Resume stays.
+    const paused = ownSessionChat({
+      chatSession: true,
+      paused: true,
+      recorded: [{ name: "resume_run", args: { text: "add enemies" } }],
+      engines: [
+        { id: "codex", kind: "delegated", label: "Codex" },
+        { id: "claude-code", kind: "delegated", label: "Claude Code" },
+      ],
+    });
+    await handleUserMessage(
+      paused.studio as never,
+      { ...ownMessage, engine: "claude-code", model: undefined } as never,
+    );
+    const [onAnother] = paused.asked.sessions;
+    assert.deepEqual(onAnother?.runControls, { runId: OWN_RUN, messageId: "m9" });
+    assert.equal(recordable(onAnother).includes("resume_run"), false, "another engine never resumes the build");
+    assert.doesNotMatch(String(onAnother?.prompt), /resume_run|you lead it again/);
+    assert.equal(paused.calls.filter((call) => call.method === HostMethod.RunControl).length, 0, "nothing resumed");
   });
 
   it("NC4. a Loop message on Ollama after a finished Loop is a plain chat turn: none of the coordinator's tools", {
@@ -1186,10 +1207,9 @@ describe("one session answers the chat (no-coordinator)", () => {
 
   /**
    * While a Loop prepared its start, the coordinator answered what was sent at once. Flipped
-   * assertion: a message sent then waits for the lead's line, and the lead reads it in its first
-   * turn's input — a lead that cannot read input mid-turn (Codex) is never cut as it starts for it.
+   * assertion: a message sent then waits for the lead's line and is handed to the lead alone.
    */
-  it("NC5. a message while the Loop prepares waits for its lead, which reads it in its first turn; Stop stops the build", {
+  it("NC5. a message while the Loop prepares waits for its lead, which alone answers it; Stop stops the build", {
     timeout: 120_000,
   }, async () => {
     const rig = await startRig({ replies: [] });
@@ -1261,14 +1281,18 @@ describe("one session answers the chat (no-coordinator)", () => {
       60_000,
       "the message handed to the lead",
     );
-    await waitForLog(rig.core, () => leadPrompts.length > 0, 60_000, "the lead's first turn");
+    await waitForLog(
+      rig.core,
+      () => leadPrompts.some((prompt) => prompt.includes("stop the workers")),
+      60_000,
+      "the lead reads it",
+    );
     assert.equal(
       customEvents(delivered, "coordinator_message_processing").filter((e) => e.messageId === messageId).length,
       0,
       "no turn of the chat's own takes it",
     );
     assert.equal(others.length, 0, "no session but the lead answers it");
-    assert.match(leadPrompts[0] ?? "", /stop the workers/, "the lead reads it in its first turn's input");
 
     await rig.core.stopThread(thread);
     const closed = await waitForLog(
@@ -1279,11 +1303,6 @@ describe("one session answers the chat (no-coordinator)", () => {
     );
     const close = customEvents(closed, "run_finished").find((e) => e.runId === runId);
     assert.match(String(close?.stoppedBecause), /stop/i, JSON.stringify(close));
-    assert.equal(
-      leadPrompts.filter((prompt) => prompt.includes("stop the workers")).length,
-      1,
-      "told once: no first turn was cut short to hand it in",
-    );
     await running;
   });
 });

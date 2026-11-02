@@ -191,20 +191,19 @@ interface PersonNote {
   lead: { runId: string; at: number } | null;
 }
 
-/** Whom a build's lead answers: its run's handed messages. */
-export type LeadAnswers = { runId: string };
-
 /** A build's lead the person may talk to in its game's chat. */
 export interface LeadSessionAsk {
   project: string;
   threadId: string;
-  answers: LeadAnswers;
   engine: string;
   model: string;
   /** The folder it works in: the game's. */
   cwd: string;
-  /** A lead's: the integration worktree it leads, as its seat checked it (real path). It builds there. */
-  leads?: string;
+  /**
+   * What it leads, as its seat checked it (real path): the run's integration worktree, or the game
+   * folder itself for a lead in place.
+   */
+  leads: string;
   signal: AbortSignal;
 }
 
@@ -551,7 +550,7 @@ export class ChatPermissionService {
     };
     const holder: LiveHolder = { live: null };
     const request: LeadAsks = {
-      ...(await this.#standing(project, threadId, [ask.cwd, ...(ask.leads ? [ask.leads] : [])])),
+      ...(await this.#standing(project, threadId, [ask.cwd, ask.leads])),
       mode: lead.running,
       screen: (call) => this.#screenLeadCall(ask, lead, call),
       ask: (question, asked) => this.#leadAsk(ask, lead, question, AbortSignal.any([asked, ask.signal])),
@@ -585,7 +584,7 @@ export class ChatPermissionService {
     const holder: LiveHolder = { live: null };
     const request: DelegatePermissions = {
       mode,
-      ...(await this.#standing(project, threadId, [ask.cwd, ...(ask.leads ? [ask.leads] : [])])),
+      ...(await this.#standing(project, threadId, [ask.cwd, ask.leads])),
       ask: (question, asked) => this.#leadAsk(ask, lead, question, AbortSignal.any([asked, ask.signal])),
       onControl: (control) => this.#onControl(threadId, mode, session, holder, control),
     };

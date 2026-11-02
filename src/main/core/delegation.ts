@@ -63,7 +63,7 @@ import { COMPUTER_TOOL_NAME, DESKTOP_TOOL_NAME } from "../../substrate/computer-
 import { WorkClass, workClassOf } from "../../substrate/budget.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { chatTurnOf, openDoor, recordSteerDelivered, settleDoor, type SteerDoor } from "./chat-steer.ts";
-import type { LeadAnswers, LeadSession, PersonSession } from "./chat-permissions.ts";
+import type { LeadSession, PersonSession } from "./chat-permissions.ts";
 import type { ActiveDelegation } from "./internals.ts";
 import {
   CallCutOff,
@@ -1550,18 +1550,17 @@ export class DelegationService {
   ): Promise<LeadSession | null> {
     const threadId = p.threadId;
     const asks = this.#core.engines.get(target.engineId).permissionPrompts === true;
-    if (!asks || typeof threadId !== "string") return null;
-    const answers = await this.#answersPerson(p, grants, session, seat, threadId);
-    if (!answers) return null;
+    const { leads } = seat;
+    if (!asks || !leads || typeof threadId !== "string") return null;
+    if (!(await this.#answersChat(p, grants, session, threadId))) return null;
     return this.#x.permissions.forLead({
       project: p.project,
       threadId,
-      answers,
       engine: target.engineId,
       model: p.model ?? "",
       cwd: target.workCwd,
       // The lead builds in the worktree it leads, as its seat checked it.
-      ...(seat.leads ? { leads: seat.leads } : {}),
+      leads,
       signal: session.abort.signal,
     });
   }
@@ -1582,34 +1581,31 @@ export class DelegationService {
   ): Promise<PersonSession | null> {
     const threadId = p.threadId;
     const asks = this.#core.engines.get(target.engineId).permissionPrompts === true;
-    if (asks || seat.leads === null || typeof threadId !== "string") return null;
-    const answers = await this.#answersPerson(p, grants, session, seat, threadId);
-    if (!answers) return null;
+    const { leads } = seat;
+    if (asks || !leads || typeof threadId !== "string") return null;
+    if (!(await this.#answersChat(p, grants, session, threadId))) return null;
     return this.#x.permissions.forPlacedLead({
       project: p.project,
       threadId,
-      answers,
       engine: target.engineId,
       model: p.model ?? "",
       cwd: target.workCwd,
-      ...(seat.leads ? { leads: seat.leads } : {}),
+      leads,
       signal: session.abort.signal,
     });
   }
 
-  /** Whom it answers in this chat: a lead, the messages handed to its run. */
-  async #answersPerson(
+  /** Does this lead answer the person in this chat: the lead of a run started here, its turn that run's? */
+  async #answersChat(
     p: DelegateParams,
     grants: DelegationGrants,
     session: DelegationSession,
-    seat: DelegationSeat,
     threadId: string,
-  ): Promise<LeadAnswers | null> {
+  ): Promise<boolean> {
     const { director } = grants;
-    if (!seat.leads || !director) return null;
+    if (!director) return false;
     const answersChat = session.chatTurn === director.runId && director.threadId === threadId;
-    if (!answersChat || !(await this.#runOfChat(p.project, threadId, director.runId))) return null;
-    return { runId: director.runId };
+    return answersChat && (await this.#runOfChat(p.project, threadId, director.runId));
   }
 
   /** The engine, the budget class and the folder a brief runs in; everything here is checked before the lock. */

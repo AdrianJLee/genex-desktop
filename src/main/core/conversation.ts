@@ -124,7 +124,7 @@ const MESSAGE = {
     ),
   unknownTool: (name: string) => `unknown run control: ${name}`,
   inPlan:
-    "The chat is in Plan mode, so this did not run: starting, continuing, resuming or landing a build waits until the plan is approved. Put it in your plan instead.",
+    "The chat is in Plan mode, so this did not run: resuming or landing a build waits until the plan is approved. Put it in your plan instead.",
   runChanged: "The run changed. This message cannot control another run; read the current state.",
   onlyPausedResumes: "Only a paused run from this conversation can be resumed. No new run was started.",
   noProjectFolder: "This run has no project folder to show.",
@@ -824,7 +824,7 @@ export class ConversationService {
    * one already made this session is not. A run that is finished or paused is never asked: nothing
    * is running to wrap up.
    */
-  async requestRunFinish(threadId: string, runId: string): Promise<string> {
+  async requestRunFinish(threadId: string, runId: string): Promise<void> {
     const events = await this.#core.store.listEvents(threadId);
     const run = latestRun(events, runId);
     if (run?.state !== RunState.Running) throw new Error(MESSAGE.nothingToFinish(Boolean(run)));
@@ -840,7 +840,6 @@ export class ConversationService {
         threadId,
       );
     }
-    return "Finishing requested: current worker attempts can complete, then accepted work is integrated, checked, and shown live. The run, plan, clock and worktrees are unchanged.";
   }
 
   /**

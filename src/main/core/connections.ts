@@ -1,16 +1,15 @@
 /**
  * The builders' tool sources as sessions see them: plugins and MCP connectors, one revision
  * counter that moves whenever either changes, and which revision each thread last applied. A
- * session that cannot call the tools itself (planning, the conversation) gets them as text.
+ * plan, which cannot call the tools itself, gets them as text.
  */
 import type { ConnectionSnapshot } from "../../shared/connections.ts";
 import { CustomEvent, customEvent } from "../../shared/custom-events.ts";
 import { EventKind } from "../../shared/event-log.ts";
-import type { GameProject } from "../../shared/game-project.ts";
 import { mcpScopeCovers, type McpConnectorView } from "../../shared/mcp.ts";
 import { McpAuthState } from "../../substrate/mcp/oauth.ts";
 import { isAgentTool, type PluginAppliedSet, type PluginInfo, pluginReach } from "../../shared/plugins.ts";
-import { CoreFact, type GameKind, hasFact } from "../../shared/project-facts.ts";
+import type { GameKind } from "../../shared/project-facts.ts";
 import type { ThreadFold } from "../../substrate/event-store.ts";
 import type { EventEnvelope } from "../../substrate/types.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
@@ -26,14 +25,6 @@ const isNameList = (value: unknown): value is string[] =>
 
 /** One session's key in the applied fold: an engine's own session id, never mistaken for another engine's. */
 const sessionKey = (engine: string, session: string): string => JSON.stringify([engine, session]);
-
-/**
- * Whether a game runs on the Studio template (Three.js through its import map under /vendor/): a
- * web game at its root in the template's shape. A shape read from a folder with no page falls back
- * to the template's, so a new empty game, a Godot or an Unreal project never claims it.
- */
-const usesStudioTemplate = (game: Pick<GameProject, "shape" | "facts"> | undefined): boolean =>
-  game?.shape.kind === "studio-template" && hasFact(game.facts, CoreFact.WebGame, ".");
 
 /** The session and the set a delivered record carries; none for a record without a well-formed one. */
 function deliveredSetOf(event: EventEnvelope): [string, PluginAppliedSet] | undefined {
@@ -118,14 +109,7 @@ export class ConnectionService {
     const game = project ? (await this.#core.games.list()).find((g) => g.name === project) : undefined;
     const kind: GameKind = game ?? { facts: [] };
     const connectors = await this.#enabledConnectors(project, kind);
-    const text = planningCapabilities(
-      revision,
-      this.#core.plugins.list(),
-      connections,
-      connectors,
-      usesStudioTemplate(game),
-      kind,
-    );
+    const text = planningCapabilities(revision, this.#core.plugins.list(), connections, connectors, kind);
     return { revision, text };
   }
 

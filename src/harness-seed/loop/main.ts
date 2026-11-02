@@ -230,8 +230,7 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
  */
 function stopCurrentMessage(studio: Studio, messages: Pick<MessageQueue, "current">, threadId: string): void {
   if (heldRuns(studio).some((active) => active.threadId === threadId && !active.done)) return;
-  // A kept message-queue.ts from before this has no `current`: its Stop is the old one.
-  const current = messages.current?.(threadId);
+  const current = messages.current(threadId);
   if (current) studio.stoppedMessages?.add(current);
 }
 

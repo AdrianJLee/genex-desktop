@@ -372,7 +372,7 @@ test("whether a connector reaches a game is the one rule its listing, capability
   const kite = await core.games.scaffold(web);
   await writeFile(path.join(harbor.dir, "Harbor.uproject"), "{}");
   const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
-  const describe = async (project: string) => capabilityFactsOf(core, await core.createGameThread(project), project);
+  const describe = (project: string) => capabilityFactsOf(core, project);
   assert.doesNotMatch(await describe(web), /Unreal · editor/, "a web game's capability facts");
   assert.match(await describe(harbor.name), /Unreal · editor/, "a game holding an Unreal project's");
 

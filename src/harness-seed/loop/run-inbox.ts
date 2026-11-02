@@ -116,17 +116,9 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   if (d.event_type === RunEvent.RunSteeringDelivered) absorbDelivery(fold, p);
 }
 
-/**
- * Was this handed to a run's lead (live chat)? A kept steer-delivery.ts from before live chat has
- * no `Lead`, and an ordinary hand-over records no `how`: those two must not read as equal.
- */
-function toTheLead(how: unknown): boolean {
-  return how !== undefined && how === SteerDelivery.Lead;
-}
-
 /** A steer handed over (to a worker, or to the build's next brief) — or a chat message a run's lead heard. */
 function absorbDelivery(fold: InboxFold, p: AnyRecord): void {
-  if (toTheLead(p.how)) {
+  if (p.how === SteerDelivery.Lead) {
     settleLeadSteers(fold, p.sourceMessageId);
     return;
   }
@@ -143,7 +135,7 @@ function absorbDelivery(fold: InboxFold, p: AnyRecord): void {
 function settleLeadSteers(fold: InboxFold, messageId: unknown): void {
   if (!messageId) return;
   for (const steer of fold.instructions)
-    if (toTheLead(steer.how) && steer.sourceMessageId === messageId) fold.settledByLead.add(steer.id);
+    if (steer.how === SteerDelivery.Lead && steer.sourceMessageId === messageId) fold.settledByLead.add(steer.id);
 }
 
 /** Has the run's current session (since its latest registration) been asked to wrap up? */

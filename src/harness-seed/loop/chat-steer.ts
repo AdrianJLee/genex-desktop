@@ -252,8 +252,8 @@ async function takeSwitches(turn: TurnLegs, arrived: QueueAction[]): Promise<Que
     }
     if (switches.changes(item)) {
       switchTo(turn, await switches.apply(item));
-      // What is sent after it is weighed against its settings (a kept older queue has no `follows`).
-      turn.steer.follows?.(item);
+      // What is sent after it is weighed against its settings.
+      turn.steer.follows(item);
     }
     words.push(item);
   }
@@ -423,7 +423,7 @@ async function followKeptSwitches(turn: TurnLegs): Promise<void> {
   for (const item of turn.interrupted) {
     if (isSlashText(item.text) || !switches.changes(item)) continue;
     switchTo(turn, await switches.apply(item));
-    turn.steer.follows?.(item);
+    turn.steer.follows(item);
   }
 }
 

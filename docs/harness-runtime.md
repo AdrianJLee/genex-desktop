@@ -136,11 +136,7 @@ logs a failed write to the harness's stderr, at most once a minute per kind, ins
 it. A seed upgrade keeps a file the
 agent edited (unless this seed removed it or changed it incompatibly: then the edit is archived and
 the seed's copy laid down, see above). A change that would break a kept older file bumps
-`ARCHIVE_EPOCH` (`substrate/seed-archive.ts`) instead of keeping older exports, `SERVES_*` marks or
-fixtures of older vintages: the upgrade into the new epoch archives every such kept file and lays
-the seed down. Kept-file checks from before epoch 2 that remain (`SERVES_LEAD` in `director.ts`
-`seatsLead`, `SERVES_OPEN_LOOP`, the Unreal shims `loop/unreal/live.ts`, `live-journal.ts`,
-`editor-life.ts`, `editor-wait.ts`, `editor-activity.ts`) are left to the work that removes them.
+`ARCHIVE_EPOCH` (`substrate/seed-archive.ts`).
 An edit the agent made to a moved
 function in a kept file still serves that file's own callers; the rest of the loop uses the new
 home. The upgrade does not hold the callers back (that would freeze every shipped fix to them for
@@ -427,7 +423,9 @@ chat's newest card until the person writes again, and on Builds' newest ended bu
 or waits paused. It sends through the composer's Loop (`loopOn`) marked `keepBuilding`, and goes once
 it went out. That mark reopens the finished build, or launches the next Loop as the launch tool would (an
 Autopilot run on the base goal plus what is left, its reference, ∞ under `MAX_RUN_HOURS`), with no
-turn deciding (chat-dispatch.ts `keepBuildingNow`); a tap always takes a turn of its own. A review
+turn deciding (chat-dispatch.ts `keepBuildingNow`); a tap always takes a turn of its own. On another
+engine than the build's it reopens nothing: like a typed message there, it is answered as with Loop
+off. A review
 is asked only with `review=yes`: yes ends the Loop, and a no goes back to the lead with both and
 decides nothing (the host still counts the no's, which close nothing); after `MAX_FINISH_REJECTIONS`
 (3) in a row, a review asked on proof that names no file made since the last no is turned back before
@@ -579,8 +577,7 @@ Loop on any engine that keeps a session, which the host seats in place (`leadsIn
 Codex, OpenCode, and a local model's session — Bonsai, OpenRouter, a local server — alike), and on
 one with no session of its own (Ollama) closes at once saying it needs one (`RunnerKind.NeedsSession`), which the chat's launch says before it promises anything
 (`launchFromIntake`). Classic is a web game's internal only, and the gauntlet works on web games only
-(`RunnerKind.WebOnly`). An open Loop whose parts include a kept older one without `SERVES_OPEN_LOOP`
-is refused with words (the chat's launch says so before its promise, `openLoopServed`); a resume
+(`RunnerKind.WebOnly`). A resume
 refused at its start stays paused and keeps its earlier report (`refusedRun` writes its close over the
 latest one, keeping only what was built, `KEPT_ON_REFUSAL`: never how that session stopped, its provider
 limit included; a refused reopen of a landed build keeps its outcome and the chat says why). A journal the host can't read, or a game list it can't give, refuses

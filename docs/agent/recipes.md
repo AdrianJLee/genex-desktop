@@ -239,8 +239,7 @@ The conventions are in [AGENTS.md](../../AGENTS.md#readability).
    and `export type EngineStatusCode = (typeof EngineStatusCode)[keyof typeof EngineStatusCode]`.
    To bind it to an existing union, add `satisfies Record<string, Existing>` and the reverse
    `Exclude<Existing, …>` check (`HostMethod`, `UiEvent`, `EventKind` do both). Move every
-   caller in the same change instead of keeping an alias: no alias stays, and a renamed seed name
-   goes in `substrate/seed-renames.ts`.
+   caller in the same change instead of keeping an alias: no alias stays.
 3. Put its predicates beside it (`isEngineReady`, `isContextFailure`), not at call sites.
 4. The seed cannot import it: give the seed its own copy (`RunEvent` in `loop/run-events.ts`) and
    hold the two together in `tests/conformance/seed-contracts.test.ts`

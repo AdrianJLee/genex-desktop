@@ -863,7 +863,6 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
   const leadRequest = (extra: Record<string, unknown> = {}) => ({
     prompt: "lead the run",
     cwd: "/tmp/game-workspace",
-    readOnly: true,
     resume: "chat-session",
     extraReads: ["/tmp/studio-scratch/autopilot/run_lead"],
     denyReads: ["/tmp/sibling-game"],
@@ -884,13 +883,13 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
 
   it("keeps its tools and the web, starts in Manual with no sandbox, and carries the standing grants", async () => {
     const sessions: Options[] = [];
-    for (const extra of [{}, { leadAsks: leadAsks() }]) {
+    for (const extra of [{ readOnly: true }, { leadAsks: leadAsks() }]) {
       const { fn, seen } = fakeQuery();
       await (await engineFor(fn, ["/tmp/secrets"])).delegate(leadRequest(extra) as never);
       sessions.push(seen[0]!);
     }
     const [unattended, asking] = sessions as [Options, Options];
-    // Without it: the unattended lead, byte for byte as before.
+    // Without it: a read-only session, byte for byte as before (the host seats no lead read-only).
     assert.equal(unattended.permissionMode, "acceptEdits");
     assert.equal("canUseTool" in unattended, false);
     assert.equal((unattended.sandbox as Options).autoAllowBashIfSandboxed, true);
@@ -1169,7 +1168,7 @@ describe("only Genex's workers", () => {
     };
     const shapes: Array<[string, Record<string, unknown>]> = [
       ["the chat's own session", { permissions: chat() }],
-      ["a lead that asks", { readOnly: true, leadAsks: lead }],
+      ["a lead that asks", { leadAsks: lead }],
       ["an unattended builder", {}],
       ["a read-only session", { readOnly: true }],
     ];

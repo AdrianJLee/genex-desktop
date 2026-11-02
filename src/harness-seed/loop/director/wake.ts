@@ -79,8 +79,6 @@ import type { TurnFacts, TurnVerdict, Wake, WakeReason, WakeView } from "./wake-
 
 /** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
 export const SERVES_LEAD = true;
-/** This part wakes an open Loop's lead too (a project that isn't a web game): a run reads it by namespace. */
-export const SERVES_OPEN_LOOP = true;
 
 /** A session limit is waited out at most this often a run. */
 export const MAX_LIMIT_WAITS = 2;

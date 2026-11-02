@@ -30,18 +30,21 @@ function closedWords(loopRun: AfterLoopRun): string {
 const OWN_WORK =
   "- Work the user asks for now, you do yourself, here in the game folder, like any change in this chat — no build starts for it, unless they ask in words for a new Loop: then you start it, as the Loop rule says.";
 
+/** A paused run's change that is not the build itself: the session's own work. */
+const PAUSED_OWN_WORK =
+  "- Other work they ask for — a fix, an update, a feature that is not that build's goal — you make yourself here, like any change in this chat: the build stays paused.";
+
 /**
- * The paused run's resume; a finished run's reopen when the turn grants it (Loop on,
- * reopen-run.ts); otherwise what a finished run's change is: the session's own work.
+ * A paused run's resume on its lead's engine; a finished run's reopen when the turn grants it (Loop
+ * on, reopen-run.ts); otherwise what a change is: the session's own work.
  */
 function workRules(loopRun: AfterLoopRun, engine: string | undefined, grant: ReopenGrant | null): string[] {
-  if (loopRun.state === RunState.Paused)
-    return [
-      `- This build is paused. When the user asks to go on with that build itself — resume, continue, keep going, run it again, with new guidance for it or none — call ${toolCall(engine, "resume_run")} once, last, with their instruction as text, and edit nothing in that reply: when your reply ends the build resumes where it stopped, with the working time it had left, and you lead it again. Going on, again or "rerun" is this resume; only a new Loop they ask for is a fresh start.`,
-      "- Other work they ask for — a fix, an update, a feature that is not that build's goal — you make yourself here, like any change in this chat: the build stays paused.",
-    ];
-  if (grant) return reopenRules(engine, grant);
-  return [OWN_WORK];
+  if (loopRun.state !== RunState.Paused) return grant ? reopenRules(engine, grant) : [OWN_WORK];
+  if (!loopRun.onLeadEngine) return [PAUSED_OWN_WORK];
+  return [
+    `- This build is paused. When the user asks to go on with that build itself — resume, continue, keep going, run it again, with new guidance for it or none — call ${toolCall(engine, "resume_run")} once, last, with their instruction as text, and edit nothing in that reply: when your reply ends the build resumes where it stopped, with the working time it had left. Going on, again or "rerun" is this resume; only a new Loop they ask for is a fresh start.`,
+    PAUSED_OWN_WORK,
+  ];
 }
 
 /**

@@ -61,9 +61,6 @@ import type { DelegateImage, DelegateResult, LiveToolSpec, ReferenceFrame } from
 
 export { directorTool } from "./director/tool-specs.ts";
 
-/** This part leads a Loop on a project of any kind: a run reads it by namespace before it leads an open Loop. */
-export const SERVES_OPEN_LOOP = true;
-
 /** The run's modules, whose functions `bindLoopRun` puts on the run. */
 const LOOP_RUN_MODULES = [loopRunFunctions, toolFunctions, integrateFunctions];
 
@@ -366,16 +363,10 @@ async function tearDown(loopRun: LoopRun): Promise<void> {
   ctx.setStatus("idle");
 }
 
-/**
- * The line the lead takes the chat on (live chat), open from the moment the run exists: what is sent
- * while the run prepares its start is handed to its lead, which reads it in its first turn's input.
- */
-function leadLine(ctx: HarnessCtx, run: Run, threadId: string, prepared: () => LoopRun | undefined): LeadLine {
-  const live = (): boolean => {
-    const loopRun = prepared();
-    return !ctx.cancelled && !loopRun?.state.finished && !loopRun?.report.failure;
-  };
-  return openLeadLine(run.runId, threadId, live, ctx);
+/** The line the lead takes the chat on (live chat), open once its lead is seated. */
+function leadLine(loopRun: LoopRun): LeadLine {
+  const { ctx, report, run, state, threadId } = loopRun;
+  return openLeadLine(run.runId, threadId, () => !state.finished && !ctx.cancelled && !report.failure, ctx);
 }
 
 /** The wake loop's run, and the close of whatever its lead left open. */
@@ -499,31 +490,21 @@ export async function runDirector(
   const measured = tracedContext(ctx, run, (span) =>
     retainSpan(timings, { ...span, goal: null, head: tracing?.state.integrationHead ?? null }),
   );
-  const line = leadLine(measured, run, threadId, () => tracing);
-  let loopRun: LoopRun;
-  let talk: DirectorTalk;
-  try {
-    loopRun = await prepareLoopRun(
-      measured,
-      { threadId, run, resume, ...(open ? { profile, clock } : {}) },
-      LOOP_RUN_MODULES,
-    );
-    const refused = loopRun.open?.refused;
-    if (refused) {
-      await line.release({ heardNone: true });
-      await refuseResume(loopRun, refused, loopRun.open?.refusalPauses === true);
-      return loopRun.report;
-    }
-    tracing = loopRun;
-    loopRun.sleep = clock.sleep;
-    keepTimings(loopRun, timings);
-    await seatTheLead(loopRun);
-    talk = directorTalk(loopRun, referenceImages(run), seatTools(loopRun));
-  } catch (err) {
-    // No lead takes what the line was handed: it goes back to the chat.
-    await line.release({ heardNone: true });
-    throw err;
+  const loopRun = await prepareLoopRun(
+    measured,
+    { threadId, run, resume, ...(open ? { profile, clock } : {}) },
+    LOOP_RUN_MODULES,
+  );
+  const refused = loopRun.open?.refused;
+  if (refused) {
+    await refuseResume(loopRun, refused, loopRun.open?.refusalPauses === true);
+    return loopRun.report;
   }
-  await leadTheRun(loopRun, talk, line, clock);
+  tracing = loopRun;
+  loopRun.sleep = clock.sleep;
+  keepTimings(loopRun, timings);
+  await seatTheLead(loopRun);
+  const talk = directorTalk(loopRun, referenceImages(run), seatTools(loopRun));
+  await leadTheRun(loopRun, talk, leadLine(loopRun), clock);
   return loopRun.report;
 }

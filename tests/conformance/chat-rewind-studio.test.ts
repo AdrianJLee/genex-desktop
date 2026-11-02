@@ -11,6 +11,7 @@ import { SkippedBy } from "../../src/shared/chat-rewind.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
 import { latestRun } from "../../src/shared/chat-run.ts";
+import { DispatchActionType } from "../../src/shared/protocol.ts";
 import { git } from "../../src/substrate/snapshots.ts";
 import type { JobSpawn } from "../../src/substrate/jobs.ts";
 import { JobRole, JobScopeKind } from "../../src/shared/jobs.ts";
@@ -393,19 +394,7 @@ it("rewound past a later build, the next message's run tools reach the build fro
     status: async () => ({ code: "ready", detail: "" }),
     models: async () => [],
     delegate: async (request) => {
-      if (useTools) {
-        const tried: Record<string, string> = {};
-        const calls: [string, Record<string, unknown>][] = [
-          ["run_status", {}],
-          ["show_build", {}],
-        ];
-        for (const [name, args] of calls) {
-          tried[name] = await request.onLiveTool!(name, args).then(String, (err: Error) => `refused: ${err.message}`);
-        }
-        answers.push(tried);
-        recordable.push((request.interviewTools ?? []).map((tool) => tool.name));
-      }
-      return {
+      const answered = {
         ok: true,
         summary: "Answered.",
         sessionId: request.resume ?? "session",
@@ -414,11 +403,33 @@ it("rewound past a later build, the next message's run tools reach the build fro
         durationMs: 1,
         engine: "claude-code",
       };
+      if (!useTools) return answered;
+      // Once: the resumed build's own lead is answered plainly.
+      useTools = false;
+      const tried: Record<string, string> = {};
+      const calls: [string, Record<string, unknown>][] = [
+        ["run_status", {}],
+        ["show_build", {}],
+      ];
+      for (const [name, args] of calls) {
+        tried[name] = await request.onLiveTool!(name, args).then(String, (err: Error) => `refused: ${err.message}`);
+      }
+      answers.push(tried);
+      recordable.push((request.interviewTools ?? []).map((tool) => tool.name));
+      return { ...answered, studioToolCalls: [{ name: "resume_run", args: { text: "Go on with the forest" } }] };
     },
   });
+  const { host } = rig.core;
+  const dispatch = host.dispatch;
+  const resumes: unknown[] = [];
+  host.dispatch = async (action, timeoutMs) => {
+    if (action.type === DispatchActionType.AutopilotResume) resumes.push(action.runId);
+    return dispatch.call(host, action, timeoutMs);
+  };
   // Build A, a Loop that seated a lead, paused before the message; the chat's own session answered it.
   await rig.core.store.writeArtifact(thread, "autopilot_run-a", {
     phase: "paused",
+    run: { runId: "run-a", project, engine: "claude-code", goal: "A forest", mode: "autopilot" },
     director: { lead: { chatSession: false } },
   });
   await rig.core.append(
@@ -460,6 +471,21 @@ it("rewound past a later build, the next message's run tools reach the build fro
   assert.equal(JSON.parse(tried!.run_status!).run.runId, "run-a");
   assert.match(tried!.show_build!, /Live/);
   assert.ok(recordable[0]?.includes("resume_run"), "build A is paused: the session may resume it");
+  // The resume it recorded, done once its reply ended, reaches build A through the rewound view.
+  const log = await rig.core.store.listEvents(thread);
+  const resumeCall = log.flatMap((e) =>
+    e.data.type === "tool_requested" && e.data.request.name === "resume_run" ? [e.data] : [],
+  )[0];
+  assert.deepEqual(resumeCall?.request.arguments, { runId: "run-a", text: "Go on with the forest" });
+  const answer = log.flatMap((e) =>
+    e.data.type === "tool_result" && e.data.tool_call_id === resumeCall?.tool_call_id ? [e.data.result] : [],
+  )[0];
+  assert.match(String(answer?.content), /Resume requested for the same run/);
+  assert.deepEqual(resumes, ["run-a"], "the host resumed build A");
+  assert.ok(
+    customEvents(log, "run_steering").some((e) => e.runId === "run-a" && e.text === "Go on with the forest"),
+    "with the instruction",
+  );
 });
 
 it("after a landed build, or with no saved copy, only the conversation rewinds and the files stay", async () => {

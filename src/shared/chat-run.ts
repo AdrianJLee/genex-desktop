@@ -181,8 +181,7 @@ const PROGRESS = /facet_|autopilot_|integration_|director_|optimization_updated|
 /**
  * Events that look like progress and are not: a wake of the lead is the lead being told, not the
  * run moving, and with up to thirty an hour they pushed the workers' own events off the list; so
- * did a steer's hand-over, two for every chat message a run's lead takes (live chat). The
- * seed's copy is loop/run-inbox.ts `NOT_PROGRESS`.
+ * did a steer's hand-over, two for every chat message a run's lead takes (live chat).
  */
 const NOT_PROGRESS: ReadonlySet<string> = new Set([CustomEvent.DirectorContinued, CustomEvent.RunSteeringDelivered]);
 

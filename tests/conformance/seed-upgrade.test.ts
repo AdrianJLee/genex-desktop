@@ -26,14 +26,11 @@ import { git, STUDIO_COMMITTER } from "../../src/substrate/snapshots.ts";
 import { cloneSeededWorkspace } from "../helpers/seed-upgrade-fixture.ts";
 import { closeBeforeCleanup, removeTree, tmpDir } from "../helpers/tmp.ts";
 import { readdirSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { studioActivity } from "../../src/shared/studio-activity.ts";
 import { toEntries } from "../../src/renderer/chat-entries.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 import { SEED_GENERATED } from "../../scripts/gen-harness-types.ts";
-import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
-import { gameRepo, loopHost } from "../helpers/loop-host.ts";
-import { copyProject, Project } from "../helpers/project-fixtures.ts";
 import { linkIsolated } from "../helpers/isolated-import.ts";
 
 async function rig(): Promise<{ seed: string; ws: string; manifest: string; backup: string }> {
@@ -885,18 +882,10 @@ describe("seed upgrade across the harness step flag", () => {
       ["loop/director/wake-schedule.ts", "turn.worked", /turn\.worked/],
       ["loop/director/wake.ts", "TurnEnd.Continue", /TurnEnd\.Continue/],
       ["loop/director/wake.ts", "turnReturnedAt", /turnReturnedAt/],
-      // A copy that has every call above but not the flag still refuses every Loop in place.
-      ["loop/director.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/director/setup.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/director/wake.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/director/wake-schedule.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/studio-state.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/run-dispatch.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      // After a Loop in place: its launch words and their guard, a finished one found by its journal,
+      // After a Loop in place: its launch words, a finished one found by its journal,
       // a resume in its journal's kind, no reopen, and the chat's status alone.
       ["loop/chat-dispatch.ts", "openLaunchPromise(", /openLaunchPromise/],
       ["loop/chat-dispatch.ts", "finishedInPlace(", /finishedInPlace/],
-      ["loop/chat-dispatch.ts", "openLoopServed(", /openLoopServed/],
       ["loop/run-dispatch.ts", "resumedProfile(", /resumedProfile/],
       ["loop/reopen-run.ts", "OPEN_LOOP_REFUSAL.notReopenable", /notReopenable/],
       ["loop/after-loop-run.ts", "inPlace", /inPlace/],
@@ -1011,117 +1000,6 @@ describe("seed upgrade across the harness step flag", () => {
     await writeFile(turn, `${shippedTurn}\n// the agent's own change, on the new shape\n`);
     const third = await boot();
     assert.ok(!(`${SEED_CALL_MEMORY_PREFIX}${TURN}` in (await memoryOf(third))), "the note is gone");
-  });
-});
-
-/**
- * One Loop for every project changed shipped parts (the run's dispatch and its runner vocabulary,
- * the chat's dispatch, brief and launch words, the reopen, the director's setup, session, wake and
- * run record, SkillOpt) and gave them new modules to import (`loop/director/open/`,
- * `loop/loop-switch.ts`, `loop/engine-seat.ts`, `loop/open-loop-prompts.ts`, `loop/builtin-hooks.ts`, `loop/loop-skills.ts`).
- * Any of those parts may be one the agent edited and a seed upgrade keeps at the older vintage: each
- * new name comes from a module of its own, so a current part beside one older copy still links,
- * through the loop, every local turn's prompt and the Unreal runner.
- */
-describe("seed upgrade across one Loop for every project", () => {
-  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-
-  it("a kept part that doesn't serve a Loop in place refuses such a Loop at its start, with words, and is noticed", {
-    timeout: 120_000,
-  }, async () => {
-    const OPEN_LOOP_PARTS = [
-      "loop/director.ts",
-      "loop/director/setup.ts",
-      "loop/director/wake.ts",
-      "loop/director/wake-schedule.ts",
-      "loop/director/open/contract.ts",
-      "loop/builtin-hooks.ts",
-      "loop/studio-state.ts",
-      "loop/run-dispatch.ts",
-    ];
-    /** The run's start: the chat's launch reads it beside the parts. */
-    const RUN_START = "loop/run-dispatch.ts";
-    const outcomes: Array<{
-      part: string;
-      refused: unknown;
-      delegated: number;
-      noticed: boolean;
-      launch: string;
-      promised: boolean;
-    }> = [];
-    for (const part of OPEN_LOOP_PARTS) {
-      const root = await tmpDir("seed-open-guard-");
-      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
-      // The agent's copy from before Loops on any project: everything else as shipped, but no flag.
-      const copy = await readFile(path.join(ws, part), "utf8");
-      const older = copy.replace(/^export const SERVES_OPEN_LOOP = true;$/m, "");
-      assert.notEqual(older, copy, `${part} carries the flag`);
-      await writeFile(path.join(ws, part), `${older}\n// the agent's own change\n`);
-      const report = await applySeed({
-        seedDir: shipped,
-        workspaceDir: ws,
-        manifestFile: manifest,
-        backupDir: path.join(root, "backup"),
-      });
-      const dir = await gameRepo(await copyProject(Project.GodotGame, path.join(root, "game")));
-      const host = loopHost({ dir, facts: [{ id: "godot-project", path: "." }], run: { runId: "run-guard" } });
-      const { handleRunStart } = (await import(pathToFileURL(path.join(ws, "loop/run-dispatch.ts")).href)) as {
-        handleRunStart: (studio: unknown, action: unknown) => Promise<void>;
-      };
-      const ctx = host.rec.ctx;
-      const studio = {
-        host: ctx,
-        cancels: new Set<string>(),
-        stoppedMessages: new Set<string>(),
-        attachedPictures: new Map(),
-        activeRuns: new Map(),
-        startingRuns: new Map(),
-        orphanRuns: new Map(),
-        scoped: () => ctx,
-      };
-      // A kept older start can't refuse itself: the chat's launch refuses for it.
-      if (part !== RUN_START)
-        await handleRunStart(studio, { type: "run_start", threadId: host.threadId, run: structuredClone(host.run) });
-      // The chat's launch says it before any promise: the run could not keep one.
-      const chat = loopHost({ dir, facts: [{ id: "godot-project", path: "." }], threadId: "t-launch" });
-      const { launchFromIntake } = (await import(pathToFileURL(path.join(ws, "loop/chat-dispatch.ts")).href)) as {
-        launchFromIntake: (studio: unknown, ctx: unknown, action: unknown, spec: unknown) => Promise<void>;
-      };
-      const chatStudio = { ...studio, host: chat.rec.ctx, scoped: () => chat.rec.ctx };
-      const spec = { goal: "A level the player walks through.", engine: "claude-code", mode: "autopilot", hours: 3 };
-      const launch = await launchFromIntake(
-        chatStudio,
-        chat.rec.ctx,
-        { threadId: chat.threadId, project: chat.game.name },
-        spec,
-      ).then(
-        () => "launched",
-        (err: unknown) => (err instanceof Error ? err.message : String(err)),
-      );
-      const promised = chat.rec
-        .paramsOf("events.append")
-        .some((params) => JSON.stringify(params.batch).includes('"role":"assistant"'));
-      outcomes.push({
-        part,
-        refused: host.appended("run_finished")[0]?.stoppedBecause,
-        delegated: host.rec.paramsOf("engine.delegate").length,
-        noticed: (report.outdatedCalls ?? []).includes(part) || !SEED_CALL_CHANGES.some((row) => row.file === part),
-        launch,
-        promised,
-      });
-      await removeTree(root);
-    }
-    assert.deepEqual(
-      outcomes,
-      OPEN_LOOP_PARTS.map((part) => ({
-        part,
-        refused: part === RUN_START ? undefined : OPEN_LOOP_REFUSAL.openLoopNeedsUpdate,
-        delegated: 0,
-        noticed: true,
-        launch: OPEN_LOOP_REFUSAL.openLoopNeedsUpdate,
-        promised: false,
-      })),
-    );
   });
 });
 

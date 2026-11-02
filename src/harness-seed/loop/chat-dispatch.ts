@@ -7,8 +7,7 @@
 import { runTurn, type TurnOptions, type TurnOutcome } from "./turn-loop.ts";
 import { sayInTurn, TurnStatus, TurnStop } from "./turn-record.ts";
 import { dropSteeringBacklog } from "./steering-backlog.ts";
-import * as runDispatchParts from "./run-dispatch.ts";
-import { afterLeadLoopRun, resumeAfterReply, type AfterLoopRun } from "./after-loop-run.ts";
+import { afterLeadLoopRun, holdsSession, resumeAfterReply, type AfterLoopRun } from "./after-loop-run.ts";
 import {
   commissionHours,
   firstLoopUnused,
@@ -21,7 +20,7 @@ import {
 import { MESSAGE as REOPEN_MESSAGE } from "./reopen-run-prompts.ts";
 import { conversationThrough, latestRun } from "./run-inbox.ts";
 import { eventsToMessages } from "./prompt.ts";
-import { EngineId, hasSessionRoles, RoleKey, roleEngine, supportsSessions } from "./model-roles.ts";
+import { EngineId, hasSessionRoles } from "./model-roles.ts";
 import {
   factsOfGame,
   LoopProfile,
@@ -32,8 +31,6 @@ import {
 } from "./folder-facts.ts";
 import { leadsInPlace } from "./engine-seat.ts";
 import { OPEN_LAUNCH_WORDS, OPEN_LOOP_REFUSAL } from "./open-loop-prompts.ts";
-import { openLoopServed } from "./open-loop-parts.ts";
-import { servesOpenLoop } from "./director/open/contract.ts";
 import { OLDER_LEAD_JOURNAL_KIND } from "./director/open/older-journal.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent, RunMode, RunState } from "./run-events.ts";
@@ -105,7 +102,8 @@ export async function handleUserMessage(studio: Studio, action: QueueAction, ste
   const { after } = loopRuns;
   carryAttachedPictures(studio.attachedPictures, action);
   const ctx = studio.scoped(action.threadId, StatusLane.Chat);
-  if (steering) await expectSession(studio.host, action, existing, steering);
+  const metadata = turnMetadata(action, after);
+  if (steering && (await holdsSession(studio.host, metadata.engine))) await steering.expect();
   if (asksStudioThreadToBuild(action)) return answerStudioThreadBuild(studio.host, ctx, action);
   // A build's late steering stays with that build: the section older builds left in NOTES.md goes
   // before the chat answers, so no later agent reads it as its own instruction.
@@ -115,7 +113,7 @@ export async function handleUserMessage(studio: Studio, action: QueueAction, ste
   const turn = await studio.host.call(HostMethod.TurnBegin, {
     threadId: action.threadId,
     input: userInput(action),
-    metadata: turnMetadata(action, after),
+    metadata,
   });
   try {
     // Stopped before its turn began: nothing answers it, and the chat is told.
@@ -140,32 +138,6 @@ function turnMetadata(action: QueueAction, after: AfterLoopRun | null): { engine
   const engine = after?.engine ?? action.engine ?? EngineId.Ollama;
   const model = after ? after.model : action.model;
   return { engine, ...(model ? { model } : {}) };
-}
-
-/**
- * The turn's engine answers with a session: expect it. The message may name none, and its run's
- * engine answers (a second expect is harmless); any other session engine is known only by its
- * description.
- */
-async function expectSession(
-  host: Host,
-  action: QueueAction,
-  existing: RunRecord | null,
-  steer: SteerHandle,
-): Promise<void> {
-  if (await answersInSession(host, turnEngine(action, existing))) await steer.expect();
-}
-
-/** The engine a message is answered on: its own, else its run's. */
-function turnEngine(action: QueueAction, existing: RunRecord | null): string {
-  return action.engine ?? existing?.engine ?? EngineId.Ollama;
-}
-
-/** Does this engine answer with a session: one known by name, or described so? */
-async function answersInSession(host: Host, engine: string): Promise<boolean> {
-  if (hasSessionRoles(engine)) return true;
-  const described = await host.call(HostMethod.EngineDescribe, {}).catch(() => []);
-  return supportsSessions(described.find((e) => e.id === engine));
 }
 
 /**
@@ -490,8 +462,7 @@ async function afterLoopRunFor(host: Host, action: QueueAction, existing: RunRec
   // Its finished build may be reopened only by the person's own words — a question's Loop a command's
   // result would inherit is not theirs — and only on the build's own engine. A Loop that worked in
   // the game folder itself is never reopened: a Loop message starts the next.
-  const ownEngine = loopRun.engine === roleEngine(existing, RoleKey.Planner);
-  const reopenable = ownEngine && !chatWrote(action) && !loopRun.inPlace;
+  const reopenable = loopRun.onLeadEngine && !chatWrote(action) && !loopRun.inPlace;
   return {
     ...loopRun,
     ...(action.messageId ? { messageId: action.messageId } : {}),
@@ -692,11 +663,8 @@ export async function launchFromIntake(
     });
   }
   await startWebIfPending(host, project, games);
-  // A Loop on a project that isn't a web game: kept edited parts that can't lead it (the run's start
-  // among them) refuse it first, before a web game's checks could ask for web files in the folder.
   const listed = games.find((g) => g.name === project) ?? null;
   const openLoop = listed !== null && loopProfileOf(listed) === LoopProfile.Open;
-  if (openLoop && !openLoopLaunches()) throw new Error(OPEN_LOOP_REFUSAL.openLoopNeedsUpdate);
   // What the folder itself refuses (loopRunRefusal): a page that cannot load, a game that is
   // already compiled. Said in chat now, instead of found out at 3am.
   const readiness = await host.call(HostMethod.GameValidate, { project }).catch(() => null);
@@ -748,11 +716,6 @@ export async function launchFromIntake(
       host.notify("run.failed", { error: String(err) });
     },
   );
-}
-
-/** Whether a Loop on a project that isn't a web game can be launched: every part it needs serves one, the run's start (read by namespace) among them. */
-function openLoopLaunches(): boolean {
-  return openLoopServed() && servesOpenLoop([runDispatchParts]);
 }
 
 /**

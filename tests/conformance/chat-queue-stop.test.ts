@@ -2,13 +2,14 @@
  * The chat's queue and Stop: a message left unanswered by a crash is answered once on boot, Stop
  * reaches a turn the chat's own session is answering (or a message still sending, or a plan being
  * written) and hands over to what waits behind it, and a stale Plan flag keeps a build's plan. And
- * what `run_status` shows of a run's progress (shared/chat-run.ts `runSnapshot`).
+ * what `run_status` shows of a run's progress (shared/chat-run.ts `runSnapshot`), beside the build
+ * controls the chat's session keeps after a run (`runControlTools`).
  */
 import assert from "node:assert/strict";
 import { after, it } from "node:test";
 import { startRig, waitForLog, customEvents, type Rig } from "../helpers/studio-rig.ts";
 import { type DelegateRequest, EngineError } from "../../src/substrate/engines/types.ts";
-import { runSnapshot } from "../../src/shared/chat-run.ts";
+import { RunControl, runControlTools, runSnapshot } from "../../src/shared/chat-run.ts";
 
 const rigs: Rig[] = [];
 after(async () => {
@@ -72,6 +73,16 @@ it("replays a durable unanswered message once on boot without opening intake", a
   const es = await rig.core.store.listEvents(thread);
   assert.equal(customEvents(es, "coordinator_message_handled").length, 1);
   assert.equal(customEvents(es, "run_started").length, 1);
+});
+
+it("offers the user a way to see and land a build after the run, in flat string tools both bridges carry", () => {
+  const tool = (name: string) => runControlTools.find((t) => t.name === name);
+  for (const name of [RunControl.ShowBuild, RunControl.LandBuild]) {
+    assert.ok(tool(name), `${name} exists`);
+    assert.equal(tool(name)?.parameters.properties.build?.type, "string");
+    assert.match(String(tool(name)?.description), /integration/);
+  }
+  assert.match(String(tool(RunControl.ShowBuild)?.description), /finished or paused/);
 });
 
 it("run_status includes the current Optimization stage without mixing runs", () => {

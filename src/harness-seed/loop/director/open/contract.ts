@@ -11,18 +11,6 @@ import { HookEvent, type HookedGame, hooksOn } from "../../hooks.ts";
 import { MINUTE_MS, SECOND_MS } from "../../time.ts";
 import type { WorkerPool } from "../../workers/pool.ts";
 
-/** This part serves a Loop on a project of any kind: a run reads it by namespace before it leads one. */
-export const SERVES_OPEN_LOOP = true;
-
-/**
- * Does every part an open Loop depends on serve one (`SERVES_OPEN_LOOP`)? A seed upgrade keeps a part
- * the agent edited before Loops on any project, which would prepare a web run on the folder or lack
- * the open Loop's wake-ups: such a run is refused with words, never led.
- */
-export function servesOpenLoop(parts: readonly Readonly<Record<string, unknown>>[]): boolean {
-  return parts.every((part) => part.SERVES_OPEN_LOOP === true);
-}
-
 /** The open lead's own tools, by the names its engine sends. Never rename a value. */
 export const OpenTool = { SavePoint: "save_point", Rewind: "rewind", Restart: "restart", Pause: "pause" } as const;
 export type OpenTool = (typeof OpenTool)[keyof typeof OpenTool];

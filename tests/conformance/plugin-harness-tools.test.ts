@@ -199,7 +199,7 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   assert.deepEqual((await localTools({ project })).sort(), [...AGENT_TOOLS].sort(), "the local harness's agents");
   assert.deepEqual((await localTools(undefined)).sort(), [...AGENT_TOOLS].sort(), "no game named: a web game's");
 
-  const facts = await capabilityFactsOf(core, threadId, project);
+  const facts = await capabilityFactsOf(core, project);
   for (const name of AGENT_TOOLS) assert.ok(facts.includes(name), `the facts name ${name}`);
   for (const name of [...RUNNER_TOOLS, ...UNREAL_PROJECT_TOOLS.slice(AGENT_TOOLS.length)])
     assert.ok(!facts.includes(name), `a web game's facts never name ${name}`);
@@ -212,7 +212,7 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   await delegate({});
   assert.deepEqual(sessions.at(-1)?.tools.sort(), [...UNREAL_PROJECT_TOOLS].sort(), "the chat of an Unreal project");
   assert.deepEqual((await localTools({ project })).sort(), [...UNREAL_PROJECT_TOOLS].sort());
-  const unrealFacts = await capabilityFactsOf(core, threadId, project);
+  const unrealFacts = await capabilityFactsOf(core, project);
   for (const name of UNREAL_PROJECT_TOOLS) assert.ok(unrealFacts.includes(name), `the facts name ${name}`);
   for (const name of RUNNER_TOOLS) assert.ok(!unrealFacts.includes(name), `the facts never name ${name}`);
   const counted = (await core.connectionSnapshot(threadId, project)).sources.find((s) => s.id === "unreal");

@@ -45,8 +45,6 @@ import type { LoopRun, LoopRunData, LoopRunState } from "./loop-run.ts";
 
 /** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
 export const SERVES_LEAD = true;
-/** This part prepares a Loop on a project of any kind: a run reads it by namespace before it leads one. */
-export const SERVES_OPEN_LOOP = true;
 
 /** Why a web Loop's worker may not write in the game folder itself: the lead's build is its integration worktree. */
 const LOCK_REFUSED =

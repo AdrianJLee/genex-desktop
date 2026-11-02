@@ -277,11 +277,9 @@ module that shipped before it (`SteerDelivery` is `loop/steer-delivery.ts`, the 
 ## Live chat during a build
 
 While a director run is going on the wake loop, its lead is the chat: a message sent meanwhile is
-handed to it at once, and it answers in the chat. The line opens as `runDirector` starts, before
-the run prepares its start (its first look at the game): a message sent meanwhile is handed to the
-lead then, and the lead reads it in its first turn's input (`wake.ts` `firstPrompt`), so a lead that
-cannot read input mid-turn (Codex) is never cut as its first turn starts. One sent before the line
-opens waits for it (`live-chat.ts` `chatWaitsFor`). Stop (composer or Builds) stops a starting build. A waking
+handed to it at once, and it answers in the chat. The line opens once `runDirector` has seated the
+lead; a message sent while the run prepares its start waits for it (`live-chat.ts` `chatWaitsFor`)
+and is then handed to the lead like any other. Stop (composer or Builds) stops a starting build. A waking
 run's start says its lead takes the chat (`autopilot_started.liveChat`), and while it runs the
 composer reads "Talk to the lead while it builds…" instead of "Sends when the build finishes…"
 (renderer `chat/live-chat.ts`).
@@ -438,19 +436,22 @@ session, or the local tool loop, with no run controls.
   `conversation.runControl`, for the run named — one that is not the
   chat's latest is refused ("The run changed"). The session asking is not one of the run's workers
   in `run_status`, nor a contractor building in the folder it lands into; a dirty folder is refused.
-- **Resuming a paused run.** After a paused run `resume_run` is bridged in as a recorded tool
+- **Resuming a paused run.** After a paused run, on the lead's engine (`AfterLoopRun.onLeadEngine`),
+  `resume_run` is bridged in as a recorded tool
   (`interviewTools`, like a Loop chat's launch), without its `runId`: only the instruction (`text`)
   is taken (`resumeAsked`), so it resumes the run it answers after. The session's reply ends
   first, then the chat does it (`resumeAfterReply`) through the host's `run.control` `resume_run`, which
   records the instruction as a `run_steering` of that message and resumes the journal; a reply that
   ended early after recording it still resumes, and says so. The chat then holds its next message
-  until run-dispatch.ts has reserved the run (`untilReserved`, at most
-  `RESUME_RESERVED_WITHIN_MS`), so a message sent during or just after that reply waits for the
+  until run-dispatch.ts has reserved the run, or holds it already (resumed meanwhile from Builds)
+  (`untilReserved`, at most `RESUME_RESERVED_WITHIN_MS`), so a message sent during or just after that reply waits for the
   run or reaches its lead instead of being answered as after a paused run again. Stop in that
   window keeps the run paused and says so: `handleRunStart`, which clears a thread's Stop as it
   reserves, asks `resumeStopped` first. The resumed run seats this same session as its lead
   (`leadSeat`), so the build stays one conversation. A refusal is said in the chat; a question
-  alone resumes nothing; Stop during the reply resumes nothing.
+  alone resumes nothing; Stop during the reply resumes nothing. A turn on another engine is offered
+  no resume: it moves the chat's bookmark to that engine, so a later Resume from Builds seats a fresh
+  lead (or the lead's own session from before the pause).
 - **Reopening a finished run.** A message the person sends with Loop on after a finished run
   keeps its commission when the chat's own session may reopen it — a turn on the build's own
   engine (`chat-dispatch.ts` `afterLoopRunFor`), never on another — (`reopen-run.ts`
@@ -517,8 +518,8 @@ session, or the local tool loop, with no run controls.
   quit after it registers but before the run saves its journal is repaired at boot as finished
   (the journal still says "done"); after the save, as paused.
 - **No Loop to go on with.** A finished build no Loop can go on from — no lead seated (the long turn,
-  the classic pipeline, a gauntlet, no journal), a message on another engine than the build's, or an
-  engine without sessions — is answered as with Loop off, and the chat says so once per finished
+  the classic pipeline, a gauntlet, no journal), a message on another engine than the build's (a Keep
+  building tap too), or an engine without sessions — is answered as with Loop off, and the chat says so once per finished
   build while the loop lives (`firstLoopUnused`, `MESSAGE.loopUnused`). A Loop that worked in the
   game folder itself (any project that isn't a web game) is not one of these: a Loop message the
   person sends after its finished run goes to no run, as
@@ -696,7 +697,7 @@ beside a lead's record of the same words); RO1 a reopened build's outcomes, RO4 
 a Loop message after a build whose lead was a session of its own (a question, no lead seated, a
 model without sessions) and RO6 a command's result; NC1–NC5 one session answering every message (a
 classic paused build, a lead of its own, another engine, Ollama, and a message sent while a Loop
-prepares, read in the lead's first turn). The Electron build smoke exercises Send during an active build, graph
+prepares, handed to the lead alone). The Electron build smoke exercises Send during an active build, graph
 preservation, and a finished chat's Mode back on its own Loop, with no new-build choice, without
 paid model calls.
 

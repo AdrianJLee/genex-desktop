@@ -310,8 +310,8 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     }
   });
 
-  it("a message to a run whose engine answers with a session shows Sending… while that session is set up, though the message names no engine", async () => {
-    // The run's engine is Claude Code; the messages name no engine, so the turn's engine is the run's.
+  it("a message after a build whose lead's engine answers with a session shows Sending… while that session is set up, though the message names no engine", async () => {
+    // The build's lead ran on Claude Code; the messages name no engine, so the turn's engine is the lead's.
     const events: any[] = [
         {
           id: "0001",
@@ -321,6 +321,11 @@ describe("steered session: an engine without input mid-turn is interrupted and r
             event_type: "run_started",
             payload: { runId: "r1", project: "pond", engine: "claude-code" },
           },
+        },
+        {
+          id: "0002",
+          thread_id: "chat",
+          data: { type: "custom", event_type: "run_finished", payload: { runId: "r1" } },
         },
       ],
       settingUp = deferred(),
@@ -332,6 +337,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
             events.push({ id: String(events.length + 1).padStart(4, "0"), thread_id: p.threadId, data });
         if (method === "events.list") return events;
         if (method === "engine.describe") return [];
+        if (method === "artifact.read") return { director: { lead: { chatSession: true } } };
         if (method === "turn.begin") {
           // The turn's session is being set up: this test ends the turn here.
           settingUp.resolve();

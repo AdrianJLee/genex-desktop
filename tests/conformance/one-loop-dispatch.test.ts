@@ -8,16 +8,9 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
-import * as builtinHookParts from "../../src/harness-seed/loop/builtin-hooks.ts";
 import { afterLeadLoopRun, afterLoopRunGrant } from "../../src/harness-seed/loop/after-loop-run.ts";
 import { afterLoopRunNote } from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
 import { launchFromIntake, startsNextOpenLoop } from "../../src/harness-seed/loop/chat-dispatch.ts";
-import * as directorParts from "../../src/harness-seed/loop/director.ts";
-import * as openContractParts from "../../src/harness-seed/loop/director/open/contract.ts";
-import { servesOpenLoop } from "../../src/harness-seed/loop/director/open/contract.ts";
-import * as setupParts from "../../src/harness-seed/loop/director/setup.ts";
-import * as wakeParts from "../../src/harness-seed/loop/director/wake.ts";
-import * as wakeScheduleParts from "../../src/harness-seed/loop/director/wake-schedule.ts";
 import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { launchRules } from "../../src/harness-seed/loop/launch-prompts.ts";
@@ -31,7 +24,6 @@ import { reopenAfterReply } from "../../src/harness-seed/loop/reopen-run.ts";
 import { runControlsFor } from "../../src/shared/chat-run.ts";
 import * as runDispatchParts from "../../src/harness-seed/loop/run-dispatch.ts";
 import { chooseRunner, handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
-import * as studioStateParts from "../../src/harness-seed/loop/studio-state.ts";
 import { RunnerKind } from "../../src/harness-seed/loop/studio-state.ts";
 import { harnessRunEnv, UNREAL_RUNNER_ENV } from "../../src/shared/protocol.ts";
 import { CHAT_SESSION, gameRepo, type LoopHost, type LoopTurn, loopHost } from "../helpers/loop-host.ts";
@@ -309,23 +301,7 @@ describe("a run the Unreal runner paused", () => {
 });
 
 describe("kept older parts, finished Loops and the chat's words", () => {
-  it("an older kept director that can't lead an open Loop refuses it with words, and a web Loop still runs", () => {
-    const parts = [
-      directorParts,
-      setupParts,
-      wakeParts,
-      wakeScheduleParts,
-      openContractParts,
-      builtinHookParts,
-      studioStateParts,
-      // The chat's launch reads the run's start too.
-      runDispatchParts,
-    ];
-    assert.equal(servesOpenLoop(parts), true, "every part this seed ships serves the one Loop");
-    for (let i = 0; i < parts.length; i++) {
-      const kept = parts.map((part, j) => (j === i ? { ...part, SERVES_OPEN_LOOP: undefined } : part));
-      assert.equal(servesOpenLoop(kept), false, `a kept older part ${i} refuses it`);
-    }
+  it("a web Loop on an engine that keeps a session runs under the director", () => {
     const described = [{ id: "claude-code", kind: "delegated", supportsSessions: true }] as never;
     assert.equal(chooseRunner({ mode: "autopilot", engine: "claude-code" } as never, described), RunnerKind.Director);
   });

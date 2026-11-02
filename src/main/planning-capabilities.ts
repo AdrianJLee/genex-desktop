@@ -58,7 +58,6 @@ export function planningCapabilities(
   plugins: PluginInfo[],
   connections: ConnectionSnapshot,
   connectors: Array<{ id: string; name: string; health: string; tools: string[] }>,
-  template: boolean,
   scope: readonly FactRef[] | GameKind | GameEngine = [],
 ): string {
   const game = gameKindOf(scope);

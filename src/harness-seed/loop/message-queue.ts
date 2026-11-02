@@ -92,7 +92,7 @@ export interface SteerHandle {
   /** The session starts; a runner that takes switches says so (`switches`), and a message that changes how the turn runs joins it too. */
   open(options?: OpenOptions): Promise<QueueAction[]>;
   /** The runner went on with this message's settings: what is sent after it is weighed against them. */
-  follows?(item: QueueAction): void;
+  follows(item: QueueAction): void;
   close(result?: { steered?: string[] } | null): Promise<QueueAction[]>;
   deliver(items: QueueAction[], how: SteerDelivery): Promise<void>;
   requeue(items: QueueAction[]): Promise<void>;

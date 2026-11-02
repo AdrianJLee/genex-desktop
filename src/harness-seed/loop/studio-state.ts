@@ -26,9 +26,6 @@ export const RunnerKind = {
 } as const;
 export type RunnerKind = (typeof RunnerKind)[keyof typeof RunnerKind];
 
-/** This part names the runners of a Loop on a project of any kind: a run reads it by namespace before it leads an open Loop. */
-export const SERVES_OPEN_LOOP = true;
-
 /**
  * A run this loop is conducting (or reserving), and the promise that settles when it is over.
  * `closed` settles, and `done` is set, as soon as the run itself is over: the chat is free from

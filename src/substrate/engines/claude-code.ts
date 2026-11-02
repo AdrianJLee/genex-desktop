@@ -2463,22 +2463,20 @@ function shellAllows(request: DelegateRequest, genexShell: boolean): string[] {
 
 /**
  * Research is part of the work: the chat, a director and its builders may search and read the
- * web, and so may a read-only lead the person may talk to (`leadAsks`), the chat's
- * main agent. Another read-only session answers from what it was handed. A worker researches when it writes, or when its lead asked for research
- * (`WorkerSeat.research`); a reader or a worker in Plan otherwise does not.
+ * web. A read-only session answers from what it was handed. A worker researches when it writes, or
+ * when its lead asked for research (`WorkerSeat.research`); a reader or a worker in Plan otherwise
+ * does not.
  */
 function researches(request: DelegateRequest): boolean {
   if (request.worker) return request.worker.research || !workerReadOnly(request.worker, Boolean(request.readOnly));
-  return !request.readOnly || Boolean(request.leadAsks);
+  return !request.readOnly;
 }
 
 /**
  * The tools the session never gets. No session gets Claude Code's own sub-agents (Agent, Task):
  * Genex runs the workers, under the person's ceiling and the chat's mode. A chat that may launch a
  * build is still a full contractor: it answers, researches or edits itself and launches only when
- * the ask needs a build. A read-only session (a reviewer, a reader) may not even run a command. A
- * read-only lead the person may talk to (`leadAsks`), the chat's main agent, keeps
- * what the chat's own session keeps; the chat's mode decides each call.
+ * the ask needs a build. A read-only session (a reviewer, a reader) may not even run a command.
  */
 function disallowedToolsFor(request: DelegateRequest, genexShell = false): string[] {
   const refused = refusedTools(request);
@@ -2489,8 +2487,7 @@ function disallowedToolsFor(request: DelegateRequest, genexShell = false): strin
 /** The tools a session never gets, whoever runs its commands (`disallowedToolsFor`). */
 function refusedTools(request: DelegateRequest): string[] {
   if (request.worker) return workerDisallowedTools(request);
-  if (request.readOnly && !request.leadAsks)
-    return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
+  if (request.readOnly) return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
   return [...MESSAGING_TOOLS, ...SUBAGENT_TOOLS, ...(asksOf(request) ? ASKING_TOOLS : [])];
 }
 

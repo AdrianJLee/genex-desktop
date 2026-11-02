@@ -13,7 +13,6 @@ import {
 } from "./folder-facts.ts";
 import { BuiltinGate, fireGates } from "./builtin-hooks.ts";
 import { OLDER_LEAD_JOURNAL_KIND } from "./director/open/older-journal.ts";
-import { openLoopServed } from "./open-loop-parts.ts";
 import { leadsInPlace } from "./engine-seat.ts";
 import { switchNamed, unrealRunnerOn } from "./loop-switch.ts";
 import { OPEN_LOOP_REFUSAL } from "./open-loop-prompts.ts";
@@ -46,9 +45,6 @@ export const RunStartRefusal = {
   WebNotReady: "web_not_ready",
 } as const;
 export type RunStartRefusal = (typeof RunStartRefusal)[keyof typeof RunStartRefusal];
-
-/** This start leads a Loop on a project of any kind: the chat's launch reads it by namespace (`open-loop-parts.ts`). */
-export const SERVES_OPEN_LOOP = true;
 
 /** What the chat and the run record are told. */
 const MESSAGE = {
@@ -686,7 +682,6 @@ async function runnerFor(host: Host, run: Run, ask: RunnerAsk): Promise<ChosenRu
     if (ask.classicResume && kind === RunnerKind.Director) return closingOlderBuild();
     return byKind(kind);
   }
-  if (!openLoopServed()) return refusing(OPEN_LOOP_REFUSAL.openLoopNeedsUpdate);
   const game = games.find((listed) => listed.name === run.project);
   // The saved journal's kind is read only when the switch is named: no other run makes the call.
   const journalKind = resume && switchNamed(process.env) ? (await readJournal(host, threadId, run.runId))?.kind : null;

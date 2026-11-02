@@ -747,12 +747,12 @@ const RETRIES_PERSONS_LOOP: MessageOrigin = "loop-held";
 
 /**
  * Whether the chat's own session is handed the Loop's start: on the person's own words, never in a
- * run's own turn and never on words Genex wrote itself (`origin`: a command's result, the cover step).
+ * run's own turn and never on words Genex wrote itself (`from`: a command's result, the cover step,
+ * a plugin's words in the chat), except its word that asks for the person's held Loop again.
  */
 function launches(options: DelegatedOptions): boolean {
   if (options.runId) return false;
-  const origin = options.asked?.origin;
-  return origin == null || origin === RETRIES_PERSONS_LOOP;
+  return !genexWroteIt(options) || options.asked?.origin === RETRIES_PERSONS_LOOP;
 }
 
 /** The folder the chat's last contractor session worked in, while it still exists. */

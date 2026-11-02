@@ -22,6 +22,7 @@ import {
   type SteerSend,
 } from "../../src/substrate/engines/types.ts";
 import { EngineId } from "../../src/shared/providers.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import { GameEngine } from "../../src/shared/game-engine.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
 import { createRunInbox, type RunInbox } from "../../src/harness-seed/loop/run-inbox.ts";
@@ -3334,6 +3335,8 @@ describe("a message after a finished build whose lead was a session of its own",
       model: undefined,
       text: "I ran this in the terminal:\nnpm test\n\nIt failed (exit code 1). It printed nothing.",
       origin: "command-result",
+      // As the host queues every message the chat wrote itself: Genex's (conversation.ts).
+      from: MessageFrom.Genex,
       autopilot: { hours: 2 },
     };
     for (const chatSession of [true, false]) {
@@ -3349,6 +3352,18 @@ describe("a message after a finished build whose lead was a session of its own",
       );
       assert.equal((await chat.registered()).length, 1, "nothing reopened");
     }
+  });
+
+  /*
+   * A plugin's words shown in the chat (desktop-assist) are queued as Genex's (`from`) with no
+   * `origin`: the turn that answers them is a Genex-written one, like a command's result.
+   */
+  it("RO6b. words a plugin posted in the chat, Genex's with no origin, are handed no Loop's start", async () => {
+    const chat = ownSessionChat({ chatSession: true });
+    const posted = { ...ownMessage, text: "Computer control is on: try the game again.", from: MessageFrom.Genex };
+    await handleUserMessage(chat.studio as never, posted as never);
+    assert.equal(chat.asked.sessions[0]?.interviewTools, undefined, "no Loop's start for Genex's words");
+    assert.equal(chat.asked.sessions[0]?.from, MessageFrom.Genex, "the turn reads them as Genex's");
   });
 
   /**

@@ -628,8 +628,8 @@ build smoke exercises Send during an active build and graph preservation, withou
 Every chat turn goes to an ordinary contractor session in the game folder (its brief, tools,
 capture and host tools) with the Loop's start, `start_autopilot` (`loop/start-autopilot.ts`),
 bridged in as a tool it may call or not (`delegated-turn.ts` `launches`): never in a run's turn,
-and never on words Genex wrote itself (`origin`: a command's result, the cover step), except its
-word after the person's held Loop. An engine without sessions is handed none: the tool lives
+and never on words Genex wrote itself (`from: genex`: a command's result, the cover step, a
+plugin's words in the chat), except its word after the person's held Loop. An engine without sessions is handed none: the tool lives
 outside `tools/`, so the direct engines' tool loop never lists it. The tool's description says
 what a Loop is and that it starts from the folder as the reply leaves it; when to call it is the
 agent's own decision. It answers, researches, writes plans or edits the game itself, or starts a

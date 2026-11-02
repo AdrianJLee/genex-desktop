@@ -23,7 +23,7 @@ function skillFact(pluginId: string, skill: PluginSkill) {
  * facts leave out), its skill tool last, as names and descriptions.
  */
 function toolFacts(manifest: PluginManifest, reach: PluginReach) {
-  const skillTool = reach.skillTool ? pluginSkillTool(manifest) : undefined;
+  const skillTool = reach.skillTool ? pluginSkillTool({ ...manifest, skills: reach.skills }) : undefined;
   return [
     ...reach.tools.map((t) => ({ name: `${manifest.id}__${t.name}`, description: t.description })),
     ...(skillTool ? [{ name: skillTool.name, description: skillTool.description }] : []),

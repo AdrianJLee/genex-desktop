@@ -386,23 +386,24 @@ export interface PluginReach {
 }
 /**
  * What of one plugin reaches a session for a game (`{ facts: [] }`: no kind yet, served as a web
- * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session was: the agent tools whose `facts` reach; the skills
- * whose scope reaches, never through a Unity or Godot game's web export, and, when they name tools,
- * one of those reaches too (a skill follows its tools); the skill reader while a file skill reaches. A narrowed session none of whose offered
- * tools the plugin has gets nothing of it, not even its skills. The registry's snapshot and the
- * capability facts both read this one rule.
+ * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session
+ * was, tools and skills alike never through a Unity or Godot game's web export: the agent tools
+ * whose `facts` reach; the skills whose scope reaches and, when they name tools, one of those
+ * reaches too (a skill follows its tools); the skill reader while a file skill reaches. A narrowed
+ * session none of whose offered tools the plugin has gets nothing of it, not even its skills. The
+ * registry's snapshot and the capability facts both read this one rule.
  */
 export function pluginReach(
   manifest: Pick<PluginManifest, "id" | "tools" | "skills">,
   game: GameKind,
   offered?: (agentName: string) => boolean,
 ): PluginReach {
+  const known = withoutEngineWebVersion(game);
   const tools = manifest.tools.filter(
-    (t) => isAgentTool(t) && scopeReaches(t.facts, game) && (!offered || offered(`${manifest.id}__${t.name}`)),
+    (t) => isAgentTool(t) && scopeReaches(t.facts, known) && (!offered || offered(`${manifest.id}__${t.name}`)),
   );
   if (offered && !tools.length) return { tools, skills: [], skillTool: false };
   const reaching = new Set(tools.map((t) => t.name));
-  const known = withoutEngineWebVersion(game);
   const skills = manifest.skills.filter(
     (s) => scopeReaches(skillScope(s), known) && (!s.tools || s.tools.some((name) => reaching.has(name))),
   );

@@ -27,7 +27,7 @@ export function workerTools(types: readonly WorkerType[] = [], allowed: number =
         type: "object",
         properties: {
           title: text(
-            "A few words naming what the player gets, in the language the person writes in: the person sees it in the chat, on the Building card and on the graph.",
+            "A few words naming what the player gets: the person sees it in the chat, on the Building card and on the graph.",
           ),
           task: text("Everything the worker needs; it sees nothing else."),
           isolation: text("read | copy | lock. Required unless type gives one."),

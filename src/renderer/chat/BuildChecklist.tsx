@@ -25,7 +25,7 @@ export function BuildChecklist({
         {list.rows.map((row) => (
           <li key={row.id} data-part-row={row.mark} className="flex min-w-0 items-start gap-2.5 py-1 text-chat-sub">
             <StepMark done={row.mark === PartMark.Added} working={row.mark === PartMark.Working} clear />
-            <span className={`min-w-0 flex-1 truncate ${row.mark === PartMark.Next ? "text-ink-3" : "text-ink"}`}>
+            <span className={`line-clamp-2 min-w-0 flex-1 ${row.mark === PartMark.Next ? "text-ink-3" : "text-ink"}`}>
               {row.title}
             </span>
             <span className="shrink-0 ps-2 text-ink-3">{row.status}</span>

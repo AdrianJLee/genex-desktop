@@ -40,7 +40,7 @@ export const OPEN_WORDS = {
     "The Loop is closing, and Genex keeps its last work now. Change nothing more; end your turn with a one-paragraph summary for the person.",
   personFinished:
     "The person asked the Loop to finish: it is closed. End your turn with a one-paragraph summary for the person.",
-  needsLabel: `${OpenTool.SavePoint} needs a label: a few words naming what works now.`,
+  needsLabel: `${OpenTool.SavePoint} needs a label.`,
   /** A save point or a finish while Genex brings the project's app back: nothing is kept or checked. */
   recovering:
     "Genex is bringing the project's app back; nothing was kept or checked. Try again once it says the app is back.",

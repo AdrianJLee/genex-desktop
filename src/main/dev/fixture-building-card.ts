@@ -7,12 +7,12 @@
  * started: the start closes every run an earlier app left open, so a Loop still going written before
  * it would read as stopped.
  */
-import { CustomEvent, customRecord, LEAD_PART } from "../../shared/custom-events.ts";
+import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { WorkerEnd, WorkerIsolation, WorkerStopCode } from "../../shared/workers.ts";
 import type { StudioCore } from "../studio-core.ts";
-import { FIXTURE_MODEL, fixtureRun } from "./fixture-kit.ts";
+import { FIXTURE_MODEL, fixtureRun, LEAD_ROW, leadSavePoint } from "./fixture-kit.ts";
 
 const RUN_ID = "fixture-building-card";
 const GOAL = "Make a night street race on rain-slicked city streets.";
@@ -103,33 +103,6 @@ function added(run: Scoped, workerId: string, title: string, head: string): Even
   ];
 }
 
-/**
- * A save point of the lead, as the seed's open Loop writes it (`savePointRound`): the lead's own row
- * at work at the first, its kept round under the label, and its merge into the game folder.
- */
-function savePoint(run: Scoped, round: number, label: string): EventData[] {
-  const snapshot = `fixture-building-card-save-${round}`;
-  const lead = { workerId: LEAD_PART, title: "Lead", mode: "single", state: "running" };
-  return [
-    ...(round === 1 ? [run(CustomEvent.DirectorWorker, lead)] : []),
-    run(CustomEvent.FacetIteration, {
-      facetId: LEAD_PART,
-      facetTitle: lead.title,
-      iteration: round,
-      winner: "challenger",
-      verdictSource: "lead",
-      reason: "",
-      satisfied: false,
-      summary: "",
-      label,
-      snapshot,
-      shots: [],
-      auto: false,
-    }),
-    run(CustomEvent.IntegrationMerge, { facetId: LEAD_PART, round, iteration: round, snapshot, conflict: false }),
-  ];
-}
-
 /** One of the chat's earlier Loops: its ask, its plan, every part added, and its close. */
 function finishedLoop(project: string, loop: EarlierLoop): EventData[] {
   const run = fixtureRun({ runId: loop.runId, project });
@@ -165,10 +138,11 @@ function buildingLoop(project: string): EventData[] {
       workerRecords: true,
       liveChat: true,
     }),
-    ...savePoint(run, 1, SAVE_POINTS[0]),
+    run(CustomEvent.DirectorWorker, { ...LEAD_ROW, state: "running" }),
+    ...leadSavePoint(run, project, 1, SAVE_POINTS[0]),
     ...added(run, "hud", "Speed and lap HUD", "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"),
     ...added(run, "track", "Track and night city", "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e"),
-    ...savePoint(run, 2, SAVE_POINTS[1]),
+    ...leadSavePoint(run, project, 2, SAVE_POINTS[1]),
     run(CustomEvent.WorkerStarted, {
       workerId: "cars",
       title: "Cars: clear-coat finish",

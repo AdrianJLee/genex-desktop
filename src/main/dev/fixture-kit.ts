@@ -12,8 +12,9 @@ import {
   linuxInstallCommands,
   type SandboxProblem,
 } from "../../shared/boot.ts";
-import type { CustomEventType } from "../../shared/custom-events.ts";
+import { CustomEvent, type CustomEventType, LEAD_PART } from "../../shared/custom-events.ts";
 import { EventKind, type EventData } from "../../shared/event-log.ts";
+import { RoundWinner } from "../../shared/run-state.ts";
 import { ShotKind, iterationDir } from "../core/run-shots.ts";
 
 export const FIXTURE_VERSION = 1;
@@ -208,4 +209,49 @@ export function fixtureRun(scope: Record<string, unknown>) {
     event_type: name,
     payload: { ...scope, ...payload },
   });
+}
+
+/** The open Loop's lead's own row (`director_worker`, its state aside), as the seed's `leadRow` writes it. */
+export const LEAD_ROW = { workerId: LEAD_PART, title: "Lead", mode: "single" } as const;
+
+/** The verdict source a round the lead kept itself carries (the seed's `SAVE_POINT_VERDICT_SOURCE`). */
+export const SAVE_POINT_SOURCE = "lead";
+
+/**
+ * A save point as the open Loop writes it (`savePointRound`): a kept round of the lead's row under
+ * its label, and its merge into the game folder under the snapshot `fixture-save-<project>-<round>`.
+ */
+export function leadSavePoint(
+  run: ReturnType<typeof fixtureRun>,
+  project: string,
+  round: number,
+  label: string,
+  summary = "",
+): EventData[] {
+  const snapshot = `fixture-save-${project}-${round}`;
+  return [
+    run(CustomEvent.FacetIteration, {
+      facetId: LEAD_ROW.workerId,
+      facetTitle: LEAD_ROW.title,
+      iteration: round,
+      winner: RoundWinner.Challenger,
+      verdictSource: SAVE_POINT_SOURCE,
+      reason: summary,
+      satisfied: false,
+      summary,
+      label,
+      snapshot,
+      shots: [],
+      auto: false,
+      move: { what: summary ? `${label}: ${summary}` : label, delivered: true },
+    }),
+    run(CustomEvent.IntegrationMerge, {
+      project,
+      facetId: LEAD_ROW.workerId,
+      round,
+      iteration: round,
+      snapshot,
+      conflict: false,
+    }),
+  ];
 }

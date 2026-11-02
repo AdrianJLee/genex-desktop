@@ -31,7 +31,7 @@ import { ExecutionStatus } from "../../shared/run-state.ts";
 import { UiEvent, type UiEventMap } from "../../shared/ui-events.ts";
 import { poolWorkerId, WorkerIsolation } from "../../shared/workers.ts";
 import type { StudioCore } from "../studio-core.ts";
-import { FIXTURE_MODEL, fixtureRun } from "./fixture-kit.ts";
+import { FIXTURE_MODEL, fixtureRun, LEAD_ROW, leadSavePoint } from "./fixture-kit.ts";
 
 /** The fixture's games, the local plugin's always-allowed tool and the worker whose question waits. */
 export const OPEN_PROJECTS = {
@@ -139,16 +139,13 @@ const LOCAL_MANIFEST = {
 const LOCAL_BACKEND =
   "export async function activate() {\n  return { async tool(name) { return { ran: name }; } };\n}\n";
 
-/** The Loops' asks, and their lead's own row and save points as the open Loop writes them. */
+/** The Loops' asks, and their lead's own row's states as the open Loop writes them. */
 const GODOT_EARLIER_ASK = "Build the moon base's walls and a door that opens.";
 const GODOT_ASK = "Light the moon base and make it play in a browser.";
 const PLUGIN_ASK = "Add a toolbar button that places a lamp at the camera.";
 const PORT_ASK = "Make this game in Unreal.";
-const LEAD_ROW = { workerId: "lead", title: "Lead", mode: "single" } as const;
 const LEAD_RUNNING = "running";
 const LEAD_DONE = "done";
-/** The verdict source a save point's round carries (the seed's `SAVE_POINT_VERDICT_SOURCE`). */
-const SAVE_POINT_SOURCE = "lead";
 /** The in-place Loop's close when its time ran out with no reviewer's yes (the seed's `OPEN_END.timeUpNoClaim`). */
 const OPEN_TIME_UP = "the Loop's time ran out; here is where it stands";
 /** How long the earlier timed Loop was given. */
@@ -328,35 +325,6 @@ function openStart(run: Scoped, ask: string, extra: Record<string, unknown> = {}
   ];
 }
 
-/** A save point as the open Loop draws it: a kept round of the lead's row, and its merge into the folder. */
-function savePoint(run: Scoped, project: string, round: number, label: string, summary: string): EventData[] {
-  const snapshot = `fixture-save-${project}-${round}`;
-  return [
-    run(CustomEvent.FacetIteration, {
-      facetId: LEAD_ROW.workerId,
-      facetTitle: LEAD_ROW.title,
-      iteration: round,
-      winner: "challenger",
-      verdictSource: SAVE_POINT_SOURCE,
-      reason: summary,
-      satisfied: false,
-      summary,
-      label,
-      snapshot,
-      shots: [],
-      move: { what: `${label}: ${summary}`, delivered: true },
-    }),
-    run(CustomEvent.IntegrationMerge, {
-      project,
-      facetId: LEAD_ROW.workerId,
-      round,
-      iteration: round,
-      snapshot,
-      conflict: false,
-    }),
-  ];
-}
-
 /** The Godot game's earlier timed Loop: one save point, then its hours and grace ran out with no claim read. */
 function earlierGodotLoop(project: string): EventData[] {
   const run = fixtureRun({ runId: GODOT_CLOSED_RUN, project });
@@ -365,7 +333,7 @@ function earlierGodotLoop(project: string): EventData[] {
   const notChecked = "The time ran out.";
   return [
     ...openStart(run, GODOT_EARLIER_ASK, { budgets: { wallClockMs: EARLIER_LOOP_MS } }),
-    ...savePoint(run, project, 1, label, summary),
+    ...leadSavePoint(run, project, 1, label, summary),
     run(CustomEvent.DirectorWorker, { ...LEAD_ROW, state: LEAD_DONE }),
     run(CustomEvent.RunFinished, {
       profile: LoopProfile.Open,
@@ -397,7 +365,7 @@ function godotLoop(project: string, threadId: string): EventData[] {
   const run = fixtureRun({ runId: GODOT_LOOP_RUN, project });
   return [
     ...openStart(run, GODOT_ASK),
-    ...savePoint(run, project, 1, "Lights", "the base's lamps light the corridors"),
+    ...leadSavePoint(run, project, 1, "Lights", "the base's lamps light the corridors"),
     run(CustomEvent.WorkerStarted, EXPORTER),
     {
       type: EventKind.Custom,
@@ -428,7 +396,7 @@ function pluginLoop(project: string, threadId: string): EventData[] {
   const run = fixtureRun({ runId: PLUGIN_LOOP_RUN, project });
   return [
     ...openStart(run, PLUGIN_ASK),
-    ...savePoint(run, project, 1, "Button", "the toolbar shows the lamp button"),
+    ...leadSavePoint(run, project, 1, "Button", "the toolbar shows the lamp button"),
     ...answeredAsks(project, threadId),
     run(CustomEvent.FinishCheck, { round: 1, step: FinishCheckStep.Checking, claim: PLUGIN_CLAIM }),
     run(CustomEvent.FinishCheck, {

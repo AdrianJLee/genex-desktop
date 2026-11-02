@@ -7,12 +7,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { savePointRound } from "../../src/harness-seed/loop/director/open/graph.ts";
-import { buildChecklist, checklistCaption, PartMark, runSavePoints } from "../../src/renderer/chat/build-checklist.ts";
+import { buildChecklist, checklistCaption, PartMark } from "../../src/renderer/chat/build-checklist.ts";
 import { buildHistory } from "../../src/renderer/build-progress.ts";
 import { BuildBarShape, buildBarShape } from "../../src/renderer/panels/run-graph/bar-shape.ts";
 import { BUILD_CHECKLIST_WORDS } from "../../src/renderer/words.ts";
-import { CustomEvent, LEAD_PART } from "../../src/shared/custom-events.ts";
-import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
+import { CHAT_PAGE_SIZE } from "../../src/shared/chat-history.ts";
+import { CustomEvent, customPayload, LEAD_PART } from "../../src/shared/custom-events.ts";
+import { type EventData, type EventEnvelope, EventKind } from "../../src/shared/event-log.ts";
 import { MINUTE_MS } from "../../src/shared/duration.ts";
 import { RunState } from "../../src/shared/run-state.ts";
 import { summarizeRun } from "../../src/shared/run-summary.ts";
@@ -21,6 +22,8 @@ import { WorkerEnd, WorkerVerdict } from "../../src/shared/workers.ts";
 const RUN = "run_c";
 const PROJECT = "racer";
 const NOW = Date.UTC(2026, 9, 13, 12, 0, 0);
+/** A tool call of the lead's turn: what fills the chat between its save points. */
+const READ_CALL = { name: "Read", arguments: {} };
 
 const event = (id: number, data: EventData): EventEnvelope => ({
   id: String(id).padStart(6, "0"),
@@ -59,9 +62,9 @@ async function leadSaves(log: EventEnvelope[], at: number, label: string, auto =
   await savePointRound(loopRun as never, point, at, []);
 }
 
-/** The checklist as the card reads it from a log, at `now`. */
+/** The checklist as the card reads it from the summary main builds of the whole log, at `now`. */
 function checklistOf(events: EventEnvelope[], { now = NOW } = {}) {
-  return buildChecklist({ summary: summarizeRun(events, PROJECT, RUN), saves: runSavePoints(events, RUN), now });
+  return buildChecklist(summarizeRun(events, PROJECT, RUN), now);
 }
 
 const rowsOf = (list: ReturnType<typeof checklistOf>) => list?.rows.map((row) => [row.title, row.mark, row.status]);
@@ -103,13 +106,31 @@ describe("the Building card's checklist", () => {
     };
     log.push(custom(log.length + 1, CustomEvent.FacetIteration, elsewhere));
     assert.deepEqual(
-      runSavePoints(log, RUN).map((point) => point.label),
+      checklistOf(log)?.rows.map((row) => row.title),
       [
         "Tower defense playable: 4 towers, 15 waves, boss, HUD",
         "Tower defense complete: music, tuned difficulty, victory/restart verified",
+        "Battle music loop",
       ],
     );
-    assert.equal(checklistOf(log)?.rows.length, 3);
+  });
+
+  it("keeps a save point the chat's loaded page no longer holds: the steps come from the run's summary of the whole log", async () => {
+    const log = [custom(1, CustomEvent.RunStarted, { mode: "director" })];
+    await leadSaves(log, 1, "A car to drive");
+    // The lead's turn between the two save points: more tool calls than one page of the chat holds.
+    for (let call = 0; call < CHAT_PAGE_SIZE; call++)
+      log.push(event(log.length + 1, { type: EventKind.ToolRequested, tool_call_id: `c${call}`, request: READ_CALL }));
+    await leadSaves(log, 2, "A full lap");
+    const page = log.slice(-CHAT_PAGE_SIZE);
+    const labels = page.map((one) => customPayload(one.data, CustomEvent.FacetIteration)?.label);
+    assert.ok(!labels.includes("A car to drive"), "the first save point is off the page");
+    const list = checklistOf(log);
+    assert.deepEqual(
+      list?.rows.map((row) => row.title),
+      ["A car to drive", "A full lap"],
+    );
+    assert.equal(list?.done, 2);
   });
 
   it("counts what is done and what works on the card's one line, with no total to count against", async () => {
@@ -220,11 +241,7 @@ describe("the building-card dev fixture", () => {
     await seedBuildingCard(core as never, "fixture-game", "t1");
     await seedBuildingCard(core as never, "fixture-game", "t1");
     const runId = "fixture-building-card";
-    const list = buildChecklist({
-      summary: summarizeRun(log, "fixture-game", runId),
-      saves: runSavePoints(log, runId),
-      now: Date.now(),
-    });
+    const list = buildChecklist(summarizeRun(log, "fixture-game", runId), Date.now());
     assert.deepEqual(
       list?.rows.map((row) => [row.title, row.mark]),
       [

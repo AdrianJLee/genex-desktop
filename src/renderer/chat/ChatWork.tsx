@@ -22,9 +22,9 @@ export interface ChatWorkProps {
   workKey: Key | null | undefined;
   /** What the busy line says (`busyLabel`). */
   label: string;
-  /** The running build's one line: its parts counted (`checklistCaption`), else what is happening now (`buildCaption`). */
+  /** The running build's one line: its steps counted (`checklistCaption`), else what is happening now (`buildCaption`). */
   caption: string;
-  /** What the running build's card lists its parts from (`build-checklist.ts`), once it has a plan or a worker. */
+  /** What the running build's card lists its steps from (`build-checklist.ts`), once it has a save point or a worker. */
   parts: BuildParts | null;
   /** The busy line waits on the user rather than working. */
   waiting: boolean;

@@ -1,19 +1,22 @@
 /**
- * The Building card's checklist (chat/build-checklist.ts): every part of a running build once —
- * the plan's parts and any other a worker built, a restart on its part's row — added, working or
- * still to come, and last the lead putting it together; and the card's one line, counted from it.
+ * The Building card's checklist (chat/build-checklist.ts): the steps of a running build a person can
+ * read — each save point its lead made, by its label, then each part a worker built, a restart on its
+ * part's row — and never the lead itself or a last step of putting it together; and the card's one
+ * line, counted from it.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildChecklist, checklistCaption, PartMark, runPlanParts } from "../../src/renderer/chat/build-checklist.ts";
+import { savePointRound } from "../../src/harness-seed/loop/director/open/graph.ts";
+import { buildChecklist, checklistCaption, PartMark, runSavePoints } from "../../src/renderer/chat/build-checklist.ts";
 import { buildHistory } from "../../src/renderer/build-progress.ts";
 import { BuildBarShape, buildBarShape } from "../../src/renderer/panels/run-graph/bar-shape.ts";
 import { BUILD_CHECKLIST_WORDS } from "../../src/renderer/words.ts";
-import { CustomEvent } from "../../src/shared/custom-events.ts";
+import { CustomEvent, LEAD_PART } from "../../src/shared/custom-events.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
 import { MINUTE_MS } from "../../src/shared/duration.ts";
 import { RunState } from "../../src/shared/run-state.ts";
 import { summarizeRun } from "../../src/shared/run-summary.ts";
+import { WorkerEnd, WorkerVerdict } from "../../src/shared/workers.ts";
 
 const RUN = "run_c";
 const PROJECT = "racer";
@@ -30,44 +33,96 @@ const event = (id: number, data: EventData): EventEnvelope => ({
 const custom = (id: number, eventType: string, payload: Record<string, unknown>) =>
   event(id, { type: "custom", event_type: eventType, payload: { runId: RUN, project: PROJECT, ...payload } });
 
-const plan = (id: number, parts: Array<[string, string]>) =>
-  custom(id, CustomEvent.AutopilotPlanReview, {
-    summary: "A night race.",
-    waitMinutes: 0,
-    facets: parts.map(([partId, title]) => ({ id: partId, title, identity: [], cameras: [], checks: [] })),
-  });
 const worker = (id: number, workerId: string, title: string, extra: Record<string, unknown> = {}) =>
   custom(id, CustomEvent.DirectorWorker, { workerId, title, mode: "loop", state: "running", ...extra });
 const round = (id: number, facetId: string, iteration: number, deadlineMs?: number) =>
-  custom(id, CustomEvent.FacetBuildStarted, {
-    facetId,
-    facetTitle: facetId,
-    iteration,
-    ...(deadlineMs ? { deadlineMs } : {}),
-  });
+  custom(id, CustomEvent.FacetBuildStarted, { facetId, iteration, ...(deadlineMs ? { deadlineMs } : {}) });
 const merged = (id: number, facetId: string, head: string) =>
   custom(id, CustomEvent.IntegrationMerge, { facetId, head, conflict: false, stage: "director" });
+/** A pool worker's own record: its start, or its end and the lead's word on it. */
+const record = (id: number, type: string, workerId: string, title: string, extra: Record<string, unknown> = {}) =>
+  custom(id, type, { workerId, title, ...extra });
+
+/**
+ * A save point of the open Loop's lead, written into `log` as the seed writes it (`savePointRound`):
+ * the lead's own row at the first, its kept round under its label, and its merge into the game folder.
+ */
+async function leadSaves(log: EventEnvelope[], at: number, label: string, auto = false): Promise<void> {
+  const loopRun = {
+    run: { runId: RUN, project: PROJECT },
+    ctx: { call: async () => null },
+    appendRun: async (type: string, payload: Record<string, unknown>) => {
+      log.push(custom(log.length + 1, type, payload));
+    },
+  };
+  const point = { label, summary: "", snapshotId: `snap-${at}`, auto, at: NOW, notes: [] };
+  await savePointRound(loopRun as never, point, at, []);
+}
 
 /** The checklist as the card reads it from a log, at `now`. */
-function checklistOf(events: EventEnvelope[], { finishing = false, now = NOW } = {}) {
-  return buildChecklist({
-    summary: summarizeRun(events, PROJECT, RUN),
-    plan: runPlanParts(events, RUN),
-    finishing,
-    now,
-  });
+function checklistOf(events: EventEnvelope[], { now = NOW } = {}) {
+  return buildChecklist({ summary: summarizeRun(events, PROJECT, RUN), saves: runSavePoints(events, RUN), now });
 }
 
 const rowsOf = (list: ReturnType<typeof checklistOf>) => list?.rows.map((row) => [row.title, row.mark, row.status]);
 
 describe("the Building card's checklist", () => {
+  /** The owner's tower defense Loop: two save points of its lead, and a music worker whose work it used. */
+  async function towerDefense(): Promise<EventEnvelope[]> {
+    const log = [custom(1, CustomEvent.RunStarted, { mode: "director" })];
+    await leadSaves(log, 1, "Tower defense playable: 4 towers, 15 waves, boss, HUD");
+    log.push(record(log.length + 1, CustomEvent.WorkerStarted, "pool.w1", "Battle music loop"));
+    log.push(record(log.length + 1, CustomEvent.WorkerFinished, "pool.w1", "Battle music loop", { state: "done" }));
+    const used = { verdict: WorkerVerdict.Used, merged: true };
+    log.push(record(log.length + 1, CustomEvent.WorkerFinished, "pool.w1", "Battle music loop", used));
+    await leadSaves(log, 2, "Tower defense complete: music, tuned difficulty, victory/restart verified");
+    return log;
+  }
+
+  it("lists the lead's save points by their labels in the order saved, then its workers; never the lead, never a last step of putting it together", async () => {
+    assert.deepEqual(rowsOf(checklistOf(await towerDefense())), [
+      ["Tower defense playable: 4 towers, 15 waves, boss, HUD", PartMark.Added, BUILD_CHECKLIST_WORDS.added],
+      [
+        "Tower defense complete: music, tuned difficulty, victory/restart verified",
+        PartMark.Added,
+        BUILD_CHECKLIST_WORDS.added,
+      ],
+      ["Battle music loop", PartMark.Added, BUILD_CHECKLIST_WORDS.added],
+    ]);
+  });
+
+  it("leaves out Genex's autosave between the lead's turns and another run's save points", async () => {
+    const log = await towerDefense();
+    await leadSaves(log, 3, "Autosave", true);
+    const elsewhere = {
+      runId: "other",
+      facetId: LEAD_PART,
+      iteration: 1,
+      verdictSource: "lead",
+      label: "Another game",
+    };
+    log.push(custom(log.length + 1, CustomEvent.FacetIteration, elsewhere));
+    assert.deepEqual(
+      runSavePoints(log, RUN).map((point) => point.label),
+      [
+        "Tower defense playable: 4 towers, 15 waves, boss, HUD",
+        "Tower defense complete: music, tuned difficulty, victory/restart verified",
+      ],
+    );
+    assert.equal(checklistOf(log)?.rows.length, 3);
+  });
+
+  it("counts what is done and what works on the card's one line, with no total to count against", async () => {
+    const log = await towerDefense();
+    log.push(record(log.length + 1, CustomEvent.WorkerStarted, "pool.w2", "Victory screen"));
+    const list = checklistOf(log);
+    assert.equal(checklistCaption(list!, false), BUILD_CHECKLIST_WORDS.caption(3, 1));
+    assert.equal(BUILD_CHECKLIST_WORDS.caption(3, 1), "3 done · 1 working");
+    assert.equal(BUILD_CHECKLIST_WORDS.caption(3, 0), "3 done");
+  });
+
   const log = [
     custom(1, CustomEvent.RunStarted, { mode: "director" }),
-    plan(2, [
-      ["track", "Track and night city"],
-      ["cars", "Cars: clear-coat finish"],
-      ["sound", "Engine, tyres and rain"],
-    ]),
     worker(3, "track", "Track and night city"),
     round(4, "track", 1),
     worker(5, "track", "Track and night city", { state: "done" }),
@@ -76,17 +131,15 @@ describe("the Building card's checklist", () => {
     round(8, "cars", 2, NOW + 25 * MINUTE_MS),
   ];
 
-  it("lists each planned part in plan order — added, working with its time left, waiting — and last the lead putting it together", () => {
+  it("lists each worker's part by its title: added, or working with its time left", () => {
     assert.deepEqual(rowsOf(checklistOf(log)), [
       ["Track and night city", PartMark.Added, BUILD_CHECKLIST_WORDS.added],
       ["Cars: clear-coat finish", PartMark.Working, BUILD_CHECKLIST_WORDS.workingFor(25)],
-      ["Engine, tyres and rain", PartMark.Next, BUILD_CHECKLIST_WORDS.waiting],
-      [BUILD_CHECKLIST_WORDS.together, PartMark.Next, BUILD_CHECKLIST_WORDS.next],
     ]);
   });
 
   it("says the round a part is in when its time left is unknown", () => {
-    const list = checklistOf([...log, round(9, "sound", 1)]);
+    const list = checklistOf([...log, worker(9, "sound", "Engine, tyres and rain"), round(10, "sound", 1)]);
     assert.deepEqual(list?.rows[2]?.status, BUILD_CHECKLIST_WORDS.workingRound(1));
   });
 
@@ -102,7 +155,7 @@ describe("the Building card's checklist", () => {
     assert.deepEqual(list?.rows[1]?.status, BUILD_CHECKLIST_WORDS.workingRound(2));
   });
 
-  it("keeps a restarted part on its own row, under the plan's name", () => {
+  it("keeps a restarted part on its own row, under its first name", () => {
     const restarted = [
       ...log,
       worker(9, "cars", "Cars: clear-coat finish", { state: "stopped" }),
@@ -110,7 +163,7 @@ describe("the Building card's checklist", () => {
       round(11, "cars-2", 1, NOW + 40 * MINUTE_MS),
     ];
     const list = checklistOf(restarted);
-    assert.equal(list?.rows.length, 4, JSON.stringify(rowsOf(list)));
+    assert.equal(list?.rows.length, 2, JSON.stringify(rowsOf(list)));
     assert.deepEqual(list?.rows[1], {
       id: "cars",
       title: "Cars: clear-coat finish",
@@ -119,72 +172,39 @@ describe("the Building card's checklist", () => {
     });
   });
 
-  it("counts the parts on the card's one line", () => {
+  it("asked to finish, says it is finishing, and a part that ended without its work says it was not added", () => {
     const list = checklistOf(log);
-    assert.equal(checklistCaption(list!, false), BUILD_CHECKLIST_WORDS.caption(1, 3, 1));
-    assert.equal(BUILD_CHECKLIST_WORDS.caption(7, 9, 2), "7 of 9 parts added · 2 working");
-    assert.equal(BUILD_CHECKLIST_WORDS.caption(3, 3, 0), "3 of 3 parts added");
-  });
-
-  it("asked to finish, says it is finishing; once nothing runs, the lead's putting it together is the work", () => {
-    const list = checklistOf(log, { finishing: true });
     assert.equal(checklistCaption(list!, true), BUILD_CHECKLIST_WORDS.finishing(1));
-    const settled = checklistOf([...log, worker(9, "cars", "Cars: clear-coat finish", { state: "done" })], {
-      finishing: true,
-    });
+    const settled = checklistOf([...log, worker(9, "cars", "Cars: clear-coat finish", { state: "done" })]);
     assert.equal(checklistCaption(settled!, true), BUILD_CHECKLIST_WORDS.finishing(0));
-    assert.deepEqual(settled?.rows.at(-1)?.mark, PartMark.Working, "the lead is putting it together now");
-    assert.deepEqual(settled?.rows[1]?.status, BUILD_CHECKLIST_WORDS.notAdded, "a part not added says so");
-    assert.deepEqual(settled?.rows[2]?.status, BUILD_CHECKLIST_WORDS.notStarted, "nor will a part not started");
+    assert.deepEqual(settled?.rows[1]?.status, BUILD_CHECKLIST_WORDS.notAdded);
   });
 
-  it("lists a part a worker built outside the plan, and nothing before a plan or a worker", () => {
-    const extra = checklistOf([...log, worker(9, "rain", "Rain on the glass"), round(10, "rain", 1)]);
-    assert.deepEqual(
-      extra?.rows.map((row) => row.id),
-      ["track", "cars", "sound", "rain", "together"],
-    );
+  it("lists nothing before a save point or a worker", () => {
     assert.equal(checklistOf([custom(1, CustomEvent.RunStarted, { mode: "director" })]), null);
   });
 
-  it("lists the workers of a Loop that keeps no plan, by their own records: added by the lead's word, working, or ended", () => {
-    const record = (id: number, type: string, workerId: string, title: string, extra: Record<string, unknown> = {}) =>
-      custom(id, type, { workerId, title, ...extra });
+  it("lists the workers of a Loop by their own records: added by the lead's word, working, or ended", () => {
     const pool = [
       custom(1, CustomEvent.RunStarted, { mode: "director" }),
       record(2, CustomEvent.WorkerStarted, "pool.w1", "Raise the land"),
-      record(3, CustomEvent.WorkerFinished, "pool.w1", "Raise the land", { state: "done" }),
-      record(4, CustomEvent.WorkerFinished, "pool.w1", "Raise the land", { verdict: "used", merged: true }),
-      record(5, CustomEvent.WorkerFinished, "pool.w1", "Raise the land", { verdict: "rejected" }),
+      record(3, CustomEvent.WorkerFinished, "pool.w1", "Raise the land", { state: WorkerEnd.Done }),
+      record(4, CustomEvent.WorkerFinished, "pool.w1", "Raise the land", { verdict: WorkerVerdict.Used, merged: true }),
+      record(5, CustomEvent.WorkerFinished, "pool.w1", "Raise the land", { verdict: WorkerVerdict.Rejected }),
       record(6, CustomEvent.WorkerStarted, "pool.w2", "Light the valley"),
       record(7, CustomEvent.WorkerStarted, "pool.w3", "Paint the sky"),
-      record(8, CustomEvent.WorkerFinished, "pool.w3", "Paint the sky", { state: "failed" }),
+      record(8, CustomEvent.WorkerFinished, "pool.w3", "Paint the sky", { state: WorkerEnd.Failed }),
     ];
-    assert.deepEqual(rowsOf(checklistOf(pool))?.slice(0, 3), [
+    assert.deepEqual(rowsOf(checklistOf(pool)), [
       ["Raise the land", PartMark.Added, BUILD_CHECKLIST_WORDS.added],
       ["Light the valley", PartMark.Working, BUILD_CHECKLIST_WORDS.working],
       ["Paint the sky", PartMark.Next, BUILD_CHECKLIST_WORDS.notAdded],
     ]);
   });
-
-  it("reads the newest plan of this run only", () => {
-    const replanned = [
-      ...log,
-      plan(9, [
-        ["track", "Track and night city"],
-        ["cars", "Cars: clear-coat finish"],
-      ]),
-      custom(10, CustomEvent.AutopilotPlanReview, { runId: "other", facets: [{ id: "x", title: "Another run" }] }),
-    ];
-    assert.deepEqual(
-      runPlanParts(replanned, RUN).map((part) => part.id),
-      ["track", "cars"],
-    );
-  });
 });
 
 describe("the building-card dev fixture", () => {
-  it("is a Loop still going whose card lists two parts added, one working, a restart on one row, and one waiting", async () => {
+  it("is a Loop still going whose card lists its lead's two save points, two parts added, one working and a restart on one row", async () => {
     const { seedBuildingCard } = await import("../../src/main/dev/fixture-building-card.ts");
     const log: EventEnvelope[] = [];
     let seq = 0;
@@ -202,26 +222,25 @@ describe("the building-card dev fixture", () => {
     const runId = "fixture-building-card";
     const list = buildChecklist({
       summary: summarizeRun(log, "fixture-game", runId),
-      plan: runPlanParts(log, runId),
-      finishing: false,
+      saves: runSavePoints(log, runId),
       now: Date.now(),
     });
     assert.deepEqual(
       list?.rows.map((row) => [row.title, row.mark]),
       [
+        ["A car to drive on a test loop", PartMark.Added],
+        ["A full lap of the night city, with speed and lap time", PartMark.Added],
         ["Speed and lap HUD", PartMark.Added],
         ["Track and night city", PartMark.Added],
         ["Cars: clear-coat finish", PartMark.Working],
         ["World: building facades", PartMark.Working],
-        ["Engine, tyres and rain", PartMark.Next],
-        [BUILD_CHECKLIST_WORDS.together, PartMark.Next],
       ],
     );
     // Flipped (no clock): the part at work showed its round's time left ("Working · ~25 min"); a Loop's
     // round has no deadline, so it shows its round.
-    assert.equal(list?.rows[2]?.status, BUILD_CHECKLIST_WORDS.workingRound(2));
-    assert.equal(list?.rows[3]?.status, BUILD_CHECKLIST_WORDS.workingRound(1), "the restart's own first round");
-    assert.equal(checklistCaption(list!, false), "2 of 5 parts added · 2 working");
+    assert.equal(list?.rows[4]?.status, BUILD_CHECKLIST_WORDS.workingRound(2));
+    assert.equal(list?.rows[5]?.status, BUILD_CHECKLIST_WORDS.workingRound(1), "the restart's own first round");
+    assert.equal(checklistCaption(list!, false), "4 done · 2 working");
     assert.equal(
       log.filter((e) => e.data.type === "messages").length,
       6,

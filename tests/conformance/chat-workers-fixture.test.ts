@@ -13,7 +13,7 @@ import { seedBuildGraph } from "../../src/main/dev/fixture-build-graph.ts";
 import { seedChatWorkers, seedChatWorkersLoop } from "../../src/main/dev/fixture-chat-workers.ts";
 import { buildHistory, historyLabel, isNewestBuild, projectBuildGraph } from "../../src/renderer/build-progress.ts";
 import { EntryAction, EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
-import { buildChecklist, PartMark, runPlanParts } from "../../src/renderer/chat/build-checklist.ts";
+import { buildChecklist, PartMark, runSavePoints } from "../../src/renderer/chat/build-checklist.ts";
 import { BUILD_CHECKLIST_WORDS } from "../../src/renderer/words.ts";
 import { buildRunGraph, GraphNodeKind, type RunGraph } from "../../src/renderer/run-graph.ts";
 import { partRows, statusLine, stepWord } from "../../src/renderer/run-steps.ts";
@@ -83,10 +83,10 @@ function rowWords(graph: RunGraph) {
   );
 }
 
-/** What a running Loop's Building card lists: each part's title and mark, the lead's own last step left out. */
+/** What a running Loop's Building card lists: each step's title and mark. */
 function cardRows(events: EventEnvelope[], project: string, runId: string) {
-  const parts = { summary: summarizeRun(events, project, runId), plan: runPlanParts(events, runId), finishing: false };
-  return (buildChecklist({ ...parts, now: START })?.rows ?? []).filter((row) => row.id !== "together");
+  const parts = { summary: summarizeRun(events, project, runId), saves: runSavePoints(events, runId) };
+  return buildChecklist({ ...parts, now: START })?.rows ?? [];
 }
 
 const workerLines = (events: EventEnvelope[]): string[] =>

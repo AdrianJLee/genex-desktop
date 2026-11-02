@@ -516,8 +516,7 @@ it("work in the game reads added on its card's row once its worker is over, howe
       conflict: false,
     });
   const rowOf = (...events: EventEnvelope[]) =>
-    buildChecklist({ summary: summarizeRun(events, "valley", RUN), plan: [], finishing: false, now: Date.now() })
-      ?.rows[0];
+    buildChecklist({ summary: summarizeRun(events, "valley", RUN), saves: [], now: Date.now() })?.rows[0];
   const begun = [
     custom(1, CustomEvent.RunStarted, { runId: RUN, project: "valley", mode: "director" }),
     started(2, "land", "Raise the land", inRun),

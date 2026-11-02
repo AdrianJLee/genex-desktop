@@ -6,7 +6,7 @@ import type { ChatPanelProps } from "./chat-panel-props.ts";
 import { useChatStop } from "./chat-stop.ts";
 import { busyLabel, chatWorkState, runCaption } from "./chat-work-state.ts";
 import type { ChatWorkProps } from "./ChatWork.tsx";
-import { type BuildParts, buildChecklist, checklistCaption, runPlanParts } from "./build-checklist.ts";
+import { type BuildParts, buildChecklist, checklistCaption, runSavePoints } from "./build-checklist.ts";
 import { buildCaption, currentWorkLabel } from "./current-work.ts";
 import { currentWorkItems, finishingRun, runStartedAt } from "./transcript.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
@@ -128,10 +128,10 @@ function useWorkWords(
     [stateEvents, outcome, activeRunId, details],
   );
   const finishing = useMemo(() => finishingRun(threadEvents, activeRunId), [threadEvents, activeRunId]);
-  const planned = useMemo(() => runPlanParts(threadEvents, activeRunId), [threadEvents, activeRunId]);
+  const saves = useMemo(() => runSavePoints(threadEvents, activeRunId), [threadEvents, activeRunId]);
   const parts = useMemo<BuildParts | null>(
-    () => (activeRunId ? { summary: outcome, plan: planned, finishing } : null),
-    [activeRunId, outcome, planned, finishing],
+    () => (activeRunId ? { summary: outcome, saves } : null),
+    [activeRunId, outcome, saves],
   );
   // The parts' counts do not move with the clock: they are read once per change of the run.
   const list = useMemo(() => (parts ? buildChecklist({ ...parts, now: Date.now() }) : null), [parts]);

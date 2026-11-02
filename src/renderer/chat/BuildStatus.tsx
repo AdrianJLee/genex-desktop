@@ -10,9 +10,10 @@ import { BuildChecklist } from "./BuildChecklist.tsx";
 
 /**
  * A build running while the chat itself is free — the only thing the chat shows for it. Its one
- * line is where it stands: its parts counted once it has some, else what is happening now. Its
- * clock sits on the right: how long it has run. With parts, the card opens to their list (each added,
- * working or still to come) and Open in Builds; without, the whole card opens Builds.
+ * line is where it stands: its steps counted once it has some, else what is happening now. Its
+ * clock sits on the right: how long it has run. With steps, the card opens to their list (the
+ * lead's save points, its workers' parts added, working or not added) and Open in Builds; without,
+ * the whole card opens Builds.
  */
 export function BuildStatus({
   since,
@@ -22,7 +23,7 @@ export function BuildStatus({
 }: {
   since?: number;
   caption: string;
-  /** what the card's list is read from, once the build has a plan or a worker */
+  /** what the card's list is read from, once the build has a save point or a worker */
   parts?: BuildParts | null;
   onOpenBuilds?: () => void;
 }): JSX.Element {

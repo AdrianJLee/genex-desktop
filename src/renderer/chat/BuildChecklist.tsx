@@ -1,7 +1,7 @@
 /**
- * The Building card's parts, opened under it (`BuildStatus.tsx`): each part with its mark and where
- * it stands, the lead's last step, and the way to the whole build on Builds. Its rows are
- * `build-checklist.ts`'s; their time left moves on while the list is open.
+ * The Building card's steps, opened under it (`BuildStatus.tsx`): each step with its mark and where
+ * it stands, and the way to the whole build on Builds. Its rows are `build-checklist.ts`'s; their
+ * time left moves on while the list is open.
  */
 import type { JSX } from "react";
 import { Icon } from "../ui/icons.tsx";
@@ -9,7 +9,7 @@ import { BUILD_CHECKLIST_WORDS as WORDS } from "../words.ts";
 import { type BuildChecklist as Checklist, PartMark } from "./build-checklist.ts";
 import { StepMark } from "./StepMark.tsx";
 
-/** The open list: one row a part, then Open in Builds when Builds can be opened. */
+/** The open list: one row a step, then Open in Builds when Builds can be opened. */
 export function BuildChecklist({
   id,
   list,

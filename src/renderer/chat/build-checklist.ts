@@ -1,10 +1,11 @@
 /**
- * The running build's parts as the Building card lists them (`BuildChecklist.tsx`): every part the
- * plan names, then any other a worker built — a restart (`replaces`) stays on its part's row, as
- * the run's summary groups it — each added, working or still to come, and last the lead putting it
- * all together. Its counts make the card's one line. Pure: read from the run's summary and plan.
+ * The running build's steps as the Building card lists them (`BuildChecklist.tsx`): each save point
+ * its lead made, by its label, in the order saved, then each part a worker built — a restart
+ * (`replaces`) stays on its part's row, as the run's summary groups it — added, working or ended
+ * without it. The lead itself is no row: what it does now is the card's line. Its counts make that
+ * line once there is a step. Pure: read from the run's summary and its save points.
  */
-import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
+import { CustomEvent, customPayload, type FacetIterationPayload, LEAD_PART } from "../../shared/custom-events.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import type { EventEnvelope } from "../../shared/event-log.ts";
 import type { RunSummary, RunTask } from "../../shared/run-summary.ts";
@@ -15,9 +16,6 @@ import { BUILD_CHECKLIST_WORDS as WORDS } from "../words.ts";
 export const PartMark = { Added: "added", Working: "working", Next: "next" } as const;
 export type PartMark = (typeof PartMark)[keyof typeof PartMark];
 
-/** The id of the lead's own last row, apart from every part's. */
-const TOGETHER = "together";
-
 /** One row of the checklist. */
 export interface ChecklistRow {
   id: string;
@@ -27,33 +25,32 @@ export interface ChecklistRow {
   status: string;
 }
 
-/** The checklist: its rows (the parts, then the lead's step) and the counts of the parts alone. */
+/** The checklist: its rows, how many of them are done and how many work now. */
 export interface BuildChecklist {
   rows: ChecklistRow[];
-  added: number;
-  total: number;
+  done: number;
   working: number;
 }
 
-/** A part the plan names: its id and title. */
-export interface PlannedPart {
+/** A save point the lead made: the record that keeps it, and its label. */
+export interface SavePoint {
   id: string;
-  title: string;
+  label: string;
 }
 
-/** The parts of the run's newest plan, in its order: what the plan card showed the user. */
-export function runPlanParts(events: readonly EventEnvelope[], runId: string | null): PlannedPart[] {
+/** The label of a save point this run's lead made, or "" for any other round: an autosave Genex took is none. */
+function leadSaveLabel(round: FacetIterationPayload | null, runId: string): string {
+  if (round?.runId !== runId || round.facetId !== LEAD_PART) return "";
+  return round.auto ? "" : (round.label ?? "");
+}
+
+/** The save points the lead of this run made, in the order it made them. */
+export function runSavePoints(events: readonly EventEnvelope[], runId: string | null): SavePoint[] {
   if (!runId) return [];
-  let parts: PlannedPart[] = [];
-  for (const event of events) {
-    const custom = customRecord(event.data);
-    if (custom?.event_type !== CustomEvent.AutopilotPlanReview || custom.payload.runId !== runId) continue;
-    const facets = Array.isArray(custom.payload.facets) ? custom.payload.facets : [];
-    parts = facets.flatMap((facet) =>
-      typeof facet?.id === "string" && facet.id ? [{ id: facet.id, title: String(facet.title || facet.id) }] : [],
-    );
-  }
-  return parts;
+  return events.flatMap((event) => {
+    const label = leadSaveLabel(customPayload(event.data, CustomEvent.FacetIteration), runId);
+    return label ? [{ id: `${LEAD_PART}:${event.id}`, label }] : [];
+  });
 }
 
 /** Whether a part's worker is building now. */
@@ -66,59 +63,39 @@ function workingStatus(task: RunTask, now: number): string {
   return typeof task.round === "number" ? WORDS.workingRound(task.round) : WORDS.working;
 }
 
-/** A part's row: its work in the build, under way, ended without it, or not started. */
-function partRow(part: PlannedPart, task: RunTask | undefined, { finishing, now }: RowContext): ChecklistRow {
-  const row = { id: part.id, title: part.title };
-  if (task && isWorking(task)) return { ...row, mark: PartMark.Working, status: workingStatus(task, now) };
-  if (task && (task.integrations > 0 || task.added === true))
-    return { ...row, mark: PartMark.Added, status: WORDS.added };
-  if (task) return { ...row, mark: PartMark.Next, status: WORDS.notAdded };
-  return { ...row, mark: PartMark.Next, status: finishing ? WORDS.notStarted : WORDS.waiting };
+/** A part's row: its work in the build, under way, or ended without it. */
+function partRow(task: RunTask, now: number): ChecklistRow {
+  const row = { id: task.id, title: task.title };
+  if (isWorking(task)) return { ...row, mark: PartMark.Working, status: workingStatus(task, now) };
+  if (task.integrations > 0 || task.added === true) return { ...row, mark: PartMark.Added, status: WORDS.added };
+  return { ...row, mark: PartMark.Next, status: WORDS.notAdded };
 }
 
-/** What every row reads besides its part: whether the run is finishing, and the clock. */
-interface RowContext {
-  finishing: boolean;
-  now: number;
-}
+/** A save point's row: done, under the lead's label. */
+const saveRow = (point: SavePoint): ChecklistRow => ({
+  id: point.id,
+  title: point.label,
+  mark: PartMark.Added,
+  status: WORDS.added,
+});
 
-/** The lead's last step: under way once the run is finishing and no part works, else next. */
-function togetherRow(working: number, finishing: boolean): ChecklistRow {
-  const now = finishing && working === 0;
-  return {
-    id: TOGETHER,
-    title: WORDS.together,
-    mark: now ? PartMark.Working : PartMark.Next,
-    status: now ? WORDS.working : WORDS.next,
-  };
-}
-
-/**
- * What a running build's checklist is read from: its summary, its plan's parts, and whether the
- * user asked it to finish (run-inbox `finishRequested`).
- */
+/** What a running build's checklist is read from: its summary and its lead's save points. */
 export interface BuildParts {
   summary: RunSummary | null;
-  plan: readonly PlannedPart[];
-  finishing: boolean;
+  saves: readonly SavePoint[];
 }
 
-/** The checklist of a running build at `now`, or null before it has a plan or a worker. */
-export function buildChecklist({ summary, plan, finishing, now }: BuildParts & { now: number }): BuildChecklist | null {
-  const tasks = summary?.tasks ?? [];
-  const planned = new Set(plan.map((part) => part.id));
-  const extra = tasks.filter((task) => !planned.has(task.id)).map((task) => ({ id: task.id, title: task.title }));
-  const parts = [...plan, ...extra];
-  if (!parts.length) return null;
-  const byId = new Map(tasks.map((task) => [task.id, task] as const));
-  const context = { finishing, now };
-  const rows = parts.map((part) => partRow(part, byId.get(part.id), context));
-  const added = rows.filter((row) => row.mark === PartMark.Added).length;
+/** The checklist of a running build at `now`, or null before it has a save point or a worker. */
+export function buildChecklist({ summary, saves, now }: BuildParts & { now: number }): BuildChecklist | null {
+  const parts = (summary?.tasks ?? []).filter((task) => task.id !== LEAD_PART);
+  const rows = [...saves.map(saveRow), ...parts.map((task) => partRow(task, now))];
+  if (!rows.length) return null;
+  const done = rows.filter((row) => row.mark === PartMark.Added).length;
   const working = rows.filter((row) => row.mark === PartMark.Working).length;
-  return { rows: [...rows, togetherRow(working, finishing)], added, total: rows.length, working };
+  return { rows, done, working };
 }
 
-/** The card's one line, counted from its checklist: how many parts are in, and how many work. */
+/** The card's one line, counted from its checklist: how many steps are done, and how many work. */
 export function checklistCaption(list: BuildChecklist, finishing: boolean): string {
-  return finishing ? WORDS.finishing(list.working) : WORDS.caption(list.added, list.total, list.working);
+  return finishing ? WORDS.finishing(list.working) : WORDS.caption(list.done, list.working);
 }

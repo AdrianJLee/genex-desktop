@@ -259,6 +259,13 @@ export interface RoundVerdict {
   because?: string | null;
 }
 
+/**
+ * The part a Loop's lead records itself under: its own row (`director_worker` `workerId`) and its
+ * save points (`facet_iteration` `facetId`). The seed's `OPEN_LEAD_PART`, held to it by
+ * `seed-contracts.test.ts`. Persisted: never rename the value.
+ */
+export const LEAD_PART = "lead";
+
 export interface FacetIterationPayload extends RunScope {
   winner?: string;
   satisfied?: boolean;
@@ -270,6 +277,10 @@ export interface FacetIterationPayload extends RunScope {
   move?: { what?: string; delivered?: boolean | null; scale?: string | null } | null;
   /** Saved stills, as paths or `{ path }` records depending on the version that wrote them. */
   shots?: unknown;
+  /** A save point's label, in the lead's words (the lead's part only). */
+  label?: string;
+  /** Genex took the save point between the lead's turns (an autosave), not the lead. */
+  auto?: boolean;
 }
 
 /**

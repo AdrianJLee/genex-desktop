@@ -17,7 +17,10 @@ export const JOB_START_TOOL: LiveToolSpec = {
       title: { type: "string", description: "A short plain name the person reads, e.g. Unreal build." },
       command: { type: "string", description: "The shell command to run." },
       cwd: { type: "string", description: "A folder inside yours to run it in, relative to yours; yours by default." },
-      hours: { type: "string", description: "Its time limit in hours: 2 by default, at most 24." },
+      hours: {
+        type: "string",
+        description: "A time limit in hours, if you want one; with none it runs until it ends or is stopped.",
+      },
     },
     required: ["title", "command"],
   },
@@ -101,8 +104,8 @@ function statusLine(job: JobLine): string {
 
 /** What a job tool answers. */
 export const JOB_ANSWER = {
-  started: (id: string, title: string, cwd: string, command: string, hours: number) =>
-    `Job ${id} (${title}) started in ${cwd}: ${command}. Check it with job_status or job_tail; it stops after ${hours} h unless it ends first.`,
+  started: (id: string, title: string, cwd: string, command: string, hours: number | null) =>
+    `Job ${id} (${title}) started in ${cwd}: ${command}. Check it with job_status or job_tail${hours === null ? "." : `; it stops after ${hours} h unless it ends first.`}`,
   inPlan:
     "The chat is in Plan mode, so this did not start: jobs wait until the plan is approved. Put it in your plan instead.",
   declined:

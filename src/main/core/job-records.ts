@@ -51,7 +51,7 @@ function jobStartedPayload(core: StudioCore, record: JobRecord): JobStartedPaylo
     role: owner.role,
     ...(owner.worker ? { worker: { ...owner.worker } } : {}),
     ...scopeOf(record),
-    deadlineAt: record.deadlineAt,
+    ...(record.deadlineAt ? { deadlineAt: record.deadlineAt } : {}),
   };
 }
 

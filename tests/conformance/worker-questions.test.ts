@@ -1,7 +1,7 @@
 /**
  * A worker's questions and calls, as the chat it answers to decides them: its card waits in the
  * chat naming it until the person answers (no agent's message counts, even one a session really
- * took), a run worker's card nobody answers is withdrawn as a lead's is, its running session
+ * took), a run worker's card waits for the person as a lead's does, its running session
  * follows the picker as a lead's does, "always" counts for the whole chat, and a run worker's
  * connector call answers to the chat its run was started in. Real core, fake delegated engines, no
  * harness.
@@ -19,8 +19,6 @@ const IN_PLAN = /The chat is in Plan mode, so this action did not run/;
 const SERVER = path.resolve("tests/fixtures/mcp/echo-server.mjs");
 /** A case that would hang on a regression fails within this instead; each case has its own. */
 const CASE_TIMEOUT_MS = 60_000;
-/** A lead's card, and a run worker's, is withdrawn after this long in the case that waits it out. */
-const LEAD_ASK_TIMEOUT_MS = 1;
 /** The plugin connector a run worker reaches: the Unreal plugin's editor, answering as the echo server does. */
 const EDITOR = { id: "editor", name: "Unreal Engine · editor", command: "ignored", args: [] };
 const EDITOR_LAUNCH = { execPath: process.execPath, extraArgs: [SERVER] };
@@ -114,21 +112,27 @@ describe("a worker's questions and calls", () => {
     }
   });
 
-  it("a run worker's card nobody answers is withdrawn as a lead's is, and the worker reads a no", {
+  // Flipped (no clock): a run worker's card nobody answered within five minutes was withdrawn as a
+  // lead's was ("Nobody answered"); it waits for the person, as a lead's does.
+  it("a run worker's card waits for the person as a lead's does: an hour on it is still pending", {
     timeout: CASE_TIMEOUT_MS,
-  }, async () => {
-    const { core, threadId, asking, runWorker, rows } = await workerChat({ leadAskTimeoutMs: LEAD_ASK_TIMEOUT_MS });
+  }, async (t) => {
+    const { core, threadId, asking, runWorker, rows } = await workerChat();
     await core.setPermissionMode(threadId, PermissionMode.Manual);
+    t.mock.timers.enable({ apis: ["setTimeout"] });
     const { card, done } = await asking(
       { tool: "Bash", input: { command: "npm install" }, always: [] },
       runWorker(),
       workerAsks,
     );
-    const answer = (await done()) as PermissionReply & { message?: string };
-    assert.equal(answer.decision, "deny", "nobody answering is never a yes");
-    assert.match(answer.message ?? "", /Nobody answered/);
-    const ended = (await rows()).filter((row) => row.requestId === card.requestId).at(-1);
-    assert.deepEqual([ended?.state, ended?.by], ["denied", "timeout"]);
+    t.mock.timers.tick(60 * 60_000);
+    await new Promise((resolve) => setImmediate(resolve));
+    const later = (await rows()).filter((row) => row.requestId === card.requestId).at(-1);
+    assert.equal(later?.state, "pending", "an hour on, it still waits for the person");
+    t.mock.timers.reset();
+    assert.equal(core.answerPermission(card.requestId, { decision: "allow" }), true);
+    const answer = (await done()) as PermissionReply;
+    assert.equal(answer.decision, "allow", "the person's later yes");
   });
 
   it("a worker's running session follows the picker as a lead's does", { timeout: CASE_TIMEOUT_MS }, async () => {

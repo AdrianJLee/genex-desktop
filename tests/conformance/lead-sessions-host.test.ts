@@ -677,12 +677,11 @@ const CLOSED =
  * leads the integration worktree from the game folder. The fake session asks the host once, when a
  * test gives it a question, and keeps the answer.
  */
-async function leadChat({ leadAskTimeoutMs }: { leadAskTimeoutMs?: number } = {}) {
+async function leadChat() {
   /** What the host told the Studio UI, in order. */
   const uiEvents: Array<{ type: string }> = [];
   const lite = await coreLite({
     gamesRoot: await realpath(await tmpDir("lead-asks-games-")),
-    ...(leadAskTimeoutMs ? { leadAskTimeoutMs } : {}),
     onUiEvent: (event) => uiEvents.push(event),
   });
   lites.push(lite);
@@ -1057,25 +1056,36 @@ describe("a build's lead asks the person it answers", () => {
     assert.deepEqual((await core.permissionSettings()).rules.find((r) => r.project === game)?.rules, ["Bash(ls *)"]);
   });
 
-  it("withdraws a card nobody answered in time, in its own words: not a no, and the work goes on", async () => {
-    const { core, threadId, asking, personSays, handToLead } = await leadChat({ leadAskTimeoutMs: 50 });
+  // Flipped (no clock): a card nobody answered within five minutes (`LEAD_ASK_TIMEOUT_MS`) was
+  // withdrawn as "Nobody answered"; a lead's card waits for the person, as the chat's own does.
+  it("a lead's card waits for the person: an hour on it is still pending, and their later yes allows it", async (t) => {
+    const { core, threadId, asking, personSays, handToLead } = await leadChat();
     await core.setPermissionMode(threadId, "default");
     await handToLead(await personSays());
-    const { answer, rows } = await (await asking({ tool: "Bash", input: { command: "ls ~/Downloads" } })).done();
-    // Flipped (Loop phase 3): "so this was not allowed. Do not retry it" read as a no, and a lead
-    // dropped work over a card nobody saw.
-    assert.deepEqual(answer, {
-      decision: "deny",
-      withdrawn: true,
-      message:
-        "Nobody answered within 5 minutes: the person may be away. This is not a no; it did not run. Carry on with the rest of the work, and ask again later if it is still needed.",
-    });
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const asked = await asking({ tool: "Bash", input: { command: "ls ~/Downloads" } });
+    const pending = async () => {
+      for (let turn = 0; turn < 2_000; turn++) {
+        const row = (await core.store.listEvents(threadId))
+          .map((event) => customRecord(event.data))
+          .findLast((custom) => custom?.event_type === "tool_permission");
+        if (row) return row.payload as unknown as ToolPermissionEvent;
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      return undefined;
+    };
+    const card = await pending();
+    assert.equal(card?.state, "pending", "the lead's card is up");
+    t.mock.timers.tick(60 * 60_000);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal((await pending())?.state, "pending", "an hour on, it still waits for the person");
+    t.mock.timers.reset();
+    assert.equal(core.answerPermission(card!.requestId, { decision: "allow" }), true);
+    const { answer, rows } = await asked.done();
+    assert.deepEqual(answer, { decision: "allow" });
     assert.deepEqual(
-      rows.map((row) => [row.state, row.by]),
-      [
-        ["pending", undefined],
-        ["denied", "timeout"],
-      ],
+      rows.map((row) => row.state),
+      ["pending", "allowed"],
     );
   });
 

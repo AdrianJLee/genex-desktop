@@ -160,36 +160,36 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
       leadSeat({ events: events as never, run: run as never, folder: "/games/plaza" });
     const chat = bookmarked({ project: "plaza", engine: "claude-code", sessionId: "chat-1", model: "opus" });
     const rows = [
-      { label: "the chat's own session", events: [chat], want: { sessionId: "chat-1", chatSession: true } },
+      { label: "the chat's own session", events: [chat], want: { sessionId: "chat-1" } },
       {
         label: "a bookmark from before one session names no model",
         events: [bookmarked({ project: "plaza", engine: "claude-code", sessionId: "chat-0" })],
-        want: { sessionId: "chat-0", chatSession: true },
+        want: { sessionId: "chat-0" },
       },
       {
         label: "no bookmark: a fresh session that becomes the chat's",
         events: [],
-        want: { sessionId: null, chatSession: true },
+        want: { sessionId: null },
       },
       {
         label: "another engine's session: a fresh one on the run's engine becomes the chat's",
         events: [bookmarked({ project: "plaza", engine: "codex", sessionId: "chat-codex", model: null })],
-        want: { sessionId: null, chatSession: true },
+        want: { sessionId: null },
       },
       {
         label: "another model: the same session, the lead's model its model option",
         events: [bookmarked({ project: "plaza", engine: "claude-code", sessionId: "chat-sonnet", model: "sonnet" })],
-        want: { sessionId: "chat-sonnet", chatSession: true },
+        want: { sessionId: "chat-sonnet" },
       },
       {
         label: "another game's session",
         events: [bookmarked({ project: "other", engine: "claude-code", sessionId: "chat-other", model: "opus" })],
-        want: { sessionId: null, chatSession: true },
+        want: { sessionId: null },
       },
     ];
     for (const { label, events, want } of rows) {
       const got = seat(events);
-      assert.deepEqual({ sessionId: got.sessionId, chatSession: got.chatSession }, want, label);
+      assert.deepEqual({ sessionId: got.sessionId }, want, label);
       assert.equal(got.folder, "/games/plaza", label);
       assert.equal(got.model, "opus", label);
     }
@@ -216,22 +216,17 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
     assert.equal(chatSoFar([]), "", "no chat, nothing said");
   });
 
-  it("O3. the lead's session is written to the chat's bookmark only when it is the chat's and it changed", async () => {
+  it("O3. the lead's session is written to the chat's bookmark only when it changed", async () => {
     const appended: unknown[] = [];
     const ctx = { call: async (_method: string, params: { batch: unknown[] }) => appended.push(...params.batch) };
     const seat = leadSeat({ events: [], run: run as never, folder: "/games/plaza" });
     await bookmarkLead(ctx as never, { threadId: "t", run: run as never, seat }, "lead-1");
     await bookmarkLead(ctx as never, { threadId: "t", run: run as never, seat }, "lead-1");
-    await bookmarkLead(
-      ctx as never,
-      { threadId: "t", run: run as never, seat: { ...seat, chatSession: false } },
-      "lead-2",
-    );
     assert.deepEqual(appended, [
       {
         type: "custom",
         event_type: "contractor_session",
-        payload: { project: "plaza", engine: "claude-code", sessionId: "lead-1", model: "opus" },
+        payload: { project: "plaza", engine: "claude-code", sessionId: "lead-1" },
       },
     ]);
   });

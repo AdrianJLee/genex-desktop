@@ -8,26 +8,23 @@
  */
 import { leadLineOf, leadLinesChanged, type LeadLine } from "./director/lead-line.ts";
 import { RunEvent } from "./run-events.ts";
-import { SteerDelivery } from "./steer-delivery.ts";
+import { fromThePerson, MessageFrom, SteerDelivery } from "./steer-delivery.ts";
 import { type ActiveRun, type Studio, heldRuns } from "./studio-state.ts";
-import { attachmentsArtifactOf, type LeadDoor, type QueueAction } from "./message-queue.ts";
+import { attachmentsArtifactOf, keepsPictures, type LeadDoor, type QueueAction } from "./message-queue.ts";
 
 /** A message's words, trimmed; anything else reads as none. */
 const wordsOf = (action: QueueAction): string => String(action.text ?? "").trim();
 
-/** The message brings pictures of its own, which the queue keeps in its attachments artifact. */
-const hasPictures = (action: QueueAction): boolean =>
-  Boolean(action.attachmentsArtifact || action.stills?.length || action.autopilot?.frames?.length);
-
 /**
- * Does the lead take this message: words for the chat — never a fresh build asked for (`newRun`, a
- * New build queued before the composer dropped it), Studio's own chat or a slash command (words to
- * the session, not to the lead). A picture with no words waits for the chat.
+ * Does the lead take this message: words or pictures for the chat — never a fresh build asked for
+ * (`newRun`, a New build queued before the composer dropped it), Studio's own chat or a slash
+ * command (words to the session, not to the lead).
  */
 function forTheLead(action: QueueAction): boolean {
   const words = wordsOf(action);
   const ownTurn = Boolean(action.newRun || action.studioThread);
-  return words.length > 0 && !words.startsWith("/") && !ownTurn;
+  const said = words.length > 0 || keepsPictures(action);
+  return said && !words.startsWith("/") && !ownTurn;
 }
 
 /** The build this chat's messages wait for: its run that has not closed yet. */
@@ -37,9 +34,9 @@ export function openBuildOf(studio: Studio, threadId: string): ActiveRun | undef
 
 /**
  * The records the lead reads a message from: a steer of its run, word for word, from this message,
- * marked as the lead's (`how: "lead"`), naming the artifact its pictures are kept in — once heard,
- * or back with the chat, a later run of the run never tells it again (run-inbox.ts), and the chat's
- * own `resume_run` records its words anew.
+ * marked as the lead's (`how: "lead"`), naming the artifact its pictures are kept in and Genex when
+ * Genex wrote it — once heard, or back with the chat, a later run of the run never tells it again
+ * (run-inbox.ts), and the chat's own `resume_run` records its words anew.
  */
 function steerOf(line: LeadLine, item: QueueAction) {
   const messageId = String(item.messageId);
@@ -51,7 +48,8 @@ function steerOf(line: LeadLine, item: QueueAction) {
         text: wordsOf(item),
         sourceMessageId: messageId,
         how: SteerDelivery.Lead,
-        ...(hasPictures(item) ? { attachmentsArtifact: attachmentsArtifactOf(messageId) } : {}),
+        ...(keepsPictures(item) ? { attachmentsArtifact: attachmentsArtifactOf(messageId) } : {}),
+        ...(fromThePerson(item) ? {} : { from: MessageFrom.Genex }),
         at: new Date().toISOString(),
       },
     },

@@ -57,8 +57,6 @@ export function servesLead(parts: readonly Readonly<Record<string, unknown>>[]):
 export interface LeadSeat {
   /** The game folder its session sits in: the live folder the user sees. */
   folder: string;
-  /** Its session is the chat's own: the chat's bookmark follows it (`bookmarkLead`). */
-  chatSession: boolean;
   /** The session its first turn resumes: the chat's; null opens a fresh one. */
   sessionId: string | null;
   /** The session the chat's bookmark names now, so an unchanged one is not written again. */
@@ -107,7 +105,6 @@ export function leadSeat({
     folder,
     engine: run.engine,
     model: plannerModel(run) ?? null,
-    chatSession: true,
     sessionId,
     bookmarked: sessionId,
   };
@@ -140,9 +137,9 @@ export async function bookmarkLead(
   { threadId, run, seat }: { threadId: string; run: Run; seat: LeadSeat },
   sessionId: string | null | undefined,
 ): Promise<void> {
-  if (!seat.chatSession || !sessionId || sessionId === seat.bookmarked) return;
+  if (!sessionId || sessionId === seat.bookmarked) return;
   seat.bookmarked = sessionId;
-  const payload = { project: run.project, engine: seat.engine, sessionId, model: seat.model };
+  const payload = { project: run.project, engine: seat.engine, sessionId };
   await ctx
     .call(HostMethod.EventsAppend, {
       threadId,

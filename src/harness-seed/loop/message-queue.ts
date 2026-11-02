@@ -3,11 +3,22 @@ import type { DelegateImage, SteerMessage } from "../types/host-api.d.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
 import { personWrote } from "./person-wrote.ts";
-import { MessageFrom, SteerDelivery } from "./steer-delivery.ts";
+import { fromThePerson, MessageFrom, SteerDelivery } from "./steer-delivery.ts";
 import { isSlashText, JoinKind, joinKindOf, type OpenOptions } from "./steer-switch.ts";
 
 /** A user message as the queue holds it: the dispatch action, plus its id once queued. */
 export type QueueAction = AnyRecord & { threadId: string; messageId?: string; text?: string };
+
+/** What sets one message apart from the next when several go into one prompt. */
+export const WORDS_APART = "\n\n";
+
+/** Each message's words, as written. */
+export const textsOf = (messages: readonly { text?: unknown }[]): string[] =>
+  messages.map((message) => String(message.text ?? ""));
+
+/** A prompt with messages' words after it, each as written. */
+export const withWords = (prompt: string, messages: readonly { text?: unknown }[]): string =>
+  [prompt, ...textsOf(messages)].join(WORDS_APART);
 
 /**
  * Where a queued message stands. Written to the transcript's view of the log: never rename a value.
@@ -292,9 +303,8 @@ const recordsFor = (event_type: RunEvent, items: readonly QueueAction[], extra: 
  *
  * While a build runs, its run's lead may take the chat (`lead`, live-chat.ts): a message it
  * takes is delivered to it with its receipt, and one that waited is handed to it once
- * `beforeProcess` answers with the lead's door for it. What the lead does not take (a picture the
- * chat did not save in the game, a fresh build asked for, slash text) keeps its place and waits for
- * the build to close, but holds nothing back: the words sent after it still reach the lead, in the
+ * `beforeProcess` answers with the lead's door for it. What the lead does not take (a fresh build
+ * asked for, slash text) keeps its place and waits for the build to close, but holds nothing back: the words sent after it still reach the lead, in the
  * order they were sent.
  */
 export class MessageQueue {
@@ -492,7 +502,7 @@ export class MessageQueue {
   }
   /** Handed to the lead: the chat hears it was delivered, and the lead that it was handed. */
   #handedLead(threadId: string, door: LeadDoor, item: QueueAction): void {
-    if (item.from !== MessageFrom.Genex) personWrote(threadId);
+    if (fromThePerson(item)) personWrote(threadId);
     this.host.notify("coordinator.delivered", { threadId, messageIds: [item.messageId] });
     door.handed(item, (items) => this.#giveBack(threadId, items));
   }
@@ -725,7 +735,7 @@ export class MessageQueue {
       if (accepted.has(item.messageId as string))
         turn.taken.set(item.messageId as string, { item, how: answer?.how ?? null });
     // A wait the session is in (its workers, an editor) ends, so it reaches the step that reads the person's words.
-    const theirs = items.some((item) => accepted.has(item.messageId as string) && item.from !== MessageFrom.Genex);
+    const theirs = items.some((item) => accepted.has(item.messageId as string) && fromThePerson(item));
     if (theirs) personWrote(threadId);
     const refused = items.filter((item) => !accepted.has(item.messageId as string));
     if (!refused.length) return;
@@ -1010,11 +1020,16 @@ function steerMessageOf(item: QueueAction): SteerMessage {
     id: item.messageId as string,
     text: String(item.text ?? ""),
     ...(images.length ? { images } : {}),
-    ...(item.from === MessageFrom.Genex ? { from: MessageFrom.Genex } : {}),
+    ...(fromThePerson(item) ? {} : { from: MessageFrom.Genex }),
   };
 }
 
 /** The artifact a message's pictures are kept in, beside the log that keeps only their count. */
 export function attachmentsArtifactOf(messageId: string): string {
   return `message_attachments_${messageId}`;
+}
+
+/** The message brings pictures: the queue keeps them in its attachments artifact (`#durable`), or has. */
+export function keepsPictures(item: QueueAction): boolean {
+  return Boolean(item.attachmentsArtifact || item.stills?.length || item.autopilot?.frames?.length);
 }

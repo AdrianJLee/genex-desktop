@@ -279,7 +279,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
       calls.slice(1),
       [
         { prompt: "/review", resume: "s1" },
-        { prompt: afterCommandPrompt([], true), resume: "s1" },
+        { prompt: afterCommandPrompt(true), resume: "s1" },
       ],
       "the command alone, then the work it cut short carried on",
     );
@@ -311,7 +311,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await until(() => q.state("build the boss")?.state === "handled");
     assert.deepEqual(
       calls.slice(1).map((c) => c.prompt),
-      ["/compact", afterCommandPrompt([], true)],
+      ["/compact", afterCommandPrompt(true)],
     );
     q.queue.stop();
   });
@@ -342,7 +342,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await until(() => q.state("build the boss")?.state === "handled");
     assert.deepEqual(
       calls.slice(1).map((c) => c.prompt),
-      ["/review", "/review", afterCommandPrompt(["and fog"], true)],
+      ["/review", "/review", "and fog", afterCommandPrompt(true)],
     );
     q.queue.stop();
   });

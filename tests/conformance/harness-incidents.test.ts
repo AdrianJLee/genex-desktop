@@ -2259,7 +2259,7 @@ describe("live chat during a build, reviewed", () => {
     const chat = liveChat();
     chat.sayAt(chat.T0 + MINUTE_MS, "is the sky dusk yet?");
     const one = chat.loopRun();
-    const words = (steer: Record<string, any>): string => String(steer.messages[0]?.text ?? "");
+    const words = (steer: Record<string, any>): string[] => steer.messages.map((m: SteerMessage) => m.text);
     const oak = () => chat.steers.find((steer) => words(steer).includes("and the benches oak"));
     await one.run(async (turn) => {
       if (turn === 1) return worked;
@@ -2284,9 +2284,12 @@ describe("live chat during a build, reviewed", () => {
       "inside a tool call the words wait for the turn's end",
     );
     assert.equal(oak()?.interrupt, true, "the next words, outside it, cut the turn — the waiting ones with them");
-    // Flipped: the person's words as they wrote them, nothing of Genex's around them.
-    assert.equal(words(oak()!), "make the sky red\n\nand the benches oak");
-    assert.equal(oak()?.messages[0]?.from, "person");
+    // Flipped: each message a steer of its own, as they wrote it, nothing of Genex's around it.
+    assert.deepEqual(words(oak()!), ["make the sky red", "and the benches oak"]);
+    assert.ok(
+      oak()!.messages.every((m: SteerMessage) => m.from === undefined),
+      "the person's: no sender mark",
+    );
     assert.equal(one.calls.length, 3);
     assert.equal(one.calls[2]!.prompt, "make the sky red\n\nand the benches oak", "resumed with their words alone");
     assert.equal(one.calls[2]!.said?.from, "person");
@@ -2368,42 +2371,42 @@ describe("live chat during a build, reviewed", () => {
     );
   const picture = { stills: [{ data: "iVBORw0KGgo=", mimeType: "image/png" }] };
 
-  // Flipped: a picture with words reaches the lead (as an image block, LM1); a picture alone waits.
-  it("LC7. a picture with no words waits for the chat, and words sent after it still reach the lead, in order", async () => {
+  // Flipped: a picture reaches the lead, alone or with words (as an image block, LM1, LM4); a slash command waits.
+  it("LC7. a slash command waits for the chat, and what is sent after it — a picture alone too — still reaches the lead, in order", async () => {
     const chat = liveChat();
     chat.loopRun();
+    await chat.say("/compact");
     await chat.say("", picture);
-    await chat.say("does it look like this?", picture);
     await chat.say("make the sky red");
     const lead = `delivered ${chat.RUN}`;
     assert.deepEqual(standing(chat), {
-      "": "queued",
-      "does it look like this?": lead,
+      "/compact": "queued",
+      "": lead,
       "make the sky red": lead,
     });
     chat.closeBuild();
     assert.ok(await settleOn(() => chat.answered.length === 1));
-    assert.deepEqual(chat.answered, [""], "the chat answers the picture once the build closes");
+    assert.deepEqual(chat.answered, ["/compact"], "the chat runs the command once the build closes");
   });
 
-  it("LC8. what waited while the run prepared reaches the lead once its line opens — past a picture alone among it", async () => {
+  it("LC8. what waited while the run prepared reaches the lead once its line opens — past a slash command among it", async () => {
     const chat = liveChat();
     // The build is under way, but its lead has no line yet: everything waits.
     await chat.say("is it started?");
+    await chat.say("/compact");
     await chat.say("", picture);
-    await chat.say("and make the sky red");
     assert.ok(await settleOn(() => Object.values(standing(chat)).every((state) => state === "queued")));
     chat.loopRun();
     const lead = `delivered ${chat.RUN}`;
-    assert.ok(await settleOn(() => standing(chat)["and make the sky red"] === lead), JSON.stringify(standing(chat)));
+    assert.ok(await settleOn(() => standing(chat)[""] === lead), JSON.stringify(standing(chat)));
     assert.deepEqual(standing(chat), {
       "is it started?": lead,
-      "": "queued",
-      "and make the sky red": lead,
+      "/compact": "queued",
+      "": lead,
     });
     chat.closeBuild();
     assert.ok(await settleOn(() => chat.answered.length === 1));
-    assert.deepEqual(chat.answered, [""]);
+    assert.deepEqual(chat.answered, ["/compact"]);
   });
 
   // Flipped: the lead reads the picture itself (LM1), never a line naming a file it should open.
@@ -2580,7 +2583,7 @@ describe("live chat during a build, reviewed", () => {
     assert.equal(chat.steers[0]?.interrupt, false, "the wrap-up is never cut short");
     assert.deepEqual(
       chat.steers[0]?.messages.map(({ id: _id, ...said }: Record<string, unknown>) => said),
-      [{ text: "also add rain", from: "person" }],
+      [{ text: "also add rain" }],
     );
     assert.deepEqual(standing(chat), { "also add rain": `delivered ${chat.RUN}` });
     const told = chat.log.filter((e) => e.data.event_type === "run_steering").map((e) => e.data.payload);
@@ -2631,7 +2634,41 @@ describe("live chat during a build, reviewed", () => {
     });
     assert.equal(chat.steers.length, 1);
     const said = chat.steers[0]!.messages.map(({ id: _id, ...message }: Record<string, unknown>) => message);
-    assert.deepEqual(said, [{ text: "hdrp или urp?", images: [sky], from: "person" }]);
+    // Flipped: a steer marks only Genex's; the person's carries no sender.
+    assert.deepEqual(said, [{ text: "hdrp или urp?", images: [sky] }]);
+    assert.deepEqual(chat.requeued(), [], "read mid-turn: heard");
+  });
+
+  it("LM3. a message Genex wrote, sent during a build, reaches the lead as Genex's, never as the person's", async () => {
+    const chat = liveChat();
+    chat.hooks.native = true;
+    const one = chat.loopRun();
+    await one.run(async () => {
+      void chat.say("You turned on the Blender plugin.", { origin: "plugin-turned-on", from: "genex" });
+      await settleOn(() => chat.steers.length > 0);
+      one.state.finished = true;
+      return { ...worked, steered: chat.steers.map((steer) => steer.messages[0].id) };
+    });
+    const said = chat.steers[0]!.messages.map(({ id: _id, ...message }: Record<string, unknown>) => message);
+    assert.deepEqual(said, [{ text: "You turned on the Blender plugin.", from: "genex" }]);
+    const recorded = chat.log.filter((e) => e.data.event_type === "run_steering").map((e) => e.data.payload.from);
+    assert.deepEqual(recorded, ["genex"], "the lead's inbox keeps who wrote it");
+  });
+
+  it("LM4. a picture sent alone during a build reaches the lead as an image block, not once the build has closed", async () => {
+    const chat = liveChat();
+    chat.hooks.native = true;
+    const one = chat.loopRun();
+    const sky = { data: "iVBORw0KGgo=", mimeType: "image/png", label: "sky" };
+    await one.run(async () => {
+      void chat.say("", { stills: [sky] });
+      await settleOn(() => chat.steers.length > 0);
+      one.state.finished = true;
+      return { ...worked, steered: chat.steers.map((steer) => steer.messages[0].id) };
+    });
+    const said = chat.steers[0]!.messages.map(({ id: _id, ...message }: Record<string, unknown>) => message);
+    assert.deepEqual(said, [{ text: "", images: [sky] }]);
+    assert.deepEqual(standing(chat), { "": `delivered ${chat.RUN}` });
     assert.deepEqual(chat.requeued(), [], "read mid-turn: heard");
   });
 

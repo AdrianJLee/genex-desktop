@@ -6,11 +6,6 @@
 
 import { WorkerTool } from "./workers/contract.ts";
 
-/** Each message as a quote block, so the session reads it as the person's own words. */
-function quoted(texts: readonly string[]): string[] {
-  return texts.filter((text) => String(text).trim()).map((text) => `> ${String(text).trim().replace(/\n/g, "\n> ")}`);
-}
-
 /** What changed while the session worked, in front of `prompt`: one line each, then the prompt. */
 export function switchedTurnPrompt(notes: readonly string[], prompt: string): string {
   return [
@@ -22,15 +17,12 @@ export function switchedTurnPrompt(notes: readonly string[], prompt: string): st
 }
 
 /**
- * The leg after a slash command the person sent while the session worked: the command has run;
- * when it cut the work short, the session carries it on; and anything they wrote with it.
+ * Genex's line after a slash command the person sent while the session worked, once what they wrote
+ * with it has been read: the command has run, and when it cut the work short, the session carries it on.
  */
-export function afterCommandPrompt(texts: readonly string[], carryOn: boolean): string {
-  const lines = ["The command the user sent has run."];
-  if (carryOn) lines.push("Carry on with what you were doing before it, unless it changed what they want.");
-  const said = quoted(texts);
-  if (said.length) lines.push("", "They also wrote this while you were working — address it:", ...said);
-  return lines.join("\n");
+export function afterCommandPrompt(carryOn: boolean): string {
+  const ran = "The command the user sent has run.";
+  return carryOn ? `${ran} Carry on with what you were doing before it, unless it changed what they want.` : ran;
 }
 
 /** The notes a switch opens the next leg with (delegated-turn.ts): one per setting that changed. */

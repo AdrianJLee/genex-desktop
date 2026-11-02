@@ -10,8 +10,8 @@
  * next leg runs on its settings; a slash command runs as a leg of its own, then the turn carries on.
  */
 import { isResumeFailure } from "./chat-session.ts";
-import type { QueueAction, SteerHandle } from "./message-queue.ts";
-import { type MessageFrom, SteerDelivery } from "./steer-delivery.ts";
+import { type QueueAction, type SteerHandle, textsOf, WORDS_APART, withWords } from "./message-queue.ts";
+import { fromThePerson, MessageFrom, SteerDelivery } from "./steer-delivery.ts";
 import { isSlashText, type OpenOptions } from "./steer-switch.ts";
 import { afterCommandPrompt, SWITCH_NOTES, switchedTurnPrompt } from "./steer-switch-prompts.ts";
 import { EngineFailure, StopReason } from "./outage.ts";
@@ -34,7 +34,10 @@ interface Leg {
   images: DelegateImage[];
   /** A slash command run as a leg of its own: its prompt is the command alone. */
   command?: boolean;
-  /** Genex wrote the whole prompt (`SteeredCallOptions.from`): the turn's own message, nothing added. */
+  /**
+   * Who wrote all of the prompt: Genex (its message, or the turn's: `SteeredCallOptions.from`), or
+   * the person (their words alone). Absent: a brief, the person's words joined to it as written.
+   */
   from?: MessageFrom;
 }
 
@@ -114,10 +117,11 @@ interface TurnLegs {
   interrupted: QueueAction[];
   /** Slash commands taken and not run yet: each runs as a leg of its own, in the order sent. */
   commands: QueueAction[];
-  /** Words that came with those commands: the leg after them tells them. */
-  afterCommands: QueueAction[];
-  /** A command ran: the leg after the commands says so. */
-  ranCommand: boolean;
+  /**
+   * Words owed a leg after this one: those that came with commands, and another sender's than the
+   * leg's (`oneSender`: a prompt says who wrote all of it).
+   */
+  owed: QueueAction[];
   /** The work was cut for a command: once the commands have run, a leg carries it on. */
   carryOn: boolean;
   /** What changed since the last leg (a switch), said as the next leg opens. */
@@ -126,18 +130,23 @@ interface TurnLegs {
   newSession: boolean;
 }
 
-const textsOf = (items: readonly QueueAction[]): string[] => items.map((item) => String(item.text ?? ""));
 /** The words among what the turn was told: a slash command is run, never quoted to a new session. */
-const wordsOf = (items: readonly QueueAction[]): string[] => textsOf(items.filter((item) => !isSlashText(item.text)));
+const wordsOf = (items: readonly QueueAction[]): QueueAction[] => items.filter((item) => !isSlashText(item.text));
 const stillsOf = (items: readonly QueueAction[]): DelegateImage[] => items.flatMap((item) => item.stills ?? []);
 
 /** Who wrote the turn's message, as a leg carries it: nothing for the person's own. */
 const fromOf = (options: SteeredCallOptions): Pick<Leg, "from"> => (options.from ? { from: options.from } : {});
 
-/** What sets one message apart from the next when several go into one prompt. */
-const WORDS_APART = "\n\n";
-/** A prompt with the person's words after it, each as they wrote it. */
-const withWords = (prompt: string, texts: readonly string[]): string => [prompt, ...texts].join(WORDS_APART);
+/**
+ * The leading messages a leg says as one sender's — Genex's (`genex`), or the person's — with the
+ * rest owed to the legs after it, in the order sent: none joins while older words are owed.
+ */
+function oneSender(owed: QueueAction[], items: readonly QueueAction[], genex: boolean): QueueAction[] {
+  const other = owed.length ? 0 : items.findIndex((item) => fromThePerson(item) === genex);
+  if (other < 0) return [...items];
+  owed.push(...items.slice(other));
+  return items.slice(0, other);
+}
 
 /** The session was cut off before or as it started (the host's interrupt). */
 const isAborted = (err: unknown): boolean => (err as { kind?: unknown } | null)?.kind === EngineFailure.Aborted;
@@ -156,9 +165,10 @@ export async function steeredCall(
   options: SteeredCallOptions,
 ): Promise<DelegateResult> {
   const told: QueueAction[] = [];
+  const owed: QueueAction[] = [];
   // A copy: a switch changes how the legs run from then on, never the caller's options.
   const seat: SteeredCallOptions = { ...options };
-  const run = (leg: Leg) => callOrStartFresh(seat, told, leg);
+  const run = (leg: Leg) => callOrStartFresh(seat, told, owed, leg);
   if (!steer)
     return run({
       prompt: options.prompt,
@@ -178,8 +188,7 @@ export async function steeredCall(
     last: undefined,
     interrupted: [],
     commands: [],
-    afterCommands: [],
-    ranCommand: false,
+    owed,
     carryOn: false,
     notes: [],
     newSession: false,
@@ -194,12 +203,17 @@ export async function steeredCall(
 /**
  * One leg; a saved session that cannot be resumed — the engine threw, or answered that it has no
  * such session (another account's, one never saved) — is started afresh with everything the turn
- * was told, so the chat never stays stuck on a session that is gone.
+ * was told (`freshLeg`), so the chat never stays stuck on a session that is gone.
  */
-async function callOrStartFresh(options: SteeredCallOptions, told: QueueAction[], leg: Leg): Promise<DelegateResult> {
+async function callOrStartFresh(
+  options: SteeredCallOptions,
+  told: readonly QueueAction[],
+  owed: QueueAction[],
+  leg: Leg,
+): Promise<DelegateResult> {
   const startFresh = () => {
-    const fresh = options.fresh?.() ?? options.prompt;
-    return options.call(withWords(fresh, wordsOf(told)), null, [...(options.images ?? []), ...stillsOf(told)]);
+    const fresh = freshLeg(options, told, owed);
+    return options.call(fresh.prompt, null, fresh.images, fresh.from);
   };
   let result: DelegateResult;
   try {
@@ -303,13 +317,12 @@ function commandLeg(turn: TurnLegs, words: QueueAction[], forwarded: boolean): L
   if (!leg) return null;
   // A command cut off before its session read it runs again, unchanged.
   if (forwarded && leg.command) {
-    turn.afterCommands.push(...words);
+    turn.owed.push(...words);
     return leg;
   }
   const command = turn.commands.shift();
   if (!command) return null;
-  turn.afterCommands.push(...words);
-  turn.ranCommand = true;
+  turn.owed.push(...words);
   return { prompt: String(command.text ?? "").trim(), resume: turn.last?.sessionId ?? null, images: [], command: true };
 }
 
@@ -330,7 +343,10 @@ function startedWorking(result: DelegateResult | undefined): boolean {
   return Boolean(result?.sessionId && result.turns > 0);
 }
 
-/** The prompt, session and pictures of the leg after `turn.leg`, carrying the messages that arrived. */
+/**
+ * The prompt, session and pictures of the leg after `turn.leg`, carrying the messages that arrived
+ * — those of the leg's own sender; another's go in a leg after it (`oneSender`).
+ */
 function legAfter(turn: TurnLegs, arrived: QueueAction[], forwarded: boolean): Leg {
   const { steer, options, told, leg, last } = turn;
   const notes = turn.notes.splice(0);
@@ -340,43 +356,72 @@ function legAfter(turn: TurnLegs, arrived: QueueAction[], forwarded: boolean): L
     // Delivered before a restart cut this turn short: its answer starts with them too.
     const lead = [...steer.carried, ...arrived];
     told.unshift(...steer.carried);
-    // Only the turn's own message, alone, says who wrote it: anything joined to it is the person's.
-    const alone = !lead.length && !notes.length;
+    const joined = oneSender(turn.owed, lead, options.from === MessageFrom.Genex);
     return {
-      prompt: withChanges(notes, withWords(options.prompt, textsOf(lead))),
+      ...withChanges(notes, withWords(options.prompt, joined), options.from),
       resume: options.resume ?? null,
-      images: [...(options.images ?? []), ...stillsOf(lead)],
-      ...(alone ? fromOf(options) : {}),
+      images: [...(options.images ?? []), ...stillsOf(joined)],
     };
   }
   // A session that had started working keeps it and reads the messages next; one cut off before
   // it read its prompt gets that prompt again, with the messages after it.
-  if (forwarded)
+  if (forwarded) {
+    const joined = oneSender(turn.owed, arrived, leg.from === MessageFrom.Genex);
     return {
-      prompt: withChanges(notes, withWords(leg.prompt, textsOf(arrived))),
+      ...withChanges(notes, withWords(leg.prompt, joined), leg.from),
       resume: leg.resume,
-      images: [...leg.images, ...stillsOf(arrived)],
+      images: [...leg.images, ...stillsOf(joined)],
     };
-  const words = [...turn.afterCommands.splice(0), ...arrived];
-  return {
-    prompt: withChanges(notes, goOnPrompt(turn, words)),
-    resume: last?.sessionId ?? null,
-    images: stillsOf(words),
-  };
+  }
+  return { ...goOnLeg(turn, arrived, notes), resume: last?.sessionId ?? null };
 }
 
-/** What the session is resumed with: the words it was cut for, or — after commands — what they leave it to do. */
-function goOnPrompt(turn: TurnLegs, words: QueueAction[]): string {
-  if (!turn.ranCommand) return textsOf(words).join(WORDS_APART);
+/**
+ * What the session is resumed with: the words it was cut for, or owed, as written — one sender's,
+ * the rest after — or, once commands have run and nothing more was said, Genex's line that they did.
+ */
+function goOnLeg(
+  turn: TurnLegs,
+  arrived: QueueAction[],
+  notes: readonly string[],
+): Pick<Leg, "prompt" | "from" | "images"> {
+  const pending = [...turn.owed.splice(0), ...arrived];
+  const first = pending[0];
+  if (first) {
+    const genex = !fromThePerson(first);
+    const words = oneSender(turn.owed, pending, genex);
+    const from = genex ? MessageFrom.Genex : MessageFrom.Person;
+    return { ...withChanges(notes, textsOf(words).join(WORDS_APART), from), images: stillsOf(words) };
+  }
   const carryOn = turn.carryOn;
-  turn.ranCommand = false;
   turn.carryOn = false;
-  return afterCommandPrompt(textsOf(words), carryOn);
+  return { ...withChanges(notes, afterCommandPrompt(carryOn), MessageFrom.Genex), images: [] };
 }
 
-/** What changed, in front of a leg's prompt; the prompt alone when nothing did. */
-function withChanges(notes: readonly string[], prompt: string): string {
-  return notes.length ? switchedTurnPrompt(notes, prompt) : prompt;
+/**
+ * What changed, in front of a leg's prompt, and who wrote it all: a note is Genex's, so the person's
+ * words behind one make a brief. The prompt alone, as `from` wrote it, when nothing changed.
+ */
+function withChanges(notes: readonly string[], prompt: string, from?: MessageFrom): Pick<Leg, "prompt" | "from"> {
+  if (!notes.length) return { prompt, ...(from ? { from } : {}) };
+  const keeps = from && from !== MessageFrom.Person;
+  return { prompt: switchedTurnPrompt(notes, prompt), ...(keeps ? { from } : {}) };
+}
+
+/**
+ * A new session's first leg: the fresh brief, and what the turn was told that the brief's sender
+ * wrote (on Genex's turn, nothing of the person's); the rest goes in the legs after it.
+ */
+function freshLeg(options: SteeredCallOptions, told: readonly QueueAction[], owed: QueueAction[]): Leg {
+  // Everything owed is in `told` already: the new session hears it from here.
+  owed.length = 0;
+  const joined = oneSender(owed, wordsOf(told), options.from === MessageFrom.Genex);
+  return {
+    prompt: withWords(options.fresh?.() ?? options.prompt, joined),
+    resume: null,
+    images: [...(options.images ?? []), ...stillsOf(joined)],
+    ...fromOf(options),
+  };
 }
 
 /** A leg in a new session: the fresh brief, everything the turn was told, and what changed (`notes`). */
@@ -385,16 +430,9 @@ function newSessionLeg(turn: TurnLegs, notes: string[]): Leg {
   turn.newSession = false;
   // The first leg: what a restart carried into this turn is told too.
   if (!turn.leg) told.unshift(...steer.carried);
-  const fresh = options.fresh?.() ?? options.prompt;
-  // Everything said with commands is in `told` already: the new session hears it there.
-  turn.afterCommands = [];
-  turn.ranCommand = false;
   turn.carryOn = false;
-  return {
-    prompt: withChanges(notes, withWords(fresh, wordsOf(told))),
-    resume: null,
-    images: [...(options.images ?? []), ...stillsOf(told)],
-  };
+  const { prompt, from, ...fresh } = freshLeg(options, told, turn.owed);
+  return { ...fresh, ...withChanges(notes, prompt, from) };
 }
 
 /**
@@ -460,19 +498,18 @@ function once(items: readonly QueueAction[]): QueueAction[] {
   return items.filter((item, at) => items.indexOf(item) === at);
 }
 
-/** Commands taken and not run, the words that came with them, or work they cut short: a leg is owed. */
+/** Commands taken and not run, words owed a leg, or work commands cut short: a leg is owed. */
 function owesLegs(turn: TurnLegs): boolean {
-  return turn.commands.length > 0 || turn.afterCommands.length > 0 || turn.carryOn;
+  return turn.commands.length > 0 || turn.owed.length > 0 || turn.carryOn;
 }
 
 /**
- * What the turn took and never ran, once it ends: its commands and the words that came with them.
- * Each waits for a turn of its own.
+ * What the turn took and never ran, once it ends: its commands and the words owed a leg. Each
+ * waits for a turn of its own.
  */
 function owedBack(turn: TurnLegs): QueueAction[] {
-  turn.ranCommand = false;
   turn.carryOn = false;
-  return [...turn.commands.splice(0), ...turn.afterCommands.splice(0)];
+  return [...turn.commands.splice(0), ...turn.owed.splice(0)];
 }
 
 /** Does a message the last leg was cut for change the Loop the turn runs on (any setting, for a runner that cannot say)? */

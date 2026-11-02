@@ -29,3 +29,7 @@ export const MessageFrom = {
   Genex: "genex",
 } as const;
 export type MessageFrom = (typeof MessageFrom)[keyof typeof MessageFrom];
+
+/** The person wrote it, not Genex: a message with no `from` is theirs. */
+export const fromThePerson = (message: Readonly<Record<string, unknown>>): boolean =>
+  message.from !== MessageFrom.Genex;

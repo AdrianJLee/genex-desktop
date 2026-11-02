@@ -549,7 +549,7 @@ describe("live chat during a build", () => {
     assert.doesNotMatch(handed[0]!, /how is it going/, "what the lead was woken with is not said again");
   });
 
-  it("L4. Stop mid-build still hands over to the oldest queued message: a picture with no words waits for the chat", {
+  it("L4. Stop mid-build still hands over to the oldest queued message: a slash command waits for the chat", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("live-stop");
@@ -559,7 +559,7 @@ describe("live chat during a build", () => {
     fakeEngine(rig, async (request) => {
       if (answersChat(request)) {
         chats.push(request);
-        return turnResult(request.resume ?? "chat", "I see the picture.");
+        return turnResult(request.resume ?? "chat", "Reviewed.");
       }
       if (!request.director) return hangUntilStopped(request, () => {});
       lead.push(request);
@@ -570,10 +570,9 @@ describe("live chat during a build", () => {
     });
     const running = dispatch();
     await until(() => rested, "the lead's first turn to end");
-    const picture = { label: "ref", mimeType: "image/png", data: "iVBORw0KGgo=" };
-    // Flipped: a picture with words reaches the lead now (LM1); one sent alone waits for the chat.
-    const { thread, messageId } = await say(rig, project.name, "", { frames: [picture] });
-    assert.equal((await stateOf(rig, thread, messageId))?.state, "queued", "a picture waits for the chat");
+    // Flipped: a picture reaches the lead now, alone too (LM1, LM4); a slash command waits for the chat.
+    const { thread, messageId } = await say(rig, project.name, "/review");
+    assert.equal((await stateOf(rig, thread, messageId))?.state, "queued", "a command waits for the chat");
     await rig.core.stopThread(thread);
     const events = await finished();
     await running;
@@ -589,7 +588,7 @@ describe("live chat during a build", () => {
     assert.equal(lead.length, 1, "no turn of the lead after Stop");
     assert.equal(chats.length, 1, "the chat answers the message that waited");
     assert.equal(chats[0]!.resume, "lead-1", "the session that led the run");
-    assert.equal(chats[0]!.images?.[0]?.data, "iVBORw0KGgo=", "with the picture");
+    assert.match(chats[0]!.prompt, /^\/review\n/, "the command the person sent");
   });
 
   it("L7. a run that crashes gives back what its lead never heard before the run closes: the chat keeps it Queued, and answers it", {

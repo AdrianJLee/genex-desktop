@@ -15,7 +15,13 @@
 import { randomUUID } from "node:crypto";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { MessageFrom } from "../../shared/engine-requests.ts";
-import { DelegateEventType, type DelegateImage, type DelegateRequest, type SteerSend } from "./types.ts";
+import {
+  DelegateEventType,
+  type DelegateImage,
+  type DelegateRequest,
+  type SteerMessage,
+  type SteerSend,
+} from "./types.ts";
 
 /**
  * How long a steered message the CLI took may sit unread after a result before the input is
@@ -83,31 +89,28 @@ export function userFrame(text: string, images: readonly DelegateImage[]) {
   };
 }
 
-/** A message by its sender: who wrote it, its words and its stills. */
-interface Said {
-  text: string;
-  images?: readonly DelegateImage[];
-  from?: MessageFrom;
-}
-
 /**
- * A message as its sender's frame. The person's: their words and pictures exactly as sent, from
- * `HUMAN_ORIGIN` (absent `from` is the person). Genex's: `isSynthetic` and no origin, which CLI
- * 2.1.257 stamps `unclassified` and shows the model under "[MESSAGE FROM NON-USER SOURCE - NOT
- * USER INPUT]" (mid-turn as a system message), never as the user's; it reports it `started` like
- * any other (`claude-steer-cli.test.ts`). A channel origin cannot say it: from local stdin the CLI
- * drops every origin but `human`.
+ * A message as its sender's frame, its stills those with pixels (the host's steer and `briefFrame`
+ * keep only those). The person's: their words and pictures exactly as sent, from `HUMAN_ORIGIN`
+ * (absent `from` is the person). Genex's: `isSynthetic` and no origin, which CLI 2.1.257 stamps
+ * `unclassified` and shows the model under "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]"
+ * (mid-turn as a system message), never as the user's; it reports it `started` like any other
+ * (`claude-steer-cli.test.ts`). A channel origin cannot say it: from local stdin the CLI drops
+ * every origin but `human`.
  */
-export function saidFrame(said: Said) {
-  const images = (said.images ?? []).filter((image) => image?.data);
-  const message = { role: "user" as const, content: blocks(said.text, images) };
+export function saidFrame(said: Omit<SteerMessage, "id">) {
+  const message = { role: "user" as const, content: blocks(said.text, said.images ?? []) };
   const sender = said.from === MessageFrom.Genex ? { isSynthetic: true as const } : { origin: HUMAN_ORIGIN };
   return { type: "user" as const, message, parent_tool_use_id: null, ...sender };
 }
 
+/** The stills of a session's first message that have pixels. */
+export const briefImages = (request: Pick<DelegateRequest, "images">): DelegateImage[] =>
+  (request.images ?? []).filter((image) => image?.data);
+
 /** A session's first message: a brief (no `from`) as it always was, or a message by its sender. */
 export function briefFrame(request: Pick<DelegateRequest, "prompt" | "images" | "from">) {
-  const images = (request.images ?? []).filter((image) => image?.data);
+  const images = briefImages(request);
   if (!request.from) return userFrame(request.prompt, images);
   return saidFrame({ text: request.prompt, images, from: request.from });
 }

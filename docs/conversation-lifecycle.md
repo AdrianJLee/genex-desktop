@@ -233,8 +233,8 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   person's messages is handed over (`loop/person-wrote.ts`: a worker wait, a lead's wait for a busy
   reviewer, a plugin lock wait on the host), so the session reaches its next step in seconds and may
   wait again; a line of Genex's ends no wait. A message the chat wrote itself (any `origin`) or a
-  plugin's ask it shows (`desktop-assist.ts`) is queued `from: genex`, so the turn it opens, or the
-  steer that hands it in, is Genex's too.
+  plugin's ask it shows (`desktop-assist.ts`) is queued `from: genex`, and every message keeps its
+  sender on the way in: the turn it opens, its steer and its `run_steering` say Genex wrote it.
 - **Cut at the next step and resume.** Any other session — Codex (`codex exec` closes stdin at
   spawn), OpenCode, an older Claude Code, and every Loop chat (a message folded in at its
   question's or launch's tool result would be answered by a turn that had already decided) — and
@@ -243,15 +243,18 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   (`main/core/steer-cut.ts`), so no tool's result is lost. `loop/chat-steer.ts` `steeredCall`
   appends `coordinator_message_delivered {how: "interrupt"}` and resumes the same session with the
   person's words alone, as they wrote them (several apart by a blank line, their pictures as
-  images); a session cut before it read its prompt gets that prompt again with the words after it. A switch first moves the turn onto the message's settings (`TurnSwitches.
+  images, `from: person`); a session cut before it read its prompt gets that prompt again with the
+  words after it. A prompt says who wrote all of it (`oneSender`): words of another sender than the
+  leg's — Genex's line among the person's, the person's after a Genex turn's own message — wait for
+  the leg after it, in the order sent. A switch first moves the turn onto the message's settings (`TurnSwitches.
   apply`, `turn-switch.ts` `switchedSettings`: a turn started with that message would have run on
   them — the after-run session's engine kept, a reopen's rules kept, the next Loop after one in the
   game folder started from a plain chat turn) and the resumed leg opens with what changed
   (`steer-switch-prompts.ts`): another model or effort resumes the same session; another engine
   starts a new one told the brief and everything the turn was told. A Loop switch drops a launch or
   question the cut leg recorded (the session is told); another keeps it, on its settings. Slash
-  text runs as a leg of its own, the command alone in the same session, and the turn carries on
-  after it. Messages reach it in the order they were sent.
+  text runs as a leg of its own, the command alone in the same session; the words sent with it
+  follow as they wrote them, then Genex's line that it ran carries the work it cut short on. Messages reach it in the order they were sent.
 - **Not read.** Whatever a session took but did not read — a Stop (checked again before every
   resumed leg), a turn that ended first, a Loop chat that had already asked its question or
   launched, a leg that failed or was stopped before it read its prompt (with anything an earlier
@@ -354,28 +357,30 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   heard is answered a second time after the close. What no turn read goes back to the chat when the
   line is released, and the chat answers it then.
 - **The hand-over.** The queue asks `leadDoor` (`loop/live-chat.ts`) for each message. The lead
-  takes words from the run's own chat — no slash text or Studio chat — while its line is open and
-  nothing older waits, with their pictures: the `run_steering` names the message's attachments
-  artifact (`attachmentsArtifactOf`), from which the lead's loop reads them as image blocks. A
-  picture with no words waits for the chat. Its receipt then carries `coordinator_message_delivered
-  {into: <runId>, how: "lead"}` and a `run_steering {runId, text, sourceMessageId,
-  attachmentsArtifact?}` the lead's inbox reads (`steers`): the words as typed, never waiting, never
+  takes words or pictures from the run's own chat — no slash text or Studio chat — while its line
+  is open and nothing older waits: the `run_steering` names the message's attachments artifact
+  (`attachmentsArtifactOf`), from which the lead's loop reads its pictures as image blocks. Its
+  receipt then carries `coordinator_message_delivered {into: <runId>, how: "lead"}` and a
+  `run_steering {runId, text, sourceMessageId, attachmentsArtifact?, from?}` the lead's inbox
+  reads (`steers`): the words as typed, never waiting, never
   processed, no turn or checkpoint of its own, and its bubble sits where it was delivered. A message that waited (sent while the run prepared) is handed the same
   way once `beforeProcess` (`chatWaitsFor`) answers with the lead's door. What the lead does not
   take waits for the close and is answered then, but holds nothing back: words sent after it
   still reach the lead, in order among themselves (`chatWaitsFor` answers null when a line opens
   or shuts, and the queue hands past it). The lead may so answer a later message before the chat
-  answers the picture; each bubble sits where it was delivered.
+  answers the one that waited; each bubble sits where it was delivered.
 - **Hearing it.** A resting lead is woken at once (a user wake, never debounced) with THE USER
   SAYS. A turn under way hears it in that turn: the wake loop takes the words off the inbox and
   calls `engine.steer {threadId, into: <runId>}` — the director's delegation carries `chatTurn:
   {messageId: <runId>}` on a waking run, which the host honours only for that run's director
-  grant. The steer is the person's words as they wrote them, with their pictures and `from:
-  person`; Claude Code reads it at its next step. Any other engine, on a turn
+  grant. Each message is a steer of its own, as written, with its pictures and its sender (Genex's
+  `from: genex`); Claude Code reads them at its next step. Any other engine, on a turn
   with a session to resume — the first too, so a Codex lead is never deaf for a whole open Loop
   turn — not the wrap-up and not inside a director tool call (`toolsInFlight`, whose answer a cut
   would lose), is interrupted and resumed in the same session with their words alone, as the
-  person's (a turn cut before it read its message is asked it again, the words after it; a first
+  person's — or Genex's, one sender's at a time, the rest handed to the resumed turn at once (a
+  lost session's fresh brief quotes the person's under THE USER SAYS) — (a turn cut before it read
+  its message is asked it again, the words after it; a first
   turn cut before its session began is asked its brief again,
   never crashing the run); otherwise `interrupt: false` leaves the turn alone, as for a fresh lead's
   first turn, which has no session to resume yet. Genex's own lines said into a turn — a worker or

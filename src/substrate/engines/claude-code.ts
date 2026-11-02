@@ -33,7 +33,7 @@ import { credentialHomes } from "../credential-homes.ts";
 import type { Usage } from "../types.ts";
 import type { ModelTokenUsage } from "../../shared/event-log.ts";
 import { claudeAuthStatus, type ClaudeAuthStatus } from "./claude-cli.ts";
-import { briefFrame, steerFeed, steerSession, type SteerFeed, type SteerSession } from "./claude-steer.ts";
+import { briefFrame, briefImages, steerFeed, steerSession, type SteerFeed, type SteerSession } from "./claude-steer.ts";
 import { autoModeRules } from "./claude-auto-mode.ts";
 import {
   askingOptions,
@@ -58,7 +58,6 @@ import {
   type CompleteRequest,
   type CompleteResponse,
   type DelegateAsks,
-  type DelegateImage,
   type DelegateRequest,
   type DelegateResult,
   type Engine,
@@ -122,7 +121,7 @@ import { StudioPlatform } from "../../shared/boot.ts";
 import { EngineKind, EngineStatusCode, EngineStatusReason, LoginSource } from "../../shared/engine-descriptor.ts";
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { ContextSource } from "../../shared/context.ts";
-import { EngineFailureKind, isInterview, StopReason } from "../../shared/engine-requests.ts";
+import { EngineFailureKind, isInterview, MessageFrom, StopReason } from "../../shared/engine-requests.ts";
 import { SessionCostLedger, sessionTotals, turnShare } from "./session-cost.ts";
 import { AccountId, accountsRoot, SubscriptionAccounts } from "./subscription-accounts.ts";
 
@@ -2360,18 +2359,14 @@ function withShellLine(request: DelegateRequest, genexShell: boolean, platform: 
   return { ...request, prompt: `${request.prompt}\n\n${line}` };
 }
 
-/** The stills a brief carries. */
-function briefImages(request: DelegateRequest): DelegateImage[] {
-  return (request.images ?? []).filter((image) => image?.data);
-}
-
 /**
  * The builder's prompt. Stills go in as image blocks, the same content-block shape the judge uses
- * — a builder that never saw the reference read it nine times in 2,245 turns. A prompt that says
- * who wrote it goes as its sender's frame (claude-steer.ts `briefFrame`).
+ * — a builder that never saw the reference read it nine times in 2,245 turns. Genex's own message,
+ * or one with pictures, goes as its sender's frame (claude-steer.ts `briefFrame`); any other is the
+ * same message as a string.
  */
 function delegatePrompt(request: DelegateRequest): unknown {
-  if (!request.from && !briefImages(request).length) return request.prompt;
+  if (request.from !== MessageFrom.Genex && !briefImages(request).length) return request.prompt;
   return (async function* () {
     yield briefFrame(request);
   })();

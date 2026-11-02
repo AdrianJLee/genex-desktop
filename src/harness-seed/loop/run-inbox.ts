@@ -1,8 +1,9 @@
 import { messageQueueState } from "./message-queue.ts";
 import type { AnyRecord, HarnessCtx, HarnessEvent } from "../types/harness.d.ts";
+import type { SteerMessage } from "../types/host-api.d.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent, RunState, SteeringSource } from "./run-events.ts";
-import { SteerDelivery } from "./steer-delivery.ts";
+import { fromThePerson, MessageFrom, SteerDelivery } from "./steer-delivery.ts";
 
 /** What a `run_control` record asks of a run. Persisted: never rename a value. */
 export const RunControlAction = {
@@ -69,15 +70,13 @@ export function conversationThrough(events: readonly HarnessEvent[], messageId?:
 /** One steer the user sent a run: the event it came in, its payload, and when the event was logged. */
 type Steer = AnyRecord & { id: string; loggedAt?: string | null };
 
-/** A steer as a reader takes it: the person's words, and the artifact the chat keeps their pictures in. */
-export interface SaidSteer {
-  text: string;
-  attachmentsArtifact?: string;
-}
+/** A steer as a reader takes it: its words, who wrote it, and the artifact the chat keeps its pictures in. */
+export type SaidSteer = Pick<SteerMessage, "text" | "from"> & { attachmentsArtifact?: string };
 
-/** A steer's words, and where its pictures are kept when it brought any (live-chat.ts). */
+/** A steer's words, Genex when Genex wrote it, and where its pictures are kept when it brought any (live-chat.ts). */
 const saidOf = (steer: Steer): SaidSteer => ({
-  text: String(steer.text),
+  text: String(steer.text ?? ""),
+  ...(fromThePerson(steer) ? {} : { from: MessageFrom.Genex }),
   ...(typeof steer.attachmentsArtifact === "string" ? { attachmentsArtifact: steer.attachmentsArtifact } : {}),
 });
 
@@ -122,7 +121,8 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   if (d.event_type === RunEvent.RunControl && p.action === RunControlAction.Finish) fold.finishing = true;
   // The director's own worker_steer events are steering too — but its own, not the
   // user's (a director must never ask the user to repeat an instruction it wrote itself).
-  const userSteer = d.event_type === RunEvent.RunSteering && p.text?.trim() && p.source !== SteeringSource.Director;
+  const said = Boolean(p.text?.trim() || p.attachmentsArtifact);
+  const userSteer = d.event_type === RunEvent.RunSteering && said && p.source !== SteeringSource.Director;
   if (userSteer) fold.instructions.push({ id: event.id, ...p, loggedAt: event.created_at ?? null });
   if (d.event_type === RunEvent.RunSteeringDelivered) absorbDelivery(fold, p);
 }
@@ -247,9 +247,9 @@ export function createRunInbox(
       return fold.finishing;
     },
     steers,
-    /** `steers`' words alone. */
+    /** `steers`' words alone: a picture sent without words has none. */
     async steering(facetId?: string, consume = true, options: { onlyNew?: boolean } = {}): Promise<string[]> {
-      return (await steers(facetId, consume, options)).map((said) => said.text);
+      return (await steers(facetId, consume, options)).map((said) => said.text).filter(Boolean);
     },
     /**
      * The user's steers addressed to one worker (`facetId`), and only those. `steering(undefined)`

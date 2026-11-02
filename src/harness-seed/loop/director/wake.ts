@@ -29,7 +29,8 @@ import {
 import { isProviderLoss, lostSignIn, noteProviderLoss, pauseDecision } from "../provider-loss.ts";
 import { CLIP_DETAIL } from "../text.ts";
 import { RunEvent } from "../run-events.ts";
-import { MessageFrom, SteerDelivery } from "../steer-delivery.ts";
+import { fromThePerson, MessageFrom, SteerDelivery } from "../steer-delivery.ts";
+import { textsOf, WORDS_APART } from "../message-queue.ts";
 import { MINUTE_MS, minutes, SECOND_MS } from "../time.ts";
 import { estimateTokens } from "../prompt.ts";
 import { limitResumePrompt, wrapUpPrompt } from "./briefs.ts";
@@ -69,7 +70,7 @@ import {
 } from "./wake-schedule.ts";
 import { turnEndAtCap, keepRunClock, withCapWatch, withCapWords } from "./cap-lines.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
-import type { DelegateImage, DelegateResult } from "../../types/host-api.d.ts";
+import type { DelegateResult, SteerMessage } from "../../types/host-api.d.ts";
 import type { RestoredWake } from "./journal.ts";
 import type { LeadLine } from "./lead-line.ts";
 import type { LoopRun } from "./loop-run.ts";
@@ -107,17 +108,11 @@ const USER_WAKES: ReadonlySet<WakeReason> = new Set<WakeReason>([WakeCause.UserM
 /** An open Loop's lead going straight on with its own work: never counted in the wake cap. */
 const SELF_CONTINUED: ReadonlySet<WakeReason> = new Set<WakeReason>([WakeCause.CarryOn, WakeCause.TurnCap]);
 
-/** What a message to the lead carries besides its words: the person's pictures, and who wrote it when it is not a brief. */
-export interface TurnSaid {
-  images?: DelegateImage[];
-  from?: MessageFrom;
-}
+/** What a message to the lead carries besides its words: the pictures said with it, and who wrote it when it is not a brief. */
+export type TurnSaid = Omit<SteerMessage, "id" | "text">;
 
-/** What the person said, as the lead is told it: their words and the pictures they sent with them. */
-interface Said {
-  text: string;
-  images: DelegateImage[];
-}
+/** A chat message as the lead is told it: its words, its pictures, and Genex when Genex wrote it. */
+type Said = Omit<SteerMessage, "id">;
 
 /** The lead's session as the run talks to it: one turn at a time, and the session id it resumes. */
 export interface DirectorTalk {
@@ -209,12 +204,9 @@ interface TurnAsk {
   said?: TurnSaid;
 }
 
-/** The words of what the person said, oldest first. */
-const textsOf = (said: readonly Said[]): string[] => said.map((one) => one.text);
-
-/** A message carrying `words` takes their pictures with it, and the person's own words alone say so (`from`). */
+/** A message carrying `words` takes their pictures with it, and says who wrote it when one sender wrote it all (`from`). */
 function saidWith(words: readonly Said[], from?: MessageFrom): TurnSaid {
-  const images = words.flatMap((one) => one.images);
+  const images = words.flatMap((one) => one.images ?? []);
   return { ...(images.length ? { images } : {}), ...(from ? { from } : {}) };
 }
 
@@ -297,20 +289,25 @@ async function takeUntold(loopRun: LoopRun, wake: WakeState): Promise<Said[]> {
   if (taken) {
     const steers = unheard(wake, taken);
     wake.heardUnrecorded = [];
-    return Promise.all(steers.map((steer) => saidOf(loopRun, steer)));
+    return Promise.all(steers.map((steer) => withItsPictures(loopRun, steer)));
   }
   const untold = await inbox.steers(undefined, false, { onlyNew: true }).catch(() => []);
   const steers = unheard(wake, untold);
   wake.heardUnrecorded = untold.map((steer) => steer.text);
-  return Promise.all(steers.map((steer) => saidOf(loopRun, steer)));
+  return Promise.all(steers.map((steer) => withItsPictures(loopRun, steer)));
 }
 
-/** A steer as the lead is told it: the person's words, and the pictures read from where the chat keeps them. */
-async function saidOf(loopRun: LoopRun, steer: SaidSteer): Promise<Said> {
-  if (!steer.attachmentsArtifact) return { text: steer.text, images: [] };
+/**
+ * A steer as the lead is told it: its words and sender, and every picture the chat keeps for it
+ * (its stills, and a commission's frames: message-queue.ts `#durable`).
+ */
+async function withItsPictures(loopRun: LoopRun, steer: SaidSteer): Promise<Said> {
+  const said = { text: steer.text, ...(steer.from ? { from: steer.from } : {}) };
+  if (!steer.attachmentsArtifact) return said;
   const params = { threadId: loopRun.threadId, artifactId: steer.attachmentsArtifact };
   const kept = (await loopRun.ctx.call(HostMethod.ArtifactRead, params).catch(() => null)) as AnyRecord | null;
-  return { text: steer.text, images: Array.isArray(kept?.stills) ? kept.stills : [] };
+  const images = [kept?.stills, kept?.frames].flatMap((list) => (Array.isArray(list) ? list : []));
+  return { ...said, ...(images.length ? { images } : {}) };
 }
 
 /** How the Loop works, as the lead's first message (and a fresh session's) says it. */
@@ -669,9 +666,10 @@ function openFresh(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk, why: string): 
     brief: kit.brief(),
     rules: rulesFor(loopRun),
     ...freshContext(loopRun),
-    digest: turn.prompt,
+    // The person's words alone (a cut turn's resume) are quoted as theirs inside Genex's brief.
+    digest: turn.said?.from === MessageFrom.Person ? userSaysBlock([turn.prompt]) : turn.prompt,
   });
-  // A fresh start is Genex's brief around the message: it keeps the pictures, never the person's sender.
+  // A fresh start is Genex's brief around the message: it keeps the pictures, never the message's sender.
   return kit.talk.session(text, null, turn.deadline - kit.clock.now(), { images: turn.said?.images ?? [] });
 }
 
@@ -1043,13 +1041,37 @@ async function takeTurn(
   let result = await oneTurn(loopRun, wake, kit, asked);
   while (wake.cut && !loopRunOver(loopRun)) {
     wake.cut = false;
-    const resumes = startedWorking(result);
-    asked = resumes ? textsOf(await tellUser(loopRun, wake)).join("\n\n") : await askAgain(loopRun, wake, asked);
-    result = await oneTurn(loopRun, wake, kit, asked, resumes ? MessageFrom.Person : undefined);
+    if (!startedWorking(result)) {
+      asked = await askAgain(loopRun, wake, asked);
+      result = await oneTurn(loopRun, wake, kit, asked);
+      continue;
+    }
+    const resume = await resumeWords(loopRun, wake);
+    asked = resume.prompt;
+    result = await oneTurn(loopRun, wake, kit, asked, resume.from);
   }
   wake.cut = false;
   await fireHooks(loopRun.ctx, loopRun.game, HookEvent.TurnEnd, moment);
   return result;
+}
+
+/**
+ * What a turn cut short for the chat's messages is resumed with: the leading ones of one sender, as
+ * written — the person's, or Genex's own — so a prompt says who wrote all of it. The rest are owed
+ * to the turn it resumes, which is handed them at once (`watchTurn`), and are not counted heard
+ * until it reads them.
+ */
+async function resumeWords(loopRun: LoopRun, wake: WakeState): Promise<{ prompt: string; from: MessageFrom }> {
+  const words = await tellUser(loopRun, wake);
+  const genex = words.length > 0 && !fromThePerson(words[0] ?? {});
+  const other = words.findIndex((one) => fromThePerson(one) === genex);
+  const now = other < 0 ? words : words.slice(0, other);
+  if (now.length < words.length) {
+    wake.owed.push(...words.slice(now.length));
+    wake.promptWords = now;
+    wake.promptThrough = 0;
+  }
+  return { prompt: textsOf(now).join(WORDS_APART), from: genex ? MessageFrom.Genex : MessageFrom.Person };
 }
 
 /** A lead's turn as Genex's moments name it: the run, and the turn's number. */
@@ -1114,36 +1136,37 @@ function mayCut(loopRun: LoopRun, wake: WakeState, kit: TurnKit): boolean {
  * What a turn under way was handed to read at its next step, by the id it went in under: the words,
  * and how many of the chat's messages the line had been handed then.
  */
-type Handed = Map<string, { words: Said[]; through: number }>;
+type Handed = Map<string, { said: Said; through: number }>;
 
 /**
- * Hand the user's words to the lead's turn under way (`engine.steer`, addressed by the run), as
- * they wrote them and with their pictures: an engine that reads input mid-turn takes them at its
- * next step (`handed`, settled against what the turn says it read); one that cannot is cut short
- * when `mayCut`, and resumed with them (`wake.cut`) — asked with `interrupt: false` otherwise.
- * Words neither took open the lead's next message.
+ * Hand the chat's messages to the lead's turn under way (`engine.steer`, addressed by the run),
+ * each as written, with its pictures and its sender: an engine that reads input mid-turn takes
+ * them at its next step (`handed`, settled against what the turn says it read; only the last
+ * counts them all heard, since a session reads them in order); one that cannot is cut short when
+ * `mayCut`, and resumed with them (`wake.cut`) — asked with `interrupt: false` otherwise. Messages
+ * neither took open the lead's next message.
  */
 async function handMidTurn(loopRun: LoopRun, wake: WakeState, kit: TurnKit, handed: Handed, id: string): Promise<void> {
   // A run that is over hears nothing more: what was sent stays untold rather than said to no one.
   if (loopRunOver(loopRun)) return;
   const { words, through } = await userWords(loopRun, wake);
   if (!words.length) return;
-  const message = { id, text: textsOf(words).join("\n\n"), ...saidWith(words, MessageFrom.Person) };
+  const messages = words.map((said, at) => ({ id: `${id}_${at + 1}`, ...said }));
   const answer = await loopRun.ctx
     .call(HostMethod.EngineSteer, {
       threadId: loopRun.threadId,
       into: loopRun.run.runId,
-      messages: [message],
+      messages,
       interrupt: mayCut(loopRun, wake, kit),
     })
     .catch(() => null);
-  const how = answer?.accepted.includes(id) ? answer.how : null;
-  if (how === SteerDelivery.Native) {
-    handed.set(id, { words, through });
-    return;
+  const accepted = new Set(answer?.accepted ?? []);
+  for (const [at, { id: sent, ...said }] of messages.entries()) {
+    if (answer?.how === SteerDelivery.Native && accepted.has(sent))
+      handed.set(sent, { said, through: at === messages.length - 1 ? through : 0 });
+    else wake.owed.push(said);
   }
-  wake.owed.push(...words);
-  if (how === SteerDelivery.Interrupt) wake.cut = true;
+  if (answer?.how === SteerDelivery.Interrupt && accepted.size) wake.cut = true;
 }
 
 /**
@@ -1251,7 +1274,7 @@ async function lineWatchedSession(
     let read = 0;
     for (const [id, told] of watch.handed) {
       if (result?.steered?.includes(id)) read = Math.max(read, told.through);
-      else wake.owed.push(...told.words);
+      else wake.owed.push(told.said);
     }
     await kit.line.heardThrough(read);
   }

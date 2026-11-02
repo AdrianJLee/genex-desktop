@@ -52,13 +52,21 @@ import { runWakeLoop, SYSTEM_CLOCK, WAKE_ENDING } from "./director/wake.ts";
 import { WrapCause } from "./director/wake-schedule.ts";
 import { openLeadLine, type LeadLine } from "./director/lead-line.ts";
 import { bookmarkLead, freshChat, leadSeat } from "./director/lead-session.ts";
-import type { MessageFrom } from "./steer-delivery.ts";
 import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
 import type { LoopRun } from "./director/loop-run.ts";
 import type { DirectorTalk, TurnSaid, WakeClock } from "./director/wake.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
-import type { DelegateImage, DelegateResult, LiveToolSpec, ReferenceFrame } from "../types/host-api.d.ts";
+import type {
+  DelegateImage,
+  DelegateResult,
+  HarnessDelegateParams,
+  LiveToolSpec,
+  ReferenceFrame,
+} from "../types/host-api.d.ts";
+
+/** One message to the lead's session: its prompt, and who wrote it when it is not a brief. */
+type LeadAsk = Pick<HarnessDelegateParams, "prompt" | "from">;
 
 export { directorTool } from "./director/tool-specs.ts";
 
@@ -96,7 +104,7 @@ function delegateTurn(
   loopRun: LoopRun,
   images: DelegateImage[],
   tools: LiveToolSpec[],
-  { prompt, from }: { prompt: string; from?: MessageFrom | undefined },
+  { prompt, from }: LeadAsk,
   sessionId: string | null | undefined,
   timeoutMs: number,
 ): Promise<DelegateResult> {
@@ -122,7 +130,7 @@ function delegateTurn(
       project: run.project,
       root: integrationWorktree,
       tools,
-      ...(lead?.chatSession ? { chatSession: true } : {}),
+      ...(lead ? { chatSession: true } : {}),
       ...(leadsOpenLoop(loopRun) ? { inPlace: true } : {}),
     },
     ...(images.length ? { images } : {}),
@@ -138,9 +146,10 @@ async function leadAsk(
   prompt: string,
   sid: string | null | undefined,
   said: TurnSaid | undefined,
-): Promise<{ prompt: string; from?: MessageFrom | undefined }> {
+): Promise<LeadAsk> {
   const chat = loopRun.lead && !sid ? await freshChat(loopRun.ctx, loopRun.threadId) : "";
-  return chat ? { prompt: `${chat}\n\n${prompt}` } : { prompt, from: said?.from };
+  if (chat) return { prompt: `${chat}\n\n${prompt}` };
+  return said?.from ? { prompt, from: said.from } : { prompt };
 }
 
 /**
@@ -407,7 +416,7 @@ async function seatTheLead(loopRun: LoopRun): Promise<void> {
   const { ctx, journal, projectDir, run, threadId } = loopRun;
   const events = await ctx.call(HostMethod.EventsList, { threadId }).catch(() => []);
   loopRun.lead = leadSeat({ events, run, folder: projectDir });
-  journal.director.lead = { chatSession: loopRun.lead.chatSession };
+  journal.director.lead = { chatSession: true };
   await loopRun.saveJournal();
 }
 

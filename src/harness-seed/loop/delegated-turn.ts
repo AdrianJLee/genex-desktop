@@ -1479,14 +1479,13 @@ async function bookmarkSession(
   if (!result.sessionId) return;
   const { turnId, engine } = options;
   const { sessionId } = result;
-  const model = options.model ?? null;
   await ctx.call(HostMethod.TurnAppend, {
     turnId,
     batch: [
       {
         type: EventKind.Custom,
         event_type: RunEvent.ContractorSession,
-        payload: { project, engine, sessionId, model },
+        payload: { project, engine, sessionId },
       },
       ...(result.ok
         ? []

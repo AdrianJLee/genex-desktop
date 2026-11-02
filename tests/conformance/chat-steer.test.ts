@@ -104,7 +104,8 @@ function interruptingQueue(run: (action: any, steer: any) => Promise<unknown>) {
 }
 
 describe("steered session: an engine without input mid-turn is interrupted and resumed", () => {
-  it("a turn on Genex's own message says so on its first leg; the leg resumed with the person's words does not", async () => {
+  // Flipped: the resume with the person's words alone says they are theirs, as the lead's does.
+  it("a turn on Genex's own message says so on its first leg; the leg resumed with the person's words says they are theirs", async () => {
     const froms: unknown[] = [];
     const started = deferred();
     const q = interruptingQueue(async (action, steer) => {
@@ -127,8 +128,86 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await started.promise;
     await q.send("and make it dark");
     await until(() => q.state("make the cover")?.state === "handled");
-    assert.deepEqual(froms, ["genex", undefined]);
+    assert.deepEqual(froms, ["genex", "person"]);
     q.queue.stop();
+  });
+
+  it("a Genex turn's first prompt is its message alone: the person's words sent while it was prepared follow as a leg of their own", async () => {
+    const calls: any[] = [],
+      preparing = deferred(),
+      prepared = deferred();
+    const q = interruptingQueue(async (action, steer) => {
+      if (action.text !== "make the cover") return;
+      preparing.resolve();
+      await prepared.promise;
+      await steeredCall({ cancelled: false }, steer, {
+        prompt: "COVER",
+        from: "genex",
+        call: async (prompt, resume, images, from) => {
+          calls.push({ prompt, resume, images: images.length, from });
+          return ok("done", "s1");
+        },
+      });
+    });
+    await q.send("make the cover");
+    await preparing.promise;
+    await q.send("and make it dark", { stills: [{ label: "dark", mimeType: "image/png", data: "d" }] });
+    prepared.resolve();
+    await until(() => q.state("make the cover")?.state === "handled");
+    assert.deepEqual(calls, [
+      { prompt: "COVER", resume: null, images: 0, from: "genex" },
+      { prompt: "and make it dark", resume: "s1", images: 1, from: "person" },
+    ]);
+    assert.equal(q.state("and make it dark")!.state, "delivered");
+    q.queue.stop();
+  });
+
+  it("a Genex message that joins the person's turn is a leg of its own after their words, never folded into them", async () => {
+    const calls: any[] = [],
+      preparing = deferred(),
+      prepared = deferred();
+    const q = interruptingQueue(async (action, steer) => {
+      if (action.text !== "build a pond") return;
+      preparing.resolve();
+      await prepared.promise;
+      await steeredCall({ cancelled: false }, steer, {
+        prompt: "PROMPT",
+        call: async (prompt, _resume, _images, from) => {
+          calls.push([prompt, from]);
+          return ok("done", "s1");
+        },
+      });
+    });
+    await q.send("build a pond");
+    await preparing.promise;
+    await q.send("and ducks");
+    await q.send("You turned on the Blender plugin.", { origin: "plugin-turned-on", from: "genex" });
+    prepared.resolve();
+    await until(() => q.state("build a pond")?.state === "handled");
+    assert.deepEqual(calls, [
+      ["PROMPT\n\nand ducks", undefined],
+      ["You turned on the Blender plugin.", "genex"],
+    ]);
+    q.queue.stop();
+  });
+
+  it("a Genex turn whose saved session is gone starts fresh still saying it is Genex's", async () => {
+    const calls: unknown[] = [];
+    await steeredCall({ cancelled: false }, null, {
+      prompt: "COVER",
+      resume: "gone",
+      fresh: () => "FRESH COVER",
+      from: "genex",
+      call: async (prompt, resume, _images, from) => {
+        calls.push([prompt, resume, from]);
+        if (resume) throw new Error("No conversation found with session ID: gone");
+        return ok("done", "s2");
+      },
+    });
+    assert.deepEqual(calls, [
+      ["COVER", "gone", "genex"],
+      ["FRESH COVER", null, "genex"],
+    ]);
   });
 
   it("resumes the same session with the message in front, recorded as delivered before the resume", async () => {

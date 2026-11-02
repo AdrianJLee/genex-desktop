@@ -17,12 +17,7 @@ import {
   landWorkers,
   WorkersEnd,
 } from "../../src/harness-seed/loop/workers/carry.ts";
-import {
-  chatWorkersCarry,
-  chatWorkerTool,
-  runningChatWorkers,
-  withChatWorkers,
-} from "../../src/harness-seed/loop/workers/chat-workers.ts";
+import { chatWorkerTool, withChatWorkers } from "../../src/harness-seed/loop/workers/chat-workers.ts";
 import { runWorkersArtifact } from "../../src/harness-seed/loop/workers/records.ts";
 import { closeRunPool, runPool } from "../../src/harness-seed/loop/workers/run-pool.ts";
 import { WorkerTool } from "../../src/shared/workers.ts";
@@ -230,7 +225,6 @@ describe("a chat turn's workers as the turn ends", () => {
         const answer = await chatWorkerTool({ threadId: THREAD, turn: TURN, name: WorkerTool.Start, args: COPY });
         id = /Started (w\d+)/.exec(answer)?.[1] ?? "";
         await settle();
-        assert.equal(runningChatWorkers(THREAD, TURN), 1);
         return "launched";
       },
       (result) => (result === "launched" ? WorkersEnd.Carry : WorkersEnd.Stop),
@@ -255,38 +249,7 @@ describe("a chat turn's workers as the turn ends", () => {
       undefined,
       fastClock(),
     );
-    assert.equal(runningChatWorkers(THREAD, "msg-3"), 0);
-  });
-
-  it("what the session is told matches what the launch does: a writer in the game folder is let finish, never carried", async () => {
-    const repo = await gameRepo();
-    const host = poolHost(repo);
-    const seat = {
-      threadId: THREAD,
-      turn: "msg-4",
-      engine: CLAUDE,
-      project: PROJECT,
-      gameDir: repo,
-      folderLabel: "AI Games/garden",
-      facts: [{ id: "unity-project", path: "." }],
-    };
-    const carries: boolean[] = [];
-    await withChatWorkers(
-      host.recorder.ctx as never,
-      seat,
-      async () => {
-        await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: COPY });
-        await settle();
-        carries.push(chatWorkersCarry(THREAD, "msg-4"));
-        await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: IN_PLACE });
-        await settle();
-        carries.push(chatWorkersCarry(THREAD, "msg-4"));
-        return "answered";
-      },
-      undefined,
-      fastClock(),
-    );
-    assert.deepEqual(carries, [true, false]);
-    assert.equal(chatWorkersCarry(THREAD, "msg-5"), false, "another turn's pool is not this one");
+    const stopped = host.appended.filter((entry) => entry.type === "worker_finished" && entry.payload.turn === "msg-3");
+    assert.equal(stopped.at(-1)?.payload.state, "stopped", "any other end stops them");
   });
 });

@@ -237,8 +237,8 @@ describe("a build recorded to start while the chat is in Plan", () => {
     assert.equal(failed.asked.length, 0);
   });
 
-  it("holds a reopened or resumed build too, saying what it would do", async () => {
-    for (const name of ["reopen_run", "resume_run"]) {
+  it("holds a resumed build too, saying what it would do", async () => {
+    for (const name of ["resume_run"]) {
       const session = chat(
         "plan",
         [{ decision: "deny" }],

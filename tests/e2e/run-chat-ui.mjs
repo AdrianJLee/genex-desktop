@@ -215,8 +215,10 @@ try {
     // One status for the build, one line at a time: no list of parts under it (they live on Builds).
     assert.ok(!s.chatLayout.some((row) => row.kind === "worker"), "no worker rows under the build status");
     assert.doesNotMatch(s.text, /Warm lights in the villageFinished/);
-    // The build is its one card: the part at work in one line, and on the right its clock and cap.
-    assert.match(s.text, /BuildingWooden bridge across the river · working\d+[hms](?: \d+[ms])?up to 30m/);
+    // The build is its one card: the part at work in one line, and on the right its clock. Intentionally
+    // flipped: the clock was followed by the Loop's cap ("up to 30m"); a Loop has no time the person set now.
+    assert.match(s.text, /BuildingWooden bridge across the river · working\d+[hms]/);
+    assert.doesNotMatch(s.text, /up to \d/);
     // Only the build runs now (the question is answered): chat shows the build row, not its own working status.
     assert.ok(!s.chatLayout.some((row) => row.kind === "status"), "a running build is not chat work");
     const build = await op("snapshot", {
@@ -225,13 +227,9 @@ try {
       limit: 20,
     });
     assert.match(build.text, /^Building/);
-    // Mode names the running build's own Loop: a 30-minute limit leads with its time. Intentionally
-    // flipped: Mode opens during the build, read-only, for the chat's "Don't wait for me" switch.
-    const mode = (await op("snapshot", { surface: "desktop", scope: "[data-promptbar]", limit: 40 })).controls.find(
-      (c) => c.label === "Mode",
-    );
-    assert.equal(mode?.text, "30m Loop", "Mode shows the running build's limit");
-    assert.equal(mode?.disabled, false, "Mode opens during the build; its Loop is shown, not changed");
+    // Intentionally flipped: Mode named the running build's Loop ("30m Loop"); the composer has no Mode now.
+    const composer = await op("snapshot", { surface: "desktop", scope: "[data-promptbar]", limit: 40 });
+    assert.ok(!composer.controls.some((c) => c.label === "Mode"), "the composer has no Mode button");
     assert.ok(
       build.controls.some((c) => c.text === "Building" && c.title === "Open in Builds"),
       "the build card opens Builds",
@@ -334,7 +332,8 @@ try {
       scope: "[data-chat-scroll] [data-build-status]",
       limit: 20,
     });
-    assert.match(build.text, /\d+[hms](?: \d+[ms])?up to 30m$/, "the build's clock is in the conversation");
+    // Intentionally flipped: the clock ended with the Loop's cap ("up to 30m"); it is the clock alone now.
+    assert.match(build.text, /\d+[hms](?: \d+[ms])?$/, "the build's clock is in the conversation");
     await op("type", { selector: '[aria-label="Prompt"]', text: "Keep this game idea", replace: true });
     await pause(CLOCK_WINDOW_MS);
     assert.equal(

@@ -2,7 +2,7 @@
  * The user's side of a thread: a message sent, the run's host controls, wrapping up a run, and Stop.
  * Composed by `StudioCore`; its state stays in the core.
  */
-import { PlanReviewState, type ComposerSendOptions, type PlanReview, SendRefusal } from "../../shared/composer.ts";
+import { PlanReviewState, type ComposerSendOptions, type PlanReview } from "../../shared/composer.ts";
 import path from "node:path";
 import {
   BuildLaunch,
@@ -18,7 +18,6 @@ import { CustomEvent, customEventData, customRecord, type AnyCustomPayload } fro
 import { MessageFrom } from "../../shared/engine-requests.ts";
 import { EventKind, ThreadKind, type ConversationRecord, type EventEnvelope } from "../../shared/event-log.ts";
 import { t } from "../../shared/i18n.ts";
-import { crossesCompletionEngine } from "../../shared/model-roles.ts";
 import { ToolPermissionBy } from "../../shared/permissions.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
@@ -105,24 +104,12 @@ const THREAD_TITLE_CHARS = 56;
 
 /**
  * User-facing copy of this module, and what the chat's session reads when a run control is refused.
- * The tag line and the commission refusals (the chat's error, kept in its log) are said to the
- * person in their language; the tag retry line is the agent's, and the rest are tool results.
+ * The tag line is said to the person in their language; the tag retry line is the agent's, and the
+ * rest are tool results.
  */
 const MESSAGE = {
   tagNoGame: () => t("Tags belong to a game's chat"),
   tagRetried: (handle: string) => `@${handle} did not arrive with my last message; it is attached now.`,
-  autopilotOutdated: () =>
-    t(
-      "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's harness-seed/loop needs to be merged into it, or the seed copies restored so the next launch upgrades them.)",
-    ),
-  localRolesOutdated: () =>
-    t(
-      "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.",
-    ),
-  loopOutdated: () =>
-    t(
-      "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling (harness-seed/loop) into its own loop code and restart itself — or restore the seed copies so the next launch upgrades them. Your brief is saved above; send it again once the loop code is current.",
-    ),
   unknownTool: (name: string) => `unknown run control: ${name}`,
   inPlan:
     "The chat is in Plan mode, so this did not run: resuming or landing a build waits until the plan is approved. Put it in your plan instead.",
@@ -137,13 +124,6 @@ const MESSAGE = {
   nothingToFinish: (known: boolean) =>
     `That build is ${known ? "no longer running" : "not in this conversation"}; nothing was asked to finish.`,
 } as const;
-
-/** What the chat says for each commission refusal. */
-const REFUSAL_WORDS: Record<SendRefusal, () => string> = {
-  [SendRefusal.AutopilotOutdated]: MESSAGE.autopilotOutdated,
-  [SendRefusal.LoopOutdated]: MESSAGE.loopOutdated,
-  [SendRefusal.LocalRolesOutdated]: MESSAGE.localRolesOutdated,
-};
 
 type ThreadMeta = { kind?: string; project?: string | null } | undefined;
 
@@ -207,7 +187,7 @@ const NO_PICTURES: SavedPictures = Object.freeze({ added: [] }) as SavedPictures
 /** Does a game thread's next message go to a plan review first? */
 function needsPlanReview(options: ComposerSendOptions, waiting: PlanReview | undefined): boolean {
   const reviewOpen = Boolean(waiting && OPEN_PLAN_REVIEW.includes(waiting.state));
-  return Boolean(options.reviewPlan || options.autopilot?.reviewPlan || reviewOpen);
+  return Boolean(options.reviewPlan || reviewOpen);
 }
 
 /** Did this send change the provider, model or effort the thread remembers? */
@@ -302,7 +282,7 @@ export class ConversationService {
       await this.#core.games.ensureCover(target.project);
       this.#core.emit(UiEvent.GameChanged, { project: target.project });
     }
-    const pictures = await this.#saveMoodBoard(target.project, sendOptions);
+    const pictures = await this.#savePictures(target.project, sendOptions);
     // The agent reads the tags' lines after the person's words; the chat shows the words alone.
     const action = this.#userMessageAction(text + tags.context, target, sendOptions, {
       resume,
@@ -310,21 +290,6 @@ export class ConversationService {
       stills,
       references: pictures.added,
     });
-    const refusal = this.#commissionRefusal(sendOptions);
-    if (refusal) {
-      const message = REFUSAL_WORDS[refusal]();
-      // The renderer already cleared the composer — the brief must survive in the log, ahead of
-      // the refusal that explains it.
-      await this.#core.append(
-        [
-          { type: EventKind.Messages, messages: [{ role: "user", content: text }] },
-          { type: EventKind.Error, message },
-        ],
-        target.threadId,
-      );
-      this.#core.emit(UiEvent.ChatError, { threadId: target.threadId, message, refusal });
-      return;
-    }
     // The person sent this, on this thread: a session answering it answers them (chat-permissions.ts).
     const messageId = action.type === DispatchActionType.UserMessage ? action.messageId : undefined;
     if (!target.studioThread) this.#x.permissions.notePersonMessage(target.threadId, messageId);
@@ -409,12 +374,12 @@ export class ConversationService {
   }
 
   /**
-   * The mood board becomes durable project data the moment it commissions a run — the next
-   * interview finds it in <project>/references/ even if the chat is long gone. Returns, relative to
-   * the game, the files this message added (`added`), which rewinding it takes back.
+   * A message's pictures become durable project data as it is sent — a later turn or run finds them
+   * in <project>/references/ even if the chat is long gone. Returns, relative to the game, the files
+   * this message added (`added`), which rewinding it takes back.
    */
-  async #saveMoodBoard(project: string | undefined, options: ComposerSendOptions): Promise<SavedPictures> {
-    const frames = options.frames ?? options.autopilot?.frames;
+  async #savePictures(project: string | undefined, options: ComposerSendOptions): Promise<SavedPictures> {
+    const { frames } = options;
     if (!frames?.length || !project) return NO_PICTURES;
     const dir = this.#core.games.dirFor(project);
     try {
@@ -565,8 +530,7 @@ export class ConversationService {
       ...(newProject ? { newProject: true } : {}),
       ...(studioThread ? { studioThread: true } : {}),
       ...(resume ? { resume } : {}),
-      ...(options.loop ? { loop: options.loop } : {}),
-      ...(options.autopilot ? { autopilot: options.autopilot } : {}),
+      ...(options.roles ? { roles: options.roles } : {}),
       ...(projectDir ? { projectDir } : {}),
       ...(extraReads.length ? { extraReads } : {}),
       ...(stills?.length ? { stills } : {}),
@@ -599,22 +563,6 @@ export class ConversationService {
       ...(stills?.length ? { pickedImages: Math.min(options.frames?.length ?? 0, stills.length) } : {}),
       ...(references.length ? { references } : {}),
     };
-  }
-
-  /**
-   * An Autopilot or Loop commission to a harness whose loop code predates the feature must be
-   * refused loudly, never silently downgraded to a plain chat message: a Loop commission is a
-   * promise of an unattended run, and the user would wake to nothing. Gated on "ready" only: a
-   * starting/restarting harness has not claimed anything yet.
-   */
-  #commissionRefusal(options: ComposerSendOptions): SendRefusal | null {
-    const host = this.#core.host;
-    if (host.state !== HarnessState.Ready) return null;
-    if (options.autopilot && !host.hasCapability(HarnessCapability.Autopilot)) return SendRefusal.AutopilotOutdated;
-    if (options.loop && !host.hasCapability(HarnessCapability.Loop)) return SendRefusal.LoopOutdated;
-    const localRoles = crossesCompletionEngine(options.engine ?? "", options.autopilot?.roles);
-    if (localRoles && !host.hasCapability(HarnessCapability.LocalRoles)) return SendRefusal.LocalRolesOutdated;
-    return null;
   }
 
   /**

@@ -2,23 +2,19 @@
  * Which Loop a run gets, through the run's start as the chat and Resume reach it: a project that
  * isn't a web game runs the one Loop on an engine that keeps a session and is told, before anything
  * is promised, that it needs one otherwise; classic and the gauntlet stay a web game's; a paused
- * Loop on an Unreal game goes on in the one Loop; a finished one Loop starts the next; and the chat
- * describes the one Loop truthfully.
+ * Loop on an Unreal game goes on in the one Loop; and the Loop's start describes the one Loop
+ * truthfully.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { afterLeadLoopRun, afterLoopRunGrant } from "../../src/harness-seed/loop/after-loop-run.ts";
 import { afterLoopRunNote } from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
-import { launchFromIntake, startsNextOpenLoop } from "../../src/harness-seed/loop/chat-dispatch.ts";
-import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
-import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
-import { launchRules } from "../../src/harness-seed/loop/launch-prompts.ts";
-import { OPEN_LAUNCH_WORDS, OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
-import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
+import { launchFromIntake } from "../../src/harness-seed/loop/chat-dispatch.ts";
+import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
+import { startAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
-import { reopenAfterReply } from "../../src/harness-seed/loop/reopen-run.ts";
 import { runControlsFor } from "../../src/shared/chat-run.ts";
 import * as runDispatchParts from "../../src/harness-seed/loop/run-dispatch.ts";
 import { chooseRunner, handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
@@ -84,7 +80,7 @@ describe("which Loop a run gets", () => {
   it("on an engine without sessions it says it needs one, before any promise in the chat", TEST_TIMEOUT, async () => {
     const host = await hostOn(Project.GodotGame, { facts: GODOT, run: { engine: "ollama" } });
     host.rec.handle("engine.describe", () => [DIRECT]);
-    const studio = { host: host.rec.ctx, attachedPictures: new Map(), activeRuns: new Map(), startingRuns: new Map() };
+    const studio = { host: host.rec.ctx, activeRuns: new Map(), startingRuns: new Map() };
     await assert.rejects(
       launchFromIntake(studio as never, host.rec.ctx as never, { threadId: "t1", project: host.game.name } as never, {
         goal: "A level the player walks through.",
@@ -161,62 +157,25 @@ describe("kept older parts, finished Loops and the chat's words", () => {
     assert.equal(chooseRunner({ mode: "autopilot", engine: "claude-code" } as never, described), RunnerKind.Director);
   });
 
-  it("a Loop message after a finished open Loop starts the next one; a finished open Loop is never reopened", async () => {
+  it("a finished open Loop reads as worked in place, a web Loop's not", async () => {
     const journal = { director: { lead: { chatSession: true }, open: { version: 1, savePoints: [] } } };
     const host = { call: async () => structuredClone(journal) };
     const run = { runId: "run-done", state: "finished", project: "lantern", goal: "a level", engine: "claude-code" };
     const inPlace = await afterLeadLoopRun(host as never, { threadId: "t1" }, run);
-    assert.equal(
-      inPlace?.inPlace,
-      true,
-      "worked in place: the chat never reopens it (chat-dispatch.ts `afterLoopRunFor`)",
-    );
+    assert.equal(inPlace?.inPlace, true, "worked in place: no build to show or land");
     const web = { call: async () => ({ director: { lead: { chatSession: true } } }) };
     const webRun = await afterLeadLoopRun(web as never, { threadId: "t1" }, run);
-    assert.equal(webRun?.inPlace, undefined, "a web Loop's finished build still reopens");
-  });
-
-  it("the chat tells a Loop on a project that isn't a web game that the lead builds in place and finishes it", () => {
-    const unlimited = { toolName: "start_autopilot", hours: null, frameCount: 2 };
-    const open = launchRules("claude-code", unlimited, GameEngine.Web, LoopProfile.Open).join("\n");
-    assert.doesNotMatch(open, /builder|judge/i);
-    assert.doesNotMatch(open, /Unreal/);
-    // Flipped (Loop phase 4): it ran until a reviewer accepted the finish.
-    assert.match(open, /until the lead finishes it, 24 h at most/);
-    assert.match(open, /you lead it in this folder, with optional workers in copies of it/);
-    const timed = launchRules(
-      "claude-code",
-      { toolName: "start_autopilot", hours: 3 },
-      GameEngine.Web,
-      LoopProfile.Open,
-    );
-    assert.match(timed.join("\n"), /up to 3 h/);
-    const web = launchRules("claude-code", unlimited, GameEngine.Web);
-    assert.deepEqual(
-      launchRules("claude-code", unlimited, GameEngine.Web, LoopProfile.Web),
-      web,
-      "web words unchanged",
-    );
-    const unreal = launchRules("claude-code", unlimited, GameEngine.Unreal, LoopProfile.Open).join("\n");
-    // Flipped (phase 5): no launch words tell the agent how to write a goal (the look first).
-    assert.match(unreal, /with the goal in the user's words/);
-    assert.doesNotMatch(unreal, /look first|before mechanics|list of features/);
-    assert.doesNotMatch(unreal, /builder|judge/i);
-    // An Unreal game its caller names no Loop for: one lead in the open editor, never parts in parallel.
-    const unnamed = launchRules("claude-code", { toolName: "start_autopilot", hours: 3 }, GameEngine.Unreal).join("\n");
-    assert.match(unnamed, /one lead works in the open Unreal editor, with helpers in copies of the game/);
-    assert.doesNotMatch(unnamed, /in parallel|as parts|one at a time|judges|look first/);
+    assert.equal(webRun?.inPlace, undefined);
   });
 });
 
-/** The studio a dispatch or a reopen reaches, over a host's recorder, as main.ts makes it. */
+/** The studio a dispatch reaches, over a host's recorder, as main.ts makes it. */
 function studioOf(host: LoopHost) {
   const ctx = host.rec.ctx;
   return {
     host: ctx,
     cancels: new Set<string>(),
     stoppedMessages: new Set<string>(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -225,28 +184,15 @@ function studioOf(host: LoopHost) {
 }
 
 describe("the chat's launch tool", () => {
-  it("names no method in its description, and answers an ∞ Loop as the project's Loop ends", async () => {
-    const launch = gameTools.find((tool) => tool.name === "start_autopilot");
-    assert.ok(launch);
-    assert.doesNotMatch(String(launch.description), /critic|facet/i);
-    const rows: Array<[string, Array<{ id: string; path: string }>, string]> = [
-      ["a Godot project", GODOT, OPEN_LAUNCH_WORDS.building],
-      ["a web game", [{ id: "web-game", path: "." }], "Building until its lead calls finish"],
-    ];
-    const outcomes: Array<[string, boolean]> = [];
-    for (const [label, facts, says] of rows) {
-      const host = ctxRecorder({
-        threadId: "chat-1",
-        extra: { project: "lantern", autopilot: { hours: null, frames: [] } },
-        handlers: { "game.list": () => [{ name: "lantern", facts }] },
-      });
-      const answer = await launch.execute({ goal: "A level.", direction: "a lantern-lit cave" }, host.ctx as never);
-      outcomes.push([label, String((answer as { content?: unknown }).content).startsWith(says)]);
-    }
-    assert.deepEqual(
-      outcomes,
-      rows.map(([label]) => [label, true]),
+  it("names no method and no rule about when in its description, and answers every Loop as ending on the lead's finish", async () => {
+    assert.doesNotMatch(String(startAutopilot.description), /critic|facet|when Loop|in words|hours/i);
+    const host = ctxRecorder({ threadId: "chat-1", extra: { project: "lantern" } });
+    const answer = await startAutopilot.execute(
+      { goal: "A level.", direction: "a lantern-lit cave" },
+      host.ctx as never,
     );
+    assert.equal((answer as { content?: unknown }).content, "Building until its lead calls finish.");
+    assert.deepEqual(host.calls, [], "it asks the host nothing");
   });
 });
 
@@ -383,214 +329,58 @@ describe("the credit cap a Loop in place keeps", () => {
 });
 
 describe("after a Loop in place", () => {
-  it(
-    "the chat keeps its status alone, is told nothing of a build to show or land, and never reopens it",
-    TEST_TIMEOUT,
-    async () => {
-      const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
-      await host.start();
-      const run = {
-        runId: host.run.runId,
-        state: "finished",
-        project: host.game.name,
-        goal: "a level",
-        engine: "claude-code",
-      };
-      const after = await afterLeadLoopRun(host.rec.ctx as never, { threadId: host.threadId }, run);
-      assert.equal(after?.inPlace, true);
-      const grant = afterLoopRunGrant(after as never);
-      assert.equal(grant.runControls.inPlace, true);
-      assert.deepEqual(
-        runControlsFor(grant.runControls).map((tool) => tool.name),
-        ["run_status"],
-      );
-      const note = afterLoopRunNote(after as never, "claude-code");
-      assert.doesNotMatch(note, /show_build|land_build/);
-
-      // The chat's own session's reopen of it is refused, saying why; no run starts.
-      let started = 0;
-      await reopenAfterReply(
-        studioOf(host) as never,
-        { threadId: host.threadId, cancelled: false },
-        after as never,
-        { hours: null, text: "Add a second room.", words: "Add a second room.", models: { model: null } },
-        async () => {
-          started += 1;
-        },
-      );
-      assert.equal(started, 0);
-      const errors = host.rec
-        .paramsOf("events.append")
-        .flatMap((params) => params.batch as Array<Record<string, unknown>>);
-      assert.ok(
-        errors.some((event) => String(event.message ?? "").includes(OPEN_LOOP_REFUSAL.notReopenable)),
-        "the chat is told why",
-      );
-    },
-  );
-
-  it("a Loop message after a finished run follows that run's own kind, whatever the folder reads as now", async () => {
-    const inPlace = { director: { open: { version: 1, savePoints: [] } } };
-    const web = { director: { baseCommit: "abc", integrationHead: "def" } };
-    const rows: Array<[string, unknown, Array<{ id: string; path: string }>, boolean]> = [
-      ["a Loop in place, its folder now a web game", inPlace, [{ id: "web-game", path: "." }], true],
-      ["a web Loop, its folder now read as nothing Genex knows", web, [], false],
-      ["a web Loop, its folder now a Godot project", web, GODOT, true],
-      ["a web Loop, its folder still a web game", web, [{ id: "web-game", path: "." }], false],
-    ];
-    const outcomes: Array<[string, boolean]> = [];
-    for (const [label, journal, facts] of rows) {
-      const host = {
-        call: async (method: string) =>
-          method === "game.list"
-            ? [{ name: "lantern", facts, ...(facts.length ? {} : { holds: "unreadable" }) }]
-            : structuredClone(journal),
-      };
-      const run = { runId: "run-done", state: "finished", project: "lantern" };
-      const message = { threadId: "t1", project: "lantern", loop: true } as never;
-      outcomes.push([label, await startsNextOpenLoop(host as never, message, run as never)]);
-    }
-    assert.deepEqual(
-      outcomes,
-      rows.map(([label, , , next]) => [label, next]),
-    );
-  });
-
-  it("Genex's word after a Loop held back at its start carries the person's Loop; words the chat wrote otherwise never do", async () => {
-    const host = { call: async () => ({ director: { open: { version: 1, savePoints: [] } } }) };
-    const run = { runId: "run-held", state: "finished", project: "lantern" };
-    const outcomes: Array<[string, boolean]> = [];
-    for (const origin of ["loop-held", "command-result", "plugin-turned-on"]) {
-      const message = { threadId: "t1", project: "lantern", loop: true, origin } as never;
-      outcomes.push([origin, await startsNextOpenLoop(host as never, message, run as never)]);
-    }
-    assert.deepEqual(outcomes, [
-      ["loop-held", true],
-      ["command-result", false],
-      ["plugin-turned-on", false],
-    ]);
-  });
-
-  it("a Loop message after it starts the next Loop, even when the game list can't be read", TEST_TIMEOUT, async () => {
+  it("the chat keeps its status alone, and is told nothing of a build to show or land", TEST_TIMEOUT, async () => {
     const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
     await host.start();
-    host.rec.handle("game.list", () => {
-      throw new Error("the list is busy");
-    });
-    const run = { runId: host.run.runId, state: "finished", project: host.game.name };
-    const message = { threadId: host.threadId, project: host.game.name, loop: true } as never;
-    assert.equal(await startsNextOpenLoop(host.rec.ctx as never, message, run), true);
+    const run = {
+      runId: host.run.runId,
+      state: "finished",
+      project: host.game.name,
+      goal: "a level",
+      engine: "claude-code",
+    };
+    const after = await afterLeadLoopRun(host.rec.ctx as never, { threadId: host.threadId }, run);
+    assert.equal(after?.inPlace, true);
+    const grant = afterLoopRunGrant(after as never);
+    assert.equal(grant.runControls.inPlace, true);
+    assert.deepEqual(
+      runControlsFor(grant.runControls).map((tool) => tool.name),
+      ["run_status"],
+    );
+    const note = afterLoopRunNote(after as never, "claude-code");
+    assert.doesNotMatch(note, /show_build|land_build/);
   });
 
   it(
-    "the chat's launch promise for a Loop in place says how it ends and promises no web connection",
+    "a Loop in place launches with no promise of when it ends: until its lead finishes it, whatever hours its start named",
     TEST_TIMEOUT,
     async () => {
       const host = await hostOn(Project.GodotGame, { facts: GODOT });
       const studio = studioOf(host);
-      for (const [n, until] of [true, false].entries()) {
-        host.rec.calls.length = 0;
-        // The launched Loop claims its goal at once and closes before anything is asserted.
-        host.turns.push(finishes);
-        await launchFromIntake(
-          studio as never,
-          host.rec.ctx as never,
-          { threadId: host.threadId, project: host.game.name } as never,
-          {
-            goal: "A level the player walks through.",
-            engine: "claude-code",
-            mode: "autopilot",
-            ...(until ? { untilSatisfied: true } : { hours: 3 }),
-          },
-        );
-        assert.ok(await host.until(() => host.appended("run_finished").length > n), "the launched Loop closed");
-        // The next launch waits for this run to settle, as the chat's next message does.
-        assert.ok(await host.until(() => studio.activeRuns.size === 0), "the launched Loop settled");
-        const said = JSON.stringify(host.rec.paramsOf("events.append"));
-        assert.doesNotMatch(said, /studio's connection/, "no web connection is promised");
-        assert.doesNotMatch(said, /required outcomes/);
-        // Flipped (Loop phase 4): it ended when a reviewer accepted the lead's finish.
-        if (until) assert.match(said, /when the lead says the goal is reached/);
-        else assert.match(said, /Building until about/);
-      }
+      // The launched Loop claims its goal at once and closes before anything is asserted.
+      host.turns.push(finishes);
+      await launchFromIntake(
+        studio as never,
+        host.rec.ctx as never,
+        { threadId: host.threadId, project: host.game.name } as never,
+        { goal: "A level the player walks through.", engine: "claude-code", mode: "autopilot", hours: 3 },
+      );
+      assert.ok(await host.until(() => host.appended("run_finished").length > 0), "the launched Loop closed");
+      assert.ok(await host.until(() => studio.activeRuns.size === 0), "the launched Loop settled");
+      const said = host.rec
+        .paramsOf("events.append")
+        .flatMap((params) => (params.batch ?? []) as Array<{ type?: string }>)
+        .filter((data) => data.type === "messages");
+      // Flipped: the chat promised "Building until about …, keep the app open"; it promises nothing now.
+      assert.deepEqual(said, [], "no promise in the chat");
+      const budgets = host.appended("run_registered")[0]?.budgets as Record<string, unknown> | undefined;
+      assert.equal(budgets?.untilSatisfied, true);
+      assert.equal(budgets?.wallClockMs, 24 * HOUR);
     },
   );
 });
 
-describe("a finished web Loop on a folder that reads otherwise now", () => {
-  it(
-    "its reopen is refused before anything is promised or written, and leaves the build finished",
-    TEST_TIMEOUT,
-    async () => {
-      const host = await hostOn(Project.GodotGame, { facts: GODOT });
-      const journal = {
-        runId: host.run.runId,
-        run: host.run,
-        director: { baseCommit: "abc", integrationHead: "def", lead: { chatSession: true } },
-      };
-      const id = `autopilot_${host.run.runId}`;
-      host.artifacts.set(id, structuredClone(journal));
-      // The finished build's close: landed, its head the live game.
-      const finished = {
-        runId: host.run.runId,
-        executionStatus: "completed",
-        victory: true,
-        landed: true,
-        integrationHead: "def",
-        summary: "The level is live.",
-      };
-      await host.rec.ctx.call("events.append", {
-        threadId: host.threadId,
-        batch: [{ type: "custom", event_type: "run_finished", payload: finished }],
-      });
-      let started = 0;
-      await reopenAfterReply(
-        studioOf(host) as never,
-        { threadId: host.threadId, cancelled: false },
-        { runId: host.run.runId } as never,
-        { hours: 2, text: "keep going", words: "keep going", models: { model: null } },
-        async () => {
-          started += 1;
-        },
-      );
-      const said = host.rec
-        .paramsOf("events.append")
-        .flatMap((params) => params.batch as Array<Record<string, unknown>>);
-      assert.equal(started, 0);
-      assert.ok(said.some((event) => String(event.message ?? "").includes(OPEN_LOOP_REFUSAL.webBuildElsewhere)));
-      assert.ok(!JSON.stringify(said).includes('"role":"assistant"'), "nothing promised");
-      assert.equal(JSON.stringify(host.artifacts.get(id)), JSON.stringify(journal), "its journal untouched");
-
-      // A reopen that reaches the run's start anyway closes as the finished build it was, never paused.
-      await handleRunStart(
-        studioOf(host) as never,
-        {
-          type: "run_start",
-          threadId: host.threadId,
-          run: structuredClone(host.run) as never,
-          resume: true,
-          reopen: { after: null },
-        } as never,
-      );
-      const closed = host.appended("run_finished").at(-1);
-      assert.equal(closed?.executionStatus, "completed");
-      assert.equal(closed?.stoppedBecause, OPEN_LOOP_REFUSAL.webBuildElsewhere);
-      assert.equal(closed?.landed, true, "the build that landed still reads as landed");
-      assert.equal(closed?.integrationHead, "def");
-      assert.equal(closed?.victory, true, "the finished build keeps its outcome");
-      const chatLines = host.rec
-        .paramsOf("events.append")
-        .flatMap((params) => (params.batch ?? []) as Array<{ type?: string; messages?: Array<{ content?: string }> }>)
-        .filter((data) => data.type === "messages")
-        .flatMap((data) => data.messages ?? []);
-      assert.ok(
-        chatLines.some((message) => message.content === OPEN_LOOP_REFUSAL.webBuildElsewhere),
-        "the chat says why the build was not picked up",
-      );
-      assert.equal(host.appended("autopilot_paused").length, 0);
-    },
-  );
-
+describe("a web Loop on a folder that reads otherwise now", () => {
   it(
     "a paused classic Autopilot run is a web Loop's: on a folder that reads otherwise it stays paused, its cap unrecorded",
     TEST_TIMEOUT,
@@ -915,33 +705,6 @@ describe("a run's route when its journal, its folder or the game list can't be r
   );
 
   it(
-    "a finished web Loop whose folder can't be read is neither reopened nor followed by a new Loop: the reopen says why",
-    TEST_TIMEOUT,
-    async () => {
-      const host = await hostOn(Project.GodotGame, { facts: [], holds: "unreadable" });
-      const journal = { runId: host.run.runId, run: host.run, director: { baseCommit: "abc", integrationHead: "def" } };
-      host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
-      const run = { runId: host.run.runId, state: "finished", project: host.game.name };
-      const message = { threadId: host.threadId, project: host.game.name, loop: true } as never;
-      assert.equal(await startsNextOpenLoop(host.rec.ctx as never, message, run as never), false);
-      let started = 0;
-      await reopenAfterReply(
-        studioOf(host) as never,
-        { threadId: host.threadId, cancelled: false },
-        { runId: host.run.runId } as never,
-        { hours: 2, text: "keep going", words: "keep going", models: { model: null } },
-        async () => {
-          started += 1;
-        },
-      );
-      const said = JSON.stringify(host.rec.paramsOf("events.append"));
-      assert.equal(started, 0);
-      assert.ok(said.includes(OPEN_LOOP_REFUSAL.folderUnknown.slice(0, 60)), said);
-      assert.ok(!said.includes("send the Loop again"), "no advice that leads back to the same refusal");
-    },
-  );
-
-  it(
     "a web game holding an engine's sample project is told which files make its Loop work in place",
     TEST_TIMEOUT,
     async () => {
@@ -953,7 +716,6 @@ describe("a run's route when its journal, its folder or the game list can't be r
       host.rec.handle("engine.describe", () => [DIRECT]);
       const studio = {
         host: host.rec.ctx,
-        attachedPictures: new Map(),
         activeRuns: new Map(),
         startingRuns: new Map(),
       };

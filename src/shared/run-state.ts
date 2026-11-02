@@ -14,7 +14,6 @@
  * ("challenger", "incumbent", "stopped"); tests/conformance/words.test.ts keeps it that way.
  */
 import { CustomEvent, customRecord, type CustomEventData, type CustomEventType } from "./custom-events.ts";
-import { HOUR_MS } from "./duration.ts";
 
 // ── verdict records ─────────────────────────────────────────────────────────────────────
 // The app's copy of what a verdict record (`loop/verdict.ts`) says about who judged a build and
@@ -415,25 +414,4 @@ function conversationRunStep(
 ): RunExecution | null {
   if (RUN_START_EVENTS.has(step.event_type)) return executionStep(run?.runId === id ? run : null, id, step);
   return run?.runId === id ? executionStep(run, id, step) : run;
-}
-
-// ── loop ──────────────────────────────────────────────────────────────────────────────────
-
-/** The Loop a run was given, as its start record kept it: its hours, or `null` for ∞ (until satisfied). */
-export interface RecordedRunLoop {
-  hours: number | null;
-}
-
-/**
- * The Loop a start record's `budgets` gave the run: ∞ when it was recorded until satisfied (its
- * `wallClockMs` is then only the safety ceiling), its hours for a positive wall-clock budget, and
- * null for budgets it cannot read. The harness writes these (`loop/chat-dispatch.ts`
- * `intakeBudgets`); the payload types are the contract, not a check, so this checks.
- */
-export function recordedRunLoop(budgets: unknown): RecordedRunLoop | null {
-  if (!budgets || typeof budgets !== "object" || Array.isArray(budgets)) return null;
-  const { wallClockMs, untilSatisfied } = budgets as { wallClockMs?: unknown; untilSatisfied?: unknown };
-  if (untilSatisfied === true) return { hours: null };
-  const timed = typeof wallClockMs === "number" && Number.isFinite(wallClockMs) && wallClockMs > 0;
-  return timed ? { hours: wallClockMs / HOUR_MS } : null;
 }

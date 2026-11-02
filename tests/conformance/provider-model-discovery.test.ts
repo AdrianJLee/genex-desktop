@@ -57,9 +57,7 @@ test("provider defaults reach the normal send boundary without a model override"
     modelKey: "claude-code::default",
     effort: null,
   });
-  const sent = composerSendOptions({ ...view, studio: true, roles: null, preferences: {} }, "claude-code::default", {
-    autopilot: false,
-  });
+  const sent = composerSendOptions({ ...view, studio: true, roles: null, preferences: {} }, "claude-code::default");
   assert.equal(sent.engine, "claude-code");
   assert.equal(sent.model, undefined);
 });

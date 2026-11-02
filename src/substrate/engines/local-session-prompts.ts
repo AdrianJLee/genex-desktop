@@ -105,11 +105,7 @@ export function checkpointRequest(summary: string, chunk: string): string {
 /** What stands in for the middle of a message too long for one summarizer chunk. */
 export const OMITTED_MIDDLE = "\n[Middle omitted here; original retained in the session checkpoint archive.]\n";
 
-/**
- * A nudge after `rounds` tool rounds that changed nothing. A Loop chat (`launchTools` names its
- * launch tools) is told which of its tools starts the build, as a fact, with no hurry to use it.
- */
-export function progressCheckNote(rounds: number, launchTools: readonly string[] = []): string {
-  const nudge = `Progress check: ${rounds} tool rounds with no file changes: go on, or reply with what you found or what you need.`;
-  return launchTools.length ? `${nudge} ${launchTools.join(" or ")} starts the build.` : nudge;
+/** A nudge after `rounds` tool rounds that changed nothing: go on, or say what was found. */
+export function progressCheckNote(rounds: number): string {
+  return `Progress check: ${rounds} tool rounds with no file changes: go on, or reply with what you found or what you need.`;
 }

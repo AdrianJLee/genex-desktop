@@ -112,7 +112,9 @@ const only = (found: readonly BuildsTracked[]): BuildsTracked => {
 };
 
 describe("runs from the log", () => {
-  it("sends a Loop's start once its autopilot_started says how it works, with its run_started's budgets", () => {
+  // Intentionally flipped: the start carried the Loop's hours and until-satisfied flag, the person's
+  // Mode pick; with no Loop control a start sends neither, only its completion policy.
+  it("sends a Loop's start once its autopilot_started says how it works, with its run_started's completion policy", () => {
     const memory = memoryWith();
     const found = read(memory, [
       record(
@@ -130,8 +132,6 @@ describe("runs from the log", () => {
       event: BuildsEvent.RunStarted,
       properties: {
         mode: BuildMode.Loop,
-        loop_hours: 2,
-        until_satisfied: false,
         completion_policy: null,
         director: true,
         facets: 0,

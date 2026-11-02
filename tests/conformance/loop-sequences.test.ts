@@ -75,7 +75,6 @@ describe("Stop and the build a chat turn launched", () => {
     const studio = {
       host,
       cancels: new Set(["thread-1"]),
-      attachedPictures: new Map(),
       activeRuns: new Map(),
       startingRuns: new Map(),
       orphanRuns: new Map(),

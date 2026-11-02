@@ -25,7 +25,6 @@ import { tellIfRefused } from "../workers/sandbox-refusal.ts";
 import { bindLoopRun, BuildTarget } from "./loop-run.ts";
 import { restoreLoopRun } from "./journal.ts";
 import { closeUnderWay } from "./close-latch.ts";
-import { reopenCommits, reopenMarkOf } from "./reopen.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import { newOpenJournal, OPEN_WALL_CLOCK, type OpenClock, openJournalOf } from "./open/contract.ts";
 import {
@@ -175,8 +174,7 @@ async function readyTheGame(loopRun: LoopRun): Promise<string> {
 
 /**
  * Where the run stands in the game's history: the starting point the user had (a snapshot of the
- * folder) and, on a resume, where this session picks the branch up. A finished build reopened starts
- * from the folder as it is now (director/reopen.ts).
+ * folder) and, on a resume, where this session picks the branch up.
  */
 async function startingCommits(ctx: HarnessCtx, run: Run, priorJournal: AnyRecord | null) {
   const incumbent = await ctx.call(HostMethod.SnapshotCreate, {
@@ -185,11 +183,6 @@ async function startingCommits(ctx: HarnessCtx, run: Run, priorJournal: AnyRecor
     project: run.project,
   });
   const live = incumbent?.git?.game ?? null;
-  const reopened = reopenMarkOf(priorJournal);
-  if (reopened && isCommit(live)) {
-    const facts = { project: run.project, runId: run.runId, finishedHead: reopened.finishedHead, liveHead: live };
-    return reopenCommits(ctx, facts);
-  }
   const baseCommit = priorJournal?.director?.baseCommit ?? priorJournal?.director?.integrationHead ?? live;
   const forkCommit = priorJournal?.director?.integrationHead ?? baseCommit;
   return { baseCommit, forkCommit };
@@ -248,7 +241,6 @@ function loopRunJournal(run: Run, baseCommit: string | null, forkCommit: string 
       baseCommit,
       integrationHead: forkCommit,
       notes: [],
-      ...(prior?.director?.reopened ? { reopened: prior.director.reopened } : {}),
     },
   };
 }

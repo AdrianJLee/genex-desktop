@@ -10,7 +10,7 @@ import { MODEL_PICKER_WORDS } from "../words.ts";
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../../shared/i18n.ts";
-import { crossesTo, normalizeRoles, takesRoles } from "../../shared/model-roles.ts";
+import { normalizeRoles, takesRoles } from "../../shared/model-roles.ts";
 import { supportedPreferences, type ModelPreferences } from "../../shared/model-preferences.ts";
 import {
   autoChoice,
@@ -22,7 +22,6 @@ import {
   unifiedEffort,
   withRoleEfforts,
 } from "../model-choices.ts";
-import { autopilotSendOptions } from "../loop-setting.ts";
 import { openingRoles, presetRoles, readStoredRoles, storeRoles } from "../role-store.ts";
 import { readJson, safeStorage, STORAGE_KEYS, storageKeyFor, type KeyValueStorage } from "../storage.ts";
 import { useModelPicker } from "../state/hooks.ts";
@@ -282,24 +281,22 @@ export function resolveComposerModel(input: {
 }
 
 /**
- * What a send carries. `key` is the model the send goes with (the pick, or for a timed build with
- * no pick, the first usable model). The interview and the plan run on the orchestrator; the
- * builders' and judges' models ride along in the commission and are applied at launch
- * (model-roles.ts). `autopilot` is false while the chat's build runs or is paused (`loopCommissions`).
+ * What a send carries. `key` is the model the send goes with. The chat runs on the orchestrator; the
+ * workers' and judges' models (`roles`) ride along on every send where the roles panel applies: the
+ * chat's own workers take them, and so does a Loop the turn starts (model-roles.ts).
  */
 export function composerSendOptions(
-  model: Pick<ComposerModelView, "studio" | "selectedEngine" | "plannerEffort" | "choices" | "roleOthers"> & {
+  model: Pick<ComposerModelView, "studio" | "selectedEngine" | "plannerEffort" | "choices"> & {
     roles: RoleRecord | null;
     preferences: ModelPreferences;
   },
   key: string | null,
-  input: { autopilot: boolean; extras?: ComposerExtras },
+  extras?: ComposerExtras,
 ): ComposerSendOptions {
   const { engine, model: pickedModel } = parseModelKey(key);
-  const roles = sendRoles(model, engine);
-  if (sendBlockOf(model, key, input)) throw new Error(MODEL_PICKER_WORDS.unavailable);
-  const sendModel = !model.studio && roles ? (roles.planner ?? "") : pickedModel;
-  const extras = input.extras;
+  const roles = model.studio ? null : sendRoles(model, engine);
+  if (sendBlockOf(model, key)) throw new Error(MODEL_PICKER_WORDS.unavailable);
+  const sendModel = roles ? (roles.planner ?? "") : pickedModel;
   const explicitModel = isExplicitModel(sendModel);
   return {
     ...(engine ? { engine } : {}),
@@ -309,7 +306,7 @@ export function composerSendOptions(
     ...(extras?.reviewPlan ? { reviewPlan: true } : {}),
     ...(extras?.frames?.length ? { frames: extras.frames } : {}),
     ...(extras?.mentions?.length ? { mentions: extras.mentions } : {}),
-    ...(extras?.autopilot && input.autopilot ? { autopilot: autopilotSendOptions(extras.autopilot, roles) } : {}),
+    ...(roles ? { roles } : {}),
   };
 }
 
@@ -322,24 +319,6 @@ function sendRoles(model: Pick<ComposerModelView, "selectedEngine"> & { roles: R
   return model.roles && engine === model.selectedEngine?.id ? model.roles : null;
 }
 
-/** The jobs whose models a commissioned build checks. */
-const CHECKED_ROLES = ["builder", "judge"] as const;
-
-/** Every job's model is offered: its provider is the chat's, or a ready one it crosses to, and its model is listed. */
-function rolesAvailable(
-  model: Pick<ComposerModelView, "choices" | "roleOthers">,
-  engine: string,
-  roles: RoleRecord | null,
-): boolean {
-  if (!roles) return true;
-  return CHECKED_ROLES.every((role) => {
-    const provider = roles.engines?.[role] ?? engine;
-    const ready = model.roleOthers.some((group) => group.engine === provider);
-    const available = provider === engine || (ready && crossesTo(engine, role, provider));
-    return available && choiceAvailable(model.choices, keyOf(provider, roles[role] ?? ""));
-  });
-}
-
 /** The model is offered and can be picked (no key asks for nothing). */
 function choiceAvailable(choices: ModelChoice[], key: string | null): boolean {
   if (!key) return true;
@@ -348,18 +327,12 @@ function choiceAvailable(choices: ModelChoice[], key: string | null): boolean {
 }
 
 /**
- * Why a send on this model cannot go: the model is no longer offered, or a commissioned build's job
- * has no model to run on; null when it can. `composerSendOptions` refuses exactly these.
+ * Why a send on this model cannot go: the model is no longer offered; null when it can. A role's
+ * model never blocks a message: only the worker or judge call that needs it is refused.
+ * `composerSendOptions` refuses exactly these.
  */
-export function sendBlockOf(
-  model: Pick<ComposerModelView, "selectedEngine" | "choices" | "roleOthers"> & { roles: RoleRecord | null },
-  key: string | null,
-  input: { autopilot: boolean; extras?: ComposerExtras },
-): SendBlock | null {
-  if (!choiceAvailable(model.choices, key)) return SendBlock.ModelUnavailable;
-  const { engine } = parseModelKey(key);
-  const commission = input.autopilot && input.extras?.autopilot;
-  return commission && !rolesAvailable(model, engine, sendRoles(model, engine)) ? SendBlock.RoleUnavailable : null;
+export function sendBlockOf(model: Pick<ComposerModelView, "choices">, key: string | null): SendBlock | null {
+  return choiceAvailable(model.choices, key) ? null : SendBlock.ModelUnavailable;
 }
 
 /** The model a chat shows: its pick made this session, else the one it remembers. */

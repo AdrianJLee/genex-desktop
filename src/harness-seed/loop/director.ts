@@ -44,8 +44,6 @@ import * as loopRunFunctions from "./director/loop-run.ts";
 import * as toolFunctions from "./director/tools.ts";
 import * as integrateFunctions from "./director/integrate.ts";
 import { prepareLoopRun } from "./director/setup.ts";
-import { reopenMarkOf } from "./director/reopen.ts";
-import { reopenNote } from "./director/reopen-prompts.ts";
 import { directorBrief, resumeNote } from "./director/briefs.ts";
 import { directors, directorTools } from "./director/tool-specs.ts";
 import { runWakeLoop, SYSTEM_CLOCK, WAKE_ENDING } from "./director/wake.ts";
@@ -197,7 +195,7 @@ export function directorTalk(loopRun: LoopRun, images: DelegateImage[], tools: L
   return talk;
 }
 
-/** What a resumed web run's lead is told about its branch, and — for a finished build reopened — where it goes on from. */
+/** What a resumed web run's lead is told about its branch. */
 async function resumeWords(loopRun: LoopRun): Promise<string | null> {
   const { baseCommit, ctx, forkCommit, integrationWorktree, priorJournal, run } = loopRun;
   if (!priorJournal?.director) return null;
@@ -209,9 +207,7 @@ async function resumeWords(loopRun: LoopRun): Promise<string | null> {
         }).catch(() => "0"),
       ) || 0
     : 0;
-  const note = resumeNote({ forkCommit, baseCommit, aheadOfBase });
-  if (!reopenMarkOf(priorJournal)) return note;
-  return `${reopenNote({ inFolder: forkCommit === baseCommit, forkCommit })} ${note}`;
+  return resumeNote({ forkCommit, baseCommit, aheadOfBase });
 }
 
 /** What the run stands on as its lead's first turn opens: why a plugin held the start back, and what the plugins said. */

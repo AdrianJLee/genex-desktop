@@ -1,4 +1,4 @@
-import type { AutopilotCommission, LoopCommission, MessageOrigin, ReferenceFrame } from "./protocol.ts";
+import type { MessageOrigin, ReferenceFrame, RunRoles } from "./protocol.ts";
 import type { ModelPreferences } from "./model-preferences.ts";
 import type { MentionRef } from "./prompt-mention.ts";
 import type { EngineFailureKind, MessageFrom } from "./engine-requests.ts";
@@ -12,8 +12,8 @@ export interface ComposerSendOptions {
   project?: string;
   newProject?: boolean;
   resume?: string;
-  loop?: LoopCommission;
-  autopilot?: AutopilotCommission;
+  /** The composer's roles panel: the workers' and judges' picks, on every send where it applies. */
+  roles?: RunRoles;
   reviewPlan?: boolean;
   frames?: ReferenceFrame[];
   /** The games, tools and assets the message tags with @ (`shared/prompt-mention.ts`). */
@@ -40,16 +40,6 @@ export const SendFailure = {
   Other: "send_failed",
 } as const;
 export type SendFailure = (typeof SendFailure)[keyof typeof SendFailure];
-/**
- * Why a message reached its chat but was refused there (`chat.error`'s `refusal`): the harness's
- * loop predates what the message commissions. Never rename a value.
- */
-export const SendRefusal = {
-  AutopilotOutdated: "autopilot_outdated",
-  LoopOutdated: "loop_outdated",
-  LocalRolesOutdated: "local_roles_outdated",
-} as const;
-export type SendRefusal = (typeof SendRefusal)[keyof typeof SendRefusal];
 /**
  * What an approved plan's message puts between the user's request and the plan
  * (`main/plan-review-prompts.ts`); a rewind gives back only the request before it.

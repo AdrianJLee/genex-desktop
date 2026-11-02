@@ -38,7 +38,6 @@ import {
 import { neverTouchFence } from "./claude-permissions.ts";
 import { neverTouchWhole } from "./never-touch.ts";
 import { type CommandSandbox, commandSandbox, leadBuildWrites } from "./session-commands.ts";
-import { StudioTool } from "./studio-tool-prompts.ts";
 import {
   type CompleteRequest,
   type CompleteResponse,
@@ -634,13 +633,6 @@ function isReadOnlySession(request: DelegateRequest): boolean {
   return Boolean(request.readOnly);
 }
 
-/** The launch tools a Loop chat was bridged, by name (its question tool is not one). */
-function launchToolNames(request: DelegateRequest): string[] {
-  return (request.interviewTools ?? [])
-    .filter((t) => t.name !== StudioTool.AskUser && t.onlyWhenAsked !== true)
-    .map((t) => t.name);
-}
-
 /**
  * The history a turn continues: the requirements in order (a repeated brief is not appended
  * twice), an answer for every call whose result was never saved, and the new prompt with this
@@ -796,7 +788,7 @@ async function checkProgress(run: LocalRun, calls: ToolCall[]): Promise<Delegate
   run.idleRounds = inspecting && nextStamp === run.workspaceStamp ? run.idleRounds + 1 : 0;
   run.workspaceStamp = nextStamp;
   if (LOCAL_SESSION_LIMITS.idleNudgeRounds.includes(run.idleRounds)) {
-    run.progressNote = progressCheckNote(run.idleRounds, launchToolNames(run.request));
+    run.progressNote = progressCheckNote(run.idleRounds);
     run.messages.push({ role: "user", content: run.progressNote });
     run.request.onEvent?.({ type: DelegateEventType.Status, payload: { message: run.progressNote } });
   }

@@ -5,6 +5,7 @@
  * belong to the turn that started them. A call for a turn that is not the live one starts nothing.
  */
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
+import type { RunRoles } from "../../types/host-api.d.ts";
 import type { FactRef, FolderHolds } from "../folder-facts.ts";
 import type { HookedGame } from "../hooks.ts";
 import { hasSessionRoles, modelOn, RoleKey, roleEngine, withRoles } from "../model-roles.ts";
@@ -27,8 +28,8 @@ export interface ChatWorkersSeat {
   engine: string;
   model?: string;
   effort?: string;
-  /** A Loop's or Autopilot's commission the message carries: its Workers role picks their engine. */
-  commission?: AnyRecord | null;
+  /** The roles the message carries (the composer's roles panel): its Workers role picks their engine. */
+  roles?: RunRoles | null;
   project: string;
   gameDir: string;
   folderLabel: string;
@@ -40,7 +41,7 @@ export interface ChatWorkersSeat {
 
 /** The workers' engine and model: the message's Workers role when it carries roles, else the chat's. */
 function workersEngine(seat: ChatWorkersSeat): { engine: string; model?: string } {
-  const roles = seat.commission?.roles;
+  const { roles } = seat;
   if (!roles) return { engine: seat.engine, ...(seat.model ? { model: seat.model } : {}) };
   const run = withRoles({ engine: seat.engine, model: seat.model, roles });
   const engine = roleEngine(run, RoleKey.Builder);
@@ -90,30 +91,13 @@ export async function closeChatWorkers(threadId: string, turn: string): Promise<
 export function rescopeChatWorkers(
   threadId: string,
   turn: string,
-  settings: Pick<ChatWorkersSeat, "engine" | "model" | "effort" | "commission">,
+  settings: Pick<ChatWorkersSeat, "engine" | "model" | "effort" | "roles">,
 ): void {
   const open = pools.get(threadId);
   if (!open || open.turn !== turn) return;
   const { scope } = open.pool.state;
   const { engine, model } = workersEngine({ ...settings, threadId, turn } as ChatWorkersSeat);
   open.pool.state.scope = { ...scope, engine, model, effort: settings.effort };
-}
-
-/** How many workers the chat's open pool for this turn has still at work (running, or waiting on the person). */
-export function runningChatWorkers(threadId: string, turn: string): number {
-  const open = pools.get(threadId);
-  if (!open || open.turn !== turn) return 0;
-  return open.pool.state.records.filter(isWorking).length;
-}
-
-/**
- * Would a Loop in the game folder take this turn's workers over as they are now (carry.ts
- * `carriedEnd`)? Not while one of them writes in the game folder itself: the launch lets it finish.
- */
-export function chatWorkersCarry(threadId: string, turn: string): boolean {
-  const open = pools.get(threadId);
-  if (!open || open.turn !== turn) return false;
-  return carriedEnd(open.pool) === WorkersEnd.Carry;
 }
 
 /** The worker grant a chat turn's delegation carries: the six tools, while its pool is open. */

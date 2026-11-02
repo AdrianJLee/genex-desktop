@@ -16,11 +16,8 @@ export const STORAGE_KEYS = {
   effort: "studio.effort",
   lastModel: "studio.model.last",
   studioChatModel: "studio.studioChat.model",
-  composerLoop: "studio.composer.loop",
   /** Which subscription models the picker lists, as set in Settings (`state/model-picker.ts` owns the format). */
   pickerModels: "studio.models.picker",
-  autopilotHours: "studio.autopilotHours",
-  autopilotReview: "studio.autopilotReview",
   terminalHeight: "studio.terminalHeight",
   /** The Live game's sound switch (`panels/stage/game-sound.ts` owns the values). */
   gameSound: "studio.gameSound",
@@ -79,8 +76,6 @@ export const storageKeyFor = {
   /** Model preferences (context size, …) per model, split the same way. */
   preferences: (studio: boolean, modelKey: string | null): string =>
     `${studio ? "studio.studioChat" : "studio"}.preferences.${modelKey}`,
-  /** A game chat's own Loop, as JSON (`loop-setting.ts` owns the format). */
-  threadLoop: (threadId: string): string => `studio.loop.${threadId}`,
   /** A game chat's own effort; the per-model effort only seeds fresh chats. */
   threadEffort: (threadId: string): string => `studio.threadEffort.${threadId}`,
   /** The engine steps offer a game's Not now hid, by its record id (`chat/EngineStepsCard.tsx`). */

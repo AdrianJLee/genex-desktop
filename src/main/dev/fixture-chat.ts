@@ -502,7 +502,6 @@ async function seedFailedPlan(core: StudioCore): Promise<void> {
       engine: EngineId.ClaudeCode,
       model: FIXTURE_MODEL,
       reviewPlan: true,
-      autopilot: { hours: 1 },
     },
   };
   await core.store.updateThread(recoveryThread, {

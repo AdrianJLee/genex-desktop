@@ -112,7 +112,7 @@ function specIn(work: string, patch: Record<string, unknown> = {}) {
     effort: "high",
     brief: "A small synthetic game brief.",
     suffix: "You have about 90 minutes.",
-    commission: { autopilot: {} },
+    commission: {},
     permissionMode: PermissionMode.Auto,
     deadlineMs: 60_000,
     graceMs: 5_000,

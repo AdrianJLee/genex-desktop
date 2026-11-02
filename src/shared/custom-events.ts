@@ -232,7 +232,7 @@ export interface RunScope {
   iteration?: number;
 }
 
-/** The part of a run's budgets its start records carry for the app to read back (`recordedRunLoop`). */
+/** The part of a run's budgets its start records carry for the app to read back (the eval lane's report). */
 export type RecordedRunBudgets = Partial<Pick<RunSpec["budgets"], "wallClockMs" | "untilSatisfied">>;
 
 export interface InterviewChoice {

@@ -244,9 +244,6 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   // run and its journal keep the count of no's, and a later close names what isn't done.
   { file: "loop/director/loop-run.ts", marker: "finishTally" },
   { file: "loop/director/journal.ts", marker: "finishTally" },
-  // A claim's close keeps the lead's call: its judge ends by the time the claim gives it, and a
-  // reopened Loop counts its reviewer's no's afresh.
-  { file: "loop/director/reopen.ts", marker: "freshTally(" },
   // A claim's review ends before the lead's turn, and the wake loop wakes no lead once a claim's
   // close has started; a claim's close is latched against the clock's, and so is a crash's.
   { file: "loop/director/wake.ts", marker: "noteTurnEnds(" },
@@ -273,26 +270,15 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   // list game.validate answers and only where a web game is served.
   { file: "loop/chat-dispatch.ts", marker: "readiness?.missing" },
   { file: "loop/run-dispatch.ts", marker: "fireGates(" },
-  // One Loop leads every project: run dispatch picks the runner by the folder's profile, a finished
-  // Loop led in place is never reopened and a Loop message after it starts the next, the chat's
-  // launch words describe it, and the runner vocabulary names the refusals.
+  // One Loop leads every project: run dispatch picks the runner by the folder's profile and the
+  // runner vocabulary names the refusals.
   { file: "loop/run-dispatch.ts", marker: "loopProfileOf(" },
-  { file: "loop/chat-dispatch.ts", marker: "startsNextOpenLoop(" },
-  { file: "loop/reopen-run.ts", marker: "OPEN_LOOP_REFUSAL.notReopenable" },
-  // A Loop in place is told its launch in its own words, a finished run's journal says what comes
-  // next, a resume goes on in its journal's kind, and after it the chat keeps its status alone
-  // (`inPlace`).
-  { file: "loop/chat-dispatch.ts", marker: "openLaunchPromise(" },
-  { file: "loop/chat-dispatch.ts", marker: "finishedInPlace(" },
+  // A resume goes on in its journal's kind, and after a Loop in place the chat keeps its status
+  // alone (`inPlace`).
   { file: "loop/run-dispatch.ts", marker: "resumedProfile(" },
   { file: "loop/after-loop-run.ts", marker: "inPlace" },
   { file: "loop/after-loop-run-prompts.ts", marker: "inPlaceControls(" },
-  { file: "loop/launch-prompts.ts", marker: "openBuildWords(" },
-  { file: "loop/chat-session.ts", marker: "loopProfileOf(" },
   { file: "loop/studio-state.ts", marker: "NeedsSession" },
-  // The launch tool the chat's own session calls names no method, and its ∞ answer follows the
-  // project's profile: a kept copy tells a project that isn't a web game of facets and critics.
-  { file: "tools/game-tools.ts", marker: "untilDoneWords(" },
   // A Loop's hours are a soft cap (time-cap.ts): its clock gives a grace after them, a claim is
   // checked whenever it comes, the lead hears the heads-up and the time's-up mid-turn and starts no
   // worker from the cap on, and a close out of time says no reviewer read a claim.

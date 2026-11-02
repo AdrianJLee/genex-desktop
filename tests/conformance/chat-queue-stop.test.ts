@@ -234,7 +234,6 @@ it("Stop while the plan is being written cancels it at once, without waiting for
       thread,
       engine: "codex",
       reviewPlan: true,
-      autopilot: { hours: 1, reviewPlan: true },
     })
     .catch(() => {});
   const deadline = Date.now() + 10_000;
@@ -379,7 +378,6 @@ it("a stale Plan mode flag during a build preserves its plan and queues the foll
     thread,
     engine: "ollama",
     reviewPlan: true,
-    autopilot: { hours: 1, reviewPlan: true },
   });
   const saved = (await rig.core.store.getRecord(thread)).metadata?.planReview as { id: string };
   assert.equal(saved.id, "approved-plan");

@@ -48,12 +48,11 @@ export const SendBlock = {
   NoModel: "no_model",
   SignInNeeded: "sign_in_needed",
   ModelUnavailable: "model_unavailable",
-  RoleUnavailable: "role_unavailable",
 } as const;
 export type SendBlock = (typeof SendBlock)[keyof typeof SendBlock];
 
-/** Where a message that did not go stopped: its send was rejected, or its chat refused it. */
-export const SendFailStage = { Rejected: "rejected", Refused: "refused" } as const;
+/** Where a message that did not go stopped: its send was rejected. */
+export const SendFailStage = { Rejected: "rejected" } as const;
 export type SendFailStage = (typeof SendFailStage)[keyof typeof SendFailStage];
 
 /** How long a provider said to wait before trying again. */
@@ -72,16 +71,6 @@ export const ModelRefOther = { Custom: "custom", Default: "default", None: "none
 
 /** An effort as analytics names it when it is not one of the app's levels: the model's own default. */
 export const EffortRefOther = { Default: "default" } as const;
-
-/** How many hours a Loop runs, in steps that say enough. */
-export const HoursBucket = {
-  None: "none",
-  One: "1",
-  Few: "2-4",
-  Several: "5-8",
-  Long: "9+",
-} as const;
-export type HoursBucket = (typeof HoursBucket)[keyof typeof HoursBucket];
 
 /** How full the context was before a compaction. */
 export const ContextBucket = {
@@ -217,10 +206,6 @@ export type ModelSetting = (typeof ModelSetting)[keyof typeof ModelSetting];
 /** Why a chat's saved model was silently swapped for another. */
 export const ModelReplaced = { ProviderGone: "provider_gone", ModelDropped: "model_dropped" } as const;
 export type ModelReplaced = (typeof ModelReplaced)[keyof typeof ModelReplaced];
-
-/** Where a Loop was turned on, off or changed. */
-export const LoopVia = { ModeMenu: "mode_menu", KeepBuilding: "keep_building" } as const;
-export type LoopVia = (typeof LoopVia)[keyof typeof LoopVia];
 
 /**
  * A press on the composer's sign-in card that only the gate sees. Sign in and Check connection are

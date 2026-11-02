@@ -145,27 +145,36 @@ export async function prepareAppBuild(input: {
   return { sha: input.sha, dir, dirty: false };
 }
 
+/**
+ * The commission an evaluated build's composer sends by default: none for a build with no Loop
+ * switch, an older build's Loop as its own modules answer it (which that build's lane reads).
+ */
+type BuildCommission = EvalCommission & { autopilot?: { hours?: number; reviewPlan?: true } };
+
 /** The product default an eval lane sends, read from the evaluated build (D3). */
 export interface ProductDefaults {
-  commission: EvalCommission;
+  commission: BuildCommission;
   permissionMode: PermissionMode;
 }
 
 /**
- * Run inside the evaluated checkout: import its Loop and permission modules with no storage and no
- * window, and report the commission a fresh game chat's composer sends, the default permission mode,
- * and any global the imports added (a module that adds one is not pure).
+ * Run inside the evaluated checkout: import its Loop module (a build with no Loop switch has none, and
+ * sends no commission) and its permission module with no storage and no window, and report the
+ * commission a fresh game chat's composer sends, the default permission mode, and any global the
+ * imports added (a module that adds one is not pure).
  */
 const DEFAULTS_SCRIPT = `
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 const at = (file) => pathToFileURL(path.join(process.cwd(), file)).href;
 const before = new Set(Object.getOwnPropertyNames(globalThis));
-const loop = await import(at(${JSON.stringify(DEFAULT_MODULES.loop)}));
+const loopModule = path.join(process.cwd(), ${JSON.stringify(DEFAULT_MODULES.loop)});
+const loop = existsSync(loopModule) ? await import(pathToFileURL(loopModule).href) : null;
 const permissions = await import(at(${JSON.stringify(DEFAULT_MODULES.permissions)}));
 const addedGlobals = Object.getOwnPropertyNames(globalThis).filter((name) => !before.has(name));
-const view = loop.composerLoopView({ own: loop.lastLoop(null), build: null });
-const extras = loop.composerExtras({ gameMode: true, view, reviewPlan: false, frames: [] });
+const view = loop?.composerLoopView({ own: loop.lastLoop(null), build: null });
+const extras = loop ? loop.composerExtras({ gameMode: true, view, reviewPlan: false, frames: [] }) : {};
 const send = extras.autopilot && typeof loop.autopilotSendOptions === "function"
   ? loop.autopilotSendOptions(extras.autopilot, null)
   : null;
@@ -177,7 +186,7 @@ process.stdout.write(JSON.stringify({ extras, send, permissionMode: permissions.
  * predates: the composer's rule as it stood (∞ has no hours; no pictures, no frames; no roles).
  * A build that exports the function answers with its own result (`send`) instead.
  */
-function legacyAutopilot(value: unknown): NonNullable<EvalCommission["autopilot"]> {
+function legacyAutopilot(value: unknown): NonNullable<BuildCommission["autopilot"]> {
   const extras = (value && typeof value === "object" ? value : {}) as { hours?: unknown; reviewPlan?: unknown };
   return {
     ...(typeof extras.hours === "number" ? { hours: extras.hours } : {}),
@@ -189,7 +198,7 @@ function legacyAutopilot(value: unknown): NonNullable<EvalCommission["autopilot"
 const SEND_KEYS: ReadonlySet<string> = new Set(["hours", "reviewPlan"]);
 
 /** The build's own answer, checked field by field; null when it had none (an older build). */
-function sendFrom(value: unknown): NonNullable<EvalCommission["autopilot"]> | null {
+function sendFrom(value: unknown): NonNullable<BuildCommission["autopilot"]> | null {
   if (value === null || value === undefined) return null;
   const unreadable = new Error("product default commission unreadable");
   if (typeof value !== "object" || Array.isArray(value)) throw unreadable;
@@ -202,7 +211,7 @@ function sendFrom(value: unknown): NonNullable<EvalCommission["autopilot"]> | nu
 }
 
 /** The commission a fresh chat's send carries: the build's own `autopilotSendOptions` answer, or the legacy rule. */
-function commissionFrom(extras: Record<string, unknown>, send: unknown): EvalCommission {
+function commissionFrom(extras: Record<string, unknown>, send: unknown): BuildCommission {
   const autopilot = sendFrom(send) ?? legacyAutopilot(extras.autopilot);
   return {
     ...(extras.autopilot !== undefined ? { autopilot } : {}),

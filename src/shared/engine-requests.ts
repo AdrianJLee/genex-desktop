@@ -45,19 +45,6 @@ export interface StudioToolSpec {
     properties: Record<string, { type: string; description?: string }>;
     required?: string[];
   };
-  /**
-   * Called only when the person asks for it in words (an Auto chat's Loop start): it doesn't make the
-   * session an interview, so messages still join it mid-turn, and no nudge names it.
-   */
-  onlyWhenAsked?: boolean;
-}
-
-/**
- * Whether a session handed `tools` is an interview: one with a question or a launch it decides on,
- * which reads no message mid-turn. Tools called only when asked don't make it one.
- */
-export function isInterview(tools: readonly StudioToolSpec[] | undefined): boolean {
-  return (tools ?? []).some((tool) => tool.onlyWhenAsked !== true);
 }
 
 /** A live studio tool: the flat projection, plus the real schema when the flat one cannot say it. */

@@ -30,7 +30,6 @@ import {
   EvalLaneErrorCode,
   LaneModeServed,
   LaunchPath,
-  QuestionKind,
 } from "../../src/shared/eval-lane.ts";
 import { EventKind } from "../../src/shared/event-log.ts";
 import { GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
@@ -66,7 +65,7 @@ function laneSpec(work: string, patch: Partial<EvalLaneSpec> = {}): EvalLaneSpec
     effort: "high",
     brief: "Make a tiny synthetic arena game.",
     suffix: "You have about 1 minutes. Nobody will answer questions; make reasonable assumptions and continue.",
-    commission: { autopilot: {} },
+    commission: {},
     permissionMode: PermissionMode.AcceptEdits,
     deadlineMs: 90_000,
     graceMs: 5_000,
@@ -185,7 +184,7 @@ async function userWords(core: StudioCore, threadId: string): Promise<string[]> 
 }
 
 describe("eval lane on a real core", () => {
-  it("sends the brief in the spec's mode, answers the typed question, and reports the chat finished", async () => {
+  it("sends the brief in the spec's mode, and reports the chat finished", async () => {
     const { core, spec, deps } = await laneCore();
     const { lane, calls } = recording(core);
     // The seeded game's digest, taken beside the lane's at the same moment: when the chat is bound.
@@ -208,17 +207,12 @@ describe("eval lane on a real core", () => {
     assert.equal(report.permissionModeServed, PermissionMode.AcceptEdits);
     const words = await userWords(core, report.threadId);
     assert.equal(words[0], `${spec.brief}\n\n${spec.suffix}`);
-    // The fixture's game chat opens with one `ask_user` question, then takes the answer.
-    assert.equal(report.questionsAsked, 1);
-    assert.equal(report.answers.length, 1);
-    for (const answer of report.answers) {
-      assert.equal(answer.question, QuestionKind.AskUser);
-      assert.equal(answer.policy, AnswerPolicy.NoAnswers);
-    }
-    assert.deepEqual(
-      words.slice(1),
-      report.answers.map(() => words[1]),
-    );
+    // Intentionally flipped: the Loop's commission made the chat an interview that asked one `ask_user`
+    // question first. A chat is handed the question card only for a new game's engine now, so the
+    // fixture's chat answers the brief at once: nothing is asked and nothing answered.
+    assert.equal(report.questionsAsked, 0);
+    assert.deepEqual(report.answers, []);
+    assert.deepEqual(words.slice(1), []);
     assert.equal(calls.includes("stopThread"), false);
     assert.equal(report.launch, LaunchPath.None);
     assert.deepEqual(report.budgets, { completionPolicy: null });

@@ -36,8 +36,6 @@ export interface ChatWorkProps {
   /** The learning pass's own status line. */
   learningLine: string;
   runStarted: number | undefined;
-  /** The time the running build was given, when it was given one. */
-  budgetMs: number | null;
   /** The chat's game, whose running build's lead screen the build status shows. */
   project: string | null;
   onShowBuilds?: () => void;
@@ -115,7 +113,6 @@ function workLine(props: ChatWorkProps, leadFrame: AgentScreenFrame | undefined)
           <div data-analytics-mask className="chat-work-build flex min-w-0 flex-col gap-2">
             <BuildStatus
               {...(props.runStarted !== undefined ? { since: props.runStarted } : {})}
-              budgetMs={props.budgetMs}
               {...(leadFrame ? { frame: leadFrame } : {})}
               {...(props.onShowBuilds ? { onOpenBuilds: props.onShowBuilds } : {})}
               parts={props.parts}

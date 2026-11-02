@@ -8,7 +8,7 @@ import { busyLabel, chatWorkState, runCaption } from "./chat-work-state.ts";
 import type { ChatWorkProps } from "./ChatWork.tsx";
 import { type BuildParts, buildChecklist, checklistCaption, runPlanParts } from "./build-checklist.ts";
 import { buildCaption, currentWorkLabel } from "./current-work.ts";
-import { currentWorkItems, finishingRun, runBudgetMs, runStartedAt } from "./transcript.ts";
+import { currentWorkItems, finishingRun, runStartedAt } from "./transcript.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import { usePlanReview } from "./use-plan-review.ts";
 
@@ -90,7 +90,6 @@ export function useChatWork(props: ChatPanelProps, chat: ChatThread, busy: boole
     details: currentDetails?.items ?? null,
     learningLine: statusWords(status).line,
     runStarted: words.runStarted,
-    budgetMs: words.budgetMs,
     project: chat.project,
     onShowBuilds: props.onShowBuilds,
   };
@@ -124,7 +123,6 @@ function useWorkWords(
     () => runStartedAt(threadEvents, activeRunId, outcome?.worked),
     [threadEvents, activeRunId, outcome?.worked],
   );
-  const budgetMs = useMemo(() => runBudgetMs(threadEvents, activeRunId), [threadEvents, activeRunId]);
   const workItems = useMemo(
     () => currentWorkItems(stateEvents, outcome, activeRunId, details),
     [stateEvents, outcome, activeRunId, details],
@@ -144,7 +142,6 @@ function useWorkWords(
       : buildCaption(activity, outcome, finishing, workItems, plan?.state),
     parts: list ? parts : null,
     runStarted,
-    budgetMs,
   };
 }
 

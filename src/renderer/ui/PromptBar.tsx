@@ -28,7 +28,6 @@ import {
 } from "./ModelMenu.tsx";
 import { ComposerEffort } from "./ComposerEffort.tsx";
 import { ConnectModelButton, useModelNudge } from "./ConnectModelButton.tsx";
-import { ComposerModeMenu } from "./ComposerModeMenu.tsx";
 import { ComposerPermissionMenu } from "./ComposerPermissionMenu.tsx";
 import type { PermissionMode } from "../../shared/permissions.ts";
 import { ComposerAddMenu, type AddMenuHandle, PlanModeOff } from "./ComposerAddMenu.tsx";
@@ -43,22 +42,11 @@ import { useAsyncEffect } from "../use-async-effect.ts";
 import { selectedCompact } from "../chat/compact-control.ts";
 import { useToolbarFit } from "./toolbar-fit.ts";
 import { composerPlaceholder, PLAN_PLACEHOLDER } from "../composer-placeholder.ts";
-import { browserStorage, removeKey, STORAGE_KEYS } from "../storage.ts";
-import {
-  type ComposerBuild,
-  composerExtras,
-  composerLoopView,
-  type LoopSetting,
-  modeMenuReach,
-  pinChatLoop,
-  rememberChatLoop,
-  RUNNING_BUILD,
-  storedChatLoop,
-} from "../loop-setting.ts";
+import { RunState } from "../../shared/run-state.ts";
 import { parseModelKey } from "../model-key.ts";
 import { chatMemory, noteComposed } from "../analytics/chat-memory.ts";
-import { hoursBucket, sendBlockedProperties, stopRequestedProperties } from "../analytics/chat-properties.ts";
-import { ComposerRoom, LoopVia, PlanModeVia, SendBlock, StopIgnored, StopVia } from "../analytics/chat-vocabulary.ts";
+import { sendBlockedProperties, stopRequestedProperties } from "../analytics/chat-properties.ts";
+import { ComposerRoom, PlanModeVia, SendBlock, StopIgnored, StopVia } from "../analytics/chat-vocabulary.ts";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import {
@@ -75,16 +63,8 @@ import {
 } from "../../shared/prompt-mention.ts";
 export { shortModelName };
 export type { ModelChoice, RoleGroup, RoleRecord, RoleRow };
-export interface AutopilotSend {
-  reviewPlan?: boolean;
-  /** Keep building's own send: the build goes on, whatever the message reads like (`AutopilotCommission.keepBuilding`). */
-  keepBuilding?: boolean;
-  roles?: RoleRecord;
-  hours: number | null;
-  frames: PickedFrame[];
-}
+/** What a send carries besides its text: plan review, the pictures, and the tags. */
 export interface ComposerExtras {
-  autopilot?: AutopilotSend;
   reviewPlan?: boolean;
   frames?: PickedFrame[];
   /** The games, tools and assets the message tags with @. */
@@ -109,11 +89,6 @@ export interface PromptBarHandle {
   openModelMenu(): void;
   /** Put words in the prompt when it has none yet (the first-launch idea), cursor after them. */
   compose(text: string): void;
-  /**
-   * Keep building: switch this chat's Loop on as Mode would, with its kept hours, and answer what a
-   * send now carries: the Loop's commission where Mode could start one, else none (`composerExtras`).
-   */
-  loopOn(): ComposerExtras;
 }
 
 /**
@@ -135,7 +110,7 @@ export interface ComposerModelProps {
 }
 
 /**
- * The chat's permission mode: the pill after Mode, on every engine, with the modes that engine
+ * The chat's permission mode: the pill after Add, on every engine, with the modes that engine
  * honours (`permissionModesFor`).
  */
 export interface ComposerPermissions {
@@ -148,9 +123,6 @@ export interface ComposerPermissions {
   engine: string;
 }
 
-export function readStoredReviewPlan(): boolean {
-  return false;
-}
 /** The prompt grows with its text between these heights (px), then scrolls. */
 const MIN_INPUT_HEIGHT = 38;
 const MAX_INPUT_HEIGHT = 138;
@@ -159,39 +131,20 @@ const STOP_PAD_MS = 600;
 const DEFAULT_PLACEHOLDER = t("Write a message…");
 
 /**
- * The composer's mode: the chat's own Loop (`loop-setting.ts`), what Mode shows and allows given
- * the chat's build, and plan review (Add's Plan mode: one message, fresh for each chat). Switching chats re-reads the Loop while
- * rendering, so the composer is never remounted and its draft and pictures stay.
+ * Plan review (Add's Plan mode): one message, fresh for each chat. A build of the chat that is
+ * running or paused keeps its own plan, so its follow-ups get none.
  */
-function useLoopSettings(props: PromptBarProps) {
-  const { conversationKey, coordinating = false, gameMode = true } = props;
-  const [pick, setPick] = useState<{ thread?: string; setting: LoopSetting } | null>(null);
-  const [reviewPlan, setReviewPlan] = useState<boolean>(readStoredReviewPlan);
-  const setting = useMemo(
-    () => (pick && pick.thread === conversationKey ? pick.setting : storedChatLoop(browserStorage(), conversationKey)),
-    [pick, conversationKey],
-  );
-  // A game chat keeps the Loop it opened with; the Studio chat and a keyless composer keep none.
-  useLayoutEffect(() => {
-    if (gameMode && conversationKey) pinChatLoop(browserStorage(), conversationKey);
-  }, [conversationKey, gameMode]);
+function usePlanReview(props: PromptBarProps) {
+  const { conversationKey, coordinating = false } = props;
+  const [reviewPlan, setReviewPlan] = useState(false);
   useLayoutEffect(() => {
     setReviewPlan(false);
-    removeKey(STORAGE_KEYS.autopilotReview);
   }, [conversationKey, coordinating]);
-  const build = props.build ?? (coordinating ? RUNNING_BUILD : null);
-  const view = composerLoopView({ own: setting, build, loopAvailable: props.loopAvailable });
-  const chooseLoop = (next: LoopSetting, via: LoopVia = LoopVia.ModeMenu): void => {
-    setPick({ thread: conversationKey, setting: next });
-    rememberChatLoop(browserStorage(), conversationKey, next);
-    track(AnalyticsEvent.LoopModeChanged, { on: next.on, hours_bucket: hoursBucket(next), via });
-  };
-  // As Mode is: a build that owns the chat keeps its own plan, so its follow-ups get no review; nor
-  // do a paused build's, whose Loop is kept for later.
-  const planAvailable = view.editable && view.forLater !== true && !coordinating;
+  const state = props.build?.state;
+  const planAvailable = !coordinating && state !== RunState.Running && state !== RunState.Paused;
   // What the bulb, Add's row and the box show: plan review that this chat's next send will carry.
   const planOn = reviewPlan && planAvailable;
-  return { setting, view, chooseLoop, reviewPlan, setReviewPlan, planAvailable, planOn, gate: props.loopGate };
+  return { setReviewPlan, planAvailable, planOn };
 }
 
 type Mention = { query: string; start: number; end: number };
@@ -614,14 +567,10 @@ interface PromptBarProps {
   leadListens?: boolean;
   activityLabel?: string;
   conversationKey?: string;
-  /** The chat's build, when one belongs to it: Mode shows its own Loop while it runs or is paused. */
-  build?: ComposerBuild | null;
+  /** The chat's build, when one belongs to it: while it runs or is paused it keeps its own plan. */
+  build?: { state: RunState } | null;
   gameMode?: boolean;
   project?: string | null;
-  /** The game can run a Loop (`loopAvailableFor`); without it Mode offers Off alone and says why. */
-  loopAvailable?: boolean;
-  /** Why the game can't run a Loop, naming its project and where it is (`engineLoopGate`). */
-  loopGate?: string;
   contexts?: ContextUsage[];
   contextUsage?: ContextUsage | null;
   onCompact?: () => void;
@@ -666,13 +615,22 @@ function useDraft(value: string | undefined, onChange: ((text: string) => void) 
   return { draft: value ?? localDraft, setDraft };
 }
 
+/** What a send carries besides its text: plan review when it is on, and the pictures and tags it has. */
+function sendExtras(reviewPlan: boolean, frames: PickedFrame[], mentions: MentionRef[]): ComposerExtras {
+  return {
+    ...(reviewPlan ? { reviewPlan: true } : {}),
+    ...(frames.length ? { frames } : {}),
+    ...(mentions.length ? { mentions } : {}),
+  };
+}
+
 /** Sending the draft with its extras, putting it all back when the send fails, and the Stop pad. */
 function useComposerSend(
   props: PromptBarProps,
   composer: {
     draft: string;
     setDraft: (text: string) => void;
-    loop: ReturnType<typeof useLoopSettings>;
+    plan: ReturnType<typeof usePlanReview>;
     board: ReturnType<typeof useBoardFrames>;
     inputRef: RefObject<HTMLTextAreaElement | null>;
     /** The @ query to close on send, and the tags in the draft, read at the moment it is sent. */
@@ -680,7 +638,7 @@ function useComposerSend(
   },
 ) {
   const ignoreStopUntil = useRef(0);
-  const { draft, setDraft, loop, board, inputRef } = composer;
+  const { draft, setDraft, plan, board, inputRef } = composer;
   // A game composer with no AI model at all offers Connect AI model in the model's place; a send
   // lights that up instead of going anywhere.
   const noModel = (props.gameMode ?? true) && props.model.choices.length === 0;
@@ -712,20 +670,11 @@ function useComposerSend(
     composer.mentions.setMention(null);
     // A failed send is already durable in the thread (main appends the error); catching here
     // only stops the same failure from surfacing twice as console noise.
-    const tags = composer.mentions.refs();
-    const extras = {
-      ...composerExtras({
-        gameMode: props.gameMode ?? true,
-        view: loop.view,
-        reviewPlan: loop.reviewPlan,
-        frames: sent.frames,
-      }),
-      ...(tags.length ? { mentions: tags } : {}),
-    };
-    loop.setReviewPlan(false);
+    const extras = sendExtras((props.gameMode ?? true) && plan.planOn, sent.frames, composer.mentions.refs());
+    plan.setReviewPlan(false);
     noteComposed(chatMemory, props.conversationKey, sent.files.length);
     void Promise.resolve(props.onSend(text, Object.keys(extras).length ? extras : undefined)).catch(() => {
-      if (extras.reviewPlan) loop.setReviewPlan(true);
+      if (extras.reviewPlan) plan.setReviewPlan(true);
       if (!inputRef.current?.value) setDraft(words);
       board.restore(sent);
     });
@@ -986,7 +935,7 @@ function ImagePicker({
 export function PromptBar(props: PromptBarProps): JSX.Element {
   const { disabled = false, coordinating = false, gameMode = true } = props;
   const { draft, setDraft } = useDraft(props.value, props.onChange);
-  const loop = useLoopSettings(props);
+  const plan = usePlanReview(props);
   const board = useBoardFrames(props.conversationKey);
   const fileRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -994,15 +943,15 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   const addMenuRef = useRef<AddMenuHandle>(null);
   const commandMenuRef = useRef<AddMenuHandle>(null);
   const modelMenuRef = useRef<ModelMenuHandle>(null);
-  usePromptHandle(props.ref, { inputRef, modelMenuRef, draft, setDraft, loop, gameMode });
+  usePromptHandle(props.ref, { inputRef, modelMenuRef, draft, setDraft });
   const mentions = useMention(gameMode, draft, setDraft, inputRef);
   const commands = useComposerCommands(draft, setDraft);
   // A reply about the build is a note to it, delivered at once, not a message waiting in line.
   // Add's Plan mode asks for what to plan, as Codex's does, until the message goes.
-  const contextual = loop.planOn ? PLAN_PLACEHOLDER : (props.placeholder ?? DEFAULT_PLACEHOLDER);
+  const contextual = plan.planOn ? PLAN_PLACEHOLDER : (props.placeholder ?? DEFAULT_PLACEHOLDER);
   const placeholderNow = props.about?.placeholder ?? composerPlaceholder(coordinating, contextual, props.leadListens);
   useAutosize(inputRef, draft, placeholderNow);
-  const composer = useComposerSend(props, { draft, setDraft, loop, board, inputRef, mentions });
+  const composer = useComposerSend(props, { draft, setDraft, plan, board, inputRef, mentions });
   const held = useFileDrop(panelRef, disabled, board.addFiles);
 
   return (
@@ -1058,9 +1007,8 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
           permissions={props.permissions ?? null}
           gameMode={gameMode}
           disabled={disabled}
-          coordinating={coordinating}
           project={props.project}
-          loop={loop}
+          plan={plan}
           limits={composerLimits(props)}
           panelRef={panelRef}
           addMenuRef={addMenuRef}
@@ -1099,14 +1047,10 @@ function usePromptHandle(
     modelMenuRef: RefObject<ModelMenuHandle | null>;
     draft: string;
     setDraft: (text: string) => void;
-    loop: ReturnType<typeof useLoopSettings>;
-    gameMode: boolean;
   },
 ): void {
   const composeNow = useRef({ draft: input.draft, setDraft: input.setDraft });
   composeNow.current = { draft: input.draft, setDraft: input.setDraft };
-  const loopNow = useRef({ loop: input.loop, gameMode: input.gameMode });
-  loopNow.current = { loop: input.loop, gameMode: input.gameMode };
   const { inputRef, modelMenuRef } = input;
   useImperativeHandle(
     ref,
@@ -1120,14 +1064,6 @@ function usePromptHandle(
           element?.focus();
           element?.setSelectionRange(element.value.length, element.value.length);
         });
-      },
-      loopOn: () => {
-        const { loop, gameMode } = loopNow.current;
-        const on = { on: true, hours: loop.setting.hours };
-        const turnsOn = gameMode && loop.view.editable && !loop.view.loopUnavailable;
-        if (turnsOn) loop.chooseLoop(on, LoopVia.KeepBuilding);
-        const view = turnsOn ? { ...loop.view, shown: on } : loop.view;
-        return composerExtras({ gameMode, view, reviewPlan: false, frames: [] });
       },
     }),
     [],
@@ -1161,9 +1097,8 @@ interface ComposerToolbarProps {
   permissions: ComposerPermissions | null;
   gameMode: boolean;
   disabled: boolean;
-  coordinating: boolean;
   project?: string | null;
-  loop: ReturnType<typeof useLoopSettings>;
+  plan: ReturnType<typeof usePlanReview>;
   limits: ComposerLimitsInput;
   panelRef: RefObject<HTMLDivElement | null>;
   addMenuRef: RefObject<AddMenuHandle | null>;
@@ -1177,26 +1112,14 @@ interface ComposerToolbarProps {
   send: JSX.Element;
 }
 
-/** The composer's toolbar: Add (or attach), Mode, permissions, then the limits, the model, the effort and Send. */
+/** The composer's toolbar: Add (or attach), permissions, then the limits, the model, the effort and Send. */
 function ComposerToolbar(props: ComposerToolbarProps): JSX.Element {
-  const { gameMode, loop, permissions } = props;
-  const { view } = loop;
-  // Mode's Loop changes only while no build owns the chat.
-  const reach = modeMenuReach({ view, coordinating: props.coordinating });
+  const { gameMode, plan, permissions } = props;
   const toolbar = useRef<HTMLDivElement>(null);
   useToolbarFit(toolbar);
   return (
     <div ref={toolbar} className="flex min-w-0 items-center gap-1" data-composer-toolbar>
       <AttachControl {...props} />
-      {gameMode && (
-        <ComposerModeMenu
-          value={view.shown}
-          onChange={reach.changes ? loop.chooseLoop : undefined}
-          disabled={!reach.opens}
-          loopUnavailable={view.loopUnavailable === true}
-          unavailableWhy={loop.gate}
-        />
-      )}
       {gameMode && permissions && (
         <ComposerPermissionMenu
           mode={permissions.mode}
@@ -1206,11 +1129,11 @@ function ComposerToolbar(props: ComposerToolbarProps): JSX.Element {
           disabled={props.disabled}
         />
       )}
-      {gameMode && loop.planOn && (
+      {gameMode && plan.planOn && (
         <PlanModeOff
           onOff={() => {
             track(AnalyticsEvent.PlanModeToggled, { on: false, via: PlanModeVia.BulbOff });
-            loop.setReviewPlan(false);
+            plan.setReviewPlan(false);
           }}
           disabled={props.disabled}
         />
@@ -1228,7 +1151,7 @@ function AttachControl({
   gameMode,
   project,
   disabled,
-  loop,
+  plan,
   panelRef,
   addMenuRef,
   mentions,
@@ -1243,11 +1166,11 @@ function AttachControl({
         anchor={panelRef}
         disabled={disabled}
         plan={{
-          on: loop.planOn,
-          available: loop.planAvailable,
+          on: plan.planOn,
+          available: plan.planAvailable,
           onChange: (on) => {
             track(AnalyticsEvent.PlanModeToggled, { on, via: PlanModeVia.AddMenu });
-            loop.setReviewPlan(on);
+            plan.setReviewPlan(on);
           },
         }}
         onReferences={onPickImages}
@@ -1282,7 +1205,6 @@ function ModelControls({
   model,
   gameMode,
   disabled,
-  loop,
   limits,
   modelMenuRef,
   modelNudge,
@@ -1290,7 +1212,6 @@ function ModelControls({
   project,
 }: ComposerToolbarProps): JSX.Element | null {
   const { choices: models, selected: modelKey, onPick: onModel, roles = null, onRoles, onEffort } = model;
-  const { view } = loop;
   const effortControl = onEffort ? (
     <ComposerEffort
       efforts={model.efforts ?? []}
@@ -1326,7 +1247,7 @@ function ModelControls({
       onCompact={limits.onCompact}
       compacting={limits.compacting}
       compactBusy={limits.compactBusy}
-      usedBy={rolesInUse(modelKey, roles, Boolean(onRoles) && view.shown.on)}
+      usedBy={rolesInUse(modelKey, roles, Boolean(onRoles))}
       project={project}
     />
   );

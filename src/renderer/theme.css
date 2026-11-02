@@ -8159,43 +8159,25 @@ a:focus-visible {
 .picker-role[data-quiet] .picker-role-name {
   color: var(--ink-3);
 }
-/* Mode: room around the Loop control's caption. */
-.mode-panel .picker-caption {
-  padding: 8px 6px 2px;
-  line-height: 18px;
-}
-/* The Mode button's time limit, before the word Loop. */
-.composer-mode-time {
-  font-family: var(--font-family-mono);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  color: var(--ink-3);
-}
-/* Mode, permissions, model and effort are filled pills, so the bar's choices read as controls before
+/* Permissions, model and effort are filled pills, so the bar's choices read as controls before
    hover. The effort slider is stepped Faster–Smarter; the thumb's centre travels between stops inset
    13px from each end of the track. */
-.composer-text-button:is(.composer-mode, .composer-permission, .composer-model, .composer-effort) {
+.composer-text-button:is(.composer-permission, .composer-model, .composer-effort) {
   padding-inline: 8px;
   background: var(--prompt-chip-fill, var(--control-fill, var(--hover)));
   color: var(--control-text, var(--ink-2));
 }
-.composer-text-button:is(.composer-mode, .composer-permission, .composer-model, .composer-effort):is(
+.composer-text-button:is(.composer-permission, .composer-model, .composer-effort):is(
   :enabled:hover,
   [aria-expanded="true"]
 ) {
   background: var(--chip-hover, var(--line-strong));
   color: var(--control-text-hover, var(--ink));
 }
-/* Mode while the chat's build runs or is paused: it cannot open, and dims like the composer's
-   disabled icons (`.composer-icon:disabled`). Opacity reads the same in both themes. */
-.composer-text-button.composer-mode:disabled {
-  opacity: 0.45;
-}
 /* The toolbar never sizes the composer to its content. The model's name keeps its room
    (`ui/toolbar-fit.ts`): the permissions pill's label gives way first, leaving the glyph (its
-   tooltip names the mode), then Mode's limit (its ∞ or time), then the context ring, then in the
-   narrowest chat the pill. Bypass keeps its warning glyph and tint throughout. */
+   tooltip names the mode), then the context ring, then in the narrowest chat the pill. Bypass
+   keeps its warning glyph and tint throughout. */
 [data-composer-toolbar] {
   container-type: inline-size;
 }
@@ -8203,8 +8185,6 @@ a:focus-visible {
   flex-shrink: 0;
 }
 [data-composer-toolbar][data-squeeze] .composer-permission-label,
-[data-composer-toolbar]:is([data-squeeze="mode-limit"], [data-squeeze="ring"], [data-squeeze="permission"])
-  .composer-mode-limit,
 [data-composer-toolbar]:is([data-squeeze="ring"], [data-squeeze="permission"]) .composer-ring,
 [data-composer-toolbar][data-squeeze="permission"] .composer-permission:not([data-mode="bypassPermissions"]) {
   display: none;

@@ -40,7 +40,6 @@ import {
   RUN_START_EVENTS,
   RoundOutcome,
   type RunExecution,
-  recordedRunLoop,
   roundOutcome,
   VerdictPass,
   VerdictRule,
@@ -260,9 +259,6 @@ export type BuildsEvent = (typeof BuildsEvent)[keyof typeof BuildsEvent];
 /** A run's start as `run_started` carries it; also a chat turn's first worker (mode chat_turn). */
 export type RunStartedProperties = {
   mode: BuildMode;
-  /** A timed Loop's hours; null for an ∞ Loop, a goal Loop or a chat turn. */
-  loop_hours: number | null;
-  until_satisfied: boolean;
   completion_policy: CompletionPolicy | null;
   director: boolean;
   facets: number;
@@ -646,13 +642,10 @@ const runStarted: Reader = (payload, at, memory) => {
   const start = memory.starts.get(runId) ?? {};
   memory.starts.delete(runId);
   const budgets = start.budgets ?? payload.budgets;
-  const loop = recordedRunLoop(budgets);
   return {
     event: BuildsEvent.RunStarted,
     properties: {
       mode: BuildMode.Loop,
-      loop_hours: loop?.hours ?? null,
-      until_satisfied: loop?.hours === null,
       completion_policy: completionPolicyOf(budgets),
       director: payload.director === true,
       facets: lengthOf(payload.facets),
@@ -686,8 +679,6 @@ const workerStarted: Reader = (payload, at, memory) => {
     event: BuildsEvent.RunStarted,
     properties: {
       mode: BuildMode.ChatTurn,
-      loop_hours: null,
-      until_satisfied: false,
       completion_policy: null,
       director: false,
       facets: 0,

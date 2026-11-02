@@ -420,7 +420,6 @@ async function dispatchThrough(host: LoopHost, { resume = false }: { resume?: bo
     host: ctx,
     cancels: new Set<string>(),
     stoppedMessages: new Set<string>(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),

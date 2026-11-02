@@ -19,7 +19,7 @@ const PERSON = {
   engine: "claude-code",
   model: "opus",
   effort: "xhigh",
-  autopilot: { roles: { planner: "opus" } },
+  roles: { planner: "opus" },
   project: "bodycam",
   projectDir: "/games/bodycam",
 };
@@ -50,7 +50,7 @@ describe("a Loop a plugin held back at its start", () => {
       engine: "claude-code",
       model: "opus",
       effort: "xhigh",
-      autopilot: { roles: { planner: "opus" } },
+      roles: { planner: "opus" },
       thread: THREAD,
       origin: MessageOrigin.LoopHeld,
     });

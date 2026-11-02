@@ -23,11 +23,10 @@ import { loadSkills } from "./skills.ts";
 import { runSelftest } from "./selftest.ts";
 import { MessageQueue } from "./message-queue.ts";
 import { HostMethod } from "./host-methods.ts";
-import { handleUserMessage, rewindAttachedPictures } from "./chat-dispatch.ts";
+import { handleUserMessage } from "./chat-dispatch.ts";
 import { handleRunStart, resumeRun } from "./run-dispatch.ts";
 import { handleBootNotice } from "./boot-notice.ts";
 import { buildHolds, chatWaitsFor, leadDoor, stopRun, stopRunsOf } from "./live-chat.ts";
-import { LOCAL_ROLES_CAPABILITY, servesLocalRoles } from "./local-roles-served.ts";
 import { heldRuns, StatusLane, type Studio } from "./studio-state.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, Host, HostCall } from "../types/harness.d.ts";
 import type { DispatchAction } from "../types/host-api.d.ts";
@@ -44,7 +43,6 @@ const IDLE_STATUS = "idle";
  * below.
  */
 const CAPABILITIES = [
-  "loop",
   "autopilot",
   "run.start",
   "run.stop",
@@ -53,7 +51,6 @@ const CAPABILITIES = [
   "scoreboard",
   "director",
   "message-queue",
-  "rewind",
   "steer",
   "workers",
 ];
@@ -75,7 +72,6 @@ export async function createStudio(host: Host) {
     host,
     cancels: new Set(),
     stoppedMessages: new Set(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -122,7 +118,7 @@ export async function createStudio(host: Host) {
   return {
     status: () => status.summarize(),
     // A build whose jobs cross to or from a local engine only when every part it needs serves it.
-    capabilities: [...CAPABILITIES, ...(servesLocalRoles() ? [LOCAL_ROLES_CAPABILITY] : [])],
+    capabilities: CAPABILITIES,
 
     async healthcheck() {
       // Prove the loaded self can talk to the substrate and read its own state.
@@ -162,8 +158,6 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
       return messages.change(action.threadId, action.messageId, action.operation, action.text);
     case "queue_resume":
       return messages.resume(action.threadId);
-    case "rewind":
-      return rewindAttachedPictures(studio.attachedPictures, action);
     case "run_start":
       return handleRunStart(studio, action);
     case "autopilot_resume":

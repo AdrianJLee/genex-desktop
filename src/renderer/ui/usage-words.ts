@@ -8,7 +8,7 @@ import { type ContextUsage, measuresPick } from "../../shared/context.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { MODEL_LIMIT_PREFIX, type ProviderUsage, type ProviderUsageReport } from "../../shared/provider-usage.ts";
 import { MODEL_KEY_SEPARATOR } from "../model-key.ts";
-import { durationText, MINUTES_PER_HOUR } from "./loop-duration.ts";
+import { MINUTES_PER_HOUR } from "../words.ts";
 
 /** A plan's own names, and where its usage lives. */
 export const PLAN_PROVIDERS: Readonly<Record<string, { brand: string; usagePage: string }>> = {
@@ -25,6 +25,14 @@ const COUNTDOWN_MINUTES = 24 * MINUTES_PER_HOUR;
 const WEEK_MINUTES = 7 * COUNTDOWN_MINUTES;
 /** Model-scoped weekly limits (such as Fable's) stay off the panel for now; true shows them again. */
 const SHOW_MODEL_LIMITS = false;
+
+/** 150 → "2 h 30 m", 120 → "2 h", 45 → "45 m" in the reader's language. */
+function durationText(minutes: number): string {
+  const h = Math.floor(minutes / MINUTES_PER_HOUR);
+  const m = Math.round(minutes % MINUTES_PER_HOUR);
+  if (h && m) return t("{hours} h {minutes} m", { hours: h, minutes: m });
+  return h ? t("{hours} h", { hours: h }) : t("{minutes} m", { minutes: m });
+}
 
 /**
  * The plans to draw while usage is still being read: each subscription this setup uses, by name,

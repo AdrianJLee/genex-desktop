@@ -44,7 +44,7 @@ import { CodedError, errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { EventKind, type EventData, type EventEnvelope, type Message, ThreadKind } from "../../shared/event-log.ts";
 import { messageQueueState } from "../../shared/message-queue.ts";
-import { DispatchActionType, HarnessCapability, HarnessState, type ReferenceFrame } from "../../shared/protocol.ts";
+import { DispatchActionType, HarnessCapability, HarnessState } from "../../shared/protocol.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { latestRun } from "../../shared/chat-run.ts";
 import type { PlacedRule } from "../../shared/project-workspace.ts";
@@ -70,8 +70,6 @@ export const CHAT_CHECKPOINT_WAIT_MS = 30 * SECOND_MS;
  * save first (`PluginHook.messages`) end this long before the wait does.
  */
 export const MESSAGE_SNAPSHOT_ROOM_MS = 5 * SECOND_MS;
-/** How long a rewind waits for the harness to take back the mood board; it never waits for more. */
-const REWIND_NOTICE_TIMEOUT_MS = 3 * SECOND_MS;
 /**
  * How long a rewind waits for the build it stopped to close (its workers settle, its close is
  * written). A stopped build lands nothing, so this is its workers winding down, never the run.
@@ -167,7 +165,6 @@ interface RewoundAction {
   extraReads?: string[];
   references?: string[];
   attachmentsArtifact?: string;
-  autopilot?: { frames?: unknown };
 }
 /** A message that stays after a rewind: its bubble and its saved action. */
 interface RemainingAction {
@@ -241,9 +238,9 @@ function afterBuilds(files: RewindFiles, planned: PlannedRewind): RewindFiles {
 
 const actionOf = (message: { action?: unknown }): RewoundAction => (message.action ?? {}) as RewoundAction;
 
-/** A withdrawn message changed state the remaining ones may share: named folders, a mood board, pictures. */
+/** A withdrawn message changed state the remaining ones may share: named folders, pictures. */
 const sharesState = (action: RewoundAction): boolean =>
-  Boolean(action.extraReads?.length || action.references?.length || action.autopilot || action.attachmentsArtifact);
+  Boolean(action.extraReads?.length || action.references?.length || action.attachmentsArtifact);
 
 /** The saved actions of the messages from a bubble on. */
 function withdrawnActions(rows: readonly EventEnvelope[], eventId: string): RewoundAction[] {
@@ -927,11 +924,6 @@ export class ChatRewindService {
     }
     // Rebuilt now, so the chat reloading after the marker gets it at once.
     await tidy("rebuilding the chat state", () => this.#core.store.chatState(threadId));
-    // The harness keeps the Loop mood board the remaining messages gave it (best effort: the
-    // rewind itself never waits on the harness for long).
-    if (this.#core.host.hasCapability(HarnessCapability.Rewind)) {
-      await tidy("telling the harness", () => this.#tellHarness(threadId, applied));
-    }
     // The build's Stop held the queue: what was sent before the message is answered again as usual.
     if (stopped) await tidy("resuming the queue", () => this.#resumeQueue(threadId));
     const project = meta?.project ?? null;
@@ -994,29 +986,5 @@ export class ChatRewindService {
       throw err;
     }
     return restored.files;
-  }
-
-  async #tellHarness(threadId: string, applied: AppliedRewind): Promise<void> {
-    const boardChanged = applied.withdrawn.some((action) => action.autopilot);
-    const board = boardChanged ? { frames: await this.#latestBoard(threadId, applied.remaining) } : {};
-    await this.#core.host.dispatch({ type: DispatchActionType.Rewind, threadId, ...board }, REWIND_NOTICE_TIMEOUT_MS);
-  }
-
-  /** The mood board the Loop interview still has: the latest remaining one, unless a run took it. */
-  async #latestBoard(threadId: string, remaining: readonly RemainingAction[]): Promise<ReferenceFrame[] | null> {
-    const runStarts = new Set<string>([CustomEvent.RunRegistered, CustomEvent.RunStarted]);
-    const lastRun = (await this.#core.store.chatState(threadId))
-      .filter((event) => runStarts.has(customRecord(event.data)?.event_type ?? ""))
-      .reduce((latest, event) => (event.id > latest ? event.id : latest), "");
-    for (const entry of [...remaining].reverse()) {
-      const artifact = entry.action.attachmentsArtifact;
-      if (!entry.action.autopilot || !artifact) continue;
-      if (entry.eventId < lastRun) return null;
-      const saved = await this.#core.store
-        .readArtifact<{ frames?: ReferenceFrame[] }>(threadId, artifact)
-        .catch(() => null);
-      if (saved?.frames?.length) return saved.frames;
-    }
-    return null;
   }
 }

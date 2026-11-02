@@ -103,7 +103,7 @@ describe("product default", () => {
   it("reads this checkout's own default commission and permission mode from its pure modules", async () => {
     const defaults = await productDefaults(repo);
     assert.equal(defaults.permissionMode, DEFAULT_PERMISSION_MODE);
-    // Flipped: Loop starts off, so a fresh chat's send commissions no build.
+    // This build has no Loop switch (no loop-setting.ts): a fresh chat's send commissions no build.
     assert.deepEqual(defaults.commission, {});
   });
 

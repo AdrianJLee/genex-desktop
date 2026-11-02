@@ -551,17 +551,16 @@ export class MessageQueue {
   /** The message as the log keeps it: its pictures saved beside it, only their count in the log. */
   async #durable(queued: QueueAction): Promise<QueueAction> {
     const durable: QueueAction = { ...queued };
-    if (!queued.stills?.length && !queued.autopilot?.frames?.length) return durable;
+    if (!queued.stills?.length) return durable;
     durable.attachmentsArtifact = attachmentsArtifactOf(queued.messageId as string);
     // The count stays in the log so the chat can hold the pictures' place while they load.
-    durable.imageCount = queued.stills?.length || queued.autopilot?.frames?.length || 0;
+    durable.imageCount = queued.stills.length;
     await this.host.call(HostMethod.ArtifactWrite, {
       threadId: queued.threadId,
       artifactId: durable.attachmentsArtifact,
-      value: { stills: queued.stills, frames: queued.autopilot?.frames },
+      value: { stills: queued.stills },
     });
     delete durable.stills;
-    if (durable.autopilot) durable.autopilot = { ...durable.autopilot, frames: undefined };
     return durable;
   }
   /**
@@ -967,14 +966,13 @@ export class MessageQueue {
     turn.closed = true;
     thread.turn = null;
   }
-  /** Put a message's stills and reference frames back on it, from the artifact they were kept in. */
+  /** Put a message's stills back on it, from the artifact they were kept in. */
   async #attach(threadId: string, action: QueueAction): Promise<void> {
     const attachments = (await this.host.call(HostMethod.ArtifactRead, {
       threadId,
       artifactId: action.attachmentsArtifact,
     })) as AnyRecord | null;
     if (attachments?.stills) action.stills = attachments.stills;
-    if (attachments?.frames && action.autopilot) action.autopilot = { ...action.autopilot, frames: attachments.frames };
   }
   stop(): void {
     this.#stopped = true;
@@ -1031,5 +1029,5 @@ export function attachmentsArtifactOf(messageId: string): string {
 
 /** The message brings pictures: the queue keeps them in its attachments artifact (`#durable`), or has. */
 export function keepsPictures(item: QueueAction): boolean {
-  return Boolean(item.attachmentsArtifact || item.stills?.length || item.autopilot?.frames?.length);
+  return Boolean(item.attachmentsArtifact || item.stills?.length);
 }

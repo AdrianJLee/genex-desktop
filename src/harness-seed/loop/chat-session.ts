@@ -4,8 +4,6 @@
  * Follow-ups, including "keep going", continue THAT conversation. The contractor is never
  * re-briefed from the last line alone, and a chat never guesses a different game folder.
  */
-import { launchRules, type LaunchGrant } from "./launch-prompts.ts";
-import { autoLoopRule } from "./auto-loop-prompts.ts";
 import { type EngineId, GameEngine } from "./game-engine.ts";
 import { handoverSection } from "./session-compact-prompts.ts";
 import { toolCall } from "./model-roles.ts";
@@ -20,8 +18,6 @@ import {
   hasFact,
   kindPending,
   kindUnknown,
-  type LoopProfile,
-  loopProfileOf,
   servedAsWeb,
 } from "./folder-facts.ts";
 import {
@@ -362,16 +358,6 @@ function gameBuild(
   return { gameEngine, facts: known, holds, engineProject, unrealFound, pluginsOff, legacy };
 }
 
-/**
- * The Loop the game gets, as the launch words name it: the engine whose goal words apply (an Unreal
- * project's look first, by its fact) and the Loop's profile (the one Loop in place, unless it is a
- * web game).
- */
-function loopOfGame(game: GameBuild): [EngineId, LoopProfile] {
-  const engine = hasFact(game.facts, CoreFact.UnrealProject) ? GameEngine.Unreal : game.gameEngine;
-  return [engine, loopProfileOf(game)];
-}
-
 /** The game is worked on in its Unreal project, through the Unreal tools: it holds one, is no web game at its root, and the plugin is on. */
 const inUnreal = (game: GameBuild) =>
   !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject) && !game.pluginsOff;
@@ -466,8 +452,7 @@ function stillsBlock(extraReads: unknown): string {
  * What the contractor is actually told. Resume = the message alone (its own context is restored):
  * a question asked mid-build is answered, never buried under an order to keep going.
  * No session = the chat's original ask plus the latest instruction, so "keep going" cannot
- * become a blank new job. `launch` = Loop is on: the chat may also start a build
- * (launch-prompts.ts), and still answers, researches and edits itself. `afterLoopRun` = the build
+ * become a blank new job. `afterLoopRun` = the build
  * this chat's session led is over (after-loop-run-prompts.ts): its note replaces the pickup of a
  * resumed session, and follows the rules of a fresh one.
  *
@@ -483,7 +468,6 @@ function stillsBlock(extraReads: unknown): string {
  *   engine?: string,
  *   gameEngine?: EngineId,
  *   engineProject?: string | null,
- *   launch?: LaunchGrant | null,
  *   afterLoopRun?: string | null,
  *   engineChoice?: boolean,
  *   unrealEngine?: unknown,
@@ -511,10 +495,6 @@ export function buildContractorBrief({
   gameEngine = GameEngine.Web,
   /** The Unreal project file an Unreal game is linked to, which its work lands in. */
   engineProject = null,
-  /** Loop is on: this chat may also launch a build. */
-  launch = null,
-  /** Loop is off: the launch tool this chat may call for a Loop the user asks for in words. */
-  autoLoop = null,
   /** The build this chat's session led is over: what it is told of it (after-loop-run-prompts.ts). */
   afterLoopRun = null,
   /** A new game while the Unreal plugin is on: the user picks the web or Unreal first (unreal-prompts.ts). */
@@ -547,8 +527,6 @@ export function buildContractorBrief({
   engine?: string;
   gameEngine?: EngineId;
   engineProject?: string | null;
-  launch?: LaunchGrant | null;
-  autoLoop?: string | null;
   afterLoopRun?: string | null;
   engineChoice?: boolean;
   /** Read no more, kept for a caller kept from before: each kind's readiness comes with the kinds (`ready`, `note`). */
@@ -566,10 +544,6 @@ export function buildContractorBrief({
   const identity = appIdentity({ folderLabel, facts: game.facts, holds: game.holds });
   const workHere = workHereLine(game, folderLabel);
   const stills = stillsBlock(extraReads);
-  const launchBlock = [
-    ...(launch?.toolName ? launchRules(engine, launch, ...loopOfGame(game)) : []),
-    ...(autoLoop ? [autoLoopRule(engine, autoLoop)] : []),
-  ];
   const workersLine = workers ? WORKERS_BRIEF_LINE : "";
 
   // A folder with no kind yet hears how its request picks one on every message, a resumed session's
@@ -584,7 +558,6 @@ export function buildContractorBrief({
       identity,
       ...kindRule,
       resumePickup(afterLoopRun),
-      ...launchBlock,
       workersLine,
       workHere,
       stills,
@@ -623,7 +596,6 @@ export function buildContractorBrief({
     "",
     CONVERSATION_RULE,
     ...rules,
-    ...launchBlock,
     ...(afterLoopRun ? [afterLoopRun] : []),
     workersLine,
     workHere,

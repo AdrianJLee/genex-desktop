@@ -7,7 +7,7 @@
  */
 import type { Message } from "../types.ts";
 import type { DelegateRequest, SteerMessage, SteerSend } from "./types.ts";
-import { isInterview } from "../../shared/engine-requests.ts";
+import { isInterview } from "./studio-tool-prompts.ts";
 import { textAsSent } from "./genex-mark-prompts.ts";
 
 /** A running local session's inbox: what the person sent since its last round, in order. */

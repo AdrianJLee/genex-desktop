@@ -11,7 +11,7 @@ import { EngineFailure, StopReason } from "./outage.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
 import { TurnStop, sayInTurn } from "./turn-record.ts";
-import { lookAtPictures, turnBriefing } from "./turn-prompts.ts";
+import { lookAtPictures } from "./turn-prompts.ts";
 import { OUTPUT_LIMIT_NOTE } from "./tool-loop-prompts.ts";
 import { picturesNotShown } from "./unseen-pictures-prompts.ts";
 import type { TurnOptions, TurnOutcome } from "./turn-loop.ts";
@@ -168,7 +168,7 @@ async function promptThatFits(
 ): Promise<Prompt | null> {
   const { threadId } = options;
   const { engine, model, contextWindow } = state;
-  const extraSystem = turnBriefing(options);
+  const { extraSystem } = options;
   const policy = await ctx.call(HostMethod.ContextPolicy, { engine, model, threadId });
   const percent = (
     policy?.policy?.mode === ContextPolicyMode.Custom ? policy.policy.thresholdPercent : DEFAULT_THRESHOLD_PERCENT
@@ -265,10 +265,9 @@ async function completionFailed(
     return { outcome: { stopped: TurnStop.EngineLimited, round, engine } };
   }
   // Subscription throttles must not end the run (PLAN.md §6.3 / M2 acceptance) — but a
-  // swap the user never hears about reads as deception. Fall back only mid-run or
-  // mid-commission, and say so in the chat, not just in a log event.
-  const commissioned = inRun || Boolean(options.loop || options.autopilot);
-  if (fallbackReady && commissioned) {
+  // swap the user never hears about reads as deception. Fall back only mid-run, and say so in
+  // the chat, not just in a log event.
+  if (fallbackReady && inRun) {
     await switchEngine(ctx, turnId, state, fallbacks[0], kind, err?.message);
     return {};
   }

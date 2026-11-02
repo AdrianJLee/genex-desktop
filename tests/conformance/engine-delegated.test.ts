@@ -1610,7 +1610,7 @@ describe("steering a running Claude Code turn", () => {
     assert.deepEqual(result.steered, []);
   });
 
-  it("an Auto chat handed only its Loop start still takes input mid-turn: that tool makes no interview", {
+  it("a chat handed its Loop start still takes input mid-turn: only the question card makes an interview", {
     timeout,
   }, async () => {
     const { fn } = steerableQuery(async function* ({ read }) {
@@ -1628,9 +1628,8 @@ describe("steering a running Claude Code turn", () => {
       interviewTools: [
         {
           name: "start_autopilot",
-          description: "Start a Loop, only when asked.",
+          description: "Start a Loop.",
           parameters: { type: "object", properties: { goal: { type: "string" } }, required: ["goal"] },
-          onlyWhenAsked: true,
         },
       ],
       steer: {

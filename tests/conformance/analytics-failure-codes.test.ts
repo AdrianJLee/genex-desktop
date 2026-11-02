@@ -18,7 +18,7 @@ import { createStudioBridge } from "../../src/preload/studio-bridge.ts";
 import { ClaudeLoginProblem, ClaudeLoginRefusal, type ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import { CliInstallOperation, CliInstallRefusal } from "../../src/shared/cli-install.ts";
 import { CodexLoginProblem } from "../../src/shared/codex-login.ts";
-import { type PlanReview, PlanReviewState, SendFailure, SendRefusal } from "../../src/shared/composer.ts";
+import { type PlanReview, PlanReviewState, SendFailure } from "../../src/shared/composer.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import {
   type EngineDescriptor,
@@ -44,7 +44,7 @@ import { installProblem } from "../../src/substrate/bonsai/runtime.ts";
 import { EngineError } from "../../src/substrate/engines/types.ts";
 import { createChatMemory } from "../../src/renderer/analytics/chat-memory.ts";
 import { chatObservers, retryAfterBucket, type SendEvent } from "../../src/renderer/analytics/chat-observe.ts";
-import { RetryAfterBucket, SendFailStage, TurnStatus } from "../../src/renderer/analytics/chat-vocabulary.ts";
+import { RetryAfterBucket, TurnStatus } from "../../src/renderer/analytics/chat-vocabulary.ts";
 import { ChatEvent } from "../../src/renderer/analytics/events/chat.ts";
 import { errorToastsShown } from "../../src/renderer/analytics/events/launch.ts";
 import type { EventProperties } from "../../src/renderer/analytics/properties.ts";
@@ -583,20 +583,13 @@ describe("phase 2 analytics: a chat says how it failed", () => {
       [SendFailure.Rewinding, SendFailure.Other],
     );
 
-    // The renderer: a refusal main announces is counted; a failure's own event is counted where it was sent.
+    // The renderer: a failure's own event is counted where it was sent, never again from main's error.
     const heard = hearing();
-    heard.ui({
-      type: UiEvent.ChatError,
-      payload: { threadId: THREAD, message: HOSTILE[7], refusal: SendRefusal.LoopOutdated },
-    });
     heard.ui({
       type: UiEvent.ChatError,
       payload: { threadId: THREAD, message: HOSTILE[7], failure: SendFailure.Other },
     });
-    heard.ui(JSON.parse(JSON.stringify({ type: UiEvent.ChatError, payload: { message: "x", refusal: HOSTILE[0] } })));
-    assert.deepEqual(heard.of(ChatEvent.MessageSendFailed), [
-      { stage: SendFailStage.Refused, code: SendRefusal.LoopOutdated },
-    ]);
+    assert.deepEqual(heard.of(ChatEvent.MessageSendFailed), []);
   });
 
   it("a delegated turn's failure and limit reach its end, its message and its event", async () => {

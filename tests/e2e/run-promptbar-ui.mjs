@@ -38,12 +38,9 @@ app.whenReady().then(async()=>{
  const settings=()=>js('JSON.parse(document.querySelector("#composer-settings").textContent||"{}")');
  const view=()=>js('document.querySelector("[data-model-view]")?.dataset.modelView??null');
  const open=label=>js('Boolean(document.querySelector("[data-slot=popover-content][aria-label=\\"'+label+'\\"][data-open]"))');
- const ownLoop=async(chat,on,hours)=>{const v=await js('JSON.parse(localStorage.getItem("studio.loop.gallery-'+chat+'")||"null")');return v?.on===on&&v?.hours===hours;};
- // What Mode says, with its ∞ when it shows one: "∞ Loop", "2h Loop" (a time limit) or "Auto".
- const MODE_WORDS='(e.querySelector("[data-icon=infinity]")?"∞ ":"")+e.textContent';
- const mode=()=>element('[aria-label="Mode"]','({text:'+MODE_WORDS+',disabled:e.disabled,opacity:getComputedStyle(e).opacity})');
  check('empty Send is disabled',await element('[data-promptbar] [aria-label="Send"]','e.disabled'));
- check('fresh composer defaults to Loop',await element('[data-promptbar] [aria-label="Mode"]',MODE_WORDS+'==="∞ Loop"'));
+ // Intentionally flipped: the composer had a Mode button (∞ Loop by default); the agent decides when to build now.
+ check('the composer has no Mode button',!(await element('[data-promptbar] [aria-label="Mode"]','true')));
  check('all toolbar buttons and nested icons have pointer cursors',await js('[...document.querySelectorAll("[data-composer-toolbar] button:enabled, [data-composer-toolbar] button:enabled svg")].every(e=>getComputedStyle(e).cursor==="pointer")'));
  check('Add is a filled 30px circle the size of Send',await js('(()=>{const a=document.querySelector("[aria-label=\\"Add images and more\\"]"),s=document.querySelector("[data-promptbar] [aria-label=Send]"),r=a.getBoundingClientRect(),q=s.getBoundingClientRect();return r.width===30&&q.width===30&&r.height===q.height&&getComputedStyle(a).backgroundColor!=="rgba(0, 0, 0, 0)"})()'));
  check('composer keeps a 7px bottom inset and a 26px radius',await element('[data-promptbar] .composer-panel','getComputedStyle(e).paddingBottom==="7px"&&getComputedStyle(e).borderTopLeftRadius==="26px"'));
@@ -66,22 +63,6 @@ app.whenReady().then(async()=>{
  await click(SPECIMEN+' [aria-label="Add images and more"]');
  check('while off, the row says it turns Plan mode on',await element(ADD_PLAN,'e.textContent.includes("Turn plan mode on")'));
  await close();
- await click('[aria-label="Mode"]');check('Mode holds only the Loop: Plan mode is in Add',!(await element('[aria-label="Mode options"] [aria-label="Plan mode"]','true')));
- check('one Loop control offers Off, until satisfied, presets and Custom',await js('[...document.querySelectorAll("[aria-label=\\"Loop time limit\\"] [role=radio]")].map(e=>e.textContent).join("|")==="Off|∞|30 m|1 h|2 h|Custom"')&&await element('[aria-label="Loop time limit"] [aria-checked="true"]','e.dataset.value==="inf"'));
- check('Loop time options fit without clipping',await js('[...document.querySelectorAll("[aria-label=\\"Loop time limit\\"] [role=radio]")].every(e=>e.scrollWidth<=e.clientWidth)'));
- await click('[aria-label="Loop time limit"] [data-value="0.5"]');
- check('a preset saves its time and names it on the trigger',await js('localStorage.getItem("studio.autopilotHours")==="0.5"')&&await ownLoop('a',true,0.5)&&await element('[aria-label="Mode"]',MODE_WORDS+'==="30m Loop"'));
- await click('[aria-label="Loop time limit"] [data-value="custom"]');
- check('Custom starts from the current time',await element('[aria-label="Custom time limit"]','e.value==="30 m"'));
- await click('[aria-label="15 minutes more"]');check('the stepper adds 15 minutes',await js('localStorage.getItem("studio.autopilotHours")==="0.75"')&&await ownLoop('a',true,0.75));
- await element('[aria-label="Custom time limit"]','(e.focus(),e.select(),true)');await insertText('1h 15m');await key('Enter');
- check('a typed duration is parsed and saved',await js('localStorage.getItem("studio.autopilotHours")==="1.25"')&&await ownLoop('a',true,1.25)&&await element('[aria-label="Custom time limit"]','e.value==="1 h 15 m"')&&await open('Mode options'));
- await capture('mode-custom');
- await element('[aria-label="Loop time limit"] [aria-checked="true"]','e.focus()');await key('Left');
- check('arrow keys move the Loop choice',await js('localStorage.getItem("studio.autopilotHours")==="2"')&&await ownLoop('a',true,2)&&await element('[aria-label="Mode"]',MODE_WORDS+'==="2h Loop"'));
- await key('Home');
- check('Off turns Loop off and keeps the saved time',await js('localStorage.getItem("studio.composer.loop")==="0" && localStorage.getItem("studio.autopilotHours")==="2"')&&await ownLoop('a',false,2)&&await element('[aria-label="Mode"]',MODE_WORDS+'==="Auto"'));
- await capture('mode-off');await close();
 
  check('the toolbar reads ring, model, effort, then Send',await js('(()=>{const t=document.querySelector("[data-composer-toolbar]");const at=s=>[...t.querySelectorAll("button")].indexOf(t.querySelector(s));return at("[aria-label=\\"Context and usage\\"]")<at("[aria-label=\\"Model settings\\"]")&&at("[aria-label=\\"Model settings\\"]")<at("[aria-label^=\\"Effort:\\"]")&&at("[aria-label^=\\"Effort:\\"]")<at("[aria-label=Send]")})()'));
  check('the model button names only the orchestrator; effort is its own filled pill',await element('[aria-label="Model settings"]','e.textContent==="Astra fixture"')&&await element('[aria-label^="Effort:"]','e.textContent==="High" && getComputedStyle(e).backgroundColor!=="rgba(0, 0, 0, 0)"'));
@@ -92,8 +73,7 @@ app.whenReady().then(async()=>{
  check('workers and reviewers stay choosable and quieter than the main agent, with no Loop note',await js('(()=>{const v=document.querySelector("[data-model-view=roles]");return v.querySelector("[data-role=builder]").hasAttribute("data-quiet")&&v.querySelector("[data-role=judge]").hasAttribute("data-quiet")&&!v.querySelector("[data-role=planner]").hasAttribute("data-quiet")&&!v.querySelector(".picker-action")})()'));
  check('opening the panel focuses the orchestrator row',await js('document.activeElement?.dataset.role==="planner"'));
  await capture('model-roles');
- await close();await click('[aria-label="Mode"]');await click('[aria-label="Loop time limit"] [data-value="2"]');await close();await click('[aria-label="Model settings"]');
- check('with Loop back on, the jobs read the same',await element('[aria-label="Mode"]',MODE_WORDS+'==="2h Loop"')&&await open('Model options')&&await js('document.querySelectorAll("[data-model-view=roles] [data-quiet]").length===2'));
+ await close();await click('[aria-label="Model settings"]');
  const infoAt=await element('[data-role="builder"] .picker-role-info','({x:e.getBoundingClientRect().x+7,y:e.getBoundingClientRect().y+7})');
  await mouse({type:'mouseMove',...infoAt});await wait(700);
  check('the Workers info icon explains the job',await js('[...document.querySelectorAll("[data-slot=tooltip-content]")].some(e=>e.textContent.includes("Workers build the parts of the plan"))'));
@@ -198,7 +178,8 @@ app.whenReady().then(async()=>{
  await insertText('A quiet garden');await wait(400);check('text enables Send',await element('[data-promptbar] [aria-label="Send"]','!e.disabled && e.dataset.state==="ready"'));
  check('ready Send is filled with the ink color',await element('[data-promptbar] [aria-label="Send"]','getComputedStyle(e).backgroundColor===getComputedStyle(document.querySelector("[data-promptbar] textarea")).color'));
  await click('[data-promptbar] [aria-label="Send"]');
- check('send includes approval and the selected Loop time',await element('#composer-settings','(()=>{const v=JSON.parse(e.textContent);return v.extras.reviewPlan===true && v.extras.autopilot.hours===2})()'));
+ // Intentionally flipped: the send carried the Loop's time (autopilot.hours); it carries no Loop commission now.
+ check('send includes approval and no Loop commission',await element('#composer-settings','(()=>{const v=JSON.parse(e.textContent);return v.extras.reviewPlan===true && !("autopilot" in v.extras) && !("loop" in v.extras)})()'));
  check('one effort is sent to every role at the closest level each model accepts',await element('#composer-settings','(()=>{const v=JSON.parse(e.textContent);return v.effort==="xhigh" && v.roles.efforts.planner==="xhigh" && v.roles.efforts.builder==="high" && v.roles.efforts.judge==="xhigh"})()'));
  const actionState=()=>js('[...document.querySelectorAll("[data-composer-specimen] [data-promptbar] button[aria-label=Send], [data-composer-specimen] [data-promptbar] button[aria-label=Stop]")].map(e=>e.getAttribute("aria-label")).join(",")');
  check('active work turns the same control into Stop',await actionState()==='Stop');
@@ -249,51 +230,24 @@ app.whenReady().then(async()=>{
  await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
  check('keyboard Stop remains available',await actionState()==='Send'&&await element('#composer-settings','e.dataset.stops==="2"'));
  check('plan review resets after sending',!(await element(BULB,'true')));
- // gallery-a keeps its own Loop now, so the saved custom time is its own; the last pick (1 h 15 m) seeds gallery-b.
- await js('localStorage.setItem("studio.loop.gallery-a",JSON.stringify({on:true,hours:1.25}));localStorage.setItem("studio.autopilotHours","1.25")');await wc.reload();await wait(500);await element('[data-promptbar]','e.scrollIntoView({block:"center"})');
- await click('[aria-label="Mode"]');
- check('reopening preserves a saved time outside the presets',await element('[aria-label="Mode"]',MODE_WORDS+'==="1h15 Loop"')&&await element('[aria-label="Loop time limit"] [aria-checked="true"]','e.dataset.value==="custom"')&&await element('[aria-label="Custom time limit"]','e.value==="1 h 15 m"'));await close();
- await click('[data-specimen-chat="b"]');
- check('a fresh chat starts from the last pick',(await mode()).text==="1h15 Loop"&&await ownLoop('b',true,1.25),await mode());
- await click('[data-specimen-chat="a"]');
  await click('[data-promptbar] textarea');await insertText('A draft that stays');await wait(100);
- await click('[aria-label="Mode"]');await click('[aria-label="Loop time limit"] [data-value="0.5"]');await close();
- await click('[data-specimen-chat="b"]');const bKept=(await mode()).text;
- await click('[aria-label="Mode"]');await click('[aria-label="Loop time limit"] [data-value="inf"]');await close();const bPicked=(await mode()).text;
- await click('[data-specimen-chat="a"]');
- check('each chat keeps its own Loop',bKept==="1h15 Loop"&&bPicked==="∞ Loop"&&(await mode()).text==="30m Loop"&&await ownLoop('a',true,0.5)&&await ownLoop('b',true,null)&&await element('[data-promptbar] textarea','e.value==="A draft that stays"'),{bKept,bPicked,a:await mode()});
+ await click('[data-specimen-chat="b"]');await click('[data-specimen-chat="a"]');
+ check('each chat keeps its own draft',await element('[data-promptbar] textarea','e.value==="A draft that stays"'));
  await element('[data-promptbar] textarea','(e.focus(),true)');await cdp('Input.dispatchKeyEvent',{type:'keyDown',key:'a',code:'KeyA',modifiers:4,commands:['selectAll']});await key('Backspace');
- await click('[data-specimen-build="running-inf"]');const runningInf=await mode();
- await click('[data-specimen-chat="b"]');await click('[data-specimen-build="running-30"]');const running30=await mode();
- // Intentionally flipped: Mode opens during a Loop build, read-only, for the chat's "Don't wait for me" switch.
- const READ_ONLY_MODE='Boolean(document.querySelector("[aria-label=\\"Mode options\\"][data-open]"))&&!document.querySelector("[aria-label=\\"Mode options\\"][data-open] [aria-label=\\"Loop time limit\\"]")&&Boolean(document.querySelector("[aria-label=\\"Mode options\\"][data-open] [data-dont-wait-row]"))';
- check('a running build names its own limit, and its Mode opens',runningInf.text==="∞ Loop"&&!runningInf.disabled&&running30.text==="30m Loop"&&!running30.disabled&&await ownLoop('a',true,0.5)&&await ownLoop('b',true,null),{runningInf,running30});
- await click('[aria-label="Mode"]');
- check('a running build\'s Mode is read-only: no Loop control, and the Don\'t wait for me switch',await js(READ_ONLY_MODE),await element('[aria-label="Mode options"]','e.textContent'));
- await capture('mode-running-build');await close();
- await click('[data-specimen-build="paused-30"]');const paused=await mode();
- check('a paused build\'s Mode names its limit and opens',paused.text==="30m Loop"&&!paused.disabled,paused);
- await click('[aria-label="Mode"]');
- check('a paused build\'s Mode is read-only too, with the switch',await js(READ_ONLY_MODE),await element('[aria-label="Mode options"]','e.textContent'));
- await capture('mode-paused-build');await close();
- await click('[data-specimen-build="finished"]');const finished=await mode();await click('[aria-label="Mode"]');
- check('a finished build\'s Mode is the chat\'s own Loop again, with no new-build choice',finished.text==="∞ Loop"&&!finished.disabled&&finished.opacity==="1"&&await element('[aria-label="Loop time limit"] [aria-checked="true"]','e.dataset.value==="inf"')&&await element('[aria-label="Mode options"]','!/new build/i.test(e.textContent)'),{finished,options:await element('[aria-label="Mode options"]','e.textContent')});
- await capture('mode-finished-build');
- await click('[aria-label="Loop time limit"] [data-value="0.5"]');
- check('a finished chat\'s Loop is its own to change',(await mode()).text==="30m Loop"&&await ownLoop('b',true,0.5),await mode());
- await close();await click('[data-specimen-build="none"]');await click('[data-specimen-chat="a"]');
+ // Intentionally flipped: a running, paused or finished build's Mode named its Loop time; no build shows a Mode now.
+ const buildModes={};for(const id of ['running','paused','finished']){await click('[data-specimen-build="'+id+'"]');buildModes[id]=await element('[data-promptbar] [aria-label="Mode"]','true');}
+ check('no build state shows a Mode button',Object.values(buildModes).every(v=>v===null),buildModes);
+ await click('[data-specimen-build="none"]');
 
  win.setSize(1080,680);wc.setZoomFactor(2);await wait(350);await js('Object.assign(document.querySelector("[data-composer-specimen]").style,{position:"fixed",bottom:"16px",left:"16px",width:"calc(100% - 32px)"});document.querySelector("#composer-settings").style.display="none"');await element('[data-promptbar]','e.scrollIntoView({block:"center"})');
  const inside='[...document.querySelectorAll("[data-slot=popover-content]")].every(e=>{const r=e.getBoundingClientRect();return r.left>=-1&&r.right<=innerWidth+1&&r.top>=-1&&r.bottom<=innerHeight+1})';
  await click('[aria-label="Model settings"]');await click('[data-role="builder"]');await capture('zoom-200');
  check('200% zoom keeps the model panel and its list within the viewport',await js(inside),await js('[...document.querySelectorAll("[data-slot=popover-content]")].map(e=>({label:e.getAttribute("aria-label"),rect:e.getBoundingClientRect().toJSON(),w:innerWidth,h:innerHeight}))'));
- await close();await click('[aria-label="Mode"]');await capture('mode-zoom-200');
- check('200% zoom keeps the Mode panel within the viewport',await js(inside));
  await close();await click('[aria-label="Add images and more"]');await capture('add-zoom-200');
  check('Add remains aligned and fully above composer at 200% zoom',await js('(()=>{const c=document.querySelector("[data-promptbar] .composer-panel").getBoundingClientRect(),p=document.querySelector("[aria-label=Add][data-slot=popover-content]").getBoundingClientRect();return Math.abs(c.width-p.width)<2 && Math.abs(c.left-p.left)<2 && p.bottom<=c.top-7 && p.top>=0})()'));
  await close();wc.setZoomFactor(1);win.setSize(1080,900);await wait(200);
- await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});await click('[aria-label="Mode"]');
- check('reduced motion removes panel animation',await element('[aria-label="Mode options"]','parseFloat(getComputedStyle(e).animationDuration)<0.001'));
+ await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});await click('[aria-label="Model settings"]');
+ check('reduced motion removes panel animation',await element('[aria-label="Model options"]','parseFloat(getComputedStyle(e).animationDuration)<0.001'));
  await close();await click('[aria-label^="Effort:"]');
  check('reduced motion keeps the effort thumb still',await element('.effort-thumb','parseFloat(getComputedStyle(e).transitionDuration)<0.001'));await close();
  await click('[aria-label="Model settings"]');await click('[data-role="planner"]');await click('[data-slot="popover-content"][aria-label="Main agent model"] [data-model-choice="claude-code::fixture-opus"]');await close();

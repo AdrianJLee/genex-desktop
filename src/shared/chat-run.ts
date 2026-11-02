@@ -90,15 +90,13 @@ export function isGrantedRunControl(name: string, grant: { inPlace?: boolean }):
 
 /**
  * The builds a chat's own session records to start, which the harness starts once its reply ends:
- * a Loop's launch (the seed's `tools/game-tools.ts`), a finished build reopened
- * (`loop/reopen-run-prompts.ts` `REOPEN_RUN`) and a paused one resumed (`resume_run`). While the
- * chat is in Plan the host holds them behind the plan card (`main/core/plan-approval.ts`). The model
- * calls them by these names: never rename one (`seed-contracts.test.ts` holds them to the seed's).
+ * a Loop's launch (the seed's `loop/start-autopilot.ts`) and a paused one resumed (`resume_run`).
+ * While the chat is in Plan the host holds them behind the plan card (`main/core/plan-approval.ts`).
+ * The model calls them by these names: never rename one (`seed-contracts.test.ts` holds them to the
+ * seed's).
  */
 export const BuildLaunch = {
   StartAutopilot: "start_autopilot",
-  StartUnattendedRun: "start_unattended_run",
-  ReopenRun: "reopen_run",
   ResumeRun: "resume_run",
 } as const;
 export type BuildLaunch = (typeof BuildLaunch)[keyof typeof BuildLaunch];

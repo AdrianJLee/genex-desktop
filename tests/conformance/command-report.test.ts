@@ -10,7 +10,6 @@ import { CustomEvent } from "../../src/shared/custom-events.ts";
 import { EventKind, type EventEnvelope } from "../../src/shared/event-log.ts";
 import { messageQueueState } from "../../src/shared/message-queue.ts";
 import { chatReportEntryIds } from "../../src/renderer/chat/transcript.ts";
-import { chatLoopExtras, loopCommissions, rememberChatLoop } from "../../src/renderer/loop-setting.ts";
 // `useReport` calls no React hook: it builds the chat's sender for a command's result.
 import { useReport as reporter } from "../../src/renderer/chat/use-submit.ts";
 import { coreLite } from "../helpers/core-lite.ts";
@@ -57,54 +56,7 @@ test("the transcript leaves out the messages the chat wrote itself, and only tho
   assert.equal(isChatReport({ origin: MessageOrigin.CommandResult }), true);
 });
 
-test("a command's result carries the chat's Loop only before the chat's first build", () => {
-  const data = new Map<string, string>();
-  const storage = {
-    getItem: (key: string) => data.get(key) ?? null,
-    setItem: (key: string, value: string) => void data.set(key, value),
-    removeItem: (key: string) => void data.delete(key),
-  };
-  const threadId = "derby-chat";
-  rememberChatLoop(storage, threadId, { on: true, hours: 2 });
-  const fresh = chatLoopExtras({ storage, threadId, build: null, coordinating: false, gameMode: true });
-  assert.deepEqual(fresh, { autopilot: { hours: 2, frames: [] } });
-  const building = chatLoopExtras({ storage, threadId, build: null, coordinating: true, gameMode: true });
-  assert.deepEqual(building, {}, "a running build takes no new commission");
-  const halfHour = { on: true, hours: 0.5 };
-  const finished = chatLoopExtras({
-    storage,
-    threadId,
-    build: { state: "finished", loop: halfHour },
-    coordinating: false,
-    gameMode: true,
-  });
-  // Flipped (was: the chat's own Loop again): a result is not the person asking for more, so it never reopens the build.
-  assert.deepEqual(finished, {}, "a finished build: a command's result carries no Loop");
-  assert.equal(loopCommissions({ state: "finished" }), true, "a message the person types still does");
-  const paused = chatLoopExtras({
-    storage,
-    threadId,
-    build: { state: "paused", loop: halfHour },
-    coordinating: false,
-    gameMode: true,
-  });
-  assert.deepEqual(paused, {}, "a paused build takes no new commission");
-  rememberChatLoop(storage, threadId, { on: false, hours: 2 });
-  assert.deepEqual(chatLoopExtras({ storage, threadId, build: null, coordinating: false, gameMode: true }), {});
-  assert.deepEqual(chatLoopExtras({ storage, threadId, build: null, coordinating: false, gameMode: false }), {});
-});
-
-test("a command's result is sent with its origin, and with the chat's Loop only before the chat's first build", async (t) => {
-  const data = new Map<string, string>();
-  const storage = {
-    getItem: (key: string) => data.get(key) ?? null,
-    setItem: (key: string, value: string) => void data.set(key, value),
-    removeItem: (key: string) => void data.delete(key),
-  };
-  Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
-  t.after(() => void delete (globalThis as { localStorage?: unknown }).localStorage);
-  const threadId = "derby-chat";
-  rememberChatLoop(storage, threadId, { on: true, hours: 2 });
+test("a command's result is sent with its origin, on the chat's model, with no Loop commission whatever its build", async () => {
   const model = {
     selected: "claude-code::opus",
     choices: [{ key: "claude-code::opus", engine: "claude-code", model: "opus", label: "Opus", disabled: false }],
@@ -120,20 +72,18 @@ test("a command's result is sent with its origin, and with the chat's Loop only 
   const sendFor = async (state: string | null): Promise<Record<string, unknown>> => {
     const sent: Array<Record<string, unknown>> = [];
     const run = state ? { runId: "run-1", state } : null;
-    const build = run ? { state, loop: { on: true, hours: 0.5 } } : null;
+    const build = run ? { state } : null;
     const props = { onSend: async (_text: string, options: Record<string, unknown>) => void sent.push(options) };
     await reporter(
       props as never,
-      { threadId, run, isStudioThread: false } as never,
+      { threadId: "derby-chat", run, isStudioThread: false } as never,
       { model, build } as never,
     )(words, MessageOrigin.CommandResult);
     assert.equal(sent.length, 1);
     return sent[0] ?? {};
   };
-  const fresh = await sendFor(null);
-  assert.deepEqual(fresh.autopilot, { hours: 2 }, "before the first build: the chat's Loop goes on with it");
-  assert.equal(fresh.origin, MessageOrigin.CommandResult);
-  for (const state of ["running", "paused", "finished"]) {
+  // Flipped: before the chat's first build a result carried the chat's Loop; no send carries one now.
+  for (const state of [null, "running", "paused", "finished"]) {
     const sent = await sendFor(state);
     assert.equal("autopilot" in sent, false, `${state}: no commission`);
     assert.equal(sent.origin, MessageOrigin.CommandResult);

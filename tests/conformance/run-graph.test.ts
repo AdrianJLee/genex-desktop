@@ -1513,7 +1513,6 @@ describe("a finished lead run its chat's own session reopens", () => {
     const run = graph.nodes.find((node) => node.kind === "run")!;
     assert.ok(run.kind === "run");
     assert.deepEqual([run.finishedAt, run.victory, run.stoppedBecause], [null, null, null]);
-    assert.equal(run.durationMs, 1_800_000, "the reopen's own half hour");
     assert.equal(graph.mergedHead, null, "only a merge of the reopened run is new to the stage");
     assert.equal(newBuildOffer(graph.mergedHead, null), null);
     assert.ok(
@@ -1538,18 +1537,11 @@ describe("a finished lead run its chat's own session reopens", () => {
   });
 });
 
-it("gives an ∞ build no duration, so it is never called a 24 h build", () => {
-  const graph = buildRunGraph([event("run_started", { budgets: { wallClockMs: 86_400_000, untilSatisfied: true } })]);
-  assert.ok(graph);
-  assert.equal(graph.nodes.find((node) => node.kind === "run")?.durationMs, undefined);
-});
-
 it("a director working without worker rows has a compact, connected input-to-result path", () => {
   const graph = buildRunGraph([
     event("run_started", { budgets: { wallClockMs: 3_600_000 } }),
     event("autopilot_started", { director: true, facets: [] }),
   ])!;
-  assert.equal(graph.nodes.find((node) => node.kind === "run")?.durationMs, 3_600_000);
   const layout = layoutSteps(partRows(graph)),
     start = layout.rects.start!,
     final = layout.rects.final!;

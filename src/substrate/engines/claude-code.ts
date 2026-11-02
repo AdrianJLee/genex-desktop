@@ -75,6 +75,7 @@ import {
   CHECKPOINT_TOOL,
   CLAUDE_CAPTURE_TOOL,
   intakeToolReply,
+  isInterview,
   RUN_COMMAND_TOOL,
   SHELL_THIS_TURN,
   STUDIO_MCP_SERVER,
@@ -121,7 +122,7 @@ import { StudioPlatform } from "../../shared/boot.ts";
 import { EngineKind, EngineStatusCode, EngineStatusReason, LoginSource } from "../../shared/engine-descriptor.ts";
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { ContextSource } from "../../shared/context.ts";
-import { EngineFailureKind, isInterview, MessageFrom, StopReason } from "../../shared/engine-requests.ts";
+import { EngineFailureKind, MessageFrom, StopReason } from "../../shared/engine-requests.ts";
 import { SessionCostLedger, sessionTotals, turnShare } from "./session-cost.ts";
 import { AccountId, accountsRoot, SubscriptionAccounts } from "./subscription-accounts.ts";
 

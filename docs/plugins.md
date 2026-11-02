@@ -788,8 +788,9 @@ twice when a call fails) and whether an editor process runs. Epic's `=== Critica
 banner, or no editor process on two looks in a row, ends the part at once, and nothing more reaches
 that editor: `part-result` answers `{state: "failed", crashed: true, error: "Unreal crashed while
 testing <Part>: <signal> in <frame>", crash: {signal, frames}}` (the top eight functions, no library,
-path or address; the frame named is the game module's first). The runner then calls `reopen-editor`
-(`editor-reopen.ts`): `{answering: true}` when Unreal answers, else `{started: true}` and a job that
+path or address; the frame named is the game module's first). `reopen-editor` (`editor-reopen.ts`,
+the `crash` hook's step, which a Loop's health watch fires) answers `{answering: true}` when Unreal
+answers, else `{started: true}` and a job that
 ends this project's leftover editor and crash reporter only (normal quit when it is the only editor,
 then `SIGTERM`, then `SIGKILL`; on Windows only the editors are listed, by WMI with their command
 lines, and each is ended with its process tree; the crash reporter is looked for on a Mac only), rebuilds the game's module with
@@ -2214,8 +2215,7 @@ from its hold and label.
 `needs` covers one call, never a job it leaves running: a tool that answers at once and works on
 in the background (the Unreal plugin's `add-cpp-module`, `reopen-editor`, `run-part`,
 `play-check`) lets its locks go as it answers, so another holder may take the editor while the job
-still closes, reopens or plays it. This is a known gap in "editor work waits its turn"; the Unreal
-runner covers adding C++ with its own wait (`whileAdding`).
+still closes, reopens or plays it. This is a known gap in "editor work waits its turn".
 
 The bundled locks: Unreal's `editor` (probe `editor-activity`: a play neither the agent nor the
 plugin's queue started) and Roblox Studio's `studio` (probe `studio-activity`: the person's

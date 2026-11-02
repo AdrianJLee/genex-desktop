@@ -124,12 +124,11 @@ clock a Resume keeps, and what a resumed run reads back) — and one session —
 chat's bookmark), and `lead-session-prompts.ts` (the chat's own session as lead, building in the integration worktree) — and a finished build reopened — `reopen.ts` (the journal
 the chat rewrites, where the run forks) and `reopen-prompts.ts` (its words) — the parts never import `director.ts`, which re-exports it) — and share
 primitives instead of copies of them: `git.ts` builds and runs every git command line (a
-conformance test finds no other), `health-check.ts` is the one health check (the host's `preview.observe`, in a window of its own), `build-turn.ts` is one
-build turn on either kind of engine, `config.ts` holds the shared waits and the light effort a
+conformance test finds no other), `health-check.ts` is the one health check (the host's `preview.observe`, in a window of its own),
+`config.ts` holds the shared waits and the light effort a
 bounded ask runs at (always "low", whatever role effort the user set), `model-roles.ts`
 `roleEffort` caps a worker's and a reviewer's effort at high (`WORKER_EFFORT_CEILING`, the app's
-copy in `shared/model-roles.ts`) while the lead keeps the user's, and `boundedEffort` holds a fixed
-effort to a lower one the user chose, `outcomes.ts` gives every stop a
+copy in `shared/model-roles.ts`) while the lead keeps the user's, `outcomes.ts` gives every stop a
 code beside its sentence (`stopCode`), `run-events.ts` writes a run's events and journal and
 logs a failed write to the harness's stderr, at most once a minute per kind, instead of dropping
 it. A seed upgrade keeps a file the
@@ -580,14 +579,12 @@ limit included; a refused reopen of a landed build keeps its outcome and the cha
 the run with words (a resume stays paused), and the refusals name what makes the project's Loop work
 in place (`openLoopBecause`). A resume goes on in its journal's profile (`resumedProfile`): a Loop that worked in place goes on in place whatever the folder reads as
 now; any other journal is a web Loop's, and on a folder that reads otherwise stays paused (a
-finished one's reopen is refused before any promise, and a Loop message starts the next Loop there), its journal untouched, and
-so does one the open setup can't pick up (`refuseResume`). A Loop in place runs no self-improvement pass, and Genex's `web.ready` gate reaches only a web
+finished one's reopen is refused before any promise, and a Loop message starts the next Loop there), its journal untouched;
+a run the Unreal runner paused (`kind: "unreal-lead"`) is such a journal. A Loop in place runs no self-improvement pass, and Genex's `web.ready` gate reaches only a web
 game's Loop. ∞ runs an open Loop until a reviewer accepts its finish, 24 hours at most: the lead may
 claim at any time, a lead that ended a turn rests, and a time-out with no yes closes in the Loop's own words with
 no reviewer asked. The chat's launch words and its launch promise describe the lead building in place, workers in
-copies and a reviewer checking its finish (`loop/open-loop-prompts.ts`). A run the Unreal runner
-from before the one Loop paused (`kind: "unreal-lead"`) is such a journal: refused on Resume, it
-stays paused. Through the real studio (`one-loop-projects.test.ts`), a Loop on the toy
+copies and a reviewer checking its finish (`loop/open-loop-prompts.ts`). Through the real studio (`one-loop-projects.test.ts`), a Loop on the toy
 plugin's project, and on a copy of that plugin with every tool renamed, runs the plugin's steps at its
 moments, its worker type and its observer, and ends on the lead's claim with no seed change; a Loop
 on a Godot folder with its plugin off runs with Genex's own tools, lends no window and writes no web file.
@@ -713,15 +710,13 @@ and `facet/phases/build.ts` only when the facet loop runs for a director; a clas
 builders carry none), so the host seats it in the mode of the chat the run was started in. A
 builder that waits on the person (a pending `tool_permission` row naming it, read by
 `loop/workers/questions.ts`) is told once in the run's log, which wakes `worker_wait`, and its
-line says `waitingForPerson`; a builder the chat has no room for yet (`too_many_workers`) waits for
-room until its deadline (`withWorkerRoom`) rather than failing its round, and a stop of it ends the
-wait before its turn. While the run's chat
+line says `waitingForPerson`. While the run's chat
 plans, the host holds its lead's writer starts and `worker_mark used` as for the chat's own
 session. The run's close stops its readers.
 
 A run's pool keeps its records in the run's own artifact (`run-workers-<run>`) and a copy's work on
-`refs/studio/runs/<run>/pool/<id>`; a resumed run opens it from that artifact on the first call
-naming one of its workers.
+`refs/studio/runs/<run>/pool/<id>`; the run opens it at its start, a resumed run from that
+artifact.
 Kept copies of the director's files from before this are in `SEED_CALL_CHANGES`.
 
 ## Acceptance evidence

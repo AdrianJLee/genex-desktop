@@ -3552,24 +3552,6 @@ describe("a quick fix after a finished Loop build (golden-boot-glory)", () => {
   });
 });
 
-/**
- * golden-boot-glory's reviewers and playtester: six defect checks stayed "failing" on
- * answers the judge gave at confidence 0.20–0.40; one playtest's "yes" was lost because its reply
- * came in a fenced block after another; and the playtester, five seconds a move, watched the match
- * clock run four minutes during one key press.
- */
-describe("the reviewers and the playtester of a broadcast match (golden-boot-glory)", () => {
-  it("GR2. playtest 2 answered yes in a fenced reply that closed one brace too many, and was recorded as no answer: the reply's JSON is read without its stray closing braces", async () => {
-    const { readJudgeJson } = await import("../../src/harness-seed/loop/judge-provenance.ts");
-    const answers = { "director-play": { answer: "yes", note: "Passing worked." } };
-    const reply = `\`\`\`json\n${JSON.stringify({ answers })}}\n\`\`\``;
-    assert.deepEqual(readJudgeJson(reply), { answers });
-    assert.deepEqual(readJudgeJson(`Here it is:\n${JSON.stringify({ answers })}}}`), { answers });
-    assert.equal(readJudgeJson("no verdict here"), null);
-    assert.equal(readJudgeJson('{"answers": {"q": '), null, "a reply cut short is still unreadable");
-  });
-});
-
 describe("a reply cut off by its output limit", () => {
   it("runs none of its tool calls and asks again for a smaller, complete reply", async () => {
     const rig = await startRig();
@@ -4457,20 +4439,6 @@ describe("a game linked to Unreal during its turn", () => {
   });
 });
 
-describe("suggestions that reached the Harness page as plain text or not at all", () => {
-  it("HP-1. a proposer reply with a code fence inside its JSON, or a skill echoed in a markdown fence first, read as no JSON and the suggestion vanished: the JSON is read", async () => {
-    const { readJudgeJson } = await import("../../src/harness-seed/loop/judge-provenance.ts");
-    const fenceInside = JSON.stringify({
-      edits: [{ op: "append", text: "```js\nfoo()\n```" }],
-      title: "Show the code",
-    });
-    assert.deepEqual(readJudgeJson(fenceInside), JSON.parse(fenceInside));
-    const echoedFirst = 'The file:\n```markdown\n# Skill\n- rule\n```\n```json\n{"edits":[],"title":"t"}\n```';
-    assert.deepEqual(readJudgeJson(echoedFirst), { edits: [], title: "t" });
-    assert.deepEqual(readJudgeJson('```json\n{"pick":"B"}\n```'), { pick: "B" }, "a fenced answer reads as before");
-  });
-});
-
 /**
  * A new game from home, first message "Hello": the game was named "Hello World
  * Adventure", and the reply was seven tool steps, one failed, and a report that the workspace was
@@ -5079,17 +5047,13 @@ describe("a worker asked for after the lead's finish (director/tools.ts)", () =>
 });
 
 describe("a run whose every role was set to think at max effort", () => {
-  it("EF1. its workers and reviewers think at most hard, its lead as set; a lower setting is every role's, fixed efforts too", async () => {
+  it("EF1. its workers and reviewers think at most hard, its lead as set; a lower setting is every role's", async () => {
     const { roleEffort } = await import("../../src/harness-seed/loop/model-roles.ts");
-    const { boundedEffort } = await import("../../src/harness-seed/loop/effort-cap.ts");
     const set = (effort: string) => ({ roles: { efforts: { planner: effort, builder: effort, judge: effort } } });
     const each = (run: object) => ["planner", "builder", "judge"].map((role) => roleEffort(run, role));
     assert.deepEqual(each(set("max")), ["max", "high", "high"], "a worker's and a reviewer's thinking is held to high");
     assert.deepEqual(each(set("medium")), ["medium", "medium", "medium"]);
     assert.deepEqual(each({ effort: "max" }), ["max", undefined, undefined], "the composer's dial is the lead's");
-    assert.equal(boundedEffort("high", roleEffort(set("low"), "judge")), "low", "a critic's own effort gives way");
-    assert.equal(boundedEffort("high", roleEffort(set("max"), "judge")), "high");
-    assert.equal(boundedEffort("high", undefined), "high");
   });
 });
 

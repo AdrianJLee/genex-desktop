@@ -724,10 +724,7 @@ its `genex.` and `unreal.` names checked, the test), `run-part` (queues a part t
 `part-result` (its state, then its shots, checks and `probes`), `rollback-part`, `reload-level`,
 `find-nodes` (the reference's nodes and the template Blueprints' casts and members) and
 `export-reference` (keeps the node reference and Python names per engine in the plugin's storage,
-then asks for `project.json`; that call failing fails nothing). The seed calls no part tool now:
-`check-part`, `blueprint-guide` and `find-nodes` are agents' tools, and the harness's `run-part`,
-`part-result`, `rollback-part`, `reload-level`, `export-reference`, `play-check` and
-`update-helper` have no caller. The harness's tools
+then asks for `project.json`; that call failing fails nothing). The harness's tools
 (`run-part`, `part-result`, `rollback-part`, `reload-level`, `export-reference`, `reopen-editor`,
 `editor-state`, `play-check`, `save-all`, `log-errors`, `end-editor`, `update-helper`,
 `editor-activity`, `hero-shots`, `open-for-run`, `wait-editor`, `engine-status`) are
@@ -891,9 +888,7 @@ moments above, its health watch asks `editor-state`, and `cpp-status` and `add-c
 tools for Unreal projects (`add-cpp-module` asks the person first, since it saves and restarts
 their editor; Plan's refusal in a planning chat as for any agent tool) that the lead calls itself;
 its brief says to call `restart` after C++ changes, which
-rebuilds through `reopen-editor`. The Unreal runner from before the one Loop is gone; a run it
-paused (`kind: "unreal-lead"`) is refused on Resume and stays paused, and its records stay readable
-on the Builds graph.
+rebuilds through `reopen-editor`.
 
 C++: `cpp-status` answers `{canCompile, xcode, platform, module,
 adding: {state: idle|adding|done|failed, error?, seconds?}}` (`cpp-tools.ts`). `add-cpp-module`

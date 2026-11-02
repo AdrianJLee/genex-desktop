@@ -1,10 +1,9 @@
 /**
- * The `lead-graph` fixture: two runs of the Unreal Loop's lead for the Builds graph to draw, in the
- * records the Unreal runner from before the one Loop wrote, which a game's history still holds. The
- * lead's milestones are columns, each save point a round it kept itself, its sub-agents parts with
- * their asset cards (a Blender model used in a save, a texture delivered and waiting, a cast that
- * failed), and the critic's advice on a round. One run finished; the other still runs, a milestone
- * and a sub-agent at work.
+ * The `lead-graph` fixture: two runs of an Unreal lead for the Builds graph to draw. The lead's
+ * milestones are columns, each save point a round it kept itself, its sub-agents parts with their
+ * asset cards (a Blender model used in a save, a texture delivered and waiting, a cast that failed),
+ * and the critic's advice on a round. One run finished; the other still runs, a milestone and a
+ * sub-agent at work.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -30,10 +29,10 @@ const RUNS = [
   ["fixture-lead-live", true],
 ] as const;
 
-/** A typed worker's part on the graph: this prefix and its id, as the Unreal runner wrote it. */
+/** A typed worker's part on the graph: this prefix and its id. */
 const AGENT_PREFIX = "agent-";
 
-/** The verdict source and the merge stage the lead's records carry (the seed's `VerdictSource.Lead`; the runner's editor stage). */
+/** The verdict source and the merge stage the lead's records carry (the seed's `VerdictSource.Lead`, an editor merge). */
 const LEAD_SOURCE = "lead";
 const EDITOR_STAGE = "editor";
 
@@ -46,7 +45,7 @@ interface LeadRun {
 
 /**
  * Seeds both runs once: a profile reused after its first start keeps them. `workerRecords`: each
- * typed worker also leaves the worker records the runner's lead wrote (`chat-workers` seeds
+ * typed worker also leaves the worker records every lead's worker leaves (`chat-workers` seeds
  * these runs so in a game of their own), which draw the run as a tree.
  */
 export async function seedLeadGraph(
@@ -77,9 +76,8 @@ const TYPED_WORKER_END: Readonly<Record<string, WorkerEnd>> = {
 };
 
 /**
- * The worker record the Unreal runner's lead wrote beside a typed worker's `director_worker`, and its
- * `merged` end once a save point took in work it used. The lead's own columns (`lead`,
- * `lead-<milestone>`) leave none.
+ * The worker record beside a typed worker's `director_worker`, and its `merged` end once a save
+ * point takes in work it used. The lead's own columns (`lead`, `lead-<milestone>`) leave none.
  */
 function typedWorkerRecord(lead: LeadRun, data: EventData): EventData[] {
   const record = customRecord(data);
@@ -299,7 +297,6 @@ async function finished(lead: LeadRun): Promise<EventData[]> {
       landed: true,
       stoppedBecause: "time-up",
       executionStatus: ExecutionStatus.Completed,
-      // The close sentence the Unreal runner wrote.
       summary:
         "3 save points; the last, Katana in hand: the combo with the katana attached. 2 workers delivered, 1 used in the game; 1 didn't deliver.",
     }),

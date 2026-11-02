@@ -2,8 +2,8 @@
  * Which Loop a run gets, through the run's start as the chat and Resume reach it: a project that
  * isn't a web game runs the one Loop on an engine that keeps a session and is told, before anything
  * is promised, that it needs one otherwise; classic and the gauntlet stay a web game's; a paused
- * Loop on an Unreal game goes on in the one Loop, and a run the Unreal runner from before paused is
- * refused; a finished one Loop starts the next; and the chat describes the one Loop truthfully.
+ * Loop on an Unreal game goes on in the one Loop; a finished one Loop starts the next; and the chat
+ * describes the one Loop truthfully.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -14,7 +14,6 @@ import { launchFromIntake, startsNextOpenLoop } from "../../src/harness-seed/loo
 import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { launchRules } from "../../src/harness-seed/loop/launch-prompts.ts";
-import { EngineId } from "../../src/harness-seed/loop/model-roles.ts";
 import { OPEN_LAUNCH_WORDS, OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
@@ -45,13 +44,9 @@ const DIRECT_WITH_SESSIONS = { id: "bonsai", label: "Bonsai", kind: "direct", su
 
 /** What Genex finds in a Godot project's folder that makes its Loop work in place, as the refusals name it. */
 const GODOT_FOUND = "godot-project at the folder's root";
-/** What Genex finds in an Unreal project's folder, as the refusals name it. */
-const UNREAL_FOUND = "unreal-project at the folder's root";
 /** The words a refused Loop on a direct engine closes with (flipped in phase 5: any Loop needs a session, and the chat goes on). */
 const NEEDS_SESSION =
   "A Loop on this project (Genex finds godot-project at the folder's root) needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); Ollama doesn't, so nothing was built. The chat still answers here.";
-const OTHER_LOOP =
-  "This Loop was paused as another kind of Loop than this project reads as now, so it can't go on now. It stays paused: once the project reads as it did, Resume picks it up.";
 
 let runs = 0;
 
@@ -74,33 +69,6 @@ const finishes: LoopTurn = async ({ tool }) => {
 /** The lead delegations that worked in place, as the one Loop's do. */
 const inPlaceLeads = (host: LoopHost) =>
   host.leadCalls().filter((call) => (call.director as { inPlace?: unknown } | undefined)?.inPlace === true);
-
-/** The Unreal runner's paused journal: two save points, 40 of 180 minutes worked, one reviewer's no. */
-function olderJournal(host: LoopHost): Record<string, unknown> {
-  const point = (label: string, snapshotId: string, auto: boolean) => ({
-    label,
-    snapshotId,
-    summary: `the ${label.toLowerCase()} room`,
-    auto,
-    at: 1,
-    thumbnails: [],
-    milestoneId: "lead",
-    round: 1,
-  });
-  return {
-    kind: "unreal-lead",
-    phase: "paused",
-    run: { ...host.run, budgets: { wallClockMs: 3 * HOUR, completionPolicy: "duration" } },
-    seat: { folder: host.dir },
-    sessionId: "unreal-lead-session",
-    workedMs: 40 * MINUTE,
-    savePoints: [point("One", "snap-old-1", false), point("Two", "snap-old-2", true)],
-    finishTally: { round: 1, rejections: 1, checking: false, reasons: ["the door does not open"] },
-    digest: { heardOwner: [], toldAgents: [], toldCritiques: 0, carried: ["Unreal reopened."], jobs: [], lastAt: null },
-    credits: { spent: 120, cap: 600 },
-    savedAt: new Date(0).toISOString(),
-  };
-}
 
 describe("which Loop a run gets", () => {
   it("a Loop on a project that isn't a web game runs the one Loop", TEST_TIMEOUT, async () => {
@@ -231,28 +199,13 @@ describe("kept older parts, finished Loops and the chat's words", () => {
     );
     const unreal = launchRules("claude-code", unlimited, GameEngine.Unreal, LoopProfile.Open).join("\n");
     // Flipped (phase 5): no launch words tell the agent how to write a goal (the look first).
-    assert.doesNotMatch(unreal, /look first/);
+    assert.match(unreal, /with the goal in the user's words/);
+    assert.doesNotMatch(unreal, /look first|before mechanics|list of features/);
     assert.doesNotMatch(unreal, /builder|judge/i);
-  });
-
-  it("the chat tells an Unreal game's Loop it is one lead building the whole game in the open editor with small helpers, not parts written in parallel", () => {
-    const rules = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot", hours: 3 }, GameEngine.Unreal);
-    const said = rules.join("\n");
-    assert.match(said, /one lead works in the open Unreal editor, with helpers in copies of the game/);
-    assert.doesNotMatch(said, /in parallel|as parts|one at a time/);
-    const open = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot" }, GameEngine.Unreal).join("\n");
-    assert.doesNotMatch(open, /judges/, "no judge decides an Unreal run's end");
-    const web = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot", hours: 3 }).join("\n");
-    assert.doesNotMatch(web, /look first/);
-  });
-
-  // Flipped (phase 5): the chat is not told how to write a goal (the look first, before mechanics).
-  it("the chat asks an Unreal game's Loop for the goal in the user's words, with no rule about the look", () => {
-    const said = launchRules(EngineId.ClaudeCode, { toolName: "start_autopilot", hours: 3 }, GameEngine.Unreal).join(
-      "\n",
-    );
-    assert.match(said, /with the goal in the user's words/);
-    assert.doesNotMatch(said, /look first|before mechanics|list of features/);
+    // An Unreal game its caller names no Loop for: one lead in the open editor, never parts in parallel.
+    const unnamed = launchRules("claude-code", { toolName: "start_autopilot", hours: 3 }, GameEngine.Unreal).join("\n");
+    assert.match(unnamed, /one lead works in the open Unreal editor, with helpers in copies of the game/);
+    assert.doesNotMatch(unnamed, /in parallel|as parts|one at a time|judges|look first/);
   });
 });
 
@@ -299,53 +252,21 @@ describe("the chat's launch tool", () => {
 
 describe("a paused Loop's journal, read at its start", () => {
   it(
-    "a run the Unreal runner paused is refused on Resume like any journal the one Loop did not write, both where it is refused: it stays paused, its journal untouched, and nothing of the project runs",
+    "a paused web Loop resumed while its folder reads otherwise stays paused, its journal and report untouched",
     TEST_TIMEOUT,
     async () => {
-      const outcomes: Array<Record<string, unknown>> = [];
-      for (const how of ["in place", "at dispatch"] as const) {
-        const host = await hostOn(Project.UnrealGame, { facts: UNREAL, turns: [finishes] });
-        const journal = olderJournal(host);
-        host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
-        if (how === "in place") await host.start({ resume: true });
-        else await host.dispatch({ resume: true });
-        const [closed] = host.appended("run_finished");
-        outcomes.push({
-          how,
-          words: closed?.stoppedBecause,
-          status: closed?.executionStatus,
-          journalKept: JSON.stringify(host.artifacts.get(`autopilot_${host.run.runId}`)) === JSON.stringify(journal),
-          touched: ["snapshot.create", "snapshot.restore", "checkpoint.take", "hooks.fire", "engine.delegate"].filter(
-            (method) => host.rec.paramsOf(method).length > 0,
-          ),
-        });
-      }
-      const kept = { status: "paused", journalKept: true, touched: [] };
-      assert.deepEqual(outcomes, [
-        { how: "in place", words: OTHER_LOOP, ...kept },
-        { how: "at dispatch", words: OPEN_LOOP_REFUSAL.webElsewhere(UNREAL_FOUND), ...kept },
-      ]);
-    },
-  );
-
-  it(
-    "a paused web Loop resumed while its folder reads otherwise stays paused, its journal and report untouched, both where it is refused",
-    TEST_TIMEOUT,
-    async () => {
-      const outcomes: Array<Record<string, unknown>> = [];
-      for (const how of ["in place", "at dispatch"] as const) {
-        const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
-        const journal = {
-          runId: host.run.runId,
-          run: host.run,
-          director: { baseCommit: "abc", integrationHead: "def", workers: {}, notes: [] },
-        };
-        host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
-        if (how === "in place") await host.start({ resume: true });
-        else await host.dispatch({ resume: true });
-        const [closed] = host.appended("run_finished");
-        outcomes.push({
-          how,
+      const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
+      const journal = {
+        runId: host.run.runId,
+        run: host.run,
+        director: { baseCommit: "abc", integrationHead: "def", workers: {}, notes: [] },
+      };
+      host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
+      await host.dispatch({ resume: true });
+      const [closed] = host.appended("run_finished");
+      // A refusal keeps the run's record as it came: no credit cap of a Loop it never ran.
+      assert.deepEqual(
+        {
           words: closed?.stoppedBecause,
           status: closed?.executionStatus,
           paused: host.appended("autopilot_paused").length,
@@ -353,14 +274,17 @@ describe("a paused Loop's journal, read at its start", () => {
           report: host.rec.paramsOf("run.artifact").some((params) => params.name === "report.json"),
           leads: host.leadCalls().length,
           cap: (host.appended("run_started")[0]?.budgets as Record<string, unknown> | undefined)?.creditCap,
-        });
-      }
-      // A refusal keeps the run's record as it came: no credit cap of a Loop it never ran.
-      const kept = { status: "paused", paused: 1, journalKept: true, report: false, leads: 0, cap: undefined };
-      assert.deepEqual(outcomes, [
-        { how: "in place", words: OTHER_LOOP, ...kept },
-        { how: "at dispatch", words: OPEN_LOOP_REFUSAL.webElsewhere(GODOT_FOUND), ...kept },
-      ]);
+        },
+        {
+          words: OPEN_LOOP_REFUSAL.webElsewhere(GODOT_FOUND),
+          status: "paused",
+          paused: 1,
+          journalKept: true,
+          report: false,
+          leads: 0,
+          cap: undefined,
+        },
+      );
     },
   );
 

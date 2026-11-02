@@ -17,6 +17,7 @@ import {
   FinishCheckState,
   GraphNodeKind,
   healthPicture,
+  type IterationNode,
   type LeadNode,
   lastGraphKey,
   type RunGraph,
@@ -291,6 +292,18 @@ describe("old runs draw as they did", () => {
       ["agent-sound-1", [["session:agent-sound-1", "building", false, "Sound: Blade swings"]]],
     ]);
     assert.equal(done.tree || live.tree, false);
+    // The critic's advice sits on the round it looked at, and is never a verdict.
+    for (const graph of [done, live]) {
+      const looked = graph.nodes.find(
+        (node): node is IterationNode => node.kind === GraphNodeKind.Iteration && node.facetId === "lead-atmosphere",
+      );
+      assert.deepEqual(
+        looked?.advice?.defects.map((item) => item.fix),
+        ["Lift the fog's far colour toward grey-blue", "Add slow spray in the lighthouse beam"],
+      );
+      assert.equal(looked?.verdict, null);
+      assert.deepEqual(graph.verdicts, [], "no verdict was recorded");
+    }
   });
 
   it("the build-graph dev fixture keeps its nodes and its rows", async () => {

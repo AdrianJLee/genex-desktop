@@ -184,8 +184,6 @@ export interface OpenLoop {
   journal: OpenJournal;
   /** Why the Loop pauses (the app could not be brought back), once it must; null while it runs. */
   halted: string | null;
-  /** Why the Loop stays paused before its first turn (a paused run's journal of another kind of Loop); null when it runs. */
-  refused: string | null;
   /** The save point count when the lead's turn under way began: a turn that saved none is autosaved. */
   turnSavedFrom: number;
   /** The lead's last turn did something (`between.ts`): it was no idle turn. */

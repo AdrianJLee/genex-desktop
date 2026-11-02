@@ -107,7 +107,6 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     hookEvents: game.hookEvents,
     journal,
     halted: null,
-    refused: null,
     turnSavedFrom: journal.savePoints.length,
     turnWorked: false,
     turnMark: null,

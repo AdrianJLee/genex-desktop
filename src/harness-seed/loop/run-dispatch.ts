@@ -529,7 +529,7 @@ function profileOf(games: readonly GameProject[], project: string): LoopProfile 
 /**
  * The profile a resumed run goes on in: its own journal's, never the folder's now. A Loop that worked
  * in place (`director.open`) goes on in place whatever the folder reads as; any other journal (the
- * director's, classic Autopilot's, the Unreal runner's from before) is a web Loop's. Null with no
+ * director's, classic Autopilot's) is a web Loop's. Null with no
  * journal: the folder decides. A journal the host can't read throws, as the runner's own read does:
  * read as none, the folder would decide, and the run would resume from a journal of the other kind.
  */

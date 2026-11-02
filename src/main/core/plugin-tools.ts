@@ -143,7 +143,7 @@ const PLAN_ANSWER = { consent: "declined", blocker: PluginCallBlocker.PlanMode, 
  * The answer, never an error, of a plugin call whose lock was not given in time: like a declined
  * consent. `hold` is Genex's typed hold, which the harness words the person's line from.
  */
-export const lockAnswer = (refused: LockRefused) =>
+const lockAnswer = (refused: LockRefused) =>
   ({
     consent: "declined",
     blocker: PluginCallBlocker.Lock,

@@ -348,10 +348,8 @@ host's own records say the run was started in, and the grant's chat if it names 
 any of them planning holds it, and a run whose chat the host cannot find holds it with that reason.
 A run's own workers (the director's builders, the run pool's) that wait on the
 person are read from the chat's log too (`loop/workers/questions.ts`): their lead's status says so
-and its `worker_wait` wakes. A run's builder and the director's single worker
-refused for room under the Settings ceiling wait for room until their deadline
-(`withWorkerRoom`); a pool's worker so refused ends with the host's words, and its lead may wait
-(`worker_wait`) and start it again.
+and its `worker_wait` wakes. A pool's worker refused for room under the Settings ceiling ends with
+the host's words, and its lead may wait (`worker_wait`) and start it again.
 
 Its questions go to the chat ([`chat-permissions.ts`](../src/main/core/chat-permissions.ts)
 `forWorker`, `#workerAsk`): a chat closed since denies at once, Bypass allows one running in another

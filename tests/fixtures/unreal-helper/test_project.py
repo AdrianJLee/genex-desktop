@@ -13,8 +13,7 @@ from support import HelperCase
 BLUEPRINTS = '/Game/VehicleTemplate/Blueprints'
 MODE_CLASS = f'{BLUEPRINTS}/BP_VehicleAdvGameMode.BP_VehicleAdvGameMode_C'
 CAR_CLASS = f'{BLUEPRINTS}/OffroadCar/BP_VehicleAdvOffroadCar.BP_VehicleAdvOffroadCar_C'
-# The file export_project writes for the scene below, exactly; the seed's projectFacts reads the same
-# file in tests/conformance/unreal-project-facts.test.ts, so both sides agree on its shape.
+# The file export_project writes for the scene below, exactly.
 SHARED_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'project-facts.json')
 
 

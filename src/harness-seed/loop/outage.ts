@@ -61,11 +61,6 @@ export const StopReason = {
 } as const;
 export type StopReason = (typeof StopReason)[keyof typeof StopReason];
 
-/** Is this failure an engine's own limit — its session limit or its usage cap — rather than a fault? */
-export function isEngineLimit(kind: unknown): boolean {
-  return kind === EngineFailure.RateLimit || kind === EngineFailure.UsageLimit;
-}
-
 /** An engine's limit as a run keeps it: which one, what the engine said, when it resets and when it hit. */
 export interface EngineLimit {
   kind: string;
@@ -74,7 +69,7 @@ export interface EngineLimit {
   at: number;
 }
 
-/** The limit an engine error names (`isEngineLimit(err.kind)`), as a run keeps it. */
+/** The limit an engine error names (its session limit or its usage cap), as a run keeps it. */
 export function engineLimitOf(err: any, at = Date.now()): EngineLimit {
   return {
     kind: err.kind,

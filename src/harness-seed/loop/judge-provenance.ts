@@ -13,7 +13,6 @@ import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 import { EngineId } from "./model-roles.ts";
 import { isPlainRecord } from "./json.ts";
-import type { AnyRecord } from "../types/harness.d.ts";
 
 /**
  * Who asked for a direct model call (`provenance.role` on `engine.complete`, recorded on the
@@ -45,8 +44,6 @@ export const JUDGE_PIN_FILE = path.join("judge", "pin.json");
 const JUDGE_PIN_MAX_BYTES = 4096;
 /** A model id as a pin may name it: an id, never a sentence or a path outside the id's own shape. */
 const PINNED_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/;
-/** How many closing braces a judge's JSON may carry past its end and still be read (`readJudgeJson`). */
-const STRAY_BRACES = 3;
 
 /** The engine and model every verdict is asked of, and whether a failing judge may fall back. */
 export interface JudgePin {
@@ -74,48 +71,6 @@ export function promptSha256(text: string): string {
 /** The placement a shuffle chose: the challenger shown as A, or as B. */
 export function placementOf(challengerIsA: boolean): JudgePlacement {
   return challengerIsA ? JudgePlacement.ChallengerA : JudgePlacement.ChallengerB;
-}
-
-/** Every fenced block's body, in reply order. */
-const FENCED_BLOCK = /```[^\n`]*\n?([\s\S]*?)```/g;
-
-/**
- * The JSON object a judge's reply carries, tolerating prose and a fence around it, and a few stray
- * closing braces after it (golden-boot-glory: a playtester's "yes" closed with one too many and was
- * recorded as no answer); null when there is none. The first fence is read first, as it always
- * was; then the whole reply, for a JSON answer whose own text carries a fence, and each later
- * fence, for a reply that echoed a file in a fence before its answer.
- */
-export function readJudgeJson(text: string): AnyRecord | null {
-  const first = /```(?:json)?\s*([\s\S]*?)```/.exec(text)?.[1] ?? text;
-  const fenced = [...text.matchAll(FENCED_BLOCK)].map((match) => match[1] ?? "");
-  for (const candidate of [first, text, ...fenced]) {
-    const parsed = objectIn(candidate);
-    if (parsed) return parsed;
-  }
-  return null;
-}
-
-/** The object from the first `{` of `candidate` to its last `}`, or to one of the few before it, when that is JSON. */
-function objectIn(candidate: string): AnyRecord | null {
-  const start = candidate.indexOf("{");
-  let end = candidate.lastIndexOf("}");
-  for (let tries = 0; start >= 0 && end > start && tries <= STRAY_BRACES; tries++) {
-    const parsed = parsedRecord(candidate.slice(start, end + 1));
-    if (parsed) return parsed;
-    end = candidate.lastIndexOf("}", end - 1);
-  }
-  return null;
-}
-
-/** A plain JSON object, or null for anything else or text that is not JSON. */
-function parsedRecord(text: string): AnyRecord | null {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return isPlainRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
 }
 
 const isEngineId = (value: unknown): value is EngineId =>

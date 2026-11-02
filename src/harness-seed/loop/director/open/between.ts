@@ -93,7 +93,7 @@ const over = (loopRun: LoopRun, open: OpenLoop): boolean =>
   Boolean(loopRun.state.finish) ||
   closeUnderWay(loopRun.state) ||
   loopRun.ctx.cancelled === true ||
-  Boolean(open.halted || open.refused);
+  Boolean(open.halted);
 
 /** A line the lead's next message carries. */
 const carry = (open: OpenLoop, line: string): void => {

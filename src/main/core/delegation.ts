@@ -553,10 +553,9 @@ const directorWindowed = (seat: DelegationSeat): boolean => !seat.leadsInPlace &
 
 /**
  * The run whose own consent may cover this session's calls to its game's engine connector: an
- * honoured director grant for this very game, seated in the game's own folder — a Loop's lead in
- * place, or the Unreal runner's unattended lead. Never a worktree run's lead (it acts on the
- * worktree it leads), a worker or the chat's own session. Whether
- * the run still covers a call is asked at the call.
+ * honoured director grant for this very game, seated in the game's own folder (a Loop's lead in
+ * place). Never a worktree run's lead (it acts on the worktree it leads), a worker or the chat's own
+ * session. Whether the run still covers a call is asked at the call.
  */
 function liveRunOf(p: DelegateParams, director: DirectorGrant | null, seat: DelegationSeat): string | null {
   const leadsWorktree = seat.leads !== null && !seat.leadsInPlace;
@@ -2686,7 +2685,7 @@ export class DelegationService {
   }
 
   /**
-   * The run-consent rule: the Unreal lead's call needs no card while its run is going (held awake
+   * The run-consent rule: a lead in place's call needs no card while its run is going (held awake
    * by the harness, and running by its records), the run is this game's and was started in the chat
    * the delegation names (`#runOfChat`), and the connector is the game's engine plugin's. That
    * chat's Plan mode refuses before this.

@@ -24,7 +24,7 @@ import { loopSkills } from "./loop-skills.ts";
 import { closeRunPool } from "./workers/run-pool.ts";
 import { leadsOpenLoop } from "./director/open/active-work.ts";
 import { briefWriter } from "./director/open/brief.ts";
-import { closeInPlace, refuseResume } from "./director/open/close.ts";
+import { closeInPlace } from "./director/open/close.ts";
 import { MESSAGE as OPEN_END, openEndWords, timeUpWithoutYes } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
 import { creditCapOf, OPEN_WALL_CLOCK, restartsApp } from "./director/open/contract.ts";
@@ -495,11 +495,6 @@ export async function runDirector(
     { threadId, run, resume, ...(open ? { profile, clock } : {}) },
     LOOP_RUN_MODULES,
   );
-  const refused = loopRun.open?.refused;
-  if (refused) {
-    await refuseResume(loopRun, refused);
-    return loopRun.report;
-  }
   tracing = loopRun;
   loopRun.sleep = clock.sleep;
   keepTimings(loopRun, timings);

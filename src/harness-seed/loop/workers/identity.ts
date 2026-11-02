@@ -1,15 +1,12 @@
 /**
  * Genex's identity for a run's workers (`appIdentity`): the run's game folder and what it holds, the
- * first thing every builder, base builder, Unreal worker and pool worker of the run is told.
+ * first thing every builder, base builder and pool worker of the run is told.
  */
 import { CoreFact, type FactRef } from "../folder-facts.ts";
 import { appIdentity } from "../project-prompts.ts";
 
 /** The game a director builds when its run found no facts: a web game at the folder's root. */
 export const WEB_AT_ROOT: readonly FactRef[] = [{ id: CoreFact.WebGame, path: "." }];
-
-/** The game an Unreal lead and its workers build when nothing else is known: an Unreal project at the folder's root. */
-export const UNREAL_AT_ROOT: readonly FactRef[] = [{ id: CoreFact.UnrealProject, path: "." }];
 
 /**
  * The folder a brief names: the last two parts of the game's folder, `/`-joined on every platform

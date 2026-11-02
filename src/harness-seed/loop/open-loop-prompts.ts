@@ -50,9 +50,6 @@ export const OPEN_LOOP_REFUSAL = {
   /** The list of projects could not be read, so nothing tells which Loop the project needs. */
   gamesUnreadable:
     "Genex couldn't read the list of projects, so it can't tell which kind of Loop this project needs; nothing was built or changed. Try again in a moment.",
-  /** A paused Loop of another kind (a web game's, before the project read as another kind): it stays paused. */
-  otherLoop:
-    "This Loop was paused as another kind of Loop than this project reads as now, so it can't go on now. It stays paused: once the project reads as it did, Resume picks it up.",
   /** A paused Loop's journal could not be read, so nothing tells how it goes on. */
   journalUnreadable:
     "Genex couldn't read this Loop's journal, so it can't tell how the Loop goes on; nothing was built. It stays paused: Resume tries again.",

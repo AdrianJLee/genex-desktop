@@ -414,9 +414,7 @@ sandbox-setup (the window opens on "Set up the protected workspace" for a Linux 
 bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]` opens the studio) and
 agents-start-failed (the open studio's sidebar says "Agents didn't start", `[data-agents-start]`, with
 a stand-in srt-win timeout under its details; Try again clears it) and update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
-itself is refused as native) and plugin-updates (Genex and Blender installed one version back: their
-rows and pages offer `Update to <version>` and the sidebar `[data-plugins-update]`, each refused as
-native) and unreal-game (the game linked to a stand-in Unreal project inside
+itself is refused as native) and unreal-game (the game linked to a stand-in Unreal project inside
 its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card with a
 stand-in viewport shot from one finished run, and the steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
 and unreal-chat (a short synthetic Unreal chat, `tests/fixtures/unreal-chat/sample-chat.json`:

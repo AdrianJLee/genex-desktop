@@ -608,8 +608,7 @@ interface Unlisted {
  * server gets the bare token from `credential()` instead.
  */
 const CREDENTIAL_FILE_VARIABLE = "GENEX_TOKEN";
-const newerVersion = (next: string | undefined, current: string) =>
-  !!next &&
+const newerVersion = (next: string, current: string) =>
   next
     .split(".")
     .some(
@@ -617,6 +616,11 @@ const newerVersion = (next: string | undefined, current: string) =>
         Number(part) > Number(current.split(".")[i]) &&
         parts.slice(0, i).every((n, j) => Number(n) === Number(current.split(".")[j])),
     );
+/** Whether this build's seed replaces an installed copy: an older version of a bundled plugin the person did not remove. */
+const seedSupersedes = (seed: PluginManifest, installed: Installed): boolean =>
+  installed.source === PluginSourceKind.Bundled &&
+  !installed.removed &&
+  newerVersion(seed.version, installed.manifest.version);
 /**
  * What the host needs to launch one plugin's MCP servers. Everything here is a function: the
  * storage root, the settings and above all the credential are read at launch, so a disabled
@@ -695,10 +699,10 @@ function withoutSeedDependencies(seed: string): (source: string) => boolean {
 export const PluginInitStep = {
   /** The saved install records read and checked. */
   Records: "records",
-  /** One bundled seed copied into the profile (a first launch, or a lost copy); named with its plugin. */
-  Seed: "seed",
   /** Updates that waited for a lease applied. */
   Pending: "pending",
+  /** One bundled seed copied into the profile (a first launch, a lost copy, or an older one); named with its plugin. */
+  Seed: "seed",
   /** The records written back. */
   Saved: "saved",
   /** Copies no record names removed. */
@@ -1021,37 +1025,48 @@ export class PluginRegistry {
       this.#refuse(id, p, e);
     }
   }
-  /** Record every bundled seed's manifest, and install a copy of any seed this profile does not have yet. */
+  /**
+   * Record every bundled seed's manifest, and install a copy of the seed where the profile has no
+   * copy, lost its copy, or holds an older version the person did not remove: a bundled plugin runs
+   * as the build that ships it; a removed one stays removed.
+   */
   async #installSeeds() {
     const bundled: PluginSource = { kind: PluginSourceKind.Bundled };
     for (const name of await readdir(this.seeds).catch(() => [])) {
       const directory = path.join(this.seeds, name);
       const manifest = validateManifest(JSON.parse(await readFile(path.join(directory, "plugin.json"), "utf8")));
-      this.#seedManifests.set(manifest.id, manifest);
-      this.#seedDirectories.set(manifest.id, directory);
-      if (this.#installed.has(manifest.id)) continue;
+      const id = manifest.id;
+      this.#seedManifests.set(id, manifest);
+      this.#seedDirectories.set(id, directory);
+      const installed = this.#installed.get(id);
+      const previous = installed ?? this.#lostSeedCopies.get(id);
+      this.#lostSeedCopies.delete(id);
+      if (installed && !seedSupersedes(manifest, installed)) continue;
       await inspectPackage(directory);
-      const installed = path.join(this.#packages(), manifest.id, `${manifest.version}-${randomUUID()}`);
-      await mkdir(path.dirname(installed), { recursive: true });
+      const copy = path.join(this.#packages(), id, `${manifest.version}-${randomUUID()}`);
+      await mkdir(path.dirname(copy), { recursive: true });
       // A clone where the disk can (APFS): every profile installs every seed, and a copy is written only once edited.
-      await cp(directory, installed, {
+      await cp(directory, copy, {
         recursive: true,
         filter: withoutSeedDependencies(directory),
         mode: constants.COPYFILE_FICLONE,
       });
-      this.onInitStep?.(PluginInitStep.Seed, manifest.id);
-      const lost = this.#lostSeedCopies.get(manifest.id);
-      this.#lostSeedCopies.delete(manifest.id);
-      this.#installed.set(manifest.id, {
-        rememberAccount: lost?.rememberAccount,
-        directory: installed,
+      this.onInitStep?.(PluginInitStep.Seed, id);
+      this.#errors.delete(id);
+      const p: Installed = {
+        rememberAccount: previous?.rememberAccount,
+        directory: copy,
         manifest,
         source: PluginSourceKind.Bundled,
-        enabled: lost ? lost.enabled : this.seedEnabled[manifest.id] !== false,
+        enabled: previous ? previous.enabled : this.seedEnabled[id] !== false,
         removed: false,
         origin: { kind: PluginSourceKind.Bundled },
         identity: pluginIdentity(manifest, bundled),
-      });
+      };
+      if (previous?.turnedOff) p.turnedOff = true;
+      // A seed laid over an older copy is an update: the Plugins page says which skills it changed.
+      p.lastSkillChange = previous ? pluginSkillChange(previous, p) : undefined;
+      this.#installed.set(id, p);
     }
     // A lost copy of a plugin Studio no longer ships has nothing to be copied from.
     for (const [id, p] of this.#lostSeedCopies) this.#refuse(id, p, new Error(MESSAGE.PackageMissing()));
@@ -1080,10 +1095,11 @@ export class PluginRegistry {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     for (const [id, p] of Object.entries(await this.#readRecords("installed.json"))) await this.#loadInstalled(id, p);
     step(PluginInitStep.Records);
-    await this.#installSeeds();
+    // The last run's waiting updates first, so this build's seed is laid over whatever they leave.
     await this.#applyPending();
     await atomicWriteJson(path.join(this.root, "pending.json"), {});
     step(PluginInitStep.Pending);
+    await this.#installSeeds();
     await this.#save();
     step(PluginInitStep.Saved);
     await this.#sweep();
@@ -1207,12 +1223,6 @@ export class PluginRegistry {
     if (this.#processes.has(id)) return PluginHealth.Ready;
     return isLive(p) ? PluginHealth.Idle : PluginHealth.Stopped;
   }
-  /** A newer bundled seed a bundled plugin could update to. */
-  #availableVersion(id: string, p: Installed): string | undefined {
-    if (p.source !== PluginSourceKind.Bundled || p.removed) return undefined;
-    const seed = this.#seedManifests.get(id)?.version;
-    return newerVersion(seed, p.manifest.version) ? seed : undefined;
-  }
   list(): PluginInfo[] {
     const installed = [...this.#installed].map(
       ([id, p]): PluginInfo => ({
@@ -1223,7 +1233,6 @@ export class PluginRegistry {
         health: this.#health(id, p),
         error: this.#errors.get(id),
         pendingVersion: this.#pending.get(id)?.manifest.version,
-        availableVersion: this.#availableVersion(id, p),
         state: isLive(p) ? "enabled" : "disabled",
         origin: p.origin,
         scan: p.scan,

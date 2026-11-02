@@ -4,8 +4,9 @@
  * index then, at the bootstrap, when the page opens and every hour. A failed read keeps the last
  * answer.
  *
- * A plugin's update comes from one of two places (`PluginUpdateSource`): `pluginUpdates` lists
- * them, `installPluginUpdate` installs one, and the store's `updateAll` installs them all.
+ * A plugin's update is a newer release in the plugin index: `pluginUpdates` lists them,
+ * `installPluginUpdate` installs one, and the store's `updateAll` installs them all. A bundled
+ * plugin has none: it updates with Studio at launch.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { HOUR_MS } from "../../shared/duration.ts";
@@ -18,20 +19,10 @@ import { createRefresher } from "./refresher.ts";
 /** How often the index is asked for again. Main keeps its own copy for hours, so most asks cost no download. */
 export const PLUGIN_INDEX_POLL_MS = HOUR_MS;
 
-/** Where a plugin's newer version comes from, which decides the call that installs it. */
-export const PluginUpdateSource = {
-  /** A newer copy of a bundled plugin, shipped with this build of the app. */
-  Seed: "seed",
-  /** A newer release in the plugin index. */
-  Index: "index",
-} as const;
-export type PluginUpdateSource = (typeof PluginUpdateSource)[keyof typeof PluginUpdateSource];
-
 /** A newer version an installed plugin can move to. */
 export interface PluginUpdate {
   plugin: PluginInfo;
   version: string;
-  source: PluginUpdateSource;
 }
 
 /** How the last run of Update plugins ended: the updates that failed, and the ones turned down in a trust dialog. */
@@ -77,14 +68,13 @@ export const updatesRunEnded = (state: PluginsState, lastRun: UpdatesRunEnd): Pl
   lastRun,
 });
 
-/** The update one installed plugin can take: its newer seed, else the index's newer release. */
+/** The update one installed plugin can take: the index's newer release. */
 function updateOf(plugin: PluginInfo, releases: ReadonlyMap<string, string>): PluginUpdate | null {
   // An update already installed waits for active sessions; removed or unlisted code is installed, not updated.
   const offered = !plugin.pendingVersion && !plugin.removed && !plugin.unlisted;
   if (!offered) return null;
-  if (plugin.availableVersion) return { plugin, version: plugin.availableVersion, source: PluginUpdateSource.Seed };
   const release = releases.get(plugin.manifest.id);
-  return release ? { plugin, version: release, source: PluginUpdateSource.Index } : null;
+  return release ? { plugin, version: release } : null;
 }
 
 /** The updates waiting for the installed plugins, in the installed order. */
@@ -102,16 +92,11 @@ export function chosenUpdates(updates: readonly PluginUpdate[], skipped: Readonl
 }
 
 /**
- * Install one update. For an index release main shows the plugin's trust dialog first, and a "no"
- * there rejects as the person's (`isUserCancelled`). A seed installs without asking.
+ * Install one update. Main shows the plugin's trust dialog first, and a "no" there rejects as the
+ * person's (`isUserCancelled`).
  */
-export function installPluginUpdate(
-  api: Pick<StudioApi, "pluginInstall" | "pluginUpdate">,
-  update: PluginUpdate,
-): Promise<void> {
-  const { id } = update.plugin.manifest;
-  // A seed has no index entry: it is installed again, through the same path as its first install.
-  return update.source === PluginUpdateSource.Seed ? api.pluginInstall(id) : api.pluginUpdate(id);
+export function installPluginUpdate(api: Pick<StudioApi, "pluginUpdate">, update: PluginUpdate): Promise<void> {
+  return api.pluginUpdate(update.plugin.manifest.id);
 }
 
 /**
@@ -141,7 +126,7 @@ export interface PluginsStore extends StoreApi<PluginsState> {
 }
 
 export function createPluginsStore(
-  api: Pick<StudioApi, "pluginsList" | "pluginsIndex" | "pluginInstall" | "pluginUpdate">,
+  api: Pick<StudioApi, "pluginsList" | "pluginsIndex" | "pluginUpdate">,
 ): PluginsStore {
   const store = createStore<PluginsState>()(() => initialPlugins());
   const list = createRefresher(api.pluginsList.bind(api), (value) =>

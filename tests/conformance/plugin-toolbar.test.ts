@@ -8,17 +8,14 @@ import {
   multiplayerPress,
   showsMultiplayer,
   takesEngineMultiplayer,
-  shownToolbarStatus,
   ToolbarPlace,
   toolbarItems,
   toolbarPlace,
   toolbarReaction,
   toolbarStatusFrom,
   toolbarTip,
-  toolbarUpdateStatus,
   visibleToolbarEntries,
 } from "../../src/shared/plugin-toolbar.ts";
-import { PLUGIN_TOOLBAR_WORDS } from "../../src/renderer/words.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
 import type { PluginInfo, PluginManifest, PluginToolbarItem, PluginToolbarStatus } from "../../src/shared/plugins.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
@@ -282,24 +279,8 @@ test("a plugin change re-asks every button; a plugin's toolbar event updates its
   assert.equal(toolbarReaction({ type: UiEvent.GameArchived, payload: {} } as UiEvent, [entry], "game"), null);
 });
 
-test("a plugin behind the version Studio bundles says Update on its buttons, until that update waits or is done", () => {
-  const behind = plugin("unreal", [item()], { availableVersion: "0.3.0" });
-  assert.deepEqual(toolbarUpdateStatus(behind, PLUGIN_TOOLBAR_WORDS.update), {
-    badge: "Update",
-    title: PLUGIN_TOOLBAR_WORDS.update.title("unreal", "0.3.0"),
-  });
-  const waiting = plugin("unreal", [item()], { availableVersion: "0.3.0", pendingVersion: "0.3.0" });
-  assert.equal(toolbarUpdateStatus(waiting, PLUGIN_TOOLBAR_WORDS.update), null, "the update waits for its sessions");
-  assert.equal(toolbarUpdateStatus(plugin("unreal", [item()]), PLUGIN_TOOLBAR_WORDS.update), null, "up to date");
-  const status = toolbarStatusFrom(toolbarUpdateStatus(behind, PLUGIN_TOOLBAR_WORDS.update));
-  assert.equal(status?.badge, "Update", "the badge survives the toolbar's own sanitizing");
-});
-test("Multiplayer brings Genex in, updates an older Genex first, and otherwise asks the game's chat", () => {
+test("Multiplayer brings Genex in, and otherwise asks the game's chat", () => {
   assert.equal(multiplayerPress(undefined), MultiplayerPress.SetUp, "Genex off or not installed");
-  const behind = plugin("genex", [item()], { availableVersion: "1.10.0" });
-  assert.equal(multiplayerPress(behind), MultiplayerPress.Update, "an older Genex's instructions refuse the template");
-  const waiting = plugin("genex", [item()], { availableVersion: "1.10.0", pendingVersion: "1.10.0" });
-  assert.equal(multiplayerPress(waiting), MultiplayerPress.Ask, "as Publish: the update waits for its sessions");
   assert.equal(multiplayerPress(plugin("genex", [item()])), MultiplayerPress.Ask);
 });
 test("Multiplayer stands beside Publish only on a built single-player game with something in it, whose page is its own", () => {
@@ -431,23 +412,4 @@ test("a dot's tooltip says its word first, then the plugin's title; a word badge
   assert.deepEqual(toolbarTip({ title: "Make this game in Unreal" }), ["Make this game in Unreal"]);
   assert.deepEqual(toolbarTip({ dot: true }), [], "a dot with no word draws nothing to say");
   assert.deepEqual(toolbarTip(undefined), []);
-});
-test("Update takes the badge's place as a word in the quiet tone, whatever dot or tone the plugin's own had", () => {
-  const own = { badge: "Ready", tone: "ok", dot: true, title: "Connected to Drift." } as const;
-  const update = toolbarUpdateStatus(
-    plugin("unreal", [item()], { availableVersion: "0.3.0" }),
-    PLUGIN_TOOLBAR_WORDS.update,
-  );
-  assert.deepEqual(shownToolbarStatus(own, update), {
-    badge: "Update",
-    title: PLUGIN_TOOLBAR_WORDS.update.title("unreal", "0.3.0"),
-  });
-  assert.deepEqual(shownToolbarStatus({ ...own, disabled: true, attention: true }, update), {
-    disabled: true,
-    attention: true,
-    badge: "Update",
-    title: PLUGIN_TOOLBAR_WORDS.update.title("unreal", "0.3.0"),
-  });
-  assert.equal(shownToolbarStatus(own, null), own, "up to date: the plugin's own status");
-  assert.equal(shownToolbarStatus(undefined, null), undefined);
 });

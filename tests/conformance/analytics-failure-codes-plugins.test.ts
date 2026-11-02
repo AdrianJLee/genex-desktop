@@ -574,17 +574,19 @@ describe("phase 3 analytics: a plugin's install, update or switch says why it fa
         ...over,
       }) as PluginInfo;
     const fake = fakeStudioApi({
-      pluginsList: async () => [plugin("genex", { availableVersion: "1.5.0" }), plugin("blender")],
+      pluginsList: async () => [plugin("genex"), plugin("blender")],
       pluginsIndex: async () => ({
         url: "https://plugins.example.invalid/index.json",
         studioVersion: "0.1.0",
         fetchedAt: 1,
         stale: false,
         entries: [],
-        updates: [{ id: "blender", installedVersion: "1.0.0", version: "2.0.0", sha: SHA }],
+        updates: [
+          { id: "genex", installedVersion: "1.0.0", version: "1.5.0", sha: SHA },
+          { id: "blender", installedVersion: "1.0.0", version: "2.0.0", sha: SHA },
+        ],
       }),
-      pluginInstall: () => Promise.reject(download),
-      pluginUpdate: () => Promise.reject(declined),
+      pluginUpdate: (id: string) => Promise.reject(id === "genex" ? download : declined),
     });
     const store = createPluginsStore(fake.api);
     await Promise.all([store.refresh(), store.refreshIndex()]);

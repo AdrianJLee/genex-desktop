@@ -3924,8 +3924,6 @@ export default {
     "Помощник попытался сделать что-то за рамками правил своего рабочего пространства.",
   "The {app} is older than your last change: build it again, then publish.":
     "{app} старше твоего последнего изменения: собери заново, потом опубликуй.",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "Плагин {plugin} {version} готов. Нажми, чтобы обновить его в «Плагинах».",
   Theme: "Тема",
   "Theme JSON": "JSON темы",
   "Theme copied.": "Тема скопирована.",
@@ -4761,7 +4759,6 @@ export default {
   attempts: "попытки",
   back: "сзади",
   "badge\u0004Set up": "Нужна настройка",
-  "badge\u0004Update": "Обновление",
   "balance couldn’t be read": "баланс не удалось получить",
   "base commit": "базовый коммит",
   "before a Loop starts": "перед запуском Loop",

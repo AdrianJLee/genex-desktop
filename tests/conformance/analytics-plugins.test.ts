@@ -245,8 +245,8 @@ describe("plugin records and UI events", () => {
 describe("the Plugins page", () => {
   it("is reached from where the last note said, once, else from the sidebar", () => {
     assert.equal(takePluginsOpening(), PluginsOpenedFrom.Sidebar);
-    notePluginsOpening(PluginsOpenedFrom.ToolbarUpdate);
-    assert.equal(takePluginsOpening(), PluginsOpenedFrom.ToolbarUpdate);
+    notePluginsOpening(PluginsOpenedFrom.PluginUpdatesMenu);
+    assert.equal(takePluginsOpening(), PluginsOpenedFrom.PluginUpdatesMenu);
     assert.equal(takePluginsOpening(), PluginsOpenedFrom.Sidebar, "a note is spent once");
   });
 

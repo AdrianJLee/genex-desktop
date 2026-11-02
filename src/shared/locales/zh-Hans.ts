@@ -3712,8 +3712,6 @@ export default {
   "The worker tried something outside the rules of its workspace.": "助手尝试了超出其工作区规则的操作。",
   "The {app} is older than your last change: build it again, then publish.":
     "{app} 早于你上次的修改：请重新构建后再发布。",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "{plugin} 插件 {version} 已就绪。点击即可在“插件”中更新。",
   Theme: "主题",
   "Theme JSON": "主题 JSON",
   "Theme copied.": "主题已复制。",
@@ -4507,7 +4505,6 @@ export default {
   attempts: "尝试次数",
   back: "背面",
   "badge\u0004Set up": "待设置",
-  "badge\u0004Update": "更新",
   "balance couldn’t be read": "无法读取余额",
   "base commit": "基础提交",
   "before a Loop starts": "Loop 开始前",

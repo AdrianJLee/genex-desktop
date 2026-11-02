@@ -766,7 +766,6 @@ export interface PluginInfo {
   health: PluginHealth;
   error?: string;
   pendingVersion?: string;
-  availableVersion?: string;
   state: "enabled" | "disabled" | "not-enabled";
   origin?: PluginSource;
   scan?: PluginScan;

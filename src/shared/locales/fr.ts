@@ -4010,8 +4010,6 @@ export default {
     "L’assistant a tenté quelque chose en dehors des règles de son espace de travail.",
   "The {app} is older than your last change: build it again, then publish.":
     "{app} : version antérieure à ta dernière modification. Relance la création, puis publie.",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "Le plugin {plugin} {version} est prêt. Clique pour le mettre à jour dans Plugins.",
   Theme: "Thème",
   "Theme JSON": "JSON du thème",
   "Theme copied.": "Thème copié.",
@@ -4858,7 +4856,6 @@ export default {
   attempts: "essais",
   back: "dos",
   "badge\u0004Set up": "À configurer",
-  "badge\u0004Update": "Mise à jour",
   "balance couldn’t be read": "impossible de lire le solde",
   "base commit": "commit de base",
   "before a Loop starts": "avant le début d’un Loop",

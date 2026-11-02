@@ -3945,8 +3945,6 @@ export default {
     "ワーカーがワークスペースのルール外のことをしようとしました。",
   "The {app} is older than your last change: build it again, then publish.":
     "{app}は最後の変更より前のものです。もう一度ビルドしてから公開してください。",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "{plugin}プラグイン{version}の準備ができました。押すと「プラグイン」でアップデートできます。",
   Theme: "テーマ",
   "Theme JSON": "テーマのJSON",
   "Theme copied.": "テーマをコピーしました。",
@@ -4794,7 +4792,6 @@ export default {
   attempts: "試行",
   back: "背面",
   "badge\u0004Set up": "要セットアップ",
-  "badge\u0004Update": "アップデート",
   "balance couldn’t be read": "残高を読み込めませんでした",
   "base commit": "ベースコミット",
   "before a Loop starts": "Loopの開始前",

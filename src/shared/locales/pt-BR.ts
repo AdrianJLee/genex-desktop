@@ -3992,8 +3992,6 @@ export default {
     "O ajudante tentou algo fora das regras do espaço de trabalho dele.",
   "The {app} is older than your last change: build it again, then publish.":
     "{app}: é de antes da sua última alteração. Crie de novo e depois publique.",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "O plugin {plugin} {version} está pronto. Clique para atualizar em Plugins.",
   Theme: "Tema",
   "Theme JSON": "JSON do tema",
   "Theme copied.": "Tema copiado.",
@@ -4837,7 +4835,6 @@ export default {
   attempts: "tentativas",
   back: "costas",
   "badge\u0004Set up": "Precisa configurar",
-  "badge\u0004Update": "Atualização",
   "balance couldn’t be read": "não foi possível ler o saldo",
   "base commit": "commit base",
   "before a Loop starts": "antes de um Loop começar",

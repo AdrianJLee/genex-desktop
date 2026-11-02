@@ -6009,15 +6009,6 @@ export const CHECK_WORDS = {
   showLess: t("Show less"),
 } as const;
 
-/** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
-export const PLUGIN_TOOLBAR_WORDS = {
-  update: {
-    badge: tc("badge", "Update"),
-    title: (plugin: string, version: string) =>
-      t("The {plugin} plugin {version} is ready. Press to update it in Plugins.", { plugin, version }),
-  },
-} as const;
-
 /**
  * A game linked to an engine whose Loop needs its project inside the game folder, named by the
  * engine's label: Rewind's note when the project lives elsewhere, and why Mode has no Loop yet.

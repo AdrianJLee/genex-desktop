@@ -341,7 +341,9 @@ describe("Claude Code on Windows runs its commands in Genex's sandbox", () => {
     assert.equal(asked[0]?.input.command, "npm test");
   });
 
-  it("a resumed session hears which shell this turn has: an unattended turn the studio's, one the person answers Bash", async () => {
+  // Flipped: the shell line was glued after a resumed session's prompt. It is the session's system
+  // text now, on every Windows session with a shell, and the prompt stays the words alone.
+  it("a Windows session's system text names its shell: an unattended session the studio's, one the person answers Bash", async () => {
     const f = await fixture();
     const person = {
       mode: PermissionMode.Auto,
@@ -350,20 +352,29 @@ describe("Claude Code on Windows runs its commands in Genex's sandbox", () => {
       protectWrites: [],
       ask: async (): Promise<PermissionReply> => ({ decision: "allow" }),
     };
-    const promptOf = async (request: Record<string, unknown>, platform: NodeJS.Platform = "win32") =>
-      String((await session(f, platform, request)).scripted.prompt);
+    const told = async (request: Record<string, unknown>, platform: NodeJS.Platform = "win32") => {
+      const { options, scripted } = await session(f, platform, request);
+      const system = options.systemPrompt as { append?: string };
+      return { prompt: String(scripted.prompt), system: String(system.append ?? "") };
+    };
+    const unattended = await told({ resume: "s1", system: "GENEX CONTEXT" });
+    assert.equal(unattended.prompt, "build the scene", "the prompt is the words alone");
     assert.match(
-      await promptOf({ resume: "s1" }),
-      /This turn your shell is mcp__studio__run_command[^\n]*Bash and PowerShell are off/,
+      unattended.system,
+      /^GENEX CONTEXT\n\nThis turn your shell is mcp__studio__run_command[^\n]*Bash and PowerShell are off/,
     );
     assert.match(
-      await promptOf({ resume: "s1", permissions: person }),
+      (await told({ resume: "s1", permissions: person })).system,
       /This turn your shell is Bash[^\n]*run_command is not here/,
     );
-    assert.equal(await promptOf({}), "build the scene", "a new session's tools say it");
-    assert.equal(await promptOf({ resume: "s1" }, "darwin"), "build the scene", "a Mac's shell never changes");
-    const reader = await promptOf({ resume: "s1", worker: seat(f, PermissionMode.Plan) });
-    assert.doesNotMatch(reader, /This turn your shell/, "a reader has no shell to name");
+    assert.match((await told({})).system, /This turn your shell is mcp__studio__run_command/, "a new session's too");
+    assert.doesNotMatch(
+      (await told({ resume: "s1" }, "darwin")).system,
+      /This turn your shell/,
+      "a Mac's shell never changes",
+    );
+    const reader = await told({ resume: "s1", worker: seat(f, PermissionMode.Plan) });
+    assert.doesNotMatch(reader.system, /This turn your shell/, "a reader has no shell to name");
   });
 
   it("macOS and Linux keep Claude Code's own sandbox and its Bash (characterization)", async () => {

@@ -219,6 +219,8 @@ export interface TurnPolicy {
    * answers (a session in Auto: `codex.ts`); otherwise it never asks and such a command fails.
    */
   approvals?: boolean;
+  /** Genex's context for the session's whole life (`DelegateRequest.system`), sent as the thread's developer instructions. */
+  developerInstructions?: string | undefined;
 }
 
 /** The thread's approvals, as the policy has them. */
@@ -233,6 +235,7 @@ function threadParams(policy: TurnPolicy): Record<string, unknown> {
     ...(policy.model ? { model: policy.model } : {}),
     approvalPolicy: approvalPolicy(policy),
     sandbox: policy.bypass ? SandboxMode.DangerFullAccess : SandboxMode.WorkspaceWrite,
+    ...(policy.developerInstructions ? { developerInstructions: policy.developerInstructions } : {}),
   };
 }
 
@@ -252,12 +255,13 @@ export function threadResumeParams(policy: TurnPolicy & { threadId: string }): R
 }
 
 /**
- * `turn/start`'s params besides the thread: the brief, the stills as local images, and the
- * sandbox exec's `-c` config spells (its writable roots, no network), restated for this turn.
+ * `turn/start`'s params besides the thread: the message's parts, each a text item of its own (Genex's
+ * notices, the prompt, Codex's own notes), the stills as local images, and the sandbox exec's `-c`
+ * config spells (its writable roots, no network), restated for this turn.
  */
 export function turnStartParams(
   policy: TurnPolicy,
-  prompt: string,
+  texts: readonly string[],
   images: readonly string[],
 ): Record<string, unknown> {
   const sandboxPolicy = policy.bypass
@@ -269,7 +273,7 @@ export function turnStartParams(
       };
   return {
     input: [
-      { type: UserInputType.Text, text: prompt },
+      ...texts.map((text) => ({ type: UserInputType.Text, text })),
       ...images.map((file) => ({ type: UserInputType.LocalImage, path: file })),
     ],
     approvalPolicy: approvalPolicy(policy),

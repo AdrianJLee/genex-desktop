@@ -303,6 +303,30 @@ describe("codex engine", () => {
     assert.equal(seen[0]!.env.OPENAI_API_KEY, undefined);
   });
 
+  it("Genex's context goes to codex exec as its developer instructions, never on stdin; its notices open stdin, marked, before the words", async () => {
+    const { fn, seen } = fakeExec(successRun);
+    const { engine, root } = await signedInEngine(fn);
+    const told = { system: "GENEX CONTEXT\nwith a second line", notices: ["Genex cut a call off."] };
+    await engine.delegate({ cwd: root, prompt: "add a moat", from: MessageFrom.Person, ...told });
+    await engine.delegate({ cwd: root, prompt: "add a moat", from: MessageFrom.Person, resume: "thread-1", ...told });
+    const setting = `developer_instructions=${JSON.stringify(told.system)}`;
+    for (const [label, call] of [
+      ["a new session", seen[0]!],
+      ["a resumed one", seen[1]!],
+    ] as const) {
+      const at = call.argv.indexOf(setting);
+      assert.ok(at > 0, `${label}: ${call.argv.join(" ")}`);
+      assert.equal(call.argv[at - 1], "-c", `${label}: a -c setting`);
+      assert.ok(at > call.argv.indexOf("exec"), `${label}: in exec's own scope`);
+      assert.ok(
+        call.prompt.startsWith(`${GENEX_MARK}\nGenex cut a call off.\n\nadd a moat`),
+        `${label}: ${call.prompt}`,
+      );
+      assert.ok(!call.prompt.includes("GENEX CONTEXT"), `${label}: the context is not on stdin`);
+    }
+    assert.ok(seen[1]!.argv.indexOf(setting) > seen[1]!.argv.indexOf("thread-1"), "after resume <id>");
+  });
+
   /**
    * One session: a waking run's lead is its chat's own session, and no lead is read-only. It
    * resumes the chat's session from the game folder and builds in the integration worktree it leads

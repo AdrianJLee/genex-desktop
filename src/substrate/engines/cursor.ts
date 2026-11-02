@@ -29,7 +29,7 @@ import { releaseStaleLocks } from "./ownership-locks.ts";
 import { StudioBridge, answerBridgeCall, bridgeTools } from "./studio-bridge.ts";
 import { writeDelegateStills } from "./codex.ts";
 import { JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
-import { textAsSent } from "./genex-mark-prompts.ts";
+import { textsAsSent } from "./genex-mark-prompts.ts";
 import { leadBuildWrites } from "./session-commands.ts";
 import {
   CURSOR_FILE_STORE,
@@ -488,7 +488,7 @@ export class CursorEngine implements Engine {
   ): string {
     const plan = chatMode(request) === PermissionMode.Plan && ctx.scratch;
     return [
-      textAsSent({ text: request.prompt, from: request.from }),
+      ...textsAsSent(request),
       ctx.pictures.length ? MESSAGE.Pictures(ctx.pictures) : "",
       ctx.bridge?.instructions() ?? "",
       plan

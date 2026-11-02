@@ -1382,8 +1382,7 @@ export class ClaudeCodeEngine implements Engine {
     // The running session, for what an answer asks of it after the answer (claude-permissions.ts).
     const running: RunningSession = { stream: null };
     const options = await this.#delegateOptions(request, { cliInstallation, login, controller, running, run });
-    const told = withShellLine(request, Boolean(run.shell), this.#platform);
-    const stream = query({ prompt: sessionPrompt(told, steer, run, controller.signal), options } as never);
+    const stream = query({ prompt: sessionPrompt(request, steer, run, controller.signal), options } as never);
     this.#catalogEpoch.set(stream, this.#catalog.epoch());
     running.stream = stream as RunningSession["stream"];
     // The mode picker reaches a running turn of a session that asks (the chat's own, a lead's, a
@@ -1435,7 +1434,7 @@ export class ClaudeCodeEngine implements Engine {
       ...claudeLaunchOptions(cliInstallation.path),
       cwd: request.cwd,
       includePartialMessages: true,
-      systemPrompt: claudeCodeSystemPrompt(request.system),
+      systemPrompt: claudeCodeSystemPrompt(withShellLine(request, Boolean(shell), this.#platform)),
       ...permissionOptions(request, ctx.running),
       // A worker's never-touch list, and a lead's calls screened by the host ahead of every allow rule.
       ...sessionHooks(request, cwd, ctx.run),
@@ -2348,26 +2347,27 @@ function sessionPrompt(
 }
 
 /**
- * The brief of a resumed Windows session with the line naming this turn's shell after it: its turns
- * may run commands in Genex's sandbox or in Bash (`studioShell`), and it remembers the other. A new
- * session's tools say it, a Mac's never changes, and a session with no shell has none to name.
+ * The session's system text, with the line naming its shell after it on Windows: its turns may run
+ * commands in Genex's sandbox or in Bash (`studioShell`), and a resumed session remembers the other.
+ * A Mac's never changes, and a session with no shell has none to name.
  */
-function withShellLine(request: DelegateRequest, genexShell: boolean, platform: NodeJS.Platform): DelegateRequest {
-  if (platform !== "win32" || !request.resume) return request;
+function withShellLine(request: DelegateRequest, genexShell: boolean, platform: NodeJS.Platform): string | undefined {
+  if (platform !== "win32") return request.system;
   const bash = !disallowedToolsFor(request, genexShell).includes(SHELL_TOOL);
-  if (!genexShell && !bash) return request;
+  if (!genexShell && !bash) return request.system;
   const line = genexShell ? SHELL_THIS_TURN.Studio : SHELL_THIS_TURN.Bash;
-  return { ...request, prompt: `${request.prompt}\n\n${line}` };
+  return [request.system, line].filter(Boolean).join("\n\n");
 }
 
 /**
  * The builder's prompt. Stills go in as image blocks, the same content-block shape the judge uses
  * — a builder that never saw the reference read it nine times in 2,245 turns. Genex's own message,
- * or one with pictures, goes as its sender's frame (claude-steer.ts `briefFrame`); any other is the
- * same message as a string.
+ * one with pictures, and one with Genex's notices go as a frame (claude-steer.ts `briefFrame`);
+ * any other is the same message as a string.
  */
 function delegatePrompt(request: DelegateRequest): unknown {
-  if (request.from !== MessageFrom.Genex && !briefImages(request).length) return request.prompt;
+  const plain = request.from !== MessageFrom.Genex && !briefImages(request).length && !request.notices?.length;
+  if (plain) return request.prompt;
   return (async function* () {
     yield briefFrame(request);
   })();
@@ -2835,9 +2835,10 @@ interface McpKit {
 /**
  * Loads a tool with the prompt. Claude Code (2.1.304 on) defers MCP tools behind its tool search,
  * offering their names but not their schemas, and a session that cannot see a tool its prompt
- * relies on does not reliably look for it: the checkpoint where the game has checkpoint hooks,
- * capture, a chat's interview tools and the studio's shell load from the first turn. Live and
- * connector tools, a large and varied set, stay deferred, and so does a checkpoint with no hooks.
+ * relies on does not reliably look for it: the checkpoint, capture, a chat's interview tools, the
+ * studio's shell and Genex's own live tools the host marks (`LiveToolSpec.alwaysLoad`: its project
+ * and worker tools) load from the first turn. Other live and connector tools, a large and varied
+ * set, stay deferred.
  */
 const LOAD_WITH_PROMPT = { alwaysLoad: true } as const;
 
@@ -2849,9 +2850,9 @@ type ToolAnswer = {
 
 /**
  * `checkpoint`: the session saves the game with a note; the chat shows the note, and the studio's
- * own checkpoint, when the delegation has one (a game with checkpoint hooks), answers what it did
- * and loads the tool with the prompt; with none the tool waits for tool search. A checkpoint that
- * failed reports as failed, never ending the build.
+ * own checkpoint, when the delegation has one (a game with checkpoint hooks), answers what it did.
+ * It loads with the prompt: its description is the only place that says it lights the Reload. A
+ * checkpoint that failed reports as failed, never ending the build.
  */
 function checkpointTool(kit: McpKit, request: Pick<DelegateRequest, "onEvent" | "onCheckpoint">) {
   const { tool, z } = kit;
@@ -2869,7 +2870,7 @@ function checkpointTool(kit: McpKit, request: Pick<DelegateRequest, "onEvent" | 
         return { content: [{ type: "text", text: CHECKPOINT_TOOL.failed(errorMessage(err)) }], isError: true };
       }
     },
-    request.onCheckpoint ? LOAD_WITH_PROMPT : undefined,
+    LOAD_WITH_PROMPT,
   );
 }
 
@@ -2940,13 +2941,14 @@ function liveTool(kit: McpKit, spec: LiveToolSpec, onLiveTool: NonNullable<Deleg
   // the shape the model must be shown. Every other live tool is still flat.
   const shape = spec.inputSchema ? zodShapeFromJsonSchema(spec.inputSchema, kit.z) : flatLiveShape(kit.z, spec);
   const description = spec.inputSchema ? describeWithSchema(spec.description, spec.inputSchema) : spec.description;
-  return kit.tool(spec.name, description, shape, async (args: Record<string, unknown>) => {
+  const answer = async (args: Record<string, unknown>) => {
     try {
       return liveToolAnswer(await onLiveTool(spec.name, args ?? {}));
     } catch (err) {
       return liveToolAnswer({ text: `${spec.name} failed: ${errorMessage(err)}`, isError: true });
     }
-  });
+  };
+  return kit.tool(spec.name, description, shape, answer, spec.alwaysLoad ? LOAD_WITH_PROMPT : undefined);
 }
 
 /** A live tool's result as the MCP answer the contractor reads. */

@@ -335,6 +335,8 @@ export interface LiveToolSpec extends StudioToolSpec {
    * tools and plugin tools are flat and never set it.
    */
   inputSchema?: Record<string, unknown>;
+  /** Genex's own tool, which an engine that defers tools loads with the prompt (Claude Code's `alwaysLoad`). */
+  alwaysLoad?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -380,6 +382,13 @@ export interface HarnessDelegateParams {
    * cover step), which the engine shows as not the person's. Absent: a brief.
    */
   from?: MessageFrom;
+  /**
+   * What the session should know for its whole life, put first in its system text (the chat's
+   * `chatContext`): the same text on every turn while the game is the same, never in the prompt.
+   */
+  system?: string;
+  /** Genex's own lines for this message (the chat so far, for a new session): never the person's words. */
+  notices?: string[];
   project: string;
   /** Build here instead of the live game folder — a facet worktree under scratch. */
   cwd?: string;

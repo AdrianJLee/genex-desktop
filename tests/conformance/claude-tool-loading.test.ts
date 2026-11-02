@@ -94,7 +94,9 @@ async function firstOffered(request: Record<string, unknown>): Promise<string[]>
 const LIVE_TOOLS = [spec("press_key"), spec("connector__search")];
 
 describe("a Claude session sees the studio tools it is expected to call from its first turn", () => {
-  it("a builder's capture where granted, and its checkpoint where the game has checkpoint hooks, load with the prompt", async () => {
+  // Flipped: a checkpoint with no hooks waited for tool search. Its own description says it lights
+  // the person's Reload, so no brief line says it again, and it loads with the prompt everywhere.
+  it("a builder's capture where granted, and its checkpoint, load with the prompt", async () => {
     const granted = await session({ onCapture: async () => "captured", onCheckpoint: async () => "saved" });
     for (const tool of ["checkpoint", "capture"]) {
       assert.ok(granted.tools.includes(tool), `${tool} is registered`);
@@ -102,8 +104,18 @@ describe("a Claude session sees the studio tools it is expected to call from its
     }
     const plain = await session({});
     assert.ok(plain.tools.includes("checkpoint"), "the checkpoint is still there for a game with no hooks");
-    assert.equal(alwaysLoaded(plain, "checkpoint"), false, "but it waits for tool search");
+    assert.equal(alwaysLoaded(plain, "checkpoint"), true, "and loads with the prompt too");
     assert.equal(plain.tools.includes("capture"), false, "no capture where none was granted");
+  });
+
+  it("Genex's own live tools the host marks (its project and worker tools) load with the prompt; the rest stay deferred", async () => {
+    const own = [
+      { ...spec("worker_start"), alwaysLoad: true },
+      { ...spec("plugins_find"), alwaysLoad: true },
+    ];
+    const chat = await session({ liveTools: [...own, ...LIVE_TOOLS], onLiveTool: async () => "ok" });
+    for (const { name } of own) assert.equal(alwaysLoaded(chat, name), true, `${name} loads with the prompt`);
+    for (const { name } of LIVE_TOOLS) assert.equal(alwaysLoaded(chat, name), false, `${name} waits for tool search`);
   });
 
   it("a Loop chat's interview tools, its launch and ask_user, load with the prompt", async () => {

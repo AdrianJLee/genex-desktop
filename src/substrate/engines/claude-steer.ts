@@ -15,6 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { MessageFrom } from "../../shared/engine-requests.ts";
+import { genexMarked } from "./genex-mark-prompts.ts";
 import {
   DelegateEventType,
   type DelegateImage,
@@ -65,26 +66,33 @@ function imageBlocks(images: readonly DelegateImage[]) {
   }));
 }
 
-/** Words and stills as one message's content blocks: the words first, when there are any. */
-function blocks(text: string, images: readonly DelegateImage[]) {
-  return [...(text ? [{ type: "text" as const, text }] : []), ...imageBlocks(images)];
+/** Genex's notices as text blocks of their own, each under the mark, ahead of a message's words. */
+function noticeBlocks(notices: readonly string[]) {
+  return notices
+    .filter((notice) => notice.trim())
+    .map((notice) => ({ type: "text" as const, text: genexMarked(notice) }));
+}
+
+/** Notices, words and stills as one message's content blocks: the words only when there are any. */
+function blocks(text: string, images: readonly DelegateImage[], notices: readonly string[] = []) {
+  return [...noticeBlocks(notices), ...(text ? [{ type: "text" as const, text }] : []), ...imageBlocks(images)];
 }
 
 /**
- * A brief's content: the text, and any stills as image blocks the text names by label (WP3d) —
- * a builder that never saw the reference read it nine times in 2,245 turns.
+ * A brief's content: Genex's notices, the text, and any stills as image blocks the text names by
+ * label (WP3d) — a builder that never saw the reference read it nine times in 2,245 turns.
  */
-export function userContent(text: string, images: readonly DelegateImage[]) {
-  if (!images.length) return [{ type: "text" as const, text }];
+export function userContent(text: string, images: readonly DelegateImage[], notices: readonly string[] = []) {
+  if (!images.length) return [...noticeBlocks(notices), { type: "text" as const, text }];
   const labels = images.map((image) => image.label).join("; ");
-  return blocks(`${text}\n\nIMAGES ATTACHED (${images.length}): ${labels}.`, images);
+  return blocks(`${text}\n\nIMAGES ATTACHED (${images.length}): ${labels}.`, images, notices);
 }
 
-/** A brief as a user message frame of the SDK's streaming input. */
-export function userFrame(text: string, images: readonly DelegateImage[]) {
+/** A brief as a user message frame of the SDK's streaming input, Genex's notices ahead of it. */
+export function userFrame(text: string, images: readonly DelegateImage[], notices: readonly string[] = []) {
   return {
     type: "user" as const,
-    message: { role: "user" as const, content: userContent(text, images) },
+    message: { role: "user" as const, content: userContent(text, images, notices) },
     parent_tool_use_id: null,
   };
 }
@@ -98,8 +106,8 @@ export function userFrame(text: string, images: readonly DelegateImage[]) {
  * (`claude-steer-cli.test.ts`). A channel origin cannot say it: from local stdin the CLI drops
  * every origin but `human`.
  */
-export function saidFrame(said: Omit<SteerMessage, "id">) {
-  const message = { role: "user" as const, content: blocks(said.text, said.images ?? []) };
+export function saidFrame(said: Omit<SteerMessage, "id">, notices: readonly string[] = []) {
+  const message = { role: "user" as const, content: blocks(said.text, said.images ?? [], notices) };
   const sender = said.from === MessageFrom.Genex ? { isSynthetic: true as const } : { origin: HUMAN_ORIGIN };
   return { type: "user" as const, message, parent_tool_use_id: null, ...sender };
 }
@@ -108,11 +116,16 @@ export function saidFrame(said: Omit<SteerMessage, "id">) {
 export const briefImages = (request: Pick<DelegateRequest, "images">): DelegateImage[] =>
   (request.images ?? []).filter((image) => image?.data);
 
-/** A session's first message: a brief (no `from`) as it always was, or a message by its sender. */
-export function briefFrame(request: Pick<DelegateRequest, "prompt" | "images" | "from">) {
+/**
+ * A session's first message: a brief (no `from`) as it always was, or a message by its sender; either
+ * way Genex's notices ride it as marked text blocks before the words, never as a frame of their own
+ * (a second frame at the turn's start would reach the session as a message sent while it worked).
+ */
+export function briefFrame(request: Pick<DelegateRequest, "prompt" | "images" | "from" | "notices">) {
   const images = briefImages(request);
-  if (!request.from) return userFrame(request.prompt, images);
-  return saidFrame({ text: request.prompt, images, from: request.from });
+  const notices = request.notices ?? [];
+  if (!request.from) return userFrame(request.prompt, images, notices);
+  return saidFrame({ text: request.prompt, images, from: request.from }, notices);
 }
 
 /** What a steerable delegation reports back through `delegate`: the host's `ready`, and what was read. */

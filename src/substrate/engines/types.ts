@@ -206,7 +206,7 @@ export type DelegateEvent =
 
 export interface DelegateRequest {
   contextPolicy?: import("../../shared/context.ts").ContextPolicy;
-  /** The brief — written by the harness, improved by SkillOpt. */
+  /** The person's words for a chat turn (`from`), or a brief for a session nobody answers. */
   prompt: string;
   /**
    * Who wrote `prompt` (`HarnessDelegateParams.from`): the person's words alone, or Genex's own
@@ -214,11 +214,14 @@ export interface DelegateRequest {
    */
   from?: MessageFrom;
   /**
-   * What the session should know for its whole life (where it runs, its plugins and their
-   * guidance), said once beside the engine's own system prompt instead of in every message. An
-   * engine with no system prompt of its own to extend reads it ahead of the brief.
+   * What the session should know for its whole life (Genex's context, its plugins and their
+   * guidance), said once beside the engine's own system prompt instead of in every message. Only an
+   * engine with a system channel is sent it (Claude Code's append, Codex's developer instructions);
+   * any other reads it as the first notice of a new session.
    */
   system?: string;
+  /** Genex's own lines that ride beside the prompt, each a block of its own ahead of it, unmarked: the engine marks them (`genex-mark-prompts.ts`). */
+  notices?: readonly string[];
   cwd: string;
   model?: string;
   /** Reasoning effort for the contractor's model ("low" | "medium" | "high" | "max"). */

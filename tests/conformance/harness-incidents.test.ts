@@ -78,6 +78,7 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
 });
 import { tmpDir } from "../helpers/tmp.ts";
 import { HOUR_MS, MINUTE_MS } from "../../src/harness-seed/loop/time.ts";
+import { JOB_POLL_MS } from "../../src/harness-seed/loop/jobs/watch.ts";
 import { describeUnknownImage, sniffImage } from "../../src/substrate/image-sniff.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { runTurn } from "../../src/harness-seed/loop/turn-loop.ts";
@@ -1665,6 +1666,17 @@ describe("the lead's later turns (wake loop)", () => {
     assert.equal(finished.stoppedBecause, "the lead finished the run");
   });
 
+  // Flipped: the ordinary end was worded as a session that stopped short ("the lead's session ended
+  // (on its own) before it called finish").
+  it("no-clock. a web lead's turn that ends with nothing at work closes the Loop in its ordinary end's words", async () => {
+    const { turns, finished } = await lateTurnLoopRun("idle-end", async () => ({
+      sessionId: "lead-1",
+      summary: "the sky is blue",
+    }));
+    assert.equal(turns.length, 1, "no wake and no wrap-up turn after it");
+    assert.match(String(finished.stoppedBecause), /^the lead's turn ended with nothing at work; /);
+  });
+
   it("D11. the lead's account disabled on a wake pauses the run: workers stopped, nothing landed, no wrap-up, the user told what to fix", async () => {
     const disabled =
       "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access";
@@ -1725,7 +1737,11 @@ function clockNight(inbox: Record<string, unknown> = {}) {
   };
   const loopRun = {
     state,
-    ctx: { cancelled: false },
+    // The host lists the run's jobs (none) as the app does; anything else it answers with nothing.
+    ctx: {
+      cancelled: false,
+      call: async (method: string): Promise<unknown> => (method === HostMethod.JobsList ? { jobs: [], seq: 0 } : null),
+    },
     report: {},
     waitSeq: 0,
     logSeq: 0,
@@ -2846,13 +2862,18 @@ describe("one session, reviewed", () => {
     assert.ok(calls[1]!.at > calls[0]!.at, "after a wait on the loop's own clock");
   });
 
-  it("OS4. a first turn the lead's lock stays busy for ends as a failed turn — the run closes on its own terms, not in a crash", async () => {
+  // Flipped: a web lead's lock busy for four asks ended its turn as failed (`MAX_BUSY_RETRIES`); every
+  // lead now waits for its lock as an open Loop's lead waits for its folder: until it is free, or a Stop.
+  it("OS4. a first turn the lead's lock stays busy for waits until the person stops the run — never a failed turn, never a crash", async () => {
     const w = clockNight();
-    const { talk } = w.lead(() => {
+    const { talk, calls } = w.lead(() => {
+      if (calls.length === 12) w.loopRun.ctx.cancelled = true;
       throw Object.assign(new Error("busy"), { code: "folder_busy" });
     });
     const outcome = await w.run(talk);
-    assert.equal(outcome.failed?.ok, false, "the loop says which turn failed");
+    assert.equal(calls.length, 12, "asked again after each wait until the Stop");
+    assert.equal(outcome.failed, null, "no wrap-up for a failed turn");
+    assert.equal(outcome.wrapCause, null);
   });
 
   /**
@@ -3137,6 +3158,52 @@ describe("a Loop has no time limit", () => {
     assert.equal(calls.length, 1);
     assert.equal(outcome.wrapCause, null);
     assert.ok(w.at.now < w.T0 + MINUTE_MS, "closed as its turn ended, not when a clock ran out");
+  });
+
+  /**
+   * A lead resting on one job of its run that runs for an hour (the worker is done), on a host that
+   * lists the run's jobs as `jobs.list` does; `failRunningRead` names which read of the running jobs
+   * (one with no `endedAfter`) the host cannot answer.
+   */
+  function restingOnAJob(failRunningRead: number | null) {
+    const w = clockNight();
+    w.worker.state = "done";
+    const endsAt = w.T0 + HOUR_MS;
+    const job = { id: "job-1", title: "Long build", state: "running", role: "lead" };
+    const reads = { all: 0, running: 0 };
+    // The job's end is a line of the run's log, as the run writes it.
+    Object.assign(w.loopRun, { note: w.note });
+    Object.assign(w.loopRun.ctx, {
+      call: async (method: string, params: { endedAfter?: number }) => {
+        if (method !== HostMethod.JobsList) return null;
+        reads.all += 1;
+        if (params.endedAfter === undefined && ++reads.running === failRunningRead)
+          throw new Error("jobs.list: the host's deadline passed");
+        if (w.at.now < endsAt) return { jobs: [job], seq: 0 };
+        return { jobs: [{ ...job, state: "exited", exitCode: 0, endSeq: 1 }], seq: 1 };
+      },
+    });
+    const { talk, calls } = w.lead((turn) => {
+      if (turn === 2) w.state.finished = true;
+      return { ok: true, sessionId: "lead-1" };
+    });
+    return { w, endsAt, reads, calls, run: () => w.run(talk) };
+  }
+
+  it("no-clock. a read of the run's jobs the host could not answer closes nothing: the lead is woken by its job's end", async () => {
+    const resting = restingOnAJob(1);
+    await resting.run();
+    assert.equal(resting.calls.length, 2, "the Loop stayed open while its job ran");
+    assert.ok(resting.calls[1]!.at >= resting.endsAt, "woken once its job ended");
+    assert.match(resting.calls[1]!.prompt, /a job of the run ended/);
+  });
+
+  it("no-clock. a lead resting on a job reads the run's jobs at most twice every JOB_POLL_MS: its ends and what runs", async () => {
+    const resting = restingOnAJob(null);
+    await resting.run();
+    assert.equal(resting.calls.length, 2);
+    const polls = HOUR_MS / JOB_POLL_MS;
+    assert.ok(resting.reads.all <= 2 * polls + 4, `${resting.reads.all} reads over an hour's rest`);
   });
 
   it("no-clock. the person's Finish while the lead's turn works gives exactly one wrap-up turn once it ends", async () => {
@@ -5243,7 +5310,6 @@ describe("the Loop's stop and nudge rules, audited after phase 5", () => {
       asleepSince: 1_000,
       userWaiting: false,
       finishNew: false,
-      wrapping: false,
       wakesAt: [],
     });
     assert.equal(resting, null, "no clock wakes it");

@@ -170,14 +170,15 @@ function studioOf(host: LoopHost) {
 }
 
 describe("the chat's launch tool", () => {
-  it("names no method and no rule about when in its description, and answers every Loop as ending on the lead's finish", async () => {
+  // Flipped: it answered "Building until its lead calls finish."; a turn that ends with nothing at work also ends a Loop, so it says only that it builds.
+  it("names no method and no rule about when in its description, and answers that it builds, nothing about when it ends", async () => {
     assert.doesNotMatch(String(startAutopilot.description), /critic|facet|when Loop|in words|hours/i);
     const host = ctxRecorder({ threadId: "chat-1", extra: { project: "lantern" } });
     const answer = await startAutopilot.execute(
       { goal: "A level.", direction: "a lantern-lit cave" },
       host.ctx as never,
     );
-    assert.equal((answer as { content?: unknown }).content, "Building until its lead calls finish.");
+    assert.equal((answer as { content?: unknown }).content, "Building.");
     assert.deepEqual(host.calls, [], "it asks the host nothing");
   });
 });

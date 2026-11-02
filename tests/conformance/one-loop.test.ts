@@ -2726,6 +2726,11 @@ describe("a Loop with no clock", () => {
       assert.equal(host.appended("run_finished").length, 1);
       assert.equal(report.executionStatus, "completed", "closed, not paused");
       assert.equal(report.victory, false, "nobody claimed the goal");
+      assert.equal(
+        report.stoppedBecause,
+        OPEN_END.nothingAtWork,
+        "the ordinary end, never a session that stopped short",
+      );
       assert.equal(await host.git("status", "--porcelain"), "", "its work is kept in Genex's checkpoint");
     },
   );

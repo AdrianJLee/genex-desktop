@@ -42,13 +42,15 @@ import { asksPending, OPEN_CLOSE_MS, type OpenClock } from "./contract.ts";
 import { OPEN_WORDS } from "./prompts.ts";
 import { writersInPlace } from "./writers.ts";
 
-/** Why the Loop ended when its lead's claim was accepted, the person asked it to finish, or its lead's session ended. */
+/** Why the Loop ended when its lead's claim was accepted, the person asked it to finish, its lead's turn ended, or its session did. */
 export const MESSAGE = {
   goalReached: "the reviewer accepted that the goal is reached",
   /** The lead claimed the goal is reached and asked no reviewer: its word closes the Loop. */
   leadClaimed: "the lead says the goal is reached",
   personFinished: "the person asked the Loop to finish",
-  /** The lead's session ended before it claimed the goal (`how`: how it ended). */
+  /** The ordinary end: the lead's turn ended with nothing at work and nothing to be woken for. */
+  nothingAtWork: "the lead's turn ended with nothing at work",
+  /** The lead's session failed before it claimed the goal (`how`: how it ended). */
   sessionEnded: (how: string) => `the lead's session ended (${how}) before it claimed the goal`,
   /** The person asked to finish, and the lead did not claim the goal in its last turn. */
   finishAsked: "the person asked the Loop to finish, and the lead did not claim the goal in its last turn",
@@ -243,14 +245,14 @@ export async function openFinish(loopRun: LoopRun, args: AnyRecord): Promise<str
   }
 }
 
-/** How a lead session that ended by itself ended: its stop reason, or whether it stopped or failed. */
-const endedHow = (result: Partial<DelegateResult>): string =>
-  result?.stopReason ?? (result?.ok ? "on its own" : "failed");
+/** How a lead session that failed ended: its stop reason, or that it failed. */
+const endedHow = (result: Partial<DelegateResult>): string => result?.stopReason ?? "failed";
 
 /**
  * Why an open Loop its lead left open ended, in its own words (the lead, never the director's), for
- * the closes whose words are the Loop's own: the person's finish, a session that ended. Null for the
- * rest (a Stop, a lost provider, a turn Genex's moments held back), whose words are every Loop's.
+ * the closes whose words are the Loop's own: the person's finish, a turn that ended with nothing at
+ * work, a session that failed. Null for the rest (a Stop, a lost provider, a turn Genex's moments
+ * held back), whose words are every Loop's.
  */
 export function openEndWords(
   loopRun: LoopRun,
@@ -260,5 +262,6 @@ export function openEndWords(
   const { ctx, state } = loopRun;
   if (ctx.cancelled || state.limit || heldTurnEnding(result) !== null) return null;
   if (wrapCause === WrapCause.Finish) return MESSAGE.finishAsked;
+  if (result?.ok) return MESSAGE.nothingAtWork;
   return MESSAGE.sessionEnded(endedHow(result));
 }

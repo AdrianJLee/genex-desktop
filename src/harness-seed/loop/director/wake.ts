@@ -77,24 +77,15 @@ export const SERVES_LEAD = true;
 export const WAKE_POLL_MS = SECOND_MS;
 /** A run opens at most this many fresh sessions for a lead whose own was lost. */
 export const MAX_FRESH_SESSIONS = 3;
-/**
- * A turn the host refused because another session holds the lead's lock is asked again after this
- * wait, at most this many times; an open Loop's lead waits for its folder until it is free or the
- * person stops it.
- */
+/** A lead's turn the host refused because another session holds its lock is asked again after this wait, until the lock is free or the person stops the run. */
 export const BUSY_RETRY_MS = 15 * SECOND_MS;
-export const MAX_BUSY_RETRIES = 4;
 /** News that reaches a resting lead is saved once it has waited this long for a wake that did not come. */
 const JOURNAL_NEWS_MS = 5 * SECOND_MS;
 /** A wake message's news is held to about this many tokens: the oldest gives way first. */
 const WAKE_TOKEN_BUDGET = 8_000;
 
-/** The user's own reasons to wake the lead, and the wrap-up they ask for: never held back by the hourly cap, so never counted in it. */
-const USER_WAKES: ReadonlySet<WakeReason> = new Set<WakeReason>([
-  WakeCause.UserMessage,
-  WakeCause.FinishRequested,
-  WakeCause.WrapUp,
-]);
+/** The user's own reasons to wake the lead: never held back by the hourly cap, so never counted in it. */
+const USER_WAKES: ReadonlySet<WakeReason> = new Set<WakeReason>([WakeCause.UserMessage, WakeCause.FinishRequested]);
 
 /** What a message to the lead carries besides its words: the pictures said with it, and who wrote it when it is not a brief. */
 export type TurnSaid = Omit<SteerMessage, "id" | "text">;
@@ -331,11 +322,11 @@ function startWrapUp(wake: WakeState, cause: WrapCause): void {
   wake.wrapping = true;
 }
 
-/** Act on the end of a turn: keep why the wrap-up the verdict starts starts, and the turn that failed. */
+/** Act on the end of a turn: the wrap-up the verdict starts, and the turn that failed. */
 function settleTurn(wake: WakeState, verdict: TurnVerdict, result: Partial<DelegateResult>) {
   if (verdict.next !== TurnEnd.WrapUp || !verdict.wrapCause) return;
   if (verdict.wrapCause === WrapCause.Failed) wake.failed = result;
-  if (!wake.wrapCause) wake.wrapCause = verdict.wrapCause;
+  startWrapUp(wake, verdict.wrapCause);
 }
 
 /** The run's jobs that ended since the lead last heard, each a line of the run's log; asked at most every `JOB_POLL_MS`. */
@@ -348,15 +339,13 @@ async function watchJobs(loopRun: LoopRun, wake: WakeState, now: number): Promis
   for (const end of read.ends) loopRun.note(jobEndLine(end), NoteKind.JobEnded);
 }
 
-/** Read the inbox while the lead rests: what the user said, a finish request, its workers' questions and job ends. */
+/** Read the inbox while the lead rests: what the user said, a finish request, its workers' questions, job ends and what is at work. */
 async function collect(loopRun: LoopRun, wake: WakeState, now: number): Promise<void> {
   const { inbox } = loopRun;
   await watchJobs(loopRun, wake, now);
   await noteWorkerQuestions(loopRun, now);
-  if (leadsOpenLoop(loopRun)) {
-    await activeWork(loopRun, now);
-    healthWatch(loopRun);
-  }
+  await activeWork(loopRun, now);
+  if (leadsOpenLoop(loopRun)) healthWatch(loopRun);
   const untold = await inbox.steers(undefined, false, { onlyNew: true }).catch(() => []);
   wake.userWaiting = wake.owed.length > 0 || unheard(wake, untold).length > 0;
   const finishing = await inbox.finishing().catch(() => false);
@@ -374,7 +363,6 @@ function wakeView(loopRun: LoopRun, wake: WakeState, now: number): WakeView {
     asleepSince: wake.asleepSince ?? now,
     userWaiting: wake.userWaiting,
     finishNew: wake.finishNew,
-    wrapping: wake.wrapping,
     wakesAt: wake.wakesAt,
   };
 }
@@ -390,20 +378,19 @@ async function journalNews(loopRun: LoopRun, wake: WakeState, now: number): Prom
 
 /**
  * Rest until something is due; null once the run ends under the lead, or once nothing is at work and
- * nothing would wake it: then the Loop is done, as a bare agent's turn ends. The first look, at the
- * turn's edge, reads the run's work at once. A message from the chat cuts the rest short.
+ * nothing would wake it: then the Loop is done, as a bare agent's turn ends. A message from the chat
+ * cuts the rest short.
  */
 async function sleepUntilDue(loopRun: LoopRun, wake: WakeState, kit: TurnKit): Promise<Wake | null> {
   const { clock, line } = kit;
-  for (let edge = true; ; edge = false) {
+  for (;;) {
     if (loopRunOver(loopRun)) return null;
     const spoke = line?.heard();
     await collect(loopRun, wake, clock.now());
     const now = clock.now();
     const due = nextWake(wakeView(loopRun, wake, now));
     if (due && due.at <= now) return due;
-    if (!due && !(await hasWorkAtHand(loopRun, now, edge)) && (await nothingJustEnded(loopRun, wake, clock)))
-      return null;
+    if (!due && !hasWorkAtHand(loopRun) && (await nothingJustEnded(loopRun, wake, now))) return null;
     await journalNews(loopRun, wake, now);
     await (spoke ? Promise.race([clock.sleep(WAKE_POLL_MS), spoke]) : clock.sleep(WAKE_POLL_MS));
   }
@@ -414,10 +401,10 @@ async function sleepUntilDue(loopRun: LoopRun, wake: WakeState, kit: TurnKit): P
  * are read again at once (a job that ended since their last read is no longer at work, and its end
  * wakes the lead), and nothing is due after it.
  */
-async function nothingJustEnded(loopRun: LoopRun, wake: WakeState, clock: WakeClock): Promise<boolean> {
+async function nothingJustEnded(loopRun: LoopRun, wake: WakeState, now: number): Promise<boolean> {
   wake.jobsPolledAt = null;
-  await collect(loopRun, wake, clock.now());
-  return nextWake(wakeView(loopRun, wake, clock.now())) === null;
+  await watchJobs(loopRun, wake, now);
+  return nextWake(wakeView(loopRun, wake, now)) === null;
 }
 
 /** The log's lines the lead has not read, as text; the shared cursor moves past them. */
@@ -437,7 +424,6 @@ function markSaid(wake: WakeState, reasons: readonly WakeReason[], now: number):
   wake.userWaiting = false;
   if (wake.finishNew) wake.finishSaid = true;
   wake.finishNew = false;
-  if (reasons.includes(WakeCause.WrapUp)) wake.wrapping = true;
 }
 
 /** How this wake's message ends: the wrap-up, or the ordinary closing. */
@@ -646,9 +632,10 @@ async function freshSession(
 }
 
 /**
- * Whether an open Loop's lead, refused because another chat's turn holds the game folder it leads
- * in (`folderBusy`), waits once more: until the folder is free, never under a Stop or a pause Genex
- * made. Its turn has not begun: a claim of it speaks for the turn that may begin.
+ * Whether a lead the host refused because another session holds its lock (`folderBusy`: for an open
+ * Loop's lead, another chat's turn in the game folder) waits once more: until the lock is free, never
+ * under a Stop or a pause Genex made. Its turn has not begun: a claim of it speaks for the turn that
+ * may begin.
  */
 async function waitsForFolder(loopRun: LoopRun, kit: TurnKit): Promise<boolean> {
   const stopped = () => loopRun.ctx.cancelled === true || Boolean(loopRun.open?.halted);
@@ -660,36 +647,15 @@ async function waitsForFolder(loopRun: LoopRun, kit: TurnKit): Promise<boolean> 
   return true;
 }
 
-/** Whether a lead the host refused because another session holds its lock (not an open Loop's) asks again: `MAX_BUSY_RETRIES` times. */
-async function asksAgainWhenFree(loopRun: LoopRun, kit: TurnKit, tries: number): Promise<boolean> {
-  if (tries >= MAX_BUSY_RETRIES || loopRun.ctx.cancelled) return false;
-  await kit.clock.sleep(BUSY_RETRY_MS);
-  return true;
-}
-
-/**
- * The lead's session asked this turn's message — and, but for an open Loop's lead, asked again after
- * a wait on the loop's clock while the host refuses it because another session holds its lock
- * (`folderBusy`): that passes. An open Loop's lead waits for its folder outside the outage ladder
- * (`patientSession`).
- */
+/** The lead's session asked this turn's message; a turn that came back failed on an outage is thrown as one. */
 async function askSession(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Promise<Partial<DelegateResult>> {
   const { talk } = kit;
-  for (let tries = 0; ; tries += 1) {
-    // An open Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session: a retry included.
-    const refused = openSessionRefused(loopRun);
-    if (refused) return refused;
-    let result: Partial<DelegateResult>;
-    try {
-      result = await talk.session(turn.prompt, talk.sessionId, turn.said);
-    } catch (err: any) {
-      const retries = folderBusy(err) && !leadsOpenLoop(loopRun);
-      if (!retries || !(await asksAgainWhenFree(loopRun, kit, tries))) throw err;
-      continue;
-    }
-    if (!endedOnOutage(result)) return result;
-    throw Object.assign(new Error(String(result.errorText)), { kind: EngineFailure.Unavailable });
-  }
+  // An open Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session: a retry included.
+  const refused = openSessionRefused(loopRun);
+  if (refused) return refused;
+  const result = await talk.session(turn.prompt, talk.sessionId, turn.said);
+  if (!endedOnOutage(result)) return result;
+  throw Object.assign(new Error(String(result.errorText)), { kind: EngineFailure.Unavailable });
 }
 
 /**
@@ -724,17 +690,13 @@ function patientAsk(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Promise<Part
   });
 }
 
-/**
- * `patientAsk`, and for an open Loop's lead refused because another chat's turn holds the game
- * folder, asked again each time it may wait for it (`waitsForFolder`).
- */
+/** `patientAsk`, and for a lead refused because another session holds its lock, asked again each time it may wait for it (`waitsForFolder`). */
 async function patientSession(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Promise<Partial<DelegateResult>> {
   for (;;) {
     try {
       return await patientAsk(loopRun, kit, turn);
     } catch (err) {
-      const waits = folderBusy(err) && leadsOpenLoop(loopRun);
-      if (!waits || !(await waitsForFolder(loopRun, kit))) throw err;
+      if (!folderBusy(err) || !(await waitsForFolder(loopRun, kit))) throw err;
     }
   }
 }
@@ -743,7 +705,7 @@ async function patientSession(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Pr
  * One delegation of the lead's session, or a fresh session when its own is lost — or when a later
  * turn has none to resume (a fresh one that met the engine's limit before it began). A failure on
  * the first turn is the run's (the crash close); on a later one it is a failed turn — and so is a
- * first turn the host kept refusing because its lock stayed busy: the run closes on its own terms.
+ * first turn whose wait for its busy lock a Stop or a pause ended: the run closes on its own terms.
  * A first turn cut short for the user's words is no failure at all (`lineWatchedSession`).
  */
 async function sessionOrFresh(
@@ -792,10 +754,7 @@ function openSessionRefused(loopRun: LoopRun): Partial<DelegateResult> | null {
   return null;
 }
 
-/**
- * One turn of the lead's session, with no time limit of its own. A turn that works on its message has
- * heard what that message told it.
- */
+/** One turn of the lead's session. A turn that works on its message has heard what that message told it. */
 async function oneTurn(
   loopRun: LoopRun,
   wake: WakeState,
@@ -1103,6 +1062,8 @@ async function rest(loopRun: LoopRun, wake: WakeState, now: number): Promise<voi
   wake.asleepFromSeq = loopRun.logSeq;
   wake.asleepSince = now;
   loopRun.resting = true;
+  // The run's jobs are read again at once: a job the turn started is at work.
+  loopRun.jobsReadAt = null;
   await keepWake(loopRun, wake, now);
 }
 

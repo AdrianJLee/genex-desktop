@@ -85,10 +85,10 @@ const ERROR_EVENTS: ReadonlyMap<string, ObservedErrorKind> = new Map([
   [CustomEvent.EngineFallback, ObservedErrorKind.Fallback],
 ]);
 
-/** A run launched until satisfied is goal-bound; one with a wall clock is duration-bound. */
+/** A run is goal-bound; only an older one whose start named a wall clock, and not ∞, was duration-bound. */
 function completionPolicyOf(budgets: RecordedRunBudgets): RegisteredBudgets["completionPolicy"] {
-  if (budgets.untilSatisfied) return CompletionPolicy.Goal;
-  return typeof budgets.wallClockMs === "number" ? CompletionPolicy.Duration : null;
+  const timed = typeof budgets.wallClockMs === "number" && !budgets.untilSatisfied;
+  return timed ? CompletionPolicy.Duration : CompletionPolicy.Goal;
 }
 
 /** The budgets the agent registered for the run it launched, with the completion policy they imply. */

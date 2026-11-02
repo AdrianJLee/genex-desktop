@@ -493,8 +493,7 @@ the person's finish). The person's finish reaching a resting lead opens its last
 folder another chat's turn holds waits for it until it is free, outside the outage ladder
 (`waitsForFolder`), never a failed turn; a Stop during the wait opens no session, and one before any
 session of this attempt worked keeps nothing. Its wrap-up asks for a claim only if the goal is reached.
-An earlier seed's reads of the folder at a turn's edge left a store in the game's git folder; the close
-removes it (`FOLDER_GIT.dropTurnStore`). Its wake messages are
+Its wake messages are
 `openDigest` (`open/digest.ts`: the person's words first, news no turn took, the lines Genex carried,
 its latest save points with the rest counted, its own
 wrap-up). `save_point {label, summary, shows?}` is Genex's checkpoint on the git-write
@@ -852,12 +851,16 @@ no time limit of Genex's own ends a turn, wakes the lead or closes the run, and 
 delegated with no `timeoutMs`. The lead's `finish` ends it. A lead turn that ends with nothing at work
 (no worker's run, no running job of the run, no recovery of the project's app: `hasWorkAtHand`) and
 nothing to wake it for closes it, as a bare agent's turn ends: its last message is the summary, with no
-wrap-up turn after it. With workers or jobs at work the lead rests, and Genex wakes it when one ends
-(a job's end read again at once before the Loop is done, so none is missed). The person's Finish, and a
+wrap-up turn after it, and the close says so ("the lead's turn ended with nothing at work"). With
+workers or jobs at work the lead rests, and Genex wakes it when one ends. The run's jobs are read at
+once after each turn, then every 5 seconds (`activeWork`); a read the host could not answer counts as
+work, so only one that says no job runs closes the Loop, and a job's end is read again at once before
+it does, so none is missed. The person's Finish, and a
 failed turn, give the lead its one wrap-up turn at once (`dueAfter` returns a `WakeCause.WrapUp`
 wake; `WRAP_UP_SPEC` holds the stop/finish rule), and the Loop closes after it. The person's Stop ends
 it at once (paused, for a Resume). A lead's rate limit, an outage past the ladder, a lost sign-in and
-the lead's `pause` pause it; the host's auto-resume resumes a limit's pause at its reset. A Loop an
+the lead's `pause` pause it; the host's auto-resume resumes a limit's pause at its reset, every time
+([automatic resume](#automatic-resume)). A Loop an
 earlier seed paused resumes with no clock: its journal's `director.clock`, its run's hours and a
 wrap-up begun at its old working deadline are read by nothing. The run's own clock (`loop-run.ts`
 `keepRunClock`, `runNow`) stays injectable for what reads the time outside the wake loop (`wrap_up`
@@ -987,8 +990,9 @@ paused on a lost sign-in (`auth`) is the user's to fix and resume (`access-lost`
 crash paused (the host saw the harness exit with it open, `onHarnessDied`, and the reborn loop's
 close came after) resumes once the harness is ready. The pure planner `autoResumePlan` reads typed
 fields only, never a close's words. A resume goes through the Resume button's own
-`resumeAutopilot`, after a host-only `run_auto_resumed` (`cause`, `attempt`) that bounds it. None
-happens after `AUTO_RESUMES_MAX` (2) automatic resumes of the run, after the user's Stop (in that
+`resumeAutopilot`, after a host-only `run_auto_resumed` (`cause`, `attempt`) that bounds it. A limit
+resets on its own, so its pause is resumed at every reset; none other happens after `AUTO_RESUMES_MAX`
+(2) automatic resumes of the run for a crash or an outage. None happens after the user's Stop (in that
 chat, or of the run through `studio:run.stop`, `StudioCore.stopRun`) or a Finish since the run last
 started, once a newer run started in that chat or another run is running (`superseded`), for a
 reset more than 12 hours away, or after ten minutes past its time without a ready harness or 1 GB

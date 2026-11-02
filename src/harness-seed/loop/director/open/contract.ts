@@ -152,9 +152,6 @@ export interface OpenLoop {
   clock: OpenClock;
   /** The run's own worker pool, opened as the Loop starts. */
   pool: WorkerPool | null;
-  /** How many of the run's jobs ran when they were last read, and when (`active-work.ts`). */
-  jobsRunning: number;
-  jobsReadAt: number | null;
   /** When the Loop (this process) took the project up: unsaved work and fresh eyes count from here at the least. */
   since: number;
   /** The log lines a turn under way took mid-turn, by sequence number: no digest tells them again (`news.ts`). */

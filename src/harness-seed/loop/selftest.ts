@@ -27,7 +27,6 @@ const quietView = (now: number) => ({
   asleepSince: now,
   userWaiting: false,
   finishNew: false,
-  wrapping: false,
   wakesAt: [],
 });
 

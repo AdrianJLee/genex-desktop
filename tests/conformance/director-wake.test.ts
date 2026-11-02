@@ -61,7 +61,6 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
         asleepSince: T0,
         userWaiting: false,
         finishNew: false,
-        wrapping: false,
         wakesAt: [],
       };
       assert.equal(nextWake(view), null, `nothing due ${(now - T0) / HOUR_MS} h on`);

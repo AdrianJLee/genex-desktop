@@ -105,7 +105,6 @@ export interface WakeView {
   userWaiting: boolean;
   /** The user asked to finish, and no message has said so yet. */
   finishNew: boolean;
-  wrapping: boolean;
   /** When the lead was woken, recently. */
   wakesAt: readonly number[];
 }

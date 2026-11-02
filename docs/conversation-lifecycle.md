@@ -14,7 +14,7 @@ project, and graph: a request to wait for the remaining workers could start a se
 
 ## Ownership
 
-- The harness owns run identity, the plan, worktrees, scheduling, deadline and cancellation.
+- The harness owns run identity, the plan, worktrees, scheduling and cancellation.
   It reserves one run per thread/project synchronously, before planning or any model request.
 - The chat owns conversation: the harness's queue (`loop/message-queue.ts`) and the chat's own
   session. Messages are persisted before acknowledgement and queued in order per chat. A
@@ -311,8 +311,9 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   harness sent; a lead reads only that worktree of the run's folder, beside the game folder and the
   run's own artifacts. Its lock is that worktree, not the game folder, so the chat's other turns
   there and Make it live go on while it thinks; a turn refused because the lock is held
-  (`DelegationRefusal.FolderBusy`, the error's `code`) is asked again after a wait, and a first turn
-  refused for good ends as a failed turn rather than the run's crash (`wake.ts` `askSession`). The
+  (`DelegationRefusal.FolderBusy`, the error's `code`) is asked again after each wait until the lock
+  is free, as an open Loop's lead waits for its folder; a Stop during the wait ends it as a failed
+  turn rather than the run's crash (`wake.ts` `waitsForFolder`). The
   host keeps a `chatSession` lead's session as the chat's `contractor` after each turn; the harness
   writes its `contractor_session` when it changed (`bookmarkLead`). Claude Code reads without
   Write, Edit or Bash; Codex, which can always write where it is started, runs from a scratch

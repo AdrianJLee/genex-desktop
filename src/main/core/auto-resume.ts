@@ -3,9 +3,10 @@
  * engine limit paused resumes once the limit resets; one a provider outage paused is tried again
  * after a wait; one the loop's crash paused resumes once the loop runs again. A build paused on a
  * lost sign-in (an expired login, an account whose access was taken away) waits for the user, who
- * has to fix it. Bounded: at most AUTO_RESUMES_MAX times a run, never after the user's Stop or
- * Finish, never with too little memory left, and only while Settings → Harness
- * "Resume builds automatically" is on. A cold start (the app itself died) stays the user's click.
+ * has to fix it. A limit's pause is resumed at every reset; a crash's or an outage's at most
+ * AUTO_RESUMES_MAX times a run. Never after the user's Stop or Finish, never with too little memory
+ * left, and only while Settings → Harness "Resume builds automatically" is on. A cold start (the app
+ * itself died) stays the user's click.
  *
  * It lives on the host, not in the harness seed, so a kept older seed cannot shadow it, and it
  * decides from typed fields only: the close's `limit`, the host's own record of a crash, the run's
@@ -19,7 +20,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import type { EventEnvelope } from "../../shared/event-log.ts";
 import { RUN_START_EVENTS, RunState, runExecution, runExecutions } from "../../shared/run-state.ts";
 
-/** The most times the studio resumes one run on its own; after that it is the user's. */
+/** The most times the studio resumes one run on its own after a crash or an outage; after that it is the user's. */
 export const AUTO_RESUMES_MAX = 2;
 /** How long after a limit's reset the resume waits, so the first call does not meet the old limit. */
 export const LIMIT_RESET_MARGIN_MS = 2 * MINUTE_MS;
@@ -117,20 +118,27 @@ const record = (value: unknown): Record<string, unknown> | null =>
 const positiveMs = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 
-/** The run's own records since it last started, its last start, and how many times it was auto-resumed. */
+/**
+ * The run's own records since it last started, its last start, how many times it was auto-resumed,
+ * and how many of those spend AUTO_RESUMES_MAX: every one but a limit's reset.
+ */
 interface RunStretch {
   startAt: number;
   sinceStart: { event_type: string; payload: Record<string, unknown>; at: number }[];
   autoResumes: number;
+  spent: number;
 }
 
 function runStretch(events: readonly EventEnvelope[], runId: string): RunStretch {
-  const stretch: RunStretch = { startAt: Number.NEGATIVE_INFINITY, sinceStart: [], autoResumes: 0 };
+  const stretch: RunStretch = { startAt: Number.NEGATIVE_INFINITY, sinceStart: [], autoResumes: 0, spent: 0 };
   for (const event of events) {
     const custom = customRecord(event.data);
     if (custom?.payload.runId !== runId) continue;
     const at = Date.parse(event.created_at);
-    if (custom.event_type === CustomEvent.RunAutoResumed) stretch.autoResumes++;
+    if (custom.event_type === CustomEvent.RunAutoResumed) {
+      stretch.autoResumes++;
+      if (custom.payload.cause !== AutoResumeCause.LimitReset) stretch.spent++;
+    }
     if (RUN_START_EVENTS.has(custom.event_type)) {
       stretch.startAt = at;
       stretch.sinceStart = [];
@@ -210,9 +218,10 @@ export function autoResumePlan(events: readonly EventEnvelope[], now: number, fa
   const held = userHeld(stretch, facts);
   if (held) return none(held);
   if (superseded(events, facts.runId)) return none(AutoResumeSkip.Superseded);
-  if (stretch.autoResumes >= AUTO_RESUMES_MAX) return none(AutoResumeSkip.Spent);
   const due = dueResume(close, stretch, facts);
   if (typeof due === "string") return none(due);
+  // A limit resets on its own, so every one is waited out: only a crash's or an outage's resumes are bounded.
+  if (due.cause !== AutoResumeCause.LimitReset && stretch.spent >= AUTO_RESUMES_MAX) return none(AutoResumeSkip.Spent);
   if (due.at - now > AUTO_RESUME_HORIZON_MS) return none(AutoResumeSkip.ResetTooFar);
   if (now < due.at) return waitUntil(due.at, holdFor(due.cause));
   return (

@@ -1,8 +1,9 @@
 /**
  * What a Loop's lead has at work while it rests: its pool's running workers and the run's running
  * jobs, and for an open Loop a recovery of the project's app under way. A lead with nothing at work
- * and nothing to be woken for is done: its Loop closes, as a bare agent's turn ends (wake.ts). An
- * open Loop's jobs are read from the host at most every `JOB_POLL_MS`, or at once at a turn's edge.
+ * and nothing to be woken for is done: its Loop closes, as a bare agent's turn ends (wake.ts). The
+ * run's jobs are read from the host at most every `JOB_POLL_MS`; a read the host could not answer
+ * says nothing, so only one that says no job runs lets the Loop close.
  */
 import type { HarnessCtx } from "../../../types/harness.d.ts";
 import type { JobView } from "../../../types/host-api.d.ts";
@@ -36,20 +37,16 @@ export function workAtHand(loopRun: LoopRun): number {
   const open = loopRun.open;
   const pooled = open?.pool ? runningRecords(open.pool.state).length : 0;
   const recovering = open?.recovering ? 1 : 0;
-  return loopRun.runningWorkers().length + pooled + (open?.jobsRunning ?? 0) + recovering;
+  return loopRun.runningWorkers().length + pooled + (loopRun.jobsRunning ?? 0) + recovering;
 }
 
-/**
- * What the lead has at work now, the run's jobs read again when the last read is `JOB_POLL_MS` old,
- * or at once when `fresh` (a turn's edge, which must not miss a job that ran within it).
- */
-export async function activeWork(loopRun: LoopRun, now: number, { fresh = false } = {}): Promise<number> {
-  const open = loopRun.open;
-  const stale = open && (fresh || open.jobsReadAt === null || now - open.jobsReadAt >= JOB_POLL_MS);
-  if (open && stale) {
-    open.jobsReadAt = now;
+/** What the lead has at work now, the run's jobs read again when the last read is `JOB_POLL_MS` old or forgotten. */
+export async function activeWork(loopRun: LoopRun, now: number): Promise<number> {
+  const readAt = loopRun.jobsReadAt ?? null;
+  if (readAt === null || now - readAt >= JOB_POLL_MS) {
+    loopRun.jobsReadAt = now;
     const jobs = await jobsNow(loopRun.ctx, loopRun.run.project, loopRun.run.runId);
-    if (jobs !== null) open.jobsRunning = runningJobs(jobs);
+    loopRun.jobsRunning = jobs === null ? null : runningJobs(jobs);
   }
   return workAtHand(loopRun);
 }
@@ -59,14 +56,10 @@ const runningJobs = (jobs: readonly JobView[]): number => jobs.filter((job) => j
 
 /**
  * Whether the lead has anything at work (the module's header): a worker until its run has settled
- * (the line of its end, which wakes the lead, is that run's last step), and the run's jobs, an open
- * Loop's read again at once at a turn's edge (`edge`), which must not miss a job the turn just
- * started; a web Loop's every time.
+ * (the line of its end, which wakes the lead, is that run's last step), and the run's jobs as their
+ * last read found them, a read that could not say among them.
  */
-export async function hasWorkAtHand(loopRun: LoopRun, now: number, edge: boolean): Promise<boolean> {
+export function hasWorkAtHand(loopRun: LoopRun): boolean {
   const pool = loopRun.pool ?? loopRun.open?.pool ?? null;
-  if (pool?.state.runs.size || loopRun.runningWorkers().length) return true;
-  if (leadsOpenLoop(loopRun)) return (await activeWork(loopRun, now, { fresh: edge })) > 0;
-  const jobs = await jobsNow(loopRun.ctx, loopRun.run.project, loopRun.run.runId);
-  return runningJobs(jobs ?? []) > 0;
+  return Boolean(pool?.state.runs.size) || loopRun.jobsRunning !== 0 || workAtHand(loopRun) > 0;
 }

@@ -2143,7 +2143,7 @@ export interface RunSpec {
   project: string;
   /** "autopilot": the wire name of a Loop's run, kept for the records it is in. */
   mode?: "autopilot";
-  /** What the run aims at: a named game's stills, or a direction in words. A run has no time limit. */
+  /** What the run aims at: a named game's stills, or a direction in words. */
   reference: RunReference;
   /** observationDelays: backoff (ms) before re-trying a blind camera — a test/ops knob. */
   budgets: {

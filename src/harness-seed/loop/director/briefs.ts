@@ -59,7 +59,7 @@ export function directorBrief(facts: DirectorBriefFacts): string {
   ].join("\n\n");
 }
 
-/** The wrap-up's message: the person asked to finish, or the last turn failed, and what is left to do. */
+/** The wrap-up's message: what is left to do (`wrapLead` says why it started). */
 export function wrapUpPrompt({
   run,
   integrationHead,
@@ -76,7 +76,7 @@ export function wrapUpPrompt({
   const head = integrationHead ? shortSha(integrationHead) : "none";
   const health = HEALTH_WORDS[String(integrationHealthy)] ?? "";
   return [
-    `Run ${run.runId}: ${userAsked ? "the user asked to finish" : "your last turn failed"}. Start no worker.`,
+    `Run ${run.runId}: start no worker.`,
     running.length
       ? `Workers still running: ${running.join(", ")} — finish stops them; merge what you want to keep first.`
       : "",

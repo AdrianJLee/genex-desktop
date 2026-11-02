@@ -23,7 +23,7 @@ import { closeRunPool } from "./workers/run-pool.ts";
 import { leadsOpenLoop } from "./director/open/active-work.ts";
 import { briefWriter } from "./director/open/brief.ts";
 import { closeInPlace } from "./director/open/close.ts";
-import { openEndWords } from "./director/open/finish.ts";
+import { MESSAGE as END_WORDS, openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
 import { creditCapOf, OPEN_WALL_CLOCK, restartsApp } from "./director/open/contract.ts";
 import { settleRecovery } from "./director/open/health.ts";
@@ -87,10 +87,10 @@ function referenceImages(run: Run): DelegateImage[] {
 }
 
 /**
- * One turn of the lead's session, on its own engine and model, with no time limit. The lead is its
- * chat's own session: it sits in the game folder (no `cwd`); its grant names the folder it builds in
- * (`root`: a web game's integration worktree, or the game folder itself for a Loop in place), and its
- * paid jobs are held to the credit cap its run record names.
+ * One turn of the lead's session, on its own engine and model. The lead is its chat's own session: it
+ * sits in the game folder (no `cwd`); its grant names the folder it builds in (`root`: a web game's
+ * integration worktree, or the game folder itself for a Loop in place), and its paid jobs are held to
+ * the credit cap its run record names.
  */
 function delegateTurn(
   loopRun: LoopRun,
@@ -258,7 +258,8 @@ function sessionEndWords(loopRun: LoopRun, result: Partial<DelegateResult>, wrap
   const held = heldTurnEnding(result);
   if (held) return held;
   if (wrapCause === WrapCause.Finish) return WAKE_ENDING[wrapCause];
-  return `the lead's session ended (${result?.stopReason ?? (result?.ok ? "on its own" : "failed")}) before it called finish`;
+  if (result?.ok) return END_WORDS.nothingAtWork;
+  return `the lead's session ended (${result?.stopReason ?? "failed"}) before it called finish`;
 }
 
 /**

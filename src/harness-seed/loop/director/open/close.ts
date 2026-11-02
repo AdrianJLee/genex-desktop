@@ -221,16 +221,7 @@ async function closeNow(loopRun: LoopRun, end: OpenEnd): Promise<void> {
   journal.phase = paused ? JournalPhase.Paused : JournalPhase.Done;
   await loopRun.saveJournal();
   await leadRowAtClose(loopRun, journalOf(loopRun), paused);
-  // Before the close is written: once it is, the run is over for the host and the lead's call with it.
-  await dropTurnReads(loopRun);
   await announce(loopRun, paused);
-}
-
-/** The run's reads of the folder leave nothing in the game's git once the Loop is over (`FOLDER_GIT.dropTurnStore`). */
-async function dropTurnReads(loopRun: LoopRun): Promise<void> {
-  const { ctx, run } = loopRun;
-  const label = `open:${run.runId}:turn-store`;
-  await gitAt(ctx, { project: run.project }, FOLDER_GIT.dropTurnStore(run.runId), { label }).catch(() => {});
 }
 
 /** Close the open Loop in place (the module's header); a close already under way is joined, never repeated. */

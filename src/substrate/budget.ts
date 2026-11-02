@@ -5,7 +5,7 @@
  * live here, checked inside `engine.complete`/`engine.delegate` before anything is dispatched.
  * Two classes of work:
  *
- *  - `"user"` — everything the user asked for. Never blocked by the ledger, and it has no hour cap.
+ *  - `"user"` — everything the user asked for. Never blocked by the ledger.
  *  - `"improvement"` — SkillOpt passes, architect jobs. Refused while user work is in flight
  *    (improvement never queues ahead of a build) and capped to a share of the day's tokens.
  *

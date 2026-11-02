@@ -1,12 +1,11 @@
 /**
  * The `building-card` fixture: a racing Loop still going, for the chat's Building card and its list
  * of parts, after five earlier Loops of the same chat that finished, so Builds holds its six builds
- * in the picker (more than its three tabs). Of the
- * plan's five parts two are added, one works on its second round with its time left, one was
- * stopped and restarted (`replaces`, one row) and works on its first round, and one has not
- * started; the Loop was given 4 hours, and its lead takes the chat's messages (live chat). Written
- * once the app has started: the start closes every run an earlier app left open, so a Loop still
- * going written before it would read as stopped.
+ * in the picker (more than its three tabs). Of the plan's five parts two are added, one works on its
+ * second round, one was stopped and restarted (`replaces`, one row) and works on its first round, and
+ * one has not started; its lead takes the chat's messages (live chat). Written once the app has
+ * started: the start closes every run an earlier app left open, so a Loop still going written before
+ * it would read as stopped.
  */
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";

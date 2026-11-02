@@ -124,6 +124,9 @@ export interface LoopRunData {
   sleep?: (ms: number) => Promise<void>;
   /** A web game's Loop's worker pool (the run's pool, its workers' copies merging into the integration worktree). */
   pool?: WorkerPool | null;
+  /** How many of the run's jobs ran when they were last read (null: the host could not say), and when (`active-work.ts`). */
+  jobsRunning?: number | null;
+  jobsReadAt?: number | null;
   /** What waits for the end of each of the lead's turns before the next (an open Loop's); the wake loop awaits it. */
   afterTurn?: () => Promise<void>;
 }

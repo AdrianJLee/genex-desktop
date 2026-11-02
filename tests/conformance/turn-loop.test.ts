@@ -717,7 +717,7 @@ describe("engine fallback (M2)", () => {
       "the interviewer's reply reaches the chat",
     );
     assert.ok(
-      messages.some((m) => /Building until its lead calls finish/.test(m.content ?? "")),
+      messages.some((m) => /^Building\.$/.test(m.content ?? "")),
       "the launch is announced",
     );
     assert.ok(
@@ -793,7 +793,7 @@ describe("engine fallback (M2)", () => {
       "the ending is said, and so is the launch",
     );
     assert.ok(
-      messages.some((m) => /Building until its lead calls finish/.test(m.content ?? "")),
+      messages.some((m) => /^Building\.$/.test(m.content ?? "")),
       "the launch is announced",
     );
     assert.ok(!messages.some((m) => /Send your answer again/.test(m.content ?? "")), "no dead-end prompt to resend");
@@ -1252,7 +1252,7 @@ describe("intake launch", () => {
       // Flipped: the launch promised a wall-clock end ("Building until about 9:48 PM — keep the app
       // open"); a Loop has no end to promise but its lead's finish.
       const messages = await rig.core.store.listMessages(thread);
-      assert.ok(messages.some((m) => m.content === "Building until its lead calls finish."));
+      assert.ok(messages.some((m) => m.content === "Building."));
       assert.ok(
         !messages.some((m) => /Building until about|keep the app open|studio's connection/.test(m.content ?? "")),
       );

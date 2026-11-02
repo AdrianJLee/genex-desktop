@@ -1799,6 +1799,7 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
       const report = await idle.start();
       assert.equal(idle.leadCalls().length, 1, "its turn ended with nothing at work: the Loop closed");
       assert.doesNotMatch(String(report.stoppedBecause), /time ran out/);
+      assert.equal(report.stoppedBecause, "the lead's turn ended with nothing at work");
       assert.equal(idle.reviewed().length, 0, "no reviewer was asked");
     },
   );

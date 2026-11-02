@@ -102,8 +102,6 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     gitWrite: gitQueue(),
     clock,
     pool: null,
-    jobsRunning: 0,
-    jobsReadAt: null,
     since: clock.now(),
     heard: new Set(),
     asked: new Set(),

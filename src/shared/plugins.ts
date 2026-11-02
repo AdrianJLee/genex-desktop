@@ -778,10 +778,7 @@ export interface PluginInfo {
   /** Agent tools of a local plugin the person allowed to run without asking; cleared when its code changes or it is turned off. */
   allowedTools?: string[];
 }
-/**
- * The plugins and skills one session was handed, as `plugin` ids and `plugin/skill` names: the
- * `tool_registry_applied` record's set, which a resumed session is compared against.
- */
+/** The plugins and skills one session is handed, as `plugin` ids and `plugin/skill` names. */
 export interface PluginAppliedSet {
   plugins: string[];
   skills: string[];

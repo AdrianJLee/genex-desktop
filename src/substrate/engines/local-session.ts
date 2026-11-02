@@ -17,17 +17,11 @@ import type { Message, ToolCall, Usage } from "../types.ts";
 import { type SteerSession, steerSession } from "./claude-steer.ts";
 import { DEFAULT_COMPACTION_PERCENT, interruption } from "./common.ts";
 import { checkpointCut, type LocalCheckpoint, summarizeLocalCheckpoint } from "./local-checkpoint.ts";
-import {
-  LOCAL_NOTE,
-  localBudgetNote,
-  localSystemPrompt,
-  modeChangedNote,
-  progressCheckNote,
-} from "./local-session-prompts.ts";
+import { LOCAL_NOTE, localBudgetNote, localSystemPrompt, progressCheckNote } from "./local-session-prompts.ts";
 import { type AutoCheck, changesSomething, permitCall, seatAsks, sessionMode } from "./local-session-permissions.ts";
 import { autoApprove } from "./auto-approver.ts";
 import { type LocalInbox, localInbox, steerUserMessage, takesSteer } from "./local-session-steer.ts";
-import { textAsSent } from "./genex-mark-prompts.ts";
+import { textsAsSent } from "./genex-mark-prompts.ts";
 import {
   executeLocalTool,
   INSPECTION_TOOLS,
@@ -145,8 +139,6 @@ interface LocalRun {
   mode: PermissionMode | null;
   /** Auto's check of a command, by the session's own model in a call of its own (auto-approver.ts). */
   autoCheck: AutoCheck;
-  /** What the model reads at its next round about a mode the user switched to while it ran. */
-  modeNote: string;
   /** The person's messages sent while it runs, read at the top of the next round (`local-session-steer.ts`). */
   inbox: LocalInbox;
   /** The host's steer, when it asked to steer this session: told once, and what was read. */
@@ -258,18 +250,15 @@ export class LocalSessions {
       .resolveFile("CLAUDE.md")
       .then((p) => readFile(p, "utf8"))
       .catch(() => "");
-    run.system = localSystemPrompt({
-      readonly: run.readonly,
-      instructions,
-      mode: run.mode,
-    });
+    const system = () => localSystemPrompt({ readonly: run.readonly, instructions, mode: run.mode });
+    run.system = system();
     request.onEvent?.({ type: DelegateEventType.System, payload: { subtype: "init", session_id: id, model } });
     // The composer's picker reaches the running session: the next call is decided in the new mode,
-    // and the model reads of it at its next round.
+    // which its system prompt says from the next round on.
     request.permissions?.onControl?.({
       setMode: async (mode) => {
         run.mode = sessionMode(run.engine, mode);
-        run.modeNote = modeChangedNote(run.mode);
+        run.system = system();
       },
     });
     try {
@@ -381,7 +370,6 @@ export class LocalSessions {
       workspaceStamp: "",
       mode: seatAsks(this.engine, request).mode,
       autoCheck: (ask, asked) => autoApprove({ complete: counted, model, cwd, ask, signal: asked }),
-      modeNote: "",
       inbox: localInbox(signal),
       steer,
     };
@@ -448,10 +436,6 @@ export class LocalSessions {
   /** One model turn and the tool calls it asked for; the session's ending when this round ends it. */
   async #round(run: LocalRun): Promise<DelegateResult | null> {
     run.signal.throwIfAborted();
-    if (run.modeNote) {
-      run.messages.push({ role: "user", content: run.modeNote });
-      run.modeNote = "";
-    }
     await readSteers(run);
     const answer = await this.#completeWithCompaction(run);
     if ("ending" in answer) return answer.ending;
@@ -644,7 +628,7 @@ function continueHistory(saved: SavedSession, messages: Message[], request: Dele
   // fail explicitly below instead of silently deleting the user's original request.
   const requirements = saved.requirements ?? [...(saved.task ? [saved.task] : [])];
   // Genex's own message reads under its mark (genex-mark-prompts.ts), here and in a compaction.
-  const prompt = textAsSent({ text: request.prompt, from: request.from });
+  const prompt = textsAsSent(request).join("\n\n");
   if (requirements.at(-1) !== prompt) requirements.push(prompt);
   saved.requirements = requirements;
   delete saved.task;

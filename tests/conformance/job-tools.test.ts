@@ -574,9 +574,11 @@ describe("job tools", () => {
     assert.equal(ended?.stoppedBy, JobStopper.Person, "its end row says the person stopped it");
     assert.equal(ended?.worker, undefined, "the chat's own job names no worker");
     const next = await callsIn(chat, await ownTurn(chat), [[JobTool.Status, { id }]]);
+    // Flipped: a Studio notice in the prompt also said to read it with job_tail and not to start it
+    // again. Genex's notice beside the words says the fact alone.
     assert.match(
-      next.request?.prompt ?? "",
-      /Jobs since your last turn: Server \(`[^`]+`\) was stopped by the person after \d+ min: read it with job_tail [^;.]+, and do not start it again unless the person asks/,
+      (next.request?.notices ?? []).join("\n"),
+      /Your jobs that ended: Server \([^,]+, `[^`]+`\) was stopped by the person after \d+ min\./,
       "the chat's agent is told the person stopped it",
     );
     assert.match(
@@ -644,14 +646,15 @@ describe("job tools", () => {
     const server = startedId(first.answers[1] ?? "");
     await untilEndRecorded(chat, built);
     const next = await callsIn(chat, await ownTurn(chat), []);
+    const notices = (request: { notices?: readonly string[] } | undefined) => (request?.notices ?? []).join("\n");
     assert.match(
-      next.request?.prompt ?? "",
-      /Jobs since your last turn: Build \(`echo built; exit 0`\) finished \(exit 0\)/,
+      notices(next.request),
+      new RegExp(`Your jobs that ended: Build \\(${built}, \`echo built; exit 0\`\\) finished \\(exit 0\\)`),
     );
-    assert.match(next.request?.prompt ?? "", new RegExp(`Still running: Server \\(${server}\\)`));
+    // Flipped: the jobs still running were named on every turn; job_list says them.
+    assert.doesNotMatch(notices(next.request), new RegExp(server), "a running job is job_list's to say");
     const again = await callsIn(chat, await ownTurn(chat), []);
-    assert.doesNotMatch(again.request?.prompt ?? "", /Jobs since your last turn/, "told once");
-    assert.match(again.request?.prompt ?? "", /Still running: Server/);
+    assert.doesNotMatch(notices(again.request), /Your jobs that ended/, "told once");
   });
 
   it("a run's jobs stop when the harness reports the run settled, and a crash does not stop them", {

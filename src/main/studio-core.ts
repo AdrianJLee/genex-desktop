@@ -760,8 +760,6 @@ export class StudioCore {
       },
       readyProject: (...args) => core.#readyProject(...args),
       recordToolRevision: (...args) => core.#connections.recordApplied(...args),
-      recordDeliveredTools: (...args) => core.#connections.recordDelivered(...args),
-      lastAppliedTools: (...args) => core.#connections.lastApplied(...args),
       setGameCover: (...args) => core.#setGameCover(...args),
       setGameCoverShader: (...args) => core.#setGameCoverShader(...args),
       get settings() {

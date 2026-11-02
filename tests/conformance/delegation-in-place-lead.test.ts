@@ -8,7 +8,7 @@ import { mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { leadToolsNote, mainAgentReachNote } from "../../src/main/core/delegation-prompts.ts";
+import { leadToolsNote } from "../../src/main/core/delegation-prompts.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { ThreadKind } from "../../src/shared/event-log.ts";
 import { engineMode, PermissionMode, type ToolPermissionEvent } from "../../src/shared/permissions.ts";
@@ -488,7 +488,6 @@ describe("a Loop's lead in place on an engine that cannot ask about every call",
           (request.denyReads ?? []).map((dir) => path.resolve(dir)).includes(path.resolve(other.dir)),
           `${label} is denied the other game`,
         );
-        assert.equal(request.prompt.includes(mainAgentReachNote()), false, `${label} is not told it reaches the Mac`);
       }
     },
   );

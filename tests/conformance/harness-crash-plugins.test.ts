@@ -23,10 +23,11 @@ type Api = Record<string, (input: unknown) => Promise<unknown>>;
 
 /** The id of the test's own plugin: a backend tool that waits, and a connector that loses its app. */
 const PLUGIN = "cutdemo";
-const NOTICE = /^Studio notice: these calls were cut off before they answered/;
+/** Genex's notice of the calls it cut off: a fact, said first, never an instruction about them. */
+const NOTICE = /^Genex cut these calls off before they answered/;
 /** Why a call made after its session's turn ended went unanswered, as the next session reads it. */
 const TURN_ENDED_WORDS =
-  "made after the session's turn had ended, so its answer could not reach you: it may have run anyway, so look at what it would have changed before calling it again; a \"user doesn't want to take this action\" answer to it meant only that, and the person declined nothing";
+  "made after your turn had ended; its \"user doesn't want to take this action\" answer was Genex's, not the person's";
 /** What the test's engine notes for a compaction, which reads no prompt. */
 const COMPACTED = "(compacted)";
 
@@ -178,7 +179,8 @@ describe("a harness crash and the plugins", () => {
       status: async () => ({ code: "ready", detail: "fixture" }),
       models: async () => [],
       delegate: async (request: DelegateRequest) => {
-        prompts.push(request.compact ? COMPACTED : request.prompt);
+        // What the session reads: Genex's notices, then the prompt (flipped: once glued into it).
+        prompts.push(request.compact ? COMPACTED : [...(request.notices ?? []), request.prompt].join("\n\n"));
         const call = firstCall;
         firstCall = null;
         if (call) await request.onLiveTool?.(...call).catch(() => null);
@@ -267,7 +269,7 @@ describe("a harness crash and the plugins", () => {
     assert.deepEqual(await who(), { pid: backend.pid, waits: 1 }, "the backend kept running and got the call once");
     assert.match(prompts[1] ?? "", NOTICE, "the next session reads the notice first");
     assert.ok(prompts[1]?.includes(`${PLUGIN}__wait`), "naming the call");
-    assert.ok(!prompts[2]?.includes("were cut off"), "and only once");
+    assert.ok(!prompts[2]?.includes("Genex cut these calls off"), "and only once");
   });
 
   it("a connector call the harness's crash cut off is recorded as outcome unknown", async () => {
@@ -357,7 +359,7 @@ describe("a harness crash and the plugins", () => {
       prompts[1],
     );
     await delegate();
-    assert.ok(!prompts[2]?.includes("were cut off"), "told once");
+    assert.ok(!prompts[2]?.includes("Genex cut these calls off"), "told once");
   });
 
   it("a session that failed, or one without host tools, never uses up the notice", async () => {
@@ -372,11 +374,11 @@ describe("a harness crash and the plugins", () => {
     await api["engine.delegate"]!({ engine: "claude-code", project, threadId, prompt: "Look only", readOnly: true });
     await delegate();
     assert.match(prompts[0] ?? "", NOTICE, "the session that failed was told");
-    assert.ok(!prompts[1]?.includes("were cut off"), "the session without host tools is not");
+    assert.ok(!prompts[1]?.includes("Genex cut these calls off"), "the session without host tools is not");
     assert.match(prompts[2] ?? "", NOTICE, "the next session that works still reads it");
     assert.ok(prompts[2]?.includes(`${PLUGIN}-editor__lost`), "naming the call");
     await delegate();
-    assert.ok(!prompts[3]?.includes("were cut off"), "and then it is used up");
+    assert.ok(!prompts[3]?.includes("Genex cut these calls off"), "and then it is used up");
   });
 
   it("a connector call still waiting on its card when the harness dies never went out: no outcome unknown, no notice", async () => {
@@ -522,7 +524,7 @@ it("a thread keeps its last twenty cut-off calls, each with its arguments clippe
 it("the cut-off notice words each reason, and says nothing for no calls", () => {
   assert.equal(cutOffNotice([]), "");
   const why: Array<[CallCutOff, string]> = [
-    [CallCutOff.HarnessEnded, "the studio's loop ended while it ran"],
+    [CallCutOff.HarnessEnded, "Genex's loop ended while it ran"],
     [CallCutOff.PluginEnded, "its plugin stopped while it ran"],
     [CallCutOff.AppLost, "the app it drives went away while it ran"],
     [CallCutOff.TurnEnded, TURN_ENDED_WORDS],

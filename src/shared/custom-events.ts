@@ -828,9 +828,6 @@ export interface CustomEventMap {
   tool_registry_applied: {
     revision?: number;
     engine?: string;
-    session?: string;
-    plugins?: string[];
-    skills?: string[];
   };
   skillopt_accepted: { skill?: string; title?: string };
   skillopt_pass: { staged?: number; accepted?: number };

@@ -4,55 +4,18 @@
  * plan, which cannot call the tools itself, gets them as text.
  */
 import type { ConnectionSnapshot } from "../../shared/connections.ts";
-import { CustomEvent, customEvent } from "../../shared/custom-events.ts";
+import { CustomEvent } from "../../shared/custom-events.ts";
 import { EventKind } from "../../shared/event-log.ts";
 import { mcpScopeCovers, type McpConnectorView } from "../../shared/mcp.ts";
 import { McpAuthState } from "../../substrate/mcp/oauth.ts";
-import { isAgentTool, type PluginAppliedSet, type PluginInfo, pluginReach } from "../../shared/plugins.ts";
+import { isAgentTool, type PluginInfo, pluginReach } from "../../shared/plugins.ts";
 import type { GameKind } from "../../shared/project-facts.ts";
-import type { ThreadFold } from "../../substrate/event-store.ts";
-import type { EventEnvelope } from "../../substrate/types.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { planningCapabilities } from "../planning-capabilities.ts";
 import type { StudioCore } from "../studio-core.ts";
 
-type ConnectionsCore = Pick<StudioCore, "mcp" | "plugins" | "games" | "append" | "emit" | "store">;
+type ConnectionsCore = Pick<StudioCore, "mcp" | "plugins" | "games" | "append" | "emit">;
 type ConnectionSource = ConnectionSnapshot["sources"][number];
-
-/** A list of names, as a log record may or may not hold one. */
-const isNameList = (value: unknown): value is string[] =>
-  Array.isArray(value) && value.every((name) => typeof name === "string");
-
-/** One session's key in the applied fold: an engine's own session id, never mistaken for another engine's. */
-const sessionKey = (engine: string, session: string): string => JSON.stringify([engine, session]);
-
-/** The session and the set a delivered record carries; none for a record without a well-formed one. */
-function deliveredSetOf(event: EventEnvelope): [string, PluginAppliedSet] | undefined {
-  const payload = customEvent(event, CustomEvent.ToolRegistryApplied);
-  if (!payload || typeof payload.engine !== "string" || typeof payload.session !== "string") return undefined;
-  const { plugins, skills } = payload;
-  if (!isNameList(plugins) || !isNameList(skills)) return undefined;
-  return [sessionKey(payload.engine, payload.session), { plugins, skills }];
-}
-
-/**
- * The plugins and skills each engine session on a thread was last handed, by that session's id,
- * checkpointed beside the thread's log (`applied-tools.json`). Only a record written once the
- * session answered carries a set: a brief that never reached its session, and a fresh session on
- * the same thread and engine, leave another session's set as it was.
- */
-const APPLIED_FOLD: ThreadFold<Array<[string, PluginAppliedSet]>> = {
-  name: "applied-tools",
-  version: 2,
-  fold: (previous, events) => {
-    const bySession = new Map(previous ?? []);
-    for (const event of events) {
-      const delivered = deliveredSetOf(event);
-      if (delivered) bySession.set(...delivered);
-    }
-    return [...bySession];
-  },
-};
 
 /** The tool registry's revision, per-thread applied revisions, and the snapshot built from them. */
 export class ConnectionService {
@@ -121,24 +84,6 @@ export class ConnectionService {
       threadId,
     );
     this.#core.emit(UiEvent.ConnectionsApplied, { threadId, revision });
-  }
-
-  /**
-   * `engine`'s session `session` answered a brief that handed it `applied`: log the set under that
-   * session, for a later resume of it to be compared against.
-   */
-  async recordDelivered(threadId: string, engine: string, session: string, applied: PluginAppliedSet): Promise<void> {
-    const payload = { engine, session, plugins: applied.plugins, skills: applied.skills };
-    await this.#core.append(
-      [{ type: EventKind.Custom, event_type: CustomEvent.ToolRegistryApplied, payload }],
-      threadId,
-    );
-  }
-
-  /** The plugins and skills `engine`'s session `session` on this thread was last handed, read from the thread's log. */
-  async lastApplied(threadId: string, engine: string, session: string): Promise<PluginAppliedSet | undefined> {
-    const { state } = await this.#core.store.foldThread(threadId, APPLIED_FOLD);
-    return new Map(state).get(sessionKey(engine, session));
   }
 
   /** What a game's folder holds; a game whose facts can't be read has no kind yet. */

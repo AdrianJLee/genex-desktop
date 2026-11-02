@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { planApprovedNote, planRevisionNote } from "../../src/main/core/delegation-prompts.ts";
+import { planApprovedNote } from "../../src/main/core/delegation-prompts.ts";
 import { joinedResult, withPlanApproval } from "../../src/main/core/plan-approval.ts";
 import type { PermissionMode } from "../../src/shared/permissions.ts";
 import type {
@@ -83,6 +83,7 @@ describe("a plan shown by ending a turn", () => {
     const [, next] = session.passes;
     assert.equal(next!.resume, "s1", "the same session goes on");
     assert.equal(next!.prompt, planApprovedNote());
+    assert.equal(next!.from, "genex", "the approval is Genex's line, never the person's words");
     assert.equal(next!.permissions!.mode, "auto");
     assert.equal(next!.images, undefined, "the stills were shown already");
     assert.equal(result.summary, "Added the jump key");
@@ -112,7 +113,10 @@ describe("a plan shown by ending a turn", () => {
     );
     await withPlanApproval({ engine: "bonsai", ...session, signal: new AbortController().signal });
     assert.equal(session.asked.length, 2);
-    assert.equal(session.passes[1]!.prompt, planRevisionNote("Use space, not W"));
+    // Flipped: the words came wrapped in a Studio notice that Plan mode goes on; they go as the
+    // person's now, and Plan mode is the session's option.
+    assert.equal(session.passes[1]!.prompt, "Use space, not W");
+    assert.equal(session.passes[1]!.from, "person");
     assert.equal(session.passes[1]!.permissions!.mode, "plan");
     assert.deepEqual(session.asked[1]!.input, { plan: "1. Jump on space" });
     assert.equal(session.passes[2]!.permissions!.mode, "acceptEdits");
@@ -200,7 +204,8 @@ describe("a build recorded to start while the chat is in Plan", () => {
     );
     const result = await withPlanApproval({ engine: "claude-code", ...session, signal });
     const [, again] = session.passes;
-    assert.equal(again?.prompt, planRevisionNote("Fewer levels"));
+    assert.equal(again?.prompt, "Fewer levels");
+    assert.equal(again?.from, "person");
     assert.equal(again?.permissions?.mode, "plan");
     assert.equal(again?.resume, "s1");
     assert.deepEqual(launches(result), [], "nothing starts");

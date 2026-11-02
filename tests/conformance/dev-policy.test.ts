@@ -49,8 +49,8 @@ test("pre-init injection avoids every real engine status/models/auth probe and k
   });
   await core.start();
   assert.equal(core.host.state, "ready");
-  // Flipped (OpenCode, OpenRouter, a local server, Grok Build, Cursor): eight scripted engines, never a real one.
-  assert.equal((await core.engines.describe()).length, 8);
+  // Flipped (OpenCode, OpenRouter, a local server, Grok Build, Cursor, Genex): nine scripted engines, never a real one.
+  assert.equal((await core.engines.describe()).length, 9);
   assert.equal(core.sandbox.enabled, true);
 });
 test("a fixture's Cursor is not installed unless the usage file makes it ready", async (t) => {

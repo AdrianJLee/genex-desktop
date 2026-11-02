@@ -78,7 +78,7 @@ interface EnginePermissions {
 }
 
 /**
- * Each engine's row. Claude Code asks mid-turn in every mode. Bonsai's tools run in the studio,
+ * Each engine's row. Claude Code asks mid-turn in every mode, and so does Genex, which runs it. Bonsai's tools run in the studio,
  * which asks before each edit or command; its commands always run in the studio's sandbox, so it
  * has no Bypass. Codex has no Manual or Accept edits: Auto keeps its sandbox (on its app server, what
  * the sandbox would not run is asked about and settled by the Auto check), Plan only reads, Bypass
@@ -91,6 +91,7 @@ interface EnginePermissions {
  */
 const ENGINE_PERMISSIONS: Readonly<Record<string, EnginePermissions>> = {
   [EngineId.ClaudeCode]: { modes: PERMISSION_MODES, withheld: UnavailableModeReason.CannotAsk, plansMidTurn: true },
+  [EngineId.Genex]: { modes: PERMISSION_MODES, withheld: UnavailableModeReason.CannotAsk, plansMidTurn: true },
   [EngineId.Bonsai]: {
     modes: [PermissionMode.Auto, PermissionMode.Manual, PermissionMode.AcceptEdits, PermissionMode.Plan],
     withheld: UnavailableModeReason.AlwaysSandboxed,

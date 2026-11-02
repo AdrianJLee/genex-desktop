@@ -31,16 +31,6 @@ const shot = (sha256: string, takenAt: number) => ({
   stats: { lumaMean: 0.4, lumaStdDev: 0.2, nearBlackFraction: 0.1, litFraction: 0.9 },
   takenAt: iso(takenAt),
 });
-const clip = (sha256: string, takenAt: number) => ({
-  sha256,
-  mimeType: "video/webm",
-  bytes: 1024,
-  width: 960,
-  height: 540,
-  durationMs: 5000,
-  motion: 0.5,
-  takenAt: iso(takenAt),
-});
 const record = (over: Partial<GenexCoverRecord> = {}): GenexCoverRecord => ({
   shot: shot(OLD, AT - MINUTE_MS),
   last: null,
@@ -48,7 +38,7 @@ const record = (over: Partial<GenexCoverRecord> = {}): GenexCoverRecord => ({
   ...over,
 });
 const asked = (kind: CoverKind = CoverKind.Picture, took: CoverAskMemory["took"] = {}): CoverAskMemory => ({
-  ask: { kind, from: OLD, at: AT },
+  ask: { kind, at: AT },
   took,
 });
 
@@ -64,7 +54,7 @@ test("a frame the agent took after the ask answers it: how long it took is kept 
     { ask: null, took: { [CoverKind.Picture]: 150 * SECOND_MS } },
     "timed by the agent's frame, though Studio took another after it",
   );
-  const clipAsk = { ask: { kind: CoverKind.Clip, from: OLD, at: AT }, took: { [CoverKind.Picture]: 60 * SECOND_MS } };
+  const clipAsk = { ask: { kind: CoverKind.Clip, at: AT }, took: { [CoverKind.Picture]: 60 * SECOND_MS } };
   assert.equal(
     settleCoverAsk(clipAsk, record({ agentTook: { shot: iso(AT + 30 * SECOND_MS) } }), AT + MINUTE_MS),
     clipAsk,
@@ -93,35 +83,6 @@ test("a waiting ask stays until the agent's frame comes, and is dropped unmeasur
   );
   const none = { ask: null, took: {} };
   assert.equal(settleCoverAsk(none, nothingYet, AT), none, "nothing asked");
-});
-
-test("from a plugin that does not say who took a frame, any new frame of the kind answers", () => {
-  const waiting = asked();
-  assert.equal(settleCoverAsk(waiting, record(), AT + MINUTE_MS), waiting, "same frame: nothing changes");
-  assert.equal(
-    settleCoverAsk(waiting, record({ clip: clip(NEW, AT + 30 * SECOND_MS) }), AT + MINUTE_MS),
-    waiting,
-    "a new clip does not answer a picture",
-  );
-  assert.deepEqual(settleCoverAsk(waiting, record({ shot: shot(NEW, AT + 150 * SECOND_MS) }), AT + 10 * MINUTE_MS), {
-    ask: null,
-    took: { [CoverKind.Picture]: 150 * SECOND_MS },
-  });
-  const first = { ask: { kind: CoverKind.Picture, from: null, at: AT }, took: {} };
-  assert.deepEqual(
-    settleCoverAsk(first, record({ shot: shot(NEW, AT + 40 * SECOND_MS) }), AT + MINUTE_MS),
-    { ask: null, took: { [CoverKind.Picture]: 40 * SECOND_MS } },
-    "asked with no frame yet, the first one answers",
-  );
-  const cases = [
-    { name: "taken before the ask", takenAt: iso(AT - SECOND_MS) },
-    { name: "taken past the wait", takenAt: iso(AT + COVER_MAKING_MS) },
-    { name: "no readable time", takenAt: "soon" },
-  ];
-  for (const { name, takenAt } of cases) {
-    const arrived = record({ shot: { ...shot(NEW, AT), takenAt } });
-    assert.deepEqual(settleCoverAsk(waiting, arrived, AT + MINUTE_MS), { ask: null, took: {} }, name);
-  }
 });
 
 test("minutes left come from the last time only, rounded up, and none once it runs over", () => {
@@ -158,21 +119,20 @@ test("a game's asks are kept under its own key and read back", () => {
 test("an ask is kept once the chat sent it, beside the times already kept", () => {
   const storage = memoryStorage();
   writeCoverAsks("snow-game", { ask: null, took: { [CoverKind.Clip]: 80 * SECOND_MS } }, storage);
-  const ask = { kind: CoverKind.Picture, from: OLD, at: AT };
+  const ask = { kind: CoverKind.Picture, at: AT };
   assert.deepEqual(rememberCoverAsk("snow-game", ask, storage), { ask, took: { [CoverKind.Clip]: 80 * SECOND_MS } });
   assert.deepEqual(readCoverAsks("snow-game", storage), { ask, took: { [CoverKind.Clip]: 80 * SECOND_MS } });
 });
 
 test("a kept value that is not an ask reads as nothing asked, and keeps what is sound", () => {
   const key = storageKeyFor.coverAsks("snow-game");
-  const sound = { kind: CoverKind.Picture, from: OLD, at: AT };
+  const sound = { kind: CoverKind.Picture, at: AT };
   const rows: Array<{ name: string; raw: string; want: CoverAskMemory }> = [
     { name: "not JSON", raw: "{", want: { ask: null, took: {} } },
     { name: "an array", raw: "[]", want: { ask: null, took: {} } },
     { name: "null", raw: "null", want: { ask: null, took: {} } },
     { name: "unknown kind", raw: JSON.stringify({ ask: { ...sound, kind: "movie" } }), want: { ask: null, took: {} } },
     { name: "time as text", raw: JSON.stringify({ ask: { ...sound, at: "now" } }), want: { ask: null, took: {} } },
-    { name: "frame as a number", raw: JSON.stringify({ ask: { ...sound, from: 7 } }), want: { ask: null, took: {} } },
     {
       name: "bad times dropped, a sound one kept",
       raw: JSON.stringify({ ask: sound, took: { picture: -5, clip: 90_000, movie: 3 } }),

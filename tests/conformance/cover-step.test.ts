@@ -6,11 +6,12 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { readFileSync } from "node:fs";
 import { rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { coverStepAsk, coverStepRuns } from "../../src/main/core/cover-step.ts";
-import { GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
+import { GENEX_COVER_TOOL, GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import { isChatReport, MessageOrigin } from "../../src/shared/protocol.ts";
 import { coreLite } from "../helpers/core-lite.ts";
@@ -43,19 +44,32 @@ const queued = (messageId: string, action: Record<string, unknown>) =>
 const closed = (runId: string, payload: Record<string, unknown> = { landed: true }) =>
   custom("run_finished", { runId, project: "racer", ...payload });
 
+/** The parameter names of the cover tool in this build's Genex seed, read as data. */
+function coverToolParameters(): string[] {
+  const manifest = JSON.parse(readFileSync(path.resolve("src/plugins/genex/plugin.json"), "utf8")) as {
+    tools: Array<{ name: string; parameters?: { properties?: Record<string, unknown> } }>;
+  };
+  const cover = manifest.tools.find((tool) => tool.name === GENEX_COVER_TOOL);
+  assert.ok(cover, "this build's Genex has a cover tool");
+  const names = Object.keys(cover.parameters?.properties ?? {});
+  assert.ok(names.length > 0, "the cover tool takes parameters");
+  return names;
+}
+
 describe("the Genex cover as a step after a landed build", () => {
-  it("asks the chat's agent for the cover with the person's engine, model and effort, never their Loop, hidden from the chat", () => {
+  it("asks for the cover by its goal alone: no tool, parameter or skill of the Genex plugin is named", () => {
     const events = [queued("m1", PERSON), closed("r1")];
     assert.deepEqual(coverStepRuns(events), ["r1"]);
     const ask = coverStepAsk(THREAD, events, "r1");
     assert.ok(ask);
-    assert.match(ask.text, /genex__skill \{"name":"cover"\}/, "the agent reads the cover skill then");
-    // Flipped from staging a genex-cover demo: the agent makes a picture of its real game by any
-    // means and hands Genex the file paths.
-    assert.match(ask.text, /genex__cover/);
-    assert.match(ask.text, /\{ image: "<path>", clip\?: "<path>" \}/);
-    assert.match(ask.text, /in the game folder/);
-    assert.match(ask.text, /PNG or JPEG, at least 1280×720/);
+    // Flipped from naming genex__skill {"name":"cover"}, genex__cover, its `{ image, clip? }` call
+    // and the picture's format: how to make and keep the cover is the plugin's own to say.
+    assert.match(ask.text, /Genex cover/);
+    assert.doesNotMatch(ask.text, /genex__/);
+    assert.doesNotMatch(ask.text, /[{}]/);
+    assert.doesNotMatch(ask.text, /skill/i);
+    for (const parameter of coverToolParameters())
+      assert.doesNotMatch(ask.text, new RegExp(`\\b${parameter}\\b`, "i"), parameter);
     assert.doesNotMatch(ask.text, /demo|stage|shoot/i);
     assert.deepEqual(ask.options, {
       engine: "claude-code",

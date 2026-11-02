@@ -550,7 +550,7 @@ export interface GenexCoverRecord {
   clip?: GenexCoverClip | null;
   /** How the last clip send went; null before any. */
   clipLast?: GenexCoverSent | null;
-  /** When the agent itself last kept a shot and a clip; absent from a plugin older than this. */
+  /** When the agent itself last kept a shot and a clip (covers/<project>/agent.json). */
   agentTook?: GenexCoverAgentTook;
 }
 

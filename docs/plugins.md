@@ -3428,17 +3428,15 @@ Genex:
   made until the agent's own frame arrives: the record's `agentTook` (`covers/<project>/agent.json`,
   set only by `genex__cover`, never by Studio's own frames). Roughly how
   long is left shows once that game's last ask was timed (ask to `agentTook`; no number before one,
-  none once it runs over). A
-  Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
-  by the owner; a second plugin with a cover would need a declared host surface instead.
+  none once it runs over). Genex-specific core UI, accepted by the owner; a second plugin with a cover would need a declared host surface instead.
 - A game that runs as its own program (a Unity, Godot or Unreal fact) cannot be photographed by
   Studio: its page shows nothing of it. Its agent renders the cover inside the engine and hands
   `genex__cover` the file paths like a web game's; the landed-run cover step asks for it the same
   way (`core/cover-step.ts`), and there is no cover reel or per-turn cover note for an engine.
 - The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`) for the
-  thread's latest `genex__cover` call from plugin `genex` whose operation is `shoot` and whose
-  answer carried a picture (a call of the newer `{image, clip?}` shape names no operation and is
-  not read there yet) (`chat-entries.ts`, the tool read with or without `genex__` and
+  thread's latest `genex__cover` call from plugin `genex` that handed over a picture (`image=` in
+  its arguments digest), or an older log record's `shoot` whose answer carried one
+  (`keptGenexCover` in `chat-entries.ts`, the tool read with or without `genex__` and
   `mcp__studio__`). Like a build's result card it goes up once that work has ended, after the turn's
   reply (or a build's result card when the build's builder shot it), never mid-turn, and a newer
   kept shot takes it down at once; earlier shots stay rows of the work. Its picture is the kept shot

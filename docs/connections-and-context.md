@@ -801,12 +801,13 @@ preview stays single-player. Fixture profiles refuse the CLI and package tools.
 
 The game's Genex cover is the 16:9 picture genex.games shows on its gallery card, its page and
 every shared link, unrelated to Studio's own sidebar cover; a clip of play can run over it on the
-cards. Once a run lands its build in a web game while Genex is on, Studio asks the chat's agent for
+cards. Once a run lands its build in a game while Genex is on, Studio asks the chat's agent for
 it as a step of its own, in a hidden message sent with the person's engine and model but not their
-Loop (`core/cover-step.ts`). The plugin's `cover` skill states the requirement and the API: the
-agent makes a picture of the real game by any means, saves it in the game folder and hands its path
-to `genex__cover {"image": …, "clip"?: …}` (a PNG or JPEG of at least 1280×720 within 8 MB; a WebM
-or MP4 of at least 5.3 s, since Genex keeps five seconds after trimming up to 300 ms). The plugin
+Loop (`core/cover-step.ts`). The ask names only the goal: make the game's Genex cover, change nothing
+else, say so in one line. How is the plugin's own, in `genex__cover`'s description and its `cover`
+skill: the agent makes a picture of the real game by any means, saves it in the game folder and
+hands its path to `genex__cover {"image": …, "clip"?: …}` (a PNG or JPEG of at least 1280×720 within
+8 MB; a WebM or MP4 of at least 5.3 s, since Genex keeps five seconds after trimming up to 300 ms). The plugin
 reads each by its bytes, through no link out of the folder, measures the picture's light as Genex's
 gate does, copies both into its own storage and answers what it kept, the last send and the cover
 Genex holds with who chose it; a refused file keeps nothing. A publish, and a draft until the game is

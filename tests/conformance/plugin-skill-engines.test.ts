@@ -245,20 +245,16 @@ const WAYS_IN = [
   "roblox__new-game",
   "roblox__finish-setup",
   "roblox__get-studio",
+  "roblox__setup",
+  "roblox__restart-studio",
+  "roblox__open-studio",
+  "roblox__do-it-for-me",
   "roblox__use-project",
   "unreal__new-game",
   "unreal__install-unreal",
 ];
-/** Tools that work on a game of their engine's own kind, which a game with no kind yet does not have. */
-const GAME_TOOLS = [
-  "roblox__setup",
-  "roblox__do-it-for-me",
-  "roblox__open-studio",
-  "roblox__restart-studio",
-  "roblox__quit-studio",
-  "roblox__undo-setup",
-  "godot__class-reference",
-];
+/** Tools that work on a game of their engine's own kind, which a game with no kind yet does not have (Roblox's: `ROBLOX_ONLY_TOOLS`). */
+const GAME_TOOLS = ["godot__class-reference"];
 
 test("a game with no kind yet is handed each engine's way in and none of its game tools", async () => {
   const resources = await makeResources({ tsc: false });
@@ -393,10 +389,6 @@ const ROBLOX_ONLY_TOOLS = [
   "roblox__cover-pictures",
   "roblox__places",
   "roblox__add-luau-checks",
-  "roblox__do-it-for-me",
-  "roblox__setup",
-  "roblox__restart-studio",
-  "roblox__open-studio",
   "roblox__quit-studio",
   "roblox__undo-setup",
 ];

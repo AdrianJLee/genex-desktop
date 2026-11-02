@@ -346,12 +346,13 @@ describe("the modeller in the loop (AG-930)", () => {
     const notice = (prompt: string) => (prompt.startsWith("build") ? null : (prompt.split("\n\n")[0] ?? ""));
 
     assert.equal(notice(await delegate("fake-delegate")), null, "a first session has nothing withdrawn");
-    await rig.core.plugins.setEnabled("blender", false);
-    assert.equal(notice(await delegate("fake-other", "ses")), null, "another engine never had Blender");
+    await rig.core.plugins.setEnabled("genex", false);
+    assert.equal(notice(await delegate("fake-other", "ses")), null, "another engine never had the Genex plugin");
 
     const resumed = notice(await delegate("fake-delegate", "ses"));
     assert.ok(resumed, "the resumed session is told before its brief");
-    assert.match(resumed, /\bblender\b/);
+    assert.match(resumed, /plugins: genex\b/);
+    assert.match(resumed, /genex\/genex-tool-model/);
     assert.match(resumed, /ignore/i);
 
     assert.equal(notice(await delegate("fake-delegate", "ses")), null, "the notice is given once");

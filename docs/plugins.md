@@ -640,9 +640,9 @@ a capture's file and hands the agent the picture itself, with its tone numbers (
 contrast, near against far contrast, saturation; a nearly black frame is called out as a render to
 doubt) and the frame rate (`editor-captures.ts`, `tone.ts`); a strip and a character sheet come back as one contact sheet. `attach_mesh` puts a static mesh on a
 Blueprint's component, and `set_route` (the route the play checks drive), `track_terrain` along it
-and `dirt_material` serve racing games. The plugin's skill (`unreal-editor`) tells every agent to
-look with these eyes, never `CaptureEditorImage` (the whole editor window) or `CaptureViewport` (the
-editor camera), and the lead's brief says the same. It also asks for a review of every character,
+and `dirt_material` serve racing games. The plugin's `unreal-editor` skill, which an agent reads
+with `unreal__skill`, says to look with these eyes, never `CaptureEditorImage` (the whole editor
+window) or `CaptureViewport` (the editor camera), and the lead's brief says the same. It also asks for a review of every character,
 up close and moving (`character_check` and its sheet, then a look in play), before it goes into the
 game or a save point claims one: a whole body, five-fingered hands, arms at its sides, nothing
 tearing between the legs, textures in play. What is wrong is fixed where it is (Blender for the rig,
@@ -1457,9 +1457,8 @@ each press of the panel is an agent tool under the action's own name: `setup`, `
 (a card, though its press has none: an agent never closes Studio unasked), `do-it-for-me`,
 `open-studio`, `cancel-get-studio` and `places` (no card; `places` lists open Studios and Studio's
 recent files, never Documents), beside `use-project`, `new-game`, `publish-update` and
-`first-publish`. A game with no place yet gets only the way in (`new-game`, `use-project`,
-`finish-setup`, `get-studio`, `cancel-get-studio`, `show-steps`; `show-steps` says to do what is
-left with `finish-setup`); the rest reach a game that holds a place. Their answers, the connection's refusals ("isn't open for this game", "isn't
+`first-publish`. A game with no kind yet or a web game gets only the plugin's way in
+([Scope by facts](#scope-by-facts)); the rest reach a game that holds a place. Their answers, the connection's refusals ("isn't open for this game", "isn't
 answering", "isn't linked") and the engine question's words name the tool for the next step,
 never a click for the person; only signing in, macOS's own prompts and Studio's or Roblox's own
 questions stay theirs. `do-it-for-me` starts the MCP switch's click itself when Studio is open,
@@ -2317,8 +2316,8 @@ and one kind for a plugin with none: the one that answered, else one whose tool 
 plugin's note words its first kind; a later scaffold is offered by its own tool). An agent never sees `facts`, `makes` or `ready`.
 
 Every agent tool of a bundled engine plugin names facts. Its way in (`new-game`, `new-plugin`,
-`use-project`, `show-steps`, Unreal's `install-unreal`, Roblox's `get-studio`, `finish-setup` and
-`cancel-get-studio`) names `web-game`, so a game with no kind yet and a web game (a port) get it,
+`use-project`, `show-steps`, Unreal's `install-unreal`, Roblox's Studio setup tools `finish-setup`,
+`get-studio`, `cancel-get-studio`, `setup`, `restart-studio`, `open-studio` and `do-it-for-me`) names `web-game`, so a game with no kind yet and a web game (a port) get it,
 and also its own fact where it works in its own games too (`new-game` and `new-plugin` never do);
 its other tools name only its own fact. A game of one engine is handed no tool of another, and
 `genex__package` names `web-game`. Unreal's `use-project` and `new-game` declare

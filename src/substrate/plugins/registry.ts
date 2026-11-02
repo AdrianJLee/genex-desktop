@@ -440,7 +440,7 @@ interface PluginPart {
  * reaches, naming only the skills that do.
  */
 function agentTools({ manifest, reach }: PluginPart): PluginTool[] {
-  const skillTool = reach.skillTool ? pluginSkillTool({ ...manifest, skills: reach.skills }) : undefined;
+  const skillTool = pluginSkillTool({ ...manifest, skills: reach.skills });
   return [...reach.tools.map((t) => agentTool(manifest.id, t)), ...(skillTool ? [skillTool] : [])];
 }
 /**
@@ -1549,11 +1549,8 @@ export class PluginRegistry {
    */
   locksFor(game: GameKind): Array<{ plugin: string; lock: PluginLock }> {
     return this.#live().flatMap(({ manifest }) => {
-      const needed = new Set(
-        [...manifest.tools.filter(isAgentTool), ...(manifest.mcpServers ?? [])]
-          .filter((part) => scopeReaches(part.facts, game))
-          .flatMap((part) => part.needs ?? []),
-      );
+      const servers = (manifest.mcpServers ?? []).filter((server) => scopeReaches(server.facts, game));
+      const needed = new Set([...pluginReach(manifest, game).tools, ...servers].flatMap((part) => part.needs ?? []));
       return locksNamed(manifest, [...needed]).filter(({ lock }) => lock.per === LockScope.Project);
     });
   }

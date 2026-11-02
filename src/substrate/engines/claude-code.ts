@@ -33,7 +33,7 @@ import { credentialHomes } from "../credential-homes.ts";
 import type { Usage } from "../types.ts";
 import type { ModelTokenUsage } from "../../shared/event-log.ts";
 import { claudeAuthStatus, type ClaudeAuthStatus } from "./claude-cli.ts";
-import { steerFeed, steerSession, userFrame, type SteerFeed, type SteerSession } from "./claude-steer.ts";
+import { briefFrame, steerFeed, steerSession, type SteerFeed, type SteerSession } from "./claude-steer.ts";
 import { autoModeRules } from "./claude-auto-mode.ts";
 import {
   askingOptions,
@@ -2343,7 +2343,7 @@ function sessionPrompt(
   // A resumed session may first answer what it had queued: its input waits for the brief's answer.
   if (!steer && !request.resume) return delegatePrompt(request);
   const session = steer ?? steerSession(() => {});
-  run.feed = steerFeed(session, userFrame(request.prompt, briefImages(request)), signal, () => run.sessionId);
+  run.feed = steerFeed(session, briefFrame(request), signal, () => run.sessionId);
   return run.feed.prompt;
 }
 
@@ -2367,13 +2367,13 @@ function briefImages(request: DelegateRequest): DelegateImage[] {
 
 /**
  * The builder's prompt. Stills go in as image blocks, the same content-block shape the judge uses
- * — a builder that never saw the reference read it nine times in 2,245 turns.
+ * — a builder that never saw the reference read it nine times in 2,245 turns. A prompt that says
+ * who wrote it goes as its sender's frame (claude-steer.ts `briefFrame`).
  */
 function delegatePrompt(request: DelegateRequest): unknown {
-  const images = briefImages(request);
-  if (!images.length) return request.prompt;
+  if (!request.from && !briefImages(request).length) return request.prompt;
   return (async function* () {
-    yield userFrame(request.prompt, images);
+    yield briefFrame(request);
   })();
 }
 

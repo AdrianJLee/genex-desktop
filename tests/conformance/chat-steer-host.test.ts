@@ -13,6 +13,7 @@ import { personWroteWatch } from "../../src/main/core/plugin-locks.ts";
 import { noteEvent, STEER_CUT_MAX_WAIT_MS, toolsInFlight } from "../../src/main/core/steer-cut.ts";
 import { ChatActivityPhase } from "../../src/shared/chat-activity.ts";
 import { customRecord } from "../../src/shared/custom-events.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import type { DispatchAction } from "../../src/shared/protocol.ts";
 import { EngineId } from "../../src/shared/providers.ts";
 import type {
@@ -308,6 +309,33 @@ describe("a session that cannot read a message mid-turn is cut only between tool
     const refused = chatSession(EngineId.Codex);
     await steerIntoChat(refused.delegations, { ...ask, interrupt: false }, heldClock().sleep);
     assert.equal(refused.wrote.current.signal.aborted, false, "nothing taken: nothing ends");
+  });
+
+  it("Genex's own lines end no wait for a lock, and reach the session with who wrote them", async () => {
+    const genex = { ...ask, messages: [{ id: "news", text: 'worker sky "Sky": done.', from: MessageFrom.Genex }] };
+    const read = nativeDoor();
+    const native = chatSession(EngineId.ClaudeCode, { steer: read.door });
+    const before = native.wrote.current.signal;
+    assert.deepEqual(await steerIntoChat(native.delegations, genex, heldClock().sleep), {
+      how: "native",
+      accepted: ["news"],
+    });
+    assert.deepEqual(read.sent, genex.messages, "the session hears it is Genex's");
+    assert.equal(before.aborted, false, "a wait for a lock goes on: the person wrote nothing");
+
+    const cut = chatSession(EngineId.Codex);
+    const times = { ...genex, messages: [{ id: "cap", text: "The working time is over.", from: MessageFrom.Genex }] };
+    assert.deepEqual(await steerIntoChat(cut.delegations, times, heldClock().sleep), {
+      how: "interrupt",
+      accepted: ["cap"],
+    });
+    assert.equal(cut.wrote.current.signal.aborted, false, "cut for Genex's line: no wait ends for the person");
+
+    const both = chatSession(EngineId.ClaudeCode, { steer: nativeDoor().door });
+    const waiting = both.wrote.current.signal;
+    const said = { ...ask, messages: [...genex.messages, { id: "ducks", text: "and ducks" }] };
+    await steerIntoChat(both.delegations, said, heldClock().sleep);
+    assert.equal(waiting.aborted, true, "the person's words among them end it");
   });
 });
 

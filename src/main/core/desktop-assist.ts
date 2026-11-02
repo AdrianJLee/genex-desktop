@@ -28,6 +28,7 @@ import path from "node:path";
 import type { ComposerSendOptions } from "../../shared/composer.ts";
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
+import { MessageFrom } from "../../shared/engine-requests.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
 import {
@@ -530,7 +531,14 @@ export function coreAssistHost(core: StudioCore): AssistHost {
     },
     post: async (threadId, project, text, messageId) => {
       const choice = await chatChoice(core, threadId);
-      await core.sendUserMessage(text, { thread: threadId, project, clientId: messageId, ...choice });
+      // The plugin's words, shown in the chat: the agent reads them as Genex's, never as the person's.
+      await core.sendUserMessage(text, {
+        thread: threadId,
+        project,
+        clientId: messageId,
+        from: MessageFrom.Genex,
+        ...choice,
+      });
     },
     grants: assistGrants(core),
     controlDeclines: controlDeclines(core),

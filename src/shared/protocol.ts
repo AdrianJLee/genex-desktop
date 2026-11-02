@@ -1,3 +1,4 @@
+import type { MessageFrom } from "./engine-requests.ts";
 import type { ModelPreferences } from "./model-preferences.ts";
 /**
  * Substrate ↔ harness wire protocol.
@@ -162,6 +163,8 @@ export type DispatchAction =
       autopilot?: AutopilotCommission;
       /** Words the chat wrote itself (a command's result); the queue keeps it and the transcript hides it. */
       origin?: MessageOrigin;
+      /** Genex wrote these words (any `origin`, a plugin's ask): the agent reads them as not the person's. */
+      from?: MessageFrom;
     }
   | { type: "compact"; threadId: string; engine?: string; model?: string }
   | { type: "cancel"; threadId?: string }

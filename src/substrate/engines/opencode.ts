@@ -28,6 +28,7 @@ import { releaseStaleLocks } from "./ownership-locks.ts";
 import { StudioBridge, answerBridgeCall, bridgeTools } from "./studio-bridge.ts";
 import { writeDelegateStills } from "./codex.ts";
 import { JUDGE_RULES, mcpToolsNote, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
+import { textAsSent } from "./genex-mark-prompts.ts";
 import { leadBuildWrites } from "./session-commands.ts";
 import {
   OPENCODE_AGENT,
@@ -467,7 +468,7 @@ export class OpenCodeEngine implements Engine {
   ): string {
     const plan = chatMode(request) === PermissionMode.Plan && ctx.scratch;
     return [
-      request.prompt,
+      textAsSent({ text: request.prompt, from: request.from }),
       ctx.bridge?.instructions() ?? "",
       ctx.bridge?.mcpCommand() ? mcpToolsNote((request.liveTools ?? []).map((tool) => tool.name)) : "",
       plan

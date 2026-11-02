@@ -28,7 +28,10 @@ import {
 import * as seedJudgeProvenance from "../../src/harness-seed/loop/judge-provenance.ts";
 import * as seedRunDispatch from "../../src/harness-seed/loop/run-dispatch.ts";
 import * as seedRunEvents from "../../src/harness-seed/loop/run-events.ts";
-import { SteerDelivery as seedSteerDelivery } from "../../src/harness-seed/loop/steer-delivery.ts";
+import {
+  MessageFrom as seedMessageFrom,
+  SteerDelivery as seedSteerDelivery,
+} from "../../src/harness-seed/loop/steer-delivery.ts";
 import * as seedTime from "../../src/harness-seed/loop/time.ts";
 import { DelegationRefusal as seedDelegationRefusal } from "../../src/harness-seed/loop/director/lead-session.ts";
 import * as seedWorkers from "../../src/harness-seed/loop/workers/contract.ts";
@@ -72,7 +75,7 @@ import {
 import { ProjectTool } from "../../src/shared/project-tools.ts";
 import { MAX_WORKERS_AT_ONCE } from "../../src/shared/workers.ts";
 import * as jobs from "../../src/shared/jobs.ts";
-import { DelegationRefusal, EngineFailureKind, StopReason } from "../../src/shared/engine-requests.ts";
+import { DelegationRefusal, EngineFailureKind, MessageFrom, StopReason } from "../../src/shared/engine-requests.ts";
 import * as queue from "../../src/shared/message-queue.ts";
 import * as roles from "../../src/shared/model-roles.ts";
 import { ReasoningEffort } from "../../src/shared/model-preferences.ts";
@@ -267,6 +270,7 @@ describe("the follow-up queue (shared/message-queue.ts ↔ loop/message-queue.ts
     assert.deepEqual([...seen].sort(), [...queue.QUEUE_STATES].sort());
     assert.equal(queue.MESSAGE_ATTEMPTS, seedQueue.MESSAGE_ATTEMPTS);
     assert.deepEqual(queue.SteerDelivery, seedSteerDelivery, "how a steered message was read, as both write it");
+    assert.deepEqual(MessageFrom, seedMessageFrom, "who wrote a message into a session, as both write it");
   });
 
   for (const [name, events] of Object.entries(LOGS)) {

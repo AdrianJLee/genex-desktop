@@ -15,6 +15,7 @@ import {
   runSnapshot,
 } from "../../shared/chat-run.ts";
 import { CustomEvent, customEventData, customRecord, type AnyCustomPayload } from "../../shared/custom-events.ts";
+import { MessageFrom } from "../../shared/engine-requests.ts";
 import { EventKind, ThreadKind, type ConversationRecord, type EventEnvelope } from "../../shared/event-log.ts";
 import { t } from "../../shared/i18n.ts";
 import { crossesCompletionEngine } from "../../shared/model-roles.ts";
@@ -579,6 +580,8 @@ export class ConversationService {
       ...(stills?.length ? { stills } : {}),
       ...(context.pictureFiles.length ? { pictureFiles: context.pictureFiles } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
+      // Words the chat wrote itself, or a plugin's ask it shows: the agent reads them as Genex's.
+      ...(options.origin || options.from === MessageFrom.Genex ? { from: MessageFrom.Genex } : {}),
     };
   }
 

@@ -24,6 +24,7 @@ import type {
   DelegateResult,
   LiveToolResult,
   LiveToolSpec,
+  MessageFrom,
   SteerMessage,
   StudioToolSpec,
   ToolDefinition,
@@ -196,6 +197,11 @@ export interface HarnessDelegateParams {
   chatTurn?: { messageId?: string };
   engine?: string;
   prompt: string;
+  /**
+   * Who wrote `prompt`: the person's words alone, or Genex's own message (a command's result, the
+   * cover step), which the engine shows as not the person's. Absent: a brief.
+   */
+  from?: MessageFrom;
   project: string;
   /** Build here instead of the live game folder — a facet worktree under scratch. */
   cwd?: string;

@@ -1,20 +1,22 @@
 /**
- * Steer, the host's half: a message the person sent while the chat's own turn works goes into
- * the session answering that turn (`engine.steer`). An engine that reads input mid-turn
+ * Steer, the host's half: a message sent while the chat's own turn works — the person's, or
+ * Genex's own line (`MessageFrom`, which the engine shows as not the person's) — goes into the
+ * session answering that turn (`engine.steer`). An engine that reads input mid-turn
  * (`Engine.steersMidTurn`) takes it at its next step and reports where it read it, which is
  * recorded in stream order among the turn's mirrored rows; any other session, and one asked not
  * to read it mid-turn (`native: false`), is cut at its next step, between tool calls and never
  * inside one (`steer-cut.ts`) — marked `steered`, so its caller (the harness's
  * `loop/chat-steer.ts`) resumes it with the messages in front instead of reading a Stop. Either
- * way the session's plugin calls stop waiting for a lock (`PersonWrote`): the agent reads the
- * message first. Only a chat's own session answers a turn, and a run's lead, which answers the
- * chat while its build runs (addressed by its run id, and told without recording where: the queue
- * recorded the hand-over): a builder's never.
+ * way, for the person's words, the session's plugin calls stop waiting for a lock (`PersonWrote`):
+ * the agent reads them first. Only a chat's own session answers a turn, and a run's lead, which
+ * answers the chat while its build runs (addressed by its run id, and told without recording
+ * where: the queue recorded the hand-over): a builder's never.
  */
 import { setTimeout as sleep } from "node:timers/promises";
 import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import type { HarnessParams, HarnessResult, HostMethod } from "../../shared/harness-api.ts";
+import { isMessageFrom, MessageFrom } from "../../shared/engine-requests.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import type { SteerMessage, SteerSend } from "../../substrate/engines/types.ts";
@@ -99,16 +101,24 @@ function servesNarrowerPurpose(p: DelegateParams, narrower: NarrowerPurpose): bo
   return Boolean(p.cwd || narrower.director);
 }
 
-/** The messages as a session takes them: an id, the words and a few pictures, nothing else. */
+/** The messages as a session takes them: an id, the words, a few pictures and who wrote them, nothing else. */
 function steerMessages(p: SteerParams): SteerMessage[] {
   const messages = Array.isArray(p?.messages) ? p.messages : [];
   return messages
     .filter((m) => typeof m?.id === "string" && typeof m.text === "string")
     .map((m) => {
       const images = Array.isArray(m.images) ? m.images.filter((image) => image?.data).slice(0, MAX_STEER_IMAGES) : [];
-      return { id: m.id, text: m.text, ...(images.length ? { images } : {}) };
+      return {
+        id: m.id,
+        text: m.text,
+        ...(images.length ? { images } : {}),
+        ...(isMessageFrom(m.from) ? { from: m.from } : {}),
+      };
     });
 }
+
+/** The person wrote it, not Genex: only their words end a wait for a lock. */
+const fromThePerson = (message: SteerMessage): boolean => message.from !== MessageFrom.Genex;
 
 /** The running session answering this chat turn, if there is one. */
 function chatSession(delegations: Iterable<ActiveDelegation>, p: SteerParams): ActiveDelegation | undefined {
@@ -148,10 +158,11 @@ async function nativeSend(running: ActiveDelegation, p: SteerParams): Promise<St
   return doorSend(running.steer);
 }
 
-/** The messages read mid-turn: the session's calls waiting for a lock stop waiting once it took one. */
+/** The messages read mid-turn: the session's calls waiting for a lock stop waiting once it took one of the person's. */
 function sendNatively(running: ActiveDelegation, send: SteerSend, messages: readonly SteerMessage[]): SteerAnswer {
   const accepted = sendEach(send, messages);
-  if (accepted.length && running.personWrote) personWrote(running.personWrote);
+  const theirs = messages.some((message) => accepted.includes(message.id) && fromThePerson(message));
+  if (theirs && running.personWrote) personWrote(running.personWrote);
   return { how: SteerDelivery.Native, accepted };
 }
 
@@ -181,7 +192,7 @@ export async function steerIntoChat(
   const mayCut = p.interrupt !== false && !running.ended && !running.abort.signal.aborted;
   if (!mayCut) return REFUSED;
   running.steered = true;
-  if (running.personWrote) personWroteBeforeCut(running.personWrote);
+  if (running.personWrote && messages.some(fromThePerson)) personWroteBeforeCut(running.personWrote);
   cutAtNextStep(running, wait);
   return { how: SteerDelivery.Interrupt, accepted: all };
 }

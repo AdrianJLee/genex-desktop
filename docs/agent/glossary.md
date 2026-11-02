@@ -81,8 +81,9 @@ is product copy, not this glossary.
 - **Wake / digest**: how the director's session is driven (`loop/director/wake.ts`). The lead
   ends its turn after each decision and the harness wakes the same session when something happens
   (`wake-schedule.ts` decides when, from typed `NoteKind` lines and timers). The digest opens each
-  wake: the user's words verbatim, what happened and where the run stands (`wake-prompts.ts`).
-- **Lead / one session**: a waking web run's director that is its chat's own session, building in
+  wake: the user's words verbatim, what happened and where the run stands (`wake-prompts.ts`). A
+  turn cut short for the person's words resumes with those words alone.
+- **Lead / one session**: a waking web run's director that is its chat's own session (one per chat), building in
   the integration worktree with its own hands beside its workers, never read-only
   (`loop/director/lead-session.ts`). After the close the same
   session answers the chat with its hands back and the run's controls — `run_status`,

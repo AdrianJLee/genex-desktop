@@ -180,6 +180,41 @@ describe("a chat's first message in a game", () => {
     assert.match(await briefFor({ commits: "1" }), /nothing has been built/i);
   });
 
+  it("a message the chat wrote itself goes to the session as Genex's; the person's as a brief, from nobody", async () => {
+    const froms: unknown[] = [];
+    const recorder = ctxRecorder({
+      threadId: "t1",
+      unknown: { value: null },
+      handlers: {
+        "events.messages": () => [{ role: "user", content: "Make the cover" }],
+        "events.list": () => [],
+        "game.list": () => [{ name: "untitled-game", title: "Untitled game", dir: "/g/untitled-game" }],
+        "game.contentStamp": () => ({ all: "same", source: "same" }),
+        "run.exec": () => ({ code: 0, stdout: "3\n", stderr: "" }),
+        "engine.delegate": (params) => {
+          froms.push(params.from);
+          return { ok: true, engine: "claude-code", turns: 1, usage: {}, sessionId: "s1", summary: "Done." };
+        },
+      },
+    });
+    const turn = (asked: Record<string, unknown>) =>
+      runDelegatedTurn(
+        recorder.ctx as never,
+        {
+          threadId: "t1",
+          turnId: "turn-1",
+          text: String(asked.text),
+          engine: "claude-code",
+          engineLabel: "Claude Code",
+          project: "untitled-game",
+          asked: { threadId: "t1", ...asked },
+        } as never,
+      );
+    await turn({ text: "Make the cover", origin: "cover-step", from: "genex" });
+    await turn({ text: "a night street race" });
+    assert.deepEqual(froms, ["genex", undefined]);
+  });
+
   it("continues from the code once anything has been made, or the chat is already talking", async () => {
     assert.match(await briefFor({ commits: "3" }), /existing code/);
     assert.match(await briefFor({ commits: "1", changes: " M src/main.js\n" }), /existing code/);

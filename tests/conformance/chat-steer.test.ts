@@ -12,7 +12,6 @@ import type { EventEnvelope } from "../../src/substrate/types.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
-import { steeredTurnPrompt, withSteers } from "../../src/harness-seed/loop/chat-steer-prompts.ts";
 
 const rigs: Rig[] = [];
 after(async () => {
@@ -105,6 +104,33 @@ function interruptingQueue(run: (action: any, steer: any) => Promise<unknown>) {
 }
 
 describe("steered session: an engine without input mid-turn is interrupted and resumed", () => {
+  it("a turn on Genex's own message says so on its first leg; the leg resumed with the person's words does not", async () => {
+    const froms: unknown[] = [];
+    const started = deferred();
+    const q = interruptingQueue(async (action, steer) => {
+      if (action.text !== "make the cover") return;
+      await steeredCall({ cancelled: false }, steer, {
+        prompt: "PROMPT",
+        from: "genex",
+        call: async (_prompt, _resume, _images, from) => {
+          froms.push(from);
+          if (froms.length > 1) return ok("Cover made.", "s1");
+          const cut = deferred();
+          q.onInterrupt(() => cut.resolve());
+          started.resolve();
+          await cut.promise;
+          return stopped("s1", 2);
+        },
+      });
+    });
+    await q.send("make the cover");
+    await started.promise;
+    await q.send("and make it dark");
+    await until(() => q.state("make the cover")?.state === "handled");
+    assert.deepEqual(froms, ["genex", undefined]);
+    q.queue.stop();
+  });
+
   it("resumes the same session with the message in front, recorded as delivered before the resume", async () => {
     const calls: any[] = [],
       started = deferred(),
@@ -136,7 +162,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await until(() => q.state("build a pond")?.state === "handled");
     assert.equal(calls.length, 2);
     assert.equal(calls[1].resume, "s1", "the same session, not a fresh one");
-    assert.equal(calls[1].prompt, steeredTurnPrompt(["and ducks"]));
+    assert.equal(calls[1].prompt, "and ducks");
     assert.deepEqual(calls[1].images, [{ label: "duck", mimeType: "image/png", data: "synthetic" }]);
     const delivered = custom(q.events, "coordinator_message_delivered");
     assert.equal(delivered.length, 1);
@@ -177,7 +203,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       await started.promise;
       await q.send("and ducks");
       await until(() => q.state("build a pond")?.state === "handled");
-      assert.deepEqual(calls[1], { prompt: withSteers("PROMPT", ["and ducks"]), resume: "prior" }, cutOff);
+      assert.deepEqual(calls[1], { prompt: "PROMPT\n\nand ducks", resume: "prior" }, cutOff);
       assert.equal(q.state("and ducks")!.state, "delivered");
       q.queue.stop();
     }
@@ -255,7 +281,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     assert.equal(q.interrupts.length, 0, "nothing was interrupted");
     assert.deepEqual(
       calls.map((c) => [c.prompt, c.resume, c.images.length]),
-      [[withSteers("PROMPT", ["and ducks"]), "prior", 2]],
+      [["PROMPT\n\nand ducks", "prior", 2]],
     );
     const delivered = custom(q.events, "coordinator_message_delivered");
     assert.deepEqual(
@@ -300,7 +326,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       prepared.resolve();
       await until(() => seen.length === (opens ? 1 : 2) && q.state("build a pond")?.state === "handled");
       if (opens) {
-        assert.deepEqual(calls, [withSteers("PROMPT", ["and ducks"])]);
+        assert.deepEqual(calls, ["PROMPT\n\nand ducks"]);
         assert.equal(q.state("and ducks")!.state, "delivered");
       } else {
         await until(() => q.state("and ducks")?.state === "handled");
@@ -481,7 +507,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await started.promise;
     await q.send("make it run"); // interrupts that leg before it read anything
     await until(() => seen.length === 3);
-    assert.equal(calls[1], withSteers(withSteers("PROMPT", ["and ducks"]), ["make it run"]));
+    assert.equal(calls[1], "PROMPT\n\nand ducks\n\nmake it run");
     assert.deepEqual(
       seen,
       ["build a pond", "and ducks", "make it run"],
@@ -519,7 +545,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await q.send("and ducks");
     await until(() => q.state("build a pond")?.state === "handled");
     assert.equal(calls.length, 2);
-    assert.equal(calls[1], steeredTurnPrompt(["and ducks", "and run"]));
+    assert.equal(calls[1], "and ducks\n\nand run");
     const textOf = (messageId: string) =>
       q.events.find(
         (r) => r.data.event_type === "coordinator_message_queued" && r.data.payload.messageId === messageId,
@@ -562,7 +588,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       calls.map((c) => c.resume),
       ["prior", "s1", null],
     );
-    assert.equal(calls[2].prompt, withSteers("FRESH", ["and ducks"]));
+    assert.equal(calls[2].prompt, "FRESH\n\nand ducks");
     q.queue.stop();
   });
 
@@ -732,8 +758,7 @@ describe("steer through the host and the harness process", () => {
           return stopped("codex-thread", 3);
         }
         assert.equal(request.resume, "codex-thread");
-        assert.equal(request.prompt.split("\n\n")[0], steeredTurnPrompt(["Make it run"]).split("\n\n")[0]);
-        assert.match(request.prompt, /> Make it run/);
+        assert.equal(request.prompt.split("\n\n")[0], "Make it run", "the person's words alone");
         return ok("Night falls on the pond.", "codex-thread");
       },
     });
@@ -884,7 +909,8 @@ describe("steer through the host and the harness process", () => {
           "with the Loop's start",
         );
         assert.match(request.prompt, /The Loop is on/);
-        assert.match(request.prompt, /> make it in the loop/);
+        // Flipped: the person's words as they wrote them, never quoted.
+        assert.match(request.prompt, /\n\nmake it in the loop/);
         return ok("Starting the Loop for the boss fight.", "chat-session", {
           studioToolCalls: [
             { name: "start_autopilot", args: { goal: "a boss fight with a giant exterminator", direction: "dark" } },
@@ -1032,7 +1058,7 @@ describe("steer through the host and the harness process", () => {
     await settle(300);
     assert.equal(prompts.length, 2, "the cut-short turn once, the unread message once");
     assert.match(prompts[0]!, /^Build a pond/, "the chat's own turn asks the message first");
-    assert.match(prompts[0]!, /address it too:\n> And ducks/, "the message it had read rides with it");
+    assert.match(prompts[0]!, /\n\nAnd ducks(\n|$)/, "the message it had read rides with it, as typed");
     assert.match(prompts[1]!, /^Make it run/);
     const events = await rig.core.store.listEvents(thread);
     assert.deepEqual(

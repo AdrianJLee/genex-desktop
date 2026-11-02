@@ -1,9 +1,9 @@
 import type { AnyRecord, HarnessEvent, Host } from "../types/harness.d.ts";
-import type { DelegateImage } from "../types/host-api.d.ts";
+import type { DelegateImage, SteerMessage } from "../types/host-api.d.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
 import { personWrote } from "./person-wrote.ts";
-import { SteerDelivery } from "./steer-delivery.ts";
+import { MessageFrom, SteerDelivery } from "./steer-delivery.ts";
 import { isSlashText, JoinKind, joinKindOf, type OpenOptions } from "./steer-switch.ts";
 
 /** A user message as the queue holds it: the dispatch action, plus its id once queued. */
@@ -116,11 +116,6 @@ export interface LeadDoor {
    * back in the queue when its run ends, so they still get an answer (and Stop hands over to them).
    */
   handed(item: QueueAction, giveBack: (items: QueueAction[]) => Promise<void>): void;
-  /**
-   * The lead only hears of it (its wrap-up began): the message is never recorded delivered to the run,
-   * and stays waiting for the chat to answer once the run closes.
-   */
-  keeps?: boolean;
 }
 
 /** A value `beforeProcess` answered with: the lead's door for the next message, or anything else. */
@@ -476,13 +471,11 @@ export class MessageQueue {
       throw err;
     }
     this.#track(thread, messageId);
-    // A lead that only hears of it (its wrap-up): it waits for the chat all the same.
-    const waits = !turn && (!door || door.keeps === true);
-    if (waits) thread.items.push(queued);
+    if (!turn && !door) thread.items.push(queued);
     else if (turn && !receipt) turn.pending.push(queued);
     thread.paused = false;
     this.host.notify("coordinator.queued", { threadId: action.threadId, messageId });
-    if (door) this.#toldLead(action.threadId, door, queued);
+    if (door) this.#handedLead(action.threadId, door, queued);
     return receipt;
   }
   /**
@@ -497,14 +490,10 @@ export class MessageQueue {
     const handedFirst = thread.items.some((item) => this.lead(queued.threadId, item));
     return handedFirst ? null : door;
   }
-  /**
-   * Handed to the lead: the chat hears it was delivered, and the lead that it was handed. One the
-   * lead only hears of is marked told, so it is never handed again while it waits for the chat.
-   */
-  #toldLead(threadId: string, door: LeadDoor, item: QueueAction): void {
-    personWrote(threadId);
-    if (door.keeps) item.toldLead = door.into;
-    else this.host.notify("coordinator.delivered", { threadId, messageIds: [item.messageId] });
+  /** Handed to the lead: the chat hears it was delivered, and the lead that it was handed. */
+  #handedLead(threadId: string, door: LeadDoor, item: QueueAction): void {
+    if (item.from !== MessageFrom.Genex) personWrote(threadId);
+    this.host.notify("coordinator.delivered", { threadId, messageIds: [item.messageId] });
     door.handed(item, (items) => this.#giveBack(threadId, items));
   }
   /** Messages a run's lead never heard, back from its ended run: each waits for a turn of its own. */
@@ -512,14 +501,12 @@ export class MessageQueue {
     if (this.#stopped) return;
     await this.#requeue(threadId, this.#thread(threadId), null, items);
   }
-  /** Hand a waiting message to the run's lead, as its receipt would have: one it only hears of keeps its place. */
+  /** Hand a waiting message to the run's lead, as its receipt would have. */
   async #handToLead(threadId: string, thread: ThreadQueue, item: QueueAction, door: LeadDoor): Promise<void> {
     await this.#events(threadId, leadRecords(item, door));
-    if (!door.keeps) {
-      thread.items = thread.items.filter((waiting) => waiting !== item);
-      thread.attempts.delete(item.messageId as string);
-    }
-    this.#toldLead(threadId, door, item);
+    thread.items = thread.items.filter((waiting) => waiting !== item);
+    thread.attempts.delete(item.messageId as string);
+    this.#handedLead(threadId, door, item);
   }
   /**
    * Hand the run's lead every waiting message it takes, in the order sent: what it does not take
@@ -555,7 +542,7 @@ export class MessageQueue {
   async #durable(queued: QueueAction): Promise<QueueAction> {
     const durable: QueueAction = { ...queued };
     if (!queued.stills?.length && !queued.autopilot?.frames?.length) return durable;
-    durable.attachmentsArtifact = `message_attachments_${queued.messageId}`;
+    durable.attachmentsArtifact = attachmentsArtifactOf(queued.messageId as string);
     // The count stays in the log so the chat can hold the pictures' place while they load.
     durable.imageCount = queued.stills?.length || queued.autopilot?.frames?.length || 0;
     await this.host.call(HostMethod.ArtifactWrite, {
@@ -737,8 +724,9 @@ export class MessageQueue {
     for (const item of items)
       if (accepted.has(item.messageId as string))
         turn.taken.set(item.messageId as string, { item, how: answer?.how ?? null });
-    // A wait the session is in (its workers, an editor) ends, so it reaches the step that reads them.
-    if (accepted.size) personWrote(threadId);
+    // A wait the session is in (its workers, an editor) ends, so it reaches the step that reads the person's words.
+    const theirs = items.some((item) => accepted.has(item.messageId as string) && item.from !== MessageFrom.Genex);
+    if (theirs) personWrote(threadId);
     const refused = items.filter((item) => !accepted.has(item.messageId as string));
     if (!refused.length) return;
     // The session will not take input now (its turn is ending, or it never could): stop
@@ -1006,20 +994,27 @@ function receiptBatch(
   ];
 }
 
-/**
- * A message delivered to a run's lead: recorded delivered to its run, then what the lead reads it
- * from. One the lead only hears of (`keeps`) is not delivered: the chat answers it.
- */
+/** A message delivered to a run's lead: recorded delivered to its run, then what the lead reads it from. */
 function leadRecords(item: QueueAction, door: LeadDoor): Array<{ event_type: RunEvent; payload: AnyRecord }> {
   const delivered = {
     event_type: RunEvent.CoordinatorMessageDelivered,
     payload: { messageId: item.messageId, into: door.into, how: SteerDelivery.Lead },
   };
-  return [...(door.keeps ? [] : [delivered]), ...door.records(item)];
+  return [delivered, ...door.records(item)];
 }
 
-/** A message as `engine.steer` hands it to the session: its words and its pictures. */
-function steerMessageOf(item: QueueAction): { id: string; text: string; images?: DelegateImage[] } {
+/** A message as `engine.steer` hands it to the session: its words, its pictures, and Genex's mark when Genex wrote it. */
+function steerMessageOf(item: QueueAction): SteerMessage {
   const images: DelegateImage[] = item.stills ?? [];
-  return { id: item.messageId as string, text: String(item.text ?? ""), ...(images.length ? { images } : {}) };
+  return {
+    id: item.messageId as string,
+    text: String(item.text ?? ""),
+    ...(images.length ? { images } : {}),
+    ...(item.from === MessageFrom.Genex ? { from: MessageFrom.Genex } : {}),
+  };
+}
+
+/** The artifact a message's pictures are kept in, beside the log that keeps only their count. */
+export function attachmentsArtifactOf(messageId: string): string {
+  return `message_attachments_${messageId}`;
 }

@@ -153,8 +153,7 @@ function plannerModel(commission: AnyRecord, engine: string, model: string | und
 /**
  * The model the turn runs on. A commissioning chat decides and scopes a build: the planner. The chat's
  * own session after its run stays on the model it answers on (after-loop-run.ts `AfterLoopRun.model`, or
- * the message's): the swap would move the session to another model, and the run it reopens would
- * seat a lead of its own (director/lead-session.ts `continuesChat`).
+ * the message's): the swap would move the session to another model.
  */
 function turnModel(options: TurnOptions, commission: AnyRecord | null, engine: string): string | undefined {
   if (!commission || options.afterLoopRun) return options.model;

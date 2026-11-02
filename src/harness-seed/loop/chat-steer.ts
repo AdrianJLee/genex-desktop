@@ -10,9 +10,8 @@
  * next leg runs on its settings; a slash command runs as a leg of its own, then the turn carries on.
  */
 import { isResumeFailure } from "./chat-session.ts";
-import { steeredTurnPrompt, withSteers } from "./chat-steer-prompts.ts";
 import type { QueueAction, SteerHandle } from "./message-queue.ts";
-import { SteerDelivery } from "./steer-delivery.ts";
+import { type MessageFrom, SteerDelivery } from "./steer-delivery.ts";
 import { isSlashText, type OpenOptions } from "./steer-switch.ts";
 import { afterCommandPrompt, SWITCH_NOTES, switchedTurnPrompt } from "./steer-switch-prompts.ts";
 import { EngineFailure, StopReason } from "./outage.ts";
@@ -35,10 +34,20 @@ interface Leg {
   images: DelegateImage[];
   /** A slash command run as a leg of its own: its prompt is the command alone. */
   command?: boolean;
+  /** Genex wrote the whole prompt (`SteeredCallOptions.from`): the turn's own message, nothing added. */
+  from?: MessageFrom;
 }
 
-/** Runs the session once — an `engine.delegate` carrying `chatTurn`, so the host knows which session answers the chat. */
-export type SessionCall = (prompt: string, resume: string | null, images: DelegateImage[]) => Promise<DelegateResult>;
+/**
+ * Runs the session once — an `engine.delegate` carrying `chatTurn`, so the host knows which session
+ * answers the chat — saying who wrote the prompt when it was not a brief.
+ */
+export type SessionCall = (
+  prompt: string,
+  resume: string | null,
+  images: DelegateImage[],
+  from?: MessageFrom,
+) => Promise<DelegateResult>;
 
 /** How the turn's legs run once a message changed it (`TurnSwitches.apply`). */
 export interface LegSwitch {
@@ -77,6 +86,8 @@ export interface SteeredCallOptions {
   fresh?: () => string;
   /** The runner takes switches: a message that changes how the turn runs joins it too. */
   switches?: TurnSwitches;
+  /** Who wrote the message the turn answers, when Genex did: its first leg says so. */
+  from?: MessageFrom;
 }
 
 /** Everything the turn has been told so far, and how to run one leg of it. */
@@ -120,6 +131,14 @@ const textsOf = (items: readonly QueueAction[]): string[] => items.map((item) =>
 const wordsOf = (items: readonly QueueAction[]): string[] => textsOf(items.filter((item) => !isSlashText(item.text)));
 const stillsOf = (items: readonly QueueAction[]): DelegateImage[] => items.flatMap((item) => item.stills ?? []);
 
+/** Who wrote the turn's message, as a leg carries it: nothing for the person's own. */
+const fromOf = (options: SteeredCallOptions): Pick<Leg, "from"> => (options.from ? { from: options.from } : {});
+
+/** What sets one message apart from the next when several go into one prompt. */
+const WORDS_APART = "\n\n";
+/** A prompt with the person's words after it, each as they wrote it. */
+const withWords = (prompt: string, texts: readonly string[]): string => [prompt, ...texts].join(WORDS_APART);
+
 /** The session was cut off before or as it started (the host's interrupt). */
 const isAborted = (err: unknown): boolean => (err as { kind?: unknown } | null)?.kind === EngineFailure.Aborted;
 
@@ -140,7 +159,13 @@ export async function steeredCall(
   // A copy: a switch changes how the legs run from then on, never the caller's options.
   const seat: SteeredCallOptions = { ...options };
   const run = (leg: Leg) => callOrStartFresh(seat, told, leg);
-  if (!steer) return run({ prompt: options.prompt, resume: options.resume ?? null, images: options.images ?? [] });
+  if (!steer)
+    return run({
+      prompt: options.prompt,
+      resume: options.resume ?? null,
+      images: options.images ?? [],
+      ...fromOf(options),
+    });
   const turn: TurnLegs = {
     ctx,
     steer,
@@ -174,11 +199,11 @@ export async function steeredCall(
 async function callOrStartFresh(options: SteeredCallOptions, told: QueueAction[], leg: Leg): Promise<DelegateResult> {
   const startFresh = () => {
     const fresh = options.fresh?.() ?? options.prompt;
-    return options.call(withSteers(fresh, wordsOf(told)), null, [...(options.images ?? []), ...stillsOf(told)]);
+    return options.call(withWords(fresh, wordsOf(told)), null, [...(options.images ?? []), ...stillsOf(told)]);
   };
   let result: DelegateResult;
   try {
-    result = await options.call(leg.prompt, leg.resume, leg.images);
+    result = await options.call(leg.prompt, leg.resume, leg.images, leg.from);
   } catch (err) {
     if (!leg.resume || !isResumeFailure(err)) throw err;
     return startFresh();
@@ -315,17 +340,20 @@ function legAfter(turn: TurnLegs, arrived: QueueAction[], forwarded: boolean): L
     // Delivered before a restart cut this turn short: its answer starts with them too.
     const lead = [...steer.carried, ...arrived];
     told.unshift(...steer.carried);
+    // Only the turn's own message, alone, says who wrote it: anything joined to it is the person's.
+    const alone = !lead.length && !notes.length;
     return {
-      prompt: withChanges(notes, withSteers(options.prompt, textsOf(lead))),
+      prompt: withChanges(notes, withWords(options.prompt, textsOf(lead))),
       resume: options.resume ?? null,
       images: [...(options.images ?? []), ...stillsOf(lead)],
+      ...(alone ? fromOf(options) : {}),
     };
   }
   // A session that had started working keeps it and reads the messages next; one cut off before
   // it read its prompt gets that prompt again, with the messages after it.
   if (forwarded)
     return {
-      prompt: withChanges(notes, withSteers(leg.prompt, textsOf(arrived))),
+      prompt: withChanges(notes, withWords(leg.prompt, textsOf(arrived))),
       resume: leg.resume,
       images: [...leg.images, ...stillsOf(arrived)],
     };
@@ -339,7 +367,7 @@ function legAfter(turn: TurnLegs, arrived: QueueAction[], forwarded: boolean): L
 
 /** What the session is resumed with: the words it was cut for, or — after commands — what they leave it to do. */
 function goOnPrompt(turn: TurnLegs, words: QueueAction[]): string {
-  if (!turn.ranCommand) return steeredTurnPrompt(textsOf(words));
+  if (!turn.ranCommand) return textsOf(words).join(WORDS_APART);
   const carryOn = turn.carryOn;
   turn.ranCommand = false;
   turn.carryOn = false;
@@ -363,7 +391,7 @@ function newSessionLeg(turn: TurnLegs, notes: string[]): Leg {
   turn.ranCommand = false;
   turn.carryOn = false;
   return {
-    prompt: withChanges(notes, withSteers(fresh, wordsOf(told))),
+    prompt: withChanges(notes, withWords(fresh, wordsOf(told))),
     resume: null,
     images: [...(options.images ?? []), ...stillsOf(told)],
   };

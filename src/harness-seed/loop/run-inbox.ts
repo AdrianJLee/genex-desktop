@@ -69,6 +69,18 @@ export function conversationThrough(events: readonly HarnessEvent[], messageId?:
 /** One steer the user sent a run: the event it came in, its payload, and when the event was logged. */
 type Steer = AnyRecord & { id: string; loggedAt?: string | null };
 
+/** A steer as a reader takes it: the person's words, and the artifact the chat keeps their pictures in. */
+export interface SaidSteer {
+  text: string;
+  attachmentsArtifact?: string;
+}
+
+/** A steer's words, and where its pictures are kept when it brought any (live-chat.ts). */
+const saidOf = (steer: Steer): SaidSteer => ({
+  text: String(steer.text),
+  ...(typeof steer.attachmentsArtifact === "string" ? { attachmentsArtifact: steer.attachmentsArtifact } : {}),
+});
+
 /** What a run's log says so far: whether this session was asked to wrap up, the steers, and who got them. */
 interface InboxFold {
   finishing: boolean;
@@ -101,8 +113,7 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   const d = event?.data;
   if (d?.type !== EventKind.Custom) return;
   const p = d.payload ?? {};
-  // A message a run's lead never heard went back to the chat, which answers it (live chat); so does
-  // one its lead was only told in its wrap-up, which the chat takes up once the run has closed.
+  // A message a run's lead never heard went back to the chat, which answers it (live chat).
   const chatAnswers =
     d.event_type === RunEvent.CoordinatorMessageRequeued || d.event_type === RunEvent.CoordinatorMessageProcessing;
   if (chatAnswers) settleLeadSteers(fold, p.messageId);
@@ -217,27 +228,28 @@ export function createRunInbox(
     }
     for (const item of selected) fold.consumed.add(item.id);
   }
+  /**
+   * The steers for one worker's brief (`facetId`) or the build's (none): the unaddressed ones and
+   * those addressed to it, every one so far unless only the ones this inbox has not answered
+   * with yet are asked for. Only the ones no session handed over yet are recorded as handed over.
+   */
+  async function steers(facetId?: string, consume = true, { onlyNew = false }: { onlyNew?: boolean } = {}) {
+    await drain();
+    const address = facetId ?? BUILD_ADDRESS;
+    const selected = fold.instructions.filter((i) => !i.facetId || i.facetId === facetId);
+    const untold = selected.filter((i) => !told.has(deliveryKey(i.id, address)) && !fold.settledByLead.has(i.id));
+    if (consume) await consumeFor(selected, address);
+    return (onlyNew ? untold : selected).map(saidOf);
+  }
   return {
     async finishing() {
       await drain();
       return fold.finishing;
     },
-    /**
-     * The steers for one worker's brief (`facetId`) or the build's (none): the unaddressed ones and
-     * those addressed to it, every one so far unless only the ones this inbox has not answered
-     * with yet are asked for. Only the ones no session handed over yet are recorded as handed over.
-     */
-    async steering(
-      facetId?: string,
-      consume = true,
-      { onlyNew = false }: { onlyNew?: boolean } = {},
-    ): Promise<string[]> {
-      await drain();
-      const address = facetId ?? BUILD_ADDRESS;
-      const selected = fold.instructions.filter((i) => !i.facetId || i.facetId === facetId);
-      const untold = selected.filter((i) => !told.has(deliveryKey(i.id, address)) && !fold.settledByLead.has(i.id));
-      if (consume) await consumeFor(selected, address);
-      return (onlyNew ? untold : selected).map((i) => i.text);
+    steers,
+    /** `steers`' words alone. */
+    async steering(facetId?: string, consume = true, options: { onlyNew?: boolean } = {}): Promise<string[]> {
+      return (await steers(facetId, consume, options)).map((said) => said.text);
     },
     /**
      * The user's steers addressed to one worker (`facetId`), and only those. `steering(undefined)`

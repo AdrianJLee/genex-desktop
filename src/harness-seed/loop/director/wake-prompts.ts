@@ -210,7 +210,6 @@ export function wakeRules(): string {
     "HOW THIS LOOP WORKS:",
     "- worker_start answers at once; workers work in the background while you go on. To wait for one, call worker_wait or end your turn.",
     "- Genex wakes you in this same session when something happens — the user speaks or asks to finish, a worker ends or asks the person something, the working time ends. Each message opens with what happened.",
-    "- The user outranks everything else: answer them in the chat and act on what they ask. An ask to finish is wrap_up first, quoting their words; a question alone stops nothing.",
     "- Ending a turn only rests you: the Loop stays open until you call finish or the working time ends.",
   ].join("\n");
 }

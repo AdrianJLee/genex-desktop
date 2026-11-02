@@ -7,68 +7,27 @@
  * clears the chat's, never the run's.
  */
 import { leadLineOf, leadLinesChanged, type LeadLine } from "./director/lead-line.ts";
-import { attachedPicturesLine } from "./live-chat-prompts.ts";
-import { WRAPPING_UP_NOTE } from "./steer-switch-prompts.ts";
 import { RunEvent } from "./run-events.ts";
 import { SteerDelivery } from "./steer-delivery.ts";
 import { type ActiveRun, type Studio, heldRuns } from "./studio-state.ts";
-import type { LeadDoor, QueueAction } from "./message-queue.ts";
+import { attachmentsArtifactOf, type LeadDoor, type QueueAction } from "./message-queue.ts";
 
 /** A message's words, trimmed; anything else reads as none. */
 const wordsOf = (action: QueueAction): string => String(action.text ?? "").trim();
 
-/** The game's folder the chat saves a message's pictures in (`references`, relative to the game). */
-const REFERENCES_FOLDER = "references";
+/** The message brings pictures of its own, which the queue keeps in its attachments artifact. */
+const hasPictures = (action: QueueAction): boolean =>
+  Boolean(action.attachmentsArtifact || action.stills?.length || action.autopilot?.frames?.length);
 
 /**
- * How many pictures travel with a message that the chat saves in the game: the ones the composer
- * attached (`pickedImages`; the rest of its stills are files its words already name), else its
- * stills, a commission's frames, or the log's count.
- */
-function pictureCount(action: QueueAction): number {
-  if (typeof action.pickedImages === "number" && action.pickedImages >= 0) return action.pickedImages;
-  if (Array.isArray(action.stills) && action.stills.length) return action.stills.length;
-  if (Array.isArray(action.autopilot?.frames) && action.autopilot.frames.length) return action.autopilot.frames.length;
-  const counted = Number(action.imageCount);
-  if (Number.isInteger(counted) && counted > 0) return counted;
-  return action.attachmentsArtifact ? 1 : 0;
-}
-
-/** A file the chat saved in the game's references folder: a plain path inside it, never out of it. */
-const isSavedReference = (file: unknown): file is string =>
-  typeof file === "string" && file.startsWith(`${REFERENCES_FOLDER}/`) && !file.split("/").includes("..");
-
-/**
- * A message's pictures as the files the chat saved them to in the game, which the lead reads: none
- * for a message without pictures, null when one of them was not saved (it waits for the chat).
- */
-function savedPictures(action: QueueAction): string[] | null {
-  const count = pictureCount(action);
-  if (count === 0) return [];
-  // Every file its pictures are saved as (a picture sent before included); an older app's added ones only.
-  const files = Array.isArray(action.pictureFiles) ? action.pictureFiles : action.references;
-  const saved = Array.isArray(files) ? files.filter(isSavedReference) : [];
-  return saved.length >= count ? saved : null;
-}
-
-/** What the lead reads of a message: its words, and where the pictures it carries were saved. */
-function leadWordsOf(action: QueueAction): string {
-  const pictures = savedPictures(action) ?? [];
-  if (!pictures.length) return wordsOf(action);
-  return [wordsOf(action), attachedPicturesLine(pictures)].filter(Boolean).join("\n\n");
-}
-
-/**
- * Does the lead take this message: words or saved pictures for the chat — never a fresh build asked
- * for (`newRun`, a New build queued before the composer dropped it), Studio's own chat, a slash
- * command (words to the session, not to the lead) or a picture the chat did not save in the game.
+ * Does the lead take this message: words for the chat — never a fresh build asked for (`newRun`, a
+ * New build queued before the composer dropped it), Studio's own chat or a slash command (words to
+ * the session, not to the lead). A picture with no words waits for the chat.
  */
 function forTheLead(action: QueueAction): boolean {
   const words = wordsOf(action);
-  const pictures = savedPictures(action);
   const ownTurn = Boolean(action.newRun || action.studioThread);
-  const said = words.length > 0 || Boolean(pictures?.length);
-  return said && pictures !== null && !words.startsWith("/") && !ownTurn;
+  return words.length > 0 && !words.startsWith("/") && !ownTurn;
 }
 
 /** The build this chat's messages wait for: its run that has not closed yet. */
@@ -78,21 +37,21 @@ export function openBuildOf(studio: Studio, threadId: string): ActiveRun | undef
 
 /**
  * The records the lead reads a message from: a steer of its run, word for word, from this message,
- * marked as the lead's (`how: "lead"`) — once heard, or back with the chat, a later run of the
- * run never tells it again (run-inbox.ts), and the chat's own `resume_run` records its words anew.
+ * marked as the lead's (`how: "lead"`), naming the artifact its pictures are kept in — once heard,
+ * or back with the chat, a later run of the run never tells it again (run-inbox.ts), and the chat's
+ * own `resume_run` records its words anew.
  */
-function steerOf(line: LeadLine, item: QueueAction, wrapping: boolean) {
-  const words = leadWordsOf(item);
+function steerOf(line: LeadLine, item: QueueAction) {
+  const messageId = String(item.messageId);
   return [
     {
       event_type: RunEvent.RunSteering,
       payload: {
         runId: line.runId,
-        text: wrapping ? `${words}\n\n${WRAPPING_UP_NOTE}` : words,
-        sourceMessageId: item.messageId,
+        text: wordsOf(item),
+        sourceMessageId: messageId,
         how: SteerDelivery.Lead,
-        // Told, not delivered: the chat answers it once the run closes (the chat reads it here all the same).
-        ...(wrapping ? { kept: true } : {}),
+        ...(hasPictures(item) ? { attachmentsArtifact: attachmentsArtifactOf(messageId) } : {}),
         at: new Date().toISOString(),
       },
     },
@@ -100,23 +59,19 @@ function steerOf(line: LeadLine, item: QueueAction, wrapping: boolean) {
 }
 
 /**
- * The door to the lead of this chat's open build, when that lead takes this message now. In its
- * wrap-up the lead still hears it, but the chat keeps it to answer once the run has closed (`keeps`):
- * the build is ending, and new work is the chat's. A message the lead was told so has no door again.
+ * The door to the lead of this chat's open build, when that lead takes this message now: its
+ * wrap-up too, since the lead is the chat's own session and answers what it heard there.
  */
 export function leadDoor(studio: Studio, threadId: string, action: QueueAction): LeadDoor | null {
   const build = openBuildOf(studio, threadId);
   const line = build ? leadLineOf(build.run.runId) : undefined;
   const takes = line?.threadId === threadId && line.open() && forTheLead(action);
   if (!line || !takes) return null;
-  const wrapping = line.wrapping();
-  if (wrapping && action.toldLead === line.runId) return null;
   return {
     into: line.runId,
     open: () => line.open(),
-    records: (item) => steerOf(line, item, wrapping),
+    records: (item) => steerOf(line, item),
     handed: (item, giveBack) => line.hear(item, giveBack),
-    ...(wrapping ? { keeps: true } : {}),
   };
 }
 

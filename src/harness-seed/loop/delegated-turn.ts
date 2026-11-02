@@ -28,6 +28,7 @@ import { afterLoopRunNote } from "./after-loop-run-prompts.ts";
 import { commissionHours, reopenAsked, reopens } from "./reopen-run.ts";
 import { type ReopenGrant, reopenRunTool } from "./reopen-run-prompts.ts";
 import { type LegSwitch, type SessionCall, steeredCall, type TurnSwitches } from "./chat-steer.ts";
+import { MessageFrom } from "./steer-delivery.ts";
 import { changesLoop, changesSettings } from "./steer-switch.ts";
 import { type DescribedEngine, endsTurnFor, switchedSettings, switchNotes, type TurnSettings } from "./turn-switch.ts";
 import * as chatWorkerParts from "./workers/chat-workers.ts";
@@ -389,9 +390,9 @@ const ranOn = (options: DelegatedOptions): { engine: string; model?: string } =>
  * on once it answered (a leg cut off before it started made no session).
  */
 function seatCall(ctx: HarnessCtx, seat: Seat): SessionCall {
-  return async (prompt, resume, images) => {
+  return async (prompt, resume, images, from) => {
     const on = ranOn(seat.options);
-    const result = await delegate(ctx, seat.options, seat.handoff, prompt, resume, images);
+    const result = await delegate(ctx, seat.options, seat.handoff, { prompt, resume, images, from });
     seat.ran = on;
     return result;
   };
@@ -1265,14 +1266,20 @@ function commissionPictures(
   return handoff.commission?.frames ?? [];
 }
 
-/** Hand `prompt` and its pictures to the contractor, resuming `resumeId` when there is one. */
+/** One leg as the contractor is handed it: its prompt and who wrote it, the session it resumes, its pictures. */
+interface LegAsked {
+  prompt: string;
+  resume: string | null | undefined;
+  images: DelegateImage[];
+  from?: MessageFrom | undefined;
+}
+
+/** Hand the leg's prompt and its pictures to the contractor, resuming its session when there is one. */
 function delegate(
   ctx: HarnessCtx,
   options: DelegatedOptions,
   handoff: Handoff,
-  prompt: string,
-  resumeId: string | null | undefined,
-  images: DelegateImage[],
+  { prompt, resume: resumeId, images, from }: LegAsked,
 ): Promise<DelegateResult> {
   const { engine, threadId, model, effort } = options;
   const { extraReads } = handoff;
@@ -1282,6 +1289,7 @@ function delegate(
     project: handoff.project,
     threadId,
     prompt,
+    ...(from ? { from } : {}),
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
     ...(options.preferences ? { preferences: options.preferences } : {}),
@@ -1318,7 +1326,13 @@ async function delegateResuming(ctx: HarnessCtx, seat: Seat): Promise<DelegateRe
     // A Loop chat that starts afresh keeps its launch rules and the folder's shape.
     fresh: () => seat.briefFor(false),
     ...(switches ? { switches } : {}),
+    ...(genexWroteIt(options) ? { from: MessageFrom.Genex } : {}),
   });
+}
+
+/** Did Genex write the message this turn answers (the host's `from`: a chat report, a plugin's ask)? */
+function genexWroteIt(options: DelegatedOptions): boolean {
+  return (options.asked as AnyRecord | null | undefined)?.from === MessageFrom.Genex;
 }
 
 /**

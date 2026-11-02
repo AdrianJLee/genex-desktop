@@ -58,7 +58,3 @@ export const SWITCH_NOTES = {
 export const WAIT_ENDED = {
   workers: `The user just wrote in the chat, so this wait ended early: read their message and answer it, then wait again (${WorkerTool.Wait}) if you still need to.`,
 } as const;
-
-/** What a build's lead reads beside the person's words once its wrap-up began (live-chat.ts). */
-export const WRAPPING_UP_NOTE =
-  "(You are wrapping up this build. Answer them briefly; a stop or finish they ask for is yours now. Anything else — more work, a change — the chat takes up itself as soon as this build has closed, so finish the wrap-up.)";

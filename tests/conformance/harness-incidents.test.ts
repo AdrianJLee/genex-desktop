@@ -14,7 +14,13 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { customEvents, makeFakePreview, startRig, waitForLog, type Rig } from "../helpers/studio-rig.ts";
-import { EngineError, type CompleteRequest, type DelegateRequest } from "../../src/substrate/engines/types.ts";
+import {
+  EngineError,
+  type CompleteRequest,
+  type DelegateRequest,
+  type SteerMessage,
+  type SteerSend,
+} from "../../src/substrate/engines/types.ts";
 import { EngineId } from "../../src/shared/providers.ts";
 import { GameEngine } from "../../src/shared/game-engine.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
@@ -26,7 +32,7 @@ import { chatWaitsFor, leadDoor, stopRunsOf } from "../../src/harness-seed/loop/
 import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
 import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
 import { switchedTurnPrompt } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
-import { steeredTurnPrompt } from "../../src/harness-seed/loop/chat-steer-prompts.ts";
+import { steerFeed, steerSession, userFrame } from "../../src/substrate/engines/claude-steer.ts";
 import { openLeadLine } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { resumeStopped } from "../../src/harness-seed/loop/after-loop-run.ts";
@@ -1736,7 +1742,7 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     finalDeadline: T0 + 3.5 * HOUR_MS,
     run: { runId: "run_w", project: "sky", goal: "a blue sky", reference: { kind: "direction" } },
     journal: { director: { workers: {}, notes: [] } },
-    inbox: { steering: async () => [], finishing: async () => false, ...inbox },
+    inbox: { steers: async () => [], steering: async () => [], finishing: async () => false, ...inbox },
     routeUserSteers: async () => {},
     runningWorkers: () => [...state.workers.values()].filter((w) => w.state === "running"),
     notesSince: (seq: number) => log.filter((entry) => entry.seq > seq),
@@ -1798,9 +1804,9 @@ describe("the wake loop, reviewed", () => {
     const said: string[] = [];
     // The host's events.append fails: taking a steer (which records its hand-over) throws; reading does not.
     const w = clockNight({
-      steering: async (_facet?: string, consume = true) => {
+      steers: async (_facet?: string, consume = true) => {
         if (consume) throw new Error("events.append failed");
-        return [...said];
+        return said.map((text) => ({ text }));
       },
     });
     w.ticks.push((now) => {
@@ -1870,22 +1876,33 @@ function liveChat() {
   const log: Array<{ id: string; data: Record<string, any> }> = [];
   const steers: Array<Record<string, any>> = [];
   const answered: string[] = [];
-  /** The host's knobs: a gate on appends, a hook before each read, whether it cuts a lead short, and a hold on its answer to a steer. */
+  /**
+   * The host's knobs: a gate on appends, a hook before each read, whether it cuts a lead short or
+   * its session reads input mid-turn (`native`), and a hold on its answer to a steer.
+   */
   const hooks: {
     gate?: Promise<void>;
     gated: number;
     beforeList?: () => Promise<void>;
     cuts: boolean;
+    native?: boolean;
     steerAnswer?: Promise<void>;
   } = {
     gated: 0,
     cuts: true,
   };
+  const artifacts = new Map<string, unknown>();
   const append = (batch: Array<Record<string, any>>) => {
     for (const data of batch) log.push({ id: String(log.length + 1).padStart(6, "0"), data });
     return log.at(-1)?.id ?? null;
   };
   async function call(method: string, p: Record<string, any> = {}): Promise<any> {
+    if (method === HostMethod.ArtifactWrite) return artifacts.set(p.artifactId, structuredClone(p.value)) && null;
+    if (method === HostMethod.ArtifactRead) return artifacts.get(p.artifactId) ?? null;
+    if (method === HostMethod.EngineSteer && hooks.native && p.native !== false) {
+      steers.push(p);
+      return { how: "native", accepted: p.messages.map((m: { id: string }) => m.id) };
+    }
     if (method === HostMethod.EventsAppend) {
       if (hooks.gate) {
         hooks.gated += 1;
@@ -2010,7 +2027,7 @@ function liveChat() {
     };
     // As director.ts opens it: live while the run goes on, recording on the run's own log.
     const line = openLeadLine(RUN, THREAD, () => !state.finished && !ctx.cancelled && !n.report.failure, ctx as never);
-    const calls: Array<{ prompt: string; at: number }> = [];
+    const calls: Array<{ prompt: string; at: number; said?: Record<string, unknown> }> = [];
     /** The run, each of the lead's turns answered by `script`; its line released when it ends, as director.ts does. */
     const run = async (script: (turn: number) => unknown) => {
       const talk: DirectorTalk = {
@@ -2018,8 +2035,8 @@ function liveChat() {
         keep: async (result) => {
           if (result?.sessionId) talk.sessionId = result.sessionId;
         },
-        session: async (prompt) => {
-          calls.push({ prompt, at: at.now });
+        session: async (prompt, _sid, _timeoutMs, said) => {
+          calls.push({ prompt, at: at.now, ...(said ? { said: { ...said } } : {}) });
           return (await script(calls.length)) as never;
         },
       };
@@ -2238,7 +2255,7 @@ describe("live chat during a build, reviewed", () => {
     assert.deepEqual(userSaysIn(await resumedFirstPrompt(chat)), []);
   });
 
-  it("LC2. a lead in the middle of a tool call is never cut short for the chat; a cut turn is told so and asked to finish what it was doing", async () => {
+  it("LC2. a lead in the middle of a tool call is never cut short for the chat; a cut turn resumes with the person's words alone", async () => {
     const chat = liveChat();
     chat.sayAt(chat.T0 + MINUTE_MS, "is the sky dusk yet?");
     const one = chat.loopRun();
@@ -2267,12 +2284,12 @@ describe("live chat during a build, reviewed", () => {
       "inside a tool call the words wait for the turn's end",
     );
     assert.equal(oak()?.interrupt, true, "the next words, outside it, cut the turn — the waiting ones with them");
-    assert.match(words(oak()!), /make the sky red[\s\S]*and the benches oak/);
+    // Flipped: the person's words as they wrote them, nothing of Genex's around them.
+    assert.equal(words(oak()!), "make the sky red\n\nand the benches oak");
+    assert.equal(oak()?.messages[0]?.from, "person");
     assert.equal(one.calls.length, 3);
-    const resumed = one.calls[2]!.prompt;
-    assert.match(resumed, /cut short/i, "the resumed turn is told it was cut");
-    assert.match(resumed, /finish what you were doing/i);
-    assert.deepEqual(userSaysIn(resumed), ["make the sky red", "and the benches oak"]);
+    assert.equal(one.calls[2]!.prompt, "make the sky red\n\nand the benches oak", "resumed with their words alone");
+    assert.equal(one.calls[2]!.said?.from, "person");
   });
 
   it("LC3. a turn that failed before it worked on its message owes the user's words to the next one, and they are never given back twice", async () => {
@@ -2351,28 +2368,29 @@ describe("live chat during a build, reviewed", () => {
     );
   const picture = { stills: [{ data: "iVBORw0KGgo=", mimeType: "image/png" }] };
 
-  it("LC7. a picture waits for the chat, and plain words sent after it still reach the lead, in order", async () => {
+  // Flipped: a picture with words reaches the lead (as an image block, LM1); a picture alone waits.
+  it("LC7. a picture with no words waits for the chat, and words sent after it still reach the lead, in order", async () => {
     const chat = liveChat();
     chat.loopRun();
+    await chat.say("", picture);
     await chat.say("does it look like this?", picture);
     await chat.say("make the sky red");
-    await chat.say("and the benches oak");
     const lead = `delivered ${chat.RUN}`;
     assert.deepEqual(standing(chat), {
-      "does it look like this?": "queued",
+      "": "queued",
+      "does it look like this?": lead,
       "make the sky red": lead,
-      "and the benches oak": lead,
     });
     chat.closeBuild();
     assert.ok(await settleOn(() => chat.answered.length === 1));
-    assert.deepEqual(chat.answered, ["does it look like this?"], "the chat answers the picture once the build closes");
+    assert.deepEqual(chat.answered, [""], "the chat answers the picture once the build closes");
   });
 
-  it("LC8. what waited while the run prepared reaches the lead once its line opens — past a picture among it", async () => {
+  it("LC8. what waited while the run prepared reaches the lead once its line opens — past a picture alone among it", async () => {
     const chat = liveChat();
     // The build is under way, but its lead has no line yet: everything waits.
     await chat.say("is it started?");
-    await chat.say("does it look like this?", picture);
+    await chat.say("", picture);
     await chat.say("and make the sky red");
     assert.ok(await settleOn(() => Object.values(standing(chat)).every((state) => state === "queued")));
     chat.loopRun();
@@ -2380,15 +2398,16 @@ describe("live chat during a build, reviewed", () => {
     assert.ok(await settleOn(() => standing(chat)["and make the sky red"] === lead), JSON.stringify(standing(chat)));
     assert.deepEqual(standing(chat), {
       "is it started?": lead,
-      "does it look like this?": "queued",
+      "": "queued",
       "and make the sky red": lead,
     });
     chat.closeBuild();
     assert.ok(await settleOn(() => chat.answered.length === 1));
-    assert.deepEqual(chat.answered, ["does it look like this?"]);
+    assert.deepEqual(chat.answered, [""]);
   });
 
-  it("LC11. a picture the chat saved in the game's references reaches the lead, its file named in the words the lead reads", async () => {
+  // Flipped: the lead reads the picture itself (LM1), never a line naming a file it should open.
+  it("LC11. a picture the chat saved in the game's references reaches the lead with the words alone, as typed", async () => {
     const chat = liveChat();
     chat.loopRun();
     const saved = { ...picture, references: ["references/skydome-warning-1a2b3c4d.png"] };
@@ -2396,11 +2415,10 @@ describe("live chat during a build, reviewed", () => {
     await chat.say("does it look like this?", picture);
     assert.deepEqual(standing(chat), {
       "i got this msg": `delivered ${chat.RUN}`,
-      "does it look like this?": "queued",
+      "does it look like this?": `delivered ${chat.RUN}`,
     });
-    const heard = chat.log.find((e) => e.data.event_type === "run_steering")?.data.payload.text;
-    assert.match(String(heard), /^i got this msg/);
-    assert.match(String(heard), /references\/skydome-warning-1a2b3c4d\.png/, "the lead is told where to look");
+    const heard = chat.log.filter((e) => e.data.event_type === "run_steering").map((e) => e.data.payload.text);
+    assert.deepEqual(heard, ["i got this msg", "does it look like this?"]);
   });
 
   it("LC9. a run that crashed before its lead's loop began gives every message it was handed back to the chat", async () => {
@@ -2464,7 +2482,7 @@ describe("live chat during a build, reviewed", () => {
    * "stop, just test computer use" was shown as delivered and read by nobody until the person pressed
    * Stop. A first turn with a session to resume is cut for the words like any other.
    */
-  it("LC12. a lead's first turn with a session to resume is cut short for the user's words, told so, and asked to finish", async () => {
+  it("LC12. a lead's first turn with a session to resume is cut short for the user's words, and resumed with them alone", async () => {
     const chat = liveChat();
     const one = chat.loopRun();
     await one.run(async (turn) => {
@@ -2477,13 +2495,11 @@ describe("live chat during a build, reviewed", () => {
       return { ok: false, stopReason: "stopped", sessionId: "lead-1", turns: 4 };
     });
     assert.equal(chat.steers[0]?.interrupt, true, "the first turn may be cut for the words");
-    // Read mid-turn by an engine that can, the words say how a stop is done, never only "carry on".
-    assert.match(String(chat.steers[0]?.messages[0]?.text), /stop or finish[^\n]*wrap_up/i);
+    // Flipped: the words alone; that a stop is wrap_up is said once, in wrap_up's own description.
+    assert.equal(chat.steers[0]?.messages[0]?.text, "stop building, just test computer use");
     assert.equal(one.calls.length, 2, one.calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
-    const resumed = String(one.calls[1]?.prompt);
-    assert.match(resumed, /cut short/i, "the resumed turn is told it was cut");
-    assert.match(resumed, /stop or finish[^\n]*wrap_up/i, "a stop is wrap_up, not finishing what it was doing");
-    assert.deepEqual(userSaysIn(resumed), ["stop building, just test computer use"]);
+    assert.equal(one.calls[1]?.prompt, "stop building, just test computer use", "resumed with their words alone");
+    assert.equal(one.calls[1]?.said?.from, "person");
   });
 
   it("LC13. a first turn cut before its session began is asked its brief again with the words, never crashing the run", async () => {
@@ -2527,7 +2543,7 @@ describe("live chat during a build, reviewed", () => {
     assert.deepEqual(userSaysIn(String(one.calls[1]?.prompt)), ["is it started?"]);
   });
 
-  it("LC15. a picture sent before (its file the game's already) reaches the lead: the chat names the file it is saved as", async () => {
+  it("LC15. a picture sent before (its file the game's already) reaches the lead with the words as typed", async () => {
     const chat = liveChat();
     chat.loopRun();
     // Saved before, so this message added no file of its own: only `pictureFiles` names where it is.
@@ -2535,7 +2551,7 @@ describe("live chat during a build, reviewed", () => {
     await chat.say("this one again", again);
     assert.deepEqual(standing(chat), { "this one again": `delivered ${chat.RUN}` });
     const heard = chat.log.find((e) => e.data.event_type === "run_steering")?.data.payload.text;
-    assert.match(String(heard), /references\/sky-1a2b3c4d\.png/);
+    assert.equal(heard, "this one again", "flipped: no line naming the file");
   });
 
   it("LC16. a picture the person's words name by its path (no picture attached) reaches the lead with the words", async () => {
@@ -2545,33 +2561,41 @@ describe("live chat during a build, reviewed", () => {
     assert.deepEqual(standing(chat), { "look at ~/Desktop/sky.png": `delivered ${chat.RUN}` });
   });
 
-  it("LC17. in the wrap-up the lead still hears the person, and the chat answers what they said once the build closes", async () => {
+  /*
+   * One session per chat: the session that heard a message in the wrap-up is the chat's own, and
+   * answers it there. The chat no longer kept it to answer a second time after the close.
+   */
+  it("LC17. in the wrap-up the lead hears the person's words as they wrote them, and the chat never answers them again", async () => {
     const chat = liveChat();
-    const one = chat.loopRun();
-    one.line.wrapUp();
-    await chat.say("also add rain");
-    // Told to the lead, with the wrap-up's words; never delivered to the run: the chat owes the answer.
-    assert.deepEqual(standing(chat), { "also add rain": "queued" });
-    const told = chat.log.filter((e) => e.data.event_type === "run_steering");
-    assert.equal(told.length, 1);
-    assert.match(String(told[0]?.data.payload.text), /^also add rain\n\n\(You are wrapping up this build/);
-    assert.equal(told[0]?.data.payload.kept, true, "marked as only told: the chat shows it where the lead heard it");
-    // Never handed again while it waits, however the queue looks.
-    await chat.say("and fog");
-    await settleOn(() => chat.log.filter((e) => e.data.event_type === "run_steering").length === 2);
-    await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(chat.log.filter((e) => e.data.event_type === "run_steering").length, 2, "each told once");
-    assert.deepEqual(chat.answered, [], "nothing answered while the build closes");
-    await one.line.release();
-    chat.closeBuild();
-    assert.ok(await settleOn(() => chat.answered.length === 2));
-    assert.deepEqual(chat.answered, ["also add rain", "and fog"], "the chat answers both, in order, once it closed");
-  });
-
-  it("LC18. a lead in its wrap-up turn hears what the person sends at its next step, told the chat takes up new work", async () => {
-    const chat = liveChat();
+    chat.hooks.native = true;
     const one = chat.loopRun();
     // Working time is over: the first turn is the wrap-up.
+    one.n.softDeadline = chat.at.now - 1;
+    await one.run(async () => {
+      void chat.say("also add rain");
+      await settleOn(() => chat.steers.length > 0);
+      one.state.finished = true;
+      return { ...worked, steered: chat.steers.map((steer) => steer.messages[0].id) };
+    });
+    assert.equal(chat.steers[0]?.interrupt, false, "the wrap-up is never cut short");
+    assert.deepEqual(
+      chat.steers[0]?.messages.map(({ id: _id, ...said }: Record<string, unknown>) => said),
+      [{ text: "also add rain", from: "person" }],
+    );
+    assert.deepEqual(standing(chat), { "also add rain": `delivered ${chat.RUN}` });
+    const told = chat.log.filter((e) => e.data.event_type === "run_steering").map((e) => e.data.payload);
+    assert.deepEqual(
+      told.map((payload) => [payload.text, "kept" in payload]),
+      [["also add rain", false]],
+    );
+    chat.closeBuild();
+    await settleOn(() => chat.answered.length > 0, 200);
+    assert.deepEqual(chat.answered, [], "heard in the wrap-up: never answered a second time");
+  });
+
+  it("LC18. words a wrap-up turn could not read go back to the chat when its line is released, and the chat answers them", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
     one.n.softDeadline = chat.at.now - 1;
     await one.run(async (turn) => {
       if (turn === 1) {
@@ -2582,10 +2606,66 @@ describe("live chat during a build, reviewed", () => {
       return worked;
     });
     assert.equal(chat.steers[0]?.interrupt, false, "the wrap-up is never cut short");
-    assert.match(String(chat.steers[0]?.messages[0]?.text), /also add rain[\s\S]*You are wrapping up this build/);
+    assert.equal(chat.steers[0]?.messages[0]?.text, "also add rain");
+    assert.deepEqual(chat.requeued(), ["also add rain"]);
     chat.closeBuild();
     assert.ok(await settleOn(() => chat.answered.length === 1));
     assert.deepEqual(chat.answered, ["also add rain"], "and the chat answers it once the build closed");
+  });
+
+  /*
+   * The lead read the person's words wrapped in Genex's: "THE USER SAYS (verbatim, oldest first):",
+   * then a paragraph of rules — and on an engine cut for them, "YOUR LAST TURN WAS CUT SHORT…" and
+   * a whole digest. Their pictures reached it as a line naming a file, when the chat had saved one.
+   */
+  it("LM1. the lead receives the person's words as they wrote them, their picture an image block", async () => {
+    const chat = liveChat();
+    chat.hooks.native = true;
+    const one = chat.loopRun();
+    const sky = { data: "iVBORw0KGgo=", mimeType: "image/png", label: "sky" };
+    await one.run(async () => {
+      void chat.say("hdrp или urp?", { stills: [sky] });
+      await settleOn(() => chat.steers.length > 0);
+      one.state.finished = true;
+      return { ...worked, steered: chat.steers.map((steer) => steer.messages[0].id) };
+    });
+    assert.equal(chat.steers.length, 1);
+    const said = chat.steers[0]!.messages.map(({ id: _id, ...message }: Record<string, unknown>) => message);
+    assert.deepEqual(said, [{ text: "hdrp или urp?", images: [sky], from: "person" }]);
+    assert.deepEqual(chat.requeued(), [], "read mid-turn: heard");
+  });
+
+  it("LM2. a worker's end said into the lead's turn is Genex's, and Claude Code takes it as not the person's", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    const line = { at: chat.T0, seq: 1, text: 'worker sky "Sky": done.', kind: "worker_ended" };
+    one.state.log.push(line);
+    await one.run(async () => {
+      await settleOn(() => chat.steers.length > 0);
+      one.state.finished = true;
+      return worked;
+    });
+    const news = chat.steers[0]!;
+    assert.equal(news.interrupt, false);
+    const [message] = news.messages as SteerMessage[];
+    assert.equal(message?.text, line.text);
+    assert.equal(message?.from, "genex");
+    // Claude Code's own input for it: CLI 2.1.257 shows it under "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]".
+    const readies: Array<SteerSend | null> = [];
+    const feed = steerFeed(
+      steerSession((send) => readies.push(send)),
+      userFrame("brief", []),
+      new AbortController().signal,
+      () => "ses_lead",
+    );
+    const input = feed.prompt[Symbol.asyncIterator]();
+    await input.next();
+    feed.initialized({ capabilities: ["msg_lifecycle_v1"] }, false);
+    assert.equal(readies[0]!(message!), true);
+    const frame = (await input.next()).value as Record<string, unknown>;
+    assert.equal(frame.isSynthetic, true);
+    assert.equal("origin" in frame, false, "never the person's: no human origin");
+    feed.dispose();
   });
 });
 
@@ -2679,7 +2759,7 @@ describe("messages without a queue", () => {
     assert.ok(await settleOn(() => legs.length === 2));
     const states = () => [...messageQueueState(log as never).messages.values()].map((m) => [m.action?.text, m.state]);
     assert.deepEqual(legs[1], {
-      prompt: switchedTurnPrompt(["The Loop is on."], steeredTurnPrompt(["make it in the loop"])),
+      prompt: switchedTurnPrompt(["The Loop is on."], "make it in the loop"),
       resume: "s1",
       loop: true,
     });

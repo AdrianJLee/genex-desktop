@@ -35,17 +35,10 @@ export interface LeadLine {
   readonly runId: string;
   /** The chat the run tells its story in: only its messages reach the lead. */
   readonly threadId: string;
-  /** It takes the chat's messages now: its run goes on, and its wrap-up has not begun. */
+  /** It takes the chat's messages now: its run goes on, its wrap-up included. */
   open(): boolean;
   /** No more messages: the run is over for its lead. */
   shut(): void;
-  /**
-   * The wrap-up began: the lead still hears what the person sends, but every message from now on
-   * stays the chat's to answer once the run has closed (live-chat.ts: its door `keeps` it).
-   */
-  wrapUp(): void;
-  /** The wrap-up began (`wrapUp`). */
-  wrapping(): boolean;
   /** A message was handed to it (`giveBack` returns it to the chat): a turn under way hears it at once. */
   hear(item: QueueAction, giveBack: GiveBack): void;
   /** Settles when the next message is handed to it. */
@@ -102,7 +95,6 @@ export function openLeadLine(
   ctx?: Pick<HarnessCtx, "call">,
 ): LeadLine {
   let isShut = false;
-  let wrappingUp = false;
   let released = false;
   let attended = false;
   let heardCount = 0;
@@ -118,12 +110,6 @@ export function openLeadLine(
       if (lines.get(runId) === line) lines.delete(runId);
       announce();
     },
-    wrapUp: () => {
-      if (isShut || wrappingUp) return;
-      wrappingUp = true;
-      announce();
-    },
-    wrapping: () => wrappingUp,
     hear: (item, giveBack) => {
       // Handed as the run ended (its line was released while the receipt was written): nobody
       // is left to hear it, so it goes back to the chat at once.

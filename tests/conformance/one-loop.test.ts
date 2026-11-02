@@ -553,15 +553,20 @@ describe("the one Loop's turns", () => {
     assert.equal(host.appended("run_finished")[0]?.victory, true);
   });
 
-  it("its first message says an ask to stop is wrap_up, and promises no news mid-turn", TEST_TIMEOUT, async () => {
-    const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
-    await host.start();
-    const brief = String(host.prompts()[0]);
-    assert.match(brief, /ask to stop[^\n]*wrap_up/i, "the person's stop is a wrap-up, in their words");
-    // An engine that can't take input mid-turn (Codex) hears news only once its turn ends.
-    assert.match(brief, /when your turn ends/i);
-    assert.doesNotMatch(brief, /News that comes while you work reaches you mid-turn\./);
-  });
+  it(
+    "its first message leaves the stop rule to wrap_up's own description, and promises no news mid-turn",
+    TEST_TIMEOUT,
+    async () => {
+      const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
+      await host.start();
+      const brief = String(host.prompts()[0]);
+      // Flipped: that a stop is wrap_up is said once, in the tool's own description.
+      assert.doesNotMatch(brief, /ask to stop[^\n]*wrap_up/i);
+      // An engine that can't take input mid-turn (Codex) hears news only once its turn ends.
+      assert.match(brief, /when your turn ends/i);
+      assert.doesNotMatch(brief, /News that comes while you work reaches you mid-turn\./);
+    },
+  );
 
   it("tools now include save_point and rewind, and restart only when hooked", TEST_TIMEOUT, async () => {
     const godot = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });

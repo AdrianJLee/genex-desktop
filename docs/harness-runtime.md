@@ -557,7 +557,7 @@ hand (a lone lead rests until it is back): the person's words still wake the lea
 `finish` are refused meanwhile, the turn's end keeps and restores nothing, and only the way back takes
 the git-write queue. Once the Loop begins to close it stops at its next step (its waits for the app
 too), says nothing and keeps no journal; the teardown waits for it a while (`settleRecovery`). A
-closing Loop's lead hears no more news. While a turn works, `open/news.ts` steers (`interrupt: false`, once each) a pool
+closing Loop's lead hears no more news. While a turn works, `open/news.ts` steers (`interrupt: false`, once each, `from: genex`) a pool
 worker's end and question (`NoteKind.WorkerAsks`), a job's end, the app's crash
 (`NoteKind.AppCrashed`); a line the
 session read (`DelegateResult.steered`) is not told again, one it never read rides the next digest:
@@ -692,7 +692,7 @@ turn and be woken. `worker_start` never waits on the commit a worker forks from:
 once, and the fork gate (`forkGate`) looks at that commit in the background before the worker's
 session (`gatedRun`); a fork that does not run ends the worker naming the problems, its goal attempt
 given back, its end waking the lead. A worker's or a job's end is said into a web lead's turn under
-way as it comes (`turn-news.ts`, `interrupt: false`, as an open Loop's lead hears its news); a line
+way as it comes (`turn-news.ts`, `interrupt: false`, `from: genex`, as an open Loop's lead hears its news); a line
 the turn read is not told again. Its `worker_start` takes `task` (a kept
 prompt's `brief` is still read), `isolation` and `research`: `copy`, the default, is its builder in
 its own worktree; `read` starts a reader from the run's shared pool (`loop/workers/run-pool.ts`,
@@ -873,7 +873,7 @@ Windows/Linux.
 
 A Loop's hours are a soft cap, one rule for every Loop (`loop/time-cap.ts` `capClock`,
 `director/cap-lines.ts`): the cap is the hours in working time, ∞ capped at `UNTIL_DONE_CAP_MS` (24
-hours). `HEADS_UP_MS` (15 minutes) before it the lead hears mid-turn that little is left (none for a
+hours). `HEADS_UP_MS` (15 minutes) before it the lead hears mid-turn, as a line of Genex's (`from: genex`), that little is left (none for a
 Loop of 15 minutes or less); at the cap it hears that the time is up, and `worker_start` is refused
 from then on. A turn whose engine reads that line goes on into `GRACE_MS` (15 minutes) of grace; one
 whose engine can't is cut short (never inside a tool call or a claim's check), and its wrap-up turn
@@ -896,9 +896,9 @@ Finish — the close asks no judge: it lands a web game's head when that moved b
 passed its health check, and a Stop before or during the close lands nothing. `landingResult` says
 what the landing may claim (`fresh-health-pass` or `no-fresh-look`), and `finish` tells the lead.
 
-The user asks to finish in the chat, and only the lead can tell such an ask from a question: its
-card says an ask to finish, wrap up or stop adding (asked again as a question too) is `wrap_up`
-first. `wrap_up` (`director/wrap-up.ts`) records the ask quoting the user's words (checked like
+The user asks to finish in the chat, and only the lead can tell such an ask from a question:
+`wrap_up`'s own description, the one place the rule is said, makes an ask to stop or finish the
+build `wrap_up` first. `wrap_up` (`director/wrap-up.ts`) records the ask quoting the user's words (checked like
 `user_asked`) as the same `run_control` finish the app's own door writes, once. From then
 `worker_start` is refused (a conflict worker excepted), each running loop worker ends the round it
 is in and stops at its next round's gate (`workers.ts` `workerStopAsk`: the user's ask, never the

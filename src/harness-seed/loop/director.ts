@@ -52,10 +52,11 @@ import { runWakeLoop, SYSTEM_CLOCK, WAKE_ENDING } from "./director/wake.ts";
 import { WrapCause } from "./director/wake-schedule.ts";
 import { openLeadLine, type LeadLine } from "./director/lead-line.ts";
 import { bookmarkLead, freshChat, leadSeat } from "./director/lead-session.ts";
+import type { MessageFrom } from "./steer-delivery.ts";
 import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
 import type { LoopRun } from "./director/loop-run.ts";
-import type { DirectorTalk, WakeClock } from "./director/wake.ts";
+import type { DirectorTalk, TurnSaid, WakeClock } from "./director/wake.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type { DelegateImage, DelegateResult, LiveToolSpec, ReferenceFrame } from "../types/host-api.d.ts";
 
@@ -95,7 +96,7 @@ function delegateTurn(
   loopRun: LoopRun,
   images: DelegateImage[],
   tools: LiveToolSpec[],
-  prompt: string,
+  { prompt, from }: { prompt: string; from?: MessageFrom | undefined },
   sessionId: string | null | undefined,
   timeoutMs: number,
 ): Promise<DelegateResult> {
@@ -104,6 +105,7 @@ function delegateTurn(
   return ctx.call(HostMethod.EngineDelegate, {
     engine: run.engine,
     prompt,
+    ...(from ? { from } : {}),
     project: run.project,
     threadId,
     ...(plannerModel(run) ? { model: plannerModel(run) } : {}),
@@ -128,6 +130,20 @@ function delegateTurn(
 }
 
 /**
+ * What one turn of the lead sends. A fresh lead session knows nothing of the chat it leads for: it
+ * is told the chat so far first, and that message is Genex's brief, never the person's words alone.
+ */
+async function leadAsk(
+  loopRun: LoopRun,
+  prompt: string,
+  sid: string | null | undefined,
+  said: TurnSaid | undefined,
+): Promise<{ prompt: string; from?: MessageFrom | undefined }> {
+  const chat = loopRun.lead && !sid ? await freshChat(loopRun.ctx, loopRun.threadId) : "";
+  return chat ? { prompt: `${chat}\n\n${prompt}` } : { prompt, from: said?.from };
+}
+
+/**
  * The lead's session as the run talks to it. A session that dies of a lost provider — the engine's
  * limit, or its sign-in gone — is not the lead failing: it is remembered, and the loop chooses between
  * waiting and pausing.
@@ -142,12 +158,10 @@ export function directorTalk(loopRun: LoopRun, images: DelegateImage[], tools: L
   };
   const talk: DirectorTalk = {
     sessionId: lead ? lead.sessionId : (loopRun.priorJournal?.director?.sessionId ?? null),
-    session: async (prompt, sid, timeoutMs) => {
+    session: async (prompt, sid, timeoutMs, said) => {
       try {
-        // A fresh lead session knows nothing of the chat it leads for: it is told the chat so far first.
-        const chat = lead && !sid ? await freshChat(ctx, threadId) : "";
-        const asked = chat ? `${chat}\n\n${prompt}` : prompt;
-        return await delegateTurn(loopRun, stillsFor(sid), tools, asked, sid, timeoutMs);
+        const pictures = [...stillsFor(sid), ...(said?.images ?? [])];
+        return await delegateTurn(loopRun, pictures, tools, await leadAsk(loopRun, prompt, sid, said), sid, timeoutMs);
       } catch (err: any) {
         if (!isProviderLoss(err?.kind)) throw err;
         state.limit = engineLimitOf(err);
@@ -388,11 +402,11 @@ async function wakeLoopRun(
 const stoppedBeforeAnyTurn = (loopRun: LoopRun): boolean =>
   leadsOpenLoop(loopRun) && loopRun.ctx.cancelled === true && !loopRun.open?.halted && !loopRun.open?.sessionWorked;
 
-/** Seat the run's lead (director/lead-session.ts): the chat's own session when it can continue it. */
+/** Seat the run's lead (director/lead-session.ts): the chat's own session, continued when it can be. */
 async function seatTheLead(loopRun: LoopRun): Promise<void> {
-  const { ctx, journal, priorJournal, projectDir, run, threadId } = loopRun;
+  const { ctx, journal, projectDir, run, threadId } = loopRun;
   const events = await ctx.call(HostMethod.EventsList, { threadId }).catch(() => []);
-  loopRun.lead = leadSeat({ events, run, folder: projectDir, priorJournal });
+  loopRun.lead = leadSeat({ events, run, folder: projectDir });
   journal.director.lead = { chatSession: loopRun.lead.chatSession };
   await loopRun.saveJournal();
 }

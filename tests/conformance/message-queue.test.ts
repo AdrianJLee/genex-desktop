@@ -841,6 +841,36 @@ test("handing a message to the running turn or to a run's lead ends the waits on
   q2.stop();
 });
 
+test("a message Genex wrote reaches the running turn as Genex's, and ends no wait on the chat", async () => {
+  const { nextWords } = await import("../../src/harness-seed/loop/person-wrote.ts");
+  const f = steerFixture(),
+    open = deferred(),
+    release = deferred();
+  const queue = new MessageQueue(f.host as never, async (a: any, steer: any) => {
+    if (a.text !== "build the level") return;
+    await steer.open();
+    open.resolve();
+    await release.promise;
+    await steer.close({ steered: [] });
+  });
+  await queue.enqueue(f.send("build the level"));
+  await open.promise;
+  const waiting = nextWords("chat");
+  let ended = false;
+  void waiting.ended.then(() => (ended = true));
+  await queue.enqueue({ ...f.send("Toy Engine asks: click Play"), from: "genex" } as never);
+  await until(() => f.asked.length === 1);
+  assert.deepEqual(
+    f.asked[0].messages.map((m: Record<string, unknown>) => m.from),
+    ["genex"],
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(ended, false, "the person wrote nothing: a wait on them goes on");
+  waiting.cancel();
+  release.resolve();
+  queue.stop();
+});
+
 /**
  * Live chat during a build: while a run's lead takes the chat (director/wake.ts), a message is
  * handed to it with its receipt — recorded delivered to the run, with the records the lead reads

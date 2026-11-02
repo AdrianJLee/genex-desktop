@@ -29,7 +29,7 @@ import {
 import { isProviderLoss, lostSignIn, noteProviderLoss, pauseDecision } from "../provider-loss.ts";
 import { CLIP_DETAIL } from "../text.ts";
 import { RunEvent } from "../run-events.ts";
-import { SteerDelivery } from "../steer-delivery.ts";
+import { MessageFrom, SteerDelivery } from "../steer-delivery.ts";
 import { MINUTE_MS, minutes, SECOND_MS } from "../time.ts";
 import { estimateTokens } from "../prompt.ts";
 import { limitResumePrompt, wrapUpPrompt } from "./briefs.ts";
@@ -67,13 +67,13 @@ import {
   WRAP_UP_MARGIN_MS,
   WrapCause,
 } from "./wake-schedule.ts";
-import { cutShortWake, midTurnUserSays } from "./live-prompts.ts";
 import { turnEndAtCap, keepRunClock, withCapWatch, withCapWords } from "./cap-lines.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
-import type { DelegateResult } from "../../types/host-api.d.ts";
+import type { DelegateImage, DelegateResult } from "../../types/host-api.d.ts";
 import type { RestoredWake } from "./journal.ts";
 import type { LeadLine } from "./lead-line.ts";
 import type { LoopRun } from "./loop-run.ts";
+import type { SaidSteer } from "../run-inbox.ts";
 import type { DigestFacts } from "./wake-prompts.ts";
 import type { TurnFacts, TurnVerdict, Wake, WakeReason, WakeView } from "./wake-schedule.ts";
 
@@ -107,9 +107,26 @@ const USER_WAKES: ReadonlySet<WakeReason> = new Set<WakeReason>([WakeCause.UserM
 /** An open Loop's lead going straight on with its own work: never counted in the wake cap. */
 const SELF_CONTINUED: ReadonlySet<WakeReason> = new Set<WakeReason>([WakeCause.CarryOn, WakeCause.TurnCap]);
 
+/** What a message to the lead carries besides its words: the person's pictures, and who wrote it when it is not a brief. */
+export interface TurnSaid {
+  images?: DelegateImage[];
+  from?: MessageFrom;
+}
+
+/** What the person said, as the lead is told it: their words and the pictures they sent with them. */
+interface Said {
+  text: string;
+  images: DelegateImage[];
+}
+
 /** The lead's session as the run talks to it: one turn at a time, and the session id it resumes. */
 export interface DirectorTalk {
-  session: (prompt: string, sid: string | null | undefined, timeoutMs: number) => Promise<Partial<DelegateResult>>;
+  session: (
+    prompt: string,
+    sid: string | null | undefined,
+    timeoutMs: number,
+    said?: TurnSaid,
+  ) => Promise<Partial<DelegateResult>>;
   sessionId: string | null;
   /** Keep the session a turn answered with, on the journal where a resume finds it. */
   keep: (result: Partial<DelegateResult> | null | undefined) => Promise<void>;
@@ -142,13 +159,13 @@ export interface WakeState {
   /** The user's words the lead was told although the store refused to record their hand-over. */
   heardUnrecorded: string[];
   /** The user's words handed into a turn that ended before it read them: they open the next message. */
-  owed: string[];
+  owed: Said[];
   /** The line the chat reaches the lead on (lead-line.ts), when the run opened one. */
   line: LeadLine | null;
   /** How many of the chat's messages the line had been handed when the lead's latest message was told them. */
   promptThrough: number;
   /** The user's words the lead's latest message carried: said again when no turn worked on it. */
-  promptWords: string[];
+  promptWords: Said[];
   /** The turn under way was cut short to hand the lead the user's words: it is resumed at once with them. */
   cut: boolean;
   /** The session's first message, when a plugin held its turn back: it opens the next one (`heldTurn`). */
@@ -185,10 +202,20 @@ interface TurnKit {
   line: LeadLine | null;
 }
 
-/** One message to the lead's session, and when its turn must be over. */
+/** One message to the lead's session, what it carries besides its words, and when its turn must be over. */
 interface TurnAsk {
   prompt: string;
   deadline: number;
+  said?: TurnSaid;
+}
+
+/** The words of what the person said, oldest first. */
+const textsOf = (said: readonly Said[]): string[] => said.map((one) => one.text);
+
+/** A message carrying `words` takes their pictures with it, and the person's own words alone say so (`from`). */
+function saidWith(words: readonly Said[], from?: MessageFrom): TurnSaid {
+  const images = words.flatMap((one) => one.images);
+  return { ...(images.length ? { images } : {}), ...(from ? { from } : {}) };
 }
 
 /** The loop's state as a run starts: a resumed one takes back what its journal kept of it. */
@@ -233,8 +260,8 @@ const loopRunOver = (loopRun: LoopRun): boolean =>
   Boolean(loopRun.open?.halted);
 
 /** Of the inbox's untold steers, what the lead has not heard: those it was told on a refused hand-over lead the list. */
-function unheard(wake: WakeState, untold: readonly string[]): string[] {
-  const stillLeading = wake.heardUnrecorded.every((text, i) => untold[i] === text);
+function unheard(wake: WakeState, untold: readonly SaidSteer[]): SaidSteer[] {
+  const stillLeading = wake.heardUnrecorded.every((text, i) => untold[i]?.text === text);
   if (!stillLeading) wake.heardUnrecorded = [];
   return untold.slice(wake.heardUnrecorded.length);
 }
@@ -243,7 +270,7 @@ function unheard(wake: WakeState, untold: readonly string[]): string[] {
  * The user's words the lead is told now — what a turn was handed and did not read first, then the
  * inbox's — and how many of the chat's messages the line had been handed by then (`through`).
  */
-async function userWords(loopRun: LoopRun, wake: WakeState): Promise<{ words: string[]; through: number }> {
+async function userWords(loopRun: LoopRun, wake: WakeState): Promise<{ words: Said[]; through: number }> {
   const owed = wake.owed.splice(0);
   const { line } = wake;
   let through = line?.count() ?? 0;
@@ -256,26 +283,34 @@ async function userWords(loopRun: LoopRun, wake: WakeState): Promise<{ words: st
 }
 
 /** The user's words a message to the lead carries, taken off the inbox, which records their hand-over. */
-async function tellUser(loopRun: LoopRun, wake: WakeState): Promise<string[]> {
+async function tellUser(loopRun: LoopRun, wake: WakeState): Promise<Said[]> {
   const { words, through } = await userWords(loopRun, wake);
   wake.promptThrough = through;
   wake.promptWords = words;
   return words;
 }
 
-/** The inbox's steers the lead has not heard, taken off it (`tellUser`). */
-async function takeUntold(loopRun: LoopRun, wake: WakeState): Promise<string[]> {
+/** The inbox's steers the lead has not heard, taken off it (`tellUser`), each with its pictures. */
+async function takeUntold(loopRun: LoopRun, wake: WakeState): Promise<Said[]> {
   const { inbox } = loopRun;
-  const taken = await inbox.steering(undefined, true, { onlyNew: true }).catch(() => null);
+  const taken = await inbox.steers(undefined, true, { onlyNew: true }).catch(() => null);
   if (taken) {
-    const words = unheard(wake, taken);
+    const steers = unheard(wake, taken);
     wake.heardUnrecorded = [];
-    return words;
+    return Promise.all(steers.map((steer) => saidOf(loopRun, steer)));
   }
-  const untold = await inbox.steering(undefined, false, { onlyNew: true }).catch(() => []);
-  const words = unheard(wake, untold);
-  wake.heardUnrecorded = [...untold];
-  return words;
+  const untold = await inbox.steers(undefined, false, { onlyNew: true }).catch(() => []);
+  const steers = unheard(wake, untold);
+  wake.heardUnrecorded = untold.map((steer) => steer.text);
+  return Promise.all(steers.map((steer) => saidOf(loopRun, steer)));
+}
+
+/** A steer as the lead is told it: the person's words, and the pictures read from where the chat keeps them. */
+async function saidOf(loopRun: LoopRun, steer: SaidSteer): Promise<Said> {
+  if (!steer.attachmentsArtifact) return { text: steer.text, images: [] };
+  const params = { threadId: loopRun.threadId, artifactId: steer.attachmentsArtifact };
+  const kept = (await loopRun.ctx.call(HostMethod.ArtifactRead, params).catch(() => null)) as AnyRecord | null;
+  return { text: steer.text, images: Array.isArray(kept?.stills) ? kept.stills : [] };
 }
 
 /** How the Loop works, as the lead's first message (and a fresh session's) says it. */
@@ -287,7 +322,7 @@ const rulesFor = (loopRun: LoopRun): string => (leadsOpenLoop(loopRun) ? openWak
  * opens in its wrap-up.
  */
 async function firstPrompt(loopRun: LoopRun, wake: WakeState, brief: () => string, now: number): Promise<string> {
-  const said = await tellUser(loopRun, wake);
+  const said = textsOf(await tellUser(loopRun, wake));
   const opening = [brief(), rulesFor(loopRun)];
   if (resumedFromJournal(loopRun)) return [...opening, resumedDigest(loopRun, wake, said, now)].join("\n\n");
   const closing = wake.wrapping ? closingFor(loopRun, wake, [], now) : "";
@@ -375,7 +410,7 @@ async function collect(loopRun: LoopRun, wake: WakeState, now: number): Promise<
     await activeWork(loopRun, now);
     healthWatch(loopRun);
   }
-  const untold = await inbox.steering(undefined, false, { onlyNew: true }).catch(() => []);
+  const untold = await inbox.steers(undefined, false, { onlyNew: true }).catch(() => []);
   wake.userWaiting = wake.owed.length > 0 || unheard(wake, untold).length > 0;
   const finishing = await inbox.finishing().catch(() => false);
   // An ask the lead recorded itself (`wrap_up`) is said already: no news to it.
@@ -498,7 +533,7 @@ async function wakePrompt(loopRun: LoopRun, wake: WakeState, due: Wake, clock: W
     startWrapUp(loopRun, wake, WrapCause.Finish, now);
     wake.wrapping = true;
   }
-  const userSays = await tellUser(loopRun, wake);
+  const userSays = textsOf(await tellUser(loopRun, wake));
   const happened = readUnread(loopRun);
   const finishNew = wake.finishNew;
   markSaid(wake, due.reasons, now);
@@ -636,7 +671,8 @@ function openFresh(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk, why: string): 
     ...freshContext(loopRun),
     digest: turn.prompt,
   });
-  return kit.talk.session(text, null, turn.deadline - kit.clock.now());
+  // A fresh start is Genex's brief around the message: it keeps the pictures, never the person's sender.
+  return kit.talk.session(text, null, turn.deadline - kit.clock.now(), { images: turn.said?.images ?? [] });
 }
 
 /**
@@ -658,7 +694,7 @@ async function freshSession(
   wake.freshSessions += 1;
   talk.sessionId = null;
   // The first turn already carries the brief: a Resume whose old session is gone opens a new one silently.
-  if (wake.turns === 1) return talk.session(turn.prompt, null, turn.deadline - clock.now());
+  if (wake.turns === 1) return talk.session(turn.prompt, null, turn.deadline - clock.now(), turn.said);
   await loopRun.decision(
     `the director's session was lost (${why}); a fresh session carries the run on`,
     "the lead's conversation was lost, so a fresh one picks the build up from its notes",
@@ -705,7 +741,7 @@ async function askSession(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Promis
     if (refused) return refused;
     let result: Partial<DelegateResult>;
     try {
-      result = await talk.session(turn.prompt, talk.sessionId, turn.deadline - clock.now());
+      result = await talk.session(turn.prompt, talk.sessionId, turn.deadline - clock.now(), turn.said);
     } catch (err: any) {
       const retries = folderBusy(err) && !leadsOpenLoop(loopRun);
       if (!retries || !(await asksAgainWhenFree(loopRun, kit, tries))) throw err;
@@ -874,7 +910,9 @@ async function retryPrompt(loopRun: LoopRun, wake: WakeState, kit: TurnKit, turn
   const userSays = await tellUser(loopRun, wake);
   wake.promptWords = [...carried, ...userSays];
   const happened = readUnread(loopRun);
-  return [limitResumePrompt(minutes(waitMs)), again, sinceThen({ userSays, happened })].filter(Boolean).join("\n\n");
+  return [limitResumePrompt(minutes(waitMs)), again, sinceThen({ userSays: textsOf(userSays), happened })]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /**
@@ -899,7 +937,8 @@ async function waitOutLimit(
     if (!(await sleepThrough(loopRun, wake, waitMs, kit.clock))) return result;
     loopRun.state.limit = null;
     const prompt = await retryPrompt(loopRun, wake, kit, turn, waitMs);
-    result = await watchedSession(loopRun, wake, kit, { prompt, deadline: retryDeadline(loopRun, wake, kit, turn) });
+    const deadline = retryDeadline(loopRun, wake, kit, turn);
+    result = await watchedSession(loopRun, wake, kit, { prompt, deadline, said: saidWith(wake.promptWords) });
   }
   return result;
 }
@@ -924,12 +963,13 @@ async function oneTurn(
   wake: WakeState,
   kit: TurnKit,
   prompt: string,
+  from?: MessageFrom,
 ): Promise<Partial<DelegateResult>> {
   wake.turns += 1;
   const deadline = turnDeadline(loopRun, wake, kit.clock.now());
   // A claim made in this turn ends its review before the turn does; the wrap-up is the last turn (finish-claim.ts).
   noteTurnEnds(loopRun.state, deadline, lastTurn(loopRun, wake, deadline));
-  const turn = { prompt, deadline };
+  const turn: TurnAsk = { prompt, deadline, said: saidWith(wake.promptWords, from) };
   const result = await waitOutLimit(loopRun, wake, kit, turn, await watchedSession(loopRun, wake, kit, turn));
   // An open Loop's session call stamped its own return (`watchedSession`).
   if (!leadsOpenLoop(loopRun)) wake.turnReturnedAt = kit.clock.now();
@@ -977,9 +1017,9 @@ const startedWorking = (result: Partial<DelegateResult>): boolean =>
 
 /**
  * One turn of the lead's, and its resumptions. A turn cut short to hand the lead the user's words
- * is resumed at once in the same session, told it was cut, their words first (a wake of the
- * user's) — or, cut before it read its message, asked that message again with their words after
- * it. A cut is never a failed turn.
+ * is resumed at once in the same session with their words alone, as they wrote them — or, cut
+ * before it read its message, asked that message again with their words after it. A cut is never
+ * a failed turn.
  */
 async function takeTurn(
   loopRun: LoopRun,
@@ -1003,12 +1043,9 @@ async function takeTurn(
   let result = await oneTurn(loopRun, wake, kit, asked);
   while (wake.cut && !loopRunOver(loopRun)) {
     wake.cut = false;
-    asked = startedWorking(result)
-      ? cutShortWake(
-          await wakePrompt(loopRun, wake, { at: kit.clock.now(), reasons: [WakeCause.UserMessage] }, kit.clock),
-        )
-      : await askAgain(loopRun, wake, asked);
-    result = await oneTurn(loopRun, wake, kit, asked);
+    const resumes = startedWorking(result);
+    asked = resumes ? textsOf(await tellUser(loopRun, wake)).join("\n\n") : await askAgain(loopRun, wake, asked);
+    result = await oneTurn(loopRun, wake, kit, asked, resumes ? MessageFrom.Person : undefined);
   }
   wake.cut = false;
   await fireHooks(loopRun.ctx, loopRun.game, HookEvent.TurnEnd, moment);
@@ -1056,7 +1093,7 @@ async function askAgain(loopRun: LoopRun, wake: WakeState, asked: string): Promi
   const carried = wake.promptWords;
   const userSays = await tellUser(loopRun, wake);
   wake.promptWords = [...carried, ...userSays];
-  return [asked, sinceThen({ userSays, happened: [] })].filter(Boolean).join("\n\n");
+  return [asked, sinceThen({ userSays: textsOf(userSays), happened: [] })].filter(Boolean).join("\n\n");
 }
 
 /**
@@ -1077,25 +1114,26 @@ function mayCut(loopRun: LoopRun, wake: WakeState, kit: TurnKit): boolean {
  * What a turn under way was handed to read at its next step, by the id it went in under: the words,
  * and how many of the chat's messages the line had been handed then.
  */
-type Handed = Map<string, { words: string[]; through: number }>;
+type Handed = Map<string, { words: Said[]; through: number }>;
 
 /**
- * Hand the user's words to the lead's turn under way (`engine.steer`, addressed by the run): an
- * engine that reads input mid-turn takes them at its next step (`handed`, settled against what the
- * turn says it read); one that cannot is cut short when `mayCut`, and resumed with them
- * (`wake.cut`) — asked with `interrupt: false` otherwise. Words neither took open the lead's next
- * message.
+ * Hand the user's words to the lead's turn under way (`engine.steer`, addressed by the run), as
+ * they wrote them and with their pictures: an engine that reads input mid-turn takes them at its
+ * next step (`handed`, settled against what the turn says it read); one that cannot is cut short
+ * when `mayCut`, and resumed with them (`wake.cut`) — asked with `interrupt: false` otherwise.
+ * Words neither took open the lead's next message.
  */
 async function handMidTurn(loopRun: LoopRun, wake: WakeState, kit: TurnKit, handed: Handed, id: string): Promise<void> {
   // A run that is over hears nothing more: what was sent stays untold rather than said to no one.
   if (loopRunOver(loopRun)) return;
   const { words, through } = await userWords(loopRun, wake);
   if (!words.length) return;
+  const message = { id, text: textsOf(words).join("\n\n"), ...saidWith(words, MessageFrom.Person) };
   const answer = await loopRun.ctx
     .call(HostMethod.EngineSteer, {
       threadId: loopRun.threadId,
       into: loopRun.run.runId,
-      messages: [{ id, text: midTurnUserSays(words) }],
+      messages: [message],
       interrupt: mayCut(loopRun, wake, kit),
     })
     .catch(() => null);
@@ -1305,8 +1343,6 @@ export async function runWakeLoop(
     wake.wrapCause = WrapCause.Deadline;
   }
   const first = await firstPrompt(loopRun, wake, brief, clock.now());
-  // The wrap-up still hears the chat, but what is sent from now on is the chat's to answer once the run closes.
-  if (wake.wrapping) wrapUpLine(line);
   let result = await turnThenBetween(loopRun, wake, kit, first);
   for (;;) {
     const verdict = afterTurn(await turnFacts(loopRun, wake, result, clock.now()));
@@ -1317,19 +1353,10 @@ export async function runWakeLoop(
     // A sign-in a worker or a judge lost while the lead slept pauses the run before it is woken.
     if (await pauseOnLostSignIn(loopRun, clock.now())) break;
     const prompt = await wakePrompt(loopRun, wake, due, clock);
-    if (wake.wrapping) wrapUpLine(line);
     result = await turnThenBetween(loopRun, wake, kit, prompt);
   }
   journalWake(loopRun, wake);
   return { result, wrapCause: wake.wrapCause, failed: wake.failed };
-}
-
-/**
- * The wrap-up began: the lead still hears the chat, and what is sent from now on stays the chat's to
- * answer once the run closes (`LeadLine.wrapUp`).
- */
-function wrapUpLine(line: LeadLine | null): void {
-  line?.wrapUp();
 }
 
 /**

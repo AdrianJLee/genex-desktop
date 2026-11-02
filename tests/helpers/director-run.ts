@@ -67,6 +67,7 @@ export function fakeLoopRun(host: FakeHost, over: Record<string, unknown> = {}, 
     run,
     resume: false,
     inbox: {
+      steers: async () => [],
       steering: async () => [],
       finishing: async () => false,
       addressed: async () => [],

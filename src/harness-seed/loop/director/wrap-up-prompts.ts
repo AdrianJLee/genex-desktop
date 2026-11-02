@@ -4,7 +4,7 @@
  */
 export const WRAP_UP_WORDS = {
   notQuoted:
-    "wrap_up needs the user's own words asking to finish, quoted exactly from their message to this run. Nothing was recorded and the run goes on: a question alone stops no worker.",
+    "wrap_up needs the user's own words asking to finish, quoted exactly from their message to this run. Nothing was recorded.",
   closing: "the run is already closing; nothing more to wrap up",
   already: "The user's ask to finish is already on record.",
   /** Workers still run: finish stops them. */

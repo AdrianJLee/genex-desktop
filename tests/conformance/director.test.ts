@@ -1157,7 +1157,6 @@ describe("a Loop interrupted and resumed", () => {
         );
 
         assert.equal(sessions, 2, "one resumed session");
-        assert.equal(results.afterLoopRun?.coordinator, undefined, "the chat's own session resumed it, no coordinator");
         assert.notEqual(results.afterLoopRun?.readOnly, true);
         if (interruption === "stop-queue")
           assert.equal(

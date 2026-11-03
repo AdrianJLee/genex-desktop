@@ -15,7 +15,7 @@
  * autopilot's stop code, liveness, the scoreboard and whether the build landed.
  */
 import { ContextSource } from "../../../src/shared/context.ts";
-import { DELEGATE_TOOL } from "../../../src/shared/coordinator.ts";
+import { DELEGATE_TOOL } from "../../../src/shared/chat-run.ts";
 import {
   CompletionRole,
   CustomEvent,

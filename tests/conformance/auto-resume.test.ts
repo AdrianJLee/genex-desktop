@@ -29,7 +29,7 @@ import {
   customRecord,
   type RunAutoResumedPayload,
 } from "../../src/shared/custom-events.ts";
-import { RunControlAction } from "../../src/shared/coordinator.ts";
+import { RunControlAction } from "../../src/shared/chat-run.ts";
 import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
 import { EventKind, type EventEnvelope } from "../../src/shared/event-log.ts";
 import { HOUR_MS, MINUTE_MS } from "../../src/shared/duration.ts";

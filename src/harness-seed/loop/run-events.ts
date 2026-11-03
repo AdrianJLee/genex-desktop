@@ -38,7 +38,6 @@ export const RunEvent = {
   IntegrationMerge: "integration_merge",
   RunControl: "run_control",
   RunFinished: "run_finished",
-  RunFollowupRequested: "run_followup_requested",
   RunInteractionEvidence: "run_interaction_evidence",
   RunIteration: "run_iteration",
   RunLearning: "run_learning",

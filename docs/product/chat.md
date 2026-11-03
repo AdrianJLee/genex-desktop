@@ -64,4 +64,4 @@ History is paged; scrolling up stops following.
 [ChatPanel](../../src/renderer/panels/ChatPanel.tsx) feeds the transcript,
 [chat components](../../src/renderer/chat) draw it,
 [PromptBar](../../src/renderer/ui/PromptBar.tsx) writes.
-Queue and session internals: [conversation coordinator](../conversation-coordinator.md).
+Queue and session internals: [conversation lifecycle](../conversation-lifecycle.md).

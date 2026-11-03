@@ -26,15 +26,11 @@ export const RunnerKind = {
 } as const;
 export type RunnerKind = (typeof RunnerKind)[keyof typeof RunnerKind];
 
-/** This part names the runners of a Loop on a project of any kind: a run reads it by namespace before it leads an open Loop. */
-export const SERVES_OPEN_LOOP = true;
-
 /**
  * A run this loop is conducting (or reserving), and the promise that settles when it is over.
  * `closed` settles, and `done` is set, as soon as the run itself is over: the chat is free from
- * then on (live-chat.ts). A run-dispatch.ts
- * kept from before live chat sets neither, and the chat waits for `settled` as it did. `stopped` is
- * the run's own Stop (live-chat.ts `stopRun`), which it keeps whatever the chat does next.
+ * then on (live-chat.ts). `stopped` is the run's own Stop (live-chat.ts `stopRun`), which it keeps
+ * whatever the chat does next.
  * `closing` is set just before the run appends its own end (`run_finished`, `autopilot_paused`): a
  * new start here (a Resume of that pause) waits for the close as for a done run, never refused by it.
  * `stops` counts the Stops that reached the run (`stopRun`), so a start waiting for its close sees a
@@ -44,7 +40,7 @@ export interface ActiveRun {
   run: Run;
   threadId: string;
   settled: Promise<unknown>;
-  closed?: Promise<unknown>;
+  closed: Promise<unknown>;
   done?: boolean;
   closing?: boolean;
   stopped?: boolean;

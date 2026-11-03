@@ -28,7 +28,7 @@ import { pressStageView, stageCurrent, stageOffers } from "./stage-views.ts";
 import { sleep, waitFor as waitUntil } from "./wait.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { expectedStatusFlag, flagValue, hasFlag, StudioFlag } from "../dev/launch-flags.ts";
-import { RunControlAction } from "../../shared/coordinator.ts";
+import { RunControlAction } from "../../shared/chat-run.ts";
 import { CustomEvent } from "../../shared/custom-events.ts";
 import { EventKind, SnapshotScope } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
@@ -147,7 +147,7 @@ interface Smoke {
 /** Why the smoke cannot go on: a hook or value its fixtures promised is missing. */
 const MESSAGE = {
   missing: (what: string) => `smoke setup is missing ${what}`,
-  coordinatorExpected: "Smoke expected a coordinator; a worker must not launch",
+  chatTurnExpected: "Smoke expected the chat's own turn; a worker must not launch",
 } as const;
 
 /** A value the smoke cannot go on without; a named smoke failure when it is missing. */
@@ -585,14 +585,14 @@ interface OutcomeRun {
   outcomeEvent: (type: string, payload: Record<string, unknown>) => Promise<unknown>;
 }
 
-/** The fixture game and its thread, the scripted coordinator, and the window pointed at them. */
+/** The fixture game and its thread, the scripted chat session, and the window pointed at them. */
 async function startBuildSmoke(smoke: Smoke): Promise<BuildSmoke> {
   const { wc } = smoke;
   const { core } = smoke.ctx;
   const project = await core.games.scaffold("build-preview-smoke", { title: "Build preview smoke" });
   const threadId = await core.threadForGame(project.name);
   const runId = "run_preview_smoke";
-  // Script only the coordinator in this isolated smoke app; never call a paid model.
+  // Script only the chat's own turn in this isolated smoke app; never call a paid model.
   core.engines.register({
     id: EngineId.Codex,
     label: "Codex",
@@ -617,14 +617,13 @@ async function startBuildSmoke(smoke: Smoke): Promise<BuildSmoke> {
       usage: {},
     }),
     delegate: async (request) => {
-      if (!request.coordinator) throw new Error(MESSAGE.coordinatorExpected);
-      await required(request.onLiveTool, "a live tool bridge")("run_status", {});
+      if (request.director || request.worker) throw new Error(MESSAGE.chatTurnExpected);
       return {
         ok: true,
         engine: EngineId.Codex,
         turns: 1,
         usage: {},
-        sessionId: "smoke-coordinator",
+        sessionId: "smoke-chat",
         summary: "The existing river and cottages builds are still visible. No new build was started.",
       };
     },
@@ -1593,7 +1592,7 @@ async function checkComposerDuringBuild(buildSmoke: BuildSmoke): Promise<void> {
   );
   await wc.executeJavaScript(`document.querySelector('button[aria-label="Send"]').click()`);
   check(
-    "coordinator answers while the existing build graph remains visible",
+    "the chat answers while the existing build graph remains visible",
     await waitFor(
       `document.body.innerText.includes('No new build was started.') && !!document.querySelector('[data-graph-node="step:river:1"] img') && document.querySelector('[data-testid="build-status"]')?.textContent.includes('2 parts working')`,
     ),
@@ -1641,7 +1640,7 @@ async function checkInterruptControls(buildSmoke: BuildSmoke): Promise<Interrupt
       stopDispatches.length === 0
     );
   });
-  // The coordinator's finish tool remains separate from interruption.
+  // Wrap up remains separate from interruption.
   await checkAsync("Wrap up asks the run to finish instead of stopping it", async () => {
     await wc.executeJavaScript(`window.studio.finishRun(${JSON.stringify(runId)}, ${JSON.stringify(threadId)})`);
     const log = await core.store.listEvents(threadId);

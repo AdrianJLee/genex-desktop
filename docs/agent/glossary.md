@@ -15,17 +15,9 @@ is product copy, not this glossary.
   sandbox and the RPC it calls (`src/substrate/`; the RPC handlers in `src/main/harness-rpc/`).
 - **Seed / applySeed**: the shipped harness source and the upgrade that copies it into the
   editable workspace while keeping the agent's edits (`src/substrate/seed-upgrade.ts`).
-- **Seed contract**: a rule both the app and the harness apply (coordinator tools, the message
-  queue, model roles, skill edits). The app keeps a typed copy in `src/shared/` and never loads
+- **Seed contract**: a rule both the app and the harness apply (the chat's run readings and build
+  names, the message queue, model roles, skill edits). The app keeps a typed copy in `src/shared/` and never loads
   the seed's; `tests/conformance/seed-contracts.test.ts` holds the two copies together.
-- **Coordinator**: a read-only session of its own that answers a game's chat for a run no lead of
-  the chat's own led (the long turn, the classic pipeline, a kept older seed), or a message on
-  another engine than the lead's, with the run's controls (`loop/coordinator.ts`). With Loop on
-  after a finished build that seated a lead, a coordinator that answers in a session reopens that
-  run through `continue_build` (**Reopen**). The fallback, which the long turn's removal keeps
-  ([harness runtime](../harness-runtime.md)); the queue (`loop/message-queue.ts`) owns the
-  conversation's order
-  ([conversation lifecycle](../conversation-coordinator.md)).
 - **Wedge**: the harness stopped sending heartbeats. The watchdog calls `recover()`, which
   rewinds the harness to its newest healthy snapshot and restarts it
   (`src/substrate/harness-host.ts` `onWedged`, `src/main/core/recovery.ts`).
@@ -97,9 +89,8 @@ is product copy, not this glossary.
   `show_build`, `land_build` (`runControls`) and a paused run's recorded `resume_run`
   (`loop/after-loop-run.ts`).
 - **Reopen**: a finished build whose journal seated a lead, started again as the same run when a
-  Loop message asks for more: the chat's own session records `reopen_run` (workers and judges
-  then take the message's picks), or the run's coordinator `continue_build` (the build's own
-  models); the chat rewrites the journal with the Loop's fresh budget (`loop/reopen-run.ts`,
+  Loop message asks for more: the chat's own session, on the build's own engine, records
+  `reopen_run` (workers and judges then take the message's picks); the chat rewrites the journal with the Loop's fresh budget (`loop/reopen-run.ts`,
   `loop/director/reopen.ts`).
 - **Run journal**: the durable artifact `autopilot_<runId>` a run resumes from. A director run
   keeps its whole record there (`loop/director/journal.ts`): the time it has worked, so a Resume

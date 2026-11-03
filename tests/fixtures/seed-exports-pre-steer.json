@@ -1,7 +1,0 @@
-{
-  "about": "Every value name loop/message-queue.ts and loop/studio-state.ts exported before steer (origin/dev 7706ee6d). A seed upgrade keeps either file once the in-app agent edited it, so the rest of the loop may import only these names from them: a name steer needs comes from a module of its own.",
-  "modules": {
-    "loop/message-queue.ts": ["MESSAGE_ATTEMPTS","MessageQueue","interruptedReplyNotice","messageQueueState"],
-    "loop/studio-state.ts": ["RunnerKind","StatusLane","heldRuns"]
-  }
-}

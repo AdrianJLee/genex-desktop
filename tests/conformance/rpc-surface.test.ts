@@ -15,10 +15,8 @@ import { coreLite } from "../helpers/core-lite.ts";
 const API_KEYS = [
   "artifact.read",
   "artifact.write",
-  "capabilities.describe",
   "checkpoint.take",
   "context.policy",
-  "coordinator.tool",
   "desktop.computer",
   "engine.abort",
   "engine.complete",
@@ -78,6 +76,7 @@ const API_KEYS = [
   "preview.showing",
   "preview.status",
   "run.artifact",
+  "run.control",
   "run.exec",
   "snapshot.create",
   "snapshot.diff",

@@ -264,7 +264,7 @@ The Genex lanes read these from the eval profile's event log (`genex-events.ts`,
   (`ready.pageMs` is a field row's first boot); the delegated turn's reply (`messages`) carries
   the same usage, marked `usage_source: delegation`, and is the one counted;
   `preview_ready` marks a project's first ready preview after a chat build
-  ([conversation lifecycle](conversation-coordinator.md)).
+  ([conversation lifecycle](conversation-lifecycle.md)).
 - Blind verdicts carry `judged` provenance and the `judgeCall` audit, an eval profile may pin its
   judge, and autopilot closes carry a `stopCode` ([harness runtime](harness-runtime.md)).
 

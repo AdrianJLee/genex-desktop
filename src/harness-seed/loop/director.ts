@@ -43,7 +43,6 @@ import { NotLandedReason } from "./verdict.ts";
 import * as loopRunFunctions from "./director/loop-run.ts";
 import * as toolFunctions from "./director/tools.ts";
 import * as integrateFunctions from "./director/integrate.ts";
-import { servesLiveChat } from "./live-chat-served.ts";
 import { prepareLoopRun } from "./director/setup.ts";
 import { reopenMarkOf } from "./director/reopen.ts";
 import { reopenNote } from "./director/reopen-prompts.ts";
@@ -52,7 +51,6 @@ import { directors, directorTools } from "./director/tool-specs.ts";
 import { runWakeLoop, SYSTEM_CLOCK, WAKE_ENDING } from "./director/wake.ts";
 import { WrapCause } from "./director/wake-schedule.ts";
 import { openLeadLine, type LeadLine } from "./director/lead-line.ts";
-import * as leadLineParts from "./director/lead-line.ts";
 import { bookmarkLead, freshChat, leadSeat } from "./director/lead-session.ts";
 import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
@@ -62,9 +60,6 @@ import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type { DelegateImage, DelegateResult, LiveToolSpec, ReferenceFrame } from "../types/host-api.d.ts";
 
 export { directorTool } from "./director/tool-specs.ts";
-
-/** This part leads a Loop on a project of any kind: a run reads it by namespace before it leads an open Loop. */
-export const SERVES_OPEN_LOOP = true;
 
 /** The run's modules, whose functions `bindLoopRun` puts on the run. */
 const LOOP_RUN_MODULES = [loopRunFunctions, toolFunctions, integrateFunctions];
@@ -368,7 +363,7 @@ async function tearDown(loopRun: LoopRun): Promise<void> {
   ctx.setStatus("idle");
 }
 
-/** The line the lead takes the chat on (live chat), open from the moment the run exists. */
+/** The line the lead takes the chat on (live chat), open once its lead is seated. */
 function leadLine(loopRun: LoopRun): LeadLine {
   const { ctx, report, run, state, threadId } = loopRun;
   return openLeadLine(run.runId, threadId, () => !state.finished && !ctx.cancelled && !report.failure, ctx);
@@ -474,11 +469,6 @@ async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, 
   }
 }
 
-/** Mark the run's lead as preparing (lead-line.ts `expectLeadLine`): a message sent meanwhile waits for it. */
-function expectLine(runId: string): () => void {
-  return typeof leadLineParts.expectLeadLine === "function" ? leadLineParts.expectLeadLine(runId) : () => {};
-}
-
 /**
  * Run a Loop under its lead. Returns the report (also written as run_finished). A Loop on a project
  * that isn't a web game (`profile` Open) is led in place by the chat's own session and closes there.
@@ -495,23 +485,16 @@ export async function runDirector(
 ): Promise<AnyRecord> {
   const open = profile === LoopProfile.Open;
   const clock = ownClock ?? (open ? OPEN_WALL_CLOCK : SYSTEM_CLOCK);
-  const liveChat = servesLiveChat();
   const timings: HostTimings = {};
   let tracing: LoopRun | undefined;
   const measured = tracedContext(ctx, run, (span) =>
     retainSpan(timings, { ...span, goal: null, head: tracing?.state.integrationHead ?? null }),
   );
-  const prepared = liveChat ? expectLine(run.runId) : () => {};
-  let loopRun: LoopRun;
-  try {
-    loopRun = await prepareLoopRun(
-      measured,
-      { threadId, run, resume, liveChat, ...(open ? { profile, clock } : {}) },
-      LOOP_RUN_MODULES,
-    );
-  } finally {
-    prepared();
-  }
+  const loopRun = await prepareLoopRun(
+    measured,
+    { threadId, run, resume, ...(open ? { profile, clock } : {}) },
+    LOOP_RUN_MODULES,
+  );
   const refused = loopRun.open?.refused;
   if (refused) {
     await refuseResume(loopRun, refused, loopRun.open?.refusalPauses === true);
@@ -521,8 +504,7 @@ export async function runDirector(
   loopRun.sleep = clock.sleep;
   keepTimings(loopRun, timings);
   await seatTheLead(loopRun);
-  const tools = seatTools(loopRun);
-  const talk = directorTalk(loopRun, referenceImages(run), tools);
+  const talk = directorTalk(loopRun, referenceImages(run), seatTools(loopRun));
   await leadTheRun(loopRun, talk, leadLine(loopRun), clock);
   return loopRun.report;
 }

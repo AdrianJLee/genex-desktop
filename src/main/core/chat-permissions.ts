@@ -9,8 +9,8 @@
  * thread's own metadata, and the shape of the brief (`DelegationService`). A harness that forges
  * any of it can only make a session ask the person, in the mode the person chose.
  *
- * A build's lead and the run's coordinator ask too (`forLead`): they are the chat's main agent, so
- * only the chat's mode and the rules the person saved limit them, as the chat's own session. Each
+ * A build's lead asks too (`forLead`): it is the chat's main agent, so only the chat's mode and the
+ * rules the person saved limit it, as the chat's own session. It
  * runs in the chat's Auto, Accept edits or Bypass (Claude Code then acts as for the chat's own
  * session), or in Manual, the host answering each question for the chat's mode: Plan denies, and
  * anything else is a card, whether or not the person is talking to it, withdrawn when nobody
@@ -80,7 +80,7 @@ import { JOB_ANSWER } from "./job-tools-prompts.ts";
 /** The permission store's file, under engine-homes. */
 const STORE_FILE = "permissions.json";
 /**
- * How long a build's lead's, the run's coordinator's or a run worker's card waits for the person.
+ * How long a build's lead's or a run worker's card waits for the person.
  * A card nobody sees must not hold a run; the person can say it again.
  */
 export const LEAD_ASK_TIMEOUT_MS = 5 * MINUTE_MS;
@@ -116,7 +116,7 @@ const MESSAGE = {
   withdrawnTurn: "The turn ended before the user answered.",
   /** A card nobody answered in its wait: not a no — the asking call alone ends, and the work goes on. */
   withdrawnTimeout: `Nobody answered within ${LEAD_ASK_TIMEOUT_MS / MINUTE_MS} minutes: the person may be away. This is not a no; it did not run. Carry on with the rest of the work, and ask again later if it is still needed.`,
-  /** What a build's lead or the run's coordinator reads when its chat was closed (archived, moved). */
+  /** What a build's lead reads when its chat was closed (archived, moved). */
   chatClosed:
     "This chat was closed, so nobody can approve this and it was not allowed. Do not retry it; say in your reply what you needed.",
   inPlan:
@@ -147,7 +147,7 @@ interface ChatSession {
 }
 
 /**
- * A build's lead or the run's coordinator, as the host follows it: the mode its session runs in,
+ * A build's lead, as the host follows it: the mode its session runs in,
  * where it started until the picker switches it (`#switchLead`), the switch still on its way, and
  * the calls its screen asked about first (by `toolUseId`) whose question has not reached the host
  * yet: the host's own questions, which the chat's mode answers whatever the session runs in by then.
@@ -161,9 +161,9 @@ interface LeadState extends ChatSession {
 /** How many of a lead's asked-first calls the host remembers: a call denied before its question is never asked. */
 const ASKED_FIRST_KEPT = 64;
 
-/** A running session the picker reaches: the chat's own, a build's lead or the run's coordinator. */
+/** A running session the picker reaches: the chat's own, or a build's lead. */
 interface LiveSession {
-  /** A lead's or the coordinator's: an answer that moves the chat's mode switches it too. */
+  /** A lead's: an answer that moves the chat's mode switches it too. */
   lead: boolean;
   /** Switch it for the chat's new mode; resolves with the failure the picker shows, or null. */
   switchTo(mode: PermissionMode): Promise<Error | null>;
@@ -191,20 +191,19 @@ interface PersonNote {
   lead: { runId: string; at: number } | null;
 }
 
-/** Whom a build's lead or the run's coordinator answers: its run's handed messages, or one message. */
-export type LeadAnswers = { runId: string } | { messageId: string };
-
-/** A build's lead or the run's coordinator the person may talk to in its game's chat. */
+/** A build's lead the person may talk to in its game's chat. */
 export interface LeadSessionAsk {
   project: string;
   threadId: string;
-  answers: LeadAnswers;
   engine: string;
   model: string;
-  /** The folder it works in: the game's (a lead) or its own home (the coordinator). */
+  /** The folder it works in: the game's. */
   cwd: string;
-  /** A lead's: the integration worktree it leads, as its seat checked it (real path). It builds there. */
-  leads?: string;
+  /**
+   * What it leads, as its seat checked it (real path): the run's integration worktree, or the game
+   * folder itself for a lead in place.
+   */
+  leads: string;
   signal: AbortSignal;
 }
 
@@ -308,7 +307,7 @@ function jobTitle(job: JobAskRequest): string {
   return job.asker === JobRole.Lead ? MESSAGE.leadJob(job.title) : MESSAGE.chatJob(job.title);
 }
 
-/** A build's lead's or the run's coordinator's session: what its engine is handed, and its end. */
+/** A build's lead's session: what its engine is handed, and its end. */
 export interface LeadSession {
   request: LeadAsks;
   /** The session is over: the picker has nothing to switch. */
@@ -336,7 +335,7 @@ function isOpenGameChat(meta: PermissionMeta, project: string): boolean {
   return meta?.kind === ThreadKind.Game && meta.project === project && meta.archived !== true;
 }
 
-/** The modes a build's lead or the run's coordinator starts in as its chat has them. */
+/** The modes a build's lead starts in as its chat has them. */
 const LEAD_OWN_MODES: ReadonlySet<PermissionMode> = new Set([
   PermissionMode.Auto,
   PermissionMode.AcceptEdits,
@@ -344,7 +343,7 @@ const LEAD_OWN_MODES: ReadonlySet<PermissionMode> = new Set([
 ]);
 
 /**
- * The mode a build's lead's or the run's coordinator's session runs in for its chat's mode: Auto,
+ * The mode a build's lead's session runs in for its chat's mode: Auto,
  * Accept edits and Bypass as they are, so Claude Code acts as it does for the chat's own session;
  * Manual for Manual and Plan, the host answering each question for the chat's mode (`#leadAsk`).
  */
@@ -409,7 +408,7 @@ export class ChatPermissionService {
   readonly #chatGrants = new Map<string, ChatGrants>();
   /**
    * Each chat's running sessions whose mode the picker can switch mid-turn: its own, and a build's
-   * lead or the run's coordinator beside it on the same chat.
+   * lead beside it on the same chat.
    */
   readonly #live = new Map<string, Set<LiveSession>>();
   /** Models whose sessions could not start in Auto ('' is the account's default model). */
@@ -532,16 +531,12 @@ export class ChatPermissionService {
   }
 
   /**
-   * How a build's lead or the run's coordinator asks in its game's own open chat, or null for any
-   * other thread. The caller has already checked the seat (this game's lead of this chat's run, or
-   * the coordinator of that run). Each call is screened here (`#screenLeadCall`) and each question
-   * routed here (`#leadAsk`), never by the harness.
+   * How a build's lead asks in its game's own open chat, or null for any other thread. The caller
+   * has already checked the seat (this game's lead of this chat's run). Each call is screened here
+   * (`#screenLeadCall`) and each question routed here (`#leadAsk`), never by the harness.
    */
   async forLead(ask: LeadSessionAsk): Promise<LeadSession | null> {
-    const { project, threadId, answers } = ask;
-    // The coordinator's seat is a message the host noted as the person's and not yet answered, as
-    // the chat's own session's: a harness cannot start one for a message nobody sent.
-    if ("messageId" in answers && !this.awaitsAnswer(threadId, answers.messageId)) return null;
+    const { project, threadId } = ask;
     const meta = await this.#threadMeta(threadId);
     if (!isOpenGameChat(meta, project)) return null;
     // Only the picker moves its mode, so what it reports says nothing about Auto for its model.
@@ -555,7 +550,7 @@ export class ChatPermissionService {
     };
     const holder: LiveHolder = { live: null };
     const request: LeadAsks = {
-      ...(await this.#standing(project, threadId, [ask.cwd, ...(ask.leads ? [ask.leads] : [])])),
+      ...(await this.#standing(project, threadId, [ask.cwd, ask.leads])),
       mode: lead.running,
       screen: (call) => this.#screenLeadCall(ask, lead, call),
       ask: (question, asked) => this.#leadAsk(ask, lead, question, AbortSignal.any([asked, ask.signal])),
@@ -589,7 +584,7 @@ export class ChatPermissionService {
     const holder: LiveHolder = { live: null };
     const request: DelegatePermissions = {
       mode,
-      ...(await this.#standing(project, threadId, [ask.cwd, ...(ask.leads ? [ask.leads] : [])])),
+      ...(await this.#standing(project, threadId, [ask.cwd, ask.leads])),
       ask: (question, asked) => this.#leadAsk(ask, lead, question, AbortSignal.any([asked, ask.signal])),
       onControl: (control) => this.#onControl(threadId, mode, session, holder, control),
     };
@@ -674,7 +669,7 @@ export class ChatPermissionService {
   }
 
   /**
-   * A lead's or coordinator's question, as the chat's mode answers it, whether or not the person is
+   * A lead's question, as the chat's mode answers it, whether or not the person is
    * talking to it: Bypass allows one running in another mode, or a call the host asked about first
    * (a switch to Bypass may land before its question arrives), Plan denies (a build is approved
    * work), and anything else is a card that "always" can keep, withdrawn if nobody answers within
@@ -714,7 +709,7 @@ export class ChatPermissionService {
   }
 
   /**
-   * A question from a session seated beside the chat (a lead, the coordinator, a worker), as the
+   * A question from a session seated beside the chat (a lead, a worker), as the
    * chat's mode answers it: a chat closed since is denied at once, Bypass allows one running in
    * another mode or a call the host asked about first, Plan denies, and anything else is a card on
    * the card's own terms whose "always" never moves the mode.
@@ -850,7 +845,7 @@ export class ChatPermissionService {
       .catch(() => {});
   }
 
-  /** A lead's or coordinator's control, as `#onControl` for the chat's own: switched for the chat's mode now. */
+  /** A lead's control, as `#onControl` for the chat's own: switched for the chat's mode now. */
   #onLeadControl(threadId: string, lead: LeadState, holder: LiveHolder, control: PermissionControl | null): void {
     if (!control) {
       this.#release(threadId, holder);
@@ -1117,7 +1112,7 @@ export class ChatPermissionService {
   }
 
   /**
-   * Switch a lead's or the coordinator's session to its mode for the chat's (`leadModeFor`), one
+   * Switch a lead's session to its mode for the chat's (`leadModeFor`), one
    * switch after another, each to the chat's mode when it runs: a pick made before an earlier switch
    * landed, or a mode read before a later pick, is never where it ends. A session that will not
    * switch stays in the mode it runs in, and its screen asks first while the chat is elsewhere

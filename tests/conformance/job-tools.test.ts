@@ -155,7 +155,7 @@ async function untilEndRecorded(chat: Chat, id: string) {
 }
 
 describe("job tools", () => {
-  it("the chat's own session, a lead and a writing worker are offered the job tools; a reader, an unseated builder, the coordinator and a local model are not", {
+  it("the chat's own session, a lead and a writing worker are offered the job tools; a reader, an unseated builder and a local model are not", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await jobChat();
@@ -167,7 +167,6 @@ describe("job tools", () => {
     const none: Array<[string, Record<string, unknown>, string?]> = [
       ["a reader worker", chat.runWorker("r1", chat.worktree, { readOnly: true })],
       ["an unseated builder", { cwd: chat.worktree }],
-      ["the coordinator", { coordinator: { runId: RUN_ID }, readOnly: true }],
     ];
     for (const [label, brief, engine] of none)
       assert.deepEqual(jobToolsOf((await callsIn(chat, brief, [], engine)).request), [], label);

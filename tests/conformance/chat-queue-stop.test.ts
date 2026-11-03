@@ -1,17 +1,15 @@
+/**
+ * The chat's queue and Stop: a message left unanswered by a crash is answered once on boot, Stop
+ * reaches a turn the chat's own session is answering (or a message still sending, or a plan being
+ * written) and hands over to what waits behind it, and a stale Plan flag keeps a build's plan. And
+ * what `run_status` shows of a run's progress (shared/chat-run.ts `runSnapshot`), beside the build
+ * controls the chat's session keeps after a run (`runControlTools`).
+ */
 import assert from "node:assert/strict";
-import { after, describe, it } from "node:test";
-import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { after, it } from "node:test";
 import { startRig, waitForLog, customEvents, type Rig } from "../helpers/studio-rig.ts";
 import { type DelegateRequest, EngineError } from "../../src/substrate/engines/types.ts";
-import {
-  coordinatorTools,
-  createRunInbox,
-  latestRun,
-  conversationThrough,
-  runSnapshot,
-} from "../../src/harness-seed/loop/run-inbox.ts";
-import { runCoordinatorTurn } from "../../src/harness-seed/loop/coordinator.ts";
+import { RunControl, runControlTools, runSnapshot } from "../../src/shared/chat-run.ts";
 
 const rigs: Rig[] = [];
 after(async () => {
@@ -30,105 +28,6 @@ const result = (summary: string, sessionId: string) => ({
   usage: {},
   durationMs: 1,
   engine: "fixture",
-});
-
-describe("addressed run inbox", () => {
-  it("retains planning-time guidance, filters targets/questions/other runs, and drains at a boundary", async () => {
-    const events: any[] = [
-      { id: "1", data: { type: "messages", messages: [{ role: "user", content: "Is it ready?" }] } },
-      {
-        id: "2",
-        data: {
-          type: "custom",
-          event_type: "run_steering",
-          payload: { runId: "r", text: "Use warm light", facetId: "light" },
-        },
-      },
-      {
-        id: "3",
-        data: { type: "custom", event_type: "run_steering", payload: { runId: "other", text: "Destroy it" } },
-      },
-      {
-        id: "4",
-        data: { type: "custom", event_type: "run_steering", payload: { runId: "r", text: "Keep walking peaceful" } },
-      },
-      // The director's own steer to a worker is not the user speaking.
-      {
-        id: "4b",
-        data: {
-          type: "custom",
-          event_type: "run_steering",
-          payload: { runId: "r", text: "fix the floating drums", facetId: "contact", source: "director" },
-        },
-      },
-    ];
-    const inbox = createRunInbox(
-      {
-        call: async (_: string, p: any) =>
-          p.after ? events.slice(events.findIndex((e) => e.id === p.after) + 1) : events,
-      } as never,
-      { threadId: "t", runId: "r" },
-    );
-    assert.deepEqual(await inbox.steering("river"), ["Keep walking peaceful"]);
-    assert.deepEqual(await inbox.backlog(), ["Use warm light"]);
-    assert.deepEqual(
-      await inbox.steering("contact"),
-      ["Keep walking peaceful"],
-      "the director's own steer never comes back as an instruction",
-    );
-    assert.deepEqual(await inbox.steering("light"), ["Use warm light", "Keep walking peaceful"]);
-    assert.equal(await inbox.finishing(), false);
-    events.push({
-      id: "5",
-      data: { type: "custom", event_type: "run_control", payload: { runId: "r", action: "finish" } },
-    });
-    assert.equal(await inbox.finishing(), true);
-    assert.deepEqual(await inbox.backlog(), []);
-  });
-  it("offers the user a way to see and land a build after the run, in flat string tools both bridges carry", () => {
-    for (const name of ["show_build", "land_build"]) {
-      const tool = coordinatorTools.find((t) => t.name === name)!;
-      assert.ok(tool, `${name} exists`);
-      assert.equal(tool.parameters.properties.build?.type, "string");
-      assert.match(tool.description, /integration/);
-    }
-    assert.match(coordinatorTools.find((t) => t.name === "show_build")!.description, /finished or paused/);
-  });
-
-  it("keeps paused and finished identity after an app restart", () => {
-    const es = [
-      { data: { type: "custom", event_type: "run_started", payload: { runId: "r", project: "village" } } },
-      { data: { type: "custom", event_type: "run_finished", payload: { runId: "r" } } },
-      { data: { type: "custom", event_type: "autopilot_paused", payload: { runId: "r" } } },
-    ];
-    assert.equal(latestRun(es as never)?.state, "paused");
-    const replaced = [
-      ...es,
-      { data: { type: "custom", event_type: "run_started", payload: { runId: "empty-replacement" } } },
-    ];
-    assert.equal(
-      latestRun(replaced as never, "r")?.state,
-      "paused",
-      "the registrar can still address an older saved run",
-    );
-  });
-});
-
-it("future queued messages stay out of an earlier turn prompt", () => {
-  const es = [
-    { id: "1", data: { type: "messages", messages: [{ role: "user", content: "first" }] } },
-    { id: "2", data: { type: "custom", event_type: "coordinator_message_queued", payload: { messageId: "a" } } },
-    { id: "3", data: { type: "messages", messages: [{ role: "user", content: "second" }] } },
-    { id: "4", data: { type: "custom", event_type: "coordinator_message_queued", payload: { messageId: "b" } } },
-  ];
-  assert.deepEqual(
-    (conversationThrough(es as never, "a") as typeof es).filter((e) => e.data.type === "messages").map((e) => e.id),
-    ["1"],
-  );
-  assert.deepEqual(
-    (conversationThrough(es as never, "b") as typeof es).filter((e) => e.data.type === "messages").map((e) => e.id),
-    ["1", "3"],
-  );
 });
 
 it("replays a durable unanswered message once on boot without opening intake", async () => {
@@ -176,7 +75,17 @@ it("replays a durable unanswered message once on boot without opening intake", a
   assert.equal(customEvents(es, "run_started").length, 1);
 });
 
-it("coordinator status includes the current Optimization stage without mixing runs", () => {
+it("offers the user a way to see and land a build after the run, in flat string tools both bridges carry", () => {
+  const tool = (name: string) => runControlTools.find((t) => t.name === name);
+  for (const name of [RunControl.ShowBuild, RunControl.LandBuild]) {
+    assert.ok(tool(name), `${name} exists`);
+    assert.equal(tool(name)?.parameters.properties.build?.type, "string");
+    assert.match(String(tool(name)?.description), /integration/);
+  }
+  assert.match(String(tool(RunControl.ShowBuild)?.description), /finished or paused/);
+});
+
+it("run_status includes the current Optimization stage without mixing runs", () => {
   const event = (event_type: string, payload: object) => ({ data: { type: "custom", event_type, payload } });
   const snapshot = runSnapshot(
     [
@@ -190,7 +99,7 @@ it("coordinator status includes the current Optimization stage without mixing ru
   assert.equal(snapshot.progress[0].phase, "profiling_candidate");
 });
 
-it("a run's wakes do not crowd the workers out of the coordinator's progress", () => {
+it("a run's wakes do not crowd the workers out of run_status's progress", () => {
   const event = (event_type: string, payload: object) => ({ data: { type: "custom", event_type, payload } });
   // Up to thirty wakes an hour, each a director_continued: an hour of them is more than the list holds.
   const wakes = Array.from({ length: 30 }, (_, i) =>
@@ -211,7 +120,7 @@ it("a run's wakes do not crowd the workers out of the coordinator's progress", (
   );
 });
 
-it("the chat's words to a run's lead do not crowd the workers out of the coordinator's progress", () => {
+it("the chat's words to a run's lead do not crowd the workers out of run_status's progress", () => {
   const event = (event_type: string, payload: object) => ({ data: { type: "custom", event_type, payload } });
   // Each message to the lead is a steer, taken off its inbox and heard: only the steer is progress.
   const chat = Array.from({ length: 10 }, (_, i) => [
@@ -234,74 +143,8 @@ it("the chat's words to a run's lead do not crowd the workers out of the coordin
   assert.equal(types[0], "director_worker", "the worker's start is still on the list");
 });
 
-it("a follow-up after a run sees what the run's lead said in the chat, and the coordinator's own reply once", async () => {
-  const custom = (id: number, event_type: string, payload: object) => ({
-    id: String(id).padStart(3, "0"),
-    data: { type: "custom", event_type, payload },
-  });
-  const words = (id: number, role: string, content: string) => ({
-    id: String(id).padStart(3, "0"),
-    data: { type: "messages", messages: [{ role, content }] },
-  });
-  const said = (id: number, delegationId: string, text: string) =>
-    custom(id, "delegated.codex", {
-      delegationId,
-      role: "planner",
-      runId: "r",
-      kind: "assistant",
-      data: { role: "assistant", parts: [{ type: "text", text }] },
-    });
-  const log = [
-    custom(1, "run_started", { runId: "r", project: "plaza" }),
-    // Mid-build, the lead answers the chat.
-    words(2, "user", "is the sky dusk yet?"),
-    custom(3, "coordinator_message_queued", { messageId: "m1", action: { text: "is the sky dusk yet?" } }),
-    custom(4, "coordinator_message_delivered", { messageId: "m1", into: "r", how: "lead" }),
-    custom(5, "run_steering", { runId: "r", text: "is the sky dusk yet?", sourceMessageId: "m1", how: "lead" }),
-    said(6, "lead", "Not yet: the sky worker is on its first round."),
-    custom(7, "run_finished", { runId: "r" }),
-    // After the run, the coordinator answers a question: its reply is in the chat's own words.
-    words(8, "user", "what did you finish?"),
-    custom(9, "coordinator_message_queued", { messageId: "m2", action: { text: "what did you finish?" } }),
-    custom(10, "coordinator_message_processing", { messageId: "m2" }),
-    said(11, "coordinator", "A dusk sky over the plaza."),
-    words(12, "assistant", "A dusk sky over the plaza."),
-    custom(13, "coordinator_message_handled", { messageId: "m2" }),
-    // The follow-up this turn answers.
-    words(14, "user", "why dusk?"),
-    custom(15, "coordinator_message_queued", { messageId: "m3", action: { text: "why dusk?" } }),
-  ];
-  const prompts: string[] = [];
-  const ctx = {
-    cancelled: false,
-    notify: () => {},
-    call: async (method: string, p: Record<string, any>) => {
-      if (method === "events.list") return log;
-      if (method === "engine.describe") return [{ id: "codex", kind: "delegated" }];
-      if (method === "engine.delegate") {
-        prompts.push(p.prompt);
-        return { ok: true, summary: "Because you asked for a dusk plaza.", sessionId: "coordinator-1" };
-      }
-      return null;
-    },
-  };
-  await runCoordinatorTurn(ctx as never, {
-    threadId: "t",
-    turnId: "turn-3",
-    run: { runId: "r", project: "plaza", engine: "codex", state: "finished" },
-    text: "why dusk?",
-    engine: "codex",
-    messageId: "m3",
-  });
-  assert.equal(prompts.length, 1);
-  const history = prompts[0]!.slice(prompts[0]!.indexOf("RECENT CONVERSATION"));
-  assert.match(history, /assistant: Not yet: the sky worker is on its first round\./, history);
-  assert.ok(history.indexOf("Not yet") < history.indexOf("what did you finish?"), "in the order it was said");
-  assert.equal(history.split("A dusk sky over the plaza.").length - 1, 1, "the coordinator's own reply once");
-});
-
 for (const ending of ["returns stopped", "throws aborted"] as const)
-  it(`Stop leaves the same durable trace in the coordinator's turn when its engine ${ending}`, async () => {
+  it(`Stop leaves the same durable trace in the chat's own turn after a run when its engine ${ending}`, async () => {
     // Real engines do both: Claude Code and Codex mostly answer a Stop with a stopped result, and
     // throw an abort when it lands before the session starts. The turn records it the same way.
     const rig = await startRig();
@@ -465,10 +308,6 @@ it("Stop hands off to queued input in the same native session; an empty queue st
     ],
     thread,
   );
-  await rig.core.store.writeArtifact(thread, "autopilot_saved", {
-    plan: { summary: "Preserve the quiet garden and its blue river" },
-    phase: "done",
-  });
   const started = deferred(),
     calls: DelegateRequest[] = [];
   rig.core.engines.register({
@@ -488,8 +327,7 @@ it("Stop hands off to queued input in the same native session; an empty queue st
         return result("Interrupted with progress saved.", "same-session");
       }
       assert.equal(request.resume, "same-session");
-      assert.match(request.prompt, /Preserve the quiet garden and its blue river/);
-      assert.match(request.prompt, /LATEST USER MESSAGE:\nAdd fireflies/);
+      assert.ok(request.prompt.includes("Add fireflies"), request.prompt);
       assert.ok(!request.signal?.aborted, "new response is not aborted by the old Stop");
       return result("Continue the existing garden.", "same-session");
     },
@@ -497,10 +335,9 @@ it("Stop hands off to queued input in the same native session; an empty queue st
   try {
     await rig.core.sendUserMessage("First message", { thread, engine: "codex" });
     await started.promise;
-    // Another model: it waits for a turn of its own rather than being steered into this one.
+    // Another model: it may join this turn as a switch, but Stop hands it a turn of its own.
     await rig.core.sendUserMessage("Add fireflies", { thread, engine: "codex", model: "another-model" });
     assert.equal(calls.length, 1);
-    assert.equal(customEvents(await rig.core.store.listEvents(thread), "coordinator_message_steering").length, 0);
     await rig.core.stopThread(thread);
     await waitForLog(rig.core, (es) => customEvents(es, "coordinator_message_handled").length === 2, 15000);
     assert.equal(calls.length, 2);
@@ -548,54 +385,4 @@ it("a stale Plan mode flag during a build preserves its plan and queues the foll
   assert.equal(saved.id, "approved-plan");
   assert.equal(customEvents(await rig.core.store.listEvents(thread), "plan_review").length, 0);
   assert.equal(customEvents(await rig.core.store.listEvents(thread), "coordinator_message_queued").length, 1);
-});
-
-it("an ordinary change after completion continues implementation with the saved plan, without another intake", async () => {
-  const rig = await startRig();
-  rigs.push(rig);
-  await rig.core.games.scaffold("followup-plan");
-  const thread = await rig.core.createGameThread("followup-plan");
-  await rig.core.append(
-    [
-      { type: "messages", messages: [{ role: "user", content: "Build a quiet garden" }] },
-      {
-        type: "custom",
-        event_type: "plan_review",
-        payload: { id: "plan", state: "approved", plan: "Keep the river blue and the existing paths" },
-      },
-      {
-        type: "custom",
-        event_type: "run_started",
-        payload: { runId: "done", project: "followup-plan", engine: "codex" },
-      },
-      { type: "custom", event_type: "run_finished", payload: { runId: "done", project: "followup-plan" } },
-    ],
-    thread,
-  );
-  let built = 0;
-  rig.core.engines.register({
-    id: "codex",
-    label: "fixture",
-    kind: "delegated",
-    status: async () => ({ code: "ready", detail: "" }),
-    models: async () => [],
-    delegate: async (request) => {
-      if (request.coordinator) {
-        await request.onLiveTool!("continue_build", { text: "Add fireflies" });
-        return result("Adding fireflies to the existing garden.", "coordinator");
-      }
-      assert.ok(!request.interviewTools?.length, "no new build interview");
-      assert.match(request.prompt, /Keep the river blue and the existing paths/);
-      assert.match(request.prompt, /Add fireflies/);
-      assert.match(request.prompt, /Build a quiet garden/);
-      await writeFile(path.join(request.cwd, "fireflies.txt"), "added");
-      built++;
-      return result("Added fireflies.", "builder");
-    },
-  });
-  await rig.core.sendUserMessage("Add fireflies", { thread, engine: "codex" });
-  await waitForLog(rig.core, (es) => customEvents(es, "coordinator_message_handled").length === 1, 15000);
-  assert.equal(built, 1);
-  assert.equal(await readFile(path.join(rig.core.games.dirFor("followup-plan"), "fireflies.txt"), "utf8"), "added");
-  assert.equal(customEvents(await rig.core.store.listEvents(thread), "run_started").length, 1);
 });

@@ -134,7 +134,7 @@ export interface UiEventMap {
   "asset.delivered": AssetDeliveredPayload;
   /** A call making an asset started or ended: the game's waiting jobs changed (`ProjectAssets.jobs`). */
   "asset.jobs": { project: string };
-  /** A coordinator tool put a build on screen: the chat of that game brings Live forward. */
+  /** A run control put a build on screen: the chat of that game brings Live forward. */
   "stage.show": { project: string; view: "live" };
 
   // — runs —

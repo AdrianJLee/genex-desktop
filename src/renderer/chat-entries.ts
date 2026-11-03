@@ -32,7 +32,7 @@ import {
   loopRefusalOf,
 } from "../shared/custom-events.ts";
 import { isHandoffNarration } from "../shared/chat-presentation.ts";
-import { isCoordinatorTool } from "../shared/coordinator.ts";
+import { isHostRunTool } from "../shared/chat-run.ts";
 import { SessionActivityRole } from "../shared/chat-activity.ts";
 import type { EventData, Message } from "../shared/event-log.ts";
 import { EventKind } from "../shared/event-log.ts";
@@ -1085,13 +1085,13 @@ function readDelegatedTurn(chat: ChatDraft, eventId: string, scope: string, payl
 
 /**
  * A call the host records itself, so its mirror would be a second row: a plugin's (`plugin_tool`),
- * a connector's (`connector_tool`), and a run control of the coordinator's or of the chat's own session after a run — the host
- * records its request and result when it runs it (conversation.ts `coordinatorTool`). A resume the
+ * a connector's (`connector_tool`), and a run control of the chat's own session after a run — the
+ * host records its request and result when it runs it (conversation.ts `runControl`). A resume the
  * session only recorded runs once its reply ends, and shows then.
  */
 function recordedByHost(chat: ChatDraft, name: string): boolean {
   if (chat.hostedTools.has(pluginToolKey(name))) return true;
-  return isCoordinatorTool(name.trim().replace(STUDIO_TOOL_PREFIX, ""));
+  return isHostRunTool(name.trim().replace(STUDIO_TOOL_PREFIX, ""));
 }
 
 /**
@@ -1175,8 +1175,8 @@ function readQuiet(chat: ChatDraft, data: EventData): boolean {
 
 /**
  * Steered in by interrupting the chat's session: the leg it cut off never sends the results that
- * would settle its tools, and the resumed session starts from the message. A run's coordinator
- * carries its runId too, so only a direct turn's calls and build workers' rows are left alone.
+ * would settle its tools, and the resumed session starts from the message. Only a direct turn's
+ * calls and build workers' rows are left alone.
  */
 function stopInterruptedLeg(chat: ChatDraft): void {
   for (const [id, row] of chat.rowByCall) {

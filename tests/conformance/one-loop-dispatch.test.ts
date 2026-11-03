@@ -8,16 +8,9 @@
 import assert from "node:assert/strict";
 import { after, describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
-import * as builtinHookParts from "../../src/harness-seed/loop/builtin-hooks.ts";
 import { afterLeadLoopRun, afterLoopRunGrant } from "../../src/harness-seed/loop/after-loop-run.ts";
 import { afterLoopRunNote } from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
 import { launchFromIntake, startsNextOpenLoop } from "../../src/harness-seed/loop/chat-dispatch.ts";
-import * as directorParts from "../../src/harness-seed/loop/director.ts";
-import * as openContractParts from "../../src/harness-seed/loop/director/open/contract.ts";
-import { servesOpenLoop } from "../../src/harness-seed/loop/director/open/contract.ts";
-import * as setupParts from "../../src/harness-seed/loop/director/setup.ts";
-import * as wakeParts from "../../src/harness-seed/loop/director/wake.ts";
-import * as wakeScheduleParts from "../../src/harness-seed/loop/director/wake-schedule.ts";
 import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { launchRules } from "../../src/harness-seed/loop/launch-prompts.ts";
@@ -27,11 +20,10 @@ import { OPEN_LAUNCH_WORDS, OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loo
 import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
-import { finishedLoopRun, reopenAfterReply } from "../../src/harness-seed/loop/reopen-run.ts";
-import { runControlsFor } from "../../src/shared/coordinator.ts";
+import { reopenAfterReply } from "../../src/harness-seed/loop/reopen-run.ts";
+import { runControlsFor } from "../../src/shared/chat-run.ts";
 import * as runDispatchParts from "../../src/harness-seed/loop/run-dispatch.ts";
 import { chooseRunner, handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
-import * as studioStateParts from "../../src/harness-seed/loop/studio-state.ts";
 import { RunnerKind } from "../../src/harness-seed/loop/studio-state.ts";
 import { harnessRunEnv, UNREAL_RUNNER_ENV } from "../../src/shared/protocol.ts";
 import { CHAT_SESSION, gameRepo, type LoopHost, type LoopTurn, loopHost } from "../helpers/loop-host.ts";
@@ -309,23 +301,7 @@ describe("a run the Unreal runner paused", () => {
 });
 
 describe("kept older parts, finished Loops and the chat's words", () => {
-  it("an older kept director that can't lead an open Loop refuses it with words, and a web Loop still runs", () => {
-    const parts = [
-      directorParts,
-      setupParts,
-      wakeParts,
-      wakeScheduleParts,
-      openContractParts,
-      builtinHookParts,
-      studioStateParts,
-      // The chat's launch reads the run's start too.
-      runDispatchParts,
-    ];
-    assert.equal(servesOpenLoop(parts), true, "every part this seed ships serves the one Loop");
-    for (let i = 0; i < parts.length; i++) {
-      const kept = parts.map((part, j) => (j === i ? { ...part, SERVES_OPEN_LOOP: undefined } : part));
-      assert.equal(servesOpenLoop(kept), false, `a kept older part ${i} refuses it`);
-    }
+  it("a web Loop on an engine that keeps a session runs under the director", () => {
     const described = [{ id: "claude-code", kind: "delegated", supportsSessions: true }] as never;
     assert.equal(chooseRunner({ mode: "autopilot", engine: "claude-code" } as never, described), RunnerKind.Director);
   });
@@ -333,10 +309,16 @@ describe("kept older parts, finished Loops and the chat's words", () => {
   it("a Loop message after a finished open Loop starts the next one; a finished open Loop is never reopened", async () => {
     const journal = { director: { lead: { chatSession: true }, open: { version: 1, savePoints: [] } } };
     const host = { call: async () => structuredClone(journal) };
-    const run = { runId: "run-done", state: "finished", project: "lantern", goal: "a level" };
-    assert.equal(await finishedLoopRun(host as never, "t1", run), null);
+    const run = { runId: "run-done", state: "finished", project: "lantern", goal: "a level", engine: "claude-code" };
+    const inPlace = await afterLeadLoopRun(host as never, { threadId: "t1" }, run);
+    assert.equal(
+      inPlace?.inPlace,
+      true,
+      "worked in place: the chat never reopens it (chat-dispatch.ts `afterLoopRunFor`)",
+    );
     const web = { call: async () => ({ director: { lead: { chatSession: true } } }) };
-    assert.notEqual(await finishedLoopRun(web as never, "t1", run), null, "a web Loop's finished build still reopens");
+    const webRun = await afterLeadLoopRun(web as never, { threadId: "t1" }, run);
+    assert.equal(webRun?.inPlace, undefined, "a web Loop's finished build still reopens");
   });
 
   it("the chat tells a Loop on a project that isn't a web game that the lead builds in place and finishes it", () => {
@@ -648,7 +630,7 @@ describe("after a Loop in place", () => {
         studioOf(host) as never,
         { threadId: host.threadId, cancelled: false },
         after as never,
-        { hours: null, text: "Add a second room.", words: "Add a second room.", models: null },
+        { hours: null, text: "Add a second room.", words: "Add a second room.", models: { model: null } },
         async () => {
           started += 1;
         },
@@ -783,7 +765,7 @@ describe("a finished web Loop on a folder that reads otherwise now", () => {
         studioOf(host) as never,
         { threadId: host.threadId, cancelled: false },
         { runId: host.run.runId } as never,
-        { hours: 2, text: "keep going", words: "keep going", models: null },
+        { hours: 2, text: "keep going", words: "keep going", models: { model: null } },
         async () => {
           started += 1;
         },
@@ -1164,7 +1146,7 @@ describe("a run's route when its journal, its folder or the game list can't be r
         studioOf(host) as never,
         { threadId: host.threadId, cancelled: false },
         { runId: host.run.runId } as never,
-        { hours: 2, text: "keep going", words: "keep going", models: null },
+        { hours: 2, text: "keep going", words: "keep going", models: { model: null } },
         async () => {
           started += 1;
         },

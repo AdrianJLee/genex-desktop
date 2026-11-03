@@ -2,16 +2,11 @@
  * The chat while a build of it is open (live chat). A message the person sends goes to the lead of
  * the run that owns the chat, when that lead takes the chat (director/lead-line.ts): recorded
  * delivered to the run, with a `run_steering` the lead's inbox reads, and answered by the lead in
- * the chat. Anything else waits for the build to close. A run has a Stop of its own (`stopRun`):
- * the chat's next message clears the chat's, never the run's.
- *
- * A module of its own: the loop's dispatch (main.ts), a chat turn (chat-dispatch.ts) and a run's
- * start (run-dispatch.ts) read it, and a seed upgrade keeps an older copy of any of those the agent
- * edited, which never exported these names. A run that opened no line — the long turn, a kept
- * director.ts from before live chat — keeps its messages waiting.
+ * the chat. Anything it does not take waits for the build to close; a message sent before the lead's
+ * line opens waits for the line. A run has a Stop of its own (`stopRun`): the chat's next message
+ * clears the chat's, never the run's.
  */
 import { leadLineOf, leadLinesChanged, type LeadLine } from "./director/lead-line.ts";
-import * as leadLines from "./director/lead-line.ts";
 import { attachedPicturesLine } from "./live-chat-prompts.ts";
 import { WRAPPING_UP_NOTE } from "./steer-switch-prompts.ts";
 import { RunEvent } from "./run-events.ts";
@@ -105,12 +100,6 @@ function steerOf(line: LeadLine, item: QueueAction, wrapping: boolean) {
 }
 
 /**
- * This copy's door keeps what a lead in its wrap-up is told (`LeadDoor.keeps`): a wrap-up only goes
- * on hearing the chat when this and the queue both do (director/wake.ts), else its line shuts.
- */
-export const DOOR_KEEPS_IN_WRAP_UP = true;
-
-/**
  * The door to the lead of this chat's open build, when that lead takes this message now. In its
  * wrap-up the lead still hears it, but the chat keeps it to answer once the run has closed (`keeps`):
  * the build is ending, and new work is the chat's. A message the lead was told so has no door again.
@@ -120,8 +109,7 @@ export function leadDoor(studio: Studio, threadId: string, action: QueueAction):
   const line = build ? leadLineOf(build.run.runId) : undefined;
   const takes = line?.threadId === threadId && line.open() && forTheLead(action);
   if (!line || !takes) return null;
-  // A kept older lead-line.ts has no wrap-up: its line shuts instead.
-  const wrapping = typeof line.wrapping === "function" && line.wrapping();
+  const wrapping = line.wrapping();
   if (wrapping && action.toldLead === line.runId) return null;
   return {
     into: line.runId,
@@ -139,34 +127,21 @@ const LINES_CHANGED = Symbol("lines changed");
  * What the chat's next message waits for: the build to close — or, when the run's lead takes
  * it, the lead's door, which the queue hands it through. When a line opens or shuts and the lead
  * still does not take it, null: the queue looks again, and may hand the lead what waits behind it
- * (message-queue.ts). Without the message (a queue from before live chat), only the close. Stop
- * closes the build early.
+ * (message-queue.ts). Stop closes the build early.
  */
 export async function chatWaitsFor(
   studio: Studio,
   threadId: string,
-  next?: QueueAction,
+  next: QueueAction,
 ): Promise<LeadDoor | null | undefined> {
   for (;;) {
     const build = openBuildOf(studio, threadId);
     if (!build) return undefined;
-    const door = next ? leadDoor(studio, threadId, next) : null;
+    const door = leadDoor(studio, threadId, next);
     if (door) return door;
-    // Its lead is still preparing the start: the chat answers now (a stop, a question), not once it is ready.
-    if (next && preparingLead(build.run.runId)) return undefined;
-    const closes = build.closed ?? build.settled;
-    if (!next) {
-      await closes;
-      continue;
-    }
     const lines = leadLinesChanged().then(() => LINES_CHANGED);
-    if ((await Promise.race([closes, lines])) === LINES_CHANGED) return null;
+    if ((await Promise.race([build.closed, lines])) === LINES_CHANGED) return null;
   }
-}
-
-/** Is this run's lead preparing its start? A kept older lead-line.ts never says so: its messages wait. */
-function preparingLead(runId: string): boolean {
-  return typeof leadLines.leadPreparing === "function" && leadLines.leadPreparing(runId);
 }
 
 /** Does an open build hold this chat or its game (a legacy second chat of a game answers for its build too)? */

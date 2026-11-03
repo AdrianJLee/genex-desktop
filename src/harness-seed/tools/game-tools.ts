@@ -105,11 +105,11 @@ function pinProject(args: AnyRecord, ctx: ToolCtx): { project?: string; error?: 
 
 /**
  * The Loop a chat's own turn asks for in words, when no Loop switch's commission reached the call (a
- * direct engine's tool loop, Loop off): the hours named, else until done. None in a run's turn, a
- * coordinator's follow-up or the Studio's own chat: those never start a Loop.
+ * direct engine's tool loop, Loop off): the hours named, else until done. None in a run's turn or the
+ * Studio's own chat: those never start a Loop.
  */
 function loopAskedInChat(args: AnyRecord, ctx: ToolCtx): AnyRecord | null {
-  if (ctx.runId || ctx.followupOf || ctx.studioThread) return null;
+  if (ctx.runId || ctx.studioThread) return null;
   const hours = hoursNamed(args.hours);
   return hours > 0 ? { hours } : {};
 }

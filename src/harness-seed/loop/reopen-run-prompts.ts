@@ -1,10 +1,6 @@
 /**
  * What the chat's own session reads and records to reopen its finished build (reopen-run.ts): the
- * tool, its rules in the after-run note, the coordinator's rules when its continue_build reopens
- * the build instead, and what the chat is told. A module of its own: the
- * existing parts that read these (after-loop-run-prompts.ts, delegated-turn.ts) import new names only
- * from here, and this imports only names every older seed exported
- * (tests/fixtures/seed-exports-pre-reopen.json).
+ * tool, its rules in the after-run note, and what the chat is told.
  */
 import { MAX_RUN_HOURS } from "./config.ts";
 import { askUser } from "./interview-question.ts";
@@ -96,25 +92,6 @@ export function reopenRules(engine: string | undefined, grant: ReopenGrant): str
     "- A contained change — a fix, a tweak, one feature: make it yourself here in the game folder and say what changed. The build stays finished.",
     `- More work than one contained change ("more", "keep going"): call ${reopen} once, last, with their request in their words as text, and edit nothing in that reply. The build goes on when your reply ends.`,
     ...startOverRules(engine, reopen, grant),
-    stills,
-  ].filter(Boolean);
-}
-
-/**
- * The coordinator's rules when a Loop came with a message after a finished build it answers for
- * (coordinator-prompts.ts): its continue_build reopens the same build with the Loop's time, which
- * the rules it answers by otherwise forbid (no new run, no clock reset), unless the ask is a contained
- * change (`build: false`, one builder turn); a question continues nothing. The stills it was shown
- * reach the build only as its words.
- */
-export function coordinatorReopenRules(hours: number | null, frameCount = 0): string[] {
-  const stills =
-    frameCount > 0
-      ? `The user attached ${frameCount} still(s) to this message: look at them, and say in continue_build's text what they show — the build goes on from your words, not the pictures.`
-      : "";
-  return [
-    `Loop is on for this message, and this build has finished: you may continue it. continue_build reopens it — its run, workers and Builds graph — from where it finished and with the models it was built with, once your reply ends, until what the user asks is checked (${budgetWords(hours)}). That is the one clock you may set going again: the Loop's working time on this same build, never another run.`,
-    'Decide from the latest message. A contained change — a fix, a tweak, one feature, anything they want quickly — is not a build: call continue_build with their request in their words and build: false, and one builder makes it in this chat while the build stays finished. More work than one contained change — several systems, new features, "more", "keep going": call continue_build once with their request in their words, and say the build goes on. A question, research or a plan is not work: answer it, and continue nothing.',
     stills,
   ].filter(Boolean);
 }

@@ -38,8 +38,6 @@ export const OPEN_LOOP_REFUSAL = {
   /** `found`: what Genex found that makes the project's Loop work in place (`openLoopBecause`). */
   needsSession: (engine: string, found?: string) =>
     `A Loop${found ? ` on this project (Genex finds ${found})` : ""} needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); ${engine} doesn't, so nothing was built. The chat still answers here.`,
-  openLoopNeedsUpdate:
-    "This harness's edited Loop files predate Loops on any project; update them, then start the Loop again.",
   /** A paused web Loop, resumed on a folder that reads as no web game now; `found`: what Genex finds there. */
   webElsewhere: (found: string) =>
     `This Loop was paused as a web game's Loop, and the folder doesn't read as a web game now (Genex finds ${found}), so it can't go on now. It stays paused: once the folder reads as a web game again (move those files out of it, say), Resume picks it up.`,

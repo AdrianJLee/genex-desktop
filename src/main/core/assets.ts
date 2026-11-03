@@ -23,7 +23,7 @@ import { type AssetCall, assetCallJobs } from "./asset-calls.ts";
 import { type AssetFolder, assetFoldersFor, DEFAULT_ASSET_FOLDERS } from "../../shared/project-workspace.ts";
 import path from "node:path";
 import { rewindsOf, withoutRewound } from "../../shared/chat-rewind.ts";
-import { latestRun } from "../../shared/coordinator.ts";
+import { latestRun } from "../../shared/chat-run.ts";
 import { genexOutputFile, isGenexRef, parseGenexRef } from "../../shared/genex-ref.ts";
 import { createHash } from "node:crypto";
 import { lstat, realpath, writeFile } from "node:fs/promises";

@@ -4,7 +4,7 @@
  * `PlanReviewController` (`../plan-review.ts`) owns the approval gate; this module is its host.
  */
 import { type ComposerSendOptions, type PlanReview, PlanReviewState } from "../../shared/composer.ts";
-import { conversationThrough, latestRun, runSnapshot } from "../../shared/coordinator.ts";
+import { conversationThrough, latestRun, runSnapshot } from "../../shared/chat-run.ts";
 import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
 import { EventKind, type Message } from "../../shared/event-log.ts";
 import { WorkClass } from "../../shared/harness-api.ts";
@@ -16,7 +16,6 @@ import { PlanReviewController } from "../plan-review.ts";
 import type { StudioCore } from "../studio-core.ts";
 import type { CoreInternals } from "./internals.ts";
 import { PLAN_SYSTEM_PROMPT, planContext } from "./plan-drafts-prompts.ts";
-import { CapabilityAudience } from "../planning-capabilities.ts";
 
 /** The longest plan the lead may write, in tokens. */
 const PLAN_MAX_TOKENS = 4096;
@@ -116,7 +115,7 @@ async function planRequest(core: PlanCore, x: PlanFacts, engineId: string, ask: 
   const conversation = spokenMessages(events);
   const record = await core.store.getRecord(thread);
   const project = ask.options.project ?? (record.metadata as { project?: string } | undefined)?.project;
-  const { revision, text: capabilities } = await x.capabilityFacts(thread, project, CapabilityAudience.Planning);
+  const { revision, text: capabilities } = await x.capabilityFacts(thread, project);
   await core.append(
     [
       // Not `customEventData`: the log records "no game" as null, which the shared payload type lacks.

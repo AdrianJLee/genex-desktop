@@ -120,7 +120,6 @@ export function registerRunsIpc(
     return true;
   });
 
-  // Wrap up: the same request the coordinator's `finish_run` tool makes.
   // Current attempts finish, then the run integrates, checks and shows — no reset, no abort.
   handle("studio:run.finish", async (payload) => {
     // A request can arrive after the run has already ended:

@@ -12,8 +12,11 @@ import { lstat, mkdir, realpath, rename } from "node:fs/promises";
 import path from "node:path";
 import { isBelow } from "./paths.ts";
 
-/** The seed generation that archives on upgrade; a manifest records the last one it reached. */
-export const ARCHIVE_EPOCH = 1;
+/**
+ * The seed generation that archives on upgrade; a manifest records the last one it reached. Epoch 2
+ * has one session answer every chat message: an install below it archives once more.
+ */
+export const ARCHIVE_EPOCH = 2;
 
 /** The workspace folder archives live in, one folder per upgrade date below it. */
 export const ARCHIVE_FOLDER = "archive";

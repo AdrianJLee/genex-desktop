@@ -457,7 +457,7 @@ describe("the harness's other doors into Live", () => {
     // No harness in a lite core: a dispatch reaches nothing, and a message is still the person's.
     lite.core.host.dispatch = async () => undefined;
     const tool = (name: string, messageId?: string, args: Record<string, unknown> = {}) =>
-      lite.api()["coordinator.tool"]!({
+      lite.api()["run.control"]!({
         threadId,
         runId: "run_done",
         name,

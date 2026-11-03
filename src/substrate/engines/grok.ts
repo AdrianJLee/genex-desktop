@@ -838,7 +838,7 @@ function cliIdentity(cli: ResolvedCli): string {
 
 /** What a session's tools may do: a build edits; a read-only session, a lead while its build runs and Plan only look. */
 function sessionAccess(request: DelegateRequest): GrokAccess {
-  const readOnly = Boolean(request.readOnly) && !request.coordinator;
+  const readOnly = Boolean(request.readOnly);
   return readOnly || chatMode(request) === PermissionMode.Plan ? GrokAccess.ReadOnly : GrokAccess.Build;
 }
 

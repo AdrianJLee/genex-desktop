@@ -552,8 +552,8 @@ export class ClaudeCodeEngine implements Engine {
   /** A CLI that reports message lifecycles folds a pushed message in at its next tool result (claude-steer.ts). */
   readonly steersMidTurn = true;
   /**
-   * A game chat's own session asks the person mid-turn (`DelegateRequest.permissions`), and so do a
-   * build's lead and the run's coordinator, in the chat's mode (`leadAsks`).
+   * A game chat's own session asks the person mid-turn (`DelegateRequest.permissions`), and so does
+   * a build's lead, in the chat's mode (`leadAsks`).
    */
   readonly permissionPrompts = true;
   /** Compact Now sends the resumed session Claude Code's own `/compact`. */
@@ -1386,8 +1386,8 @@ export class ClaudeCodeEngine implements Engine {
     const stream = query({ prompt: sessionPrompt(told, steer, run, controller.signal), options } as never);
     this.#catalogEpoch.set(stream, this.#catalog.epoch());
     running.stream = stream as RunningSession["stream"];
-    // The mode picker reaches a running turn of a session that asks (the chat's own, a lead's, the
-    // coordinator's, a worker's): the host holds this until the session takes no more control
+    // The mode picker reaches a running turn of a session that asks (the chat's own, a lead's, a
+    // worker's): the host holds this until the session takes no more control
     // requests (its input ended at a result) or its end, whichever comes first.
     run.control = liveControl(rulesAsks(request), stream);
     // Started after the stream exists: a throw during setup must not leave a live timer whose
@@ -1539,7 +1539,7 @@ export class ClaudeCodeEngine implements Engine {
         ...(request.preferences ? await this.preferenceSettings(request.model, request.preferences) : {}),
         ...(Object.keys(rules).length ? { permissions: rules } : {}),
         // The chat's own session works in its game folder (the host checked), checkpointed before
-        // each message; a lead or the coordinator answers for a build.
+        // each message; a lead answers for a build.
         ...(rulesAsks(request)
           ? {
               autoMode: autoModeRules({
@@ -2379,7 +2379,7 @@ function delegatePrompt(request: DelegateRequest): unknown {
 
 /**
  * The session's PreToolUse hooks: a worker's never-touch screen first (`neverTouchHook`, every
- * call, reads included, in every mode), and a lead's, coordinator's or asking worker's screen
+ * call, reads included, in every mode), and a lead's or asking worker's screen
  * (`leadScreenHook`), which sees every tool call before Claude Code's own rules do.
  */
 function sessionHooks(request: DelegateRequest, cwd: string, run: RunState): { hooks?: unknown } {
@@ -2463,22 +2463,20 @@ function shellAllows(request: DelegateRequest, genexShell: boolean): string[] {
 
 /**
  * Research is part of the work: the chat, a director and its builders may search and read the
- * web, and so may a read-only lead or coordinator the person may talk to (`leadAsks`), the chat's
- * main agent. Another read-only session answers from what it was handed. A worker researches when it writes, or when its lead asked for research
- * (`WorkerSeat.research`); a reader or a worker in Plan otherwise does not.
+ * web. A read-only session answers from what it was handed. A worker researches when it writes, or
+ * when its lead asked for research (`WorkerSeat.research`); a reader or a worker in Plan otherwise
+ * does not.
  */
 function researches(request: DelegateRequest): boolean {
   if (request.worker) return request.worker.research || !workerReadOnly(request.worker, Boolean(request.readOnly));
-  return !request.readOnly || Boolean(request.leadAsks);
+  return !request.readOnly;
 }
 
 /**
  * The tools the session never gets. No session gets Claude Code's own sub-agents (Agent, Task):
  * Genex runs the workers, under the person's ceiling and the chat's mode. A chat that may launch a
  * build is still a full contractor: it answers, researches or edits itself and launches only when
- * the ask needs a build. A read-only session (a reviewer, a reader) may not even run a command. A
- * read-only lead or coordinator the person may talk to (`leadAsks`), the chat's main agent, keeps
- * what the chat's own session keeps; the chat's mode decides each call.
+ * the ask needs a build. A read-only session (a reviewer, a reader) may not even run a command.
  */
 function disallowedToolsFor(request: DelegateRequest, genexShell = false): string[] {
   const refused = refusedTools(request);
@@ -2489,8 +2487,7 @@ function disallowedToolsFor(request: DelegateRequest, genexShell = false): strin
 /** The tools a session never gets, whoever runs its commands (`disallowedToolsFor`). */
 function refusedTools(request: DelegateRequest): string[] {
   if (request.worker) return workerDisallowedTools(request);
-  if (request.readOnly && !request.leadAsks)
-    return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
+  if (request.readOnly) return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
   return [...MESSAGING_TOOLS, ...SUBAGENT_TOOLS, ...(asksOf(request) ? ASKING_TOOLS : [])];
 }
 
@@ -2611,8 +2608,7 @@ export function claudeCodeSystemPrompt(system: string | undefined): Record<strin
 /**
  * How the session is permitted. An unattended contractor edits inside a git-snapshotted
  * workspace, where every edit is recoverable, which is what makes acceptEdits defensible there. A
- * game chat's own session asks the person instead, in the mode they chose; a build's lead or the
- * run's coordinator asks from its chat's Auto, Accept edits or Bypass, or from Manual, and the host
+ * game chat's own session asks the person instead, in the mode they chose; a build's lead asks from its chat's Auto, Accept edits or Bypass, or from Manual, and the host
  * answers (claude-permissions.ts). The picker switches either mid-turn.
  */
 function permissionOptions(request: DelegateRequest, running: RunningSession): Record<string, unknown> {

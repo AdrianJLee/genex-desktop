@@ -1,7 +1,7 @@
 /**
  * The app and the harness each keep a copy of the contracts they share, because the app must not
  * load the agent's editable seed (scripts/check-boundaries.ts) and the seed cannot import from
- * the app. These tests hold the copies together: the same coordinator tools, the same queue
+ * the app. These tests hold the copies together: the same run readings and build names, the same queue
  * states and readings of the same logs, the same role tables and presets, the same skill
  * edits and the same vocabularies. A change to one copy that the other lacks fails here.
  */
@@ -47,7 +47,7 @@ import { REOPEN_RUN as seedReopenRun } from "../../src/harness-seed/loop/reopen-
 import { tools as seedGameTools } from "../../src/harness-seed/tools/game-tools.ts";
 import * as seedVerdict from "../../src/harness-seed/loop/verdict.ts";
 import { endsChatSessions } from "../../src/shared/chat-rewind.ts";
-import * as coordinator from "../../src/shared/coordinator.ts";
+import * as chatRun from "../../src/shared/chat-run.ts";
 import { throughClaudeFolder as seedThroughClaudeFolder } from "../../src/harness-seed/loop/workers/claude-folder.ts";
 import { throughClaudeFolder } from "../../src/substrate/paths.ts";
 import {
@@ -189,53 +189,37 @@ const LOGS: Record<string, EventEnvelope[]> = {
   ],
 };
 
-describe("the coordinator contract (shared/coordinator.ts ↔ loop/run-inbox.ts)", () => {
-  it("offers the same tools, word for word", () => {
-    assert.deepEqual(coordinator.coordinatorTools, seedInbox.coordinatorTools);
-    for (const tool of seedInbox.coordinatorTools)
-      assert.equal(coordinator.isCoordinatorTool(tool.name), true, tool.name);
-    assert.equal(coordinator.isCoordinatorTool("delete_game"), false);
-  });
-
+describe("the chat's run (shared/chat-run.ts ↔ loop/run-inbox.ts)", () => {
   it("the chat's own session after a run keeps the host's own tools: live run controls, and the resume it records", () => {
-    for (const tool of coordinator.runControlTools) assert.equal(coordinator.isCoordinatorTool(tool.name), true);
+    for (const tool of chatRun.runControlTools) assert.equal(chatRun.isHostRunTool(tool.name), true);
     assert.deepEqual(
-      coordinator.runControlTools.map((tool) => tool.name),
-      Object.values(coordinator.RunControl),
+      chatRun.runControlTools.map((tool) => tool.name),
+      Object.values(chatRun.RunControl),
     );
-    // The resume is the coordinator's own `resume_run`, never a live control: its reply ends first.
-    assert.equal(coordinator.isCoordinatorTool(seedResumeRun), true);
-    assert.equal(coordinator.isRunControl(seedResumeRun), false);
+    // The resume is the host's to answer too, never a live control: its reply ends first.
+    assert.equal(chatRun.isHostRunTool(seedResumeRun), true);
+    assert.equal(chatRun.isRunControl(seedResumeRun), false);
+    assert.equal(chatRun.isHostRunTool("delete_game"), false);
   });
 
   it("names the builds a chat's own session records to start as the seed's tools do, which Plan holds", () => {
     const seedNames = new Set([...seedGameTools.map((tool) => tool.name), seedReopenRun, seedResumeRun]);
-    for (const name of Object.values(coordinator.BuildLaunch)) assert.equal(seedNames.has(name), true, name);
-    assert.equal(coordinator.BuildLaunch.ReopenRun, seedReopenRun);
-    assert.equal(coordinator.BuildLaunch.ResumeRun, seedResumeRun);
-    assert.equal(coordinator.isBuildLaunch("ask_user"), false, "a question is no launch");
-  });
-
-  it("one vocabulary names the coordinator's tools, in menu order, and the run's controls are some of them", () => {
-    const names: string[] = Object.values(coordinator.CoordinatorTool);
-    assert.deepEqual(
-      coordinator.coordinatorTools.map((tool) => tool.name),
-      names,
-    );
-    for (const control of Object.values(coordinator.RunControl)) assert.ok(names.includes(control), control);
+    for (const name of Object.values(chatRun.BuildLaunch)) assert.equal(seedNames.has(name), true, name);
+    assert.equal(chatRun.BuildLaunch.ReopenRun, seedReopenRun);
+    assert.equal(chatRun.BuildLaunch.ResumeRun, seedResumeRun);
+    assert.equal(chatRun.isBuildLaunch("ask_user"), false, "a question is no launch");
   });
 
   for (const [name, events] of Object.entries(LOGS)) {
     it(`reads the run and the conversation of the same log the same way: ${name}`, () => {
-      assert.deepEqual(coordinator.latestRun(events), seedInbox.latestRun(events as never));
+      assert.deepEqual(chatRun.latestRun(events), seedInbox.latestRun(events as never));
       for (const runId of ["r1", "r2", "lost", "none"]) {
-        assert.deepEqual(coordinator.latestRun(events, runId), seedInbox.latestRun(events as never, runId), runId);
-        assert.deepEqual(coordinator.runSnapshot(events, runId), seedInbox.runSnapshot(events as never, runId), runId);
+        assert.deepEqual(chatRun.latestRun(events, runId), seedInbox.latestRun(events as never, runId), runId);
       }
-      assert.deepEqual(coordinator.conversationThrough(events), seedInbox.conversationThrough(events as never));
+      assert.deepEqual(chatRun.conversationThrough(events), seedInbox.conversationThrough(events as never));
       for (const messageId of ["a", "b", "c", "red"])
         assert.deepEqual(
-          coordinator.conversationThrough(events, messageId),
+          chatRun.conversationThrough(events, messageId),
           seedInbox.conversationThrough(events as never, messageId),
           messageId,
         );
@@ -263,10 +247,10 @@ describe("a compaction's end of the chat's sessions (shared/chat-rewind.ts ↔ l
   }
 });
 
-describe("the run inbox's wrap-up (shared/coordinator.ts ↔ loop/run-inbox.ts)", () => {
-  it("names the wrap-up and the chat's stop the same way, in their persisted spelling", () => {
-    assert.deepEqual(coordinator.RunControlAction, { Finish: "finish", Stop: "stop" });
-    assert.deepEqual(seedInbox.RunControlAction, coordinator.RunControlAction);
+describe("the run inbox's wrap-up (shared/chat-run.ts ↔ loop/run-inbox.ts)", () => {
+  it("names the wrap-up the same way, in its persisted spelling", () => {
+    assert.deepEqual(chatRun.RunControlAction, { Finish: "finish" });
+    assert.deepEqual(seedInbox.RunControlAction, chatRun.RunControlAction);
   });
 
   const finish = (id: number, runId = "r") => custom(id, "run_control", { runId, action: "finish" });
@@ -281,7 +265,7 @@ describe("the run inbox's wrap-up (shared/coordinator.ts ↔ loop/run-inbox.ts)"
   for (const { label, events, expected } of rows) {
     it(`reads whether this session was asked to wrap up the same way: ${label}`, () => {
       assert.equal(seedInbox.finishRequested(events as never, "r"), expected, "harness");
-      assert.equal(coordinator.finishRequested(events, "r"), expected, "app");
+      assert.equal(chatRun.finishRequested(events, "r"), expected, "app");
     });
   }
 });
@@ -347,11 +331,6 @@ describe("the follow-up queue (shared/message-queue.ts ↔ loop/message-queue.ts
 describe("model roles (shared/model-roles.ts ↔ loop/model-roles.ts)", () => {
   it("has the same tables", () => {
     for (const key of ["FABLE", "OPUS", "SOL", "TERRA"] as const) assert.equal(roles[key], seedRoles[key], key);
-    // The older seed's engine constants stay exported for kept files; they are the app's ids.
-    assert.deepEqual(
-      [seedRoles.CLAUDE_CODE_ENGINE, seedRoles.CODEX_ENGINE, seedRoles.BONSAI_ENGINE],
-      [EngineId.ClaudeCode, EngineId.Codex, EngineId.Bonsai],
-    );
     assert.deepEqual(roles.ROLES, seedRoles.ROLES);
     assert.deepEqual(roles.CLAUDE_CODE_MODELS, seedRoles.CLAUDE_CODE_MODELS);
     assert.deepEqual(roles.CODEX_MODELS, seedRoles.CODEX_MODELS);
@@ -618,7 +597,7 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
   });
 
   it("logs a chat's delegation under the tool name the app reads", () => {
-    assert.equal(seedDelegatedTurn.DELEGATE_TOOL, coordinator.DELEGATE_TOOL);
+    assert.equal(seedDelegatedTurn.DELEGATE_TOOL, chatRun.DELEGATE_TOOL);
   });
 
   it("has the same time units", () => {

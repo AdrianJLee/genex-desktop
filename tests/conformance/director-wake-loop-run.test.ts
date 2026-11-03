@@ -291,9 +291,9 @@ describe("the lead is woken, not kept in one long turn", () => {
 });
 
 describe("live chat during a build", () => {
-  /** The session answering the chat once the run is over: a coordinator, or the chat's own with the run's controls. */
+  /** The session answering the chat once the run is over: the chat's own, with the run's controls. */
   const answersChat = (request: DelegateRequest): boolean =>
-    !request.director && Boolean(request.coordinator || request.liveTools?.some((t) => t.name === "run_status"));
+    !request.director && Boolean(request.liveTools?.some((t) => t.name === "run_status"));
   /** A message to the game's chat, as the composer sends it, with the bubble id it is queued under. */
   async function say(rig: Rig, project: string, text: string, over: Record<string, unknown> = {}) {
     const thread = await rig.core.threadForGame(project);
@@ -326,15 +326,10 @@ describe("live chat during a build", () => {
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("live-answer");
     const lead: Array<{ request: DelegateRequest; at: number }> = [];
-    const coordinators: DelegateRequest[] = [];
     const seen: Record<string, unknown> = {};
     let workersAborted = 0;
     let rested = false;
     fakeEngine(rig, async (request) => {
-      if (request.coordinator) {
-        coordinators.push(request);
-        return turnResult("coordinator", "answered by the chat");
-      }
       if (!request.director) return hangUntilStopped(request, () => workersAborted++);
       lead.push({ request, at: Date.now() });
       const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
@@ -369,7 +364,6 @@ describe("live chat during a build", () => {
     assert.match(woken.request.prompt, /THE USER SAYS[\s\S]*is the sky dusk yet\?/);
     assert.equal(seen.runOpen, true, "the run was still running when the lead answered");
     assert.equal(seen.workersAborted, 0, "a question stops no worker");
-    assert.equal(coordinators.length, 0, "the lead answered, not a coordinator after the build");
     const log = await rig.core.store.listEvents(thread);
     const started = customEvents(log, "autopilot_started").find((e) => e.runId === runId);
     assert.equal(started?.liveChat, true, "the build says its lead takes the chat, so the composer can say so");
@@ -592,7 +586,6 @@ describe("live chat during a build", () => {
     assert.equal(finishedEvent.stoppedBecause, "stopped by the user");
     assert.equal(lead.length, 1, "no turn of the lead after Stop");
     assert.equal(chats.length, 1, "the chat answers the message that waited");
-    assert.equal(chats[0]!.coordinator, undefined, "in its own session, not a coordinator's");
     assert.equal(chats[0]!.resume, "lead-1", "the session that led the run");
     assert.match(chats[0]!.prompt, /does it look like this\?/);
     assert.equal(chats[0]!.images?.[0]?.data, "iVBORw0KGgo=", "with the picture");
@@ -650,7 +643,6 @@ describe("live chat during a build", () => {
       "Queued in the paged chat, not settled with the run",
     );
     assert.equal(chats.length, 1, "the chat answered it");
-    assert.equal(chats[0]!.coordinator, undefined, "in its own session, not a coordinator's");
     assert.match(chats[0]!.prompt, /is the sky dusk yet\?/);
   });
 

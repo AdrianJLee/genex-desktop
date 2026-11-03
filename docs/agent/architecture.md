@@ -54,8 +54,7 @@ host for arrives over the harness RPC, which is therefore an untrusted surface:
   `engine.interrupt` are unchecked on purpose: their `cwd` is only a key into running delegations.
 - Adoption, which widens the sandbox, is not on the RPC: only user-consented host flows call
   `sandbox.allowWrite`.
-- Only whoever answers the person in a game chat asks them: its own Claude session, or a build's
-  lead or the run's coordinator, in the chat's mode
+- Only whoever answers the person in a game chat asks them: its own Claude session, or a build's lead, in the chat's mode
   ([tool permissions](../tool-permissions.md)), decided from the host's records. The harness makes no threads; `events.append` and
   `turn.append` refuse `tool_permission` and `plugin_consent` rows. No agent process writes a
   game's `.claude` folder; no landing or promotion brings one.
@@ -222,7 +221,7 @@ or `as never`.
 
 **Seed contracts.** The app never loads [`src/harness-seed/`](../../src/harness-seed/), and nothing
 under `src/shared` resolves where the seed runs. A rule both apply has a typed host copy in
-`src/shared` — the coordinator's tools and run reading (`coordinator.ts`), the follow-up queue
+`src/shared` — the chat's run controls and run reading (`chat-run.ts`), the follow-up queue
 (`message-queue.ts`) and the model-role tables and presets (`model-roles.ts`) — and the seed keeps
 its own. `tests/conformance/seed-contracts.test.ts`
 and `tests/conformance/providers.test.ts` replay the same inputs through both copies. Another
@@ -299,7 +298,7 @@ fresh chats (roles stay per engine, preferences per model); `ComposerSendOptions
 ([plan limits](../connections-and-context.md#plan-limits)), read on open, then each minute. Stop
 (`studio:cancel`) aborts provider work after at most 5 s for a send on its way; the harness gets 5 s
 to acknowledge, then the oldest queued message runs; Escape never cancels a build
-(`composerEscapeIntent`). Wrapping up (`finish_run`, `studio:run.finish`) is not cancel. A fresh game
+(`composerEscapeIntent`). Wrapping up (`studio:run.finish`) is not cancel. A fresh game
 inherits `studio.model.last`; the Studio thread keeps `studio.studioChat.model` and its own keys,
 seeded once and never written back. Studio chat's `ModelMenu` has no `onRoles`.
 
@@ -327,7 +326,7 @@ confirmation calls the consent, permission or plan IPC.
 direct tool registry and a Loop chat's delegated bridge; the provider turn ends, the answer arrives
 through the normal message queue and resumes the same session, and a question never launches a
 run by itself. Its commissioning options live in a thread artifact referenced by `intakeId`.
-Explicit Studio messages bypass game coordinators: `loop/studio-chat.ts` calls `engine.complete`
+Explicit Studio messages bypass game chats: `loop/studio-chat.ts` calls `engine.complete`
 with no tools, a bounded window, current attachments and host-owned `studio.context`; it never
 delegates or edits games, settings or harness files, and a blank reply is a durable error.
 
@@ -436,12 +435,11 @@ on another ready provider the job may cross to (`crossesTo`, [local models](../l
 [`src/shared/protocol.ts`](../../src/shared/protocol.ts)) and `withRoles` stamps `builderEngine`
 beside `judgeEngine` only when a slot is crossed. The loop never reads `run.engine` for a builder or
 critic: `roleEngine(run, role)` names the engine and `modelOn`/`plannerModel` a model that engine
-knows. The lead and the coordinator (session engines only) stay on the
+knows. The lead (session engines only) stays on the
 orchestrator's engine; workers go to the workers' engine; second opinions and reviewers go to the
 judges' engine. A worker's `usage_limit`/`rate_limit` becomes `state.workerLimit` (never
 `state.limit`, which pauses the run), reported as `workersEngineLimit`. A reopen resolves its
-message's picks with `withRoles`, planned on the session's model; the coordinator's keeps the
-build's (`reopenedRun`). An unready provider's remembered pick is kept; a Loop send with it is
+message's picks with `withRoles`, planned on the session's model (`reopenedRun`). An unready provider's remembered pick is kept; a Loop send with it is
 refused (`requireAvailableRoles`). Stored roles are versioned; another preset table's record is
 replaced once. `tests/conformance/director-cross-engine.test.ts` runs a crossed run end to end.
 
@@ -551,7 +549,7 @@ agent's changes to its own files (`guardian.write_self`).
 
 The harness loop in [`src/harness-seed/loop/`](../../src/harness-seed/loop/). Product behavior is in
 the [builds and live product page](../product/builds-live.md); the chat's lifecycle is
-[the conversation's](../conversation-coordinator.md). Every loop fix gets an incident
+[the conversation's](../conversation-lifecycle.md). Every loop fix gets an incident
 row in `tests/conformance/harness-incidents.test.ts` ([recipe](recipes.md#harness-incident-fix)).
 
 **Plan review.** Composer commissions with Plan mode on are reviewed before execution by
@@ -591,8 +589,8 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
 - Live chat (`loop/live-chat.ts`, `director/lead-line.ts`) and one session
   (`director/lead-session.ts`, `after-loop-run.ts`, `reopen-run.ts`, the host's `#leadRoot`): the
   lead is the chat's own session, which answers again after the close
-  ([live chat](../conversation-coordinator.md#live-chat-during-a-build),
-  [after the build](../conversation-coordinator.md#after-the-build-the-same-session)).
+  ([live chat](../conversation-lifecycle.md#live-chat-during-a-build),
+  [after the build](../conversation-lifecycle.md#after-the-build-the-same-session)).
 - Each turn of the lead's session ends with a host-written `session_activity` (`completed`,
   `interrupted` or `failed`), never a `turn_ended`, so the chat shows the build between turns.
 - The hours are a soft cap (`loop/time-cap.ts`); both closes are one function (`closeTheLoopRun`).
@@ -602,7 +600,7 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
 (`loop/repo.ts`, `snapshots.ts`). One committer signs studio commits (`STUDIO_AS`, `GIT_ENV`). A
 chat keeps the game folder from before and after each answered message the same way, on
 `refs/studio/chat/<thread>/before|after/<message>`, for rewinding
-([conversation lifecycle](../conversation-coordinator.md#sending-and-rewinding)). `.studio/` is
+([conversation lifecycle](../conversation-lifecycle.md#sending-and-rewinding)). `.studio/` is
 gitignored. Adoption writes a real `.gitignore` before
 `git init`. `checkOutNewRepo` fast-imports the installed seed as the first harness repository; `ensureRepo` finishes an interrupted first commit. Snapshots commit to the checked-out branch, hooks off, never during a merge,
 rebase, cherry-pick or revert. `SnapshotEngine.restore` checks everything before any reset and
@@ -804,8 +802,7 @@ at 4 KiB. Connector tool results, call errors and stderr health messages are red
 values (materialized env and headers, launch `secrets`, OAuth tokens) and then token shapes, through
 [`src/shared/redact.ts`](../../src/shared/redact.ts), the one redactor for the event log, the dev
 control and MCP. Collisions shorten a tool name's base so the suffixed name stays within 48
-characters (`uniqueToolName`). Judges, critics, read-only sessions and the
-coordinator get no connectors; the Auto chat, a Loop chat and a build's lead get them.
+characters (`uniqueToolName`). Judges, critics and read-only sessions get no connectors; the Auto chat, a Loop chat and a build's lead get them.
 
 **Connector trust.** A stdio connector is trusted native code: `studio:mcp.save` computes a launch
 digest over command, args, cwd and variable names, and a mismatch needs the native trust dialog

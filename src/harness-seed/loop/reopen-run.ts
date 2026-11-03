@@ -8,26 +8,16 @@
  * from the ask on (`RunStart.reopen`). Only an explicit start over launches a new build. A question is
  * answered. A paused build is not this: it resumes with the time it had left (`resume_run`).
  *
- * A finished build the run's coordinator answers for (its lead was a session of its own, the
- * message went to another engine, or a kept older part hands the chat to it) reopens the same way when a Loop came with the message: the
- * coordinator is told, and its continue_build reopens the build instead of handing the work to one
- * builder turn (`finishedLoopRun`), with the models the build was made with. A finished build no Loop
- * can go on from — no lead seated, a coordinator on a model without sessions, a kept older part — is
- * answered as with Loop off, and the chat says so once (`firstLoopUnused`). A game built in Unreal is
- * neither: its finished Unreal Loop is never reopened, and the person's Loop message after it may
- * start the next one (chat-dispatch.ts `startsNextUnrealLoop`).
- *
- * chat-dispatch.ts offers it only when every part it depends on says so (`servesReopen`): a seed
- * upgrade keeps a part the agent edited before, which would plan on the commission's model, bridge
- * the launch, word the old rules or read the reopened run's inbox from its start — then the message
- * is answered as with Loop off. This module imports only names every older seed exported
- * (tests/fixtures/seed-exports-pre-reopen.json).
+ * A finished build no Loop can go on from — no lead seated, a message on another engine than the
+ * build's, an engine without sessions — is answered as with Loop off, and the chat says so once
+ * (`firstLoopUnused`). A Loop that worked in the game folder itself is never reopened: the person's
+ * Loop message after it may start the next one (chat-dispatch.ts `startsNextOpenLoop`).
  */
 import { clampRunHours, MAX_RUN_HOURS } from "./config.ts";
 import { reopenedJournal } from "./director/reopen.ts";
 import { HostMethod } from "./host-methods.ts";
 import { runUnderWay } from "./live-chat.ts";
-import { RoleKey, roleEngine, withRoles } from "./model-roles.ts";
+import { withRoles } from "./model-roles.ts";
 import { MESSAGE, REOPEN_RUN, reopenPromise } from "./reopen-run-prompts.ts";
 import { OPEN_LOOP_REFUSAL } from "./open-loop-prompts.ts";
 import { kindUnknown, LoopProfile, loopProfileOf } from "./folder-facts.ts";
@@ -38,7 +28,7 @@ import { isCommit } from "./shell.ts";
 import { HOUR_MS } from "./time.ts";
 import type { AfterLoopRun } from "./after-loop-run.ts";
 import type { RunReopen, Studio } from "./studio-state.ts";
-import type { AnyRecord, HarnessCtx, HarnessEvent, Host } from "../types/harness.d.ts";
+import type { AnyRecord, HarnessEvent, Host } from "../types/harness.d.ts";
 import type { EventData, ModelPreferences, RunRoles, RunSpec } from "../types/host-api.d.ts";
 
 type RunBudgets = RunSpec["budgets"];
@@ -46,56 +36,19 @@ type RunBudgets = RunSpec["budgets"];
 /** The model an engine picks for itself: a lead that names no model runs on it. */
 const ENGINE_DEFAULT = "default";
 
-/** Does every part a reopen depends on serve it (`SERVES_REOPEN`)? */
-export function servesReopen(parts: readonly Readonly<Record<string, unknown>>[]): boolean {
-  return parts.every((part) => part.SERVES_REOPEN === true);
-}
-
-/** A finished run the chat may reopen (`reopenable`, set by chat-dispatch.ts once its parts serve it). */
+/** A finished run the chat may reopen (`reopenable`, set by chat-dispatch.ts). */
 function mayReopen(loopRun: AfterLoopRun | null | undefined): boolean {
   return loopRun?.reopenable === true && loopRun.state === RunState.Finished;
 }
 
 /**
  * Does a routed message keep its commission: one for no run, or one for a finished run the chat's
- * own session or the run's coordinator may reopen (`reopenable`) — never a run under way or a paused
- * run, where it could commission a second run.
+ * own session may reopen (`reopenable`) — never a run under way or a paused run, where it could
+ * commission a second run.
  */
 export function keepsCommission(existing: unknown, loopRun: AfterLoopRun | null): boolean {
   if (!existing) return true;
   return mayReopen(loopRun);
-}
-
-/**
- * A finished build the run's coordinator answers for, as a run its continue_build may reopen: one
- * whose journal seated a lead (the chat's own session, or one of its own), which goes on as the same
- * run. The long turn and a kept older run seat none, and the classic pipeline and a gauntlet keep no
- * director journal: none of them can. Its model is none — the build goes on with the models it was
- * made with.
- */
-export async function finishedLoopRun(
-  host: Pick<HarnessCtx, "call">,
-  threadId: string,
-  run: AnyRecord,
-  messageId?: string,
-): Promise<AfterLoopRun | null> {
-  if (run?.state !== RunState.Finished || !run.runId) return null;
-  const journal = await readJournal(host, threadId, run.runId);
-  // A Loop that worked in the game folder itself (an open Loop) has no copy to go on from: the next
-  // Loop message starts a new one (chat-dispatch.ts `startsNextOpenLoop`).
-  if (journal?.director?.open) return null;
-  if (typeof journal?.director?.lead?.chatSession !== "boolean") return null;
-  return {
-    runId: run.runId,
-    state: RunState.Finished,
-    goal: typeof run.goal === "string" ? run.goal : null,
-    landed: typeof run.landed === "boolean" ? run.landed : null,
-    stoppedBecause: typeof run.stoppedBecause === "string" ? run.stoppedBecause : null,
-    engine: roleEngine(run, RoleKey.Planner),
-    model: null,
-    ...(messageId ? { messageId } : {}),
-    reopenable: true,
-  };
 }
 
 /** The finished builds each loop's chats were told no Loop can go on from, by run. */
@@ -197,18 +150,9 @@ export function reopenBudgets(saved: Partial<RunBudgets> | undefined, hours: num
  * (model-roles.ts `withRoles`, the finished run's stamps dropped first); planned on the model this
  * session answers on (so `leadSeat` seats it again), else the planner it had — never the builders'
  * model, which `plannerModel` would read in its place; its engine, goal, reference and plan kept;
- * the launch's readiness dropped (the folder is asked again). With no models (`null`: the run's
- * coordinator reopens it) every model stays the one the build was made with.
+ * the launch's readiness dropped (the folder is asked again).
  */
-export function reopenedRun(
-  saved: RunSpec & AnyRecord,
-  budgets: RunBudgets,
-  picks: ReopenModels | null,
-): RunSpec & AnyRecord {
-  if (!picks) {
-    const { readiness: _launched, ...kept } = saved;
-    return { ...kept, budgets };
-  }
+export function reopenedRun(saved: RunSpec & AnyRecord, budgets: RunBudgets, picks: ReopenModels): RunSpec & AnyRecord {
   const {
     readiness: _launched,
     model: _builders,
@@ -255,7 +199,7 @@ export async function reopenAfterReply(
   studio: Studio,
   ctx: ReopeningChat,
   loopRun: AfterLoopRun,
-  ask: ReopenAsk & { words: string; models: ReopenModels | null },
+  ask: ReopenAsk & { words: string; models: ReopenModels },
   start: StartReopened,
   now: () => number = Date.now,
 ): Promise<void> {

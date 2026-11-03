@@ -12,7 +12,7 @@
  * `run_control` and `run_auto_resumed` records — never from the words a close is written in.
  */
 import { AutoResumeCause, CustomEvent, customRecord, type RunAutoResumedPayload } from "../../shared/custom-events.ts";
-import { RunControlAction } from "../../shared/coordinator.ts";
+import { RunControlAction } from "../../shared/chat-run.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { EngineFailureKind } from "../../shared/engine-requests.ts";
 import { errorMessage } from "../../shared/errors.ts";

@@ -45,19 +45,16 @@ import type { LoopRun, LoopRunData, LoopRunState } from "./loop-run.ts";
 
 /** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
 export const SERVES_LEAD = true;
-/** This part prepares a Loop on a project of any kind: a run reads it by namespace before it leads one. */
-export const SERVES_OPEN_LOOP = true;
 
 /** Why a web Loop's worker may not write in the game folder itself: the lead's build is its integration worktree. */
 const LOCK_REFUSED =
   "Not started: in this Loop the build is the integration worktree, so a writer works in a copy (isolation copy) and you merge it with worker_mark.";
 
-/** How a run starts: its thread, the run, whether it resumes, whether its lead takes the chat, its profile and an open Loop's clock. */
+/** How a run starts: its thread, the run, whether it resumes, its profile and an open Loop's clock. */
 export interface LoopStart {
   threadId: string;
   run: Run;
   resume?: boolean;
-  liveChat?: boolean;
   /** How the Loop works on its project: a web game's (the default), or in place (`LoopProfile.Open`). */
   profile?: LoopProfile;
   /** An open Loop's clock (the wake loop's); a web run reads the wall clock. */
@@ -133,14 +130,14 @@ export function runStartedPayload(run: Run, resume: boolean): AnyRecord {
   };
 }
 
-/** The run's first cards on its thread: the run started, as a Loop's. */
+/** The run's first cards on its thread: the run started, as a Loop's whose lead takes the chat. */
 async function announceRunStart(
   ctx: HarnessCtx,
   threadId: string,
   run: Run,
-  start: { resume: boolean; liveChat: boolean; profile?: LoopProfile },
+  start: { resume: boolean; profile?: LoopProfile },
 ) {
-  const { resume, liveChat, profile } = start;
+  const { resume, profile } = start;
   const started = runStartedPayload(run, resume);
   const pool = {
     runId: run.runId,
@@ -151,7 +148,7 @@ async function announceRunStart(
     director: true,
     workerRecords: true,
     ...(resume ? { resumed: true } : {}),
-    ...(liveChat ? { liveChat: true } : {}),
+    liveChat: true,
     ...(profile ? { profile } : {}),
   };
   await ctx.call(HostMethod.EventsAppend, {
@@ -269,9 +266,9 @@ export async function prepareLoopRun(
   start: LoopStart,
   modules: ReadonlyArray<Record<string, unknown>>,
 ): Promise<LoopRun> {
-  const { threadId, run, resume = false, liveChat = false, profile = LoopProfile.Web } = start;
+  const { threadId, run, resume = false, profile = LoopProfile.Web } = start;
   if (profile === LoopProfile.Open)
-    return prepareOpenLoopRun(ctx, { threadId, run, resume, liveChat, clock: start.clock ?? OPEN_WALL_CLOCK }, modules);
+    return prepareOpenLoopRun(ctx, { threadId, run, resume, clock: start.clock ?? OPEN_WALL_CLOCK }, modules);
   const loopRun = bindLoopRun({ ctx, threadId, run, resume }, modules);
   const inbox = ctx.runInbox ?? createRunInbox(ctx, { threadId, runId: run.runId });
   ctx.setStatus(`run ${run.runId} · lead`);
@@ -283,7 +280,7 @@ export async function prepareLoopRun(
     totalMs: capHoursMs(run, run.budgets?.wallClockMs ?? DEFAULT_WALL_CLOCK_MS),
   });
   const report = loopRunReport(run, resume ? await earlierReport(ctx, threadId, run.runId) : null);
-  await announceRunStart(ctx, threadId, run, { resume, liveChat });
+  await announceRunStart(ctx, threadId, run, { resume });
   const projectDir = await readyTheGame(loopRun);
   const { baseCommit, forkCommit } = await startingCommits(ctx, run, priorJournal);
   const integrationWorktree = await openIntegration(loopRun, forkCommit);
@@ -425,10 +422,10 @@ function openLoopRunData(
  */
 async function prepareOpenLoopRun(
   ctx: HarnessCtx,
-  start: { threadId: string; run: Run; resume: boolean; liveChat: boolean; clock: OpenClock },
+  start: { threadId: string; run: Run; resume: boolean; clock: OpenClock },
   modules: ReadonlyArray<Record<string, unknown>>,
 ): Promise<LoopRun> {
-  const { threadId, run, resume, liveChat, clock } = start;
+  const { threadId, run, resume, clock } = start;
   const loopRun = bindLoopRun({ ctx, threadId, run, resume }, modules);
   const inbox = ctx.runInbox ?? createRunInbox(ctx, { threadId, runId: run.runId });
   ctx.setStatus(`run ${run.runId} · lead in place`);
@@ -441,7 +438,7 @@ async function prepareOpenLoopRun(
   const game = await openGame(ctx, run);
   if (!refused) recordCreditCap(run, spentBefore);
   const report = loopRunReport(run, resume ? await earlierReport(ctx, threadId, run.runId) : null);
-  if (!refused) await announceRunStart(ctx, threadId, run, { resume, liveChat, profile: LoopProfile.Open });
+  if (!refused) await announceRunStart(ctx, threadId, run, { resume, profile: LoopProfile.Open });
   const baseCommit = refused ? null : await openStartingPoint(ctx, run, priorJournal);
   Object.assign(loopRun, openLoopRunData({ run, threadId, priorJournal, inbox }, game, baseCommit, runClock, report));
   loopRun.gameFacts = game.facts;

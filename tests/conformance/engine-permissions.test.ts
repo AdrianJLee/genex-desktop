@@ -271,7 +271,7 @@ describe("a chat's own Claude session asks the person", () => {
   });
 
   it("a read-only brief stays read-only, whatever else it carries", async () => {
-    // Upstream's read-only sessions (a waking run's lead, the coordinator, a playtester) are never
+    // Upstream's read-only sessions (a waking run's lead, a playtester) are never
     // the person's own: the host hands them no `permissions` (a lead the person talks to gets
     // `leadAsks`, below), and the engine keeps them read-only anyway.
     const { fn, seen } = fakeQuery();
@@ -853,7 +853,7 @@ describe("a chat's own Claude session asks the person", () => {
 });
 
 /**
- * A build's lead (and the run's coordinator) is read-only and unattended, until the host hands it
+ * A build's lead is read-only and unattended, until the host hands it
  * `leadAsks`: then it keeps what the chat's own session keeps, starts in the chat's Auto, Accept
  * edits or Bypass, else in Manual so every edit and command reaches `canUseTool`, the host answers
  * for the chat's mode, and the picker switches it mid-turn. Everything else about its session stays
@@ -863,7 +863,6 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
   const leadRequest = (extra: Record<string, unknown> = {}) => ({
     prompt: "lead the run",
     cwd: "/tmp/game-workspace",
-    readOnly: true,
     resume: "chat-session",
     extraReads: ["/tmp/studio-scratch/autopilot/run_lead"],
     denyReads: ["/tmp/sibling-game"],
@@ -884,13 +883,13 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
 
   it("keeps its tools and the web, starts in Manual with no sandbox, and carries the standing grants", async () => {
     const sessions: Options[] = [];
-    for (const extra of [{}, { leadAsks: leadAsks() }]) {
+    for (const extra of [{ readOnly: true }, { leadAsks: leadAsks() }]) {
       const { fn, seen } = fakeQuery();
       await (await engineFor(fn, ["/tmp/secrets"])).delegate(leadRequest(extra) as never);
       sessions.push(seen[0]!);
     }
     const [unattended, asking] = sessions as [Options, Options];
-    // Without it: the unattended lead, byte for byte as before.
+    // Without it: a read-only session, byte for byte as before (the host seats no lead read-only).
     assert.equal(unattended.permissionMode, "acceptEdits");
     assert.equal("canUseTool" in unattended, false);
     assert.equal((unattended.sandbox as Options).autoAllowBashIfSandboxed, true);
@@ -1169,7 +1168,7 @@ describe("only Genex's workers", () => {
     };
     const shapes: Array<[string, Record<string, unknown>]> = [
       ["the chat's own session", { permissions: chat() }],
-      ["a lead that asks", { readOnly: true, leadAsks: lead }],
+      ["a lead that asks", { leadAsks: lead }],
       ["an unattended builder", {}],
       ["a read-only session", { readOnly: true }],
     ];

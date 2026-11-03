@@ -213,8 +213,8 @@ export function originalAsk(messages: readonly BriefMessage[] | undefined): stri
  * The contractor session this chat already has, walking the log newest-last.
  * `contractor_session` is the durable bookmark, and the chat's own delegations always write it;
  * `delegation_incomplete` and a mirrored init event are fallbacks for chats that started before
- * the bookmark existed. A later one of those never outranks a bookmark: a coordinator, worker or
- * reviewer that ran in this thread leaves them too, and its session is not the chat's.
+ * the bookmark existed. A later one of those never outranks a bookmark: a worker or reviewer that
+ * ran in this thread leaves them too, and its session is not the chat's.
  */
 export function lastContractorSession(
   events: readonly AnyRecord[] | undefined,
@@ -461,13 +461,6 @@ function stillsBlock(extraReads: unknown): string {
     ...extraReads.map((dir) => `- ${dir}`),
   ].join("\n");
 }
-
-/**
- * This brief tells the chat's own session after a lead's run that the build is over
- * (`afterLoopRun`): chat-dispatch.ts asks before it sends the chat there (after-loop-run.ts
- * `servesAfterLoopRun`), since a kept copy from before would tell it to pick up where it left off.
- */
-export const SERVES_AFTER_LOOP_RUN = true;
 
 /**
  * What the contractor is actually told. Resume = the message alone (its own context is restored):

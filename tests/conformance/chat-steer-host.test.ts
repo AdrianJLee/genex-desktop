@@ -423,7 +423,7 @@ describe("a restated resume_run", () => {
       resumes.push(action);
     };
     const resume = (text: string) =>
-      api()["coordinator.tool"]({ threadId: thread, runId: "r1", name: "resume_run", args: { text }, messageId: "m1" });
+      api()["run.control"]({ threadId: thread, runId: "r1", name: "resume_run", args: { text }, messageId: "m1" });
 
     await resume("Add rain");
     await resume("Add rain");
@@ -437,54 +437,6 @@ describe("a restated resume_run", () => {
       ],
     );
     assert.equal(resumes.length, 3, "each call still asks the same run to resume");
-  });
-});
-
-describe("the chat is free once a run closes", () => {
-  it("continue_build is taken for a finished run while its self-improvement pass still holds the run", async () => {
-    const { core, api } = await lite();
-    const thread = await core.store.createThread({ title: "finished run" });
-    await core.store.appendEvents(thread, [
-      custom("run_started", { runId: "r1", project: "pond", engine: "codex" }),
-      custom("run_finished", { runId: "r1", project: "pond" }),
-    ]);
-    // The harness holds the run until its learning pass after run_finished is over (run.settled).
-    core.host.options.onNotify?.("run.keepawake", { runId: "r1" });
-    const answer = await api()["coordinator.tool"]({
-      threadId: thread,
-      runId: "r1",
-      name: "continue_build",
-      args: { text: "Add rain" },
-      messageId: "m1",
-    });
-    assert.match(String(answer), /will continue in this game/);
-    assert.deepEqual(
-      payloads(await core.store.listEvents(thread), "run_followup_requested").map((p) => p.text),
-      ["Add rain"],
-    );
-  });
-});
-
-describe("a contained change after a finished build (golden-boot-glory)", () => {
-  it("continue_build records build: false, so the harness hands the change to one builder turn instead of reopening the build", async () => {
-    const { core, api } = await lite();
-    const thread = await core.store.createThread({ title: "finished run" });
-    await core.store.appendEvents(thread, [
-      custom("run_started", { runId: "r1", project: "pond", engine: "codex" }),
-      custom("run_finished", { runId: "r1", project: "pond" }),
-    ]);
-    const continueBuild = (messageId: string, args: Record<string, unknown>) =>
-      api()["coordinator.tool"]({ threadId: thread, runId: "r1", name: "continue_build", args, messageId });
-    await continueBuild("m1", { text: "Remove the name plates", build: false });
-    await continueBuild("m1", { text: "Remove the name plates", build: false });
-    await continueBuild("m2", { text: "Add a second stadium" });
-    assert.deepEqual(
-      payloads(await core.store.listEvents(thread), "run_followup_requested").map((p) => [p.text, p.build]),
-      [
-        ["Remove the name plates", false],
-        ["Add a second stadium", undefined],
-      ],
-    );
   });
 });
 

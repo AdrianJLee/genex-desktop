@@ -227,7 +227,6 @@ export const HarnessCapability = {
   Compact: "compact",
   Selftest: "selftest",
   Scoreboard: "scoreboard",
-  Coordinator: "coordinator",
   Director: "director",
   MessageQueue: "message-queue",
   Rewind: "rewind",

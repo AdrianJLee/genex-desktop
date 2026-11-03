@@ -10,7 +10,8 @@ import { CHECKPOINT_FILE_MAX_BYTES, CheckpointPhase, chatCheckpointRef } from ".
 import { SkippedBy } from "../../src/shared/chat-rewind.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
-import { latestRun } from "../../src/shared/coordinator.ts";
+import { latestRun } from "../../src/shared/chat-run.ts";
+import { DispatchActionType } from "../../src/shared/protocol.ts";
 import { git } from "../../src/substrate/snapshots.ts";
 import type { JobSpawn } from "../../src/substrate/jobs.ts";
 import { JobRole, JobScopeKind } from "../../src/shared/jobs.ts";
@@ -353,7 +354,6 @@ it("a build after the message leaves the chat with it: files come back when it l
   await rig.core.sendUserMessage("Make a castle", { thread, engine: "claude-code" });
   await waitForLog(rig.core, handled(thread, 2), 20000, "the answer after the rewind");
   assert.equal(turns.length, 2);
-  assert.ok(!turns[1]!.coordinator, "a turn of the chat's own, not the run's coordinator");
   assert.equal(turns[1]!.resume, undefined, "with a fresh session");
   assert.doesNotMatch(turns[1]!.prompt, /Make a village|The run paused/);
   // A Plan-mode send is no longer a follow-up to a paused build: it gets its plan review.
@@ -383,8 +383,9 @@ it("rewound past a later build, the next message's run tools reach the build fro
   const thread = await rig.core.createGameThread(project);
   const dir = rig.core.games.dirFor(project);
   const head = (await git(dir, ["rev-parse", "HEAD"])).trim();
-  /** What the coordinator's run tools answered, per tool, once it is asked to use them. */
+  /** What the run's controls answered, per control, and what the session may record, once it uses them. */
   const answers: Record<string, string>[] = [];
+  const recordable: string[][] = [];
   let useTools = false;
   rig.core.engines.register({
     id: "claude-code",
@@ -393,19 +394,7 @@ it("rewound past a later build, the next message's run tools reach the build fro
     status: async () => ({ code: "ready", detail: "" }),
     models: async () => [],
     delegate: async (request) => {
-      if (request.coordinator && useTools) {
-        const tried: Record<string, string> = {};
-        const calls: [string, Record<string, unknown>][] = [
-          ["run_status", {}],
-          ["show_build", {}],
-          ["resume_run", { text: "Go on with the forest" }],
-        ];
-        for (const [name, args] of calls) {
-          tried[name] = await request.onLiveTool!(name, args).then(String, (err: Error) => `refused: ${err.message}`);
-        }
-        answers.push(tried);
-      }
-      return {
+      const answered = {
         ok: true,
         summary: "Answered.",
         sessionId: request.resume ?? "session",
@@ -414,9 +403,35 @@ it("rewound past a later build, the next message's run tools reach the build fro
         durationMs: 1,
         engine: "claude-code",
       };
+      if (!useTools) return answered;
+      // Once: the resumed build's own lead is answered plainly.
+      useTools = false;
+      const tried: Record<string, string> = {};
+      const calls: [string, Record<string, unknown>][] = [
+        ["run_status", {}],
+        ["show_build", {}],
+      ];
+      for (const [name, args] of calls) {
+        tried[name] = await request.onLiveTool!(name, args).then(String, (err: Error) => `refused: ${err.message}`);
+      }
+      answers.push(tried);
+      recordable.push((request.interviewTools ?? []).map((tool) => tool.name));
+      return { ...answered, studioToolCalls: [{ name: "resume_run", args: { text: "Go on with the forest" } }] };
     },
   });
-  // Build A paused before the message; the message went to its coordinator.
+  const { host } = rig.core;
+  const dispatch = host.dispatch;
+  const resumes: unknown[] = [];
+  host.dispatch = async (action, timeoutMs) => {
+    if (action.type === DispatchActionType.AutopilotResume) resumes.push(action.runId);
+    return dispatch.call(host, action, timeoutMs);
+  };
+  // Build A, a Loop that seated a lead, paused before the message; the chat's own session answered it.
+  await rig.core.store.writeArtifact(thread, "autopilot_run-a", {
+    phase: "paused",
+    run: { runId: "run-a", project, engine: "claude-code", goal: "A forest", mode: "autopilot" },
+    director: { lead: { chatSession: false } },
+  });
   await rig.core.append(
     [
       custom("run_started", {
@@ -431,7 +446,7 @@ it("rewound past a later build, the next message's run tools reach the build fro
     thread,
   );
   await rig.core.sendUserMessage("Make it autumn", { thread, engine: "claude-code" });
-  await waitForLog(rig.core, handled(thread, 1), 20000, "the coordinator's answer");
+  await waitForLog(rig.core, handled(thread, 1), 20000, "the chat's answer");
   // Build B began after the message and landed.
   await rig.core.append(
     [
@@ -448,14 +463,29 @@ it("rewound past a later build, the next message's run tools reach the build fro
   useTools = true;
   await rig.core.sendUserMessage("How is the forest?", { thread, engine: "claude-code" });
   await waitForLog(rig.core, handled(thread, 2), 20000, "the answer after the rewind");
-  assert.equal(answers.length, 1, "build A's coordinator answered");
+  assert.equal(answers.length, 1, "the chat's own session answered with build A's controls");
   const [tried] = answers;
   // A refused call is the `refused: ` this test writes; run_status's own text may say "refused" (a
   // plugin skill's summary does), so the whole answer is not searched for the word.
   for (const [name, answer] of Object.entries(tried ?? {})) assert.doesNotMatch(answer, /^refused: /, name);
   assert.equal(JSON.parse(tried!.run_status!).run.runId, "run-a");
   assert.match(tried!.show_build!, /Live/);
-  assert.match(tried!.resume_run!, /Resume requested for the same run/);
+  assert.ok(recordable[0]?.includes("resume_run"), "build A is paused: the session may resume it");
+  // The resume it recorded, done once its reply ended, reaches build A through the rewound view.
+  const log = await rig.core.store.listEvents(thread);
+  const resumeCall = log.flatMap((e) =>
+    e.data.type === "tool_requested" && e.data.request.name === "resume_run" ? [e.data] : [],
+  )[0];
+  assert.deepEqual(resumeCall?.request.arguments, { runId: "run-a", text: "Go on with the forest" });
+  const answer = log.flatMap((e) =>
+    e.data.type === "tool_result" && e.data.tool_call_id === resumeCall?.tool_call_id ? [e.data.result] : [],
+  )[0];
+  assert.match(String(answer?.content), /Resume requested for the same run/);
+  assert.deepEqual(resumes, ["run-a"], "the host resumed build A");
+  assert.ok(
+    customEvents(log, "run_steering").some((e) => e.runId === "run-a" && e.text === "Go on with the forest"),
+    "with the instruction",
+  );
 });
 
 it("after a landed build, or with no saved copy, only the conversation rewinds and the files stay", async () => {
@@ -522,9 +552,8 @@ it("rewinding over a running build stops it first; the build leaves the chat and
   const thread = await rig.core.createGameThread(project);
   const dir = rig.core.games.dirFor(project);
   const chatTurns: DelegateRequest[] = [];
-  const coordinators: DelegateRequest[] = [];
   const workerStarted = deferred();
-  /** While the build runs, a session that is not its coordinator is one of its builders. */
+  /** While the build runs, a session is one of its builders. */
   let building = false;
   rig.core.engines.register({
     id: "codex",
@@ -549,10 +578,6 @@ it("rewinding over a running build stops it first; the build leaves the chat and
         durationMs: 1,
         engine: "codex",
       });
-      if (request.coordinator) {
-        coordinators.push(request);
-        return answer("The build is paused.", "coordinator-session");
-      }
       if (!building) {
         chatTurns.push(request);
         return answer(`Chat answer ${chatTurns.length}.`, request.resume ?? `chat-${chatTurns.length}`);
@@ -609,7 +634,6 @@ it("rewinding over a running build stops it first; the build leaves the chat and
     // The next message is the chat's own turn again, with a fresh session.
     await rig.core.sendUserMessage("Make a harbour", { thread, engine: "codex" });
     await waitForLog(rig.core, handled(thread, 2), 20000, "the answer after the rewind");
-    assert.equal(coordinators.length, 0, "the stopped build's coordinator never answers");
     assert.equal(chatTurns.length, 2);
     assert.equal(chatTurns[1]!.resume, undefined);
     assert.equal(await exists(dir), true);
@@ -657,7 +681,7 @@ it("a rewind over a running build waits for the build's jobs to end, and their l
         durationMs: 1,
         engine: "codex",
       });
-      if (request.coordinator || !building) return answer("Answered.");
+      if (!building) return answer("Answered.");
       workerStarted.resolve();
       await new Promise<void>((resolve) => request.signal?.addEventListener("abort", () => resolve(), { once: true }));
       return answer("Stopped.");
@@ -757,7 +781,7 @@ it("a build that does not close in time fails the rewind, and the queue its Stop
         durationMs: 1,
         engine: "codex",
       });
-      if (request.coordinator || !building) return answer("Answered.");
+      if (!building) return answer("Answered.");
       workerStarted.resolve();
       // A worker that winds down only when it is let go, whatever the Stop says.
       await releaseWorker.promise;

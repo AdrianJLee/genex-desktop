@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { PlanReviewState } from "../../shared/composer.ts";
-import { latestRun } from "../../shared/coordinator.ts";
+import { latestRun } from "../../shared/chat-run.ts";
 import type { CodingProvider } from "../../shared/coding-cli.ts";
 import { CustomEvent, customPayload, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";

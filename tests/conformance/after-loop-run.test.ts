@@ -1,6 +1,6 @@
 /**
- * The same agent after the build (loop/after-loop-run.ts): once a run a lead led as its chat's own
- * session has closed, the chat's next message goes to that session with the run's controls. Which
+ * The same agent after the build (loop/after-loop-run.ts): once a Loop run that seated a lead has
+ * closed, the chat's next message goes to the chat's own session with the run's controls. Which
  * runs that is, what the session is told, what it is handed, and the resume it records — and,
  * after a finished build with Loop on, the reopen it records (loop/reopen-run.ts) — without a rig.
  * The rig runs are director-one-session.test.ts S1 and S6–S10.
@@ -13,13 +13,12 @@ import {
   afterLoopRunGrant,
   resumeAfterReply,
   resumeAsked,
-  servesAfterLoopRun,
+  resumeStopped,
 } from "../../src/harness-seed/loop/after-loop-run.ts";
 import { handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import type { Studio } from "../../src/harness-seed/loop/studio-state.ts";
 import { afterLoopRunNote } from "../../src/harness-seed/loop/after-loop-run-prompts.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
-import * as chatSession from "../../src/harness-seed/loop/chat-session.ts";
 import * as delegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
 import * as turnLoop from "../../src/harness-seed/loop/turn-loop.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
@@ -86,7 +85,7 @@ const closed = (state: string) => ({
 });
 
 describe("which chats after a run the chat's own session answers", () => {
-  it("A1. only a closed run whose lead was the chat's own session, on an engine that holds a session", async () => {
+  it("A1. a closed run whose journal seated a lead, on an engine that holds a session", async () => {
     const rows: Array<{
       label: string;
       run: Record<string, unknown>;
@@ -104,11 +103,11 @@ describe("which chats after a run the chat's own session answers", () => {
       { label: "a paused lead run", run: closed("paused"), journal: leadJournal(true), engine: "codex", own: true },
       { label: "a message that names no engine", run: closed("finished"), journal: leadJournal(true), own: true },
       {
-        label: "a message on another engine than its lead's (another session)",
+        label: "a message on another engine than its lead's (the chat's own session there)",
         run: closed("finished"),
         journal: leadJournal(true),
         engine: "claude-code",
-        own: false,
+        own: true,
       },
       {
         label: "a run still running",
@@ -128,7 +127,7 @@ describe("which chats after a run the chat's own session answers", () => {
         run: closed("finished"),
         journal: leadJournal(false),
         engine: "codex",
-        own: false,
+        own: true,
       },
       {
         label: "a director with its own hands (the long turn, a kept older part)",
@@ -174,6 +173,7 @@ describe("which chats after a run the chat's own session answers", () => {
       landed: false,
       stoppedBecause: "stopped by the user",
       engine: "codex",
+      onLeadEngine: true,
       model: null,
     });
     const onFable = await afterLeadLoopRun(
@@ -184,27 +184,39 @@ describe("which chats after a run the chat's own session answers", () => {
     assert.equal(onFable?.model, "claude-fable-5-1", "the model its lead ran on, for a message that names none");
   });
 
-  it("A1b. the turn runs where the session is: the lead's engine, and its model unless the message names one", async () => {
+  it("A1b. the turn runs on the message's engine, else the lead's; on the lead's engine, on its model unless the message names one", async () => {
     const lead = { ...closed("finished"), engine: "claude-code", roles: { planner: "claude-fable-5-1" } };
     const runsOn = async (message: { engine?: string; model?: string }) => {
       const loopRun = await afterLeadLoopRun(hostWith(leadJournal(true)), { threadId: THREAD, ...message }, lead);
-      return loopRun && { engine: loopRun.engine, model: loopRun.model };
+      return loopRun && { engine: loopRun.engine, model: loopRun.model, onLeadEngine: loopRun.onLeadEngine };
     };
     const rows = [
       {
         label: "the lead's engine, no model",
         message: { engine: "claude-code" },
-        runs: { engine: "claude-code", model: "claude-fable-5-1" },
+        runs: { engine: "claude-code", model: "claude-fable-5-1", onLeadEngine: true },
       },
-      { label: "no engine, no model", message: {}, runs: { engine: "claude-code", model: "claude-fable-5-1" } },
+      {
+        label: "no engine, no model",
+        message: {},
+        runs: { engine: "claude-code", model: "claude-fable-5-1", onLeadEngine: true },
+      },
       {
         label: "the lead's engine, a model of its own",
         message: { engine: "claude-code", model: "opus" },
-        runs: { engine: "claude-code", model: "opus" },
+        runs: { engine: "claude-code", model: "opus", onLeadEngine: true },
       },
-      // Another engine is another session: the coordinator answers, and the lead's model is not borrowed there.
-      { label: "another engine, no model", message: { engine: "codex" }, runs: null },
-      { label: "another engine, a model of its own", message: { engine: "codex", model: "gpt-5.6-sol" }, runs: null },
+      // Another engine is the chat's own session there: the lead's model is not borrowed there.
+      {
+        label: "another engine, no model",
+        message: { engine: "codex" },
+        runs: { engine: "codex", model: null, onLeadEngine: false },
+      },
+      {
+        label: "another engine, a model of its own",
+        message: { engine: "codex", model: "gpt-5.6-sol" },
+        runs: { engine: "codex", model: "gpt-5.6-sol", onLeadEngine: false },
+      },
     ];
     const seen: Array<{ label: string; runs: unknown }> = [];
     for (const { label, message } of rows) seen.push({ label, runs: await runsOn(message) });
@@ -212,12 +224,6 @@ describe("which chats after a run the chat's own session answers", () => {
       seen,
       rows.map(({ label, runs }) => ({ label, runs })),
     );
-  });
-
-  it("A2. the chat turn, the runner that picks it and its brief serve it (`SERVES_AFTER_LOOP_RUN`); a part without the mark does not", () => {
-    assert.equal(servesAfterLoopRun([delegatedTurn, chatSession, turnLoop]), true);
-    assert.equal(servesAfterLoopRun([delegatedTurn, { buildContractorBrief }]), false);
-    assert.equal(servesAfterLoopRun([delegatedTurn, chatSession, { runTurn: turnLoop.runTurn }]), false);
   });
 });
 
@@ -228,9 +234,12 @@ describe("what the chat's own session is told and handed after a run", () => {
     goal: "a dusk plaza",
     landed: false,
     stoppedBecause: null,
+    onLeadEngine: true,
     model: null,
   };
   const paused = { ...finished, state: "paused", stoppedBecause: "stopped by the user" };
+  /** A paused run answered on another engine than its lead's: the chat's bookmark moves there. */
+  const pausedElsewhere = { ...paused, onLeadEngine: false };
 
   it("A3. the note: the build is over, its hands are back, a question never restarts it, and the controls spelled for its engine", () => {
     const note = afterLoopRunNote(finished as never, "claude-code");
@@ -247,6 +256,10 @@ describe("what the chat's own session is told and handed after a run", () => {
     assert.match(pausedNote, /PAUSED/);
     assert.match(pausedNote, /stopped by the user/);
     assert.match(pausedNote, /\.studio\/bridge\/tool\.mjs resume_run/, "a paused run's resume, spelled for Codex");
+    const elsewhereNote = afterLoopRunNote(pausedElsewhere as never, "codex");
+    assert.match(elsewhereNote, /PAUSED/);
+    assert.match(elsewhereNote, /the build stays paused/);
+    assert.doesNotMatch(elsewhereNote, /resume_run/, "no resume on another engine than its lead's");
   });
 
   it("A4. the brief carries the note in place of 'pick up where you left off', resumed or fresh", () => {
@@ -273,7 +286,7 @@ describe("what the chat's own session is told and handed after a run", () => {
     assert.match(fresh, /Original request:\nmake a dusk plaza/);
   });
 
-  it("A5. handed the run's controls for this run and message; a paused run's resume is bridged, a finished one's is not", () => {
+  it("A5. handed the run's controls for this run and message; a paused run's resume is bridged on its lead's engine, a finished one's is not", () => {
     const finishedGrant = afterLoopRunGrant({ ...finished, messageId: "m1" } as never);
     assert.deepEqual(finishedGrant, { runControls: { runId: RUN, messageId: "m1" } });
     const pausedGrant = afterLoopRunGrant({ ...paused, messageId: "m2" } as never);
@@ -284,12 +297,17 @@ describe("what the chat's own session is told and handed after a run", () => {
     );
     // The resume reaches this run only: the bridged tool names no run to reach another with.
     assert.deepEqual(Object.keys(pausedGrant.interviewTools?.[0]?.parameters.properties ?? {}), ["text"]);
+    // On another engine the build's controls stay, and its resume is Builds' alone.
+    assert.deepEqual(afterLoopRunGrant({ ...pausedElsewhere, messageId: "m2" } as never), {
+      runControls: { runId: RUN, messageId: "m2" },
+    });
   });
 
   it("A6. a recorded resume is taken only after a paused run, and done through the host's resume_run once the reply ends", async () => {
     const recorded = [{ name: "resume_run", args: { text: "continue with a red moon" } }];
     assert.equal(resumeAsked(finished as never, recorded), null, "a finished run resumes nothing");
     assert.equal(resumeAsked(paused as never, []), null);
+    assert.equal(resumeAsked(pausedElsewhere as never, recorded), null, "nothing resumes on another engine");
     const asked = resumeAsked(paused as never, recorded);
     assert.deepEqual(asked, { text: "continue with a red moon" });
     // Hostile: the session names another run, or more than its instruction. Only the words are
@@ -312,7 +330,7 @@ describe("what the chat's own session is told and handed after a run", () => {
       calls.map((c) => [c.method, c.params]),
       [
         [
-          "coordinator.tool",
+          "run.control",
           {
             threadId: THREAD,
             runId: RUN,
@@ -321,10 +339,7 @@ describe("what the chat's own session is told and handed after a run", () => {
             args: { text: "continue with a red moon" },
           },
         ],
-        [
-          "coordinator.tool",
-          { threadId: THREAD, runId: RUN, messageId: "m4", name: "resume_run", args: { text: "go on" } },
-        ],
+        ["run.control", { threadId: THREAD, runId: RUN, messageId: "m4", name: "resume_run", args: { text: "go on" } }],
       ],
     );
 
@@ -333,7 +348,7 @@ describe("what the chat's own session is told and handed after a run", () => {
     const refusing = {
       call: async (method: string, params: any) => {
         refused.push({ method, params });
-        if (method === "coordinator.tool")
+        if (method === "run.control")
           throw new Error("Only a paused run from this conversation can be resumed. No new run was started.");
         return null;
       },
@@ -345,7 +360,7 @@ describe("what the chat's own session is told and handed after a run", () => {
     assert.match(JSON.stringify(told?.batch), /Only a paused run from this conversation can be resumed/);
   });
 
-  it("A7. the chat holds its next message until the run it asked to resume is reserved, never past its bound", async () => {
+  it("A7. the chat holds its next message until the run it asked to resume is reserved or already held, never past its bound", async () => {
     const studio = studioWith(hostWith(null));
     let released = false;
     const resuming = resumeAfterReply(studio, chatOf(studio), { ...paused, messageId: "m5" } as never, {
@@ -355,10 +370,17 @@ describe("what the chat's own session is told and handed after a run", () => {
     });
     await sleep(200);
     assert.equal(released, false, "the resumed run is not reserved yet: the chat still holds");
-    // run-dispatch.ts reserves the run once the host's resume reaches the loop.
-    studio.startingRuns.set(RUN, { run: { runId: RUN } as never, threadId: THREAD, settled: new Promise(() => {}) });
+    // run-dispatch.ts reserves the run once the host's resume reaches the loop (`handleRunStart` asks first).
+    resumeStopped(studio, { type: "run_start", threadId: THREAD, run: { runId: RUN } as never, resume: true });
     await resuming;
     assert.equal(released, true);
+
+    // A run already held, resumed meanwhile from Builds (the host's resume then dispatches nothing): the chat holds not at all.
+    const held = studioWith(hostWith(null));
+    held.activeRuns.set(THREAD, { threadId: THREAD, run: { runId: RUN }, done: false } as never);
+    const heldSince = Date.now();
+    await resumeAfterReply(held, chatOf(held), { ...paused, messageId: "m8" } as never, { text: "go on" }, 10_000);
+    assert.ok(Date.now() - heldSince < 2_000, `held ${Date.now() - heldSince} ms for a run already reserved`);
 
     // A resume that never comes frees the chat once the bound passes.
     const lone = studioWith(hostWith(null));
@@ -402,6 +424,7 @@ describe("the chat's own session after a finished build, with Loop on (reopen-ru
     goal: "a dusk plaza",
     landed: true,
     stoppedBecause: null,
+    onLeadEngine: true,
     model: null,
     messageId: "m1",
     reopenable: true,

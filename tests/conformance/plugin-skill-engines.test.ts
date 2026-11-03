@@ -17,10 +17,10 @@ import type { PluginInfo, PluginManifest } from "../../src/shared/plugins.ts";
 import { CoreFact, type FactRef } from "../../src/shared/project-facts.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
-import { CapabilityAudience, planningCapabilities } from "../../src/main/planning-capabilities.ts";
+import { planningCapabilities } from "../../src/main/planning-capabilities.ts";
 import { offersUnrealGame } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { coreLite } from "../helpers/core-lite.ts";
-import { copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
+import { capabilityFactsOf, copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
 import { makeResources } from "../helpers/resources.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -119,15 +119,7 @@ test("the capability facts a session without plugin tools reads carry only the s
   const manifest = validateManifest(withSkills(SKILLS));
   const plugins = [{ manifest, enabled: true, removed: false } as PluginInfo];
   const skillsIn = (engine?: GameEngine) => {
-    const text = planningCapabilities(
-      1,
-      plugins,
-      { sources: [] } as never,
-      [],
-      true,
-      CapabilityAudience.Planning,
-      engine,
-    );
+    const text = planningCapabilities(1, plugins, { sources: [] } as never, [], engine);
     const facts = JSON.parse(text.split("\n\n")[2] ?? "{}") as { plugins: Array<{ skills: Array<{ name: string }> }> };
     return facts.plugins[0]?.skills.map((s) => s.name);
   };
@@ -386,12 +378,9 @@ test("a Roblox game's chat lists the Roblox skills and a web game's does not", a
     (await core.games.factsOf(obby.name)).map((fact) => fact.id),
     [ROBLOX_PROJECT],
   );
-  const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
-  /** The skill names the chat's capability facts list for the plugin `roblox`. */
+  /** The skill names the capability facts list for the plugin `roblox`. */
   const robloxSkills = async (project: string) => {
-    const text = String(
-      await api["capabilities.describe"]?.({ project, threadId: await core.createGameThread(project) }),
-    );
+    const text = await capabilityFactsOf(core, project);
     const facts = text
       .split("\n\n")
       .map((part) => {

@@ -6,13 +6,6 @@ import { personWrote } from "./person-wrote.ts";
 import { SteerDelivery } from "./steer-delivery.ts";
 import { isSlashText, JoinKind, joinKindOf, type OpenOptions } from "./steer-switch.ts";
 
-/**
- * This queue hands a message to a run's lead while its build runs (live chat, `beforeProcess`
- * answering with a `LeadDoor`); an older copy keeps every message behind the build. Read by
- * main.ts through live-chat-served.ts `serveLiveChat`, never imported by name.
- */
-export const SERVES_LIVE_CHAT = true;
-
 /** A user message as the queue holds it: the dispatch action, plus its id once queued. */
 export type QueueAction = AnyRecord & { threadId: string; messageId?: string; text?: string };
 
@@ -99,7 +92,7 @@ export interface SteerHandle {
   /** The session starts; a runner that takes switches says so (`switches`), and a message that changes how the turn runs joins it too. */
   open(options?: OpenOptions): Promise<QueueAction[]>;
   /** The runner went on with this message's settings: what is sent after it is weighed against them. */
-  follows?(item: QueueAction): void;
+  follows(item: QueueAction): void;
   close(result?: { steered?: string[] } | null): Promise<QueueAction[]>;
   deliver(items: QueueAction[], how: SteerDelivery): Promise<void>;
   requeue(items: QueueAction[]): Promise<void>;
@@ -129,9 +122,6 @@ export interface LeadDoor {
    */
   keeps?: boolean;
 }
-
-/** This copy of the queue keeps a message a lead's door only tells (`LeadDoor.keeps`): director/wake.ts reads it. */
-export const QUEUE_KEEPS_TOLD = true;
 
 /** A value `beforeProcess` answered with: the lead's door for the next message, or anything else. */
 const isLeadDoor = (value: unknown): value is LeadDoor =>
@@ -321,14 +311,14 @@ export class MessageQueue {
    * Waits until `next` may be answered — or answers with the lead's door when the lead takes it, or
    * null when the lead's lines changed and the queue should look again.
    */
-  beforeProcess: (threadId: string, next?: QueueAction) => Promise<unknown>;
+  beforeProcess: (threadId: string, next: QueueAction) => Promise<unknown>;
   steerable: (threadId: string, action: QueueAction) => boolean;
   /** The door to the run's lead that takes this message now, or null. */
   lead: (threadId: string, action: QueueAction) => LeadDoor | null;
   constructor(
     host: Host,
     process: (action: QueueAction, steer?: SteerHandle) => Promise<unknown>,
-    beforeProcess: (threadId: string, next?: QueueAction) => Promise<unknown> = async () => {},
+    beforeProcess: (threadId: string, next: QueueAction) => Promise<unknown> = async () => {},
     steerable = (_threadId: string, _action: QueueAction): boolean => true,
     lead = (_threadId: string, _action: QueueAction): LeadDoor | null => null,
   ) {

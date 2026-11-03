@@ -661,7 +661,7 @@ function absolute(value: string | undefined): string | undefined {
 
 /** What a session's tools may do: a build edits; a read-only session, a lead while its build runs and Plan only look. */
 function sessionAccess(request: DelegateRequest): CursorAccess {
-  const readOnly = Boolean(request.readOnly) && !request.coordinator;
+  const readOnly = Boolean(request.readOnly);
   return readOnly || chatMode(request) === PermissionMode.Plan ? CursorAccess.ReadOnly : CursorAccess.Build;
 }
 

@@ -3,7 +3,7 @@
  * transcript entries, the questions waiting on the user, the follow-ups waiting in the queue, and
  * the plan under review. Pure, so ChatPanel only draws it.
  */
-import { conversationThrough, finishRequested } from "../../shared/coordinator.ts";
+import { conversationThrough, finishRequested } from "../../shared/chat-run.ts";
 import { mergeChatEvents } from "../../shared/chat-history.ts";
 import { isPlanReviewRecord, type PlanReviewRecord } from "../../shared/composer.ts";
 import { CustomEvent, customEvent, customPayload, customRecord, delegatedPayload } from "../../shared/custom-events.ts";

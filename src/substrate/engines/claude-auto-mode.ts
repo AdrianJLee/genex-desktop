@@ -1,7 +1,7 @@
 /**
  * The studio's rules for Claude Code's Auto classifier: the settings key `autoMode`, which every
- * session that asks carries (a game chat's own session, a build's lead, the run's coordinator, a
- * worker of the chat's lead) and
+ * session that asks carries (a game chat's own session, a build's lead, a worker of the chat's
+ * lead) and
  * which only Auto reads (and Plan, where it runs with Auto's semantics).
  *
  * Auto should let a person building a game have everything ordinary game work needs without a
@@ -34,7 +34,7 @@ export interface AutoModeSeat {
   /**
    * True for the game chat's own session in its game folder, which the studio checkpoints before
    * each message it answers (`main/chat-checkpoints.ts`) and the chat's Rewind restores. False for
-   * a build's lead or the run's coordinator, whose edits are not checkpointed that way.
+   * a build's lead, whose edits are not checkpointed that way.
    */
   gameFolder: boolean;
   /** A worker of the chat's lead: boxed, prompted by the lead, its work merged by the lead. */

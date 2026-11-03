@@ -283,14 +283,12 @@ export interface DelegateRequest {
   liveTools?: LiveToolSpec[];
   onLiveTool?: (name: string, args: Record<string, unknown>) => Promise<LiveToolResult>;
   /**
-   * A session that may look and talk but never edit or run commands (a reviewer, a reader worker), unless it asks in the chat's mode (`leadAsks`: the run's coordinator). Never a
-   * run's lead: the host seats every lead as a full agent.
+   * A session that may look and talk but never edit or run commands (a reviewer, a reader worker).
+   * Never a run's lead: the host seats every lead as a full agent.
    */
   readOnly?: boolean;
   /** A Loop's reviewer: the folder it reads (its cwd is a home of its own, which its brief must not name as the build). */
   reviewer?: { reads: string };
-  /** Host-owned stable coordinator workspace; keep session cwd across chat turns. */
-  coordinator?: boolean;
   /**
    * Stills that go into the builder's prompt as image blocks: the
    * reference frames on a facet's first iteration, reference|build pair images when a style
@@ -314,7 +312,7 @@ export interface DelegateRequest {
    */
   permissions?: DelegatePermissions;
   /**
-   * A build's lead, or the run's coordinator, in a game chat: the chat's main agent, limited only by
+   * A build's lead in a game chat: the chat's main agent, limited only by
    * the chat's mode and the rules the person saved. Its session gets Claude Code's tools, no sandbox
    * and no blanket shell, in its chat's Auto, Accept edits or Bypass, else in Manual
    * (`LeadAsks.mode`), which the picker switches while it runs (`onControl`); every tool call but a
@@ -429,7 +427,7 @@ export interface AskFirst {
 }
 
 /**
- * What a build's lead or the run's coordinator is handed: a session that asks, and the host's word
+ * What a build's lead is handed: a session that asks, and the host's word
  * on each tool call before anything else decides it. Claude Code applies its mode and allow rules
  * (the saved ones, a game's own `.claude` settings) before it asks, so only a check that runs ahead
  * of them holds while the chat is in a mode the session could not be switched to.

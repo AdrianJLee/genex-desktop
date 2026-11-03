@@ -275,14 +275,6 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   { file: "loop/director/wake-schedule.ts", marker: "turn.worked" },
   { file: "loop/director/wake.ts", marker: "TurnEnd.Continue" },
   { file: "loop/director/wake.ts", marker: "turnReturnedAt" },
-  // A run leads an open Loop only when every part it depends on says it serves one (run-dispatch.ts
-  // `OPEN_LOOP_PARTS`): a copy that has the calls above but not the flag still refuses every one.
-  { file: "loop/director.ts", marker: "SERVES_OPEN_LOOP" },
-  { file: "loop/director/setup.ts", marker: "SERVES_OPEN_LOOP" },
-  { file: "loop/director/wake.ts", marker: "SERVES_OPEN_LOOP" },
-  { file: "loop/director/wake-schedule.ts", marker: "SERVES_OPEN_LOOP" },
-  { file: "loop/studio-state.ts", marker: "SERVES_OPEN_LOOP" },
-  { file: "loop/run-dispatch.ts", marker: "SERVES_OPEN_LOOP" },
   // A web page missing its files is refused by Genex's own gate (builtin-hooks.ts), from the typed
   // list game.validate answers and only where a web game is served.
   { file: "loop/chat-dispatch.ts", marker: "readiness?.missing" },
@@ -292,14 +284,12 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   // launch words describe it, and the runner vocabulary names the refusals.
   { file: "loop/run-dispatch.ts", marker: "loopProfileOf(" },
   { file: "loop/chat-dispatch.ts", marker: "startsNextOpenLoop(" },
-  { file: "loop/reopen-run.ts", marker: "director?.open" },
   { file: "loop/reopen-run.ts", marker: "OPEN_LOOP_REFUSAL.notReopenable" },
-  // A Loop in place is told its launch in its own words (refused there when kept parts can't lead
-  // it), a finished run's journal says what comes next, a resume goes on in its journal's kind, and
-  // after it the chat keeps its status alone (`inPlace`).
+  // A Loop in place is told its launch in its own words, a finished run's journal says what comes
+  // next, a resume goes on in its journal's kind, and after it the chat keeps its status alone
+  // (`inPlace`).
   { file: "loop/chat-dispatch.ts", marker: "openLaunchPromise(" },
   { file: "loop/chat-dispatch.ts", marker: "finishedInPlace(" },
-  { file: "loop/chat-dispatch.ts", marker: "openLoopServed(" },
   { file: "loop/run-dispatch.ts", marker: "resumedProfile(" },
   { file: "loop/after-loop-run.ts", marker: "inPlace" },
   { file: "loop/after-loop-run-prompts.ts", marker: "inPlaceControls(" },

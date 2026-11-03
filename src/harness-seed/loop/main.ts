@@ -22,13 +22,11 @@ import { chatWorkerTool } from "./workers/chat-workers.ts";
 import { loadSkills } from "./skills.ts";
 import { runSelftest } from "./selftest.ts";
 import { MessageQueue } from "./message-queue.ts";
-import * as queueParts from "./message-queue.ts";
 import { HostMethod } from "./host-methods.ts";
 import { handleUserMessage, rewindAttachedPictures } from "./chat-dispatch.ts";
 import { handleRunStart, resumeRun } from "./run-dispatch.ts";
 import { handleBootNotice } from "./boot-notice.ts";
 import { buildHolds, chatWaitsFor, leadDoor, stopRun, stopRunsOf } from "./live-chat.ts";
-import { serveLiveChat } from "./live-chat-served.ts";
 import { LOCAL_ROLES_CAPABILITY, servesLocalRoles } from "./local-roles-served.ts";
 import { heldRuns, StatusLane, type Studio } from "./studio-state.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, Host, HostCall } from "../types/harness.d.ts";
@@ -53,7 +51,6 @@ const CAPABILITIES = [
   "compact",
   "selftest",
   "scoreboard",
-  "coordinator",
   "director",
   "message-queue",
   "rewind",
@@ -101,8 +98,6 @@ export async function createStudio(host: Host) {
     (threadId, action) => !buildHolds(studio, threadId, action.project),
     (threadId, action) => leadDoor(studio, threadId, action),
   );
-  // A waking run's start says its lead takes the chat only when this queue hands messages to it.
-  serveLiveChat(queueParts);
 
   function scoped(threadId: string, lane: StatusLane = StatusLane.Run): HarnessCtx {
     return {
@@ -235,8 +230,7 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
  */
 function stopCurrentMessage(studio: Studio, messages: Pick<MessageQueue, "current">, threadId: string): void {
   if (heldRuns(studio).some((active) => active.threadId === threadId && !active.done)) return;
-  // A kept message-queue.ts from before this has no `current`: its Stop is the old one.
-  const current = messages.current?.(threadId);
+  const current = messages.current(threadId);
   if (current) studio.stoppedMessages?.add(current);
 }
 

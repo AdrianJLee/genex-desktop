@@ -17,7 +17,6 @@ import {
   SEED_MOVES,
   type SeedUpgradeReport,
 } from "../../src/substrate/seed-upgrade.ts";
-import { RENAMED_SEED_FILES, renameInSource } from "../../src/substrate/seed-renames.ts";
 import { SEED_CALL_MEMORY_PREFIX, seedCallMemory, seedUpgradedPayload } from "../../src/main/seed-upgrade-notice.ts";
 import { pathExists } from "../../src/substrate/fsx.ts";
 import { StudioCore } from "../../src/main/studio-core.ts";
@@ -26,28 +25,13 @@ import { coreLite } from "../helpers/core-lite.ts";
 import { git, STUDIO_COMMITTER } from "../../src/substrate/snapshots.ts";
 import { cloneSeededWorkspace } from "../helpers/seed-upgrade-fixture.ts";
 import { closeBeforeCleanup, removeTree, tmpDir } from "../helpers/tmp.ts";
-import { readdirSync, readFileSync } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { readdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { studioActivity } from "../../src/shared/studio-activity.ts";
 import { toEntries } from "../../src/renderer/chat-entries.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 import { SEED_GENERATED } from "../../scripts/gen-harness-types.ts";
-import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
-import { gameRepo, loopHost } from "../helpers/loop-host.ts";
-import { copyProject, Project } from "../helpers/project-fixtures.ts";
-import { callIsolated, linkIsolated } from "../helpers/isolated-import.ts";
-
-/** Where an upgrade keeps the agent's copy of `rel`: a renamed module's new path (seed-renames.ts). */
-const keptAt = (rel: string): string => RENAMED_SEED_FILES[rel] ?? rel;
-
-/** A renamed module's path before the rename, by its path now. */
-const OLD_PATH: Readonly<Record<string, string>> = Object.fromEntries(
-  Object.entries(RENAMED_SEED_FILES).map(([oldPath, newPath]) => [newPath, oldPath]),
-);
-
-/** What an older vintage's copy of `rel` exported, wherever the module stood then. */
-const vintageExports = (modules: Record<string, string[]>, rel: string): string[] =>
-  modules[rel] ?? modules[OLD_PATH[rel] ?? ""] ?? [];
+import { linkIsolated } from "../helpers/isolated-import.ts";
 
 async function rig(): Promise<{ seed: string; ws: string; manifest: string; backup: string }> {
   const root = await tmpDir("seed-upgrade-");
@@ -596,56 +580,45 @@ describe("retiring a seed file the app no longer ships", () => {
 });
 
 /**
- * Every vintage the seed shipped before the archive epoch (phase 5): an agent that edited any of its
- * parts kept them across upgrades, which is why each later change had to keep the older names
- * exported. Upgrading into the epoch (seed-archive.ts) archives every such kept part, of a file
- * this seed changes or no longer ships, and lays the shipped copy down, so the harness that boots
- * is the shipped one: no older copy is left beside it to fail at link time.
+ * An install from before the archive epoch whose agent edited every part of an older seed, kept
+ * across upgrades until now. Upgrading into the epoch (seed-archive.ts) archives every such kept
+ * part, of a file this seed changes or no longer ships, and lays the shipped copy down, so the
+ * harness that boots is the shipped one: no older copy is left beside it to fail at link time.
  */
-describe("seed upgrade into the archive epoch, over every older vintage", () => {
+describe("seed upgrade into the archive epoch, over an older install", () => {
   const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-  const fixtures = path.resolve(fileURLToPath(new URL("../fixtures", import.meta.url)));
   /** A hash no seed file has: the copy an older seed laid down, which the agent then edited. */
   const OLDER_SEED_HASH = "0".repeat(64);
+  /** What the agent's edit of an older part holds. */
+  const OLDER_EDIT = "export const OLDER_EDIT = true;\n// the agent's own change\n";
 
-  /** Every part an older vintage exported, by its path as a TypeScript seed names it (a renamed module left out). */
-  function olderParts(): Map<string, string[]> {
-    const parts = new Map<string, string[]>();
-    for (const name of readdirSync(fixtures)
-      .filter((file) => /^seed-exports-.*\.json$/.test(file))
-      .sort()) {
-      const { modules } = JSON.parse(readFileSync(path.join(fixtures, name), "utf8")) as {
-        modules: Record<string, string[]>;
-      };
-      for (const [rel, names] of Object.entries(modules)) {
-        const at = rel.replace(/\.mjs$/, ".ts");
-        if (!Object.hasOwn(RENAMED_SEED_FILES, at)) parts.set(at, names);
-      }
-    }
-    return parts;
+  /** Every `.ts` part the shipped seed has under `loop/` and `tools/`, workspace-relative. */
+  function olderParts(): string[] {
+    const parts: string[] = [];
+    for (const top of ["loop", "tools"])
+      for (const entry of readdirSync(path.join(shipped, top), { recursive: true, withFileTypes: true }))
+        if (entry.isFile() && entry.name.endsWith(".ts"))
+          parts.push(path.relative(shipped, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"));
+    return parts.sort();
   }
 
   it("archives each kept older part with the agent's edit, lays the shipped copy down, and the harness loads", async () => {
     const parts = olderParts();
-    assert.ok(parts.size > 100, `the vintages name their parts (${parts.size})`);
+    assert.ok(parts.length > 100, `the seed has its parts (${parts.length})`);
     const root = await tmpDir("seed-epoch-");
     const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
-    // An install from before the epoch whose agent edited every one of those parts of an older seed.
     const body = JSON.parse(await readFile(manifest, "utf8")) as {
       files: Record<string, string>;
       archiveEpoch?: number;
     };
     delete body.archiveEpoch;
-    const edits = new Map<string, string>();
     // The copy the shipped seed laid down in that workspace, or null where it ships none.
     const laid = new Map<string, string | null>();
-    for (const [rel, names] of parts) {
+    for (const rel of parts) {
       body.files[rel] = OLDER_SEED_HASH;
-      const text = `${names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`).join("\n")}\n// the agent's own change\n`;
-      edits.set(rel, text);
       laid.set(rel, await readFile(path.join(ws, rel), "utf8").catch(() => null));
       await mkdir(path.dirname(path.join(ws, rel)), { recursive: true });
-      await writeFile(path.join(ws, rel), text);
+      await writeFile(path.join(ws, rel), OLDER_EDIT);
     }
     await writeFile(manifest, JSON.stringify(body));
 
@@ -658,18 +631,10 @@ describe("seed upgrade into the archive epoch, over every older vintage", () => 
     });
 
     assert.equal(report.archive?.dir, "archive/2026-10-30");
-    assert.deepEqual(
-      [...(report.archive?.edits ?? [])].sort(),
-      [...parts.keys()].sort(),
-      "every kept part is archived",
-    );
-    for (const [rel, text] of edits) {
-      // The upgrade's renames (seed-renames.ts) reach the archived copy too.
-      assert.equal(
-        await readFile(path.join(ws, "archive", "2026-10-30", rel), "utf8"),
-        renameInSource(rel, text),
-        `${rel}: the agent's copy`,
-      );
+    assert.deepEqual([...(report.archive?.edits ?? [])].sort(), parts, "every kept part is archived");
+    for (const rel of parts) {
+      const archived = await readFile(path.join(ws, "archive", "2026-10-30", rel), "utf8");
+      assert.equal(archived, OLDER_EDIT, `${rel}: the agent's copy`);
       const shippedCopy = laid.get(rel) ?? null;
       if (shippedCopy !== null)
         assert.equal(await readFile(path.join(ws, rel), "utf8"), shippedCopy, `${rel}: shipped`);
@@ -917,18 +882,10 @@ describe("seed upgrade across the harness step flag", () => {
       ["loop/director/wake-schedule.ts", "turn.worked", /turn\.worked/],
       ["loop/director/wake.ts", "TurnEnd.Continue", /TurnEnd\.Continue/],
       ["loop/director/wake.ts", "turnReturnedAt", /turnReturnedAt/],
-      // A copy that has every call above but not the flag still refuses every Loop in place.
-      ["loop/director.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/director/setup.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/director/wake.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/director/wake-schedule.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/studio-state.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      ["loop/run-dispatch.ts", "SERVES_OPEN_LOOP", /SERVES_OPEN_LOOP/],
-      // After a Loop in place: its launch words and their guard, a finished one found by its journal,
+      // After a Loop in place: its launch words, a finished one found by its journal,
       // a resume in its journal's kind, no reopen, and the chat's status alone.
       ["loop/chat-dispatch.ts", "openLaunchPromise(", /openLaunchPromise/],
       ["loop/chat-dispatch.ts", "finishedInPlace(", /finishedInPlace/],
-      ["loop/chat-dispatch.ts", "openLoopServed(", /openLoopServed/],
       ["loop/run-dispatch.ts", "resumedProfile(", /resumedProfile/],
       ["loop/reopen-run.ts", "OPEN_LOOP_REFUSAL.notReopenable", /notReopenable/],
       ["loop/after-loop-run.ts", "inPlace", /inPlace/],
@@ -954,7 +911,6 @@ describe("seed upgrade across the harness step flag", () => {
     const older: ReadonlyArray<readonly [string, string, RegExp]> = [
       ["loop/run-dispatch.ts", "loopProfileOf(", /loopProfileOf/],
       ["loop/chat-dispatch.ts", "startsNextOpenLoop(", /startsNextOpenLoop/],
-      ["loop/reopen-run.ts", "director?.open", /director\?\.open/],
       ["loop/launch-prompts.ts", "openBuildWords(", /openBuildWords/],
       ["loop/chat-session.ts", "loopProfileOf(", /loopProfileOf/],
       ["loop/studio-state.ts", "NeedsSession", /NeedsSession/],
@@ -1044,472 +1000,6 @@ describe("seed upgrade across the harness step flag", () => {
     await writeFile(turn, `${shippedTurn}\n// the agent's own change, on the new shape\n`);
     const third = await boot();
     assert.ok(!(`${SEED_CALL_MEMORY_PREFIX}${TURN}` in (await memoryOf(third))), "the note is gone");
-  });
-});
-
-/**
- * Steer added names the loop needs to two modules that already shipped. A seed upgrade keeps
- * either file once the agent edited it, so a name steer needs must come from a module of its
- * own: imported from the kept older copy, it fails to link, the harness does not load, and the
- * watchdog rewinds the agent's edits.
- */
-describe("seed upgrade across steer", () => {
-  const vintage = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../fixtures/seed-exports-pre-steer.json", import.meta.url)), "utf8"),
-  ) as { modules: Record<string, string[]> };
-  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-
-  it("an agent that edited its message queue and studio state before steer keeps them, and the harness still loads", async () => {
-    const root = await tmpDir("seed-steer-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-    // The agent's copies of the older vintage: every name each exported then, and nothing newer.
-    for (const [rel, names] of Object.entries(vintage.modules)) {
-      const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
-      await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
-    }
-
-    const report = await applySeed({
-      seedDir: shipped,
-      workspaceDir: ws,
-      manifestFile: manifest,
-      backupDir: path.join(root, "backup"),
-    });
-    for (const rel of Object.keys(vintage.modules))
-      assert.ok(report.kept.includes(keptAt(rel)), `${rel} is the agent's`);
-
-    // What the bootstrap does: import the workspace's own main.ts. A sibling importing a name the
-    // kept copies never exported would throw here, at link time.
-    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
-    assert.equal(main.createStudio, "function");
-  });
-});
-
-/**
- * Messages without a queue added switches, waits that end when the person writes, and workers that
- * carry into a Loop, to modules that already shipped. A seed upgrade keeps any of them once the
- * agent edited it, so every name the change needs comes from a module of its own.
- */
-describe("seed upgrade across messages without a queue", () => {
-  const vintage = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../fixtures/seed-exports-pre-no-queue.json", import.meta.url)), "utf8"),
-  ) as { modules: Record<string, string[]> };
-  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-
-  it("an agent that edited its queue, chat turn, workers or lead before the change keeps them, and the harness still loads", async () => {
-    const root = await tmpDir("seed-no-queue-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-    for (const rel of [
-      "loop/steer-switch.ts",
-      "loop/steer-switch-prompts.ts",
-      "loop/turn-switch.ts",
-      "loop/person-wrote.ts",
-      "loop/workers/carry.ts",
-    ])
-      assert.ok(await pathExists(path.join(ws, rel)), `${rel} is seeded`);
-    // The agent's copies of the older vintage: every name each exported then, and nothing newer.
-    for (const [rel, names] of Object.entries(vintage.modules)) {
-      const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
-      await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
-    }
-    const report = await applySeed({
-      seedDir: shipped,
-      workspaceDir: ws,
-      manifestFile: manifest,
-      backupDir: path.join(root, "backup"),
-    });
-    for (const rel of Object.keys(vintage.modules))
-      assert.ok(report.kept.includes(keptAt(rel)), `${rel} is the agent's`);
-    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
-    assert.equal(main.createStudio, "function");
-  });
-
-  it("a lead goes on hearing the chat in its wrap-up only while the chat's queue and door both keep what it is told", async () => {
-    const root = await tmpDir("seed-no-queue-wrap-");
-    const wake = (ws: string) => path.join(ws, "loop", "director", "wake.ts");
-    const fresh = path.join(root, "fresh");
-    await applySeed({ seedDir: shipped, workspaceDir: fresh, manifestFile: path.join(root, "fresh.json") });
-    assert.equal(await callIsolated(wake(fresh), "wrapUpKeeps"), true);
-    for (const rel of ["loop/message-queue.ts", "loop/live-chat.ts"]) {
-      const ws = path.join(root, path.basename(rel, ".ts"));
-      const manifest = path.join(root, `${path.basename(rel, ".ts")}.json`);
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-      // The agent's copy from before the change: the names it exported then, and nothing newer.
-      const older = vintage.modules[rel].map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
-      await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
-      await applySeed({
-        seedDir: shipped,
-        workspaceDir: ws,
-        manifestFile: manifest,
-        backupDir: path.join(ws, "..", "b"),
-      });
-      assert.equal(await callIsolated(wake(ws), "wrapUpKeeps"), false, `${rel} kept from before: the line shuts`);
-    }
-  });
-});
-
-/**
- * Live chat during a build gave the queue, the run's start and the wake loop names they had not
- * exported: the lead's door, the run's close before its self-improvement pass, the line a run's
- * lead takes the chat on. A seed upgrade keeps any of those modules once the agent edited it, so
- * each name live chat needs comes from a module of its own (loop/live-chat.ts,
- * loop/director/lead-line.ts, loop/director/live-prompts.ts); imported from a kept older copy it
- * would fail to link, and the harness would not load.
- */
-describe("seed upgrade across live chat", () => {
-  const vintage = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../fixtures/seed-exports-pre-live.json", import.meta.url)), "utf8"),
-  ) as { modules: Record<string, string[]> };
-  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-
-  it("an agent that edited its queue, run start or director before live chat keeps them, and the harness still loads", async () => {
-    const root = await tmpDir("seed-live-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-    // The new modules live chat added are laid down beside the agent's older copies.
-    for (const rel of ["loop/live-chat.ts", "loop/director/lead-line.ts", "loop/director/live-prompts.ts"])
-      assert.ok(await pathExists(path.join(ws, rel)), `${rel} is seeded`);
-    // The agent's copies of the older vintage: every name each exported then, and nothing newer.
-    for (const [rel, names] of Object.entries(vintage.modules)) {
-      const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
-      await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
-    }
-
-    const report = await applySeed({
-      seedDir: shipped,
-      workspaceDir: ws,
-      manifestFile: manifest,
-      backupDir: path.join(root, "backup"),
-    });
-    for (const rel of Object.keys(vintage.modules))
-      assert.ok(report.kept.includes(keptAt(rel)), `${rel} is the agent's`);
-
-    // What the bootstrap does: import the workspace's own main.ts. Live chat importing a name the
-    // kept copies never exported would throw here, at link time.
-    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
-    assert.equal(main.createStudio, "function");
-  });
-
-  it("a steer-delivery.ts kept from before live chat: a Resume's inbox hands nothing over twice", async () => {
-    const root = await tmpDir("seed-live-steer-");
-    const ws = path.join(root, "workspace");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: path.join(root, "manifest.json") });
-    // The agent's copy from before live chat: its vocabulary has no `Lead`.
-    const older = (vintage.modules["loop/steer-delivery.ts"] ?? []).map(
-      (name) => `export const ${name} = { Prompt: "prompt", Native: "native", Interrupt: "interrupt" };`,
-    );
-    await writeFile(path.join(ws, "loop", "steer-delivery.ts"), `${older.join("\n")}\n// the agent's own change\n`);
-    const inbox = (await import(pathToFileURL(path.join(ws, "loop", "run-inbox.ts")).href)) as {
-      createRunInbox: (
-        ctx: unknown,
-        at: { threadId: string; runId: string },
-      ) => {
-        addressed(): Promise<Array<{ facetId: string; text: string }>>;
-        backlog(): Promise<string[]>;
-      };
-    };
-    // A steer to the sky worker, already handed over before the pause (no `how`: not a lead's).
-    const log = [
-      {
-        id: "e1",
-        data: { type: "custom", event_type: "run_steering", payload: { runId: "r", text: "pinker", facetId: "sky" } },
-      },
-      {
-        id: "e2",
-        data: {
-          type: "custom",
-          event_type: "run_steering_delivered",
-          payload: { runId: "r", messageId: "e1", facetId: "sky", stage: "now" },
-        },
-      },
-    ];
-    const appended: unknown[] = [];
-    const ctx = {
-      call: async (method: string, params: { batch?: unknown[] }) => {
-        if (method === "events.list") return log;
-        if (method === "events.append") appended.push(...(params.batch ?? []));
-        return null;
-      },
-    };
-    const resumed = inbox.createRunInbox(ctx, { threadId: "t", runId: "r" });
-    assert.deepEqual(await resumed.addressed(), [], "the sky worker was told already");
-    assert.deepEqual(await resumed.backlog(), [], "nothing is unread");
-    assert.deepEqual(appended, [], "nothing is handed over a second time");
-  });
-
-  it("a queue kept from before live chat: the build's start does not say its lead takes the chat", async () => {
-    const live = (await import("../../src/harness-seed/loop/live-chat-served.ts")) as {
-      serveLiveChat?: (queue: Readonly<Record<string, unknown>>) => void;
-      servesLiveChat?: () => boolean;
-    };
-    assert.equal(typeof live.serveLiveChat, "function", "main.ts tells live chat which queue it wired");
-    const older = Object.fromEntries((vintage.modules["loop/message-queue.ts"] ?? []).map((name) => [name, name]));
-    try {
-      live.serveLiveChat?.(older);
-      assert.equal(live.servesLiveChat?.(), false, "an older queue keeps every message behind the build");
-      live.serveLiveChat?.(await import("../../src/harness-seed/loop/message-queue.ts"));
-      assert.equal(live.servesLiveChat?.(), true, "today's queue hands a message to the lead");
-    } finally {
-      live.serveLiveChat?.({});
-    }
-  });
-});
-
-/**
- * The same agent after the build: once a lead's run is over, the chat's next message goes to the
- * chat's own session with the run's controls, not to a coordinator. A seed upgrade keeps any module
- * that path touches once the agent edited it, so each name it needs comes from a module of its own
- * (loop/after-loop-run.ts, loop/after-loop-run-prompts.ts); imported from a kept older copy it would fail
- * to link, and the harness would not load. And where a kept older chat turn or brief would give that
- * session no run controls, the chat asks first (`ownSessionAfterNight`) and the coordinator answers.
- */
-describe("seed upgrade across the same agent after the build", () => {
-  const vintage = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../fixtures/seed-exports-pre-after-loop-run.json", import.meta.url)), "utf8"),
-  ) as { modules: Record<string, string[]> };
-  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-  /** An older copy of a module as the agent kept it: every name it exported then, and nothing newer. */
-  const olderCopy = (rel: string): string => {
-    const older = vintageExports(vintage.modules, rel).map(
-      (name) => `export const ${name} = () => ${JSON.stringify(name)};`,
-    );
-    // As a seed upgrade leaves the agent's copy: its old names rewritten (seed-renames.ts).
-    return renameInSource(rel, `${older.join("\n")}\n// the agent's own change\n`);
-  };
-
-  it("an agent that edited its chat turn, its brief or its dispatch before it keeps them, and the harness still loads", async () => {
-    const root = await tmpDir("seed-after-run-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-    // The new modules the after-run chat added are laid down beside the agent's older copies.
-    for (const rel of ["loop/after-loop-run.ts", "loop/after-loop-run-prompts.ts"])
-      assert.ok(await pathExists(path.join(ws, rel)), `${rel} is seeded`);
-    for (const rel of Object.keys(vintage.modules)) await writeFile(path.join(ws, rel), olderCopy(rel));
-
-    const report = await applySeed({
-      seedDir: shipped,
-      workspaceDir: ws,
-      manifestFile: manifest,
-      backupDir: path.join(root, "backup"),
-    });
-    for (const rel of Object.keys(vintage.modules))
-      assert.ok(report.kept.includes(keptAt(rel)), `${rel} is the agent's`);
-
-    // What the bootstrap does: import the workspace's own main.ts. The after-run chat importing a
-    // name the kept copies never exported would throw here, at link time.
-    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
-    assert.equal(main.createStudio, "function");
-  });
-
-  it("a chat turn, the runner that picks it or its brief kept from before: the chat after a lead's run is the coordinator's again", async () => {
-    /** Whether a workspace whose `kept` module is the agent's older copy sends the chat after a run to its own session. */
-    const ownSession = async (kept: string | null): Promise<unknown> => {
-      const root = await tmpDir("seed-after-run-part-");
-      const ws = path.join(root, "workspace");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: path.join(root, "manifest.json") });
-      if (kept) await writeFile(path.join(ws, kept), olderCopy(kept));
-      const dispatch = (await import(pathToFileURL(path.join(ws, "loop", "chat-dispatch.ts")).href)) as {
-        ownSessionAfterLoopRun?: () => boolean;
-      };
-      return dispatch.ownSessionAfterLoopRun ? dispatch.ownSessionAfterLoopRun() : null;
-    };
-    assert.equal(await ownSession(null), true, "every part serves it: the chat's own session answers");
-    // turn-loop.ts is the runner between the dispatch and the chat turn: a kept one may not hand
-    // the turn the run it answers after.
-    const parts = ["loop/delegated-turn.ts", "loop/chat-session.ts", "loop/turn-loop.ts"];
-    const seen: Array<{ kept: string; ownSession: unknown }> = [];
-    for (const kept of parts) seen.push({ kept, ownSession: await ownSession(kept) });
-    assert.deepEqual(
-      seen,
-      parts.map((kept) => ({ kept, ownSession: false })),
-      "an older chat turn, runner or brief would give that session no run controls and tell it to pick up where it left off",
-    );
-  });
-});
-
-/**
- * A finished build reopened: after a build whose run seated a lead has finished, a message with
- * Loop on that asks for more reopens the same run with a fresh budget — through the chat's own
- * session, or the run's coordinator (loop/reopen-run.ts, and the run's side loop/director/reopen.ts). A seed upgrade keeps any module that path touches once the
- * agent edited it, so each name the reopen needs comes from a module of its own; imported from a
- * kept older copy it would fail to link, and the harness would not load.
- */
-describe("seed upgrade across a finished build reopened", () => {
-  const vintage = JSON.parse(
-    readFileSync(fileURLToPath(new URL("../fixtures/seed-exports-pre-reopen.json", import.meta.url)), "utf8"),
-  ) as { modules: Record<string, string[]> };
-  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-  /**
-   * An older copy of a module as the agent kept it: every name it exported then, and nothing newer.
-   * Its `SERVES_*` marks stay `true`, so a row isolates the one mark the reopen adds.
-   */
-  const olderCopy = (rel: string): string => {
-    const older = vintageExports(vintage.modules, rel).map((name) =>
-      name.startsWith("SERVES_")
-        ? `export const ${name} = true;`
-        : `export const ${name} = () => ${JSON.stringify(name)};`,
-    );
-    // As a seed upgrade leaves the agent's copy: its old names rewritten (seed-renames.ts).
-    return renameInSource(rel, `${older.join("\n")}\n// the agent's own change\n`);
-  };
-
-  it("a chat turn, its runner, the after-run words, the coordinator or the run's start kept from before: no finished build reopens through what it serves, and the chat's own session still answers after it", async () => {
-    /** What a workspace whose `kept` module is the agent's older copy does after a lead's finished run. */
-    const serves = async (kept: string | null): Promise<unknown> => {
-      const root = await tmpDir("seed-reopen-part-");
-      const ws = path.join(root, "workspace");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: path.join(root, "manifest.json") });
-      if (kept) await writeFile(path.join(ws, kept), olderCopy(kept));
-      const dispatch = (await import(pathToFileURL(path.join(ws, "loop", "chat-dispatch.ts")).href)) as {
-        ownSessionAfterLoopRun?: () => boolean;
-        ownSessionReopens?: () => boolean;
-        coordinatorReopens?: () => boolean;
-      };
-      return {
-        afterLoopRun: dispatch.ownSessionAfterLoopRun?.() ?? null,
-        reopens: dispatch.ownSessionReopens?.() ?? null,
-        coordinatorReopens: dispatch.coordinatorReopens?.() ?? null,
-      };
-    };
-    assert.deepEqual(
-      await serves(null),
-      { afterLoopRun: true, reopens: true, coordinatorReopens: true },
-      "every part serves it: the chat's own session, or the run's coordinator, reopens a finished build",
-    );
-    const rows = [
-      // An older chat part would plan on the commission's model, bridge the launch or word the old
-      // rules: the session does the work itself, and the coordinator still reopens.
-      { kept: "loop/turn-loop.ts", serves: { afterLoopRun: true, reopens: false, coordinatorReopens: true } },
-      { kept: "loop/delegated-turn.ts", serves: { afterLoopRun: true, reopens: false, coordinatorReopens: true } },
-      {
-        kept: "loop/after-loop-run-prompts.ts",
-        serves: { afterLoopRun: true, reopens: false, coordinatorReopens: true },
-      },
-      // An older coordinator or its prompt would never tell it the Loop: it continues the work as with Loop off.
-      { kept: "loop/coordinator.ts", serves: { afterLoopRun: true, reopens: true, coordinatorReopens: false } },
-      { kept: "loop/coordinator-prompts.ts", serves: { afterLoopRun: true, reopens: true, coordinatorReopens: false } },
-      // An older start would read the reopened run's inbox from its start: neither reopens.
-      { kept: "loop/run-dispatch.ts", serves: { afterLoopRun: true, reopens: false, coordinatorReopens: false } },
-    ];
-    const seen: Array<{ kept: string; serves: unknown }> = [];
-    for (const { kept } of rows) seen.push({ kept, serves: await serves(kept) });
-    assert.deepEqual(seen, rows);
-  });
-});
-
-/**
- * One Loop for every project changed shipped parts (the run's dispatch and its runner vocabulary,
- * the chat's dispatch, brief and launch words, the reopen, the director's setup, session, wake and
- * run record, SkillOpt) and gave them new modules to import (`loop/director/open/`,
- * `loop/loop-switch.ts`, `loop/engine-seat.ts`, `loop/open-loop-prompts.ts`, `loop/builtin-hooks.ts`, `loop/loop-skills.ts`).
- * Any of those parts may be one the agent edited and a seed upgrade keeps at the older vintage: each
- * new name comes from a module of its own, so a current part beside one older copy still links,
- * through the loop, every local turn's prompt and the Unreal runner.
- */
-describe("seed upgrade across one Loop for every project", () => {
-  const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
-
-  it("a kept part that doesn't serve a Loop in place refuses such a Loop at its start, with words, and is noticed", {
-    timeout: 120_000,
-  }, async () => {
-    const OPEN_LOOP_PARTS = [
-      "loop/director.ts",
-      "loop/director/setup.ts",
-      "loop/director/wake.ts",
-      "loop/director/wake-schedule.ts",
-      "loop/director/open/contract.ts",
-      "loop/builtin-hooks.ts",
-      "loop/studio-state.ts",
-      "loop/run-dispatch.ts",
-    ];
-    /** The run's start: the chat's launch reads it beside the parts. */
-    const RUN_START = "loop/run-dispatch.ts";
-    const outcomes: Array<{
-      part: string;
-      refused: unknown;
-      delegated: number;
-      noticed: boolean;
-      launch: string;
-      promised: boolean;
-    }> = [];
-    for (const part of OPEN_LOOP_PARTS) {
-      const root = await tmpDir("seed-open-guard-");
-      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
-      // The agent's copy from before Loops on any project: everything else as shipped, but no flag.
-      const copy = await readFile(path.join(ws, part), "utf8");
-      const older = copy.replace(/^export const SERVES_OPEN_LOOP = true;$/m, "");
-      assert.notEqual(older, copy, `${part} carries the flag`);
-      await writeFile(path.join(ws, part), `${older}\n// the agent's own change\n`);
-      const report = await applySeed({
-        seedDir: shipped,
-        workspaceDir: ws,
-        manifestFile: manifest,
-        backupDir: path.join(root, "backup"),
-      });
-      const dir = await gameRepo(await copyProject(Project.GodotGame, path.join(root, "game")));
-      const host = loopHost({ dir, facts: [{ id: "godot-project", path: "." }], run: { runId: "run-guard" } });
-      const { handleRunStart } = (await import(pathToFileURL(path.join(ws, "loop/run-dispatch.ts")).href)) as {
-        handleRunStart: (studio: unknown, action: unknown) => Promise<void>;
-      };
-      const ctx = host.rec.ctx;
-      const studio = {
-        host: ctx,
-        cancels: new Set<string>(),
-        stoppedMessages: new Set<string>(),
-        attachedPictures: new Map(),
-        activeRuns: new Map(),
-        startingRuns: new Map(),
-        orphanRuns: new Map(),
-        scoped: () => ctx,
-      };
-      // A kept older start can't refuse itself: the chat's launch refuses for it.
-      if (part !== RUN_START)
-        await handleRunStart(studio, { type: "run_start", threadId: host.threadId, run: structuredClone(host.run) });
-      // The chat's launch says it before any promise: the run could not keep one.
-      const chat = loopHost({ dir, facts: [{ id: "godot-project", path: "." }], threadId: "t-launch" });
-      const { launchFromIntake } = (await import(pathToFileURL(path.join(ws, "loop/chat-dispatch.ts")).href)) as {
-        launchFromIntake: (studio: unknown, ctx: unknown, action: unknown, spec: unknown) => Promise<void>;
-      };
-      const chatStudio = { ...studio, host: chat.rec.ctx, scoped: () => chat.rec.ctx };
-      const spec = { goal: "A level the player walks through.", engine: "claude-code", mode: "autopilot", hours: 3 };
-      const launch = await launchFromIntake(
-        chatStudio,
-        chat.rec.ctx,
-        { threadId: chat.threadId, project: chat.game.name },
-        spec,
-      ).then(
-        () => "launched",
-        (err: unknown) => (err instanceof Error ? err.message : String(err)),
-      );
-      const promised = chat.rec
-        .paramsOf("events.append")
-        .some((params) => JSON.stringify(params.batch).includes('"role":"assistant"'));
-      outcomes.push({
-        part,
-        refused: host.appended("run_finished")[0]?.stoppedBecause,
-        delegated: host.rec.paramsOf("engine.delegate").length,
-        noticed: (report.outdatedCalls ?? []).includes(part) || !SEED_CALL_CHANGES.some((row) => row.file === part),
-        launch,
-        promised,
-      });
-      await removeTree(root);
-    }
-    assert.deepEqual(
-      outcomes,
-      OPEN_LOOP_PARTS.map((part) => ({
-        part,
-        refused: part === RUN_START ? undefined : OPEN_LOOP_REFUSAL.openLoopNeedsUpdate,
-        delegated: 0,
-        noticed: true,
-        launch: OPEN_LOOP_REFUSAL.openLoopNeedsUpdate,
-        promised: false,
-      })),
-    );
   });
 });
 

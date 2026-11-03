@@ -2252,7 +2252,7 @@ checkpoint's after steps keeps its snapshot, with a note that they were stopped.
 #### Before each chat message
 
 A game chat saves the game folder before each message is answered, so Rewind can bring it back
-([the conversation coordinator](conversation-coordinator.md)). An engine whose state lives in its
+([the conversation lifecycle](conversation-lifecycle.md#sending-and-rewinding)). An engine whose state lives in its
 app and reaches the folder only when exported opts in with `messages: true` on that
 `checkpoint.before` step; the host then runs those steps, and only those
 (`registry.messageCheckpointPlan(game)`, `HookService.prepareMessageCheckpoint`), right before each
@@ -3514,8 +3514,7 @@ Genex:
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;
-  `character.import` is Uthana); it names no order between Genex and Local Blender, and a chat's
-  coordinator promises no provider a lane lacks (`coordinator-prompts.ts`).
+  `character.import` is Uthana); it names no order between Genex and Local Blender.
 - Genex's guide, eight platform cards and five lane cards (model, character, texture, audio,
   image) are vendored behind Studio-written prefaces in
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`

@@ -135,7 +135,7 @@ const CHAT_SESSIONS = new Set<string>([CustomEvent.ContractorSession, CustomEven
 
 /**
  * Drops the session ids a chat turn would resume. Before a rewind, all of them; always, the ones
- * a run's director, builders, scout or coordinator mirrored into the chat: those sessions work
+ * a run's director, builders or scout mirrored into the chat: those sessions work
  * elsewhere, and a chat that resumed one would carry on the run's conversation as its own.
  */
 function withoutSession<T extends EventEnvelope>(event: T, rewound: boolean): T {

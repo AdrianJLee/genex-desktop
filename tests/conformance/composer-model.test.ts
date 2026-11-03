@@ -582,7 +582,7 @@ describe("what a chat's Loop is", () => {
     assert.deepEqual(storedChatLoop(storage(globals)), { on: true, hours: 1 }, "no chat reads the last pick");
   });
 
-  it("while a build owns the chat, or its coordinator answers, Mode stays shut; with neither it opens and changes", () => {
+  it("while a build owns the chat, or a build of it is running, Mode stays shut; with neither it opens and changes", () => {
     const running = composerLoopView({ own: halfHour, build: { state: "running", loop: infinite } });
     for (const coordinating of [false, true])
       assert.deepEqual(

@@ -58,7 +58,6 @@ const Kind = {
   Chat: "chat",
   Lead: "lead",
   Worker: "worker",
-  Coordinator: "coordinator",
   FollowUp: "follow-up",
   /** The chat's own session after its run: the run's controls ride on its turn. */
   After: "after",
@@ -66,7 +65,6 @@ const Kind = {
 type Kind = (typeof Kind)[keyof typeof Kind];
 function kindOf(request: DelegateRequest): Kind {
   if (request.director) return Kind.Lead;
-  if (request.coordinator) return Kind.Coordinator;
   if (request.worker) return Kind.Worker;
   if (request.liveTools?.some((tool) => tool.name === "run_status")) return Kind.After;
   return request.interviewTools?.length ? Kind.Chat : Kind.FollowUp;
@@ -105,8 +103,7 @@ function sessionEngine(
       const extra = (await script(request, kind)) ?? {};
       const sessionId = request.resume ?? `${kind}-${++minted}`;
       asked.sessionId = sessionId;
-      const own = kind === Kind.Worker || kind === Kind.Coordinator;
-      if (!own) histories.set(sessionId, [...(histories.get(sessionId) ?? []), kind]);
+      if (kind !== Kind.Worker) histories.set(sessionId, [...(histories.get(sessionId) ?? []), kind]);
       return {
         ok: true,
         engine: id,
@@ -296,12 +293,12 @@ for (const engine of ["claude-code", "codex"]) {
       assert.equal(await chatBookmark(rig, threadId), chatSession, "the chat's bookmark is still its session");
 
       // The chat goes on after the close in that same session: a question is answered there, with
-      // its hands back and the run's controls — no coordinator of its own, no builder follow-up.
+      // its hands back and the run's controls — no builder follow-up.
       await answered(rig, threadId, "why dusk?", engine, 2);
       assert.deepEqual(
-        requests.filter((r) => r.kind === Kind.Coordinator || r.kind === Kind.FollowUp).map((r) => r.kind),
+        requests.filter((r) => r.kind === Kind.FollowUp).map((r) => r.kind),
         [],
-        "no coordinator session opens, and no builder follow-up",
+        "no builder follow-up",
       );
       const after = requests.find((r) => r.kind === Kind.After)!.request;
       assert.equal(after.resume, chatSession, "answered by the same session");
@@ -718,13 +715,12 @@ describe("the same agent after the build", () => {
       afters.map(() => ["start_autopilot"]),
     );
     assert.deepEqual(
-      requests.filter((r) => r.kind === Kind.Coordinator || r.kind === Kind.FollowUp).map((r) => r.kind),
+      requests.filter((r) => r.kind === Kind.FollowUp).map((r) => r.kind),
       [],
-      "no coordinator and no builder follow-up",
+      "no builder follow-up",
     );
     const log = await rig.core.store.listEvents(threadId);
     assert.equal(customEvents(log, "run_registered").length, 1, "no new run");
-    assert.equal(customEvents(log, "run_followup_requested").length, 0, "nothing handed to a builder");
   });
 
   it("S7. after a paused run a question is answered in place, and 'continue with…' resumes the run with the same session as its lead", {
@@ -802,11 +798,6 @@ describe("the same agent after the build", () => {
     );
     assert.equal(customEvents(log, "run_registered").length, 2, "the same run, registered again by its resume");
     assert.equal(new Set(customEvents(log, "run_registered").map((e) => e.runId)).size, 1, "never a second run");
-    assert.deepEqual(
-      requests.filter((r) => r.kind === Kind.Coordinator).map((r) => r.kind),
-      [],
-      "no coordinator session opens",
-    );
     // The run closes inside the resumed lead's `finish` call: its turn returns just after.
     const whole = [Kind.Chat, Kind.Lead, Kind.After, Kind.After, Kind.Lead];
     for (let waited = 0; (histories.get(chatSession)?.length ?? 0) < whole.length && waited < 600; waited++)
@@ -909,9 +900,9 @@ function loopRunsClosed(rig: Rig, count: number, label: string) {
 const workingTime = (registered: Record<string, unknown> | undefined): number | undefined =>
   (registered?.budgets as { wallClockMs?: number } | undefined)?.wallClockMs;
 
-/** The kinds of this chat's turns no build of its own should open: a coordinator, a builder follow-up. */
+/** The kinds of this chat's turns no build of its own should open: a builder follow-up. */
 const strangers = (requests: ReadonlyArray<{ kind: Kind }>): Kind[] =>
-  requests.filter((r) => r.kind === Kind.Coordinator || r.kind === Kind.FollowUp).map((r) => r.kind);
+  requests.filter((r) => r.kind === Kind.FollowUp).map((r) => r.kind);
 
 describe("the same agent after the build: the resume it asks for, and the session it is", () => {
   it("S8. a message sent while the chat's own session asks to resume waits for the resumed run, never answered as after a paused run again; a reply that ended early resumes anyway, and says so", {
@@ -1080,7 +1071,7 @@ describe("the same agent after the build: the resume it asks for, and the sessio
     assert.match(leadPrompts[1] ?? "", /THE USER SAYS[\s\S]*continue with a red moon/);
   });
 
-  it("S10. a message that names no engine goes on on the lead's engine, in the same session; one on another engine is the coordinator's", {
+  it("S10. a message that names no engine goes on on the lead's engine, in the same session; one on another engine is the chat's own session there, with the run's controls", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const engine = "codex";
@@ -1119,7 +1110,7 @@ describe("the same agent after the build: the resume it asks for, and the sessio
       .filter((r) => r.kind === Kind.After)
       .map((r) => ({ resume: r.request.resume, asked: r.request.prompt.includes("why dusk?") }));
     const elsewhereFirst = other.requests.map((r) => r.kind);
-    // Another engine is another session: the coordinator answers there, and the lead's is not asked.
+    // Another engine is another session: the chat's own there answers with the run's controls, and the lead's is not asked.
     await answered(rig, threadId, "and why a plaza?", "claude-code", 3);
     assert.deepEqual(
       {
@@ -1131,13 +1122,13 @@ describe("the same agent after the build: the resume it asks for, and the sessio
       {
         onTheLeadsEngine: [{ resume: chatSession, asked: true }],
         elsewhereFirst: [],
-        onAnotherEngine: [Kind.Coordinator],
+        onAnotherEngine: [Kind.After],
         leadsSessionAsked: 1,
       },
     );
   });
 
-  it("S10b. a message with Loop on another engine after the build is still the coordinator's: nothing to record, nothing reopens", {
+  it("S10b. a message with Loop on another engine after the build is the chat's own session there: no reopen offered, nothing reopens", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const engine = "codex";
@@ -1153,70 +1144,21 @@ describe("the same agent after the build: the resume it asks for, and the sessio
     const log = await answeredOnLoop(rig, threadId, "add enemies", "claude-code", { hours: 2 }, 2);
     assert.deepEqual(
       {
-        onAnotherEngine: other.requests.map((r) => ({ kind: r.kind, tools: r.request.interviewTools ?? [] })),
+        onAnotherEngine: other.requests.map((r) => ({
+          kind: r.kind,
+          reopens: offeredTools(r.request).includes("reopen_run"),
+        })),
         leadsSessionAsked: requests.filter((r) => r.kind === Kind.After).length,
         steered: customEvents(log, "run_steering").length,
         registered: customEvents(log, "run_registered").length,
       },
       {
-        onAnotherEngine: [{ kind: Kind.Coordinator, tools: [] }],
+        onAnotherEngine: [{ kind: Kind.After, reopens: false }],
         leadsSessionAsked: 0,
         steered: 0,
         registered: 1,
       },
     );
-  });
-
-  it("S10c. a message with Loop 2 h on another engine asking for more: the coordinator continues the build, and the same run reopens with the Loop's time, led by the chat's session on the build's engine", {
-    timeout: RIG_TIMEOUT_MS,
-  }, async () => {
-    const engine = "codex";
-    const { rig, threadId } = await gameChat("after-run-coordinator-reopens");
-    let loopRun = landingLoopRun("sky");
-    let part = "sky";
-    const { requests } = sessionEngine(rig, engine, async (request, kind) => {
-      if (kind === Kind.Lead) return loopRun(request);
-      if (kind === Kind.Worker) return writePart(request, part);
-    });
-    const other = sessionEngine(rig, "claude-code", async (request, kind) => {
-      if (kind === Kind.Coordinator) await liveCall(request)("continue_build", { text: "add enemies to the plaza" });
-    });
-    await launchedAndClosed(rig, threadId, engine);
-    const chatSession = requests.find((r) => r.kind === Kind.Chat)?.sessionId;
-    const leadsBefore = requests.filter((r) => r.kind === Kind.Lead).length;
-    // The reopened run works to its ask: its lead starts a worker for it.
-    loopRun = landingLoopRun("enemies");
-    part = "enemies";
-
-    await answeredOnLoop(rig, threadId, "add enemies", "claude-code", { hours: 2 }, 2);
-    const log = await loopRunsClosed(rig, 2, "the reopened run's close");
-    const registered = customEvents(log, "run_registered");
-    const reopenedLead = requests.filter((r) => r.kind === Kind.Lead)[leadsBefore];
-    /** The model a registration planned on. */
-    const plannerOf = (e: Record<string, unknown> | undefined) =>
-      (e?.roles as { planner?: string } | undefined)?.planner;
-    assert.deepEqual(
-      {
-        onAnotherEngine: other.requests.map((r) => r.kind),
-        runs: new Set(registered.map((e) => e.runId)).size,
-        resumed: registered.map((e) => e.resumed),
-        workingTime: registered.map(workingTime),
-        planner: registered.map(plannerOf),
-        asked: customEvents(log, "run_steering").map((e) => e.text),
-        leadResumes: reopenedLead?.request.resume,
-      },
-      {
-        onAnotherEngine: [Kind.Coordinator],
-        runs: 1,
-        resumed: [false, true],
-        workingTime: [3_600_000, 7_200_000],
-        planner: [plannerOf(registered[0]), plannerOf(registered[0])],
-        asked: ["add enemies to the plaza"],
-        leadResumes: chatSession,
-      },
-      "no builder turn on the other engine: the same build goes on, on its own engine and models",
-    );
-    assert.match(String(other.requests[0]?.request.prompt), /Loop is on/);
   });
 });
 
@@ -1349,7 +1291,7 @@ describe("the same agent after the build: a finished build reopened with Loop on
     );
     assert.equal(await readFile(path.join(project.dir, "src", "sky.js"), "utf8"), "export const sky = 'pink';\n");
     assert.equal(await readFile(path.join(project.dir, "src", "enemies.js"), "utf8"), "export const enemies = true;\n");
-    assert.deepEqual(strangers(requests), [], "no coordinator and no builder follow-up");
+    assert.deepEqual(strangers(requests), [], "no builder follow-up");
     const leadsAgain = leads.length - firstLeads;
     const whole = [
       Kind.Chat,

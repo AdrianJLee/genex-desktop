@@ -255,11 +255,6 @@ test("delegated background work never becomes the main reply, while a direct cha
     runId: undefined,
     facetId: undefined,
   });
-  assert.deepEqual(delegationActivityScope({ coordinator: { runId: "run" }, readOnly: true }), {
-    role: "planner",
-    runId: "run",
-    facetId: undefined,
-  });
 });
 
 test("late terminal records from another build do not replace the current build outcome", () => {
@@ -468,7 +463,7 @@ test("a run's earlier result card is superseded by its later close, so only the 
   );
 });
 
-test("a coordinator turn ending does not end worker tools; stopping their run does", () => {
+test("a chat turn ending does not end worker tools; stopping their run does", () => {
   const pending = [
     custom(1, "delegated.codex", {
       runId: "build",
@@ -548,7 +543,7 @@ test("cancelled plans stay at their recorded position when a later conversation 
 
 test("queue identity, edits and removals survive paged history and checkpoint batches", async () => {
   const { messageQueueState } = await import("../../src/shared/message-queue.ts");
-  const { conversationThrough } = await import("../../src/shared/coordinator.ts");
+  const { conversationThrough } = await import("../../src/shared/chat-run.ts");
   const user = event(1, { type: "messages", messages: [{ role: "user", content: "Original request" }] });
   const queued = custom(2, "coordinator_message_queued", { messageId: "a", action: { text: "Original request" } });
   let state = chatContext(chatContext([], [user]), [queued]);
@@ -965,8 +960,8 @@ test("a message steered in by interrupting the session stops the tools that leg 
       runId: "build",
       facetId: "river",
     }),
-    // A run's coordinator answers for that run: its rows carry the runId, but it is the chat's session.
-    // (Its run controls are the host's own rows, recorded when the host answers them: a read here.)
+    // An older log's session that answered for a run: its rows carry the runId, but it was the chat's.
+    // (Run controls are the host's own rows, recorded when the host answers them: a read here.)
     said(7, "coordinator", [{ type: "tool_use", id: "status", name: "Read", input: { file_path: "NOTES.md" } }], {
       runId: "build",
     }),
@@ -981,7 +976,7 @@ test("a message steered in by interrupting the session stops the tools that leg 
   assert.deepEqual(
     states("interrupt"),
     ["running", "stopped", "running", "stopped", "running"],
-    "only the interrupted chat legs (a coordinator's too); not the turn's own call, a build worker or the resumed session",
+    "only the interrupted chat legs (an older log's run-scoped one too); not the turn's own call, a build worker or the resumed session",
   );
   assert.deepEqual(
     states("native"),

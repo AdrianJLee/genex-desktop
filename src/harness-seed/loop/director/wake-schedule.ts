@@ -15,9 +15,6 @@ export const DirectorLoop = {
 } as const;
 export type DirectorLoop = (typeof DirectorLoop)[keyof typeof DirectorLoop];
 
-/** This part wakes an open Loop's lead too: a run reads it by namespace. */
-export const SERVES_OPEN_LOOP = true;
-
 /**
  * What a line of the run's log is about, set by whoever writes it outside the lead's own turn
  * (`note(text, kind)`). A line with no kind is the lead's own doing when it was written during its

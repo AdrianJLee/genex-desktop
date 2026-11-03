@@ -204,7 +204,7 @@ export function runtimeImports(root: string, rel: string, options: ts.CompilerOp
  * The harness seed is the in-app agent's own editable code, copied into its workspace and run
  * there: the app must not load it. Every runtime import from the main process, the preload, the
  * renderer or shared code into `src/harness-seed/` (static, or a literal dynamic import). The
- * contract parts the app needs live in `src/shared` instead (`coordinator.ts`, `message-queue.ts`,
+ * contract parts the app needs live in `src/shared` instead (`chat-run.ts`, `message-queue.ts`,
  * `model-roles.ts`, `skill-edits.ts`), held to the seed's copies by
  * `tests/conformance/seed-contracts.test.ts`.
  */

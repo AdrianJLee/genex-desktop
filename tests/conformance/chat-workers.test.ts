@@ -1,7 +1,7 @@
 /**
  * Workers in a chat: the chat's own session, answering a turn on an engine that carries a worker's
  * seat (every engine that keeps a session, a local model's included), is offered the worker tools
- * (never a worker, a run's builder or lead, or the coordinator); the seed's chat turn hands its session the tools and the brief's line and
+ * (never a worker, or a run's builder or lead); the seed's chat turn hands its session the tools and the brief's line and
  * closes the pool however the turn ends; a worker tool call reaches the harness's pool of the live
  * turn only; Plan holds writers and merges (no snapshot, no copy, no delegation, no merge) while a
  * reader runs; and a worker the pool starts carries the turn's grant, on the Workers role's engine,
@@ -197,7 +197,7 @@ async function headOf(dir: string): Promise<string> {
 }
 
 describe("workers in a chat", () => {
-  it("the chat's own session is offered the worker tools; a worker, a run's builder or lead, the coordinator and a local model's session are not", {
+  it("the chat's own session is offered the worker tools; a worker, a run's builder or lead and a local model's session are not", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await workerChat();
@@ -221,7 +221,6 @@ describe("workers in a chat", () => {
           director: { runId: RUN_ID, threadId, project: game, root: project.dir, setup: null, tools: [] },
         },
       ],
-      ["the run's coordinator", { coordinator: { runId: RUN_ID, messageId: turn }, readOnly: true }],
     ];
     for (const [label, extra, engine] of notOffered) {
       await delegate({ ...extra, ...grant }, engine);

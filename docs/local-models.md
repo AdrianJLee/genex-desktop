@@ -83,7 +83,7 @@ Engine `kind` still distinguishes local inference from subscription transport. T
 and historical descriptors fall back to delegated kind. Bonsai implements both `complete`
 and `delegate`; it is not a subscription and does not use either vendor CLI.
 Studio's app-wide assistant uses `complete` without tools; game chats and builds keep their
-existing session/coordinator paths.
+existing session paths.
 
 The same director, worker, integration, preview and judging code runs for Bonsai sessions.
 Model roles accept Bonsai, Claude Code, Codex, OpenCode, OpenRouter and a local server (a model
@@ -110,7 +110,7 @@ agent-edited older copy would put an Ollama model id on a subscription, so main 
 instead.
 
 `engines/local-session.ts` owns local session history under the engine home, separately for
-workers, directors and coordinators; its tools and path confinement live in
+workers, directors and chats; its tools and path confinement live in
 `local-session-tools.ts` and the words it gives the model in `local-session-prompts.ts`. A resume validates workspace and model identity.
 The system prompt holds only what stays the same across a session's requests; each request's turn
 and time budget rides its own message (`localBudgetNote`), so a resumed session keeps the runtime's
@@ -150,7 +150,7 @@ response for out-of-range offsets. Sessions receive their turn/time budget up fr
 Local file tools resolve real paths, respect host read grants and deny lists, restrict writes
 to the session workspace. Shell commands use
 ProcessSandbox, with workspace and Git metadata write roots, credential deny lists, no
-outbound domains, time/output ceilings and cancellation. Read-only and coordinator
+outbound domains, time/output ceilings and cancellation. Read-only
 sessions have no file-write or shell tool; a Loop chat that may launch a build keeps them, and
 its idle-round nudge asks it to finish or launch rather than implement. The host remains authoritative for
 which computer, capture, Blender, plugin, connector and director tools a role receives.

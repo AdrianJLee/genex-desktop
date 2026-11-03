@@ -111,8 +111,8 @@ export function rememberChatLoop(
 
 /**
  * A typed message's Loop commissions a build in a chat with none yet, or once its build finished:
- * the chat's own session then decides whether that continues the same run or starts over, and the
- * run's coordinator whether it continues it. A running or paused build takes none. A command's
+ * the chat's own session then decides whether that continues the same run or starts over. A
+ * running or paused build takes none. A command's
  * result follows `reportCommissions` instead.
  */
 export function loopCommissions(build: Pick<ComposerBuild, "state"> | null | undefined): boolean {
@@ -146,8 +146,8 @@ export interface ModeMenuReach {
 }
 
 /**
- * How far the person reaches Mode: it opens, and its Loop changes, only while no build owns the
- * chat and the run's coordinator is not answering.
+ * How far the person reaches Mode: it opens, and its Loop changes, only while no build of the
+ * chat is running.
  */
 export function modeMenuReach(input: { view: ComposerLoopView; coordinating: boolean }): ModeMenuReach {
   const changes = input.view.editable && !input.coordinating;

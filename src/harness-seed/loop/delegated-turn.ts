@@ -105,22 +105,8 @@ export const MessageUsageSource = {
   Delegation: "delegation",
 } as const;
 export type MessageUsageSource = (typeof MessageUsageSource)[keyof typeof MessageUsageSource];
-/** The tool name the transcript records a delegation under (the app reads it as `DELEGATE_TOOL` in `shared/coordinator.ts`). */
+/** The tool name the transcript records a delegation under (the app reads it as `DELEGATE_TOOL` in `shared/chat-run.ts`). */
 export const DELEGATE_TOOL = "delegate_to_contractor";
-
-/**
- * This turn serves the chat's own session after a lead's run (after-loop-run.ts): it hands the
- * session the run's controls and gives back the resume it records. chat-dispatch.ts asks before it
- * sends the chat here (`servesAfterLoopRun`); a kept copy from before would do neither.
- */
-export const SERVES_AFTER_LOOP_RUN = true;
-
-/**
- * This turn offers the chat's own session the reopen of its finished build when Loop came with the
- * message (reopen-run.ts), and gives back the reopen it records. chat-dispatch.ts asks before it
- * offers it (`servesReopen`): a kept copy from before would bridge the launch instead.
- */
-export const SERVES_REOPEN = true;
 
 /** "claude-code is throttled (usage limit reached)": an engine's outage, as a fallback names it. */
 function outageWords(engine: string, kind: string, detail: string | undefined): string {
@@ -420,8 +406,7 @@ function sessionOptions(seat: Seat): DelegatedOptions {
 
 /**
  * The turn's first seat. It takes switches only as the chat's own turn answering a message the
- * dispatch named (`asked`, chat-dispatch.ts): never a run's builder, a coordinator's follow-up, or a
- * kept older dispatch that names none.
+ * dispatch named (`asked`, chat-dispatch.ts): never a run's builder.
  */
 async function seatOf(
   ctx: HarnessCtx,
@@ -430,7 +415,7 @@ async function seatOf(
   briefFor: (resumed: boolean) => string,
 ): Promise<Seat> {
   const asked = options.asked && typeof options.asked === "object" ? (options.asked as AnyRecord) : null;
-  const switches = asked !== null && Boolean(options.steer) && !options.runId && !options.followupOf;
+  const switches = asked !== null && Boolean(options.steer) && !options.runId;
   const described = switches ? await ctx.call(HostMethod.EngineDescribe, {}).catch(() => []) : [];
   const taken = switches ? asked : null;
   const engines = Array.isArray(described) ? described : [];
@@ -850,12 +835,12 @@ function launchToolFor(options: DelegatedOptions, reopening: boolean): HarnessTo
 /**
  * Autopilot's launch, for a Loop the user asks for in words, whenever the turn has no Loop launch of
  * its own: Loop off, or after a run the chat led (finished or paused), with the Loop switch on or off.
- * Only in the chat's own turn: never in a run's turn or in the build a finished run's coordinator
- * handed on, and never for words the chat wrote itself (a command's result): only the person asks.
+ * Only in the chat's own turn: never in a run's turn, and never for words the chat wrote itself (a
+ * command's result): only the person asks.
  * A chat asked for a Loop always has a way to start it.
  */
 function autoLaunchFor(options: DelegatedOptions, launchTool: HarnessTool | null): HarnessTool | null {
-  const chatsOwnTurn = !options.runId && !options.followupOf;
+  const chatsOwnTurn = !options.runId;
   if (launchTool || !chatsOwnTurn || chatWroteIt(options)) return null;
   const launch = launchToolset.find((t) => t.name === "start_autopilot");
   // A launch kept from before hours could reach it would turn every "3h Loop" into one until done.

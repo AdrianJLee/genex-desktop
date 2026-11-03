@@ -35,8 +35,9 @@ Every direct model call is recorded by the host as `completion_call` with the ca
 
 Learned data and kept edits are archived, never read. The seed writes no lessons, checks catalogue,
 recipes, memory of the user's taste or staged skill edits, and reads none: a workspace that still
-holds them works without them. On the first upgrade to this seed (the manifest's `archiveEpoch` 1,
-the app's `substrate/seed-archive.ts`) they move to `<harness workspace>/archive/<YYYY-MM-DD>/` at
+holds them works without them. On an install's upgrade into the archive epoch (`ARCHIVE_EPOCH` 2,
+the app's `substrate/seed-archive.ts`: every install whose manifest records a lower `archiveEpoch`
+archives once more) they move to `<harness workspace>/archive/<YYYY-MM-DD>/` at
 the same relative paths — `library/games/`, `library/contract-lessons.md`, `library/checks.json`,
 `library/recipe-stats.json` — beside the agent's own edits of seed files this seed removed or changed
 incompatibly, which are archived the same way and replaced by the seed's copies; the boot writes the
@@ -134,34 +135,9 @@ code beside its sentence (`stopCode`), `run-events.ts` writes a run's events and
 logs a failed write to the harness's stderr, at most once a minute per kind, instead of dropping
 it. A seed upgrade keeps a file the
 agent edited (unless this seed removed it or changed it incompatibly: then the edit is archived and
-the seed's copy laid down, see above), so a module that code moved out of still exports every name it had
-(`tests/fixtures/seed-exports-2e-pre.json`), a kept older file keeps loading against the new
-siblings, and a name an existing module newly needs comes from a new module, never from another
-existing one that the agent may have kept at an older vintage (the wake loop's, the journal's,
-live chat's, one session's, the after-run chat's, the reopen's and goal-directed generation's
-vintages are `seed-exports-pre-wake.json`, `seed-exports-pre-journal.json`,
-`seed-exports-pre-live.json`, `seed-exports-pre-one-session.json`,
-`seed-exports-pre-after-loop-run.json`, `seed-exports-pre-reopen.json`,
-`seed-exports-pre-goals.json`, the Unreal lead's `seed-exports-pre-lead.json`, the open harness's
-`seed-exports-pre-open-harness.json`, Genex's moments' `seed-exports-pre-hooks.json` and one Loop's
-`seed-exports-pre-one-loop.json`; the goals',
-the lead's and the moments' are kept one module at a time, the lead's and the moments' with each
-module's own imports as they were, so a retired module a kept caller still imports stays as a shim:
-`loop/unreal/live.ts`, `live-journal.ts`, `editor-life.ts`, `editor-wait.ts`, `editor-activity.ts`). Where a kept older
-part would contradict a newer one, the loop asks before it relies on it: a waking run seats its
-chat's session as its lead only when every part that lead depends on exports
-`SERVES_LEAD` (`director.ts` `seatsLead`), and otherwise a director with its own hands leads, as
-before; the chat after that lead's run goes to the same session only when its runner, turn and
-brief (`turn-loop.ts`, `delegated-turn.ts`, `chat-session.ts`) export `SERVES_AFTER_LOOP_RUN`
-(`chat-dispatch.ts` `ownSessionAfterLoopRun`), and otherwise to the coordinator; and a Loop message
-after a finished build reopens the same run only when the parts that answer it export
-`SERVES_REOPEN` — the session's runner, turn, note and start (`turn-loop.ts`, `delegated-turn.ts`,
-`after-loop-run-prompts.ts`, `run-dispatch.ts`; `chat-dispatch.ts` `ownSessionReopens`), or the
-coordinator, its prompt and the start (`coordinator.ts`, `coordinator-prompts.ts`,
-`run-dispatch.ts`; `coordinatorReopens`) — and is otherwise answered as with Loop off. The run's
-own parts need no such mark for a reopen: the chat rewrites the journal
-(`director/reopen.ts` `reopenedJournal`) without the clock and wake state, which every vintage of
-`setup.ts`, `wake.ts` and `journal.ts` reads as a new run's. An edit the agent made to a moved
+the seed's copy laid down, see above). A change that would break a kept older file bumps
+`ARCHIVE_EPOCH` (`substrate/seed-archive.ts`).
+An edit the agent made to a moved
 function in a kept file still serves that file's own callers; the rest of the loop uses the new
 home. The upgrade does not hold the callers back (that would freeze every shipped fix to them for
 as long as the file stays edited); it says so instead. `SEED_MOVES` in `substrate/seed-upgrade.ts`
@@ -239,27 +215,13 @@ before the split still carries the web rules, so a web game then reads them twic
 `loop/prompt.ts` that reads no `operating-rules-web.md` and a kept `loop/chat-session.ts` that never
 names `start_web_game` are in `SEED_CALL_CHANGES`.
 
-Not removed at that gate: the run's coordinator (`loop/coordinator.ts`, `coordinator-prompts.ts`,
-the host's `coordinator` delegation and `continue_build`) and the `SERVES_LEAD` and
-`SERVES_AFTER_LOOP_RUN` checks. The coordinator answers after every classic-pipeline run — on a model
-without sessions it is the only answerer there is (its tool rounds, `answerWithTools`) — after a
-run of a kept older seed whose parts lack those marks or of a lead that was a session of its own,
-and a message on another engine than the lead's
-([the coordinator, a fallback](conversation-coordinator.md#the-coordinator-a-fallback)). With Loop
-on after a finished build whose journal seated a lead, a coordinator that answers in a session is
-told so (`coordinatorReopenRules`), and its `continue_build` reopens that same run for the Loop's
-time on the build's own models once the reply ends (`reopen-run.ts` `finishedLoopRun`), instead of
-one builder turn. A finished build no Loop can go on from — no lead seated (the long turn, a kept
-pre-lead director, the classic pipeline, a gauntlet), a coordinator without sessions, a kept older
-part — is answered as with Loop off, and the chat says so once per build while the loop lives
-(`firstLoopUnused`). A finished Loop on a project that isn't a web game is never reopened: it
-worked in the game folder, with no copy to go on from (`finishedLoopRun` answers null for a journal
-with `director.open`), so a Loop message the person sends after it is answered as before any run and
-the chat's session may launch the next Loop, which builds on what the project holds
-(`chat-dispatch.ts` `startsNextOpenLoop`). Not solved, by the owner's decision: a chat whose
-build ran on the classic pipeline or a gauntlet (as on a local model without sessions) has no way
-to start another timed build in it since "Start a new build" was removed. Nothing replaces the
-coordinator for the cases it answers yet; it goes only once something does, in work of its own.
+Every game chat message is the chat's own turn: its build's lead's while that build runs, the chat's
+own session otherwise, which keeps the run's controls (`run_status`, `show_build`, `land_build`, and
+`resume_run` after a pause) after a closed Loop run whose journal seated a lead
+([after the build](conversation-lifecycle.md#after-the-build-the-same-session)). Not solved, by the
+owner's decision: a chat whose build ran on the classic pipeline or a gauntlet (as on a local model
+without sessions) has no way to start another timed build in it since "Start a new build" was
+removed.
 
 `src/harness-seed/prompts/` is the LOCAL-ENGINE game chat path only (`loop/prompt.ts`): the delegated
 engines get their instructions from the briefs the loop renders, not from those files. Trimming
@@ -272,8 +234,7 @@ game's own chat is interactive: the host, never the loop, hands it `DelegateRequ
 so it runs in the mode the person picked, without the studio's sandbox or a blanket Bash allow,
 and asks them (`canUseTool`) whatever Claude Code would ask. The host decides from its own records:
 the brief's shape, the message id it dispatched on that thread (`chatTurn`) and the thread's
-metadata. A waking run's lead answering its chat, and the coordinator of a run started in that
-chat, get `leadAsks` instead: Claude Code's tools in the chat's Auto, Accept edits or Bypass, else
+metadata. A waking run's lead answering its chat gets `leadAsks` instead: Claude Code's tools in the chat's Auto, Accept edits or Bypass, else
 in Manual, switched by the permission picker while they run, no sandbox, limited only by the chat's
 mode and saved rules as the chat's own session (the studio's fence spares a lead the integration
 worktree it builds in); each question answered for that mode or carded (withdrawn after five
@@ -303,7 +264,7 @@ rule's `/x` relative to the settings root. A worktree's session still reads its 
 folder's neighbours are denied only inside the games root or scratch
 ([tool permissions](tool-permissions.md)). A Claude Code chat,
 lead and worker may use WebSearch and WebFetch; second opinions (`complete()`) and read-only
-sessions (the coordinator, only by asking) may not, and an unattended
+sessions may not, and an unattended
 shell keeps its sandboxed network. Every delegated Claude session asks for thinking summaries
 (`showThinkingSummaries`); the chat shows a chat or lead session's non-empty summary under the
 work disclosure's Thinking details, never a builder's or judge's. Codex keeps its CLI's own web
@@ -462,7 +423,9 @@ chat's newest card until the person writes again, and on Builds' newest ended bu
 or waits paused. It sends through the composer's Loop (`loopOn`) marked `keepBuilding`, and goes once
 it went out. That mark reopens the finished build, or launches the next Loop as the launch tool would (an
 Autopilot run on the base goal plus what is left, its reference, ∞ under `MAX_RUN_HOURS`), with no
-turn deciding (chat-dispatch.ts `keepBuildingNow`); a tap always takes a turn of its own. A review
+turn deciding (chat-dispatch.ts `keepBuildingNow`); a tap always takes a turn of its own. On another
+engine than the build's it reopens nothing: like a typed message there, it is answered as with Loop
+off. A review
 is asked only with `review=yes`: yes ends the Loop, and a no goes back to the lead with both and
 decides nothing (the host still counts the no's, which close nothing); after `MAX_FINISH_REJECTIONS`
 (3) in a row, a review asked on proof that names no file made since the last no is turned back before
@@ -487,7 +450,7 @@ The leads claim through `finish`. A web lead's `finish` (`director/integrate.ts`
 it runs the health check on the integration head first (unless the person asked to finish), and a
 head that fails is not landed: the lead hears why and goes on, or finishes with `land=no`.
 `victory=yes` is the lead's word that the goal is reached, and nobody else has to agree; a Finish
-asked of the run (the person's, or the chat's agent's `finish_run`) closes it as it stands and claims
+asked of the run (the person's Wrap up, or the lead's `wrap_up`) closes it as it stands and claims
 nothing. One close and one finish run at a time (`director/close-latch.ts`): a second finish is
 refused at once, and a close asked while one is under way waits for it; from the finish's close on,
 `worker_start` is refused and starts nothing (`RUN_OVER_NO_WORKERS`). The close stops the workers
@@ -605,7 +568,7 @@ worker's end and question (`NoteKind.WorkerAsks`), a job's end, the app's crash
 session read (`DelegateResult.steered`) is not told again, one it never read rides the next digest:
 an engine that can't read mid-turn (Codex, Bonsai) hears news only when its turn ends, at most
 `OPEN_TURN_MS` later. The person's words do cut such a turn, its first included
-([hearing it](conversation-coordinator.md#live-chat-during-a-build)).
+([hearing it](conversation-lifecycle.md#live-chat-during-a-build)).
 
 One Loop for every project. Run dispatch (`conductRun`) takes the game from the list it already
 read and its profile (`loopProfileOf`): a web game keeps the director on an engine that keeps a
@@ -614,8 +577,7 @@ Loop on any engine that keeps a session, which the host seats in place (`leadsIn
 Codex, OpenCode, and a local model's session — Bonsai, OpenRouter, a local server — alike), and on
 one with no session of its own (Ollama) closes at once saying it needs one (`RunnerKind.NeedsSession`), which the chat's launch says before it promises anything
 (`launchFromIntake`). Classic is a web game's internal only, and the gauntlet works on web games only
-(`RunnerKind.WebOnly`). An open Loop whose parts include a kept older one without `SERVES_OPEN_LOOP`
-is refused with words (the chat's launch says so before its promise, `openLoopServed`); a resume
+(`RunnerKind.WebOnly`). A resume
 refused at its start stays paused and keeps its earlier report (`refusedRun` writes its close over the
 latest one, keeping only what was built, `KEPT_ON_REFUSAL`: never how that session stopped, its provider
 limit included; a refused reopen of a landed build keeps its outcome and the chat says why). A journal the host can't read, or a game list it can't give, refuses
@@ -781,7 +743,7 @@ Kept copies of the director's files from before this are in `SEED_CALL_CHANGES`.
 
 `npm run test:agentic-readiness` prepares two disposable local Git checkouts with shared
 read-only-in-practice node_modules, then boots their fixture profiles plus a separate owned
-sentinel. It exercises navigation/filter/model menu, Unicode/keyboard, coordinator Send,
+sentinel. It exercises navigation/filter/model menu, Unicode/keyboard, Send to the chat's own session,
 Stop's real pending AbortSignal, history buttons/graph, distinct game input/image, diagnostics,
 identity failures, stale builds, preserved runtime self-edits, restart and cleanup isolation.
 It writes `.studio-dev/evidence/accept-<time>/report.json` and selected artifacts. Read the
@@ -801,9 +763,8 @@ The new conformance tests deliberately corrupt temporary inputs/imports/ownershi
 shapes and compile an incompatible canonical API method; they do not break app source.
 
 Background interaction was checked initially on Electron 43.4.1: Unicode input and Send worked
-unfocused; a delayed real Stop aborted its pending fixture coordinator and produced a durable
-turn end. The existing coordinator records an aborted delegated turn as error; the fixture
-asserts the explicit abort cause, without changing coordinator semantics. A sent Stop during
+unfocused; a delayed real Stop aborted its pending fixture session and produced a durable
+turn end. A sent Stop during
 the composer's short ignore guard is not evidence of cancellation. Capture content must still
 be reviewed by the task's developer. Native IME, vendor authorization, every graph geometry,
 and a real packaged-main plus development OS identity combination remain unverified.

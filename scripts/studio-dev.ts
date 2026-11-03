@@ -163,7 +163,7 @@ export function devLaunchCommand(options: {
 }): DevLaunchCommand {
   const { owner, platform, executable, args, env, logs } = options;
   const bundleEnd = executable.indexOf(".app/");
-  if (platform !== "darwin" || !launchesLive(owner) || bundleEnd < 0) return { command: executable, args };
+  if (!launchesThroughOpen(owner, platform) || bundleEnd < 0) return { command: executable, args };
   const vars = Object.entries(env).flatMap(([name, value]) =>
     value === undefined ? [] : ["--env", `${name}=${value}`],
   );
@@ -171,6 +171,35 @@ export function devLaunchCommand(options: {
   return {
     command: MAC_OPEN,
     args: ["-n", "-W", "--stdout", logs.stdout, "--stderr", logs.stderr, ...vars, "-a", bundle, "--args", ...args],
+  };
+}
+
+/** Whether a profile's Electron is started through macOS's `open` ({@link devLaunchCommand}). */
+function launchesThroughOpen(owner: { providers?: string; freshMachine?: boolean }, platform: NodeJS.Platform) {
+  return platform === "darwin" && launchesLive(owner);
+}
+
+/** One launch's output files: what the spawned process writes, and what the app writes. */
+export interface LaunchLogPaths {
+  spawn: { stdout: string; stderr: string };
+  app: { stdout: string; stderr: string };
+}
+
+/**
+ * Where a launch's output goes, all in its log folder. The spawned process's stdio files are created
+ * before it starts. Through `open` the app gets files of its own: `open --stdout <file>` fails with
+ * LaunchServices error -10810 when the file already exists. Otherwise the spawned process is the
+ * app, and its stdio files are the app's logs.
+ */
+export function launchLogPaths(
+  logRoot: string,
+  options: { owner: { providers?: string; freshMachine?: boolean }; platform: NodeJS.Platform },
+): LaunchLogPaths {
+  const spawned = { stdout: path.join(logRoot, "stdout.log"), stderr: path.join(logRoot, "stderr.log") };
+  if (!launchesThroughOpen(options.owner, options.platform)) return { spawn: spawned, app: spawned };
+  return {
+    spawn: spawned,
+    app: { stdout: path.join(logRoot, "app-stdout.log"), stderr: path.join(logRoot, "app-stderr.log") },
   };
 }
 
@@ -185,9 +214,9 @@ async function launchApp(owner: any, id: string, providers: string) {
   pruneUnusedBuilds(devRoot(checkout));
   const logRoot = safeChild(devRoot(checkout), `evidence/launch-${buildId}`);
   fs.mkdirSync(logRoot, { mode: 0o700 });
-  const logs = { stdout: path.join(logRoot, "stdout.log"), stderr: path.join(logRoot, "stderr.log") };
-  const out = fs.openSync(logs.stdout, "wx", 0o600);
-  const err = fs.openSync(logs.stderr, "wx", 0o600);
+  const logs = launchLogPaths(logRoot, { owner, platform: process.platform });
+  const out = fs.openSync(logs.spawn.stdout, "wx", 0o600);
+  const err = fs.openSync(logs.spawn.stderr, "wx", 0o600);
   const launchArgs = [
     path.join(checkout, `.studio-dev/builds/${buildId}/main/main.mjs`),
     `--studio-dev-launch=${path.join(owner.root, "launch.json")}`,
@@ -200,7 +229,7 @@ async function launchApp(owner: any, id: string, providers: string) {
     executable: resolveElectron(checkout),
     args: fixture ? fixtureElectronArgs(launchArgs) : launchArgs,
     env,
-    logs,
+    logs: logs.app,
   });
   const child = spawn(plan.command, plan.args, {
     cwd: checkout,

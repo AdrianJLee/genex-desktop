@@ -1171,7 +1171,6 @@ export default {
   "Credential save failed. {reason} Sign-in is stopped.":
     "Speichern der Zugangsdaten fehlgeschlagen. {reason} Die Anmeldung ist gestoppt.",
   Credits: "Credits",
-  "Critic's advice": "Rat des Kritikers",
   "Curated release": "Kuratierte Version",
   "Current build failed; no stale output was exported":
     "Aktueller Build fehlgeschlagen; es wurde keine veraltete Ausgabe exportiert",
@@ -2553,7 +2552,6 @@ export default {
     "Sobald es an ist, läuft es an festen Stellen in Genex: {steps}; diese Schritte fragen dich vorher nicht.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Ein Konto für Hunderte Modelle. Du zahlst OpenRouter nur, was du nutzt.",
-  "One bold move": "Ein mutiger Schritt",
   "One key for hundreds of models. Pay as you go.": "Ein Schlüssel für Hunderte Modelle. Du zahlst nur, was du nutzt.",
   "One step before the agent can build in Godot.": "Noch ein Schritt, dann kann der Agent in Godot bauen.",
   "Online rooms": "Online-Räume",

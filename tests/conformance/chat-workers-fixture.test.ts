@@ -11,7 +11,6 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { seedBuildGraph } from "../../src/main/dev/fixture-build-graph.ts";
 import { seedChatWorkers, seedChatWorkersLoop } from "../../src/main/dev/fixture-chat-workers.ts";
-import { seedLeadGraph } from "../../src/main/dev/fixture-lead-graph.ts";
 import { buildHistory, historyLabel, isNewestBuild, projectBuildGraph } from "../../src/renderer/build-progress.ts";
 import { EntryAction, EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
 import { buildChecklist, PartMark, runPlanParts } from "../../src/renderer/chat/build-checklist.ts";
@@ -187,29 +186,6 @@ describe("the chat-workers dev fixture", () => {
       [...graphSays].sort(),
       "the card's rows say what the graph's rows say: added, working, or still to come",
     );
-  });
-
-  it("a fourth game holds the Unreal lead's runs with their typed workers' records: trees that keep the lead's own columns", async () => {
-    const { logs, core } = await seeded();
-    const events = logs.get("thread-fixture-unreal-loop") ?? [];
-    const plain = await fakeCore();
-    await seedLeadGraph(plain.core as never, "fixture-unreal-loop", "plain");
-    const before = plain.logs.get("plain") ?? [];
-    for (const runId of ["fixture-lead-done", "fixture-lead-live"]) {
-      const graph = projectBuildGraph(events, "thread-fixture-unreal-loop", [], core.layout.runs, runId);
-      const old = projectBuildGraph(before, "plain", [], core.layout.runs, runId);
-      assert.ok(graph && old);
-      assert.equal(graph.tree, true, `${runId}: the typed workers' records make the run a tree`);
-      assert.equal(old.tree, false, `${runId}: the lead-graph fixture itself is unchanged`);
-      const steps = (g: RunGraph) => partRows(g, null).map((row) => [row.facet.facetId, row.steps.length]);
-      assert.deepEqual(steps(graph), steps(old), `${runId}: the same rows, the lead's own columns among them`);
-    }
-    const done = projectBuildGraph(events, "thread-fixture-unreal-loop", [], core.layout.runs, "fixture-lead-done");
-    assert.ok(done);
-    const katana = rowWords(done).find(([title]) => title === "Blender: Katana");
-    assert.deepEqual(katana, ["Blender: Katana", "Added to your game"]);
-    // Flipped: the typed workers had lines ("Blender: Katana. Added to your game.").
-    assert.deepEqual(workerLines(events), [], "the lead's workers are its card's rows, never lines");
   });
 
   it("the first game's history lists the Loop, then the chat turn", async () => {

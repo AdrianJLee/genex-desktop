@@ -1038,7 +1038,6 @@ export default {
     "凭据保存失败。登录已停止；不会自动重试。",
   "Credential save failed. {reason} Sign-in is stopped.": "凭据保存失败。{reason}登录已停止。",
   Credits: "积分",
-  "Critic's advice": "评论员建议",
   "Curated release": "精选版本",
   "Current build failed; no stale output was exported": "当前构建失败；未导出过时的输出",
   "Current cover": "当前封面",
@@ -2335,7 +2334,6 @@ export default {
     "启用后，它会在 Genex 的这些时刻运行：{steps}；这些步骤不会事先询问你。",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "一个账号，数百个模型。用多少就付给 OpenRouter 多少。",
-  "One bold move": "一个大胆的改动",
   "One key for hundreds of models. Pay as you go.": "一个密钥，数百个模型。按量付费。",
   "One step before the agent can build in Godot.": "只差一步，智能体就能在 Godot 中制作了。",
   "Online rooms": "在线房间",

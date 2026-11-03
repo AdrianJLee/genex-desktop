@@ -3,7 +3,6 @@ import type { JSX } from "react";
 import { useMemo, useState } from "react";
 import { t } from "../../../shared/i18n.ts";
 import {
-  type AdviceInfo,
   cameraWords,
   checkWords,
   type IterationNode,
@@ -183,34 +182,6 @@ function StepStory({ step, node }: { step: Step; node: IterationNode }): JSX.Ele
   );
 }
 
-/** A critic's advice on the try: each defect with its fix, its one bold move, and its gate answers. Advice, not a verdict. */
-function AdviceNotes({ advice }: { advice: AdviceInfo }): JSX.Element {
-  return (
-    <div className="flex flex-col gap-2.5">
-      {advice.defects.length ? (
-        <ul className="flex flex-col gap-1.5">
-          {advice.defects.map((item) => (
-            <li key={item.defect} className="text-body-sm text-ink-2 [overflow-wrap:anywhere]">
-              {item.defect}
-              {item.fix ? <span className="block text-ink-3">{t("Fix: {fix}", { fix: item.fix })}</span> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {advice.boldMove ? <Quote label={t("One bold move")}>{advice.boldMove}</Quote> : null}
-      {advice.gates.length ? (
-        <ul className="flex flex-col gap-1 text-body-sm text-ink-3">
-          {advice.gates.map((gate) => (
-            <li key={gate} className="[overflow-wrap:anywhere]">
-              {gate}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
 function StepRows({
   graph,
   run,
@@ -234,11 +205,6 @@ function StepRows({
           defaultOpen={notesOpen}
         >
           <JudgesNotes node={node} graph={graph} quoted={judgesOn(node)} />
-        </Row>
-      ) : null}
-      {node.advice ? (
-        <Row row={PanelRow.CriticsAdvice} label={t("Critic's advice")} right={String(node.advice.defects.length)}>
-          <AdviceNotes advice={node.advice} />
         </Row>
       ) : null}
       {node.scoreboard ? (

@@ -1120,7 +1120,6 @@ export default {
   "Credential save failed. {reason} Sign-in is stopped.":
     "Не удалось сохранить учётные данные. {reason} Вход остановлен.",
   Credits: "Кредиты",
-  "Critic's advice": "Совет критика",
   "Curated release": "Проверенный релиз",
   "Current build failed; no stale output was exported":
     "Текущая сборка не удалась; устаревший результат не экспортирован",
@@ -2477,7 +2476,6 @@ export default {
     "После включения он срабатывает в определённые моменты работы Genex: {steps}; в эти моменты он тебя не спрашивает.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Один аккаунт — сотни моделей. Платишь OpenRouter за то, что используешь.",
-  "One bold move": "Одна смелая идея",
   "One key for hundreds of models. Pay as you go.": "Один ключ — сотни моделей. Платишь только за то, что используешь.",
   "One step before the agent can build in Godot.": "Ещё один шаг — и агент сможет собирать в Godot.",
   "Online rooms": "Онлайн-комнаты",

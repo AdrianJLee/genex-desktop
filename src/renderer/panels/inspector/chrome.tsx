@@ -249,7 +249,6 @@ export const PanelRow = {
   TechnicalDetails: "technical-details",
   Checks: "checks",
   ReviewersNotes: "reviewers-notes",
-  CriticsAdvice: "critic-s-advice",
   StudioLearned: "what-the-studio-learned",
 } as const;
 export type PanelRow = (typeof PanelRow)[keyof typeof PanelRow];

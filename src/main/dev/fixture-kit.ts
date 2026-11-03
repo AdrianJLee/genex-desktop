@@ -41,8 +41,6 @@ export const FixtureName = {
   Notifications: "notifications",
   BuildGraph: "build-graph",
   LargeBuildGraph: "large-build-graph",
-  /** An Unreal lead's runs on the Builds graph: milestones, save points, sub-agents and the critic's advice. */
-  LeadGraph: "lead-graph",
   SandboxSetup: "sandbox-setup",
   UpdateReady: "update-ready",
   UnrealGame: "unreal-game",
@@ -51,14 +49,14 @@ export const FixtureName = {
   RobloxGame: "roblox-game",
   /**
    * Workers on the Builds graph and in the chat: a chat turn's two, and, written after the start,
-   * a Loop's three with its lead's jobs, build-graph's web Loops and lead-graph's Unreal lead runs
-   * with their workers' records.
+   * a Loop's three with its lead's jobs, and build-graph's web Loops from before the one Loop with
+   * their workers' records.
    */
   ChatWorkers: "chat-workers",
   /**
-   * A Loop still going whose integration head grew through four builds (a sound-only merge, a
-   * repainted sign, a blank one), twelve workers off them, and deliveries only in its build; before
-   * it, a finished Loop of two pictured builds and no save points.
+   * A web game's Loop still going in its folder with four save points (one whose picture is the
+   * last's, a repainted sign, the lead's own), twelve workers off them, and deliveries into the game;
+   * before it, a finished web Loop of an earlier Genex with two pictured builds.
    */
   BuildTimeline: "build-timeline",
   /** The finish check on the Builds graph and in the chat: four Loops, one in each of its looks. */

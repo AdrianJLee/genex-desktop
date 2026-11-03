@@ -1,7 +1,8 @@
 /**
- * The `build-graph` fixture: two runs of a sword in ice for the Builds graph to draw. The same runs
- * with the worker records a director's builders write today (`chat-workers` seeds them in a game
- * of their own) draw as trees.
+ * The `build-graph` fixture: two runs of a sword in ice for the Builds graph to draw, as an earlier
+ * Genex recorded web games' Loops in an integration copy (a Loop works in its folder now: the
+ * `build-timeline` fixture draws one). The same runs with the worker records a director's builders
+ * write today (`chat-workers` seeds them in a game of their own) draw as trees.
  */
 import fs from "node:fs/promises";
 import path from "node:path";

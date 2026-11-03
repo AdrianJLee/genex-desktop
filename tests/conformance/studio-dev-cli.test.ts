@@ -13,14 +13,13 @@ import { freshMachineEnv } from "../../scripts/studio-dev/fresh-machine.ts";
 import { strippedEnv } from "../../scripts/evals/lanes/common.ts";
 
 test("fixtures lists the one exported fixture list without a profile or app", async () => {
-  // Flipped from 35: plugin-updates left the list, since a bundled plugin updates with Genex at launch (from 34: build-timeline joined, 33: items-store, 31: data-folder and data-missing, 30: native-games, 29: agents-start-failed, 28: asset-library, 27: genex-terms, 26: roblox-game, 25: building-card, 24: paused-build, 23: plugin-updates, 22: open-projects, 21: stills-game).
-  assert.equal(FIXTURE_NAMES.length, 34);
+  // Flipped from 34: lead-graph left the list with the Unreal runner's drawing. Flipped from 35: plugin-updates left the list, since a bundled plugin updates with Genex at launch (from 34: build-timeline joined, 33: items-store, 31: data-folder and data-missing, 30: native-games, 29: agents-start-failed, 28: asset-library, 27: genex-terms, 26: roblox-game, 25: building-card, 24: paused-build, 23: plugin-updates, 22: open-projects, 21: stills-game).
+  assert.equal(FIXTURE_NAMES.length, 33);
   for (const added of [
     "build-timeline",
     "first-launch",
     "notifications",
     "build-graph",
-    "lead-graph",
     "sandbox-setup",
     "update-ready",
     "chat-workers",

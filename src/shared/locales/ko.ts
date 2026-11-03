@@ -1083,7 +1083,6 @@ export default {
   "Credential save failed. {reason} Sign-in is stopped.":
     "자격 증명을 저장하지 못했어요. {reason} 로그인이 중지됐어요.",
   Credits: "크레딧",
-  "Critic's advice": "비평가의 조언",
   "Curated release": "엄선된 릴리스",
   "Current build failed; no stale output was exported": "현재 빌드가 실패했어요. 오래된 결과물은 내보내지 않았어요",
   "Current cover": "현재 커버",
@@ -2424,7 +2423,6 @@ export default {
     "켜면 Genex의 다음 시점에 실행돼요: {steps}. 이 단계들은 미리 확인을 요청하지 않아요.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "계정 하나로 수백 개 모델을 써요. 쓴 만큼만 OpenRouter에 내요.",
-  "One bold move": "과감한 한 수",
   "One key for hundreds of models. Pay as you go.": "키 하나로 수백 개 모델을 써요. 쓴 만큼만 내요.",
   "One step before the agent can build in Godot.": "한 단계만 더 하면 에이전트가 Godot에서 만들 수 있어요.",
   "Online rooms": "온라인 방",

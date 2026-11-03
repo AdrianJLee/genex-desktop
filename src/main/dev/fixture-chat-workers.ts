@@ -4,8 +4,7 @@
  * a chat message whose two workers ended (one checked, one's work added to the game), so Builds
  * opens on that chat turn. A second game holds a Loop still going: three workers, the lead's
  * background work and the finish check that has not run yet. A third game holds the build-graph
- * fixture's two web Loops, their builders writing the worker records a director writes today; a
- * fourth the lead-graph fixture's Unreal lead runs, their typed workers writing theirs.
+ * fixture's two web Loops, their builders writing the worker records a director writes today.
  *
  * The Loop is written once the app has started ({@link seedChatWorkersLoop}): the start closes
  * every run an earlier app left open, so a Loop written before it would read as stopped.
@@ -19,7 +18,6 @@ import { ExecutionStatus } from "../../shared/run-state.ts";
 import { poolWorkerId, WorkerEnd, WorkerIsolation, WorkerVerdict } from "../../shared/workers.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { seedBuildGraph } from "./fixture-build-graph.ts";
-import { seedLeadGraph } from "./fixture-lead-graph.ts";
 import { FIXTURE_MODEL, fixtureRun } from "./fixture-kit.ts";
 
 /** The earlier Loop of the fixture game: the key that says its chat is seeded. */
@@ -33,10 +31,6 @@ const LOOP_RUN = "fixture-workers-loop";
 const WEB_LOOP_GAME = { name: "fixture-web-loop", title: "Fixture web Loop" } as const;
 /** The web Loops' finished run: the key that says that game is seeded. */
 const WEB_LOOP_RUN = "fixture-graph-run";
-/** The fourth game: the lead-graph fixture's Unreal lead runs, with the worker records their typed workers write. */
-const UNREAL_LOOP_GAME = { name: "fixture-unreal-loop", title: "Fixture Unreal Loop" } as const;
-/** The Unreal lead's finished run: the key that says that game is seeded. */
-const UNREAL_LOOP_RUN = "fixture-lead-done";
 
 const ASK = "The car drifts left on straight roads. Find out why and fix it.";
 const LOOP_ASK = "Port the racer's car and build a fast track for it.";
@@ -124,16 +118,13 @@ export async function seedChatWorkers(core: StudioCore, project: string, threadI
   if (await hasRun(core, threadId, EARLIER_LOOP)) return;
   await core.append([...earlierLoop(project), ...chatTurn(project)], threadId);
   const games = await core.games.list();
-  for (const game of [LOOP_GAME, WEB_LOOP_GAME, UNREAL_LOOP_GAME]) {
+  for (const game of [LOOP_GAME, WEB_LOOP_GAME]) {
     if (!games.some((known) => known.name === game.name)) await core.games.scaffold(game.name, { title: game.title });
     await core.threadForGame(game.name);
   }
 }
 
-/**
- * Writes the second game's Loop still going, the third game's web Loops and the fourth game's
- * Unreal lead runs, once, after the app has started.
- */
+/** Writes the second game's Loop still going and the third game's web Loops, once, after the app has started. */
 export async function seedChatWorkersLoop(core: StudioCore): Promise<void> {
   const threadId = await core.threadForGame(LOOP_GAME.name);
   if (!(await hasRun(core, threadId, LOOP_RUN)))
@@ -141,9 +132,6 @@ export async function seedChatWorkersLoop(core: StudioCore): Promise<void> {
   const webThread = await core.threadForGame(WEB_LOOP_GAME.name);
   if (!(await hasRun(core, webThread, WEB_LOOP_RUN)))
     await seedBuildGraph(core, WEB_LOOP_GAME.name, webThread, { builderRecords: true });
-  const unrealThread = await core.threadForGame(UNREAL_LOOP_GAME.name);
-  if (!(await hasRun(core, unrealThread, UNREAL_LOOP_RUN)))
-    await seedLeadGraph(core, UNREAL_LOOP_GAME.name, unrealThread, { workerRecords: true });
 }
 
 /** Whether the chat's log already holds a record of this run (the seed writes it once). */

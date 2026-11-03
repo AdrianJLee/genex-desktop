@@ -28,7 +28,7 @@ async function jobsNow(ctx: HarnessCtx, project: string, runId: string): Promise
  * app back, and the recovery's outcome wakes it, never the question of what next.
  */
 export function workAtHand(loopRun: LoopRun): number {
-  const recovering = loopRun.open?.recovering ? 1 : 0;
+  const recovering = loopRun.open.recovering ? 1 : 0;
   return loopRun.runningWorkers().length + (loopRun.jobsRunning ?? 0) + recovering;
 }
 
@@ -52,5 +52,5 @@ const runningJobs = (jobs: readonly JobView[]): number => jobs.filter((job) => j
  * last read found them, a read that could not say among them.
  */
 export function hasWorkAtHand(loopRun: LoopRun): boolean {
-  return Boolean(loopRun.open?.pool?.state.runs.size) || loopRun.jobsRunning !== 0 || workAtHand(loopRun) > 0;
+  return Boolean(loopRun.open.pool?.state.runs.size) || loopRun.jobsRunning !== 0 || workAtHand(loopRun) > 0;
 }

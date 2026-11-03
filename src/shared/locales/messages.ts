@@ -3426,7 +3426,6 @@ export const MESSAGES = [
   "The lead stopped {count}.",
   "The lead wants to run {job} in the background",
   "The lead's summary",
-  "The lead's view of the game",
   "The lead: done",
   "The lead: paused",
   "The lead: stopped",

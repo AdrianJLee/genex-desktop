@@ -267,7 +267,8 @@ self-improving conformance tests protect product behavior. Native login/picker/d
 verification requires separate explicit prerequisites; fixtures do not certify it.
 `npm run test:computer:e2e` runs the real Electron with a fixture game: the computer tool over an
 offscreen window (WebGL and WebGPU), the requested-state setup, agent screens on their Builds nodes, and a
-scripted director's run end to end (worker, look, integrate, show, finish, landing).
+scripted lead's Loop end to end in the game folder (the lead's own computer, a worker in a copy, its
+merge, finish).
 It also checks secure contexts in Live and worker views. Register `game` and `studio-plugin`
 privileges in one call before Electron is ready; a second registration loses the game's secure
 context and disables WebGPU, while Three.js can silently render through its WebGL fallback.

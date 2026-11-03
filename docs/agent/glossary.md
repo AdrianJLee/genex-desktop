@@ -86,9 +86,8 @@ is product copy, not this glossary.
 - **Lead / one session**: a Loop's director that is its chat's own session (one per chat),
   building in the game folder with its own hands beside its workers, never read-only
   (`loop/director/lead-session.ts`). After the close the same session answers the chat with its
-  hands back and the run's controls — `run_status`, and after a web Loop an earlier Genex ran
-  `show_build` and `land_build` (`runControls`) — and a paused run's recorded `resume_run`
-  (`loop/after-loop-run.ts`).
+  hands back and the run's status, `run_status` (`runControls`), and after a paused Loop that worked
+  in place its recorded `resume_run` (`loop/after-loop-run.ts`).
 - **Run journal**: the durable artifact `autopilot_<runId>` a run resumes from. A director run
   keeps its whole record there (`loop/director/journal.ts`): the time it has worked, so a Resume
   goes on with what the budget has left, the log and the wake loop's state.

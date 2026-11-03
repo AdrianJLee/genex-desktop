@@ -36,8 +36,6 @@ export const DELEGATE_TOOL = "delegate_to_contractor";
  */
 export const RunControl = {
   RunStatus: "run_status",
-  ShowBuild: "show_build",
-  LandBuild: "land_build",
 } as const;
 export type RunControl = (typeof RunControl)[keyof typeof RunControl];
 
@@ -48,24 +46,6 @@ export const runControlTools: readonly StudioToolSpec[] = [
     description: "Read the current run and its workers' progress. This does not start or stop work.",
     parameters: { type: "object", properties: {} },
   },
-  {
-    name: RunControl.ShowBuild,
-    description:
-      "Open a build in Live, the game view on the right of this chat, without changing the game folder: integration (what the run built, landed or not), live (the game folder as it is), or a commit hash. Use only when the user asks to see, run, play or launch what a run made, including after the run has finished or paused; never to show your own edits, which the stage's Reload button offers by itself. Afterwards say what it answered: open in Live, or waiting behind Reload while the user watches Live.",
-    parameters: {
-      type: "object",
-      properties: { build: { type: "string", description: "live, integration (default), or a commit hash." } },
-    },
-  },
-  {
-    name: RunControl.LandBuild,
-    description:
-      "Put a build in the game folder: merge what the run built (integration, the default) or a named commit into the folder the user plays from; Live shows it at once or through its Reload button, as the answer says. Only for a run that has finished or paused. Refuses when the game folder has uncommitted edits.",
-    parameters: {
-      type: "object",
-      properties: { build: { type: "string", description: "integration (default) or a commit hash." } },
-    },
-  },
 ];
 
 const RUN_CONTROLS: ReadonlySet<string> = new Set<string>(Object.values(RunControl));
@@ -73,19 +53,6 @@ const RUN_CONTROLS: ReadonlySet<string> = new Set<string>(Object.values(RunContr
 /** Is this one of the run's controls the chat's own session keeps? */
 export function isRunControl(name: string): name is RunControl {
   return RUN_CONTROLS.has(name);
-}
-
-/** The controls a Loop that worked in the game folder itself keeps: its status alone, no build to show or land. */
-const IN_PLACE_CONTROLS: ReadonlySet<string> = new Set<string>([RunControl.RunStatus]);
-
-/** The run's controls a grant hands the chat's own session: all of them, or the status alone after an in-place Loop. */
-export function runControlsFor(grant: { inPlace?: boolean }): readonly StudioToolSpec[] {
-  return grant.inPlace === true ? runControlTools.filter((tool) => IN_PLACE_CONTROLS.has(tool.name)) : runControlTools;
-}
-
-/** Is this one of the controls a grant hands (`runControlsFor`)? */
-export function isGrantedRunControl(name: string, grant: { inPlace?: boolean }): name is RunControl {
-  return isRunControl(name) && (grant.inPlace !== true || IN_PLACE_CONTROLS.has(name));
 }
 
 /**

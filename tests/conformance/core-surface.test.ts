@@ -60,7 +60,6 @@ const METHODS = [
   // A game its first message left Untitled takes the name a later message gives it (conversation.ts).
   "nameFromIdea",
   "newRunId",
-  "offerBuild",
   "offerLive",
   "permissionSettings",
   "playGameSnapshot",

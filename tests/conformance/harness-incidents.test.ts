@@ -787,7 +787,9 @@ describe("a paused build from an earlier version (old-pause)", () => {
     const closed = host.appended("run_finished").at(-1);
     assert.match(String(closed?.stoppedBecause), /earlier version of Genex/);
     assert.equal(closed?.executionStatus, "completed", "closed, not paused again");
-    assert.equal(closed?.integrationHead, "head-1", "what it built is kept");
+    // Flipped (one Loop): the close kept the old build's `integrationHead` to show or land; its work
+    // stays on its git ref, and the close names no build of its own.
+    assert.equal(closed?.integrationHead, undefined);
     assert.equal(host.appended("autopilot_paused").length, 0);
   });
 });
@@ -802,12 +804,14 @@ describe("a change after a paused build (stale-pause)", () => {
   // and the resume is its tool's to say: the session is handed it while the build is paused.
   it("stale-pause words. after a paused build, only going on with that build resumes it: the resume tool says so", async () => {
     const { afterLoopRunGrant } = await import("../../src/harness-seed/loop/after-loop-run.ts");
+    // Flipped (one Loop): the paused run named no `inPlace`; only a Loop that worked in place resumes now.
     const paused = {
       runId: "run_paused",
       state: "paused",
       engine: "claude-code",
       onLeadEngine: true,
       model: null,
+      inPlace: true,
     };
     const resume = afterLoopRunGrant(paused).interviewTools?.find((tool) => tool.name === "resume_run");
     const words = String(resume?.description);
@@ -877,7 +881,12 @@ function ownSessionChat({
   ];
   for (const data of since) log.push({ id: `e${log.length + 1}`, data });
   const store: Json = {
-    journal: { phase: "done", run: ownRun, director: { lead: { chatSession }, sessionId: "lead-own", plan: {} } },
+    // Flipped (one Loop): the journal had no `open`, as an earlier Genex's web Loop's, and still resumed.
+    journal: {
+      phase: "done",
+      run: ownRun,
+      director: { lead: { chatSession }, sessionId: "lead-own", plan: {}, open: { version: 1, savePoints: [] } },
+    },
     turnOver: false,
   };
   const asked = { sessions: [] as Json[], said: [] as string[] };
@@ -1040,7 +1049,7 @@ describe("one session answers the chat (no-coordinator)", () => {
     const [answer] = finished.asked.sessions;
     assert.equal("coordinator" in (answer ?? {}), false, "never a coordinator");
     assert.notEqual(answer?.readOnly, true, "with its hands");
-    assert.deepEqual(answer?.runControls, { runId: OWN_RUN, messageId: "m9" }, "run_status, show_build and land_build");
+    assert.deepEqual(answer?.runControls, { runId: OWN_RUN, messageId: "m9" }, "run_status");
 
     const paused = ownSessionChat({ paused: true, recorded: [{ name: "resume_run", args: { text: "add enemies" } }] });
     await handleUserMessage(paused.studio as never, { ...ownMessage } as never);
@@ -1691,6 +1700,8 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     decision: async () => {},
     saveJournal: async () => {},
     ledgerLines: () => [],
+    // The Loop's own record, which every run carries (`LoopRunData.open`): nothing has halted it.
+    open: { halted: null },
   };
   const note = (text: string, kind?: string) => {
     loopRun.logSeq += 1;
@@ -1937,6 +1948,8 @@ function liveChat() {
       decision: async () => {},
       saveJournal: async () => {},
       ledgerLines: () => [],
+      // The Loop's own record, which every run carries (`LoopRunData.open`): nothing has halted it.
+      open: { halted: null },
     };
     // As director.ts opens it: live while the run goes on, recording on the run's own log.
     const line = openLeadLine(RUN, THREAD, () => !state.finished && !ctx.cancelled && !n.report.failure, ctx as never);

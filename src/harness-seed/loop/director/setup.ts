@@ -109,7 +109,6 @@ async function announceRunStart(ctx: HarnessCtx, threadId: string, run: Run, res
     runId: run.runId,
     project: run.project,
     facets: [],
-    integrationNotes: "",
     maxParallel: 1 + MAX_WORKERS_AT_ONCE,
     director: true,
     workerRecords: true,

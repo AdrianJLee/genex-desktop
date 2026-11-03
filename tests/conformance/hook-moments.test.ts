@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { HELD_TURN_WAIT_MS, whileTurnHeld } from "../../src/harness-seed/loop/director/turn-hold.ts";
-import { runHeldWords, turnsHeldWords as directorTurnsHeld } from "../../src/harness-seed/loop/director/held-words.ts";
+import { openStartHeld, turnsHeldWords as directorTurnsHeld } from "../../src/harness-seed/loop/director/held-words.ts";
 import {
   endOfTurnCheckpoint,
   fireHooks,
@@ -390,7 +390,7 @@ describe("Genex's own holds, in the person's words on every surface", () => {
         return endOfTurnCheckpoint(recorder.ctx as never, { project: NAME, threadId: "t1" }, game);
       },
     ],
-    ["a director run's start", (hold) => runHeldWords(held(hold))],
+    ["a Loop's start", (hold) => openStartHeld(held(hold))],
     ["a director run's lead turns held", (hold) => directorTurnsHeld(held(hold))],
     ["a chat's wait for the game's apps", (hold) => pendingLine(held(hold))],
     [
@@ -418,7 +418,7 @@ describe("Genex's own holds, in the person's words on every surface", () => {
   it("a step's own block keeps its reason: no surface words it as Genex's hold", () => {
     // A step's block: its reason, and no hold of Genex's.
     const step = { reason: "The crane is being serviced.", hold: undefined };
-    assert.match(runHeldWords(step), /a plugin of this game held it back: The crane is being serviced\./);
+    assert.match(openStartHeld(step), /a plugin of this project held it back: The crane is being serviced\./);
     assert.match(directorTurnsHeld(step), /The crane is being serviced\./);
     assert.match(turnHeldLine(step), /The crane is being serviced\./);
     assert.equal(pendingLine(step), "The crane is being serviced.");

@@ -3254,9 +3254,11 @@ async function directLoopRun(request: DelegateRequest, dir: DirectorSeen): Promi
 
 /** What the lead saw and did during the run. */
 function checkDirectorLoopRun({ check }: ComputerSmoke, dir: DirectorSeen, dirProjectDir: string): void {
+  // Flipped (one Loop): the lead had no window of its own, no look and no computer. It is the chat's
+  // own session and has the window its chat's turns have; no `look` was ever brought back.
   check(
-    "the lead has no window of its own: no look, no computer",
-    Array.isArray(dir.leadTools) && !dir.leadTools.includes("look") && !dir.leadTools.includes("computer"),
+    "the lead has its chat's window: the computer, and no look",
+    Array.isArray(dir.leadTools) && !dir.leadTools.includes("look") && dir.leadTools.includes("computer"),
     JSON.stringify(dir.leadTools ?? null).slice(0, 300),
   );
   check(

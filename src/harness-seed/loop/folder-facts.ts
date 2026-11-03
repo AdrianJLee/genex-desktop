@@ -176,11 +176,21 @@ export function servedAsWeb(game: FactsOfDescriptor): boolean {
 }
 
 /**
- * How a Loop worked on its project: in place (`open`, as every Loop does now), or in an integration
- * copy (`web`, a web game's Loop an earlier Genex ran). Persisted in `autopilot_started.profile`:
- * never rename a value.
+ * Whether a session in the game's folder gets Genex's eyes on it (the capture and computer tools over
+ * a pooled window): a web game, or a folder served as one, is a page to capture and drive, and a game
+ * that plays through the Play Protocol a process to start and drive the same way. An Unreal game is
+ * seen in its editor, and any other kind in its own app.
  */
-export const LoopProfile = { Web: "web", Open: "open" } as const;
+export function seenInWindow(game: (FactsOfDescriptor & Pick<GameProject, "shape">) | null | undefined): boolean {
+  return servedAsWeb(game) || playsThroughBridge(game);
+}
+
+/**
+ * How a Loop worked on its project: in place (`open`), as every Loop does. Persisted in
+ * `autopilot_started.profile`, where the app also reads the history value an earlier Genex wrote
+ * (`shared/project-facts.ts`): never rename a value.
+ */
+export const LoopProfile = { Open: "open" } as const;
 export type LoopProfile = (typeof LoopProfile)[keyof typeof LoopProfile];
 
 /** What a Loop says when its game is of a kind Genex can't name. */

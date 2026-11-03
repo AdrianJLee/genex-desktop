@@ -2619,9 +2619,9 @@ export class StudioCore {
     return { ...this.#x.runPreview };
   }
 
-  /** Reflect stage visibility (and whether the person watches a game in Live) while preserving active observations. */
-  previewStageVisible(visible: boolean, watching = visible, stageGame: string | null = null): Promise<void> {
-    return this.#previews.setStageVisible(visible, watching, stageGame);
+  /** Reflect stage visibility while preserving active observations. */
+  previewStageVisible(visible: boolean): Promise<void> {
+    return this.#previews.setStageVisible(visible);
   }
 
   /** The Live game's sound switch, as the user left it. */
@@ -2674,11 +2674,6 @@ export class StudioCore {
   /** Something would have changed Live: it waits for the person's Reload instead (`live.behind`). */
   offerLive(...args: Parameters<PreviewService["offerLive"]>): ReturnType<PreviewService["offerLive"]> {
     return this.#previews.offerLive(...args);
-  }
-
-  /** A build nobody on the stage asked to see: offered to Live's Reload, never loaded (`PreviewService.offerBuild`). */
-  offerBuild(...args: Parameters<PreviewService["offerBuild"]>): ReturnType<PreviewService["offerBuild"]> {
-    return this.#previews.offerBuild(...args);
   }
 
   /** What waits for this game's Live and the build Live shows: the stage reads it on mount (`live.behind`). */

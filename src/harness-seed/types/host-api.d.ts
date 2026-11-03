@@ -302,8 +302,8 @@ export interface DelegateImage {
 
 /**
  * A Loop's lead: the chat's own session, in the game folder (`root`), with the run's tools. The host
- * honours its grant only in place (`inPlace`), for this game's own run started in this chat, and
- * hands the engine `root`'s checked real path (delegation.ts `#leadRoot`).
+ * honours its grant only for a `root` that is the game folder itself, for this game's own run started
+ * in this chat, and hands the engine `root`'s checked real path (delegation.ts `#inPlaceRoot`).
  */
 export interface DelegateDirectorGrant {
   runId: string;
@@ -316,8 +316,6 @@ export interface DelegateDirectorGrant {
    * lead in its game's folder.
    */
   chatSession?: boolean;
-  /** The lead works in the game folder itself; a grant without it is never a lead's. */
-  inPlace?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -356,14 +354,10 @@ export interface WorkerGrant {
 export interface HarnessDelegateParams {
   /**
    * The chat's own session after a closed Loop run: the run's controls it keeps (`run_status`,
-   * `show_build`, `land_build`, shared/chat-run.ts `RunControl`), answered by the host for this
-   * run and message (`run.control`). Honoured only for the chat's own session.
+   * shared/chat-run.ts `RunControl`), answered by the host for this run and message
+   * (`run.control`). Honoured only for the chat's own session.
    */
-  /**
-   * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
-   * its controls are only the status, never a build to show or land.
-   */
-  runControls?: { runId: string; messageId?: string; inPlace?: boolean };
+  runControls?: { runId: string; messageId?: string };
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a

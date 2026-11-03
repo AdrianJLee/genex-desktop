@@ -4,7 +4,7 @@
  * core, fake delegated engine, no harness.
  */
 import assert from "node:assert/strict";
-import { mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -369,49 +369,10 @@ describe("the chat's own session after a lead's run", () => {
     return { engine, answers };
   }
 
-  it("answers run_status, show_build and land_build for the session asking, whose own hold on the game folder is no contractor building there", async () => {
-    const { core, api, project, threadId } = await gameChat({ withPreview: true });
-    const built = await closedLoopRun(core, project, "run_after");
-    const seen: DelegateRequest[] = [];
-    const { engine, answers } = controlsEngine(
-      [
-        ["run_status", {}],
-        ["land_build", {}],
-      ],
-      seen,
-    );
-    core.engines.register(engine as never);
-    const ask = (extra: Record<string, unknown>) =>
-      api["engine.delegate"]!({ engine: "codex", prompt: "go", project: project.name, threadId, ...extra });
-
-    await ask({ runControls: { runId: "run_after", messageId: "m1" } });
-    const names = (seen.at(-1)!.liveTools ?? []).map((tool) => tool.name);
-    for (const tool of ["run_status", "show_build", "land_build"]) assert.ok(names.includes(tool), names.join(", "));
-    for (const tool of ["steer_run", "finish_run", "resume_run", "continue_build"])
-      assert.ok(!names.includes(tool), `${tool} is not a control it keeps live`);
-    const status = JSON.parse(answers.run_status!) as { run: { state: string }; activeWorkers: unknown[] };
-    assert.equal(status.run.state, "finished");
-    assert.deepEqual(status.activeWorkers, [], "the session asking is not one of the run's workers");
-    assert.match(answers.land_build!, /Landed [0-9a-f]{10} in the game folder \(merged\)/, answers.land_build);
-    assert.equal(await readFile(path.join(project.dir, "src", "sky.js"), "utf8"), "export const sky = 'dusk';\n");
-    assert.equal(
-      await git(project.dir, ["merge-base", "--is-ancestor", built, "HEAD"]).then(
-        () => "in",
-        () => "out",
-      ),
-      "in",
-    );
-
-    // A game folder with edits of its own is refused, as Make it live always refused it.
-    const head = await git(project.dir, ["rev-parse", "HEAD"]);
-    await writeFile(path.join(project.dir, "src", "sky.js"), "export const sky = 'pink';\n");
-    await ask({ runControls: { runId: "run_after", messageId: "m2" } });
-    assert.match(answers.land_build!, /^refused: .*uncommitted/, answers.land_build);
-    assert.equal(await git(project.dir, ["rev-parse", "HEAD"]), head, "nothing merged over the edit");
-    assert.equal(await readFile(path.join(project.dir, "src", "sky.js"), "utf8"), "export const sky = 'pink';\n");
-  });
-
-  it("after a Loop that worked in place it offers run_status alone, and answers no show_build or land_build", async () => {
+  // Flipped (one Loop): the session was also handed `show_build` and `land_build`, and after a Loop
+  // that worked in place (`runControls.inPlace`) the status alone. Every Loop works in the game
+  // folder, so every closed Loop leaves its chat the status alone, and a guessed show or land is no tool.
+  it("answers run_status for the session asking, and no show_build or land_build", async () => {
     const { core, api, project, threadId } = await gameChat({ withPreview: true });
     await closedLoopRun(core, project, "run_after");
     const head = await git(project.dir, ["rev-parse", "HEAD"]);
@@ -440,12 +401,16 @@ describe("the chat's own session after a lead's run", () => {
       prompt: "go",
       project: project.name,
       threadId,
-      runControls: { runId: "run_after", messageId: "m1", inPlace: true },
+      runControls: { runId: "run_after", messageId: "m1" },
     });
     const names = (seen.at(-1)!.liveTools ?? []).map((tool) => tool.name);
     const controls = names.filter((name) => ["run_status", "show_build", "land_build"].includes(name));
     assert.deepEqual(controls, ["run_status"], names.join(", "));
-    assert.equal((JSON.parse(answers.run_status!) as { run: { state: string } }).run.state, "finished");
+    for (const tool of ["steer_run", "finish_run", "resume_run", "continue_build"])
+      assert.ok(!names.includes(tool), `${tool} is not a control it keeps live`);
+    const status = JSON.parse(answers.run_status!) as { run: { state: string }; activeWorkers: unknown[] };
+    assert.equal(status.run.state, "finished");
+    assert.deepEqual(status.activeWorkers, [], "the session asking is not one of the run's workers");
     for (const name of ["show_build", "land_build"])
       assert.doesNotMatch(String(answers[name]), /Landed|showing|Showing/, `${name}: ${answers[name]}`);
     assert.equal(await git(project.dir, ["rev-parse", "HEAD"]), head, "nothing landed in the game folder");
@@ -459,7 +424,7 @@ describe("the chat's own session after a lead's run", () => {
     await closedLoopRun(core, project, "run_after");
     const head = await git(project.dir, ["rev-parse", "HEAD"]);
     const seen: DelegateRequest[] = [];
-    const { engine, answers } = controlsEngine([["land_build", {}]], seen);
+    const { engine, answers } = controlsEngine([["run_status", {}]], seen);
     core.engines.register(engine as never);
     const controls = { runControls: { runId: "run_after", messageId: "m1" } };
     const hostile: Array<{ label: string; extra: Record<string, unknown> }> = [
@@ -480,7 +445,7 @@ describe("the chat's own session after a lead's run", () => {
       const names = (seen.at(-1)!.liveTools ?? []).map((tool) => tool.name);
       offered.push({
         label,
-        controls: names.filter((name) => ["run_status", "show_build", "land_build"].includes(name)),
+        controls: names.filter((name) => name === "run_status"),
       });
     }
     assert.deepEqual(
@@ -488,9 +453,9 @@ describe("the chat's own session after a lead's run", () => {
       hostile.map(({ label }) => ({ label, controls: [] })),
       "no run control outside the chat's own session",
     );
-    assert.equal(answers.land_build, undefined);
+    assert.equal(answers.run_status, undefined);
 
-    // The chat's own session, naming a run that is not its chat's latest: refused, nothing landed.
+    // The chat's own session, naming a run that is not its chat's latest: refused.
     await api["engine.delegate"]!({
       engine: "codex",
       prompt: "go",
@@ -498,7 +463,7 @@ describe("the chat's own session after a lead's run", () => {
       threadId,
       runControls: { runId: "run_other", messageId: "m2" },
     });
-    assert.match(answers.land_build!, /^refused: The run changed/, answers.land_build);
+    assert.match(answers.run_status!, /^refused: The run changed/, answers.run_status);
     assert.equal(await git(project.dir, ["rev-parse", "HEAD"]), head, "the game folder is where it was");
   });
 });

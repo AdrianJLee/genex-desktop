@@ -766,21 +766,14 @@ export interface StudioApi {
   /** Merge a build into the live game folder and show it. */
   landBuild(project: string, commit: string): Promise<{ commit: string; how: "merged" | "already" }>;
   /**
-   * Where the native game view sits (zero while anything covers it), and whether the person is
-   * watching a game in Live under whatever briefly covers it (`stage.ts` `watchingLive`).
+   * Where the native game view sits (zero while anything covers it), and the window size it was
+   * measured in (main carries it through resizes).
    */
-  /** The stage slot's rectangle, and the window size it was measured in (main carries it through resizes). */
   previewBounds(bounds: {
     x: number;
     y: number;
     width: number;
     height: number;
-    watching: boolean;
-    /**
-     * The game open on the stage (absent under home, Play or Studio): a show the person asks for in
-     * its chat may load it even while Live holds another game out of sight.
-     */
-    project?: string | null;
     viewport?: { width: number; height: number };
   }): Promise<boolean>;
   /** The Live game's sound switch; main decides when Live is actually heard. */

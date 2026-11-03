@@ -3605,7 +3605,6 @@ export default {
   "The lead stopped {count}.": "主智能体停止了其中{count}次。",
   "The lead wants to run {job} in the background": "主智能体想在后台运行 {job}",
   "The lead's summary": "主智能体的总结",
-  "The lead's view of the game": "主智能体眼中的游戏",
   "The lead: done": "主智能体：已完成",
   "The lead: paused": "主智能体：已暂停",
   "The lead: stopped": "主智能体：已停止",

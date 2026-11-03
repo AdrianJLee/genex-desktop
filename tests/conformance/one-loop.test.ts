@@ -171,7 +171,8 @@ describe("the one Loop's start", () => {
     assert.ok(first, "the lead had a turn");
     assert.equal(first.resume, CHAT_SESSION);
     const director = first.director as Record<string, unknown>;
-    assert.equal(director.inPlace, true);
+    // Flipped: the grant also said `inPlace: true`; its root alone, the game folder, places it now.
+    assert.equal("inPlace" in director, false);
     assert.equal(director.root, host.dir);
     assert.equal(first.cwd, undefined);
     assert.equal(first.readOnly, undefined);
@@ -2973,8 +2974,10 @@ describe("a web game's Loop", () => {
     await done;
     const [first] = host.leadCalls();
     const director = first?.director as Record<string, unknown> | undefined;
-    assert.equal(director?.inPlace, true, "led in place");
-    assert.equal(director?.root, host.dir, "its root is the game folder");
+    // Flipped: "led in place" was the grant's `inPlace: true`; its root, the game folder, says it now.
+    assert.equal(director?.root, host.dir, "led in place: its root is the game folder");
+    // A web game: the lead's turn carries its chat's eyes on it, the window its chat's turns have.
+    assert.equal((first?.selfCapture as { root?: string } | undefined)?.root, host.dir);
     assert.equal(host.appended("autopilot_started")[0]?.profile, "open");
     const copies = host.rec.paramsOf("snapshot.worktree").map((params) => String(params.name));
     assert.ok(!copies.includes("integration"), `no integration worktree (${copies.join(", ")})`);

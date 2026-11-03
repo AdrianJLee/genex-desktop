@@ -130,6 +130,8 @@ export interface OpenLoop {
   holds: FolderHolds | null;
   /** The moments the game's plugins hook, as `game.list` listed them. */
   hookEvents: readonly string[];
+  /** Genex's eyes reach the game (`seenInWindow`): the lead's turns get the window its chat's turns have. */
+  seen: boolean;
   journal: OpenJournal;
   /** Why the Loop pauses (the app could not be brought back), once it must; null while it runs. */
   halted: string | null;

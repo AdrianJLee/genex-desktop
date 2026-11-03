@@ -20,7 +20,7 @@ import { changesSettings } from "./steer-switch.ts";
 import { type DescribedEngine, endsTurnFor, switchedSettings, type TurnSettings } from "./turn-switch.ts";
 import { WorkersEnd } from "./workers/carry.ts";
 import { holdsWebGame } from "./web-game.ts";
-import { factsOfGame, kindPending, playsThroughBridge, servedAsWeb, servedFactsOf } from "./folder-facts.ts";
+import { factsOfGame, kindPending, seenInWindow, servedAsWeb, servedFactsOf } from "./folder-facts.ts";
 import { kindKey } from "./web-build.ts";
 import { factsReadyNotice } from "./project-prompts.ts";
 import { effortCap } from "./effort-cap.ts";
@@ -830,17 +830,13 @@ async function recordDelegateRequest(ctx: HarnessCtx, options: DelegatedOptions,
 }
 
 /**
- * Hands and eyes for every build: the capture tool and the computer
- * tool over a pooled window of this folder — a run's single builder and a chat build alike,
- * Loop or not.
+ * Hands and eyes for the chat's own session on a game Genex sees (`seenInWindow`): the capture tool
+ * and the computer tool over a pooled window of this folder. Its turns as a Loop's lead get the same
+ * window (director.ts `delegateTurn`).
  */
 function senses(options: DelegatedOptions, handoff: Handoff): AnyRecord {
   const { project, projectDir } = handoff;
-  // A web game (or a folder with no kind yet, served as one) is a page to capture and drive, and a
-  // game that plays through the Play Protocol (a Godot game Genex set up) is a process to start and
-  // drive the same way; an Unreal game is seen in its editor, and any other kind in its own app.
-  const playable = servedAsWeb(handoff.descriptor) || playsThroughBridge(handoff.descriptor);
-  if (!projectDir || !playable) return {};
+  if (!projectDir || !seenInWindow(handoff.descriptor)) return {};
   return {
     selfCapture: {
       project,

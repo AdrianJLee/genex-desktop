@@ -46,7 +46,7 @@ const LOOP_ACTS: ReadonlySet<string> = new Set<string>([
 /** Why the lead's act is refused now (the Loop paused or closing; a worker once anybody asked to finish), or null. */
 async function refusedAct(loopRun: LoopRun, name: string): Promise<string | null> {
   if (!LOOP_ACTS.has(name)) return null;
-  if (loopRun.open?.halted) return OPEN_WORDS.paused;
+  if (loopRun.open.halted) return OPEN_WORDS.paused;
   const { state } = loopRun;
   const closing = state.finished || Boolean(state.finish) || closeUnderWay(state);
   if (closing) return OPEN_WORDS.ending;
@@ -75,7 +75,7 @@ async function noteTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
  */
 async function pauseTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
   const why = String(args.why ?? "").trim();
-  if (!why || !loopRun.open) return OPEN_WORDS.needsWhy;
+  if (!why) return OPEN_WORDS.needsWhy;
   loopRun.open.halted = why.slice(0, PAUSE_CHARS);
   await loopRun.saveJournal();
   return OPEN_WORDS.pausing;
@@ -91,20 +91,20 @@ async function jobsOf(loopRun: LoopRun): Promise<unknown> {
 /** `run_status`: the Loop's save points, its workers and jobs, and what the folder holds. */
 export async function openStatus(loopRun: LoopRun): Promise<AnyRecord> {
   const { gameFacts, open } = loopRun;
-  const pool = open?.pool;
+  const pool = open.pool;
   return {
-    savePoints: (open?.journal.savePoints ?? []).map(({ label, summary, auto }) => ({ label, summary, auto })),
+    savePoints: open.journal.savePoints.map(({ label, summary, auto }) => ({ label, summary, auto })),
     atWork: workAtHand(loopRun),
     workers: pool?.state.records.length ? await pool.call(WorkerTool.Status, {}) : "none started",
     jobs: await jobsOf(loopRun),
     facts: gameFacts ?? [],
-    crashes: open?.journal.crashes ?? 0,
+    crashes: open.journal.crashes,
   };
 }
 
 /** A worker tool's answer from the run's pool. */
 async function workerAnswer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<unknown> {
-  const pool = loopRun.open?.pool;
+  const pool = loopRun.open.pool;
   return pool ? pool.call(name, args) : OPEN_WORDS.unknownTool(name);
 }
 

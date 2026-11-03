@@ -87,8 +87,6 @@ export interface LoopRunData {
   journalSaved?: string | null;
   /** The Loop's own record (open/contract.ts): its facts, journal, git-write queue, clock and pool. */
   open: OpenLoop;
-  /** The run's own waits (the wake clock's sleep, when one was given); absent: the wall clock. */
-  sleep?: (ms: number) => Promise<void>;
   /** How many of the run's jobs ran when they were last read (null: the host could not say), and when (`active-work.ts`). */
   jobsRunning?: number | null;
   jobsReadAt?: number | null;
@@ -184,7 +182,7 @@ export function notesSince(loopRun: LoopRun, seq: number): LoopRunLogEntry[] {
 
 /** The workers of the run's pool still at work. */
 export function runningWorkers(loopRun: LoopRun): WorkerRecord[] {
-  return (loopRun.open?.pool?.state.records ?? []).filter(isWorking);
+  return (loopRun.open.pool?.state.records ?? []).filter(isWorking);
 }
 
 /** Every check this run made gets the same record, on the same event path as `director_worker`. */

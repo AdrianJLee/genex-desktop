@@ -2,9 +2,13 @@
 export const OPEN_LOOP_REFUSAL = {
   needsSession: (engine: string) =>
     `A Loop needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); ${engine} doesn't, so nothing was built. The chat still answers here.`,
-  /** A web game's Loop an earlier Genex paused, which built in a copy of the game folder; `ref`: where git keeps its work. */
+  /**
+   * A web game's Loop an earlier Genex paused, which built in a copy of the game folder; `ref`: where
+   * git keeps its work, which the chat's session reads in `run_status` (the card drops it, as it
+   * drops every ref).
+   */
   webLoopBefore: (ref: string) =>
-    `This Loop was paused by an earlier version of Genex, which built web games in a copy of the game folder, so it can't go on in this one. Its work is in git at ${ref}: ask here to bring it into the game.`,
+    `This Loop was paused by an earlier version of Genex, which built web games in a copy of the game folder, so it can't go on in this one. Its work is kept in git (${ref}): ask here to bring it into the game.`,
   /** The list of projects could not be read, so nothing tells which Loop the project needs. */
   gamesUnreadable:
     "Genex couldn't read the list of projects, so it can't tell how this project's Loop goes; nothing was built or changed. Try again in a moment.",

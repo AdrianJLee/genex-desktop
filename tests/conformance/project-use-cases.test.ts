@@ -916,7 +916,8 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
       await host.dispatch();
       const [first] = host.leadCalls();
       assert.equal(first?.resume, CHAT_SESSION, "the chat's own session leads");
-      assert.equal((first?.director as { inPlace?: unknown } | undefined)?.inPlace, true, "in the game folder");
+      // Flipped: "in the game folder" was the grant's `inPlace: true`; its root, the game folder, says it now.
+      assert.equal((first?.director as { root?: unknown } | undefined)?.root, host.dir, "in the game folder");
       const trail = host.trail();
       const probe = trail.indexOf("tool:unreal__editor-activity");
       const save = trail.indexOf("tool:unreal__save-all");

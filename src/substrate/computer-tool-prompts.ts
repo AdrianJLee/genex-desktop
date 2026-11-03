@@ -18,18 +18,16 @@ import {
  * Who holds the tool, which changes whose build the window shows and whether it can reload. An
  * `operator` drives the person's computer (or a VM) with their consent, never a build.
  */
-export type ComputerToolRole = "builder" | "director" | "operator";
+export type ComputerToolRole = "builder" | "operator";
 
 /** Whose build the window shows, by role. */
 const WHOSE_BUILD: Record<ComputerToolRole, string> = {
   builder: "YOUR build (this workspace, uncommitted edits included)",
-  director:
-    "the build your window is pointed at (your own integration worktree by default; `look` points it at a worker's build or the live folder)",
   operator: "the person's computer, with their consent — only the apps they allowed",
 };
 
 /** The roles that edit files, and so may rebuild what they look at. */
-const RELOADING_ROLES: ReadonlySet<ComputerToolRole> = new Set(["builder", "director"]);
+const RELOADING_ROLES: ReadonlySet<ComputerToolRole> = new Set(["builder"]);
 
 /** The reload sentence, for the roles that edit files. */
 const RELOAD_LINE =

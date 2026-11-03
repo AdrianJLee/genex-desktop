@@ -1,6 +1,5 @@
 /** The props every inspector panel shares, and the lightbox's picture. */
 import type { KeepBuildingTap } from "../../keep-building.ts";
-import type { AgentScreenFrame } from "../../../shared/agent-screen.ts";
 import type { RunSummary } from "../../../shared/run-summary.ts";
 import type {
   AssetInfo,
@@ -56,8 +55,6 @@ export interface InspectorProps {
   resultPairsWithBase: boolean;
   /** a Loop's build history, when the graph draws one */
   timeline: BuildTimeline | null;
-  /** the lead's newest view of the game, while it has the run */
-  leadFrame: AgentScreenFrame | null;
   onClose: () => void;
   onSelect: (id: string) => void;
   onPrev: () => void;

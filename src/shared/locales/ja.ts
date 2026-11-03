@@ -3823,7 +3823,6 @@ export default {
   "The lead wants to run {job} in the background":
     "メインエージェントが{job}をバックグラウンドで実行しようとしています",
   "The lead's summary": "メインエージェントのまとめ",
-  "The lead's view of the game": "メインエージェントから見たゲーム",
   "The lead: done": "メインエージェント：完了",
   "The lead: paused": "メインエージェント：一時停止中",
   "The lead: stopped": "メインエージェント：停止",

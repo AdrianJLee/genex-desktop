@@ -222,7 +222,9 @@ describe("which chats after a run the chat's own session answers", () => {
 });
 
 describe("what the chat's own session is told and handed after a run", () => {
-  const finished = { runId: RUN, state: "finished", onLeadEngine: true, model: null };
+  // Flipped (one Loop): the run named no `inPlace`, and a paused one resumed all the same; only a
+  // Loop that worked in the game folder resumes now (an earlier Genex's web Loop is refused).
+  const finished = { runId: RUN, state: "finished", onLeadEngine: true, model: null, inPlace: true };
   const paused = { ...finished, state: "paused" };
   /** A paused run answered on another engine than its lead's: the chat's bookmark moves there. */
   const pausedElsewhere = { ...paused, onLeadEngine: false };
@@ -367,6 +369,8 @@ describe("the chat's own session after a build it led: the Loop's start, never a
     onLeadEngine: true,
     model: null,
     messageId: "m1",
+    // Flipped (one Loop): it named no `inPlace`; only a Loop that worked in place resumes now.
+    inPlace: true,
   };
   const paused = { ...finished, state: "paused", stoppedBecause: "stopped by the user" };
   /** A tool the session recorded: its name and what it passed. */

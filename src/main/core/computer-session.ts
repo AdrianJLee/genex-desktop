@@ -133,8 +133,6 @@ export interface ComputerSessionOptions {
 export interface ComputerSession<T extends ComputerTarget = ComputerTarget> {
   run(name: string, args: Record<string, unknown>): Promise<LiveToolResult>;
   ensureLoaded(force?: boolean): Promise<TargetLoad<T>>;
-  root(): string;
-  retarget(root: string): void;
   trace(): TraceSummary;
 }
 
@@ -1043,7 +1041,7 @@ export function computerSession<T extends ComputerTarget>(
   initialRoot: string,
   options: ComputerSessionOptions,
 ): ComputerSession<T> {
-  let root = initialRoot;
+  const root = initialRoot;
   let loadedAt = 0;
   let moves = 0;
   let caps = source.caps;
@@ -1107,10 +1105,6 @@ export function computerSession<T extends ComputerTarget>(
   return {
     run,
     ensureLoaded,
-    root: () => root,
-    retarget: (next) => {
-      root = next;
-    },
     trace: () => trace.summary(clock.deterministic(), watch.total()),
   };
 }

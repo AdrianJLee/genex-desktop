@@ -8,7 +8,6 @@ import { STATE_TONE, StepState, Tone } from "../../run-steps.ts";
 import { LeadFace, leadAbout, leadFace } from "../../run-tree.ts";
 import { LEAD_WORDS } from "../../words.ts";
 import { Panel, Para } from "./chrome.tsx";
-import { LiveScreen, useScreenTrail } from "./screen.tsx";
 import { GraphSelection } from "./selection.ts";
 import { Status } from "./tone.tsx";
 import type { InspectorProps } from "./types.ts";
@@ -23,13 +22,8 @@ const FACE_TONE: Record<LeadFace, Tone> = {
 };
 
 export function LeadPanel(props: InspectorProps): JSX.Element {
-  const { leadFrame, graph, outcome, rows } = props;
+  const { graph, outcome, rows } = props;
   const face = graph.tree ? leadFace(graph, outcome, rows) : LeadFace.Working;
-  // Only the lead at work shows its screen, as its node does.
-  const frame = face === LeadFace.Working ? leadFrame : null;
-  const trail = useScreenTrail(frame);
-  const open = (src: string, caption: string): void =>
-    props.onLight([{ path: null, src, title: LEAD_WORDS.name, caption }], 0);
   return (
     <Panel
       id={GraphSelection.Lead}
@@ -41,9 +35,6 @@ export function LeadPanel(props: InspectorProps): JSX.Element {
       onClose={props.onClose}
       reply={{ label: LEAD_WORDS.name, placeholder: t("Anything the lead should do next?") }}
       onReply={props.onReply}
-      media={
-        frame ? <LiveScreen frame={frame} trail={trail} label={t("The lead's view of the game")} onOpen={open} /> : null
-      }
     >
       <Para>{leadAbout(face, graph.tree)}</Para>
     </Panel>

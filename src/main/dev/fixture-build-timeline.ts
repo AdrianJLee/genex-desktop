@@ -34,13 +34,14 @@ const DONE_ASK = "Give the car a horn, and a garage to park it in.";
 const DONE_HEADS = ["e5", "f6"].map((seed) => seed.repeat(20));
 const SIGN = "assets/genex/shop-sign.png";
 const ENGINE = "assets/genex/engine-loop.wav";
-/** The lead's four save points, in order: what each kept. */
+/** The lead's four save points, in order: their number and what each kept. */
 const SAVE_POINTS = [
-  { label: "Shop sign", summary: "the red sign hangs over the paint shop" },
-  { label: "Engine sounds", summary: "the car hums and the tyres squeal" },
-  { label: "Blue sign", summary: "the sign repainted blue" },
-  { label: "Night street", summary: "the street at night" },
-];
+  { n: 1, label: "Shop sign", summary: "the red sign hangs over the paint shop" },
+  { n: 2, label: "Engine sounds", summary: "the car hums and the tyres squeal" },
+  { n: 3, label: "Blue sign", summary: "the sign repainted blue" },
+  { n: 4, label: "Night street", summary: "the street at night" },
+] as const;
+const [SHOP_SIGN, ENGINE_SOUNDS, BLUE_SIGN, NIGHT_STREET] = SAVE_POINTS;
 
 const SKY: Rgb = [150, 190, 230];
 const ROAD: Rgb = [70, 74, 86];
@@ -182,9 +183,13 @@ const LEAD_ROW = { workerId: "lead", title: "Lead", mode: "single" } as const;
 /** The verdict source a save point's round carries (the seed's `SAVE_POINT_VERDICT_SOURCE`). */
 const SAVE_POINT_SOURCE = "lead";
 
-/** Save point `n` of the lead, with its checkpoint's picture, as the Loop records it: a kept round of the lead's row and its merge into the folder. */
-function savePoint(run: Scoped, project: string, n: number, pictures: Pictures): EventData[] {
-  const { label, summary } = SAVE_POINTS[n - 1] ?? { label: `Save ${n}`, summary: "" };
+/** A save point of the lead, with its checkpoint's picture, as the Loop records it: a kept round of the lead's row and its merge into the folder. */
+function savePoint(
+  run: Scoped,
+  project: string,
+  { n, label, summary }: (typeof SAVE_POINTS)[number],
+  pictures: Pictures,
+): EventData[] {
   const snapshot = `fixture-save-${n}`;
   return [
     run(CustomEvent.FacetIteration, {
@@ -232,13 +237,13 @@ function firstBuilds(run: Scoped, project: string, pictures: Pictures): EventDat
     delivered(run, project, SIGN_PAINTER, { id: "job-sign-1", file: SIGN, picture: pictures.signs[0] }),
     ended(run, SIGN_PAINTER, WorkerEnd.Done, "Painted a red shop sign."),
     verdict(run, SIGN_PAINTER, true),
-    ...savePoint(run, project, 1, pictures),
+    ...savePoint(run, project, SHOP_SIGN, pictures),
     started(run, SOUNDS),
     started(run, TRACK),
     delivered(run, project, SOUNDS, { id: "job-engine", file: ENGINE }),
     ended(run, SOUNDS, WorkerEnd.Done, "Made an engine loop."),
     verdict(run, SOUNDS, true),
-    ...savePoint(run, project, 2, pictures),
+    ...savePoint(run, project, ENGINE_SOUNDS, pictures),
     ended(run, TRACK, WorkerEnd.Done, "Built a street track."),
     verdict(run, TRACK, false, "The track cut through the shop."),
   ];
@@ -261,8 +266,8 @@ function laterBuilds(run: Scoped, project: string, pictures: Pictures): EventDat
     delivered(run, project, REPAINT, { id: "job-sign-2", file: SIGN, picture: pictures.signs[1] }),
     ended(run, REPAINT, WorkerEnd.Done, "Repainted the sign blue."),
     verdict(run, REPAINT, true),
-    ...savePoint(run, project, 3, pictures),
-    ...savePoint(run, project, 4, pictures),
+    ...savePoint(run, project, BLUE_SIGN, pictures),
+    ...savePoint(run, project, NIGHT_STREET, pictures),
     started(run, DRIFT),
     started(run, SMOKE),
   ];

@@ -35,7 +35,7 @@ import { folderBusy } from "./lead-session.ts";
 import { LEAD_FRESH_START, SESSION_LOST_WHY } from "./lead-session-prompts.ts";
 import { noteTurnEnds, noteTurnOver } from "./turn-ends.ts";
 import { activeWork, hasWorkAtHand } from "./open/active-work.ts";
-import { OPEN_WALL_CLOCK } from "./open/contract.ts";
+import { OPEN_WALL_CLOCK, type OpenClock } from "./open/contract.ts";
 import { healthWatch } from "./open/health.ts";
 import {
   askOf,
@@ -77,12 +77,6 @@ export interface DirectorTalk {
   keep: (result: Partial<DelegateResult> | null | undefined) => Promise<void>;
 }
 
-/** The loop's clock: the real one, or one a test moves. */
-export interface WakeClock {
-  now: () => number;
-  sleep: (ms: number) => Promise<void>;
-}
-
 /** What the loop keeps between the lead's turns. */
 export interface WakeState {
   turns: number;
@@ -114,7 +108,7 @@ export interface WakeOutcome {
 interface TurnKit {
   talk: DirectorTalk;
   start: readonly string[];
-  clock: WakeClock;
+  clock: OpenClock;
   line: LeadLine | null;
 }
 
@@ -355,7 +349,7 @@ async function freshSession(
  * may begin.
  */
 async function waitsForFolder(loopRun: LoopRun, kit: TurnKit): Promise<boolean> {
-  const stopped = () => loopRun.ctx.cancelled === true || Boolean(loopRun.open?.halted);
+  const stopped = () => loopRun.ctx.cancelled === true || Boolean(loopRun.open.halted);
   if (stopped()) return false;
   await kit.clock.sleep(BUSY_RETRY_MS);
   // A Stop or a pause during the wait: the run's Stop freed the folder, and the next ask would be seated.
@@ -382,7 +376,7 @@ async function askSession(loopRun: LoopRun, kit: TurnKit, ask: TurnAsk): Promise
 function patienceCtx(loopRun: LoopRun): HarnessCtx {
   const { ctx, open } = loopRun;
   return Object.create(ctx, {
-    cancelled: { get: () => ctx.cancelled === true || Boolean(open?.halted) },
+    cancelled: { get: () => ctx.cancelled === true || Boolean(open.halted) },
   }) as HarnessCtx;
 }
 
@@ -463,7 +457,7 @@ const STOPPED_BY_THE_USER = "stopped by the user";
  * work on under it); null while it may open one.
  */
 function openSessionRefused(loopRun: LoopRun): Partial<DelegateResult> | null {
-  if (loopRun.open?.halted) return haltedTurn(loopRun.open.halted);
+  if (loopRun.open.halted) return haltedTurn(loopRun.open.halted);
   if (loopRun.ctx.cancelled === true) return haltedTurn(STOPPED_BY_THE_USER);
   return null;
 }
@@ -644,7 +638,7 @@ export async function runWakeLoop(
   loopRun: LoopRun,
   talk: DirectorTalk,
   start: readonly string[],
-  clock: WakeClock = OPEN_WALL_CLOCK,
+  clock: OpenClock = OPEN_WALL_CLOCK,
   line: LeadLine | null = null,
 ): Promise<WakeOutcome> {
   // The run's tools read the time on this clock (`wrap_up` stamps the person's ask with it).

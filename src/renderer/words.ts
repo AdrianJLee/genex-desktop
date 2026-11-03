@@ -125,15 +125,18 @@ const GIT_REF = /\brefs\/[^\s)]+/gi;
  * "run_fixture123456" learns nothing — so they are removed here rather than trusted not to appear.
  */
 export function withoutIds(text: string): string {
-  return text
-    .replace(GIT_REF, "")
-    .replace(RUN_ID, "")
-    .replace(COMMIT_SHA, "")
-    .replace(/\(\s*\)/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\s*·\s*(?=·|$)/g, "")
-    .replace(/^\s*[·—-]\s*/, "")
-    .trim();
+  return (
+    text
+      .replace(GIT_REF, "")
+      .replace(RUN_ID, "")
+      .replace(COMMIT_SHA, "")
+      // The brackets a stripped id leaves, with the space before them: "in git (refs/…): ask" reads "in git: ask".
+      .replace(/\s*\(\s*\)/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*·\s*(?=·|$)/g, "")
+      .replace(/^\s*[·—-]\s*/, "")
+      .trim()
+  );
 }
 
 function clip(text: string, max: number): string {
@@ -903,7 +906,8 @@ function pausedLoopRunWords(rounds: number, stopped: boolean, why: string): Loop
     };
   return {
     headline: t("{rounds, plural, =0 {Paused} one {Paused after # round} other {Paused after # rounds}}", { rounds }),
-    because: t("{why}. Everything built so far is kept.", { why: capitalise(why) }),
+    // A reason may end a sentence of its own: the card's full stop is the one it ends with.
+    because: t("{why}. Everything built so far is kept.", { why: capitalise(why).replace(/[.!?…]+$/, "") }),
   };
 }
 

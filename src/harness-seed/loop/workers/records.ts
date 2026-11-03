@@ -7,7 +7,6 @@
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
 import type { WorkerType } from "../../types/host-api.d.ts";
 import type { FactRef, FolderHolds } from "../folder-facts.ts";
-import type { Where } from "../git.ts";
 import type { HookedGame } from "../hooks.ts";
 import { HostMethod } from "../host-methods.ts";
 import { sleep } from "../time.ts";
@@ -60,8 +59,6 @@ export interface WorkerScope {
   gameDir: string;
   /** The game as far as Genex's moments go (`hookEvents`): a worker's start and end are announced only when its plugins hook them. */
   game?: HookedGame;
-  /** Where the lead works, which a copy's work merges into. */
-  leadFolder: Where;
   /** Who runs a worker's session: Genex, the project's folder and what it holds (every brief opens with it). */
   identity: { folderLabel: string; facts: readonly FactRef[]; holds?: FolderHolds | null };
   clock: PoolClock;

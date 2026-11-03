@@ -3888,7 +3888,6 @@ export default {
   "The lead stopped {count}.": "L’agent principal en a arrêté {count}.",
   "The lead wants to run {job} in the background": "L’agent principal veut lancer {job} en arrière-plan",
   "The lead's summary": "Résumé de l’agent principal",
-  "The lead's view of the game": "Le jeu vu par l’agent principal",
   "The lead: done": "Agent principal : terminé",
   "The lead: paused": "Agent principal : en pause",
   "The lead: stopped": "Agent principal : arrêté",

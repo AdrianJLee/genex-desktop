@@ -206,8 +206,8 @@ session's turn, a Loop lead's included, is told none. A local turn's operating r
 game.
 
 Every game chat message is the chat's own turn: its build's lead's while that build runs, the chat's
-own session otherwise, which keeps the run's controls (`run_status`, `show_build`, `land_build`, and
-`resume_run` after a pause) after a closed Loop run whose journal seated a lead
+own session otherwise, which keeps the run's status (`run_status`, and `resume_run` after a pause
+of a Loop that worked in place) after a closed Loop run whose journal seated a lead
 ([after the build](conversation-lifecycle.md#after-the-build-the-same-session)). Not solved, by the
 owner's decision: a chat whose build ran on the classic pipeline or a gauntlet (as on a local model
 without sessions) has no way to start another timed build in it since "Start a new build" was
@@ -230,12 +230,12 @@ mode and saved rules as the chat's own session; each question answered for that 
 minutes), and every call but a read or a studio tool screened by the host ahead of every allow rule
 (a PreToolUse hook) only to ask first while the chat is in a mode the session could not be switched
 to. A lead also has the chat's own session's plugins and connectors. A Loop's lead has one seat,
-the host's own finding (`DelegationService#leadRoot`): it works in the game folder itself, a web
-game's too (`director.inPlace`, honoured only for a writing lead whose root is the game folder by
-name and real path, of a run of this game started in the chat its delegation and grant name), its
-plugins acting there and its run's consent covering its engine connector; no lead is lent a
-preview window. A grant it cannot place, or one that names no seat in place, leaves the session
-unattended. A lead's workers, the director's builders among them, follow the chat's mode and
+the host's own finding (`DelegationService#inPlaceRoot`): it works in the game folder itself, a web
+game's too (honoured only for a writing lead whose `director.root` is the game folder by name and
+real path, of a run of this game started in the chat its delegation and grant name), its plugins
+acting there and its run's consent covering its engine connector; on a game Genex sees it has the
+window its chat's turns have (the capture and computer tools), beside its run tools. A grant it
+cannot place leaves the session unattended. A lead's workers, the director's builders among them, follow the chat's mode and
 ask in it, boxed and never reaching the never-touch list in any mode
 ([workers](tool-permissions.md#workers)); a reviewer and a second opinion are unattended: `acceptEdits`, a sandboxed shell auto-allowed inside the workspace,
 and no questions. A harness edit can make a
@@ -520,8 +520,9 @@ refuses the run with words (a resume stays paused). A resume goes on by its jour
 (`resumedRoute`): a Loop that worked in place (`director.open`) goes on in place whatever the folder
 reads as now; a web game's Loop an earlier Genex paused in its integration worktree (`director`, no
 `open`) is refused and stays paused, its words naming the git ref that holds its work
-(`refs/studio/runs/<runId>/integration`, `OPEN_LOOP_REFUSAL.webLoopBefore`), so the chat's own
-session brings it in when the person asks; any other journal (the classic pipeline's, the Unreal
+(`refs/studio/runs/<runId>/integration`, `OPEN_LOOP_REFUSAL.webLoopBefore`), which the chat's own
+session reads in `run_status` and brings in when the person asks (its card says the work is kept in
+git, as cards name no ref, and the chat offers no `resume_run` after it); any other journal (the classic pipeline's, the Unreal
 runner's `kind: "unreal-lead"`) closes as it stood (`closingOlderBuild`). A Loop runs no
 self-improvement pass, and Genex's `web.ready` gate reaches a game by its facts: a web game at its
 root. The chat's launch words and its launch promise describe the lead building in place, workers in
@@ -868,7 +869,7 @@ chat (`freshChat`).
 
 #### Claims, the person's finish and worker approvals
 
-A claim (`victory=yes`) may come whenever the goal is reached and closes the Loop on the lead's
+A claim (`finish` with its `summary`) may come whenever the goal is reached and closes the Loop on the lead's
 word (Loop phase 4); with `review=yes` a reviewer reads it first (`open/finish.ts`): a yes closes it as reviewed, while a no, no answer, no time or no reviewer to seat
 goes back to the lead and decides nothing (no row of no's closes a run). No judge's word turns a
 claim back. However a run ends — the lead's `finish`, a turn with nothing at work, the user's Finish

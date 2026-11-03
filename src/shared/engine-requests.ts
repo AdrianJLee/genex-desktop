@@ -75,8 +75,8 @@ export interface DelegateCaptureGrant {
 
 /**
  * A Loop's lead: the chat's own session, in the game folder (`root`), with the run's tools. The host
- * honours its grant only in place (`inPlace`), for this game's own run started in this chat, and
- * hands the engine `root`'s checked real path (delegation.ts `#leadRoot`).
+ * honours its grant only for a `root` that is the game folder itself, for this game's own run started
+ * in this chat, and hands the engine `root`'s checked real path (delegation.ts `#inPlaceRoot`).
  */
 export interface DelegateDirectorGrant {
   runId: string;
@@ -89,8 +89,6 @@ export interface DelegateDirectorGrant {
    * lead in its game's folder.
    */
   chatSession?: boolean;
-  /** The lead works in the game folder itself; a grant without it is never a lead's. */
-  inPlace?: boolean;
 }
 
 /** A still that goes into the builder's prompt as an image block. */

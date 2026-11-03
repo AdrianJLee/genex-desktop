@@ -975,8 +975,7 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
       }
       assert.ok(ruleDenies(deny, "Edit", "/tmp/studio/settings.json"), "the studio's own files stay fenced");
     }
-    // The studio's rules for the classifier: a build session, never a read-only one, and no game
-    // folder carve-out (its edits there are not checkpointed per message).
+    // The studio's rules for the classifier: a build session, never a read-only one.
     const { autoMode } = auto.settings as { autoMode: Record<string, string[]> };
     assert.equal(autoMode.allow![0], "$defaults");
     assert.equal(
@@ -985,13 +984,13 @@ describe("a build's lead asks from the chat's mode, and the host answers", () =>
     );
     const build = autoMode.environment!.find((entry) => entry.startsWith("**Build session**"));
     assert.ok(build, "a build session");
-    // The lead builds with its own hands: Auto's classifier reads that its edits and commits in the
-    // integration worktree it leads are the work, not a session overstepping workers' ground.
-    assert.match(build, /A lead edits and commits in the run's integration worktree/);
-    assert.equal(
-      autoMode.allow!.some((entry) => entry.startsWith("Game Folder Work:")),
-      false,
-    );
+    // Flipped (one Loop): "A lead edits and commits in the run's integration worktree" and no game
+    // folder carve-out. The lead builds with its own hands in the game folder, which Genex's save
+    // points checkpoint: its edits and deletions there are the work and recoverable.
+    assert.match(build, /leads a build of the person's game in its game folder/);
+    assert.match(build, /checkpoints it under refs\/studio\/ at each save point/);
+    assert.doesNotMatch(build, /integration worktree|lands the work/);
+    assert.ok(autoMode.allow!.some((entry) => entry.startsWith("Game Folder Work:")));
   });
 
   // Only the chat's own session handed the picker a live control: a lead's session kept the mode it

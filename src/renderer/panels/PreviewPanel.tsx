@@ -39,7 +39,7 @@ import type { BesideTarget } from "../open-beside.ts";
 import { OPEN_BUILD_EVENT } from "../open-build.ts";
 import { replyAbout } from "../reply-about.ts";
 import { type RunGraph as RunGraphModel, runBuilding, runIdOf } from "../run-graph.ts";
-import { kindPendingGame, type StageWatch, StageView, watchingLive } from "../stage.ts";
+import { kindPendingGame, type StageWatch, StageView } from "../stage.ts";
 import { threadLog } from "../state/event-log.ts";
 import { useEventLog, useLaunch, useShallow, useThreads } from "../state/hooks.ts";
 import { isWorkingStatus } from "../state/threads.ts";
@@ -800,13 +800,12 @@ export function PreviewPanel({
   /** A plugin's toolbar button has its panel up over the stage. */
   const [toolbarOpen, setToolbarOpen] = useState(false);
   // Only the web preview is a game to watch or a page to probe; beside any other view, what waits goes in.
-  // A game waiting for Play is no game watched: a chat's show asked of it may load it.
   const watch: StageWatch = { view: stageView, visible, showEmpty, preview };
   const firstPlan = useFirstPlan(project, status, runGraph);
   const shown = { onLive: previewOnStage && visible, loading: liveLoading, empty: showEmpty };
   const controls = useStageControls(project, live, { ...shown, firstPlan: Boolean(firstPlan) }, onNotice);
   const cover = { ...flags, liveLoading: controls.loader.covering, project, visible, sidebarOverlay, toolbarOpen };
-  useNativeViewBounds(slot, { ...cover, watching: watchingLive(watch) && !live.idle });
+  useNativeViewBounds(slot, cover);
   const trouble = useBuildProblem(project, live.loadLive, onNotice);
   const about = useLiveAbout(loaded, run.firstSaid);
   useLiveProbe({ project: preview ? project : null, stageView, live, buildProblemRef: trouble.buildProblemRef, about });

@@ -7096,17 +7096,6 @@ a:focus-visible {
 .chat-jump {
   animation: chat-fade-in var(--duration-quick) ease-out;
 }
-/* The running build's first picture slides in beside its words, which make room for it (gap-3). */
-@keyframes build-picture-in {
-  from {
-    width: 0;
-    margin-inline-end: -0.75rem;
-    opacity: 0;
-  }
-}
-.build-picture-in {
-  animation: build-picture-in var(--duration-fast) var(--ease-smooth-out);
-}
 .build-card-text {
   transition: padding-inline-start var(--duration-fast) var(--ease-smooth-out);
 }
@@ -7145,7 +7134,6 @@ a:focus-visible {
   .presence[data-presence],
   .chat-jump,
   .chat-waiting-card,
-  .build-picture-in,
   [data-chat-status] .chat-chevron {
     animation: none;
   }

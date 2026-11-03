@@ -42,7 +42,7 @@ import type { LoopRun } from "../loop-run.ts";
 import { WrapCause } from "../wake-schedule.ts";
 import { type TurnEnds, turnEndsOf } from "../turn-ends.ts";
 import { closeInPlace, type OpenEnd } from "./close.ts";
-import { asksPending, OPEN_CLOSE_MS, type OpenClock } from "./contract.ts";
+import { asksPending, OPEN_CLOSE_MS } from "./contract.ts";
 import { OPEN_WORDS } from "./prompts.ts";
 import { writersInPlace } from "./writers.ts";
 
@@ -64,9 +64,6 @@ export const MESSAGE = {
 
 /** How often a close running past the lead's call is looked at, until the call must answer. */
 const CLOSE_POLL_MS = SECOND_MS;
-
-/** The Loop's clock: the wake loop's. */
-const clockOf = (loopRun: LoopRun): OpenClock => loopRun.open.clock;
 
 /** Whether the Loop is closing or closed: nothing more is claimed or ended then. */
 const closing = (loopRun: LoopRun): boolean =>
@@ -90,8 +87,7 @@ function tallyFor(loopRun: LoopRun, lastRound: number): FinishTally {
 }
 
 /** What marks the lead's work: its Loop's newest save point, its own or an autosave ("" before the first). */
-const workMarkOf = (loopRun: LoopRun): string | null =>
-  loopRun.open ? (loopRun.open.journal.savePoints.at(-1)?.snapshotId ?? "") : null;
+const workMarkOf = (loopRun: LoopRun): string => loopRun.open.journal.savePoints.at(-1)?.snapshotId ?? "";
 
 /** Whether the claim's own turn is over: its session returned, or another turn began. */
 const turnLost = (loopRun: LoopRun, claimed: TurnEnds | undefined): boolean => {
@@ -101,14 +97,14 @@ const turnLost = (loopRun: LoopRun, claimed: TurnEnds | undefined): boolean => {
 
 /** Why a yes no longer speaks for the folder: a recovery took it back to a save point since the claim. */
 function lapsedSince(loopRun: LoopRun): () => Promise<string | null> {
-  const restores = loopRun.open?.restores ?? 0;
-  return async () => ((loopRun.open?.restores ?? 0) !== restores ? MESSAGE.wentBackUnderReview : null);
+  const restores = loopRun.open.restores;
+  return async () => (loopRun.open.restores !== restores ? MESSAGE.wentBackUnderReview : null);
 }
 
 /** Ask the reviewer about the claim, on the Loop's clock, from the call's start: a yes leaves the close its time (`OPEN_CLOSE_MS`). */
 async function check(loopRun: LoopRun, claim: FinishClaim, started: number): Promise<FinishOutcome> {
   const { ctx, gameFacts, inbox, projectDir, run, threadId } = loopRun;
-  const clock = clockOf(loopRun);
+  const clock = loopRun.open.clock;
   const log = await readFinishLog(ctx, threadId, run.runId, await inbox.steering());
   const turn = turnEndsOf(loopRun.state);
   return checkFinish(
@@ -157,7 +153,7 @@ function reviewAnswer(outcome: FinishOutcome): string {
  * (`LEAD_CALL_MS` from its start), then left to finish on its own; whether it finished in time.
  */
 async function closeWithinCall(loopRun: LoopRun, end: OpenEnd, started: number): Promise<boolean> {
-  const clock = clockOf(loopRun);
+  const clock = loopRun.open.clock;
   const answerBy = started + LEAD_CALL_MS - CALL_MARGIN_MS;
   let done = false;
   const closing = closeInPlace(loopRun, end).finally(() => {
@@ -176,10 +172,10 @@ async function closeWithinCall(loopRun: LoopRun, end: OpenEnd, started: number):
  */
 function claimRefusal(loopRun: LoopRun, args: AnyRecord): string | null {
   if (!hasText(args.summary)) return OPEN_WORDS.needsSummary;
-  if (loopRun.open?.recovering) return OPEN_WORDS.recovering;
+  if (loopRun.open.recovering) return OPEN_WORDS.recovering;
   // The folder the reviewer would read is not the one the lead asked for yet.
-  if (loopRun.open && asksPending(loopRun.open.journal)) return OPEN_WORDS.askFirst;
-  const writers = loopRun.open ? writersInPlace(loopRun.open).map((record) => record.id) : [];
+  if (asksPending(loopRun.open.journal)) return OPEN_WORDS.askFirst;
+  const writers = writersInPlace(loopRun.open).map((record) => record.id);
   return writers.length ? OPEN_WORDS.writerAtWork(writers) : null;
 }
 
@@ -202,7 +198,7 @@ async function pageProblems(loopRun: LoopRun): Promise<string | null> {
   const { ctx, gameFacts, open, run } = loopRun;
   if (!servedAsWeb({ facts: gameFacts, holds: open.holds })) return null;
   const target = { project: run.project, runId: run.runId, label: "director/finish" };
-  const check = await checkHealth(ctx, target, { sleep: clockOf(loopRun).sleep });
+  const check = await checkHealth(ctx, target, { sleep: loopRun.open.clock.sleep });
   return check.ok || check.unchecked ? null : OPEN_WORDS.unhealthy(healthLine(check));
 }
 
@@ -253,7 +249,7 @@ async function reviewedClaim(
 
 /** `finish` (the module's header): one claim at a time, never on a Loop already closing. */
 export async function openFinish(loopRun: LoopRun, args: AnyRecord): Promise<string> {
-  const started = clockOf(loopRun).now();
+  const started = loopRun.open.clock.now();
   if (closing(loopRun)) return OPEN_WORDS.ending;
   if (!holdFinish(loopRun.state)) return OPEN_WORDS.finishUnderWay;
   try {

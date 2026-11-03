@@ -80,9 +80,9 @@ restart, so none overwrites another's): one row per action with
 
 ## Who holds it
 
-Workers (a capture grant, unless `computer: false`) and the director hold `computer` on a pooled
-window of their own, never Live; the chat's own session holds it on a game played in its engine's
-editor. A judge is a second opinion the lead asks for with `judge`: it reads the pictures it is
+Workers (a capture grant, unless `computer: false`) and the chat's own session hold `computer` on a
+pooled window of their own, never Live, the session in its turns as a Loop's lead too (one window,
+role `builder`); the chat's own session holds it on a game played in its engine's editor. A judge is a second opinion the lead asks for with `judge`: it reads the pictures it is
 given and holds no computer.
 
 A chat's earlier `chat_judge_result` rows (from before Genex dropped the chat's `judge_play`) still

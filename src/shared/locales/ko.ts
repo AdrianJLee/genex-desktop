@@ -3731,7 +3731,6 @@ export default {
   "The lead stopped {count}.": "메인 에이전트가 시도 {count}개를 중지했어요.",
   "The lead wants to run {job} in the background": "메인 에이전트가 백그라운드에서 {job} 실행을 요청해요",
   "The lead's summary": "메인 에이전트 요약",
-  "The lead's view of the game": "메인 에이전트가 보는 게임",
   "The lead: done": "메인 에이전트: 완료",
   "The lead: paused": "메인 에이전트: 일시 정지됨",
   "The lead: stopped": "메인 에이전트: 중지됨",

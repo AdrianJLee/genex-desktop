@@ -331,10 +331,7 @@ with no tools, a bounded window, current attachments and host-owned `studio.cont
 delegates or edits games, settings or harness files, and a blank reply is a durable error.
 
 **Stage, Live's gate and morning card.** During a run the stage stays where the user left
-it, and Live changes only through the user's own loads (the renderer's IPC, and `show_build` /
-`land_build` answering a still unanswered message of the person's, `ChatPermissionService.awaitsAnswer`,
-while Live, holding that game, is out of sight, `PreviewService.liveOutOfSight`; otherwise a show
-is offered by commit, `offerBuild`, and a landing lands and offers the folder). A harness preview call that names no window, or
+it, and Live changes only through the user's own loads (the renderer's IPC). A harness preview call that names no window, or
 the live view, reaches the stand-in (`STAND_IN_HANDLE`, a hidden window outside the lease count,
 opened on first use with what Live shows, closed after two idle minutes); only a build with no
 headless capability still drives Live. What the harness loads there, a checkpoint and a rewind
@@ -590,7 +587,7 @@ a preview window. Rules:
   person's `from: person`); Genex's own messages and lines go `from: genex` (`MessageFrom`), which
   each engine shows as not the person's.
 - Live chat (`loop/live-chat.ts`, `director/lead-line.ts`) and one session
-  (`director/lead-session.ts`, `after-loop-run.ts`, the host's `#leadRoot`): the
+  (`director/lead-session.ts`, `after-loop-run.ts`, the host's `#inPlaceRoot`): the
   lead is the chat's own session, one per chat, which goes on after the close
   ([live chat](../conversation-lifecycle.md#live-chat-during-a-build),
   [after the build](../conversation-lifecycle.md#after-the-build-the-same-session)).

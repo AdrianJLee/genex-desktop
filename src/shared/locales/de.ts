@@ -3912,7 +3912,6 @@ export default {
   "The lead stopped {count}.": "Der Hauptagent hat {count} davon gestoppt.",
   "The lead wants to run {job} in the background": "Der Hauptagent möchte {job} im Hintergrund ausführen",
   "The lead's summary": "Zusammenfassung des Hauptagenten",
-  "The lead's view of the game": "Das Spiel aus Sicht des Hauptagenten",
   "The lead: done": "Hauptagent: fertig",
   "The lead: paused": "Hauptagent: pausiert",
   "The lead: stopped": "Hauptagent: gestoppt",

@@ -299,10 +299,11 @@ describe("a Loop's lead in place has its run's tools on the game folder", () => 
 describe("a Loop's lead's window and seat", () => {
   // Flipped (one Loop): a web Loop's lead, read-only in the game folder and leading its run's
   // integration worktree, was lent the preview window (`look`, the computer). Every lead works in its
-  // game folder now, a web game's too, with the tools any session there has; a seat on a worktree is
-  // never granted.
+  // game folder now, a web game's too; a seat on a worktree is never granted. Flipped again: "the web
+  // lead has no computer". The lead is the chat's own session, and on a web game its turn carries the
+  // chat's capture grant (director.ts `delegateTurn`), so it has the window its chat's turns have.
   it(
-    "no Loop's lead is lent the preview window, a web game's neither, and a worktree seat is dropped",
+    "a web game's lead has its chat's window and no look, a Godot game's neither, and a worktree seat is dropped",
     TEST_TIMEOUT,
     async () => {
       const { core, godot, threadId, delegate } = await inPlaceWorld();
@@ -310,7 +311,8 @@ describe("a Loop's lead's window and seat", () => {
       const pondChat = await core.threadForGame(pond.name);
       const names = (request: DelegateRequest) => (request.liveTools ?? []).map((tool) => tool.name);
       await recordRun(core, pond.name, "run_web", pondChat);
-      const web = await delegate("web-lead", inPlaceBrief(pondChat, pond.name, pond.dir, "run_web"), {
+      const eyes = { selfCapture: { project: pond.name, root: pond.dir, label: pond.name } };
+      const web = await delegate("web-lead", inPlaceBrief(pondChat, pond.name, pond.dir, "run_web", eyes), {
         thread: pondChat,
         game: pond.name,
       });
@@ -318,11 +320,13 @@ describe("a Loop's lead's window and seat", () => {
       await recordRun(core, godot.name, RUN_ID, threadId);
       const open = await delegate("open-lead", inPlaceBrief(threadId, godot.name, godot.dir));
       assert.ok(open.leadAsks, "a Godot game's lead is seated in place");
-      for (const [label, request] of [
-        ["web", web],
-        ["godot", open],
+      assert.ok(names(web).includes("computer"), `the web lead has its chat's computer: ${names(web).join(", ")}`);
+      assert.equal(typeof web.onCapture, "function", "and its capture");
+      for (const [label, request, absent] of [
+        ["web", web, ["look"]],
+        ["godot", open, ["look", "computer"]],
       ] as const)
-        for (const name of ["look", "computer"])
+        for (const name of absent)
           assert.equal(
             names(request).includes(name),
             false,
@@ -731,6 +735,51 @@ describe("Genex's pause of an open Loop reaches only its lead", () => {
       await delegate("lead-1", inPlaceBrief(threadId, godot.name, godot.dir));
       assert.deepEqual(answers.at(-1), { aborted: 1 }, "the run's lead in place is");
       assert.equal(signals.at(-1)?.aborted, true);
+    },
+  );
+});
+
+describe("a Loop's lead in place while its chat plans", () => {
+  // Moved from delegation-unreal-live.test.ts, which pinned the deleted Unreal runner's lead. Flipped:
+  // a director's `integrate` and a `finish` that lands were held for the plan too; the one Loop has
+  // no `integrate`, and its `finish` closes in place, landing nothing.
+  it(
+    "holds a writer's start and a merge for the plan's approval; a reader, a rejection and finish go on",
+    TEST_TIMEOUT,
+    async () => {
+      const { core, godot, threadId, state, delegate } = await inPlaceWorld();
+      const dispatched: string[] = [];
+      Object.defineProperty(core.host, "hasCapability", { configurable: true, value: () => true });
+      core.host.dispatch = async (action) => {
+        const name = String((action as { name?: unknown }).name);
+        dispatched.push(name);
+        return `answered ${name}`;
+      };
+      await recordRun(core, godot.name, RUN_ID, threadId);
+      await core.setPermissionMode(threadId, PermissionMode.Plan);
+      const calls: Array<[string, Record<string, unknown>]> = [
+        ["worker_start", { title: "Sky", task: "x", isolation: "copy" }],
+        ["worker_mark", { id: "w1", verdict: "used" }],
+        ["worker_start", { title: "Look around", task: "x", isolation: "read" }],
+        ["worker_mark", { id: "w1", verdict: "rejected" }],
+        ["finish", { summary: "done" }],
+      ];
+      const answers: string[] = [];
+      state.during = async (request) => {
+        for (const [name, args] of calls) answers.push(text(await request.onLiveTool!(name, args)));
+      };
+      const tools = calls.map(([name]) => ({
+        name,
+        description: name,
+        parameters: { type: "object", properties: {} },
+      }));
+      const brief = inPlaceBrief(threadId, godot.name, godot.dir);
+      const request = await delegate("lead-plan", { ...brief, director: { ...brief.director, tools } });
+      assert.ok(request.director, "the lead is seated in place");
+      assert.match(answers[0] ?? "", /writers start once the person approves your plan/);
+      assert.match(answers[1] ?? "", /a worker's work is merged once the person approves/);
+      assert.deepEqual(answers.slice(2), ["answered worker_start", "answered worker_mark", "answered finish"]);
+      assert.deepEqual(dispatched, ["worker_start", "worker_mark", "finish"], "no snapshot, copy or merge");
     },
   );
 });

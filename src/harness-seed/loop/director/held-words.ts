@@ -24,7 +24,6 @@ const upper = (name: string): string => name.charAt(0).toUpperCase() + name.slic
 export const clause = (words: string): string => words.trim().replace(/[.]+$/, "");
 
 const MESSAGE = {
-  RunHeld: (reason: string) => `The run didn't start: a plugin of this game held it back: ${reason}`,
   TurnsHeld: (reason: string) => `A plugin of this game kept holding the lead's turns back: ${reason}`,
   StartHeld: (reason: string, resumed: boolean) =>
     `The Loop didn't start: a plugin of this project held it back: ${reason} ${resumed ? "Then press Resume: the Loop stays paused." : "Then start the Loop again."}`,
@@ -102,12 +101,7 @@ function heldFor(held: HookHeldBy, words: HoldWords): string | null {
   return hold ? words[hold.hold](hold.label ?? THE_APP) : null;
 }
 
-/** Why a run didn't start, for the person: Genex's hold in their words, a plugin's block with its reason. */
-export function runHeldWords(held: HeldBack): string {
-  return heldFor(held, START_HELD) ?? MESSAGE.RunHeld(held.reason);
-}
-
-/** Why the lead's turn stopped when it was held while the run could not wait, for the person, as {@link runHeldWords} words it. */
+/** Why the lead's turn stopped when it was held while the run could not wait, for the person, as {@link openStartHeld} words a start. */
 export function turnsHeldWords(held: HeldBack): string {
   return heldFor(held, TURNS_HELD) ?? MESSAGE.TurnsHeld(held.reason);
 }
@@ -118,10 +112,7 @@ export function turnsHeldWords(held: HeldBack): string {
  * reason and what to do next.
  */
 export function openStartHeld(blocked: HeldBack, resumed = false): string {
-  const genexHold = resumed ? heldFor(blocked, RESUME_HELD) : null;
-  if (genexHold) return genexHold;
-  if (holdOf(blocked)) return runHeldWords(blocked);
-  return MESSAGE.StartHeld(blocked.reason, resumed);
+  return heldFor(blocked, resumed ? RESUME_HELD : START_HELD) ?? MESSAGE.StartHeld(blocked.reason, resumed);
 }
 
 /** Why something was held back, for the lead: Genex's own hold in its words, a step's block with its reason. */

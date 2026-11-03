@@ -10,7 +10,7 @@
  *
  * Two layers:
  *  - `GIT`, the command lines themselves, pure: for code that already has its own exec (the
- *    union merge, the reviewer, the nested-repository check), and for the tests.
+ *    union merge, the reviewer), and for the tests.
  *  - the helpers that run them through `ctx.call("run.exec")` in a worktree (`cwd`) or in the
  *    live game folder (`{ project }`): `gitAt`, `headOf`, `isAncestor`, `updateRef`,
  *    `mergeNoFf`, `resetClean`.
@@ -128,9 +128,6 @@ export const GIT = Object.freeze({
   /** Paths changed against `base`, restricted to `pathspec` (already-quoted shell words). */
   diffNames: (base: unknown, pathspec: string): string => `git diff --name-only ${commitArg(base)} -- ${pathspec}`,
   diff: (base: unknown, pathspec: string): string => `git diff ${commitArg(base)} -- ${pathspec}`,
-  /** Does `rev:file` exist? Answers `yes` or `no` on stdout. */
-  catFileExists: (rev: string, file: string): string =>
-    `git cat-file -e ${shellQuote(`${rev}:${file}`)} && echo yes || echo no`,
   checkoutPath: (rev: unknown, file: string): string => `git checkout ${commitArg(rev)} -- ${shellQuote(file)}`,
   /**
    * Is the worktree's `file` byte-identical to its copy at `rev` (and does `rev` hold it at all)?

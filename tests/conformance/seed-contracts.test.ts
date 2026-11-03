@@ -607,9 +607,11 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
   });
 
   // Flipped (one Loop): it also held the seed's profile choice (`loopProfileOf`, `WEB_LOOP_FACTS`) to
-  // the app's; every Loop works in place now, and only the persisted vocabulary is shared.
+  // the app's; every Loop works in place now, and only the persisted vocabulary is shared. Flipped:
+  // the seed's vocabulary equalled the app's; it keeps only the value it writes, which the app names
+  // alike (the app alone keeps `web`, an earlier Genex's, for history).
   it("names a Loop's profile as the app does", () => {
-    assert.deepEqual(seedFolderFacts.LoopProfile, LoopProfile);
+    assert.deepEqual(seedFolderFacts.LoopProfile, { Open: LoopProfile.Open });
   });
   it("the seed's starters and project tool names are the app's", () => {
     assert.deepEqual(seedFolderFacts.ProjectStarter, ProjectStarter);

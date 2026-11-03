@@ -6,7 +6,7 @@
  * contract, no preview, no copy of the game for the lead: it works in the game folder itself.
  */
 import type { AnyRecord, HarnessCtx, Run } from "../../../types/harness.d.ts";
-import { type FactRef, factsOfGame, type FolderHolds } from "../../folder-facts.ts";
+import { type FactRef, factsOfGame, type FolderHolds, seenInWindow } from "../../folder-facts.ts";
 import { HostMethod } from "../../host-methods.ts";
 import { modelOn, RoleKey, roleEffort, roleEngine } from "../../model-roles.ts";
 import { folderLabelOf } from "../../workers/identity.ts";
@@ -34,6 +34,8 @@ export interface OpenedGame {
   facts: FactRef[];
   holds: FolderHolds | null;
   hookEvents: string[];
+  /** Genex's eyes reach the game (`seenInWindow`): the lead's turns get the window its chat's turns have. */
+  seen: boolean;
 }
 
 /** The game as `game.list` lists it; a game with no folder throws, as a web run's does. */
@@ -47,6 +49,7 @@ export async function openGame(ctx: HarnessCtx, run: Run): Promise<OpenedGame> {
     facts: factsOfGame(game),
     holds: typeof game?.holds === "string" ? (game.holds as FolderHolds) : null,
     hookEvents: Array.isArray(game?.hookEvents) ? game.hookEvents.map(String) : [],
+    seen: seenInWindow(game),
   };
 }
 
@@ -92,6 +95,7 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     facts: game.facts,
     holds: game.holds,
     hookEvents: game.hookEvents,
+    seen: game.seen,
     journal,
     halted: null,
     turnSavedFrom: journal.savePoints.length,
@@ -115,7 +119,7 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
 /** Why a worker's merge into the game folder is refused now (the Loop paused, closing, closed or stopped), or null. */
 function mergeRefusedNow(loopRun: LoopRun): string | null {
   const { ctx, open, state } = loopRun;
-  if (open?.halted) return OPEN_WORDS.paused;
+  if (open.halted) return OPEN_WORDS.paused;
   const over = state.finished || Boolean(state.finish) || closeUnderWay(state) || ctx.cancelled === true;
   return over ? OPEN_WORDS.ending : null;
 }
@@ -138,7 +142,6 @@ function poolSeat(loopRun: LoopRun, open: OpenLoop): RunPoolSeat {
     ...(cap === null ? {} : { creditCap: cap }),
     gameDir: projectDir,
     game: { hookEvents: open.hookEvents },
-    leadFolder: { project: run.project },
     identity: { folderLabel: folderLabelOf(projectDir, run.project), facts: open.facts, holds: open.holds },
     clock: open.clock,
     // The pool's copies and merges take the game's one git index, as the lead's saves and restores do.

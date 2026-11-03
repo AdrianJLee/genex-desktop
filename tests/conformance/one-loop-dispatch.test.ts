@@ -14,7 +14,7 @@ import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts
 import { startAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
-import { runControlsFor } from "../../src/shared/chat-run.ts";
+import { runControlTools } from "../../src/shared/chat-run.ts";
 import * as runDispatchParts from "../../src/harness-seed/loop/run-dispatch.ts";
 import { chooseRunner, handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { RunnerKind } from "../../src/harness-seed/loop/studio-state.ts";
@@ -61,9 +61,12 @@ const finishes: LoopTurn = async ({ tool }) => {
   return undefined;
 };
 
-/** The lead delegations that worked in place, as the one Loop's do. */
+/**
+ * The lead delegations that worked in place, as the one Loop's do. Flipped: read from the grant's
+ * `inPlace` flag, which is gone; a lead's grant is in place by its root, the game folder itself.
+ */
 const inPlaceLeads = (host: LoopHost) =>
-  host.leadCalls().filter((call) => (call.director as { inPlace?: unknown } | undefined)?.inPlace === true);
+  host.leadCalls().filter((call) => (call.director as { root?: unknown } | undefined)?.root === host.game.dir);
 
 describe("which Loop a run gets", () => {
   it("a Loop on a project that isn't a web game runs the one Loop", TEST_TIMEOUT, async () => {
@@ -72,6 +75,7 @@ describe("which Loop a run gets", () => {
     const [first] = inPlaceLeads(host);
     assert.ok(first, "the lead worked in place");
     assert.equal(first.resume, CHAT_SESSION, "the chat's own session leads");
+    assert.equal(first.selfCapture, undefined, "a Godot folder Genex does not see: no window, as its chat's turns");
     for (const method of ["game.scaffold", "preview.load"]) assert.ok(!host.trail().includes(method), `no ${method}`);
     assert.equal(host.appended("run_finished").length, 1);
   });
@@ -149,10 +153,25 @@ describe("kept older parts, finished Loops and the chat's words", () => {
     const host = { call: async () => structuredClone(journal) };
     const run = { runId: "run-done", state: "finished", project: "lantern", goal: "a level", engine: "claude-code" };
     const inPlace = await afterLeadLoopRun(host as never, { threadId: "t1" }, run);
-    assert.equal(inPlace?.inPlace, true, "worked in place: no build to show or land");
+    assert.equal(inPlace?.inPlace, true, "worked in place");
     const web = { call: async () => ({ director: { lead: { chatSession: true } } }) };
     const webRun = await afterLeadLoopRun(web as never, { threadId: "t1" }, run);
     assert.equal(webRun?.inPlace, undefined);
+  });
+
+  it("after a paused web Loop from before the chat answers as after a finished one: no resume_run", async () => {
+    const paused = { runId: "run-paused", state: "paused", project: "lantern", goal: "a level", engine: "claude-code" };
+    const open = { call: async () => ({ director: { lead: { chatSession: true }, open: { version: 1 } } }) };
+    const web = { call: async () => ({ director: { lead: { chatSession: true } } }) };
+    const offered = async (host: unknown) => {
+      const after = await afterLeadLoopRun(host as never, { threadId: "t1" }, paused);
+      assert.ok(after, "the chat's own session answers after it");
+      const grant = afterLoopRunGrant(after);
+      return { controls: grant.runControls.runId, tools: (grant.interviewTools ?? []).map((tool) => tool.name) };
+    };
+    assert.deepEqual(await offered(open), { controls: "run-paused", tools: ["resume_run"] });
+    // Run dispatch refuses its resume (`OPEN_LOOP_REFUSAL.webLoopBefore`): no resume is offered for it.
+    assert.deepEqual(await offered(web), { controls: "run-paused", tools: [] });
   });
 });
 
@@ -250,7 +269,13 @@ describe("a paused Loop's journal, read at its start", () => {
       });
       await web.dispatch({ resume: true });
       const [lead] = web.leadCalls();
-      assert.equal((lead?.director as { inPlace?: boolean } | undefined)?.inPlace, true, "led in place");
+      assert.equal((lead?.director as { root?: string } | undefined)?.root, web.game.dir, "led in place");
+      // A folder that reads as a web game now: the lead's turn carries its chat's eyes on it.
+      assert.deepEqual(
+        lead?.selfCapture,
+        { project: web.game.name, root: web.game.dir, label: web.game.name },
+        "the window its chat's turns have",
+      );
       assert.equal(web.appended("run_finished").at(-1)?.victory, true);
     },
   );
@@ -284,7 +309,9 @@ describe("a paused Loop's journal, read at its start", () => {
     const closed = host.appended("run_finished").at(-1);
     assert.equal(closed?.stoppedBecause, NEEDS_SESSION);
     assert.equal(closed?.executionStatus, "paused");
-    assert.equal(closed?.integrationHead, "head-1", "the paused build is still offered");
+    // Flipped (one Loop): the earlier close's `integrationHead` was kept, the paused build still
+    // offered to show or land; no run leaves a build of its own now, and none is kept.
+    assert.equal(closed?.integrationHead, undefined);
     assert.equal(closed?.baseCommit, "base-1");
     assert.deepEqual(closed?.workers, earlier.workers);
     assert.deepEqual(closed?.notes, earlier.notes);
@@ -345,10 +372,12 @@ describe("after a Loop in place", () => {
     };
     const after = await afterLeadLoopRun(host.rec.ctx as never, { threadId: host.threadId }, run);
     assert.equal(after?.inPlace, true);
+    // Flipped: the grant carried `inPlace` and the host chose the status alone by it; every Loop's
+    // chat is handed the one control now, `run_status`.
     const grant = afterLoopRunGrant(after as never);
-    assert.equal(grant.runControls.inPlace, true);
+    assert.deepEqual(grant.runControls, { runId: host.run.runId });
     assert.deepEqual(
-      runControlsFor(grant.runControls).map((tool) => tool.name),
+      runControlTools.map((tool) => tool.name),
       ["run_status"],
     );
   });

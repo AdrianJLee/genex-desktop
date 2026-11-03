@@ -21,8 +21,8 @@ game has content, Full screen (hold Esc), plugin actions, Multiplayer, Publish. 
 Play/Reload. An empty scaffold shows “Ready for your first idea”, or
 “Building your game” with Watch progress, then Play latest; the first healthy build shows itself.
 Opening a game starts nothing: Live keeps its game. Otherwise only the user changes Live (Play,
-Reload, Make live, a chat request while hidden) or a finished Unity/Godot `web/` build. A changed
-game folder, a chat's show or landing of an earlier build, or a broken shown build lights Reload; hidden and not stopped, they go in at once. The
+Reload, Make live) or a finished Unity/Godot `web/` build. A changed game folder or a broken shown
+build lights Reload; hidden and not stopped, they go in at once. The
 preview's network is open, as a web page's. Other folders' views:
 [projects](projects-engines.md#lives-views).
 
@@ -47,7 +47,7 @@ the Loop goes on.
 After a chat-led build, its session takes follow-ups: edits, resuming a paused run, or a
 new Loop for more work than a reply holds. **Stop** interrupts at once, keeping finished
 work: a stopped Loop shows one Stopped line with Resume. Resume refuses an earlier Genex's
-paused web Loop; its card names the git ref holding the work for the chat to bring in. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
+paused web Loop; its card says the work is kept in git, and its words name the ref for the chat to bring in. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
 pauses wait. A crash or restart settles abandoned activity from saved state.
 
 ## Where to work

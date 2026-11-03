@@ -18,7 +18,7 @@ import { closeRunPool } from "./workers/run-pool.ts";
 import { closeInPlace } from "./director/open/close.ts";
 import { MESSAGE as END_WORDS, openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
-import { creditCapOf, OPEN_WALL_CLOCK, restartsApp } from "./director/open/contract.ts";
+import { creditCapOf, OPEN_WALL_CLOCK, type OpenClock, restartsApp } from "./director/open/contract.ts";
 import { settleRecovery } from "./director/open/health.ts";
 import { openTools } from "./director/open/tool-specs.ts";
 import { openHandler } from "./director/open/tools.ts";
@@ -42,7 +42,7 @@ import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
 import type { LoopRun } from "./director/loop-run.ts";
 import type { TurnSaid } from "./director/news.ts";
-import type { DirectorTalk, WakeClock } from "./director/wake.ts";
+import type { DirectorTalk } from "./director/wake.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type {
   DelegateImage,
@@ -79,8 +79,8 @@ function referenceImages(run: Run): DelegateImage[] {
 
 /**
  * One turn of the lead's session, on its own engine and model. The lead is its chat's own session: it
- * sits in the game folder (no `cwd`) and builds there (`root`, `inPlace`), and its paid jobs are held
- * to the credit cap its run record names.
+ * sits in the game folder (no `cwd`) and builds there (`root`), with the eyes its chat's turns have,
+ * and its paid jobs are held to the credit cap its run record names.
  */
 function delegateTurn(
   loopRun: LoopRun,
@@ -107,6 +107,8 @@ function delegateTurn(
     ...(creditCap === null ? {} : { creditCap }),
     // The lead answers the chat while its build runs: what the person sends reaches its turn under way.
     ...(loopRun.waking ? { chatTurn: { messageId: run.runId } } : {}),
+    // The eyes its chat's turns have (delegated-turn.ts `senses`): the same window of the game folder.
+    ...(loopRun.open.seen ? { selfCapture: { project: run.project, root: projectDir, label: run.project } } : {}),
     director: {
       runId: run.runId,
       threadId,
@@ -114,7 +116,6 @@ function delegateTurn(
       root: projectDir,
       tools,
       ...(lead ? { chatSession: true } : {}),
-      inPlace: true,
     },
     ...(images.length ? { images } : {}),
   });
@@ -224,7 +225,7 @@ export async function closeLeftOpen(
   result: Partial<DelegateResult>,
   wrapCause: WrapCause | null = null,
 ): Promise<void> {
-  const halted = loopRun.open?.halted;
+  const halted = loopRun.open.halted;
   if (halted) return closeInPlace(loopRun, { victory: false, because: halted, paused: true });
   const because = openEndWords(loopRun, result, wrapCause) ?? sessionEndWords(loopRun, result);
   return closeInPlace(loopRun, { victory: false, because, notDone: [] });
@@ -241,7 +242,7 @@ function crashReport(loopRun: LoopRun, err: { kind?: unknown; message?: unknown 
 /** A run that threw before it closed: a sentence on the card, the message in the report. */
 async function closeAfterCrash(loopRun: LoopRun, err: any): Promise<void> {
   if (loopRun.state.finished) return;
-  const halted = loopRun.open?.halted;
+  const halted = loopRun.open.halted;
   if (halted) return closeInPlace(loopRun, { victory: false, because: halted, paused: true });
   if (!closeUnderWay(loopRun.state)) crashReport(loopRun, err);
   return closeInPlace(loopRun, { victory: false, because: String(loopRun.report.stoppedBecause) });
@@ -270,7 +271,7 @@ async function wakeLoopRun(
   talk: DirectorTalk,
   start: readonly string[],
   line: LeadLine,
-  clock: WakeClock,
+  clock: OpenClock,
 ) {
   const outcome = await runWakeLoop(loopRun, talk, start, clock, line);
   await line.release();
@@ -281,7 +282,7 @@ async function wakeLoopRun(
 
 /** A Loop the person stopped before any session of its lead's read its message this time. */
 const stoppedBeforeAnyTurn = (loopRun: LoopRun): boolean =>
-  loopRun.ctx.cancelled === true && !loopRun.open?.halted && !loopRun.open?.sessionWorked;
+  loopRun.ctx.cancelled === true && !loopRun.open.halted && !loopRun.open.sessionWorked;
 
 /**
  * Seat the run's lead (director/lead-session.ts): the chat's own session, continued when it can be,
@@ -316,12 +317,12 @@ function keepTimings(loopRun: LoopRun, timings: HostTimings): void {
 
 /** The lead's tools, and the dispatch of them. */
 function seatTools(loopRun: LoopRun): LiveToolSpec[] {
-  const types = loopRun.open?.pool?.state.types ?? [];
+  const types = loopRun.open.pool?.state.types ?? [];
   loopRun.afterTurn = () => openBetweenTurns(loopRun);
   directors.set(loopRun.run.runId, openHandler(loopRun));
   return openTools(types, {
     restart: restartsApp(loopRun.game),
-    workers: loopRun.open?.pool?.state.allowed,
+    workers: loopRun.open.pool?.state.allowed,
     appSaved: hooksOn(loopRun.game, HookEvent.CheckpointBefore),
     cppRestart: (loopRun.gameFacts ?? []).some((fact) => fact.id === CoreFact.UnrealProject),
   });
@@ -342,7 +343,7 @@ async function closeStoppedStart(loopRun: LoopRun): Promise<void> {
 }
 
 /** The run under its lead: its start, the lead's turns, the close of whatever it left open, and the teardown. */
-async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, clock: WakeClock): Promise<void> {
+async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, clock: OpenClock): Promise<void> {
   try {
     const start = await prepareTheStart(loopRun);
     if (start.blocked) {
@@ -373,12 +374,11 @@ export async function runDirector(
     run,
     resume = false,
     clock = OPEN_WALL_CLOCK,
-  }: { threadId: string; run: Run; resume?: boolean; clock?: WakeClock },
+  }: { threadId: string; run: Run; resume?: boolean; clock?: OpenClock },
 ): Promise<AnyRecord> {
   const timings: HostTimings = {};
   const measured = tracedContext(ctx, run, (span) => retainSpan(timings, { ...span, goal: null }));
   const loopRun = await prepareLoopRun(measured, { threadId, run, resume, clock }, LOOP_RUN_MODULES);
-  loopRun.sleep = clock.sleep;
   keepTimings(loopRun, timings);
   await seatTheLead(loopRun);
   const talk = directorTalk(loopRun, referenceImages(run), seatTools(loopRun));

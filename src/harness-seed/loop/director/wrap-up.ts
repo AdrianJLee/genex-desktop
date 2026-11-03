@@ -49,7 +49,7 @@ export async function wrapUp(loopRun: LoopRun, args: AnyRecord): Promise<string>
   const { ctx, inbox, run, state, threadId } = loopRun;
   if (state.finish || closeUnderWay(state)) return WRAP_UP_WORDS.closing;
   const now = runNow(loopRun);
-  if (await finishAsked(loopRun)) return `${WRAP_UP_WORDS.already} ${WRAP_UP_WORDS.recorded}`;
+  if (await finishAsked(loopRun)) return WRAP_UP_WORDS.already;
   if (!(await userQuoted(inbox, args.user_asked))) return WRAP_UP_WORDS.notQuoted;
   // A new Loop asked for with it rides on the same record: the studio starts it once this run closes (next-loop.ts).
   const next = nextLoopFrom(args);

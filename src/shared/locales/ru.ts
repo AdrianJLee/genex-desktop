@@ -3802,7 +3802,6 @@ export default {
   "The lead stopped {count}.": "Главный агент остановил {count} из них.",
   "The lead wants to run {job} in the background": "Главный агент хочет запустить {job} в фоне",
   "The lead's summary": "Итог главного агента",
-  "The lead's view of the game": "Игра глазами главного агента",
   "The lead: done": "Главный агент: готово",
   "The lead: paused": "Главный агент: на паузе",
   "The lead: stopped": "Главный агент: остановлен",

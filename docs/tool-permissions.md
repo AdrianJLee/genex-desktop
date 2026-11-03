@@ -170,15 +170,15 @@ recorded under the run with the agent id as `facetId`, so its asset cards land o
 its words never stream as the chat's reply.
 
 A lead also has the chat's own session's plugins, connectors and cover, whether or not it asks
-(`hostToolsEligible`): its director grant (`inPlace`) marks its seat in the game folder
-(`#leadRoot`), and the host's own finding of that seat (`seat.leads`) decides, never the brief; a
+(`hostToolsEligible`): its director grant's root marks its seat in the game folder
+(`#inPlaceRoot`), and the host's own finding of that seat (`seat.leads`) decides, never the brief; a
 read-only session that leads nothing gets none. No lead is read-only. On an engine that does not ask
 about each call it runs in the chat's mode (`#placedLeadSession`): Bypass unboxed, Plan read-only.
 Its plugin calls act on the game folder it sits in (`DelegationSession.leads` as the binding's
 directory), its system text is its chat's own, and its run's own consent covers its engine
-connector's calls (`liveRunOf`, `#runConsents`). A grant the host refuses to seat, or one that names
-no seat in place, is dropped whole (`honouredDirector`): the session runs unattended, with no
-director or run tools. No lead is lent a preview window; a connector that shares the project root
+connector's calls (`liveRun`, `#runConsents`). A grant the host refuses to seat is dropped whole
+(`honouredDirector`): the session runs unattended, with no director or run tools. On a game Genex
+sees, a lead has the window its chat's turns have (its capture grant); a connector that shares the project root
 works on the game folder, as for every session (`resolveProject`). They are auto-allowed studio tools, as for
 the chat's own session: a plugin tool that declares `confirmation` waits on its consent card
 (`plugin_consent`, nine minutes; one nobody answers settles as "Nobody answered", and the agent
@@ -332,8 +332,7 @@ offered no worker tools.
 
 Plan holds writers on the host (`heldInPlan`): a copy or in-place writer's start and
 `worker_mark used` wait for the plan's approval, from the chat's own session and from a run's lead,
-and so do a director's `integrate` and a `finish` that lands the build (`finish land=no` goes on),
-so no snapshot, copy or merge is made; a reader starts. A start that names a worker type stands as
+so no snapshot, copy or merge is made; a reader starts, and a lead's `finish` closes in place. A start that names a worker type stands as
 that type declares, whatever isolation it asks for (a type the host does not know writes). A run's lead is judged by the chats the
 host's own records say the run was started in, and the grant's chat if it names one of this game's:
 any of them planning holds it, and a run whose chat the host cannot find holds it with that reason.
@@ -585,8 +584,8 @@ the turn's end (`ChatPermissionService.planning`, so a plan approved mid-turn le
 behind the same card, which shows the reply and what the build would build. Approved, it starts as
 recorded; sent back with words, it is dropped and the session plans again; any other ending, a
 question beside it or a failed turn drops it. The harness starts a recorded build once the reply
-ends, so the host is what holds it. While the chat is in Plan the run controls `resume_run` and
-`land_build` answer that they did not run (`conversation.ts` `BUILD_CHANGES`).
+ends, so the host is what holds it. While the chat is in Plan the `resume_run` run control answers
+that it did not run (`conversation.ts` `#applyRunControl`).
 
 ## Auto's classifier
 
@@ -674,7 +673,7 @@ allow rules and hooks load into the person's own session there, which has no san
 never writes it: `game.write` refuses a path through a `.claude` folder at any depth, in any case
 and as Windows reads a name, checked as named and as it really lands (a link inside the game
 included), for a game and an optimization candidate. Landing a build (`landBuild`, the person's
-button and the `land_build` run control) and promoting a candidate refuse a commit that changes one.
+button) and promoting a candidate refuse a commit that changes one.
 The sandbox denies every agent process (the harness, `run.exec`, builds) writing a game's
 `.claude` folder (`claudeFolderDenyWrites`).
 

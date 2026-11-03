@@ -4,8 +4,7 @@
  * Genex is off: it belongs to the account, not to the agent's tools. Which buttons exist is the manifest's (`toolbarItems`); what they say is the plugin's status action or a `plugin.event` of kind
  * `toolbar`, both sanitized before they reach the DOM. A panel target opens its own dialog over
  * the stage (and says so, so the native game view gets out of the way); an action target runs
- * the same review → ticket → native approval sequence as the Plugins dialog. While Studio bundles
- * a newer version of the plugin, its buttons say Update instead and open Plugins at it.
+ * the same review → ticket → native approval sequence as the Plugins dialog.
  */
 import type { Dispatch, JSX, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -16,17 +15,13 @@ import { t } from "../../shared/i18n.ts";
 import type { FactRef, FolderHolds, GameKind } from "../../shared/project-facts.ts";
 import {
   type PluginToolbarEntry,
-  shownToolbarStatus,
   toolbarReaction,
   toolbarStatusFrom,
-  MultiplayerPress,
-  multiplayerPress,
   showsMultiplayer,
   takesEngineMultiplayer,
   ToolbarPlace,
   toolbarPlace,
   toolbarTip,
-  toolbarUpdateStatus,
   visibleToolbarEntries,
 } from "../../shared/plugin-toolbar.ts";
 import {
@@ -55,7 +50,7 @@ import { cn } from "../ui/cn.ts";
 import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
-import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
+import { GENEX_WORDS, problemWords } from "../words.ts";
 import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plugins/genex/GenexPublish.tsx";
 import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, publishesWeb, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
@@ -218,22 +213,19 @@ function ToolbarIcon({ icon }: { icon: string | undefined }): JSX.Element | null
 }
 
 /**
- * A button's badge: the update mark while its plugin is behind, else its status's word in its tone,
- * or (`dot`) a dot in that tone whose word only screen readers hear. In the chat header a word also
- * carries its dot, which stands in for it while the header folds the button to its icon (theme.css).
+ * A button's badge: its status's word in its tone, or (`dot`) a dot in that tone whose word only
+ * screen readers hear. In the chat header a word also carries its dot, which stands in for it while
+ * the header folds the button to its icon (theme.css).
  */
 function ToolbarBadge({
   id,
-  update,
   status,
   place,
 }: {
   id: string;
-  update: boolean;
   status: PluginToolbarStatus | undefined;
   place: ToolbarPlace;
 }): JSX.Element | null {
-  if (update) return <UpdateMark id={id} word={PLUGIN_TOOLBAR_WORDS.update.badge} />;
   if (!status?.badge) return null;
   const tone = status.tone ?? "info";
   if (status.dot) {
@@ -304,13 +296,12 @@ function ToolbarTip({
 /**
  * A plugin's button: the accent while its status says its action is due, the quiet pill otherwise;
  * Publish wears its tint instead, filled while there is something to publish (`toolbarLook`).
- * While its plugin is behind the bundled version it wears the Update badge instead, and then it
- * opens Plugins at the plugin, game or not. Its title, and a dot's word, show in its own tooltip.
- * An engine's button stands in the chat header (`place`), the rest on the strip.
+ * Its title, and a dot's word, show in its own tooltip. An engine's button stands in the chat
+ * header (`place`), the rest on the strip.
  */
 function ToolbarButton({
   entry,
-  status: own,
+  status,
   project,
   busy,
   due,
@@ -326,13 +317,9 @@ function ToolbarButton({
   onPress: () => void;
 }): JSX.Element {
   const badgeId = useId();
-  const update = toolbarUpdateStatus(entry.plugin, PLUGIN_TOOLBAR_WORDS.update);
-  const status = shownToolbarStatus(own, update);
   const needsGame = entry.item.requiresProject !== false && !project;
-  // Updating needs no game and isn't the plugin's own action, so nothing the plugin says holds it back.
-  const blocked = update ? false : Boolean(status?.disabled) || needsGame;
+  const blocked = Boolean(status?.disabled) || needsGame;
   const disabled = blocked || busy;
-  const press = update ? () => openPluginsFromToolbar(entry.plugin.manifest.id) : onPress;
   return (
     <ToolbarTip lines={toolbarTip(status)} tip={entry.key} place={place}>
       <Button
@@ -345,12 +332,12 @@ function ToolbarButton({
         // The label names the button; the badge, its state, is read after it ("Unreal Editor, Ready").
         aria-describedby={status?.badge ? badgeId : undefined}
         disabled={disabled}
-        onClick={press}
+        onClick={onPress}
         className={place === ToolbarPlace.Header ? HEADER_BUTTON : undefined}
       >
         <ToolbarIcon icon={entry.item.icon} />
         <span data-toolbar-label>{entry.item.label}</span>
-        <ToolbarBadge id={badgeId} update={Boolean(update)} status={status} place={place} />
+        <ToolbarBadge id={badgeId} status={status} place={place} />
       </Button>
     </ToolbarTip>
   );
@@ -461,25 +448,16 @@ function useStudioPublish(
   return { shown, setup: setup && shown, open, close, handOff };
 }
 
-/**
- * Multiplayer, left of Publish on every game that gets Publish. With Genex on, one press asks the
- * game's chat to make it multiplayer; without it, the setup dialog brings Genex in first, and the
- * ask goes out the moment Genex is on. While Studio bundles a newer Genex, the press opens Plugins
- * at Genex first, as Publish's does: an older Genex's instructions refuse a game made from the template.
- */
 /** A second Multiplayer press within this long is the same press. */
 const REPEAT_PRESS_MS = 1.5 * SECOND_MS;
 
-/** A button's Update: Plugins opens at the plugin, and usage analytics hears it came from the toolbar. */
-function openPluginsFromToolbar(id: string): void {
-  notePluginsOpening(PluginsOpenedFrom.ToolbarUpdate);
-  openPluginsAt(id);
-}
-
+/**
+ * Multiplayer, left of Publish on every game that gets Publish. With Genex on, one press asks the
+ * game's chat to make it multiplayer; without it, the setup dialog brings Genex in first, and the
+ * ask goes out the moment Genex is on.
+ */
 function useMultiplayer(project: string | null, shown: boolean, genex: PluginToolbarEntry | undefined) {
   const genexOn = Boolean(genex);
-  const behind = genex ? toolbarUpdateStatus(genex.plugin, PLUGIN_TOOLBAR_WORDS.update) : null;
-  const pressed = multiplayerPress(genex?.plugin);
   const [setup, setSetup] = useState(false);
   const asked = useRef(Number.NEGATIVE_INFINITY);
   const ask = useCallback(() => {
@@ -489,58 +467,29 @@ function useMultiplayer(project: string | null, shown: boolean, genex: PluginToo
     composeInChat({ project, text: GENEX_WORDS.multiplayer.prompt, send: true });
   }, [project]);
   const press = useCallback(() => {
-    if (pressed === MultiplayerPress.Update) openPluginsFromToolbar(GENEX_PLUGIN_ID);
-    else if (pressed === MultiplayerPress.Ask) ask();
+    if (genexOn) ask();
     else setSetup(true);
-  }, [pressed, ask]);
+  }, [genexOn, ask]);
   const close = useCallback(() => setSetup(false), []);
-  // Genex came on while its dialog was up: the press goes on as it would now, Update first for an older Genex.
+  // Genex came on while its dialog was up: the press goes on as it would now.
   useEffect(() => {
     if (!setup || !genexOn) return;
     setSetup(false);
-    press();
-  }, [setup, genexOn, press]);
+    ask();
+  }, [setup, genexOn, ask]);
   useEffect(() => {
     if (setup && !shown) setSetup(false);
   }, [setup, shown]);
-  return { press, setup: setup && shown, close, behind };
-}
-
-/**
- * A plugin behind the version Studio bundles: a small rising arrow in the button's own ink, the word
- * ("Update") read by assistive tech and the button's title saying what pressing does.
- */
-function UpdateMark({ id, word }: { id: string; word: string }): JSX.Element {
-  return (
-    <span id={id} data-plugin-badge data-plugin-update role="img" aria-label={word} className="inline-flex opacity-80">
-      <Icon name="update" size={14} />
-    </span>
-  );
+  return { press, setup: setup && shown, close };
 }
 
 /** Multiplayer: quiet like Publish beside it, since neither is the game's next step until asked. */
-function MultiplayerButton({
-  onPress,
-  behind = null,
-}: {
-  onPress: () => void;
-  /** Genex is older than the one Studio bundles: the button says Update, as Genex's own buttons do. */
-  behind?: PluginToolbarStatus | null;
-}): JSX.Element {
-  const badgeId = useId();
+function MultiplayerButton({ onPress }: { onPress: () => void }): JSX.Element {
   const label = GENEX_WORDS.multiplayer.button;
   return (
-    <Button
-      variant="pill"
-      data-genex-multiplayer
-      aria-label={GENEX_WORDS.multiplayer.buttonLabel}
-      aria-describedby={behind ? badgeId : undefined}
-      title={behind?.title}
-      onClick={onPress}
-    >
+    <Button variant="pill" data-genex-multiplayer aria-label={GENEX_WORDS.multiplayer.buttonLabel} onClick={onPress}>
       <Icon name="users" />
       <span>{label}</span>
-      {behind ? <UpdateMark id={badgeId} word={PLUGIN_TOOLBAR_WORDS.update.badge} /> : null}
     </Button>
   );
 }
@@ -671,7 +620,6 @@ function ToolbarButtons({
     shown: boolean;
     before: PluginToolbarEntry | undefined;
     press: () => void;
-    behind: PluginToolbarStatus | null;
   };
 }): JSX.Element {
   const slot = useEngineSlot();
@@ -696,9 +644,7 @@ function ToolbarButtons({
         .filter((entry) => placeOf(entry) === ToolbarPlace.Strip)
         .map((entry) => (
           <Fragment key={entry.key}>
-            {multiplayer.shown && entry === multiplayer.before && (
-              <MultiplayerButton onPress={multiplayer.press} behind={multiplayer.behind} />
-            )}
+            {multiplayer.shown && entry === multiplayer.before && <MultiplayerButton onPress={multiplayer.press} />}
             {button(entry, ToolbarPlace.Strip)}
           </Fragment>
         ))}

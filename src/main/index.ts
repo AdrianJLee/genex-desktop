@@ -93,7 +93,6 @@ import {
   FIXTURE_UPDATE_RELEASE,
   FixtureName,
   fixtureEngines,
-  installOlderPlugins,
   isChatFixture,
   prepareFixture,
 } from "./dev/fixtures.ts";
@@ -1020,9 +1019,6 @@ async function createCore(userData: string): Promise<StudioCore> {
       harnessLogBatch.push(line, stream);
     },
   });
-  // The plugin-updates fixture's profile holds older plugins before the core reads its plugin store.
-  if (fixtureProviders && dev?.fixture === FixtureName.PluginUpdates)
-    await installOlderPlugins(studio.layout.engineHomes, resources);
   performanceRecorder.mark("core-start");
   await studio.init();
   performanceRecorder.mark("core-ready");

@@ -3848,8 +3848,6 @@ export default {
     "작업자가 작업 공간 규칙을 벗어난 일을 하려고 했어요.",
   "The {app} is older than your last change: build it again, then publish.":
     "{app}은 마지막 변경 전에 빌드됐어요. 다시 빌드한 다음 게시하세요.",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "{plugin} 플러그인 {version} 준비 완료. 누르면 ‘플러그인’에서 업데이트해요.",
   Theme: "테마",
   "Theme JSON": "테마 JSON",
   "Theme copied.": "테마를 복사했어요.",
@@ -4275,8 +4273,6 @@ export default {
   "Update and play": "업데이트하고 플레이",
   "Update needed": "업데이트 필요",
   "Update ready — restart": "업데이트 준비 완료 — 다시 시작",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "앱을 게시하려면 ‘플러그인’에서 Genex 플러그인을 업데이트하세요.",
   "Update to {version}": "{version} 버전으로 업데이트",
   "Update {count}": "{count}개 업데이트",
   "Update {name}": "{name} 업데이트",
@@ -4675,7 +4671,6 @@ export default {
   attempts: "시도",
   back: "후면",
   "badge\u0004Set up": "설정 필요",
-  "badge\u0004Update": "업데이트",
   "balance couldn’t be read": "잔액을 불러올 수 없음",
   "base commit": "기준 커밋",
   "before a Loop starts": "Loop 시작 전",

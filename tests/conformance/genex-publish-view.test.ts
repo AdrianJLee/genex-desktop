@@ -389,6 +389,9 @@ const cover = (over: Partial<GenexCoverRecord> = {}): GenexCoverRecord => ({
   shot: null,
   last: null,
   sending: false,
+  candidates: [],
+  clip: null,
+  agentTook: {},
   ...over,
 });
 const last = (kind: GenexCoverOutcome) => ({ kind, at: "2026-10-09T10:05:00Z" });

@@ -68,7 +68,8 @@ extraction scripts. Downloads refuse redirects and are bounded to 256 MiB. A dig
 mismatch aborts installation (manifests are compared canonically). Local packages and catalog
 releases use the same validation and isolated startup probe. Updates wait for active sessions; a
 failed probe leaves the prior installation selected. Expanded capabilities require explicit
-installation confirmation. Updates are never automatic. Each install or reload copies the package
+installation confirmation. Index and local updates are never automatic; a bundled plugin updates
+with Studio (below). Each install or reload copies the package
 to `packages/<id>/<version>-<uuid>` (a clone where the disk can make one, as APFS does, so a
 profile's copies of the bundled plugins take no space until edited); once the new copy is active (and its MCP servers moved to it)
 the copy it replaced is deleted, as is a pending update superseded before it activated. At start-up
@@ -125,17 +126,19 @@ Reinstalling a removed plugin is an **install**, not an update: the dialog is an
 manifest that is about to land, so a seed that has grown new capabilities or a new MCP server since
 the record was written installs rather than being refused with no way forward.
 
-Bundled seeds are inspected for explicit versioned updates, so a change to a bundled plugin's files needs a
+Bundled seeds update by version, so a change to a bundled plugin's files needs a
 higher `version` in its `plugin.json`: `scripts/check-plugin-versions.ts` (run by `check:static`) refuses
-one that changed against where the branch left `origin/dev` without it. Existing profiles keep their pinned
-version until the user chooses Update; active leases defer activation, while disabling still
-blocks calls immediately. The renderer lists a seed's newer version and the index's newer release
-as one set (`pluginUpdates` in `renderer/state/plugins.ts`; none for a plugin whose update already
+one that changed against where the branch left `origin/dev` without it. A bundled plugin updates with
+Studio: at launch, after applying the updates the last run left waiting for a lease, the registry lays
+this build's seed over an installed copy of an older version (`#installSeeds` in `registry.ts`),
+keeping its on/off switch, saved account and data, and noting which skills changed; `#sweep` deletes
+the old copy. Nothing is probed then, as on a first launch. A removed preference still wins: a
+removed bundled plugin stays removed across Studio upgrades. Active leases defer an update's
+activation, while disabling still blocks calls immediately. The renderer lists the index's newer
+releases (`pluginUpdates` in `renderer/state/plugins.ts`; none for a plugin whose update already
 waits for sessions): each plugin's row and page offer **Update to x**, and the sidebar's **Update
-plugins** runs them one after another. A seed's update asks nothing: it is Genex's own code, shipped
-inside the app the user installed (`asksBeforeInstall` in `main/plugin-local-install.ts`); an index
-release goes through its own trust dialog, and a no there rejects `studio:plugins.update` as the
-person's no (`isUserCancelled`; a no to an install still resolves). A removed preference suppresses the seed across Studio upgrades.
+plugins** runs them one after another. Each goes through its own trust dialog, and a no there
+rejects `studio:plugins.update` as the person's no (`isUserCancelled`).
 Normal updates preserve settings, protected credentials and job state. The Genex plugin adopts
 `engine-homes/genex`, keeping existing allowances and unresolved jobs; remove/reinstall is not a
 required upgrade step.
@@ -315,7 +318,7 @@ batch coalesce into one follow-up, and unmounting drops late answers and schedul
 A button is drawn in the prompt bar's quiet pill fill, or in the accent while its status sets
 `attention` (the action is due) and the game is not empty; Genex's Publish uses only `title` and
 `attention`, in Play's blue (its tint, filled once due). Buttons keep their labels at every width:
-while the strip is too narrow for them, they move to a second row under it. An offered update's Update badge is always a word in the quiet tone. A backend can also
+while the strip is too narrow for them, they move to a second row under it. A backend can also
 push a status without being asked through `events.emit` with
 `{kind: "toolbar", item, badge, tone, title, attention, dot}`; the renderer applies it to that item,
 or re-asks the status action when the item is not named.
@@ -3247,8 +3250,8 @@ audited) | a curated release | the folder … | Genex (built in)}* with the publ
 runs on the computer like an installed app and is not sandboxed; **It asks to:** with each
 capability in plain words; the programs it starts with the environment each is given; the tools
 Genex runs for it; the skills it adds; and **Scan: {verdict}, {findings}** or **Not scanned.** An
-update marks what is new or changed. A bundled seed installs and updates without the dialog unless
-it would replace a plugin from elsewhere.
+update marks what is new or changed. A bundled seed installs without the dialog unless it would
+replace a plugin from elsewhere, and updates with Studio at launch.
 
 ## Hot reload and debug logs
 
@@ -3373,9 +3376,8 @@ Genex:
   approved (a line under the rows gives Genex's reason), and players get it once it is approved. A draft sends no app,
   and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
-  The dialog sends apps only through an installed Genex plugin whose record says it can
-  (`native.supported`, `gateByPlugin`): a profile still on a plugin from before apps is told to
-  update it in Plugins. The plugin's `publishing-apps` skill tells the game's agent how to build an
+  The dialog sends apps only while the Genex plugin's record says it can (`native.supported`,
+  `gateByPlugin`). The plugin's `publishing-apps` skill tells the game's agent how to build an
   app or a web version (in `web/`) for Publish, how to make an app open in a window, and never to
   send the person to another store. A Unity web version is built from a full-window template the
   agent writes in `Assets/WebGLTemplates/Genex/`: Unity's own templates draw a fixed 960x600 box.
@@ -3425,17 +3427,15 @@ Genex:
   made until the agent's own frame arrives: the record's `agentTook` (`covers/<project>/agent.json`,
   set only by `genex__cover`, never by Studio's own frames). Roughly how
   long is left shows once that game's last ask was timed (ask to `agentTook`; no number before one,
-  none once it runs over). A
-  Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
-  by the owner; a second plugin with a cover would need a declared host surface instead.
+  none once it runs over). Genex-specific core UI, accepted by the owner; a second plugin with a cover would need a declared host surface instead.
 - A game that runs as its own program (a Unity, Godot or Unreal fact) cannot be photographed by
   Studio: its page shows nothing of it. Its agent renders the cover inside the engine and hands
   `genex__cover` the file paths like a web game's; the landed-run cover step asks for it the same
   way (`core/cover-step.ts`), and there is no cover reel or per-turn cover note for an engine.
 - The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`) for the
-  thread's latest `genex__cover` call from plugin `genex` whose operation is `shoot` and whose
-  answer carried a picture (a call of the newer `{image, clip?}` shape names no operation and is
-  not read there yet) (`chat-entries.ts`, the tool read with or without `genex__` and
+  thread's latest `genex__cover` call from plugin `genex` that handed over a picture (`image=` in
+  its arguments digest), or an older log record's `shoot` whose answer carried one
+  (`keptGenexCover` in `chat-entries.ts`, the tool read with or without `genex__` and
   `mcp__studio__`). Like a build's result card it goes up once that work has ended, after the turn's
   reply (or a build's result card when the build's builder shot it), never mid-turn, and a newer
   kept shot takes it down at once; earlier shots stay rows of the work. Its picture is the kept shot

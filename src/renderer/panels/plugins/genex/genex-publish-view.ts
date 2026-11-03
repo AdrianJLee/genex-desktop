@@ -207,9 +207,9 @@ function failureOf(outcome: PublishOutcome, state: GenexPublishState, job: Genex
 }
 
 /**
- * Whether Studio should take the game's Genex cover as the dialog opens: the plugin reports its
- * cover (an older one does not), no shot is kept, none is being sent, no publish is running (it
- * shoots the cover itself), and the owner chose none on genex.games.
+ * Whether Studio should take the game's Genex cover as the dialog opens: the record has its cover,
+ * no shot is kept, none is being sent, no publish is running (it shoots the cover itself), and the
+ * owner chose none on genex.games.
  */
 export function needsCover(state: GenexPublishState): boolean {
   const cover = state.cover;

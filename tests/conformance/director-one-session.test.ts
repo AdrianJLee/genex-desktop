@@ -362,7 +362,8 @@ for (const engine of ["claude-code", "codex"]) {
       const chatSession = requests.find((r) => r.kind === Kind.Chat)!.sessionId!;
       const afterClose = requests.filter((r) => r.kind === Kind.After);
       assert.equal(afterClose.length, 2, afterClose.map((r) => r.request.prompt.slice(0, 60)).join(" | "));
-      assert.match(afterClose[0]!.request.prompt, /genex__skill \{"name":"cover"\}/, "the cover comes first");
+      // Flipped from /genex__skill \{"name":"cover"\}/: the ask names the cover as its goal, no tool or skill.
+      assert.match(afterClose[0]!.request.prompt, /Genex cover/, "the cover comes first");
       assert.match(afterClose[1]!.request.prompt, /why dusk\?/, "then the person's message");
       for (const turn of afterClose) assert.equal(turn.request.resume, chatSession, "both in the chat's own session");
       assert.equal(customEvents(log, "run_started").length, 1, "the cover step started no build");

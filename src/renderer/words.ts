@@ -3831,8 +3831,6 @@ export const PUBLISH_PLATFORM_WORDS = {
   rebuildAsk: (players: string, title: string) =>
     t("Build the {players} app of {title} again so I can publish it.", { players, title }),
   rebuildFirst: (app: string) => t("The {app} is older than your last change: build it again, then publish.", { app }),
-  /** The installed Genex plugin is from before apps: its update sends them. */
-  updateGenex: t("Update the Genex plugin in Plugins to publish apps."),
   notListed: t("The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it."),
 } as const;
 
@@ -6007,15 +6005,6 @@ export const CHECK_WORDS = {
   routeHeld: t("The judge's moves were replayed on this build, and the goal held."),
   showAll: t("Show all"),
   showLess: t("Show less"),
-} as const;
-
-/** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
-export const PLUGIN_TOOLBAR_WORDS = {
-  update: {
-    badge: tc("badge", "Update"),
-    title: (plugin: string, version: string) =>
-      t("The {plugin} plugin {version} is ready. Press to update it in Plugins.", { plugin, version }),
-  },
 } as const;
 
 /**

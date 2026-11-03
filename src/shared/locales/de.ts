@@ -4036,8 +4036,6 @@ export default {
     "Der Helfer hat etwas versucht, das die Regeln seines Arbeitsbereichs nicht erlauben.",
   "The {app} is older than your last change: build it again, then publish.":
     "{app}: älter als deine letzte Änderung. Bau sie neu und veröffentliche sie dann.",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "Das Plugin {plugin} {version} ist bereit. Klick, um es unter „Plugins“ zu aktualisieren.",
   Theme: "Design",
   "Theme JSON": "Design-JSON",
   "Theme copied.": "Design kopiert.",
@@ -4483,8 +4481,6 @@ export default {
   "Update and play": "Aktualisieren und spielen",
   "Update needed": "Update nötig",
   "Update ready — restart": "Update bereit – neu starten",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "Aktualisiere das Genex-Plugin unter „Plugins“, um Apps zu veröffentlichen.",
   "Update to {version}": "Auf {version} aktualisieren",
   "Update {count}": "{count} aktualisieren",
   "Update {name}": "{name} aktualisieren",
@@ -4894,7 +4890,6 @@ export default {
   attempts: "Versuche",
   back: "hinten",
   "badge\u0004Set up": "Einrichten nötig",
-  "badge\u0004Update": "Update",
   "balance couldn’t be read": "Guthaben nicht lesbar",
   "base commit": "Basis-Commit",
   "before a Loop starts": "bevor ein Loop startet",

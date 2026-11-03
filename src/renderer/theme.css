@@ -1655,7 +1655,7 @@ button.chat-header-title:hover {
   color: var(--ink);
 }
 /* A narrow chat header folds the game's engine button (ChatHeader's `[data-chat-engine]`) to its
-   icon: its name goes, and its status dot or update mark moves to the icon's corner. */
+   icon: its name goes, and its status dot moves to the icon's corner. */
 [data-chat-header] {
   container-type: inline-size;
 }
@@ -1664,7 +1664,7 @@ button.chat-header-title:hover {
     width: 32px;
     padding-inline: 0;
   }
-  [data-chat-engine] :is([data-toolbar-label], [data-plugin-badge]:not([data-dot], [data-plugin-update])) {
+  [data-chat-engine] :is([data-toolbar-label], [data-plugin-badge]:not([data-dot])) {
     display: none;
   }
   [data-chat-engine] [data-fold-dot] {
@@ -1674,17 +1674,6 @@ button.chat-header-title:hover {
     position: absolute;
     top: 5px;
     inset-inline-end: 5px;
-  }
-  [data-chat-engine] [data-plugin-update] {
-    position: absolute;
-    top: 2px;
-    inset-inline-end: 2px;
-    border-radius: 50%;
-    background: var(--control-fill, var(--hover));
-  }
-  [data-chat-engine] [data-plugin-update] svg {
-    width: 11px;
-    height: 11px;
   }
 }
 .studio-shell[data-compact="true"] {

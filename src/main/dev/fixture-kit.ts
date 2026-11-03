@@ -71,7 +71,6 @@ export const FixtureName = {
    * editor, a plugin loaded from a folder, and the card that offers the Unreal plugin.
    */
   OpenProjects: "open-projects",
-  PluginUpdates: "plugin-updates",
   /** Signed in with Genex's updated terms to accept: the sidebar's line and Review under a held-up Genex call. */
   GenexTerms: "genex-terms",
   /** A Loop a usage limit paused and resumed: a worker's try Paused, one Added after, one Left out. */

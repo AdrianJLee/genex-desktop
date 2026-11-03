@@ -1238,7 +1238,7 @@ export class StudioCore {
 
   /** The registry's start, each part of it marked so a slow plugin setup's log says which part held it. */
   async #initPlugins(): Promise<void> {
-    // A first launch also marks each seed it copies.
+    // A first launch, or one that lays a newer seed over an older copy, also marks each seed it copies.
     this.plugins.onInitStep = (step, plugin) =>
       this.options.markBoot?.(`core:plugins-${step}${plugin ? `:${plugin}` : ""}`);
     await this.plugins.init();

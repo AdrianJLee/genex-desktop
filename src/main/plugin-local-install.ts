@@ -69,8 +69,8 @@ export function reviewPluginInstall(
 
 /**
  * Whether installing asks the user first. A bundled seed is Studio's own code, shipped inside the
- * app the user already installed, so installing or updating one asks nothing — unless it takes over
- * a plugin from elsewhere, whose saved account and data it erases. An unnamed origin always asks.
+ * app the user already installed, so installing one asks nothing — unless it takes over a plugin
+ * from elsewhere, whose saved account and data it erases. An unnamed origin always asks.
  */
 export function asksBeforeInstall(origin: PluginSource | undefined, review: PluginInstallReview): boolean {
   return origin?.kind !== PluginSourceKind.Bundled || review.replaces !== undefined;

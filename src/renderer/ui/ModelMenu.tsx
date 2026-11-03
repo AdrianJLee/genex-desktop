@@ -31,11 +31,6 @@ import { AnalyticsEvent } from "../analytics/events.ts";
 import { elapsedMs } from "../analytics/properties.ts";
 export type { RoleKey, RoleRow };
 export type RoleRecord = RunRoles;
-export interface RoleGroup {
-  engine: string;
-  label: string;
-  models: Array<{ id: string; label: string }>;
-}
 export interface ModelChoice extends ModelCapabilities {
   key: string;
   name: string;

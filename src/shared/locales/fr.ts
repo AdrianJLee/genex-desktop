@@ -10,8 +10,6 @@ export default {
   "(named {count, plural, one {# time} other {# times}} now)":
     "(déjà signalé {count, plural, one {# fois} other {# fois}})",
   "**Build to start:** {ask}": "**Build à lancer :** {ask}",
-  "15 minutes less": "15 minutes de moins",
-  "15 minutes more": "15 minutes de plus",
   "1 credit ≈ 1¢": "1 crédit ≈ 1¢",
   "2 to 20 characters.": "De 2 à 20 caractères.",
   "3D": "3D",
@@ -24,8 +22,6 @@ export default {
   "64-bit PCs": "PC 64 bits",
   "<added>+{count}</added> this month": "<added>+{count}</added> ce mois-ci",
   "<name>{title}</name> <live>is live!</live>": "<name>{title}</name> <live>est en ligne !</live>",
-  'A "beat a real game" run needs at least two screenshots of the reference.':
-    "Un build « battre un vrai jeu » a besoin d’au moins deux captures d’écran de la référence.",
   "A ChatGPT connection change is already in progress.": "Un changement de connexion ChatGPT est déjà en cours.",
   "A GLB for the game plus reference renders to check it.":
     "Un GLB pour le jeu, plus des rendus de référence pour le vérifier.",
@@ -239,10 +235,6 @@ export default {
     "Un jeu d’infiltration où un chat vole des chaussettes dans une maison endormie",
   "A survival game on a raft that grows from things you fish out of the sea":
     "Un jeu de survie sur un radeau qui s’agrandit avec ce que tu pêches dans la mer",
-  "A team of AIs builds and tests your idea for up to {limit}.":
-    "Une équipe d’IA crée et teste ton idée pendant {limit} maximum.",
-  "A team of AIs builds and tests your idea until it’s done.":
-    "Une équipe d’IA crée et teste ton idée jusqu’à ce qu’elle soit prête.",
   "A tide pool explorer collecting shells before the waves return":
     "Un explorateur de flaques de marée qui ramasse des coquillages avant le retour des vagues",
   "A tiny planet you walk around, planting trees until it turns green":
@@ -1177,9 +1169,7 @@ export default {
   "Current build failed; no stale output was exported":
     "Le build actuel a échoué ; aucun ancien résultat n’a été exporté",
   "Current cover": "Couverture actuelle",
-  Custom: "Autre",
   "Custom theme": "Thème personnalisé",
-  "Custom time limit": "Limite de temps personnalisée",
   "Customize theme": "Personnaliser le thème",
   Cut: "Couper",
   "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.":
@@ -1253,7 +1243,6 @@ export default {
   "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
     "« Fais-le pour moi » ouvre le launcher, et ce chat y installe Unreal en contrôlant l’ordinateur. Environ 45 Go. Toi seul te connectes à Epic, quand il le demande.",
   "Does it feel alive? {score} of {max}": "Ça a l’air vivant ? {score} sur {max}",
-  "Does what you ask, then stops.": "Fait ce que tu demandes, puis s’arrête.",
   "Don't allow": "Ne pas autoriser",
   "Don't ask again for this action in {source}.": "Ne plus demander pour cette action dans {source}.",
   "Don't use Godot": "Ne pas utiliser Godot",
@@ -1808,10 +1797,6 @@ export default {
   "Home background": "Arrière-plan de l’accueil",
   "Hooks can run commands with your access.": "Les hooks peuvent lancer des commandes avec tes droits.",
   Horns: "Cornes",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. It builds until about {end}. Keep the app open.":
-    "Heures — des assistants créent pendant ton absence, et un vérificateur ne garde que ce qui améliore le jeu. Ça crée jusque vers {end}. Garde l’app ouverte.",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. No cap: it runs until what you asked for is checked working, and stops by about {end} whatever happens. Keep the app open.":
-    "Heures — des assistants créent pendant ton absence, et un vérificateur ne garde que ce qui améliore le jeu. Sans limite : ça tourne jusqu’à ce que ta demande soit vérifiée et marche, et ça s’arrête vers {end} quoi qu’il arrive. Garde l’app ouverte.",
   Hover: "Survol",
   "How Harness works": "Comment marche Harness",
   "How does Harness build a game?": "Comment Harness crée-t-il un jeu ?",
@@ -2183,19 +2168,9 @@ export default {
   "Looking through the assets": "Parcourt les ressources",
   "Looking up Blueprint nodes": "Consulte les nœuds Blueprint",
   "Looking…": "Recherche…",
-  "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling (harness-seed/loop) into its own loop code and restart itself — or restore the seed copies so the next launch upgrades them. Your brief is saved above; send it again once the loop code is current.":
-    "Loop ne peut pas démarrer : le code de boucle de Studio est antérieur à la fonction Loop de la zone de saisie, il ne sait donc pas lancer un build minuté. Pour corriger ça, demande à Studio dans le chat de fusionner la gestion de Loop de la base (harness-seed/loop) dans son code de boucle et de redémarrer — ou restaure les copies de la base pour que le prochain lancement les mette à jour. Tes consignes sont enregistrées plus haut ; renvoie-les une fois le code de boucle à jour.",
-  "Loop can’t run in this game yet, so Keep building can’t start it.":
-    "Loop ne peut pas encore tourner dans ce jeu, donc « Continuer » ne peut pas le lancer.",
   "Loop finished · Changes kept in your project": "Loop terminé · Changements gardés dans ton projet",
   "Loop from {day}": "Loop, {day}",
-  "Loop mode": "Mode Loop",
   "Loop not started": "Loop non lancé",
-  "Loop time limit": "Limite de temps de Loop",
-  "Loops need the {engine} project inside this game’s folder, so Rewind can undo each step; {project} is in {place}. Make a new one from the {engine} button, or move {project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.":
-    "Loop a besoin du projet {engine} dans le dossier de ce jeu, pour que le retour en arrière puisse annuler chaque étape ; {project} est dans {place}. Crée-en un nouveau avec le bouton {engine}, ou déplace {project} dans le dossier de ce jeu et choisis-le là. D’ici là, l’agent fait ce que tu demandes, puis s’arrête.",
-  "Loops need this game’s {engine} project inside its folder, so Rewind can undo each step. A new {engine} project made from the {engine} button goes there. Until then, it does what you ask, then stops.":
-    "Loop a besoin du projet {engine} de ce jeu dans son dossier, pour que le retour en arrière puisse annuler chaque étape. Un nouveau projet {engine} créé avec le bouton {engine} y sera placé. D’ici là, l’agent fait ce que tu demandes, puis s’arrête.",
   "Luau checks are added: scripts are checked at each worker's end and before a build finishes.":
     "Vérifications Luau ajoutées : les scripts sont vérifiés quand chaque assistant termine et avant la fin d’un build.",
   "Luau checks are already on this computer.": "Les vérifications Luau sont déjà sur cet ordinateur.",
@@ -2284,7 +2259,6 @@ export default {
   "Mobile support for {title}": "Compatibilité mobile pour {title}",
   "Mobile support saved": "Compatibilité mobile enregistrée",
   Mode: "Mode",
-  "Mode options": "Options du mode",
   "Model Providers": "Fournisseurs de modèles",
   "Model discovery disconnected.": "La recherche de modèles a été déconnectée.",
   "Model discovery timed out. Try again.": "La recherche de modèles a expiré. Réessaie.",
@@ -2434,7 +2408,6 @@ export default {
   "No such account: {account}": "Compte introuvable : {account}",
   "No supported UI colors found. Choose a Genex token file or a VS Code color theme.":
     "Aucune couleur d’interface prise en charge trouvée. Choisis un fichier de tokens Genex ou un thème de couleurs VS Code.",
-  "No time limit": "Sans limite de temps",
   "No unlocked system keyring is available. Start GNOME Keyring or KWallet and unlock it, then restart Genex.":
     "Aucun trousseau système déverrouillé n’est disponible. Lance GNOME Keyring ou KWallet, déverrouille-le, puis redémarre Genex.",
   "Nobody answered": "Personne n’a répondu",
@@ -2536,8 +2509,6 @@ export default {
   "OS encryption is unavailable; secret storage remains locked.":
     "Le chiffrement du système est indisponible ; le stockage des secrets reste verrouillé.",
   Off: "Désactivé",
-  "Off — one build pass in this chat, shown as it goes. Set hours for a reviewed build that runs on its own: ∞ until what you asked for is checked working, or a number of hours.":
-    "Désactivé — une seule passe de build dans ce chat, visible au fur et à mesure. Choisis des heures pour un build vérifié qui tourne tout seul : ∞ jusqu’à ce que ta demande soit vérifiée et marche, ou un nombre d’heures.",
   "Off. Your agent can't use Genex tools.": "Désactivé. Ton agent ne peut pas utiliser les outils Genex.",
   "Off: friends see your name only.": "Désactivé : tes amis ne voient que ton nom.",
   Offline: "Hors ligne",
@@ -4083,12 +4054,8 @@ export default {
     "Le partage des statistiques de build a été retiré de cette version de Genex.",
   "This build of the studio can't pick a build back up yet — its own loop code predates timed builds.":
     "Cette version de Studio ne peut pas encore reprendre un build — son code de boucle est antérieur aux builds minutés.",
-  "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's harness-seed/loop needs to be merged into it, or the seed copies restored so the next launch upgrades them.)":
-    "Cette version de Studio ne peut pas encore lancer de build minuté — tes consignes sont enregistrées plus haut, et les renvoyer une fois Studio mis à jour lancera le build. (Son code de boucle est antérieur aux builds minutés : il faut y fusionner le harness-seed/loop de la base, ou restaurer les copies de la base pour que le prochain lancement les mette à jour.)",
   "This build turned out not to run — reload to go back to your game":
     "Ce build ne se lance pas — recharge pour revenir à ton jeu",
-  "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.":
-    "Les assistants ou vérificateurs de ce build tournent sur un modèle local, ce que le code de boucle de Studio ne prend pas encore en charge — tes consignes sont enregistrées plus haut. Choisis le même type de moteur pour toutes les tâches et renvoie-les, ou demande à Studio de fusionner le harness-seed/loop de la base dans son code de boucle (ou de restaurer les copies de la base) pour que le prochain lancement les mette à jour.",
   "This change no longer differs from what Harness has now.":
     "Ce changement ne diffère plus de ce que Harness a maintenant.",
   "This change was already undone.": "Ce changement a déjà été annulé.",
@@ -5301,11 +5268,8 @@ export default {
   unknown: "inconnu",
   "unknown error": "erreur inconnue",
   "unknown project {name}": "projet inconnu {name}",
-  "until about {end}": "jusque vers {end}",
-  "until satisfied · by ~{end}": "jusqu’au résultat · ~{end}",
   "up to {count, plural, one {# worker} other {# workers}} at once":
     "jusqu’à {count, plural, one {# assistant} other {# assistants}} à la fois",
-  "up to {time}": "jusqu’à {time}",
   "up {percent}%": "en hausse de {percent} %",
   "use your {publisher} account": "utiliser ton compte {publisher}",
   "used a tool": "a utilisé un outil",
@@ -5566,8 +5530,6 @@ export default {
   "{done} of {size} GB": "{done} sur {size} Go",
   "{done} of {total}": "{done} sur {total}",
   "{done} of {total} MB": "{done} sur {total} Mo",
-  "{elapsed} of {budget}": "{elapsed} sur {budget}",
-  "{elapsed} of {budget} min": "{elapsed} sur {budget} min",
   "{engine} always uses its sandbox": "{engine} utilise toujours son bac à sable",
   "{engine} can’t stop to ask yet": "{engine} ne peut pas encore s’arrêter pour demander",
   "{engine} default": "Par défaut de {engine}",
@@ -5618,16 +5580,12 @@ export default {
   "{game} · started {time}": "{game} · lancé le {time}",
   "{health} · {count, plural, one {# tool} other {# tools}}":
     "{health} · {count, plural, one {# outil} other {# outils}}",
-  "{hours, plural, one {# hour} other {# hours}}": "{hours, plural, one {# heure} other {# heures}}",
-  "{hours, plural, one {# hour} other {# hours}} {minutes, plural, one {# minute} other {# minutes}}":
-    "{hours, plural, one {# heure} other {# heures}} {minutes, plural, one {# minute} other {# minutes}}",
   "{hours} h": "{hours} h",
   "{hours} h {minutes} m": "{hours} h {minutes} min",
   "{hours} h {minutes} min": "{hours} h {minutes} min",
   "{hours}+ h": "{hours}+ h",
   "{hours}h": "{hours} h",
   "{hours}h {minutes}m": "{hours} h {minutes} min",
-  "{hours}h{minutes}": "{hours}h{minutes}",
   "{hours}h {minutes}m": "{hours} h {minutes} min",
   "{input} in / {output} out per M tokens": "{input} en entrée / {output} en sortie par M de tokens",
   "{kept} · {count} finished.": "{kept} · {count, plural, one {# terminé} other {# terminés}}.",
@@ -5654,7 +5612,6 @@ export default {
   "{max} files at most": "{max} fichiers maximum",
   "{max} pictures at most": "{max} images maximum",
   "{millions}M": "{millions} M",
-  "{minutes, plural, one {# minute} other {# minutes}}": "{minutes, plural, one {# minute} other {# minutes}}",
   "{minutes} m": "{minutes} min",
   "{minutes} min": "{minutes} min",
   "{minutes} min left": "{minutes} min restantes",

@@ -33,7 +33,6 @@ import {
   type HomeLeftTo,
   type HomeWords,
   type LaunchFailReason,
-  type LaunchMode,
   type LaunchStage,
   type LocationOutcome,
   type ManageVia,
@@ -120,7 +119,6 @@ export type WorkspaceEventProperties = {
     chars_bucket: CharsBucket;
     from_suggestion: boolean;
     from_welcome_idea: boolean;
-    mode: LaunchMode;
     review_plan: boolean;
     pictures: number;
     mentions: number;

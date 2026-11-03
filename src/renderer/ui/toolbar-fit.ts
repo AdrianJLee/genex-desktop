@@ -1,8 +1,7 @@
 /**
  * The composer toolbar keeps the model's name whole. When the name would be cut short, the
- * permissions pill's label gives way first, then Mode's time limit (its ∞ or "30m"), then the
- * context ring, and in the narrowest chat the permissions pill itself (never Bypass's warning);
- * only then does the name truncate. Measured, not a width threshold: names and labels differ in
+ * permissions pill's label gives way first, then the context ring, and in the narrowest chat the
+ * permissions pill itself (never Bypass's warning); only then does the name truncate. Measured, not a width threshold: names and labels differ in
  * length.
  */
 import { type RefObject, useLayoutEffect, useRef } from "react";
@@ -10,7 +9,6 @@ import { type RefObject, useLayoutEffect, useRef } from "react";
 /** What the toolbar has given up for the model's name (`data-squeeze`, theme.css). */
 const ToolbarSqueeze = {
   PermissionLabel: "permission-label",
-  ModeLimit: "mode-limit",
   Ring: "ring",
   Permission: "permission",
 } as const;
@@ -20,7 +18,6 @@ type ToolbarSqueeze = (typeof ToolbarSqueeze)[keyof typeof ToolbarSqueeze];
 const STEPS: readonly (ToolbarSqueeze | null)[] = [
   null,
   ToolbarSqueeze.PermissionLabel,
-  ToolbarSqueeze.ModeLimit,
   ToolbarSqueeze.Ring,
   ToolbarSqueeze.Permission,
 ];

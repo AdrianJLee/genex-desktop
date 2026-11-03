@@ -266,7 +266,7 @@ function newTurn(action: QueueAction, after: number, carried: QueueAction[]): Tu
   return {
     messageId: action.messageId as string,
     action,
-    // As it was sent: the dispatch may drop its Loop on routing, which never makes the person's same Loop a change.
+    // As it was sent: a message sent while the turn works is weighed against these (steer-switch.ts).
     settings: { ...action },
     after,
     expecting: false,
@@ -390,9 +390,9 @@ export class MessageQueue {
   /**
    * Put one unsettled message back on the queue, unless a restart has already cut it off twice. One
    * read by a turn a restart cut short goes in front of that turn's replay; one that switched how
-   * that turn ran (the Loop, another model) gets a turn of its own after it instead, with all that
-   * turn read after it: the replay runs on the turn's own settings, which the switch changed. A slash
-   * command it read stays read, never run twice (it may have cleared the session).
+   * that turn ran (another engine, model, effort or roles) gets a turn of its own after it instead,
+   * with all that turn read after it: the replay runs on the turn's own settings, which the switch
+   * changed. A slash command it read stays read, never run twice (it may have cleared the session).
    */
   async #restoreMessage(
     threadId: string,
@@ -551,17 +551,16 @@ export class MessageQueue {
   /** The message as the log keeps it: its pictures saved beside it, only their count in the log. */
   async #durable(queued: QueueAction): Promise<QueueAction> {
     const durable: QueueAction = { ...queued };
-    if (!queued.stills?.length && !queued.autopilot?.frames?.length) return durable;
+    if (!queued.stills?.length) return durable;
     durable.attachmentsArtifact = attachmentsArtifactOf(queued.messageId as string);
     // The count stays in the log so the chat can hold the pictures' place while they load.
-    durable.imageCount = queued.stills?.length || queued.autopilot?.frames?.length || 0;
+    durable.imageCount = queued.stills.length;
     await this.host.call(HostMethod.ArtifactWrite, {
       threadId: queued.threadId,
       artifactId: durable.attachmentsArtifact,
-      value: { stills: queued.stills, frames: queued.autopilot?.frames },
+      value: { stills: queued.stills },
     });
     delete durable.stills;
-    if (durable.autopilot) durable.autopilot = { ...durable.autopilot, frames: undefined };
     return durable;
   }
   /**
@@ -967,14 +966,13 @@ export class MessageQueue {
     turn.closed = true;
     thread.turn = null;
   }
-  /** Put a message's stills and reference frames back on it, from the artifact they were kept in. */
+  /** Put a message's stills back on it, from the artifact they were kept in. */
   async #attach(threadId: string, action: QueueAction): Promise<void> {
     const attachments = (await this.host.call(HostMethod.ArtifactRead, {
       threadId,
       artifactId: action.attachmentsArtifact,
     })) as AnyRecord | null;
     if (attachments?.stills) action.stills = attachments.stills;
-    if (attachments?.frames && action.autopilot) action.autopilot = { ...action.autopilot, frames: attachments.frames };
   }
   stop(): void {
     this.#stopped = true;
@@ -1031,5 +1029,5 @@ export function attachmentsArtifactOf(messageId: string): string {
 
 /** The message brings pictures: the queue keeps them in its attachments artifact (`#durable`), or has. */
 export function keepsPictures(item: QueueAction): boolean {
-  return Boolean(item.attachmentsArtifact || item.stills?.length || item.autopilot?.frames?.length);
+  return Boolean(item.attachmentsArtifact || item.stills?.length);
 }

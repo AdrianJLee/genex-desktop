@@ -2203,7 +2203,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     previewBoundsSeen,
     fullScreen: { enter: () => gameScreen?.enter(), active: () => gameScreen?.active() ?? false },
   });
-  registerRunsIpc(handle, { core: studio, runSummaryReader, keepAwake, pushUiEvent, appendErrorDurably });
+  registerRunsIpc(handle, { core: studio, runSummaryReader, keepAwake });
   registerLearningIpc(handle, { core: studio });
   registerSettingsIpc(handle, {
     core: studio,

@@ -144,8 +144,8 @@ describe("harness host: boot & RPC", () => {
     await r.host.start();
     assert.equal(r.host.state, "ready");
     assert.ok(r.host.harnessVersion, "the host knows which self is running");
-    assert.deepEqual(r.host.capabilities, ["loop"], "the ready message carries what the loaded self can do");
-    assert.equal(r.host.hasCapability("loop"), true);
+    assert.deepEqual(r.host.capabilities, ["autopilot"], "the ready message carries what the loaded self can do");
+    assert.equal(r.host.hasCapability("autopilot"), true);
     assert.equal(r.host.hasCapability("run.start"), false);
 
     await r.host.dispatch({ type: "user_message", threadId: r.thread, text: "hello" }, 15_000);
@@ -261,7 +261,7 @@ describe("harness host: self-modification", () => {
   it("a self-edit that drops the capabilities property reads as [], not as the old claims", async () => {
     const r = await rig("capability-loss");
     await r.host.start();
-    assert.deepEqual(r.host.capabilities, ["loop"]);
+    assert.deepEqual(r.host.capabilities, ["autopilot"]);
 
     // A stale or hand-rolled loop that never heard of capabilities: the property is absent.
     await writeFile(
@@ -277,7 +277,7 @@ describe("harness host: self-modification", () => {
     await r.host.restart();
     assert.equal(r.host.state, "ready");
     assert.deepEqual(r.host.capabilities, [], "absence is the detection — the old list must not survive the restart");
-    assert.equal(r.host.hasCapability("loop"), false);
+    assert.equal(r.host.hasCapability("autopilot"), false);
     await r.host.stop();
   });
 
@@ -503,7 +503,7 @@ export async function createStudio(host: Host): Promise<object> {
 
     await rm(path.join(r.workspace, "loop", "main.ts"));
     await r.host.start();
-    assert.deepEqual(r.host.capabilities, ["loop"], "a pre-TypeScript workspace boots its main.mjs");
+    assert.deepEqual(r.host.capabilities, ["autopilot"], "a pre-TypeScript workspace boots its main.mjs");
     await r.host.stop();
   });
 
@@ -519,7 +519,7 @@ export async function createStudio(host: Host): Promise<object> {
   it("boots the shipped seed's loop/main.ts under this Node", async () => {
     const r = await seedHost("seed-node", process.execPath, false);
     await r.host.start();
-    assert.ok(r.host.capabilities.includes("loop"), r.logs.join("\n"));
+    assert.ok(r.host.capabilities.includes("autopilot"), r.logs.join("\n"));
     assert.equal(await r.host.healthcheck(), true, r.logs.join("\n"));
     await r.host.stop();
   });
@@ -529,7 +529,7 @@ export async function createStudio(host: Host): Promise<object> {
     const cache = path.join(root, "seed-compile-cache", "compile-cache");
     r.host = new HarnessHost({ ...r.host.options, compileCache: cache });
     await r.host.start();
-    assert.ok(r.host.capabilities.includes("loop"), r.logs.join("\n"));
+    assert.ok(r.host.capabilities.includes("autopilot"), r.logs.join("\n"));
     const entries = existsSync(cache) ? await readdir(cache, { recursive: true }) : [];
     assert.ok(entries.length > 0, "the cache holds the harness's compiled modules once it is ready");
     await r.host.stop();
@@ -540,7 +540,7 @@ export async function createStudio(host: Host): Promise<object> {
   }, async () => {
     const r = await seedHost("seed-electron", electron!, true);
     await r.host.start();
-    assert.ok(r.host.capabilities.includes("loop"), r.logs.join("\n"));
+    assert.ok(r.host.capabilities.includes("autopilot"), r.logs.join("\n"));
     assert.equal(await r.host.healthcheck(), true, r.logs.join("\n"));
     await r.host.stop();
   });

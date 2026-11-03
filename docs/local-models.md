@@ -103,11 +103,9 @@ at screenshots, so an Ollama model without vision is listed but disabled in thei
 that cannot see leaves reviewing to the first installed model that can (or to itself when none
 can). A
 build turn on a model that cannot see receives a note instead of the turn's pictures
-(`unseen-pictures-prompts.ts`). A send that crosses a job to or from Ollama needs the
-`local-roles` harness capability, which `main.ts` claims only when `model-roles.ts` exports
-`SERVES_LOCAL_ROLES` (`local-roles-served.ts`): an
-agent-edited older copy would put an Ollama model id on a subscription, so main refuses the send
-instead.
+(`unseen-pictures-prompts.ts`). A send carries its roles as they are: a role whose model is
+missing never blocks the chat's message. The chat's own workers take the Workers pick, and a
+Loop's workers and reviewers take both.
 
 `engines/local-session.ts` owns local session history under the engine home, separately for
 workers, directors and chats; its tools and path confinement live in
@@ -151,8 +149,8 @@ Local file tools resolve real paths, respect host read grants and deny lists, re
 to the session workspace. Shell commands use
 ProcessSandbox, with workspace and Git metadata write roots, credential deny lists, no
 outbound domains, time/output ceilings and cancellation. Read-only
-sessions have no file-write or shell tool; a Loop chat that may launch a build keeps them, and
-its idle-round nudge asks it to finish or launch rather than implement. The host remains authoritative for
+sessions have no file-write or shell tool. A session that goes tool rounds without changing a
+file is nudged to go on, or to reply with what it found or needs (`progressCheckNote`). The host remains authoritative for
 which computer, capture, Blender, plugin, connector and director tools a role receives.
 
 Tool images are carried as actual image parts after every result in their tool round. A new

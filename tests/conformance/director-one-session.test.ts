@@ -2,9 +2,8 @@
  * One session through the real core and harness (loop/director/lead-session.ts): a waking run
  * launched from a chat is led by that chat's own contractor session — resumed in the game folder,
  * building in the integration worktree it leads, never read-only — and the chat goes on in the same session
- * once the run closes, with its hands back and the run's controls (loop/after-loop-run.ts); with Loop
- * on it reopens a finished build — the same run, led by the same session (loop/reopen-run.ts). A
- * session that cannot be resumed is replaced by a fresh one told the brief, the chat so far and the
+ * once the run closes, with its hands back and the run's controls (loop/after-loop-run.ts); a Loop it
+ * starts after a finished build is a new run, never that build reopened. A session that cannot be resumed is replaced by a fresh one told the brief, the chat so far and the
  * digest, and a worker's work that conflicts comes back to the lead, the merge undone.
  */
 import assert from "node:assert/strict";
@@ -165,12 +164,9 @@ async function answered(
   return handledUpTo(rig, threadId, handled, text);
 }
 
-/** The Loop a message carries from the composer: its hours (none: ∞) and its pictures. */
-type Loop = { hours?: number; frames?: typeof FRAMES };
-
-/** Send a message with Loop on, on `engine`, and wait until it is answered: the `handled`th of the thread. */
-async function answeredOnLoop(rig: Rig, threadId: string, text: string, engine: string, loop: Loop, handled: number) {
-  await rig.core.sendUserMessage(text, { thread: threadId, engine, autopilot: loop });
+/** Send a message with pictures on `engine`, and wait until it is answered: the `handled`th of the thread. */
+async function answeredWithPictures(rig: Rig, threadId: string, text: string, engine: string, handled: number) {
+  await rig.core.sendUserMessage(text, { thread: threadId, engine, frames: FRAMES });
   return handledUpTo(rig, threadId, handled, text);
 }
 
@@ -255,7 +251,7 @@ for (const engine of ["claude-code", "codex"]) {
       await rig.core.sendUserMessage("make a dusk plaza", {
         thread: threadId,
         engine,
-        autopilot: { frames: FRAMES },
+        frames: FRAMES,
       });
       const finished = await loopRunClosed(rig, "the launched run's close");
       assert.equal(finished.landed, true, String(finished.stoppedBecause));
@@ -345,7 +341,7 @@ for (const engine of ["claude-code", "codex"]) {
         }
       });
 
-      await rig.core.sendUserMessage("make a dusk plaza", { thread: threadId, engine, autopilot: { frames: FRAMES } });
+      await rig.core.sendUserMessage("make a dusk plaza", { thread: threadId, engine, frames: FRAMES });
       const finished = await loopRunClosed(rig, "the launched run's close");
       assert.equal(finished.landed, true, String(finished.stoppedBecause));
       const log = await handledUpTo(rig, threadId, 2, "the cover step");
@@ -407,7 +403,7 @@ for (const engine of ["claude-code", "codex"]) {
         }
       });
 
-      await rig.core.sendUserMessage("make a dusk plaza", { thread: threadId, engine, autopilot: { frames: FRAMES } });
+      await rig.core.sendUserMessage("make a dusk plaza", { thread: threadId, engine, frames: FRAMES });
       const finished = await loopRunClosed(rig, "the own-hands run's close");
       assert.equal(finished.landed, true, String(finished.stoppedBecause));
       assert.ok(
@@ -450,7 +446,7 @@ describe("a lead whose chat session cannot be resumed", () => {
     await rig.core.sendUserMessage("make a dusk plaza with a fountain", {
       thread: threadId,
       engine,
-      autopilot: { frames: FRAMES },
+      frames: FRAMES,
     });
     await loopRunClosed(rig, "the run's close");
 
@@ -673,7 +669,7 @@ describe("the same agent after the build", () => {
     await rig.core.sendUserMessage("make a dusk plaza", {
       thread: threadId,
       engine,
-      autopilot: { frames: FRAMES },
+      frames: FRAMES,
     });
     const finished = await loopRunClosed(rig, "the run left beside the game folder");
     assert.equal(finished.landed, false, String(finished.stoppedBecause));
@@ -709,8 +705,7 @@ describe("the same agent after the build", () => {
       assert.equal(turn.request.resume, chatSession, "every answer is the chat's own session");
       assert.notEqual(turn.request.readOnly, true);
     }
-    // Loop off after a finished build: no reopen and no question. Named flip: the start of a new
-    // Loop, for one asked in words, is always held (it used to be no launch at all).
+    // After a finished build: no reopen and no question, and the Loop's start is always held.
     assert.deepEqual(
       afters.map((turn) => offeredTools(turn.request)),
       afters.map(() => ["start_autopilot"]),
@@ -765,7 +760,7 @@ describe("the same agent after the build", () => {
     await rig.core.sendUserMessage("make a moonlit plaza", {
       thread: threadId,
       engine,
-      autopilot: { frames: FRAMES },
+      frames: FRAMES,
     });
     await waitForLog(rig.core, () => workerStarted, 120_000, "the run's worker to start");
     await rig.core.stopThread(threadId);
@@ -835,7 +830,7 @@ async function launchAndPause(rig: Rig, threadId: string, engine: string, starte
   await rig.core.sendUserMessage("make a moonlit plaza", {
     thread: threadId,
     engine,
-    autopilot: { frames: FRAMES },
+    frames: FRAMES,
   });
   await waitForLog(rig.core, () => started.worker, 120_000, "the run's worker to start");
   await rig.core.stopThread(threadId);
@@ -882,12 +877,12 @@ async function writePart(request: DelegateRequest, id: string): Promise<void> {
   await writeFile(path.join(request.cwd, "src", `${id}.js`), `export const ${id} = true;\n`);
 }
 
-/** The dusk plaza the chat launches with Loop on, on `engine`, once its run has closed. */
+/** The dusk plaza the chat launches on `engine`, once its run has closed. */
 async function launchedAndClosed(rig: Rig, threadId: string, engine: string) {
   await rig.core.sendUserMessage("make a dusk plaza", {
     thread: threadId,
     engine,
-    autopilot: { hours: 1, frames: FRAMES },
+    frames: FRAMES,
   });
   return loopRunClosed(rig, "the launched run's close");
 }
@@ -896,10 +891,6 @@ async function launchedAndClosed(rig: Rig, threadId: string, engine: string) {
 function loopRunsClosed(rig: Rig, count: number, label: string) {
   return waitForLog(rig.core, (events) => customEvents(events, "run_finished").length >= count, 150_000, label);
 }
-
-/** The working time a run was registered with. */
-const workingTime = (registered: Record<string, unknown> | undefined): number | undefined =>
-  (registered?.budgets as { wallClockMs?: number } | undefined)?.wallClockMs;
 
 /** The kinds of this chat's turns no build of its own should open: a builder follow-up. */
 const strangers = (requests: ReadonlyArray<{ kind: Kind }>): Kind[] =>
@@ -1034,44 +1025,6 @@ describe("the same agent after the build: the resume it asks for, and the sessio
     assert.equal(requests.filter((r) => r.kind === Kind.Lead).length, 1, "no lead turn after the Stop");
   });
 
-  it("S7b. 'continue with…' sent with Loop on after a paused run resumes it with the time it had left: the resume is offered, never a reopen, and a new Loop's start only beside it", {
-    timeout: RIG_TIMEOUT_MS,
-  }, async () => {
-    const engine = "claude-code";
-    const { rig, threadId } = await gameChat("after-run-resume-on-loop");
-    const leadPrompts: string[] = [];
-    const started = { worker: false };
-    const loopRun = pausedLoopRun(leadPrompts, started);
-    const offered: string[][] = [];
-    sessionEngine(rig, engine, async (request, kind) => {
-      if (kind !== Kind.After) return loopRun(request, kind);
-      offered.push(offeredTools(request));
-      if (request.prompt.includes("continue with a red moon")) return recordedResume("continue with a red moon");
-    });
-    await launchAndPause(rig, threadId, engine, started);
-
-    await answeredOnLoop(rig, threadId, "continue with a red moon", engine, { hours: 3 }, 2);
-    const log = await loopRunsClosed(rig, 2, "the resumed run's close");
-    const registered = customEvents(log, "run_registered");
-    assert.deepEqual(
-      {
-        offered,
-        runs: new Set(registered.map((e) => e.runId)).size,
-        resumed: registered.map((e) => e.resumed),
-        workingTime: registered.map(workingTime),
-      },
-      // The launch names no hours, so it is an ∞ build with its 24 h ceiling (origin/dev's launch).
-      {
-        offered: [["start_autopilot", "resume_run"]],
-        runs: 1,
-        resumed: [false, true],
-        workingTime: [86_400_000, 86_400_000],
-      },
-      "the same run resumed on its own budget: the Loop's three hours are not a new one",
-    );
-    assert.match(leadPrompts[1] ?? "", /THE USER SAYS[\s\S]*continue with a red moon/);
-  });
-
   it("S10. a message that names no engine goes on on the lead's engine, in the same session; one on another engine is the chat's own session there, with the run's controls", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
@@ -1100,7 +1053,7 @@ describe("the same agent after the build: the resume it asks for, and the sessio
     await rig.core.sendUserMessage("make a dusk plaza", {
       thread: threadId,
       engine,
-      autopilot: { frames: FRAMES },
+      frames: FRAMES,
     });
     await loopRunClosed(rig, "the codex run's close");
     const chatSession = requests.find((r) => r.kind === Kind.Chat)!.sessionId;
@@ -1128,193 +1081,13 @@ describe("the same agent after the build: the resume it asks for, and the sessio
       },
     );
   });
-
-  it("S10b. a message with Loop on another engine after the build is the chat's own session there: no reopen offered, nothing reopens", {
-    timeout: RIG_TIMEOUT_MS,
-  }, async () => {
-    const engine = "codex";
-    const { rig, threadId } = await gameChat("after-run-engines-on-loop");
-    const first = landingLoopRun("sky");
-    const { requests } = sessionEngine(rig, engine, async (request, kind) => {
-      if (kind === Kind.Lead) return first(request);
-      if (kind === Kind.Worker) return writePart(request, "sky");
-    });
-    const other = sessionEngine(rig, "claude-code", async () => {});
-    await launchedAndClosed(rig, threadId, engine);
-
-    const log = await answeredOnLoop(rig, threadId, "add enemies", "claude-code", { hours: 2 }, 2);
-    assert.deepEqual(
-      {
-        onAnotherEngine: other.requests.map((r) => ({
-          kind: r.kind,
-          reopens: offeredTools(r.request).includes("reopen_run"),
-        })),
-        leadsSessionAsked: requests.filter((r) => r.kind === Kind.After).length,
-        steered: customEvents(log, "run_steering").length,
-        registered: customEvents(log, "run_registered").length,
-      },
-      {
-        onAnotherEngine: [{ kind: Kind.After, reopens: false }],
-        leadsSessionAsked: 0,
-        steered: 0,
-        registered: 1,
-      },
-    );
-  });
 });
 
-/** The reopen the chat's own session records, as the session's result carries it. */
-const recordedReopen = (text: string) => ({ studioToolCalls: [{ name: "reopen_run", args: { text } }] });
+/** What the chat's own session is offered after a finished build it led: the Loop's start, never a reopen. */
+const AFTER_FINISHED_OFFERED = ["start_autopilot"];
 
-/** What the chat's own session is offered with Loop on after a finished build it led: the reopen, a start over, a question. */
-const REOPEN_OFFERED = ["reopen_run", "start_autopilot", "ask_user"];
-
-/** What S11 saw from inside its sessions: the offer, and where the reopened run stood. */
-interface ReopenSeen {
-  offered?: string[];
-  /** The game folder's HEAD when the reopened run's lead first woke: its starting point. */
-  folderHead?: string;
-  /** The reopened run's worker: the commit it started on, and the sky it found there. */
-  workerHead?: string;
-  workerSky?: string;
-  /** Every prompt the reopened run's lead was given. */
-  reopenedPrompts: string[];
-  /** The workers the reopened run's lead read in its status before it finished. */
-  reopenedWorkers?: string[];
-}
-
-/** The reopened run's lead, seen: every prompt it is given, and the game folder's HEAD when it first wakes. */
-async function seeReopenedLead(gameDir: string, request: DelegateRequest, seen: ReopenSeen): Promise<void> {
-  seen.reopenedPrompts.push(request.prompt);
-  // The reopened run took its starting point before its lead's first turn.
-  seen.folderHead ??= await git(gameDir, ["rev-parse", "HEAD"]);
-}
-
-/** The reopened run's worker, seen: the commit it starts on, and the sky it finds there. */
-async function seeReopenedWorker(request: DelegateRequest, seen: ReopenSeen): Promise<void> {
-  seen.workerHead = await git(request.cwd, ["rev-parse", "HEAD"]);
-  seen.workerSky = await readFile(path.join(request.cwd, "src", "sky.js"), "utf8");
-}
-
-/**
- * S11's sessions: a run that lands the sky; the chat after it, which paints the sky pink itself and
- * then records the reopen for enemies; and the run reopened, which builds them.
- */
-function reopenedLoopRuns(gameDir: string, seen: ReopenSeen) {
-  // The reopened run works to its ask: its lead starts a worker for it.
-  const loopRuns = [
-    landingLoopRun("sky"),
-    landingLoopRun("enemies", (status) => {
-      seen.reopenedWorkers = (status.workers as Array<{ title: string }>).map((worker) => worker.title);
-    }),
-  ];
-  let loopRun = 0;
-  const chatAfter = async (request: DelegateRequest) => {
-    if (request.prompt.includes("add enemies")) {
-      seen.offered = offeredTools(request);
-      loopRun = 1;
-      return recordedReopen("add enemies");
-    }
-    if (request.prompt.includes("make the sky pink"))
-      await writeFile(path.join(request.cwd, "src", "sky.js"), "export const sky = 'pink';\n");
-  };
-  return async (request: DelegateRequest, kind: Kind) => {
-    const reopened = loopRun === 1;
-    if (kind === Kind.Lead) {
-      if (reopened) await seeReopenedLead(gameDir, request, seen);
-      return loopRuns[loopRun]?.(request);
-    }
-    if (kind === Kind.Worker) {
-      if (reopened) await seeReopenedWorker(request, seen);
-      return writePart(request, reopened ? "enemies" : "sky");
-    }
-    if (kind === Kind.After) return chatAfter(request);
-  };
-}
-
-/** A steer left on a run after its close, as a Stop can leave one: nobody asked the next run for it. */
-async function leaveStaleSteer(rig: Rig, threadId: string, runId: unknown, words: string): Promise<void> {
-  await rig.core.store.appendEvents(threadId, [
-    { type: "custom", event_type: "run_steering", payload: { runId, text: words, at: new Date().toISOString() } },
-  ]);
-}
-
-describe("the same agent after the build: a finished build reopened with Loop on", () => {
-  it("S11. an ask for more with Loop 2 h reopens the same run with a fresh budget, led by the same session, hearing the chat from the ask on and forking from the game folder as it is now", {
-    timeout: RIG_TIMEOUT_MS,
-  }, async () => {
-    const engine = "codex";
-    const { rig, project, threadId } = await gameChat("after-run-reopen");
-    const seen: ReopenSeen = { reopenedPrompts: [] };
-    const { requests, histories } = sessionEngine(rig, engine, reopenedLoopRuns(project.dir, seen));
-    const first = await launchedAndClosed(rig, threadId, engine);
-    assert.equal(first.landed, true, String(first.stoppedBecause));
-    const chatSession = requests.find((r) => r.kind === Kind.Chat)?.sessionId ?? "";
-    const firstLeads = requests.filter((r) => r.kind === Kind.Lead).length;
-
-    // Loop off: the session makes the change in the game folder itself, and nothing reopens.
-    await answered(rig, threadId, "make the sky pink", engine, 2);
-    assert.equal(await readFile(path.join(project.dir, "src", "sky.js"), "utf8"), "export const sky = 'pink';\n");
-    await leaveStaleSteer(rig, threadId, first.runId, "old note");
-
-    await answeredOnLoop(rig, threadId, "add enemies", engine, { hours: 2 }, 3);
-    assert.deepEqual(seen.offered, REOPEN_OFFERED, "the reopen is offered first");
-    const log = await loopRunsClosed(rig, 2, "the reopened run's close");
-    const registered = customEvents(log, "run_registered");
-    assert.deepEqual(
-      {
-        runs: [...new Set(registered.map((e) => e.runId))],
-        resumed: registered.map((e) => e.resumed),
-        workingTime: registered.map(workingTime),
-        asked: customEvents(log, "run_steering").some((e) => e.runId === first.runId && e.text === "add enemies"),
-      },
-      { runs: [first.runId], resumed: [false, true], workingTime: [3_600_000, 7_200_000], asked: true },
-      "the same run registered again, with the Loop's two hours and the ask saved on it",
-    );
-
-    const leads = requests.filter((r) => r.kind === Kind.Lead);
-    assert.equal(leads.at(-1)?.request.resume, chatSession, "the reopened run's lead is the chat's own session");
-    const [opening = ""] = seen.reopenedPrompts;
-    // Flipped (Loop phase 5): the reopen is said in the brief, no THE BUILD GOES ON AT heading.
-    assert.match(opening, /the same run goes on with a fresh working budget from the game folder as it is now/);
-    assert.match(opening, /THE USER SAYS[\s\S]*add enemies/);
-    assert.ok(!seen.reopenedPrompts.some((p) => p.includes("old note")), "a steer from before the ask is not told");
-    assert.equal(seen.workerHead, seen.folderHead, "the new worker forks from the game folder as it is now");
-    assert.equal(seen.workerSky, "export const sky = 'pink';\n", "with the change made after the run");
-
-    const second = customEvents(log, "run_finished")[1] ?? {};
-    assert.equal(second.landed, true, String(second.stoppedBecause));
-    // Flipped (Loop phase 5): the run's workers are its pool's records, read in run_status, not the report's.
-    assert.deepEqual(
-      [...(seen.reopenedWorkers ?? [])].sort(),
-      ["enemies", "sky"],
-      "the reopened run's record keeps the finished run's workers",
-    );
-    assert.equal(await readFile(path.join(project.dir, "src", "sky.js"), "utf8"), "export const sky = 'pink';\n");
-    assert.equal(await readFile(path.join(project.dir, "src", "enemies.js"), "utf8"), "export const enemies = true;\n");
-    assert.deepEqual(strangers(requests), [], "no builder follow-up");
-    const leadsAgain = leads.length - firstLeads;
-    const whole = [
-      Kind.Chat,
-      ...Array.from({ length: firstLeads }, () => Kind.Lead),
-      Kind.After,
-      Kind.After,
-      ...Array.from({ length: leadsAgain }, () => Kind.Lead),
-    ];
-    // The run closes inside the last lead's `finish` call: its turn returns just after.
-    for (let waited = 0; (histories.get(chatSession)?.length ?? 0) < whole.length && waited < 600; waited++)
-      await sleep(25);
-    assert.deepEqual(
-      histories.get(chatSession),
-      whole,
-      "one conversation: the build, the chat after it, and the build again",
-    );
-    assert.equal(histories.size, 1, `no other session of the chat: ${JSON.stringify([...histories.keys()])}`);
-  });
-});
-
-describe("the same agent after the build: a start over or a question with Loop on", () => {
-  it("S12. an explicit start over with Loop on launches a new build: another run, never the finished one reopened", {
+describe("the same agent after the build: a new Loop or a question", () => {
+  it("S12. a Loop the session starts after a finished build is a new build: another run, never the finished one reopened", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const engine = "codex";
@@ -1334,8 +1107,8 @@ describe("the same agent after the build: a start over or a question with Loop o
     });
     await launchedAndClosed(rig, threadId, engine);
 
-    await answeredOnLoop(rig, threadId, "start over, a neon city", engine, { hours: 1, frames: FRAMES }, 2);
-    assert.deepEqual(offered, REOPEN_OFFERED);
+    await answeredWithPictures(rig, threadId, "start over, a neon city", engine, 2);
+    assert.deepEqual(offered, AFTER_FINISHED_OFFERED);
     const log = await loopRunsClosed(rig, 2, "the new build's close");
     const registered = customEvents(log, "run_registered");
     assert.deepEqual(
@@ -1350,7 +1123,7 @@ describe("the same agent after the build: a start over or a question with Loop o
     assert.deepEqual(strangers(requests), []);
   });
 
-  it("S13. a question with Loop on is answered, the reopen offered and not taken: nothing starts again", {
+  it("S13. a question after a finished build is answered by the chat's own session: nothing starts again", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const engine = "codex";
@@ -1365,17 +1138,16 @@ describe("the same agent after the build: a start over or a question with Loop o
     await launchedAndClosed(rig, threadId, engine);
     const chatSession = requests.find((r) => r.kind === Kind.Chat)?.sessionId;
 
-    const log = await answeredOnLoop(rig, threadId, "why dusk?", engine, { hours: 2 }, 2);
+    const log = await answeredWithPictures(rig, threadId, "why dusk?", engine, 2);
     assert.deepEqual(
       {
         offered,
         answeredBy: requests.filter((r) => r.kind === Kind.After).map((r) => r.request.resume),
-        // A reopen saves the ask on the run before the message is handled; its start follows.
         steered: customEvents(log, "run_steering").length,
         registered: customEvents(log, "run_registered").length,
         leads: requests.filter((r) => r.kind === Kind.Lead && r.request.prompt.includes("why dusk?")).length,
       },
-      { offered: REOPEN_OFFERED, answeredBy: [chatSession], steered: 0, registered: 1, leads: 0 },
+      { offered: AFTER_FINISHED_OFFERED, answeredBy: [chatSession], steered: 0, registered: 1, leads: 0 },
       "answered by the chat's own session, and the build stays finished",
     );
   });

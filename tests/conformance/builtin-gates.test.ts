@@ -54,7 +54,6 @@ function launchOn(facts: readonly object[], readiness: Readiness, extra: object 
   const studio = {
     host: { ...recorder.ctx.host, heartbeat: () => {} },
     cancels: new Set<string>(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),

@@ -13,7 +13,6 @@ import type { CodingProvider } from "../../../src/shared/coding-cli.ts";
 import {
   EVAL_LANE_EXIT,
   EVAL_LANE_REPORT_SCHEMA,
-  type EvalCommission,
   EvalLaneErrorCode,
   type EvalExecutables,
   type EvalLaneReport,
@@ -24,7 +23,7 @@ import { EngineId } from "../../../src/shared/providers.ts";
 import { isBelow } from "../../../src/substrate/paths.ts";
 import { fixtureElectronArgs, fixtureElectronEnv, resolveElectron } from "../../electron-runtime.mjs";
 import type { QuotaReader } from "../budget.ts";
-import { EndedHow, EvalAgent, HarnessFailure, LaneMode } from "../vocabulary.ts";
+import { EndedHow, EvalAgent, HarnessFailure } from "../vocabulary.ts";
 import { assertNoBannedArgv, type CliResolver, genexAppArgv, resolveLaneCli } from "./argv.ts";
 import {
   createRunWorkspace,
@@ -48,7 +47,7 @@ const DEV_BUILD_SWITCH = "--dev-build";
 export const APP_STOP_MARGIN_MS = 5 * MINUTE_MS;
 
 /** The pure modules the product default is read from, inside the evaluated checkout. */
-const DEFAULT_MODULES = { loop: "src/renderer/loop-setting.ts", permissions: "src/shared/permissions.ts" } as const;
+const DEFAULT_MODULES = { permissions: "src/shared/permissions.ts" } as const;
 
 /** A command's result. */
 export interface CommandResult {
@@ -147,73 +146,27 @@ export async function prepareAppBuild(input: {
 
 /** The product default an eval lane sends, read from the evaluated build (D3). */
 export interface ProductDefaults {
-  commission: EvalCommission;
   permissionMode: PermissionMode;
 }
 
 /**
- * Run inside the evaluated checkout: import its Loop and permission modules with no storage and no
- * window, and report the commission a fresh game chat's composer sends, the default permission mode,
- * and any global the imports added (a module that adds one is not pure).
+ * Run inside the evaluated checkout: import its permission module with no storage and no window,
+ * and report the default permission mode and any global the import added (a module that adds one
+ * is not pure).
  */
 const DEFAULTS_SCRIPT = `
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 const at = (file) => pathToFileURL(path.join(process.cwd(), file)).href;
 const before = new Set(Object.getOwnPropertyNames(globalThis));
-const loop = await import(at(${JSON.stringify(DEFAULT_MODULES.loop)}));
 const permissions = await import(at(${JSON.stringify(DEFAULT_MODULES.permissions)}));
 const addedGlobals = Object.getOwnPropertyNames(globalThis).filter((name) => !before.has(name));
-const view = loop.composerLoopView({ own: loop.lastLoop(null), build: null });
-const extras = loop.composerExtras({ gameMode: true, view, reviewPlan: false, frames: [] });
-const send = extras.autopilot && typeof loop.autopilotSendOptions === "function"
-  ? loop.autopilotSendOptions(extras.autopilot, null)
-  : null;
-process.stdout.write(JSON.stringify({ extras, send, permissionMode: permissions.DEFAULT_PERMISSION_MODE, addedGlobals }));
+process.stdout.write(JSON.stringify({ permissionMode: permissions.DEFAULT_PERMISSION_MODE, addedGlobals }));
 `;
 
 /**
- * The Loop commission of a build older than `autopilotSendOptions` (loop-setting.ts), which it
- * predates: the composer's rule as it stood (∞ has no hours; no pictures, no frames; no roles).
- * A build that exports the function answers with its own result (`send`) instead.
- */
-function legacyAutopilot(value: unknown): NonNullable<EvalCommission["autopilot"]> {
-  const extras = (value && typeof value === "object" ? value : {}) as { hours?: unknown; reviewPlan?: unknown };
-  return {
-    ...(typeof extras.hours === "number" ? { hours: extras.hours } : {}),
-    ...(extras.reviewPlan === true ? { reviewPlan: true } : {}),
-  };
-}
-
-/** The keys a build's `autopilotSendOptions` answer may carry for a send with no pictures and no roles. */
-const SEND_KEYS: ReadonlySet<string> = new Set(["hours", "reviewPlan"]);
-
-/** The build's own answer, checked field by field; null when it had none (an older build). */
-function sendFrom(value: unknown): NonNullable<EvalCommission["autopilot"]> | null {
-  if (value === null || value === undefined) return null;
-  const unreadable = new Error("product default commission unreadable");
-  if (typeof value !== "object" || Array.isArray(value)) throw unreadable;
-  const fields: Record<string, unknown> = { ...value };
-  const { hours, reviewPlan } = fields;
-  const shaped = Object.keys(fields).every((key) => SEND_KEYS.has(key));
-  const hoursOk = hours === undefined || (typeof hours === "number" && Number.isFinite(hours));
-  if (!shaped || !hoursOk || (reviewPlan !== undefined && reviewPlan !== true)) throw unreadable;
-  return { ...(typeof hours === "number" ? { hours } : {}), ...(reviewPlan === true ? { reviewPlan: true } : {}) };
-}
-
-/** The commission a fresh chat's send carries: the build's own `autopilotSendOptions` answer, or the legacy rule. */
-function commissionFrom(extras: Record<string, unknown>, send: unknown): EvalCommission {
-  const autopilot = sendFrom(send) ?? legacyAutopilot(extras.autopilot);
-  return {
-    ...(extras.autopilot !== undefined ? { autopilot } : {}),
-    ...(extras.reviewPlan === true ? { reviewPlan: true } : {}),
-  };
-}
-
-/**
- * The evaluated build's product default: `lastLoop(null)` through `composerExtras`, and
- * `DEFAULT_PERMISSION_MODE`, computed in a separate Node inside that checkout. Refuses a module that
- * adds a global when imported, a bypass mode, or an answer that is not the expected shape.
+ * The evaluated build's product default: `DEFAULT_PERMISSION_MODE`, computed in a separate Node
+ * inside that checkout. Refuses a module that adds a global when imported, or a bypass mode.
  */
 export async function productDefaults(checkout: string, run: CommandRunner = systemRunner): Promise<ProductDefaults> {
   const result = await run(process.execPath, ["--input-type=module", "--eval", DEFAULTS_SCRIPT], {
@@ -221,23 +174,14 @@ export async function productDefaults(checkout: string, run: CommandRunner = sys
     env: strippedEnv(process.env),
   });
   if (result.code !== 0) throw new Error(`product defaults unreadable: ${result.stderr.slice(-500)}`);
-  const answer = JSON.parse(result.stdout) as {
-    extras?: unknown;
-    send?: unknown;
-    permissionMode?: unknown;
-    addedGlobals?: unknown;
-  };
+  const answer = JSON.parse(result.stdout) as { permissionMode?: unknown; addedGlobals?: unknown };
   const modes: readonly unknown[] = Object.values(PermissionMode);
   const mode = answer.permissionMode;
   if (!modes.includes(mode) || mode === PermissionMode.Bypass)
     throw new Error("product default permission mode refused");
   if (!Array.isArray(answer.addedGlobals) || answer.addedGlobals.length)
     throw new Error("product default modules are not pure");
-  if (!answer.extras || typeof answer.extras !== "object") throw new Error("product default commission unreadable");
-  return {
-    commission: commissionFrom(answer.extras as Record<string, unknown>, answer.send),
-    permissionMode: mode as PermissionMode,
-  };
+  return { permissionMode: mode as PermissionMode };
 }
 
 /**
@@ -282,7 +226,7 @@ export function laneSpec(
     effort: request.lane.effort,
     brief: request.evalCase.brief,
     suffix: request.suffix,
-    commission: request.lane.mode === LaneMode.Auto ? {} : defaults.commission,
+    commission: {},
     permissionMode: defaults.permissionMode,
     deadlineMs: request.deadlineMs,
     graceMs: request.graceMs,

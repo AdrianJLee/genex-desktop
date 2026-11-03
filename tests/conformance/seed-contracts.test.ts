@@ -7,7 +7,6 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import * as seedChatDispatch from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { endsSessions as seedEndsSessions } from "../../src/harness-seed/loop/compaction-log.ts";
 import * as seedDelegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
 import * as seedFolderFacts from "../../src/harness-seed/loop/folder-facts.ts";
@@ -37,8 +36,7 @@ import { DelegationRefusal as seedDelegationRefusal } from "../../src/harness-se
 import * as seedWorkers from "../../src/harness-seed/loop/workers/contract.ts";
 import * as seedJobs from "../../src/harness-seed/loop/jobs/contract.ts";
 import { RESUME_RUN as seedResumeRun } from "../../src/harness-seed/loop/after-loop-run.ts";
-import { REOPEN_RUN as seedReopenRun } from "../../src/harness-seed/loop/reopen-run-prompts.ts";
-import { tools as seedGameTools } from "../../src/harness-seed/tools/game-tools.ts";
+import { startAutopilot as seedStartAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
 import * as seedVerdict from "../../src/harness-seed/loop/verdict.ts";
 import { endsChatSessions } from "../../src/shared/chat-rewind.ts";
 import * as chatRun from "../../src/shared/chat-run.ts";
@@ -81,13 +79,7 @@ import * as roles from "../../src/shared/model-roles.ts";
 import { ReasoningEffort } from "../../src/shared/model-preferences.ts";
 import { PreviewConsoleSource, PreviewGone } from "../../src/shared/preview-contract.ts";
 import { EngineId } from "../../src/shared/providers.ts";
-import {
-  ExecutionStatus,
-  JournalPhase,
-  VerdictPass,
-  VerdictRule,
-  recordedRunLoop,
-} from "../../src/shared/run-state.ts";
+import { ExecutionStatus, JournalPhase, VerdictPass, VerdictRule } from "../../src/shared/run-state.ts";
 import { EventKind, type EventEnvelope, MessageUsageSource } from "../../src/shared/event-log.ts";
 import * as seedEngineSeat from "../../src/harness-seed/loop/engine-seat.ts";
 import { EngineKind, EngineStatusCode } from "../../src/shared/engine-descriptor.ts";
@@ -195,10 +187,7 @@ describe("the chat's run (shared/chat-run.ts ↔ loop/run-inbox.ts)", () => {
   });
 
   it("names the builds a chat's own session records to start as the seed's tools do, which Plan holds", () => {
-    const seedNames = new Set([...seedGameTools.map((tool) => tool.name), seedReopenRun, seedResumeRun]);
-    for (const name of Object.values(chatRun.BuildLaunch)) assert.equal(seedNames.has(name), true, name);
-    assert.equal(chatRun.BuildLaunch.ReopenRun, seedReopenRun);
-    assert.equal(chatRun.BuildLaunch.ResumeRun, seedResumeRun);
+    assert.deepEqual(Object.values(chatRun.BuildLaunch), [seedStartAutopilot.name, seedResumeRun]);
     assert.equal(chatRun.isBuildLaunch("ask_user"), false, "a question is no launch");
   });
 
@@ -660,15 +649,6 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
   it("the seed's starters and project tool names are the app's", () => {
     assert.deepEqual(seedFolderFacts.ProjectStarter, ProjectStarter);
     assert.deepEqual(seedFolderFacts.ProjectTool, ProjectTool);
-  });
-});
-
-describe("run budgets (shared/run-state.ts ↔ loop/chat-dispatch.ts)", () => {
-  it("reads the Loop back as the seed recorded it: ∞ as until satisfied, hours as hours", () => {
-    assert.deepEqual(recordedRunLoop(seedChatDispatch.intakeBudgets({ hours: 24, untilSatisfied: true })), {
-      hours: null,
-    });
-    assert.deepEqual(recordedRunLoop(seedChatDispatch.intakeBudgets({ hours: 1 })), { hours: 1 });
   });
 });
 

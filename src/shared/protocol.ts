@@ -66,16 +66,6 @@ export interface DispatchMessage {
   action: DispatchAction;
 }
 
-/** Composer Loop on a chat turn — hours from the stepper, stills the user dropped. */
-export interface LoopCommission {
-  hours: number;
-  frames?: ReferenceFrame[];
-}
-
-/**
- * Composer Autopilot on a chat turn. Hours are the optional "stop after N hours" cap — absent
- * means run until what was asked is verified and nothing blocks it (A2). Frames are the mood board.
- */
 /** Who plans, builds and judges — one model id per job; `undefined`/"default" is the engine's own default. */
 export interface RunRoles {
   /** Explicit reasoning per role; absent means that role model's own default. */
@@ -88,20 +78,6 @@ export interface RunRoles {
    * in that slot is then one of that engine's. Never the orchestrator, which is the run's engine.
    */
   engines?: { builder?: string; judge?: string };
-}
-
-export interface AutopilotCommission {
-  hours?: number;
-  frames?: ReferenceFrame[];
-  /** The composer's roles panel: explicit orchestrator / workers / judges picks (harness-seed/loop/model-roles.ts). */
-  roles?: RunRoles;
-  /** Request host-owned explicit approval before execution (default off). */
-  reviewPlan?: boolean;
-  /**
-   * The person's Keep building tap after a Loop ended with something still to fix: the finished
-   * build reopens, or the next Loop starts, with no turn deciding whether it is a contained change.
-   */
-  keepBuilding?: boolean;
 }
 
 /**
@@ -155,10 +131,8 @@ export type DispatchAction =
       pickedImages?: number;
       /** Reference files this message saved in the game (relative paths); a rewind with files removes them. */
       references?: string[];
-      /** Composer Loop: the chat may start an unattended build when the ask needs one. */
-      loop?: LoopCommission;
-      /** Composer Autopilot: the chat may launch a build that decomposes into facets and runs until satisfied. */
-      autopilot?: AutopilotCommission;
+      /** The composer's roles panel: the workers' and judges' picks, for the turn's workers and a Loop it starts. */
+      roles?: RunRoles;
       /** Words the chat wrote itself (a command's result); the queue keeps it and the transcript hides it. */
       origin?: MessageOrigin;
       /** Genex wrote these words (any `origin`, a plugin's ask): the agent reads them as not the person's. */
@@ -168,11 +142,6 @@ export type DispatchAction =
   | { type: "cancel"; threadId?: string }
   | { type: "queue_message"; threadId: string; messageId: string; operation: "hold" | "edit" | "remove"; text?: string }
   | { type: "queue_resume"; threadId: string }
-  /**
-   * The chat was rewound (capability "rewind"). `frames`, when present, is the Loop mood board
-   * the interview still has after it (null: none); absent, the board is untouched.
-   */
-  | { type: "rewind"; threadId: string; frames?: ReferenceFrame[] | null }
   | { type: "healthcheck" }
   /** Run the loop's deterministic self-test (the architect's bar); rejects with the first failure. */
   | { type: "selftest" }
@@ -199,7 +168,6 @@ export const DispatchActionType = {
   Cancel: "cancel",
   QueueMessage: "queue_message",
   QueueResume: "queue_resume",
-  Rewind: "rewind",
   Healthcheck: "healthcheck",
   Selftest: "selftest",
   RunStart: "run_start",
@@ -221,7 +189,6 @@ void actionsAreListed;
  * the seed's `loop/main.ts`). The host checks one before it hands that work over. Wire names.
  */
 export const HarnessCapability = {
-  Loop: "loop",
   Autopilot: "autopilot",
   RunStart: "run.start",
   RunStop: "run.stop",
@@ -230,13 +197,10 @@ export const HarnessCapability = {
   Scoreboard: "scoreboard",
   Director: "director",
   MessageQueue: "message-queue",
-  Rewind: "rewind",
   /** A message sent while the chat's own turn works joins that turn (`engine.steer`). */
   Steer: "steer",
   /** The chat's own session may run workers: the harness answers `worker_tool` for its turn. */
   Workers: "workers",
-  /** A build whose jobs cross to or from a completion-only local engine (`crossesCompletionEngine`). */
-  LocalRoles: "local-roles",
 } as const;
 export type HarnessCapability = (typeof HarnessCapability)[keyof typeof HarnessCapability];
 

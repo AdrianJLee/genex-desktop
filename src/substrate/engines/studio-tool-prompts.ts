@@ -15,6 +15,14 @@ export const StudioTool = {
 } as const;
 export type StudioTool = (typeof StudioTool)[keyof typeof StudioTool];
 
+/**
+ * Whether a session handed `tools` is an interview: one handed the question card, which reads no
+ * message mid-turn (an answer read after its question would reach a turn that had already asked).
+ */
+export function isInterview(tools: readonly { name: string }[] | undefined): boolean {
+  return (tools ?? []).some((tool) => tool.name === StudioTool.AskUser);
+}
+
 /** The studio's own MCP server, as a contractor sees it: every tool is `mcp__studio__<name>`. */
 export const STUDIO_MCP_SERVER = "studio";
 export const STUDIO_TOOL_PREFIX = `mcp__${STUDIO_MCP_SERVER}__`;

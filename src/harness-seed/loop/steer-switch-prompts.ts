@@ -25,25 +25,11 @@ export function afterCommandPrompt(carryOn: boolean): string {
   return carryOn ? `${ran} Carry on with what you were doing before it, unless it changed what they want.` : ran;
 }
 
-/** The notes a switch opens the next leg with (delegated-turn.ts): one per setting that changed. */
+/** The note a switch opens the next leg with (delegated-turn.ts): the engine, or the model and effort, that changed. */
 export const SWITCH_NOTES = {
   model: (label: string) => `You now run on ${label}.`,
   engine: (label: string) =>
     `${label} takes over this chat: you are a new session, so read the conversation below before you act.`,
-  loopOn: (tool: string, hours: number | null) =>
-    `The Loop is on${hours === null ? " (until the ask is done)" : ` (${hours} h)`}: you may start a build with ${tool} when the ask needs one, or answer and edit yourself as before.`,
-  loopHours: (hours: number | null) =>
-    `The Loop's time changed: a build you start now runs ${hours === null ? "until the ask is done" : `for ${hours} h`}.`,
-  loopOff: "The Loop is off: do what they ask yourself, and do not start a build.",
-  loopRoles: "The Loop's roles changed: a build you start now uses the models they picked.",
-  reopenOn: "The Loop is on: more work on the finished build goes to it with reopen_run, as your notes say.",
-  pictures: (count: number) => `They attached ${count} picture${count === 1 ? "" : "s"} for the build.`,
-  workersCarry: (count: number) =>
-    `${count} worker${count === 1 ? " you started is" : "s you started are"} still working: a build you start takes ${count === 1 ? "it" : "them"} over and they keep going.`,
-  dropped: (tools: readonly string[]) =>
-    `The ${tools.join(" and ")} call you made before this change did not go out: make it again if it still fits the new settings.`,
-  workersLand: (count: number) =>
-    `${count} worker${count === 1 ? " you started is" : "s you started are"} still working: wait for ${count === 1 ? "it" : "them"} (${WorkerTool.Wait}) and mark what ${count === 1 ? "it" : "they"} made (${WorkerTool.Mark}) before you start a build. When the build starts, a worker writing in the game folder itself is waited for; any other still working stops.`,
 } as const;
 
 /** What a tool that only waits answers when the person's words ended its wait (person-wrote.ts). */

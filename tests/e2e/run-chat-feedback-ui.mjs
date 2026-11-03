@@ -141,16 +141,6 @@ try {
     await until(async () => (await snap()).state.room === "studio", "learning opens Studio");
     await click(`nav [data-thread="${learning.thread_id}"]`);
     await capture("outcome-and-learning");
-    // After a finished build Mode is the chat's own Loop again: no new-build choice, the time limit to pick.
-    await click('[aria-label="Mode"]');
-    const options = await op("snapshot", { surface: "desktop", scope: '[aria-label="Mode options"]', limit: 40 });
-    assert.doesNotMatch(options.text, /new build/i);
-    assert.ok(!options.controls.some((c) => /new build/i.test(c.text ?? "")));
-    const limit = await op("snapshot", { surface: "desktop", scope: '[aria-label="Loop time limit"]', limit: 20 });
-    assert.ok(limit.controls.some((c) => c.text === "Custom"));
-    await capture("mode-after-finished-build");
-    await key("Escape");
-    assert.match((await snap()).controls.find((c) => c.label === "Mode")?.text ?? "", /Loop$/);
   });
   await check(
     "unavailable plans offer model recovery, preserve the request and retry on the chosen provider",
@@ -216,8 +206,6 @@ try {
     const handoff = events(thread).find((e) => e.data.event_type === "contractor_handoff").data.payload;
     assert.equal(handoff.engine, "codex");
     assert.equal(handoff.model, "fixture-v1");
-    // Flipped (step 1): the handoff names the Loop chat's launch tool instead of `interview: true`.
-    assert.match(String(handoff.launch), /^start_(autopilot|unattended_run)$/);
     report.modelInheritance = { engine: handoff.engine, model: handoff.model };
     await capture("question");
   });
@@ -261,10 +249,6 @@ try {
     await answered();
     const log = events(thread);
     assert.ok(!log.some((e) => e.data.event_type === "run_started"));
-    assert.match(
-      String(log.filter((e) => e.data.event_type === "contractor_handoff").at(-1).data.payload.launch),
-      /^start_(autopilot|unattended_run)$/,
-    );
     assert.match((await snap()).text, /Actually, a coast at night/);
     await capture("custom-answer");
   });

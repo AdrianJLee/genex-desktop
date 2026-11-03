@@ -3,16 +3,14 @@
  * to `wrap_up` (wrap-up.ts) and the `run_control` record keeps it; next-loop.ts starts it once the
  * run has closed. Pure: no launch here, so the lead's tools can read it without the chat's dispatch.
  */
-import { hoursNamed } from "./config.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
 import { RunControlAction } from "./run-inbox.ts";
 import type { AnyRecord, HarnessEvent } from "../types/harness.d.ts";
 
-/** The new Loop a finish ask carries: what to build, the bar, and its hours (null: until done). */
+/** The new Loop a finish ask carries: what to build, and the bar. */
 export interface NextLoop {
   goal: string;
   direction: string;
-  hours: number | null;
 }
 
 /** A finish ask's new Loop from what the lead passed, or null when it names no goal. */
@@ -20,17 +18,16 @@ export function nextLoopFrom(args: AnyRecord): NextLoop | null {
   const goal = typeof args.next_goal === "string" ? args.next_goal.trim() : "";
   if (!goal) return null;
   const direction = typeof args.next_direction === "string" ? args.next_direction.trim() : "";
-  const hours = hoursNamed(args.next_hours);
-  return { goal, direction: direction || goal, hours: hours > 0 ? hours : null };
+  return { goal, direction: direction || goal };
 }
 
-/** The events that open a run again (a resume, a reopen): an ask to finish before them is spent. */
+/** The events that open a run again (a resume): an ask to finish before them is spent. */
 const OPENED: ReadonlySet<string> = new Set([RunEvent.RunRegistered, RunEvent.RunStarted]);
 
 /**
  * The new Loop the ask to finish of `runId`'s latest opening carries in `events`, once that run has
  * finished; null when none was asked, the run paused (a Stop, a limit: its resume is what goes on), or
- * it opened again since (a resume or reopen starts nothing an earlier ask carried).
+ * it opened again since (a resume starts nothing an earlier ask carried).
  */
 export function nextLoopOf(events: readonly HarnessEvent[], runId: string): NextLoop | null {
   let fold: NextFold = { next: null, finished: false };

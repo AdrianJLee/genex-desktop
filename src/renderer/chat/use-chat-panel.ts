@@ -68,7 +68,7 @@ export function useChatPanel(props: ChatPanelProps) {
   const submit: Send = async (text, extras, preserveDraft, source) => {
     await sendAnswered(text, extras, preserveDraft, source);
   };
-  useKeepBuilding(chat.threadId, sendAnswered, props.onNotice, composerRef);
+  useKeepBuilding(chat.threadId, sendAnswered, props.onNotice);
   useComposeInChat(chat.threadId, chat.project, composer.drafts, composerRef, sendAnswered);
   const report = useReport(props, chat, composer, work);
   const enginesRead = useEngines((s) => s.list.length > 0);

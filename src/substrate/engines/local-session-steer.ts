@@ -7,7 +7,7 @@
  */
 import type { Message } from "../types.ts";
 import type { DelegateRequest, SteerMessage, SteerSend } from "./types.ts";
-import { isInterview } from "../../shared/engine-requests.ts";
+import { isInterview } from "./studio-tool-prompts.ts";
 import { textAsSent } from "./genex-mark-prompts.ts";
 
 /** A running local session's inbox: what the person sent since its last round, in order. */
@@ -48,8 +48,8 @@ export function localInbox(signal: AbortSignal): LocalInbox {
 }
 
 /**
- * Whether this session reads messages mid-turn. An interview does not: a message read after its
- * question's or launch's tool result would be answered by a turn that had already decided.
+ * Whether this session reads messages mid-turn. An interview (handed the question card) does not: a
+ * message read after its question's tool result would be answered by a turn that had already decided.
  */
 export function takesSteer(request: DelegateRequest): boolean {
   return !isInterview(request.interviewTools);

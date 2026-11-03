@@ -2089,8 +2089,6 @@ export const STILL_TO_FIX_WORDS = {
     notDone.length
       ? [t("Keep building: fix what’s left."), ...notDone.map((item) => `- ${item}`)].join("\n")
       : t("Keep building where you left off."),
-  /** Keep building in a game whose Loop can't run here: nothing was sent. */
-  noLoop: t("Loop can’t run in this game yet, so Keep building can’t start it."),
 } as const;
 
 /**
@@ -6008,27 +6006,16 @@ export const CHECK_WORDS = {
 } as const;
 
 /**
- * A game linked to an engine whose Loop needs its project inside the game folder, named by the
- * engine's label: Rewind's note when the project lives elsewhere, and why Mode has no Loop yet.
+ * A game linked to an engine whose save points need its project inside the game folder, named by
+ * the engine's label: Rewind's note when the project lives elsewhere.
  */
 export const ENGINE_GAME_WORDS = {
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
   rewindNote: (engine: string, project: string) =>
     t("Rewind doesn’t undo changes made in {engine}: {project} is outside the game folder.", { engine, project }),
-  /** Mode's caption for a game whose project lies outside its folder: where it is, and the two ways to a Loop. */
-  loopUnavailable: (engine: string, project: string | null, place: string) =>
-    project
-      ? t(
-          "Loops need the {engine} project inside this game’s folder, so Rewind can undo each step; {project} is in {place}. Make a new one from the {engine} button, or move {project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.",
-          { engine, project, place },
-        )
-      : t(
-          "Loops need this game’s {engine} project inside its folder, so Rewind can undo each step. A new {engine} project made from the {engine} button goes there. Until then, it does what you ask, then stops.",
-          { engine },
-        ),
 } as const;
 
-/** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */
+/** A game linked to an Unreal project: the Live tab's card and Rewind's note. */
 export const UNREAL_WORDS = {
   /** The Live tab's line under the project's name, in place of the web page. */
   stageStatus: t("Plays in the Unreal editor."),
@@ -6085,9 +6072,6 @@ export const UNREAL_WORDS = {
   playShot: (project: string) => t("{game} in play", { game: project }),
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
   rewindNote: (project: string) => ENGINE_GAME_WORDS.rewindNote(GAME_ENGINE_WORDS.unreal, project),
-  /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
-  loopUnavailable: (project: string | null, place: string) =>
-    ENGINE_GAME_WORDS.loopUnavailable(GAME_ENGINE_WORDS.unreal, project, place),
 } as const;
 
 /** The Unity plugin's words in Studio's own UI. */

@@ -12,8 +12,8 @@ Settings. Each game has one conversation on the left and a stage on the right. T
 switches between **Live** (the playable
 game), **Builds** (work and results) and **Assets** (files and generated media).
 
-The prompt bar chooses the model, permissions, Auto or Loop mode, planning, references and
-tools. Chat shows replies, questions, compact status and results; details expand on demand.
+The prompt bar chooses the model, permissions, planning, references and tools; the chat's agent
+decides whether a request needs a Loop. Chat shows replies, questions, compact status and results; details expand on demand.
 
 Studio pairs an assistant with Activity to review runs and instruction improvements. Settings owns
 the games folder, appearance, provider/model setup and saved permissions. Accounts, local projects and installed harness edits
@@ -25,7 +25,7 @@ must survive application changes.
 | --- | --- |
 | [Workspace and games](../product/workspace.md) | Navigation, Play, library, new/open games, settings and export |
 | [Chat and questions](../product/chat.md) | Messages, streaming, statuses, plans, questions and long history |
-| [Builds and Live](../product/builds-live.md) | Auto/Loop, workers, progress, playback, checks and outcomes |
+| [Builds and Live](../product/builds-live.md) | Loops, workers, progress, playback, checks and outcomes |
 | [Models and context](../product/models-context.md) | Models, permissions, saved preferences, accounts and context |
 | [Assets and plugins](../product/assets-plugins.md) | Media, previews, tools, plugin setup and permissions |
 | [Projects and engines](../product/projects-engines.md) | Project kinds, engines, plugins on or off, ports |

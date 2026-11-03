@@ -1,11 +1,9 @@
 /**
  * What the chat's own session reads on each of its turns after a run it led, for as long as that
- * run is the chat's latest (after-loop-run.ts): the build is over, its hands are back, the run's
- * controls it keeps, spelled for its engine — and, after a finished build with Loop on, its reopen
- * (reopen-run-prompts.ts).
+ * run is the chat's latest (after-loop-run.ts): the build is over, its hands are back, and the run's
+ * controls it keeps, spelled for its engine.
  */
 import { toolCall } from "./model-roles.ts";
-import { reopenRules, type ReopenGrant } from "./reopen-run-prompts.ts";
 import { RunState } from "./run-events.ts";
 import { clip, CLIP_QUOTE } from "./text.ts";
 import type { AfterLoopRun } from "./after-loop-run.ts";
@@ -26,23 +24,16 @@ function closedWords(loopRun: AfterLoopRun): string {
   return "finished";
 }
 
-/** A finished run's change with Loop off (or no reopen granted): the session's own work. */
-const OWN_WORK =
-  "- Work the user asks for now, you do yourself, here in the game folder, like any change in this chat — no build starts for it, unless they ask in words for a new Loop: then you start it, as the Loop rule says.";
-
 /** A paused run's change that is not the build itself: the session's own work. */
 const PAUSED_OWN_WORK =
   "- Other work they ask for — a fix, an update, a feature that is not that build's goal — you make yourself here, like any change in this chat: the build stays paused.";
 
-/**
- * A paused run's resume on its lead's engine; a finished run's reopen when the turn grants it (Loop
- * on, reopen-run.ts); otherwise what a change is: the session's own work.
- */
-function workRules(loopRun: AfterLoopRun, engine: string | undefined, grant: ReopenGrant | null): string[] {
-  if (loopRun.state !== RunState.Paused) return grant ? reopenRules(engine, grant) : [OWN_WORK];
+/** A paused run's resume on its lead's engine, and what any other change is: the session's own work. */
+function workRules(loopRun: AfterLoopRun, engine: string | undefined): string[] {
+  if (loopRun.state !== RunState.Paused) return [];
   if (!loopRun.onLeadEngine) return [PAUSED_OWN_WORK];
   return [
-    `- This build is paused. When the user asks to go on with that build itself — resume, continue, keep going, run it again, with new guidance for it or none — call ${toolCall(engine, "resume_run")} once, last, with their instruction as text, and edit nothing in that reply: when your reply ends the build resumes where it stopped, with the working time it had left. Going on, again or "rerun" is this resume; only a new Loop they ask for is a fresh start.`,
+    `- This build is paused. When the user asks to go on with that build itself — resume, continue, keep going, run it again, with new guidance for it or none — call ${toolCall(engine, "resume_run")} once, last, with their instruction as text, and edit nothing in that reply: when your reply ends the build resumes where it stopped. Going on, again or "rerun" is this resume.`,
     PAUSED_OWN_WORK,
   ];
 }
@@ -50,18 +41,14 @@ function workRules(loopRun: AfterLoopRun, engine: string | undefined, grant: Reo
 /**
  * The note that opens each turn of the chat's own session after its run, while that run is the
  * chat's latest: in place of "pick up where you left off" on a resumed session, after the chat so
- * far on a fresh one. `grant`: the finished build's reopen this turn offers (Loop on).
+ * far on a fresh one.
  */
-export function afterLoopRunNote(
-  loopRun: AfterLoopRun,
-  engine: string | undefined,
-  grant: ReopenGrant | null = null,
-): string {
+export function afterLoopRunNote(loopRun: AfterLoopRun, engine: string | undefined): string {
   const goal = loopRun.goal ? ` ("${clip(loopRun.goal, CLIP_QUOTE)}")` : "";
   return [
     `THE BUILD IS OVER: run ${loopRun.runId}${goal} ${closedWords(loopRun)}. You are this chat's own session, back in the game folder with your hands: the build no longer runs, and you may read and edit the game here as in any turn of this chat.`,
-    "- Answer a question yourself: a question never restarts the build or starts one.",
-    ...workRules(loopRun, engine, grant),
+    "- Answer a question yourself: a question never restarts the build.",
+    ...workRules(loopRun, engine),
     loopRun.inPlace ? inPlaceControls(engine) : buildControls(engine),
     "- Speak the user's terms: Live, Builds, the build, your game folder — never integration branch or worktree.",
   ].join("\n");

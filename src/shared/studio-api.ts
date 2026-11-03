@@ -821,22 +821,6 @@ export interface StudioApi {
    * `scripts`: the person trusts a remix's setup scripts, which then run (and from then on).
    */
   installPackages(project: string, options?: { scripts?: boolean }): Promise<InstallResult>;
-  startRun(spec: {
-    project: string;
-    goal: string;
-    reference: {
-      name: string;
-      shots: string[];
-      notes?: string;
-      kind?: "reference" | "direction";
-      frames?: Array<{ label: string; mimeType: string; data: string }>;
-    };
-    hours: number;
-    engine?: string;
-    model?: string;
-    judgeEngine?: string;
-    judgeModel?: string;
-  }): Promise<{ runId: string }>;
   stopRun(runId: string): Promise<boolean>;
   /** Wrap up: the builders finish what they are on, then the run integrates, checks and shows. */
   finishRun(runId: string, threadId: string): Promise<boolean>;

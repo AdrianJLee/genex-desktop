@@ -2,7 +2,6 @@ import { type JSX, useId, useMemo, useState } from "react";
 import type { AgentScreenFrame } from "../../shared/agent-screen.ts";
 import { t } from "../../shared/i18n.ts";
 import { useNow } from "../panels/run-graph/use-builds-model.ts";
-import { capWords } from "../run-steps.ts";
 import { Elapsed, useStartedAt } from "../ui/LoadingState.tsx";
 import { Presence } from "../ui/Presence.tsx";
 import { BUILD_CHECKLIST_WORDS } from "../words.ts";
@@ -14,21 +13,17 @@ import { BuildChecklist } from "./BuildChecklist.tsx";
  * A build running while the chat itself is free — the only thing the chat shows for it. Its one
  * line is where it stands: its parts counted once it has some, else what is happening now; the
  * picture is the lead's own view of the game, small, once there is something in it to see. Its
- * clock sits on the right: how long it has run, and under it the most it was given ("up to 10h"),
- * a cap the build may finish well inside. With parts, the card opens to their list (each added,
+ * clock sits on the right: how long it has run. With parts, the card opens to their list (each added,
  * working or still to come) and Open in Builds; without, the whole card opens Builds.
  */
 export function BuildStatus({
   since,
-  budgetMs,
   caption,
   frame,
   parts,
   onOpenBuilds,
 }: {
   since?: number;
-  /** the time the build was given, when it was given one */
-  budgetMs?: number | null;
   caption: string;
   frame?: AgentScreenFrame;
   /** what the card's list is read from, once the build has a plan or a worker */
@@ -85,7 +80,6 @@ export function BuildStatus({
                 <Elapsed since={startedAt} />
               </span>
             </span>
-            {budgetMs ? <span className="block text-status text-ink-3">{capWords(budgetMs)}</span> : null}
           </p>
         }
         below={

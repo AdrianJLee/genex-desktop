@@ -982,28 +982,12 @@ export function leadWorking(graph: RunGraph, summary: RunSummary | null, rows: P
   return !rows.some((row) => row.working) && !checkingBuild(graph, summary);
 }
 
-/** How far a run is into the time it was given: "9 of 30 min", "1 h 5 min of 2 h". */
-export function budgetWords(elapsedMs: number, budgetMs: number): string {
-  const elapsed = Math.max(0, Math.floor(elapsedMs / MINUTE_MS));
-  const budget = Math.max(1, Math.round(budgetMs / MINUTE_MS));
-  if (budget < MINUTES_PER_HOUR) return t("{elapsed} of {budget} min", { elapsed, budget });
-  return t("{elapsed} of {budget}", { elapsed: spanWords(elapsed), budget: spanWords(budget) });
-}
-
 /** A span of whole minutes in the chat build card's short units: "9m", "1h", "1h 5m". */
 function shortSpanWords(minutes: number): string {
   if (minutes < MINUTES_PER_HOUR) return t("{minutes}m", { minutes });
   const rest = minutes % MINUTES_PER_HOUR;
   const hours = Math.floor(minutes / MINUTES_PER_HOUR);
   return rest ? t("{hours}h {minutes}m", { hours, minutes: rest }) : t("{hours}h", { hours });
-}
-
-/**
- * The time a build was given, as the chat's build card says it: "up to 10h". It is a cap, not a
- * target — the build may finish well before it.
- */
-export function capWords(budgetMs: number): string {
-  return t("up to {time}", { time: shortSpanWords(Math.max(1, Math.round(budgetMs / MINUTE_MS))) });
 }
 
 /** Whole minutes from `from` to `to` (or now); null when unknown, backwards or under a minute. */
@@ -1032,8 +1016,6 @@ const MAX_NAMED_MISSING = 2;
 interface LineFacts {
   /** how long the build has worked, pauses aside: "1 h 5 min" */
   worked: string | null;
-  /** the same for a build that can go on, against the time it was given when it has one: "1 h 5 min of 8 h" */
-  time: string | null;
   hasBuild: boolean;
 }
 
@@ -1054,23 +1036,13 @@ export function workedShortWords(worked: RunWorked | null | undefined, now = Dat
   return minutes < 1 ? null : shortSpanWords(minutes);
 }
 
-/**
- * The time a build has worked (run-state.ts `RunWorked`, left out while its start is unknown),
- * said once for every state, and against the time it was given while it can still go on.
- */
+/** The time a build has worked (run-state.ts `RunWorked`, left out while its start is unknown), said once for every state. */
 function lineFacts(graph: RunGraph, summary: RunSummary | null, now: number): LineFacts {
-  const run = graph.nodes.find((node) => node.kind === GraphNodeKind.Run);
-  const budget = run?.kind === GraphNodeKind.Run ? (run.durationMs ?? null) : null;
   const ms = summary?.worked ? workedMs(summary.worked, now) : null;
-  const worked = ms === null ? null : workedWords(ms);
-  return {
-    worked,
-    time: ms !== null && budget ? budgetWords(ms, budget) : worked,
-    hasBuild: hasNewBuild(graph, summary),
-  };
+  return { worked: ms === null ? null : workedWords(ms), hasBuild: hasNewBuild(graph, summary) };
 }
 
-/** A state and the time the build has worked: "Paused · 1 h of 8 h". */
+/** A state and the time the build has worked: "Paused · 1 h 5 min". */
 const timed = (state: string, time: string | null): string => (time ? `${state} · ${time}` : state);
 
 /**
@@ -1086,7 +1058,7 @@ export function statusLine(graph: RunGraph, summary: RunSummary | null, rows: Pa
   if (execution === ExecutionStatus.Paused)
     return {
       tone: Tone.Orange,
-      strong: timed(t("Paused"), facts.time),
+      strong: timed(t("Paused"), facts.worked),
       rest: facts.hasBuild ? t("an earlier build is ready to play · resume from chat") : t("resume from chat"),
     };
   if (execution === ExecutionStatus.Failed || execution === ExecutionStatus.Cancelled)
@@ -1124,7 +1096,7 @@ function runningLine(graph: RunGraph, summary: RunSummary | null, rows: PartRow[
   if (startFailed)
     rest = building || working ? `${rest} · ${t("the starting point failed")}` : startFailedWords(base.error);
   const doing = step?.state === StepState.Judging ? t("Checking") : t("Building");
-  return { tone: "live", strong: timed(doing, facts.time), rest };
+  return { tone: "live", strong: timed(doing, facts.worked), rest };
 }
 
 /** The starting point failed, with the harness's own error when it gave one. */

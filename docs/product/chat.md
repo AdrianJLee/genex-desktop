@@ -43,7 +43,7 @@ quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any m
 
 A sent message shows at once: idle, as the next bubble, **Sending** until saved.
 While the chat works it reaches that work at its next step (else waits below, removable): **Sending…** until
-read, then sits there. A changed Mode, model or effort applies from there; workers carry over
+read, then sits there. A changed model or effort applies from there; workers carry over
 or finish. A build's lead hears it, wrap-up included.
 During work a sendable draft shows Send, else Stop; Stopping shows until done; a second press
 within 5 s is ignored. The stopped build shows its result, else Stopped once, with Resume. A

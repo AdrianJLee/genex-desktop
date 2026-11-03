@@ -211,10 +211,10 @@ export interface EvalCliHomes {
 }
 
 /**
- * The composer options an eval lane forwards with the brief: the evaluated build's default
- * commission (`autopilot`/`loop`), computed from that build's own pure modules, never hard-coded.
+ * The composer options an eval lane forwards with the brief. A build has no Loop switch, so a send
+ * commissions none: the chat's agent decides whether to start a Loop.
  */
-export type EvalCommission = Pick<ComposerSendOptions, "autopilot" | "loop" | "reviewPlan" | "preferences">;
+export type EvalCommission = Pick<ComposerSendOptions, "reviewPlan" | "preferences">;
 
 /**
  * What an eval launch of the app is asked to do: one brief through one chat, in the build's default

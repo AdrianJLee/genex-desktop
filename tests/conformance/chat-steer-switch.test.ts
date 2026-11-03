@@ -1,7 +1,7 @@
 /**
  * Messages without a queue: a message the person sends while the chat's turn works reaches that
- * turn at the session's next step, whatever it changes. One that changes how the turn runs — the
- * Loop switched on or off, its hours, another model, effort or engine — cuts the session there and
+ * turn at the session's next step, whatever it changes. One that changes how the turn runs — another
+ * model, effort, engine or roles — cuts the session there and
  * the turn goes on with that message's settings; a slash command runs as a leg of its own and the
  * turn carries on after it. These drive the runner (chat-steer.ts) through the real queue.
  */
@@ -10,12 +10,7 @@ import { describe, it } from "node:test";
 import type { DelegateResult } from "../../src/substrate/engines/types.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { type LegSwitch, steeredCall, type TurnSwitches } from "../../src/harness-seed/loop/chat-steer.ts";
-import { changesLoop } from "../../src/harness-seed/loop/steer-switch.ts";
-import {
-  afterCommandPrompt,
-  SWITCH_NOTES,
-  switchedTurnPrompt,
-} from "../../src/harness-seed/loop/steer-switch-prompts.ts";
+import { afterCommandPrompt, switchedTurnPrompt } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
 
 const deferred = <T = void>() => {
   let resolve!: (value: T) => void;
@@ -99,18 +94,14 @@ function legUntilCut(q: ReturnType<typeof cuttingQueue>, started: { resolve(): v
   return cut.promise.then(() => result);
 }
 
-/**
- * Test switches: the Loop or another engine changes the turn, the Loop as the real rule weighs it
- * against `asked`; each switch leg is recorded by what it runs on.
- */
-function switchesFor(calls: any[], applied: any[] = [], asked: Record<string, unknown> = {}): TurnSwitches {
+/** Test switches: another model or engine changes the turn; each switch leg is recorded by what it runs on. */
+function switchesFor(calls: any[], applied: any[] = []): TurnSwitches {
   return {
-    changes: (item) => Boolean(item.autopilot) || item.engine === "codex",
-    changesLoop: (item) => changesLoop(item, asked),
+    changes: (item) => Boolean(item.model) || item.engine === "codex",
     takes: () => true,
     apply: async (item): Promise<LegSwitch> => {
       applied.push(item.text);
-      const on = item.engine === "codex" ? "codex" : "loop";
+      const on = item.engine === "codex" ? "codex" : "model";
       return {
         call: async (prompt, resume, images) => {
           calls.push({ prompt, resume, images, on });
@@ -118,14 +109,14 @@ function switchesFor(calls: any[], applied: any[] = [], asked: Record<string, un
         },
         fresh: () => "FRESH BRIEF",
         newSession: on === "codex",
-        notes: [on === "codex" ? "CODEX TAKES OVER" : "LOOP IS ON"],
+        notes: [on === "codex" ? "CODEX TAKES OVER" : "ANOTHER MODEL"],
       };
     },
   };
 }
 
 describe("a message that changes how the turn runs: the turn goes on with its settings", () => {
-  it("Loop switched on mid-answer: the same session goes on at its next step, on the message's settings, told what changed", async () => {
+  it("another model mid-answer: the same session goes on at its next step, on the message's settings, told what changed", async () => {
     const calls: any[] = [],
       started = deferred(),
       results: DelegateResult[] = [];
@@ -145,21 +136,21 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     });
     await q.send("build the boss");
     await started.promise;
-    await q.send("make it in the loop", { autopilot: { roles: {} } });
+    await q.send("use sonnet for this", { model: "sonnet" });
     await until(() => q.state("build the boss")?.state === "handled");
     assert.equal(q.asked[0].native, false, "never read as words mid-turn");
     assert.equal(calls.length, 2);
     assert.deepEqual(
       calls[1],
       {
-        prompt: switchedTurnPrompt(["LOOP IS ON"], "make it in the loop"),
+        prompt: switchedTurnPrompt(["ANOTHER MODEL"], "use sonnet for this"),
         resume: "s1",
         images: [],
-        on: "loop",
+        on: "model",
       },
       "the same session, on the switched call, the change said first",
     );
-    assert.equal(q.state("make it in the loop")!.state, "delivered", "read by this turn: no turn of its own");
+    assert.equal(q.state("use sonnet for this")!.state, "delivered", "read by this turn: no turn of its own");
     assert.equal(results[0].summary, "switched");
     q.queue.stop();
   });
@@ -193,34 +184,6 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     q.queue.stop();
   });
 
-  it("a Loop switch outranks a launch or a question the cut leg recorded: it is dropped, the session told so, and goes on", async () => {
-    const calls: any[] = [],
-      started = deferred(),
-      results: DelegateResult[] = [];
-    const q = cuttingQueue(async (action, steer) => {
-      if (action.text !== "build the boss") return;
-      results.push(
-        await steeredCall({ cancelled: false }, steer, {
-          prompt: "PROMPT",
-          call: async (prompt, resume) => {
-            calls.push({ prompt, resume, on: "start" });
-            const launched = { studioToolCalls: [{ name: "start_autopilot", args: { goal: "old" } }] };
-            return legUntilCut(q, started, stopped("s1", 2, launched));
-          },
-          switches: switchesFor(calls),
-        }),
-      );
-    });
-    await q.send("build the boss", { autopilot: { hours: 2 } });
-    await started.promise;
-    await q.send("no, until it is done", { autopilot: { hours: null } });
-    await until(() => q.state("build the boss")?.state === "handled");
-    assert.equal(calls.length, 2, "the session went on");
-    assert.deepEqual(results[0].studioToolCalls, [], "the launch on the old settings is dropped");
-    assert.ok(String(calls[1].prompt).includes(SWITCH_NOTES.dropped(["start_autopilot"])), "and the session is told");
-    q.queue.stop();
-  });
-
   it("another engine, model or effort keeps a launch the cut leg recorded: the build starts on the message's settings", async () => {
     const calls: any[] = [],
       applied: string[] = [],
@@ -236,13 +199,13 @@ describe("a message that changes how the turn runs: the turn goes on with its se
             const launched = { studioToolCalls: [{ name: "start_autopilot", args: { goal: "boss" } }] };
             return legUntilCut(q, started, stopped("s1", 2, launched));
           },
-          switches: switchesFor(calls, applied, { autopilot: { hours: 2 } }),
+          switches: switchesFor(calls, applied),
         }),
       );
     });
-    await q.send("build the boss", { autopilot: { hours: 2 } });
+    await q.send("build the boss");
     await started.promise;
-    await q.send("let codex take it", { engine: "codex", autopilot: { hours: 2 } });
+    await q.send("let codex take it", { engine: "codex" });
     await until(() => q.state("build the boss")?.state === "handled");
     assert.equal(calls.length, 1, "nothing ran after the launch");
     assert.deepEqual(

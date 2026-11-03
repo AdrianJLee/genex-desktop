@@ -232,18 +232,14 @@ export function unrealWithoutPlugin(engine: string | undefined): string[] {
 
 /**
  * What the chat's own session is told when its turn changed what the project is (a port, or files
- * it wrote): the project's kind now, and to go on with what it said it would build first, with the
- * tools this new turn hands it. With Loop on (`launch`, its launch tool as the session calls it) a
- * build of the game is that tool's, never the session's own, even after its last reply said it
- * would build it: the session decides by its Loop rules again.
+ * it wrote): the project's kind now, and to go on with what it said it would do, with the tools this
+ * new turn hands it.
  */
-export function factsReadyPrompt(facts: readonly FactRef[], launch?: string, notReady?: string): string {
+export function factsReadyPrompt(facts: readonly FactRef[], notReady?: string): string {
   const holds = `The project now holds ${holdsWords(facts)}; your tools fit it now.`;
   // An app that isn't ready is the agent's to get ready (open, reopen or wait for it), never the person's.
   const ready = notReady
     ? `${holds} Its app isn't ready yet: ${notReady} Get it ready with your own tools (open, reopen or wait for it) before you use it.`
     : holds;
-  if (launch)
-    return `${ready} Loop is on, so decide as your Loop rules say: when the ask is to build the game or change it substantially, start it now with ${launch} (call it last, then recap in one short paragraph); anything smaller, finish it here and tell the user what you did.`;
   return `${ready} Go on with what you said you would do, then tell the user what you made.`;
 }

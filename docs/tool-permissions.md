@@ -590,7 +590,7 @@ Stop ends the turn with the plan. The card offers only modes the engine honours
 (`planContinuations`).
 
 On every engine that honours Plan, Claude Code included, a build the chat's own session recorded to
-start (`BuildLaunch`: a Loop launch, `reopen_run`, `resume_run`) while the chat is still in Plan at
+start (`BuildLaunch`: a Loop launch or `resume_run`) while the chat is still in Plan at
 the turn's end (`ChatPermissionService.planning`, so a plan approved mid-turn lets it go) waits
 behind the same card, which shows the reply and what the build would build. Approved, it starts as
 recorded; sent back with words, it is dropped and the session plans again; any other ending, a

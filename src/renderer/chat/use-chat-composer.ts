@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { measuredContext } from "../../shared/context.ts";
-import type { ComposerBuild } from "../loop-setting.ts";
 import { parseModelKey } from "../model-key.ts";
 import { type Notify, ToastTone } from "../state/toasts.ts";
 import { problemWords } from "../words.ts";
@@ -9,7 +8,6 @@ import { useComposerModel } from "./use-composer-model.ts";
 import { usePermissionMode } from "./use-permission-mode.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import { useSignInGate } from "./use-sign-in-gate.ts";
-import { runLoopSetting } from "./transcript.ts";
 import { useThreadDrafts } from "./use-thread-drafts.ts";
 import { errorCode } from "../../shared/errors.ts";
 
@@ -58,7 +56,7 @@ export function useChatComposer(props: ChatPanelProps, chat: ChatThread) {
     const catalogModel = selectedEngine?.models.find((entry) => entry.id === (modelId || "default"));
     return measuredContext(chat.threadEvents, engine, modelId, catalogModel?.resolvedModel);
   }, [chat.threadEvents, selected, selectedEngine]);
-  // The chat's permission mode on its engine: the pill after Mode, and what a plan card may continue in.
+  // The chat's permission mode on its engine: the pill after Add, and what a plan card may continue in.
   const permissions = usePermissionMode({
     threadId: chat.threadId,
     studio: chat.isStudioThread,
@@ -66,18 +64,16 @@ export function useChatComposer(props: ChatPanelProps, chat: ChatThread) {
     selected,
     onNotice,
   });
-  const { run, threadEvents } = chat;
-  const build = useMemo<ComposerBuild | null>(
-    () => (run ? { state: run.state, loop: runLoopSetting(threadEvents, run.runId) } : null),
-    [run, threadEvents],
-  );
+  const { run } = chat;
+  const runState = run?.state;
+  const build = useMemo(() => (runState ? { state: runState } : null), [runState]);
   return {
     drafts,
     model,
     permissions,
     gate,
     contextUsage,
-    /** The chat's build as Mode reads it: its state and the Loop its start record kept. */
+    /** The chat's build as plan review reads it: its state. */
     build,
     // Unavailable choices still need an operable model menu and sign-in recovery.
     noModel: choices.length === 0,

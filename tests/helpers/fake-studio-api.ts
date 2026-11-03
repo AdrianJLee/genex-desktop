@@ -272,7 +272,6 @@ const METHODS = [
   "previewCoverStill",
   "buildProblem",
   "installPackages",
-  "startRun",
   "stopRun",
   "finishRun",
   "resumeAutopilot",

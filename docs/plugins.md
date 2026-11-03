@@ -2633,8 +2633,9 @@ A game linked to any declared engine is an engine game (`isEngineGame`, with the
 `loop/engine-game.ts`): it gets no web rules, preview check, web Live view or web Loop, and only
 Unreal's card, editor and words ask for Unreal by name. Its descriptor carries `linkedEngine`
 (`{label, projectFiles, projectInFolder}`). With `projectInFolder` true and the project outside the
-game folder, Mode offers no Loop and Rewind says what it can't undo, both in the engine's label
-(`renderer/engine-game.ts`); with it false the Loop runs wherever the project is.
+game folder, save points do not hold the project and Rewind says what it can't undo, in the
+engine's label (`renderer/engine-game.ts` `engineRewindNote`); with it false the Loop runs wherever
+the project is.
 
 ### Editor play in the harness
 

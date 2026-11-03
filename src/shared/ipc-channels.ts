@@ -291,7 +291,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:preview.cover-still": "previewCoverStill",
   "studio:build.problem": "buildProblem",
   "studio:packages.install": "installPackages",
-  "studio:run.start": "startRun",
   "studio:run.stop": "stopRun",
   "studio:run.finish": "finishRun",
   "studio:autopilot.resume": "resumeAutopilot",
@@ -584,7 +583,6 @@ export interface StudioInvokePayloads {
   "studio:preview.cover-still": undefined;
   "studio:build.problem": { project: string };
   "studio:packages.install": { project: string; scripts?: boolean };
-  "studio:run.start": Arg<"startRun", 0>;
   "studio:run.stop": { runId: string };
   "studio:run.finish": { runId: string; threadId: string };
   "studio:autopilot.resume": { runId: string };

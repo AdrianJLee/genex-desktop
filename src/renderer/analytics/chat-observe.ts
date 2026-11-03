@@ -8,7 +8,7 @@
  * window that catches up later still reports them right.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
-import { PlanReviewState, SendRefusal } from "../../shared/composer.ts";
+import { PlanReviewState } from "../../shared/composer.ts";
 import { type CustomEventData, CustomEvent, customPayload, customRecord } from "../../shared/custom-events.ts";
 import type { EngineKind } from "../../shared/engine-descriptor.ts";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
@@ -42,7 +42,6 @@ import {
   ContextBucket,
   LeftTo,
   RetryAfterBucket,
-  SendFailStage,
   SignInFrom,
   StopEndedBy,
   TurnOutcome,
@@ -82,7 +81,6 @@ const STATUSES: ReadonlySet<string> = new Set(Object.values(TurnStatus));
 const FAILURE_KINDS: ReadonlySet<string> = new Set(Object.values(EngineFailureKind));
 const REVIEW_STATES: ReadonlySet<string> = new Set(Object.values(PlanReviewState));
 const DELIVERIES: ReadonlySet<string> = new Set(Object.values(SteerDelivery));
-const REFUSALS: ReadonlySet<string> = new Set(Object.values(SendRefusal));
 /** Phases that show a reply is being worked on (the first one is `first_phase`). */
 const ACTIVE_PHASES: ReadonlySet<string> = new Set([
   ChatActivityPhase.Working,
@@ -111,7 +109,6 @@ const isFailureKind = (value: unknown): value is EngineFailureKind =>
 const isReviewState = (value: unknown): value is PlanReviewState =>
   typeof value === "string" && REVIEW_STATES.has(value);
 const isDelivery = (value: unknown): value is SteerDelivery => typeof value === "string" && DELIVERIES.has(value);
-const isRefusal = (value: unknown): value is SendRefusal => typeof value === "string" && REFUSALS.has(value);
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
 /** A turn's outcome from its record: the seed's own word, `none` without one, `other` for any other. */
@@ -532,12 +529,6 @@ function streamEnded(hearing: Hearing, payload: { threadId: string; failed?: boo
   if (turn && payload.failed === true) turn.streamFailed = true;
 }
 
-/** A message its chat refused for what it commissions; a send that failed is counted where it was sent. */
-function chatRefused(hearing: Hearing, payload: { refusal?: SendRefusal }): void {
-  if (isRefusal(payload.refusal))
-    hearing.send(ChatEvent.MessageSendFailed, { stage: SendFailStage.Refused, code: payload.refusal });
-}
-
 /** One of main's UI events. */
 export function hearUiEvent(hearing: Hearing, event: UiEvent): void {
   if (event.type === UiEvent.CoordinatorProcessing) processing(hearing, event.payload);
@@ -546,7 +537,6 @@ export function hearUiEvent(hearing: Hearing, event: UiEvent): void {
     firstToken(hearing, event.payload.threadId, event.payload.streamId);
   } else if (event.type === UiEvent.ChatDelta) firstToken(hearing, event.payload.threadId, event.payload.streamId);
   else if (event.type === UiEvent.ChatStreamEnded) streamEnded(hearing, event.payload);
-  else if (event.type === UiEvent.ChatError) chatRefused(hearing, event.payload);
   else if (event.type === UiEvent.ContextUsage) {
     const { threadId, percent } = event.payload;
     if (threadId && typeof percent === "number") hearing.memory.context.set(threadId, percent);

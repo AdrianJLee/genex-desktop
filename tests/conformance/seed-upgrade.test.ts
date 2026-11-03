@@ -881,12 +881,8 @@ describe("seed upgrade across the harness step flag", () => {
       ["loop/director/wake-schedule.ts", "turn.worked", /turn\.worked/],
       ["loop/director/wake.ts", "TurnEnd.Continue", /TurnEnd\.Continue/],
       ["loop/director/wake.ts", "turnReturnedAt", /turnReturnedAt/],
-      // After a Loop in place: its launch words, a finished one found by its journal,
-      // a resume in its journal's kind, no reopen, and the chat's status alone.
-      ["loop/chat-dispatch.ts", "openLaunchPromise(", /openLaunchPromise/],
-      ["loop/chat-dispatch.ts", "finishedInPlace(", /finishedInPlace/],
+      // After a Loop in place: a resume in its journal's kind, and the chat's status alone.
       ["loop/run-dispatch.ts", "resumedProfile(", /resumedProfile/],
-      ["loop/reopen-run.ts", "OPEN_LOOP_REFUSAL.notReopenable", /notReopenable/],
       ["loop/after-loop-run.ts", "inPlace", /inPlace/],
       ["loop/after-loop-run-prompts.ts", "inPlaceControls(", /inPlaceControls/],
     ];
@@ -909,12 +905,7 @@ describe("seed upgrade across the harness step flag", () => {
   it("a kept part from before one Loop led every project is reported once and noted", async () => {
     const older: ReadonlyArray<readonly [string, string, RegExp]> = [
       ["loop/run-dispatch.ts", "loopProfileOf(", /loopProfileOf/],
-      ["loop/chat-dispatch.ts", "startsNextOpenLoop(", /startsNextOpenLoop/],
-      ["loop/launch-prompts.ts", "openBuildWords(", /openBuildWords/],
-      ["loop/chat-session.ts", "loopProfileOf(", /loopProfileOf/],
       ["loop/studio-state.ts", "NeedsSession", /NeedsSession/],
-      // The launch tool's words name no method, and its ∞ answer follows the project's profile.
-      ["tools/game-tools.ts", "untilDoneWords(", /untilDoneWords/],
     ];
     for (const [file, marker] of older) {
       const root = await tmpDir("seed-step-one-loop-");

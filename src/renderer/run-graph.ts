@@ -20,7 +20,6 @@ import { graphKeyOf, type RunGraphEvent, turnOfGraphKey, workerKeyOf } from "../
  */
 import { CustomEvent } from "../shared/custom-events.ts";
 import { finishRecordOf } from "../shared/finish-check.ts";
-import { HOUR_MS } from "../shared/duration.ts";
 import { t } from "../shared/i18n.ts";
 import { type EventEnvelope, EventKind } from "../shared/event-log.ts";
 import type { MakingPhase } from "../shared/asset-making.ts";
@@ -32,7 +31,6 @@ import {
   RoundOutcome,
   type RunExecution,
   RunState,
-  recordedRunLoop,
   roundOutcome,
 } from "../shared/run-state.ts";
 import type { RunSummary } from "../shared/run-summary.ts";
@@ -321,7 +319,6 @@ export interface RunNode {
   project: string | null;
   goal: string;
   reference: { name: string; kind: string | null } | null;
-  durationMs?: number;
   startedAt: string | null;
   finishedAt: string | null;
   active: boolean;
@@ -1282,9 +1279,6 @@ function onRunStarted(graph: GraphDraft, entry: RunEntry): void {
   // Its first start record is the message it answers; a resume or a later steer is not.
   if (run.startedAt === null) run.asked = graph.answering;
   run.startedAt = entry.event.created_at;
-  // Absent budgets leave the earlier value; an ∞ build has only a safety ceiling, never a duration.
-  const loop = recordedRunLoop(payload.budgets);
-  if (loop) run.durationMs = loop.hours === null ? undefined : loop.hours * HOUR_MS;
   const reference = record(payload.reference);
   run.reference = reference ? { name: str(reference.name, "reference"), kind: strOrNull(reference.kind) } : null;
   run.referenceFrames = reference ? strings(reference.frames) : [];

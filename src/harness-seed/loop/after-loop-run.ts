@@ -5,9 +5,8 @@
  * `run_status`, `show_build` and `land_build` answered live by the host (`runControls`). On the
  * build's own engine, after a paused run it may record `resume_run`, bridged in, which the studio
  * does once the reply ends — the resumed run's lead may be this same session, so it may not run
- * while the session still answers; after a finished run with Loop on it may record `reopen_run`
- * instead, and the chat reopens that same run once the reply ends (reopen-run.ts). A turn on
- * another engine moves the chat's bookmark there, so a lead the build seats later starts afresh.
+ * while the session still answers. A turn on another engine moves the chat's bookmark there, so a
+ * lead the build seats later starts afresh.
  */
 import { readJournal } from "./run-journal.ts";
 import { HostMethod } from "./host-methods.ts";
@@ -65,7 +64,7 @@ export interface AfterLoopRun {
   stoppedBecause: string | null;
   /** The engine the turn runs on: the message's, else the one its lead ran on. */
   engine: string;
-  /** The turn runs on the engine its lead ran on: only there may it resume or reopen the build. */
+  /** The turn runs on the engine its lead ran on: only there may it resume the build. */
   onLeadEngine: boolean;
   /**
    * The model the turn runs on: the message's, else on the lead's engine the one its lead ran on.
@@ -73,11 +72,9 @@ export interface AfterLoopRun {
   model: string | null;
   /** The chat's message the session answers: the run's controls act for it (a resume records it). */
   messageId?: string;
-  /** chat-dispatch.ts may reopen this finished run (reopen-run.ts) once its parts serve it. */
-  reopenable?: boolean;
   /**
    * The run was a Loop that worked in the game folder itself (`journal.director.open`): it has no
-   * build to show or land, and a finished one is never reopened (a Loop message starts the next).
+   * build to show or land.
    */
   inPlace?: boolean;
 }

@@ -332,7 +332,8 @@ describe("statusWords", () => {
 
   it("carries no identifier for any status the harness can emit", () => {
     const statuses = emittedStatuses();
-    assert.ok(statuses.length >= 20, `expected the seed's setStatus calls, found ${statuses.length}`);
+    // Lowered from 20: the reopen and the Studio chat's build answer, three statuses, are gone with the Loop button.
+    assert.ok(statuses.length >= 15, `expected the seed's setStatus calls, found ${statuses.length}`);
     for (const status of statuses) {
       const words = statusWords(status);
       assert.doesNotMatch(words.line, RUN_ID, status);

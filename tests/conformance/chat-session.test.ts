@@ -14,7 +14,6 @@ import {
 } from "../../src/harness-seed/loop/chat-session.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
-import { launchRules } from "../../src/harness-seed/loop/launch-prompts.ts";
 import { fencedCommand } from "../../src/shared/terminal.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
@@ -118,11 +117,6 @@ describe("chat session helpers", () => {
       assert.ok(talk >= 0, "the brief says how to answer a greeting");
       assert.ok(talk < brief.search(/checkpoint|its own shape/), "before any rule about building");
     }
-    const loop = launchRules("claude-code", { toolName: "start_unattended_run" }).join("\n");
-    assert.ok(
-      loop.search(/greeting/i) >= 0 && loop.search(/greeting/i) < loop.search(/ask_user/),
-      "a Loop chat replies before it asks",
-    );
   });
 
   it("briefs a brand-new game's first message as a blank page, and a built one's as code to continue", () => {
@@ -263,29 +257,17 @@ describe("the brief of a game that builds in Unreal", () => {
     assert.doesNotMatch(brief, WEB_PAGE);
   });
 
-  it("a Loop chat in an Unreal game is told a build is the one Loop, its lead building in place and finishing it", () => {
-    const launch = { toolName: "start_autopilot", hours: 1, project: "fog-valley" };
-    const unreal = buildContractorBrief({
-      ask: "make me a survival game in a misty valley",
-      folderLabel: "AI Games/fog-valley",
-      engine: "claude-code",
-      gameEngine: GameEngine.Unreal,
-      engineProject: PROJECT,
-      launch,
-    });
-    assert.match(unreal, /mcp__studio__start_autopilot/);
-    assert.match(unreal, /you lead it in this folder, with optional workers in copies of it/);
-    assert.match(unreal, /finish it when the goal is reached/);
-    // Flipped (phase 5): the brief no longer tells the agent how to write a goal (the look first).
-    assert.doesNotMatch(unreal, /look first/);
-    assert.doesNotMatch(unreal, /builders|judges/);
-    const web = buildContractorBrief({
-      ask: "a pong game",
-      folderLabel: "AI Games/pong",
-      engine: "claude-code",
-      launch,
-    });
-    assert.doesNotMatch(web, /Unreal|one lead/);
+  it("no brief says when to start a Loop: the Loop's start describes itself", () => {
+    for (const gameEngine of [GameEngine.Unreal, GameEngine.Web]) {
+      const brief = buildContractorBrief({
+        ask: "make me a survival game in a misty valley",
+        folderLabel: "AI Games/fog-valley",
+        engine: "claude-code",
+        gameEngine,
+        engineProject: gameEngine === GameEngine.Unreal ? PROJECT : null,
+      });
+      assert.doesNotMatch(brief, /start_autopilot|Loop is on|asks? (for one )?in words|You start Loops/);
+    }
   });
 
   it("a web game's brief is the web brief, word for word", () => {

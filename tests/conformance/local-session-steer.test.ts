@@ -240,17 +240,32 @@ describe("steering a running local session", () => {
     assert.deepEqual(result.steered, ["pic"]);
   });
 
-  it("takes nothing mid-turn in an interview: its question or launch would already have decided", async () => {
+  it("takes nothing mid-turn in an interview: its question would already have decided", async () => {
     const { doors, result } = await steerable({
       rounds: [() => reply("Done")],
       request: {
         interviewTools: [
-          { name: "launch_build", description: "launch", parameters: { type: "object", properties: {} } },
+          { name: "ask_user", description: "ask", parameters: { type: "object", properties: {} } },
+          { name: "start_autopilot", description: "launch", parameters: { type: "object", properties: {} } },
         ],
       },
     });
     assert.deepEqual(doors, [null]);
     assert.deepEqual(result.steered, []);
+  });
+
+  // Intentionally flipped: a session handed only a launch read nothing mid-turn either. Every chat
+  // turn is handed the Loop's start now, so only a question makes a session an interview.
+  it("takes a message mid-turn in a session handed only the Loop's start", async () => {
+    const { doors } = await steerable({
+      rounds: [() => reply("Done")],
+      request: {
+        interviewTools: [
+          { name: "start_autopilot", description: "launch", parameters: { type: "object", properties: {} } },
+        ],
+      },
+    });
+    assert.equal(typeof doors[0], "function");
   });
 
   it("tells the host no when the session cannot start", async () => {

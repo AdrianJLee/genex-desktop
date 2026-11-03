@@ -1575,12 +1575,6 @@ async function checkPluginJobInGraph(buildSmoke: BuildSmoke, assetJobId: string)
 async function checkComposerDuringBuild(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, threadId, waitFor } = buildSmoke;
   const { core } = buildSmoke.ctx;
-  check(
-    "a running build's Mode is disabled and dimmed like the composer's disabled icons",
-    await waitFor(
-      `(() => { const mode = document.querySelector('[data-promptbar] button[aria-label="Mode"]'); return mode?.disabled === true && getComputedStyle(mode).opacity === '0.45'; })()`,
-    ),
-  );
   await wc.executeJavaScript(
     `(() => { const input = document.querySelector('textarea[aria-label="Prompt"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Is the river ready?'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,
   );
@@ -1776,16 +1770,6 @@ async function checkFinishedRun(buildSmoke: BuildSmoke): Promise<void> {
       `document.querySelector('[data-graph-panel="final"]')?.textContent.includes('the reviewer preferred it to the one you had')`,
     ),
   );
-  await waitFor(`document.querySelector('button[aria-label="Mode"]')?.disabled === false`);
-  await wc.executeJavaScript(`document.querySelector('button[aria-label="Mode"]')?.click()`);
-  check(
-    "a finished chat's Mode opens on its own Loop, with no new-build choice",
-    await waitFor(
-      `!!document.querySelector('[aria-label="Mode options"] [aria-label="Loop time limit"]') && !/new build/i.test(document.querySelector('[aria-label="Mode options"]')?.textContent ?? 'new build') && getComputedStyle(document.querySelector('button[aria-label="Mode"]')).opacity === '1'`,
-    ),
-  );
-  wc.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
-  wc.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
 }
 
 /** The morning card, and the earlier build opened from its chat card. */

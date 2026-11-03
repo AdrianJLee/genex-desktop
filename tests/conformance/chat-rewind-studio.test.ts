@@ -361,7 +361,6 @@ it("a build after the message leaves the chat with it: files come back when it l
     thread,
     engine: "claude-code",
     reviewPlan: true,
-    autopilot: { hours: 1, reviewPlan: true },
   });
   await waitForLog(
     rig.core,

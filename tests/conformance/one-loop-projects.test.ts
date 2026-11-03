@@ -153,9 +153,9 @@ async function openedProject(project: Project, plugin?: string) {
   return { rig, game, threadId };
 }
 
-/** Send the message with Loop on and no hours (∞), and wait for the Loop's close. */
+/** Send the message the chat starts a Loop for, and wait for the Loop's close. */
 async function loopUntilClosed(rig: Rig, threadId: string) {
-  await rig.core.sendUserMessage("make a garden with a pond", { thread: threadId, engine: ENGINE, autopilot: {} });
+  await rig.core.sendUserMessage("make a garden with a pond", { thread: threadId, engine: ENGINE });
   const events = await waitForLog(
     rig.core,
     (log) => customEvents(log, "run_finished").length >= 1,

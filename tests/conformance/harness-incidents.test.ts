@@ -22,6 +22,7 @@ import {
   type SteerSend,
 } from "../../src/substrate/engines/types.ts";
 import { EngineId } from "../../src/shared/providers.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import { GameEngine } from "../../src/shared/game-engine.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
 import { createRunInbox, type RunInbox } from "../../src/harness-seed/loop/run-inbox.ts";
@@ -59,7 +60,6 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
     host: { call: async () => null, notify: () => {}, heartbeat: () => {}, workspace: "/fixture" } as Host,
     cancels: new Set(),
     stoppedMessages: new Set(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -750,11 +750,11 @@ describe("a run the loop died in, resumed (the full journal)", () => {
 /**
  * "Research how to build this and write a plan, don't build yet", sent with Loop on, reached a
  * write-less interviewer whose only way forward was start_autopilot — hours of build to deliver
- * two documents. The Loop chat is a contractor now: it may
- * launch a build, and does the rest itself.
+ * two documents. The chat's own session is a contractor now: it may launch a build, and does the
+ * rest itself.
  */
-describe("a Loop chat asked for research (corner-guy)", () => {
-  it("corner-guy. research and a plan in Loop: the chat writes the plan itself, starts no build and takes no preview pass", async () => {
+describe("a chat asked for research (corner-guy)", () => {
+  it("corner-guy. research and a plan: the chat writes the plan itself, starts no build and takes no preview pass", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const requests: DelegateRequest[] = [];
@@ -781,7 +781,6 @@ describe("a Loop chat asked for research (corner-guy)", () => {
     });
     await rig.core.sendUserMessage("Research how to build this and write a plan. Don't build yet.", {
       engine: "vendor",
-      autopilot: { hours: 1 },
     });
     const events = await waitForLog(rig.core, (log) => log.some((e) => e.data.type === "turn_ended"), 30_000, "turn");
 
@@ -789,10 +788,12 @@ describe("a Loop chat asked for research (corner-guy)", () => {
     const [request] = requests;
     assert.ok(
       request?.interviewTools?.some((tool) => tool.name === "start_autopilot"),
-      "Loop still lets it launch",
+      "it may still launch",
     );
-    assert.match(String(request?.prompt), /A request for research or a plan is not a request to build/);
-    assert.ok(request?.onCapture, "a Loop chat has the Auto chat's eyes on its build");
+    // Flipped: the brief told it "A request for research or a plan is not a request to build"; the
+    // Loop's start describes itself, and the person's words say the rest.
+    assert.doesNotMatch(String(request?.prompt), /not a request to build/);
+    assert.ok(request?.onCapture, "the chat has its eyes on its build");
     const started = customEvents(events, "run_registered").length + customEvents(events, "run_started").length;
     assert.equal(started, 0, "no build was started");
     // A plan is nothing the preview can show: no "black canvas" warning for the empty scaffold
@@ -1000,7 +1001,6 @@ function ownSessionChat({
   const studio: Json = {
     host,
     cancels: new Set<string>(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -1028,10 +1028,6 @@ function ownSessionChat({
 /** The names of the tools a delegation was handed to record. */
 const recordable = (params: Json | undefined): string[] =>
   (params?.interviewTools ?? []).map((tool: Json) => String(tool.name));
-
-/** What the chat said of a Loop that cannot continue a build. */
-const loopUnusedWords = (said: readonly string[]) =>
-  said.filter((words) => /Loop can't continue this build/.test(words));
 
 /**
  * The run's coordinator answered a game's chat whenever no lead of the chat's own had led its last
@@ -1132,7 +1128,7 @@ describe("one session answers the chat (no-coordinator)", () => {
         { id: "claude-code", kind: "delegated", label: "Claude Code" },
       ],
     });
-    const elsewhere = { ...ownMessage, engine: "claude-code", model: undefined, autopilot: { hours: 2 } };
+    const elsewhere = { ...ownMessage, engine: "claude-code", model: undefined };
     await handleUserMessage(chat.studio as never, elsewhere as never);
     assert.equal(chat.asked.sessions.length, 1);
     const [answer] = chat.asked.sessions;
@@ -1140,7 +1136,6 @@ describe("one session answers the chat (no-coordinator)", () => {
     assert.equal(answer?.engine, "claude-code", "on the message's engine");
     assert.deepEqual(answer?.runControls, { runId: OWN_RUN, messageId: "m9" });
     assert.equal(recordable(answer).includes("reopen_run"), false, "another engine never reopens the build");
-    assert.equal(loopUnusedWords(chat.asked.said).length, 1, "the chat says once that the Loop can't continue it");
     assert.equal((await chat.registered()).length, 1, "nothing reopened");
 
     // A paused build: that turn moves the chat's bookmark to its engine, so no resume of it would
@@ -1165,7 +1160,7 @@ describe("one session answers the chat (no-coordinator)", () => {
     assert.equal(paused.calls.filter((call) => call.method === HostMethod.RunControl).length, 0, "nothing resumed");
   });
 
-  it("NC4. a Loop message on Ollama after a finished Loop is a plain chat turn: none of the coordinator's tools", {
+  it("NC4. a message on Ollama after a finished Loop is a plain chat turn: none of the coordinator's tools", {
     timeout: 120_000,
   }, async () => {
     const rig = await startRig({ replies: [{ text: "The plaza has no enemies yet." }] });
@@ -1187,12 +1182,7 @@ describe("one session answers the chat (no-coordinator)", () => {
       run,
       director: { lead: { chatSession: true }, sessionId: "chat-1", plan: {} },
     });
-    await rig.core.sendUserMessage("add enemies", {
-      thread,
-      engine: "ollama",
-      model: "qwen3.6:27b",
-      autopilot: { hours: 2 },
-    });
+    await rig.core.sendUserMessage("add enemies", { thread, engine: "ollama", model: "qwen3.6:27b" });
     const events = await waitForLog(
       rig.core,
       (log) => customEvents(log, "coordinator_message_handled").length === 1,
@@ -1204,10 +1194,8 @@ describe("one session answers the chat (no-coordinator)", () => {
         String(tool.function?.name),
       ),
     );
-    for (const name of ["steer_run", "finish_run", "stop_run", "continue_build"])
+    for (const name of ["steer_run", "finish_run", "stop_run", "continue_build", "start_autopilot"])
       assert.equal(offered.includes(name), false, `${name} is no tool of the chat's`);
-    const said = (await rig.core.store.listMessages(thread)).map((m) => String(m.content ?? ""));
-    assert.equal(loopUnusedWords(said).length, 1, "the chat says once that the Loop can't continue it");
     assert.equal(customEvents(events, "run_registered").length, 0, "no run starts");
   });
 
@@ -1376,13 +1364,18 @@ describe("steering said to a closed build (stale-backlog)", () => {
 });
 
 /**
- * "Can you start a 3h Loop…" sent with Mode on Auto (Loop off) reached a contractor with no launch
- * tool: it worked on in its own turn and said "The 3-hour loop starts now" while no run started and
- * the Builds bar stayed empty. Asked in words, an Auto chat starts the Loop itself, for the hours named.
+ * A Loop started only when the person asked for one in words (or with the composer's Loop switch
+ * on): the chat's agent was handed its start with a rule about when ("only when the user asks for
+ * one in words… Pass the hours they named"), a rule sentence in its brief, and the hours it was
+ * told capped the run. There is no switch now: every chat's own turn is handed start_autopilot as
+ * the tool describes itself, with no hours and no rule, and the agent decides; a Loop it starts
+ * goes until its lead finishes it, on the roles the message carries. A message queued before the
+ * upgrade with a Keep building commission launched with no turn deciding it; it is answered by an
+ * ordinary turn now.
  */
-describe("a Loop asked for in words with Mode on Auto (auto-loop)", () => {
-  /** A game chat on a delegated engine whose answer records `launch`; the run's own sessions end at once. */
-  async function autoChat(launch: Record<string, unknown>) {
+describe("the chat's agent decides when a Loop starts (always-launch)", () => {
+  /** A game chat on a delegated engine whose answer records `launch` (none: it only answers); a run's own sessions end at once. */
+  async function launchingChat(launch: Record<string, unknown> | null) {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const project = "seyda-neen";
@@ -1402,15 +1395,11 @@ describe("a Loop asked for in words with Mode on Auto (auto-loop)", () => {
         if (request.director || !inTheGame || chat.length > 0)
           return { ...ran, sessionId: "run-session", summary: "Looked around." };
         chat.push(request);
-        return {
-          ...ran,
-          sessionId: "auto-chat",
-          summary: "Starting the Loop.",
-          studioToolCalls: [{ name: "start_autopilot", args: launch }],
-        };
+        const calls = launch ? { studioToolCalls: [{ name: "start_autopilot", args: launch }] } : {};
+        return { ...ran, sessionId: "own-chat", summary: launch ? "Starting the Loop." : "Answered.", ...calls };
       },
     });
-    return { rig, thread, chat };
+    return { rig, project, thread, chat };
   }
   type Json = Record<string, any>;
   const ask = { goal: "The Morrowind start scene", direction: "AAA swamp town at dawn" };
@@ -1420,74 +1409,62 @@ describe("a Loop asked for in words with Mode on Auto (auto-loop)", () => {
       log.filter((e) => e.thread_id === thread),
       "run_registered",
     );
-  /** The run the chat registered, once it has. */
-  async function registered(rig: Rig, thread: string): Promise<Json | undefined> {
+
+  it("always-launch. a plain message: the chat's own session is handed start_autopilot as it describes itself, with no hours and no rule, and its Loop goes until its lead finishes it, on the message's roles", async () => {
+    const { startAutopilot } = await import("../../src/harness-seed/loop/start-autopilot.ts");
+    const { rig, thread, chat } = await launchingChat({ ...ask, hours: 3 });
+    const roles = { builder: "vendor-fast", judge: "vendor-model" };
+    await rig.core.sendUserMessage("Make my Morrowind scene", { thread, engine: "vendor", roles });
     const events = await waitForLog(rig.core, (log) => runsIn(log, thread).length > 0, 30_000, "run_registered");
     await rig.core.stopThread(thread);
-    return runsIn(events, thread)[0];
-  }
-
-  it('auto-loop. "start a 3h Loop" in Auto: the chat is handed the Loop\'s start and a 3-hour run starts', async () => {
-    const { rig, thread, chat } = await autoChat({ ...ask, hours: 3 });
-    await rig.core.sendUserMessage("Can you start a 3h Loop on my Morrowind scene?", { thread, engine: "vendor" });
-    const run = await registered(rig, thread);
+    const run = runsIn(events, thread)[0];
 
     const launch = chat[0]?.interviewTools?.find((tool) => tool.name === "start_autopilot");
-    assert.ok(launch, "an Auto chat may start the Loop it is asked for");
-    assert.ok((launch?.parameters as Json)?.properties?.hours, "with the hours the user named");
-    assert.match(String(chat[0]?.prompt), /Never say a Loop started/);
+    assert.equal(launch?.description, startAutopilot.description, "the tool's own description, no rule beside it");
+    assert.equal((launch?.parameters as Json)?.properties?.hours, undefined, "no hours");
+    assert.equal("onlyWhenAsked" in (launch ?? {}), false);
+    assert.doesNotMatch(String(chat[0]?.prompt), /Never say a Loop started|Loop switch|asks in words/);
     assert.equal(run?.goal, ask.goal);
-    assert.equal(run?.budgets?.wallClockMs, 3 * HOUR_MS, "for the hours named");
-    assert.notEqual(run?.budgets?.untilSatisfied, true);
+    assert.equal(run?.budgets?.untilSatisfied, true, "until its lead finishes it, whatever hours the call named");
+    assert.deepEqual(run?.roles, roles, "the roles the message carries");
   });
 
-  it('auto-loop. hours sent as text ("2h", as engines that bridge every field as text send them) still cap the run', async () => {
-    const { rig, thread, chat } = await autoChat({ ...ask, hours: "2h" });
-    await rig.core.sendUserMessage("Start a 2h Loop", { thread, engine: "vendor" });
-    const run = await registered(rig, thread);
-    assert.equal(run?.budgets?.wallClockMs, 2 * HOUR_MS);
-    const launch = chat[0]?.interviewTools?.find((tool) => tool.name === "start_autopilot");
-    assert.equal(launch?.onlyWhenAsked, true, "called only when asked: messages still join the turn");
-  });
-
-  it("auto-loop. a direct engine's chat (its tool loop, Loop off) starts the Loop it is asked for, for the hours named; a run's own turn never does", async () => {
-    const { tools } = await import("../../src/harness-seed/tools/game-tools.ts");
-    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
-    const startAutopilot = tools.find((tool) => tool.name === "start_autopilot");
-    assert.ok(startAutopilot);
-    const call = async (args: Record<string, unknown>, extra: Record<string, unknown>) =>
-      startAutopilot.execute({ goal: "g", direction: "d", ...args }, ctxRecorder({ extra }).ctx) as Promise<
-        Record<string, any>
-      >;
-    const rows = [
-      { label: "1h named", args: { hours: "1h" }, extra: { engine: "ollama" }, hours: 1 },
-      { label: "30m named", args: { hours: "30m" }, extra: { engine: "ollama" }, hours: 0.5 },
-      { label: "none named: until done", args: {}, extra: { engine: "ollama" }, hours: 24 },
-      { label: "a run's own turn", args: { hours: 1 }, extra: { engine: "ollama", runId: "run_x" }, hours: null },
-    ];
-    const seen = [];
-    for (const { label, args, extra } of rows) {
-      const outcome = await call(args, extra);
-      seen.push({ label, hours: outcome.ok ? outcome.details?.run?.hours : null });
-    }
-    assert.deepEqual(
-      seen,
-      rows.map(({ label, hours }) => ({ label, hours })),
+  it("always-launch. a message queued before the upgrade with a Keep building commission gets an ordinary turn: no Loop starts unless that turn starts one", async () => {
+    const { rig, project, thread, chat } = await launchingChat(null);
+    const older = { autopilot: { hours: 2, keepBuilding: true } };
+    await rig.core.host.dispatch({
+      type: "user_message",
+      threadId: thread,
+      text: "Keep building: the swamp's fog",
+      engine: "vendor",
+      project,
+      ...older,
+    });
+    const events = await waitForLog(
+      rig.core,
+      (log) => customEvents(log, "coordinator_message_handled").length > 0 || runsIn(log, thread).length > 0,
+      30_000,
+      "answered",
     );
+    assert.equal(chat.length, 1, "one turn of the chat's own session");
+    assert.match(String(chat[0]?.prompt), /the swamp's fog/);
+    assert.deepEqual(runsIn(events, thread), [], "no Loop started by itself");
   });
 
-  it('auto-loop. "30m" is half an hour, never 30 hours', async () => {
-    const { rig, thread } = await autoChat({ ...ask, hours: "30m" });
-    await rig.core.sendUserMessage("Start a 30 minute Loop", { thread, engine: "vendor" });
-    const run = await registered(rig, thread);
-    assert.equal(run?.budgets?.wallClockMs, HOUR_MS / 2);
-  });
-
-  it('auto-loop. a Loop "until it\'s done" in Auto: no hours named, the run goes until what was asked is verified', async () => {
-    const { rig, thread } = await autoChat(ask);
-    await rig.core.sendUserMessage("Start a Loop and don't stop until it's really AAA", { thread, engine: "vendor" });
-    const run = await registered(rig, thread);
-    assert.equal(run?.budgets?.untilSatisfied, true);
+  it("always-launch-direct. a direct engine's chat (Ollama's tool loop), which cannot lead a Loop, is not handed a Loop's start", async () => {
+    const { createToolRegistry } = await import("../../src/harness-seed/tools/index.ts");
+    const recorder = ctxRecorder({
+      workspace: path.resolve("src/harness-seed"),
+      unknown: { value: null },
+      handlers: { "plugins.tools": () => ({ tools: [] }), "mcp.tools": () => ({ tools: [] }) },
+    });
+    const registry = await createToolRegistry(recorder.ctx as never, { threadId: "t1" } as never);
+    assert.ok(registry.names().includes("read_file"), "the tool loop's own tools are there");
+    const launches = new Set(["start_autopilot", "start_unattended_run"]);
+    assert.deepEqual(
+      registry.names().filter((name) => launches.has(name)),
+      [],
+    );
   });
 });
 
@@ -1932,7 +1909,6 @@ function liveChat() {
   const studio = {
     host,
     cancels: new Set<string>(),
-    attachedPictures: new Map(),
     activeRuns: new Map([[RUN, build]]),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -2464,7 +2440,6 @@ describe("live chat during a build, reviewed", () => {
     const studio = {
       host,
       cancels,
-      attachedPictures: new Map(),
       activeRuns: new Map([["run_done", closedRun]]),
       startingRuns: new Map(),
       orphanRuns: new Map(),
@@ -2731,7 +2706,7 @@ describe("messages without a queue", () => {
     engine: "x",
   });
 
-  it("NQ1. the Loop switched on while the chat's answer works reaches that answer at its next step, which goes on in the Loop", async () => {
+  it("NQ1. another model picked while the chat's answer works reaches that answer at its next step, which goes on on it", async () => {
     const log: Array<{ id: string; data: Record<string, any> }> = [];
     let onCut = () => {};
     const host = {
@@ -2747,7 +2722,7 @@ describe("messages without a queue", () => {
       },
       notify: () => {},
     };
-    const legs: Array<{ prompt: string; resume: string | null; loop: boolean }> = [];
+    const legs: Array<{ prompt: string; resume: string | null; switched: boolean }> = [];
     let running = () => {};
     const working = new Promise<void>((resolve) => {
       running = resolve;
@@ -2757,7 +2732,7 @@ describe("messages without a queue", () => {
       await steeredCall({ cancelled: false }, steer, {
         prompt: "BRIEF",
         call: async (prompt, resume) => {
-          legs.push({ prompt, resume, loop: false });
+          legs.push({ prompt, resume, switched: false });
           const cutNow = new Promise<void>((resolve) => {
             onCut = resolve;
           });
@@ -2766,15 +2741,15 @@ describe("messages without a queue", () => {
           return cut("s1") as never;
         },
         switches: {
-          changes: (item) => Boolean(item.autopilot),
+          changes: (item) => Boolean(item.model),
           takes: () => true,
           apply: async () => ({
             call: async (prompt, resume) => {
-              legs.push({ prompt, resume, loop: true });
-              return ok("Starting the Loop.", "s1") as never;
+              legs.push({ prompt, resume, switched: true });
+              return ok("On it.", "s1") as never;
             },
             newSession: false,
-            notes: ["The Loop is on."],
+            notes: ["You now run on sonnet."],
           }),
         },
       });
@@ -2789,21 +2764,21 @@ describe("messages without a queue", () => {
     await queue.enqueue({
       type: "user_message",
       threadId: "chat",
-      text: "make it in the loop",
+      text: "use sonnet for it",
       engine: "claude-code",
-      autopilot: {},
+      model: "sonnet",
     });
     assert.ok(await settleOn(() => legs.length === 2));
     const states = () => [...messageQueueState(log as never).messages.values()].map((m) => [m.action?.text, m.state]);
     assert.deepEqual(legs[1], {
-      prompt: switchedTurnPrompt(["The Loop is on."], "make it in the loop"),
+      prompt: switchedTurnPrompt(["You now run on sonnet."], "use sonnet for it"),
       resume: "s1",
-      loop: true,
+      switched: true,
     });
     assert.ok(
       await settleOn(
         () =>
-          [...messageQueueState(log as never).messages.values()].find((m) => m.action?.text === "make it in the loop")
+          [...messageQueueState(log as never).messages.values()].find((m) => m.action?.text === "use sonnet for it")
             ?.state === "delivered",
       ),
       JSON.stringify(states()),
@@ -3097,31 +3072,18 @@ describe("one session, reviewed", () => {
 describe("the Loop's time limit", () => {
   /**
    * The composer's ∞ ("until satisfied") reached the log as a plain 24-hour budget, so every
-   * surface that read the run back called it a 24 h build and the composer could not tell it from
-   * a user who picked 24 h.
+   * surface that read the run back called it a 24 h build. There are no hours to pick now: every
+   * Loop is recorded as until satisfied, whatever hours its start named.
    */
-  it("L1. ∞ Loop is recorded as until satisfied, not as a 24-hour cap", async () => {
-    const { tools } = await import("../../src/harness-seed/tools/game-tools.ts");
-    const { intakeBudgets } = await import("../../src/harness-seed/loop/chat-dispatch.ts");
+  it("L1. a Loop is recorded as until satisfied, not as a 24-hour cap, whatever hours its start named", async () => {
+    const { startAutopilot } = await import("../../src/harness-seed/loop/start-autopilot.ts");
     const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
-    const startAutopilot = tools.find((tool) => tool.name === "start_autopilot");
-    assert.ok(startAutopilot, "the seed ships start_autopilot");
-    const launch = async (autopilot: Record<string, unknown>): Promise<Record<string, unknown>> => {
-      const ctx = ctxRecorder({ extra: { autopilot } }).ctx;
-      const outcome = await startAutopilot.execute({ goal: "g", direction: "d" }, ctx);
-      assert.ok(typeof outcome === "object" && outcome.details, "start_autopilot answers with the run");
-      return outcome.details.run as Record<string, unknown>;
-    };
-
-    const unbounded = await launch({ frames: [] });
-    assert.equal(unbounded.untilSatisfied, true);
-    assert.equal(unbounded.hours, 24, "the 24-hour ceiling stays as the safety cap");
-    const capped = await launch({ hours: 24, frames: [] });
-    assert.equal("untilSatisfied" in capped, false, "a picked 24 h is a cap, not ∞");
-
-    // Flipped (phase 5): no completion policy rides the budgets; the lead's finish ends any Loop.
-    assert.deepEqual(intakeBudgets(unbounded), { wallClockMs: 86_400_000, untilSatisfied: true });
-    assert.deepEqual(intakeBudgets({ hours: 0.5 }), { wallClockMs: 1_800_000 });
+    const outcome = await startAutopilot.execute({ goal: "g", direction: "d", hours: 3 }, ctxRecorder().ctx);
+    assert.ok(typeof outcome === "object" && outcome.details, "start_autopilot answers with the run");
+    const run = outcome.details.run as Record<string, unknown>;
+    // Flipped: the start wrote its hours (3) and untilSatisfied only for ∞; it writes neither now.
+    assert.equal("hours" in run, false);
+    assert.equal("untilSatisfied" in run, false);
   });
 });
 
@@ -3203,7 +3165,6 @@ describe("a run started again after a close of its own", () => {
     const studio = {
       host,
       cancels: new Set<string>(),
-      attachedPictures: new Map(),
       activeRuns: new Map(),
       startingRuns: new Map(),
       orphanRuns: new Map(),
@@ -3258,104 +3219,6 @@ describe("a run started again after a close of its own", () => {
     assert.equal(ownClose[0]?.payload?.executionStatus, "failed");
     assert.equal(ownClose[0]?.payload?.victory, false);
     assert.equal(failed.length, 1, "the app is told the run failed");
-  });
-
-  /**
-   * A finished build reopened hears the user from the ask the chat recorded for it
-   * (loop/reopen-run.ts gives the cursor): a steer left on the run after its close and before that
-   * ask — a Stop that came before a start — is not the reopened run's to hear.
-   */
-  it("a reopened run's inbox reads from the cursor its start carries: a steer left before the ask is not told", async () => {
-    const log = closedLog();
-    const steer = (text: string): Logged => ({ type: "custom", event_type: "run_steering", payload: { runId, text } });
-    log.push({ id: "e3", data: steer("old note") }, { id: "e4", data: steer("add enemies") });
-    const { ctx } = await startAgain(log, { reopen: { after: "e3" } });
-
-    assert.deepEqual(await ctx.runInbox?.steering(undefined, false), ["add enemies"]);
-  });
-
-  /**
-   * A finished build reopened from a message on other models went on building and judging on the
-   * finished run's: the reopen (loop/reopen-run.ts `reopenedRun`) replaced only the planner, and the
-   * run's start never resolves an applied run's roles again (model-roles.ts `withRoles`), so the
-   * Loop's roles, the effort and the preferences the message was sent with were ignored.
-   */
-  it("RO4. a reopened run builds and judges on the reopening message's picks: only its planner is the session's model", async () => {
-    const { reopenAfterReply } = await import("../../src/harness-seed/loop/reopen-run.ts");
-    const finished = {
-      ...run,
-      roles: { planner: "gpt-5.6-sol", builder: "gpt-5.6-sol", judge: "gpt-5.6-sol" },
-      rolesApplied: true,
-      model: "gpt-5.6-sol",
-      judgeEngine: "codex",
-      judgeModel: "gpt-5.6-sol",
-    };
-    const log = closedLog();
-    let journal: unknown = { phase: "done", run: finished, director: { lead: { chatSession: true } } };
-    const host = {
-      workspace: "/nonexistent",
-      notify: () => {},
-      call: async (method: string, params: { batch?: Logged[]; value?: unknown }): Promise<unknown> => {
-        if (method === HostMethod.EventsList) return [...log];
-        if (method === HostMethod.ArtifactRead) return journal;
-        if (method === HostMethod.ArtifactWrite) journal = params.value;
-        if (method === HostMethod.EventsAppend)
-          for (const data of params.batch ?? []) log.push({ id: `e${log.length + 1}`, data });
-        return null;
-      },
-    };
-    const studio = { host, cancels: new Set<string>(), attachedPictures: new Map(), activeRuns: new Map() };
-    const loopRun = {
-      runId,
-      state: "finished",
-      engine: "codex",
-      model: "gpt-5.6-terra",
-      messageId: "m9",
-      reopenable: true,
-    };
-    const roles = {
-      planner: "gpt-5.6-terra",
-      builder: "opus",
-      judge: "gpt-5.6-luna",
-      engines: { builder: "claude-code" },
-    };
-    const ask = {
-      hours: 2,
-      text: "add enemies",
-      words: "add enemies",
-      models: { model: "gpt-5.6-terra", roles, effort: "medium" },
-    };
-    const started: Array<Record<string, unknown>> = [];
-    const start = async (reopened: Record<string, unknown>) => void started.push(reopened);
-    await reopenAfterReply(
-      studio as never,
-      { threadId, cancelled: false },
-      loopRun as never,
-      ask as never,
-      start as never,
-    );
-
-    const [reopened] = started;
-    assert.deepEqual(
-      {
-        runId: reopened?.runId,
-        planner: (reopened?.roles as { planner?: string } | undefined)?.planner,
-        model: reopened?.model,
-        builderEngine: reopened?.builderEngine,
-        judgeEngine: reopened?.judgeEngine,
-        judgeModel: reopened?.judgeModel,
-        effort: reopened?.effort,
-      },
-      {
-        runId,
-        planner: "gpt-5.6-terra",
-        model: "opus",
-        builderEngine: "claude-code",
-        judgeEngine: "codex",
-        judgeModel: "gpt-5.6-luna",
-        effort: "medium",
-      },
-    );
   });
 
   /**
@@ -3435,114 +3298,26 @@ describe("a run started again after a close of its own", () => {
       "the run this loop runs is not closed under it",
     );
   });
-
-  /**
-   * A finished build its chat's own session reopened, the app gone before the chat's queue marked the
-   * message answered: the queue answers it again after the restart (message-queue.ts `restore`), and
-   * the reopen found the ask the first answer had recorded (loop/reopen-run.ts `askTheBuild`) and did
-   * not record it twice — but started the run from the log's last record, past that ask, so the
-   * reopened run never heard what it was reopened for. So did a message the finished run's lead
-   * took and never heard: back with the chat, its own turn took the lead's record of its words for the
-   * ask and recorded none.
-   */
-  it("RO2. a reopened run hears its ask: one recorded before a restart replayed the message, and one a lead's record of the same words gave back", async () => {
-    const { reopenAfterReply } = await import("../../src/harness-seed/loop/reopen-run.ts");
-    const record = (event_type: string, payload: Record<string, unknown>): Logged => ({
-      type: "custom",
-      event_type,
-      payload,
-    });
-    /** Reopen as the chat does once the reply has ended, on a host that keeps `log` and the run's journal; answers the start's cursor. */
-    async function reopenOn(log: Array<{ id: string; data: Logged }>, { started = true } = {}) {
-      let journal: unknown = { phase: "done", run, director: { lead: { chatSession: true } } };
-      type Params = { batch?: Logged[]; value?: unknown };
-      const host = {
-        workspace: "/nonexistent",
-        notify: () => {},
-        call: async (method: string, params: Params): Promise<unknown> => {
-          if (method === HostMethod.EventsList) return [...log];
-          if (method === HostMethod.ArtifactRead) return journal;
-          if (method === HostMethod.ArtifactWrite) journal = params.value;
-          if (method === HostMethod.EventsAppend)
-            for (const data of params.batch ?? []) log.push({ id: `e${log.length + 1}`, data });
-          return null;
-        },
-      };
-      const studio = { host, cancels: new Set<string>(), attachedPictures: new Map(), activeRuns: new Map() };
-      const loopRun = { runId, state: "finished", engine: "codex", model: null, messageId: "m9", reopenable: true };
-      let cursor: unknown = null;
-      // Not started: the app dies before the run is registered again.
-      const start = async (_run: unknown, reopen: unknown) => {
-        if (started) cursor = reopen;
-      };
-      const ask = { hours: 2, words: "add enemies", models: { model: null } };
-      await reopenAfterReply(studio as never, { threadId, cancelled: false }, loopRun as never, ask, start);
-      return cursor;
-    }
-    /** The chat's own asks for the message (a lead's records of its words are not). */
-    const asks = (log: Array<{ id: string; data: Logged }>) =>
-      log.filter(
-        ({ data }) =>
-          data.event_type === "run_steering" && !data.payload?.how && data.payload?.sourceMessageId === "m9",
-      ).length;
-
-    const log = [
-      { id: "e1", data: record("run_registered", { ...run, resumed: false }) },
-      { id: "e2", data: record("run_finished", { runId, project: "plaza", victory: true }) },
-    ];
-    await reopenOn(log, { started: false });
-    // The restart: the queue answers the message again.
-    log.push({ id: "e5", data: record("coordinator_message_requeued", { messageId: "m9", attempts: 1 }) });
-    const replayed = await reopenOn(log);
-    assert.equal(asks(log), 1, "the replayed message records its ask once");
-    const { ctx } = await startAgain(log, { reopen: replayed });
-    assert.deepEqual(await ctx.runInbox?.steering(undefined, false, { onlyNew: true }), ["add enemies"]);
-
-    const givenBack = [
-      { id: "e1", data: record("run_registered", { ...run, resumed: false }) },
-      { id: "e2", data: record("coordinator_message_delivered", { messageId: "m9", into: runId, how: "lead" }) },
-      { id: "e3", data: record("run_steering", { runId, text: "add enemies", sourceMessageId: "m9", how: "lead" }) },
-      { id: "e4", data: record("run_steering", { runId, text: "a darker sky", sourceMessageId: "m8" }) },
-      { id: "e5", data: record("run_finished", { runId, project: "plaza", victory: true }) },
-      { id: "e6", data: record("coordinator_message_requeued", { messageId: "m9" }) },
-    ];
-    const again = await startAgain(givenBack, { reopen: await reopenOn(givenBack) });
-    assert.equal(asks(givenBack), 1, "the lead's record of its words is not its ask: the chat records its own");
-    assert.deepEqual(await again.ctx.runInbox?.steering(undefined, false, { onlyNew: true }), ["add enemies"]);
-  });
 });
 
 /**
- * A Loop message after a finished build whose lead was a session of its own (the chat's session on
+ * A message after a finished build whose lead was a session of its own (the chat's session on
  * another model), or a build no lead was seated for: the chat's own session answers either.
  */
-describe("a Loop message after a finished build whose lead was a session of its own", () => {
-  it("RO5c. a question with Loop on is answered: nothing continues, nothing reopens, and nothing is said of the Loop", async () => {
+describe("a message after a finished build whose lead was a session of its own", () => {
+  it("RO5c. a question is answered: nothing continues and nothing reopens", async () => {
     const chat = ownSessionChat();
-    await handleUserMessage(
-      chat.studio as never,
-      { ...ownMessage, text: "why dusk?", autopilot: { hours: 2 } } as never,
-    );
+    await handleUserMessage(chat.studio as never, { ...ownMessage, text: "why dusk?" } as never);
     assert.equal(chat.asked.sessions.length, 1, "one session answers");
     assert.equal((await chat.registered()).length, 1);
-    assert.deepEqual(loopUnusedWords(chat.asked.said), [], "the Loop was offered, so nothing is said of it");
   });
 
-  it("RO5d. a Loop message after a finished build no run of the run can go on from — no lead was seated — is answered as with Loop off, and the chat says so once", async () => {
+  it("RO5d. after a finished build no lead was seated for, a message gets a plain turn with no run's controls", async () => {
     const chat = ownSessionChat();
     chat.store.journal = { phase: "done", run: ownRun, director: { plan: {} } };
-    const first = { ...ownMessage, autopilot: { hours: 2 } };
-    await handleUserMessage(chat.studio as never, first as never);
-    assert.equal("autopilot" in first, false, "its Loop is dropped");
-    assert.equal(chat.asked.sessions.length, 1, "one plain turn answers, as with Loop off");
+    await handleUserMessage(chat.studio as never, { ...ownMessage } as never);
+    assert.equal(chat.asked.sessions.length, 1, "one plain turn answers");
     assert.equal(chat.asked.sessions[0]?.runControls, undefined, "a run that seated no lead hands no controls");
-    assert.equal(loopUnusedWords(chat.asked.said).length, 1);
-
-    await handleUserMessage(
-      chat.studio as never,
-      { ...ownMessage, messageId: "m10", autopilot: { hours: 2 } } as never,
-    );
-    assert.equal(loopUnusedWords(chat.asked.said).length, 1, "said once for the build, not on every message");
     assert.equal((await chat.registered()).length, 1, "nothing reopened");
   });
 
@@ -3550,15 +3325,18 @@ describe("a Loop message after a finished build whose lead was a session of its 
    * The chat reports how a command the person ran from a reply went, in words it writes itself
    * (`origin`). Sent while the chat's history was still loading, the renderer saw no build and gave it
    * the chat's Loop; queued before an upgrade, it replays with it. The harness kept that Loop for a
-   * finished build (loop/reopen-run.ts `keepsCommission`), so a failing command's output — read as a
-   * request for a fix — reopened the build for hours though nobody asked.
+   * finished build, so a failing command's output — read as a request for a fix — reopened the build
+   * for hours though nobody asked. No message carries a Loop now, nothing reopens a build, and what
+   * the chat writes itself is handed no Loop's start.
    */
-  it("RO6. a command's result carrying the chat's Loop reopened a finished build on words nobody typed: what the chat writes itself never keeps a Loop once a run exists", async () => {
+  it("RO6. a command's result, words the chat wrote itself, is handed no Loop's start: an ordinary turn answers it", async () => {
     const report = {
       ...ownMessage,
       model: undefined,
       text: "I ran this in the terminal:\nnpm test\n\nIt failed (exit code 1). It printed nothing.",
       origin: "command-result",
+      // As the host queues every message the chat wrote itself: Genex's (conversation.ts).
+      from: MessageFrom.Genex,
       autopilot: { hours: 2 },
     };
     for (const chatSession of [true, false]) {
@@ -3566,29 +3344,33 @@ describe("a Loop message after a finished build whose lead was a session of its 
         chatSession,
         recorded: [{ name: "reopen_run", args: { text: "fix the failing test" } }],
       });
-      const sent = { ...report };
-      await handleUserMessage(chat.studio as never, sent as never);
-      assert.equal("autopilot" in sent, false, "its Loop is dropped");
-      assert.equal(chat.asked.sessions[0]?.interviewTools, undefined, "the chat's own session is offered no reopen");
+      await handleUserMessage(chat.studio as never, { ...report } as never);
+      assert.equal(
+        chat.asked.sessions[0]?.interviewTools,
+        undefined,
+        "the chat's own session is offered no Loop's start",
+      );
       assert.equal((await chat.registered()).length, 1, "nothing reopened");
-      assert.deepEqual(loopUnusedWords(chat.asked.said), [], "a Loop nobody chose is not spoken of");
     }
   });
 
-  it("RO5e. a message on a model without sessions, which answers with tools in bounded rounds, is never handed a build's hours: the Loop is not used, and the chat says so", async () => {
-    const chat = ownSessionChat();
-    const local = { ...ownMessage, engine: "ollama", model: "qwen3", autopilot: { hours: 2 } };
-    await handleUserMessage(chat.studio as never, local as never);
-    assert.equal("autopilot" in local, false, "its Loop is dropped");
-    assert.equal(loopUnusedWords(chat.asked.said).length, 1);
-    assert.equal((await chat.registered()).length, 1, "nothing reopened");
+  /*
+   * A plugin's words shown in the chat (desktop-assist) are queued as Genex's (`from`) with no
+   * `origin`: the turn that answers them is a Genex-written one, like a command's result.
+   */
+  it("RO6b. words a plugin posted in the chat, Genex's with no origin, are handed no Loop's start", async () => {
+    const chat = ownSessionChat({ chatSession: true });
+    const posted = { ...ownMessage, text: "Computer control is on: try the game again.", from: MessageFrom.Genex };
+    await handleUserMessage(chat.studio as never, posted as never);
+    assert.equal(chat.asked.sessions[0]?.interviewTools, undefined, "no Loop's start for Genex's words");
+    assert.equal(chat.asked.sessions[0]?.from, MessageFrom.Genex, "the turn reads them as Genex's");
   });
 
   /**
    * A game linked to Unreal whose finished run was an Unreal Loop, which seats no lead and keeps no
-   * journal: a new ask with Mode on a Loop starts another Unreal Loop, never "Loop can't continue
-   * this build here" and one plain turn. The host lists the game here linked to the project inside
-   * its folder.
+   * journal: a new ask starts another Loop when the chat's own session starts one, never "Loop can't
+   * continue this build here" and one plain turn. The host lists the game here linked to the project
+   * inside its folder.
    */
   const unrealGame = {
     name: "plaza",
@@ -3598,31 +3380,18 @@ describe("a Loop message after a finished build whose lead was a session of its 
   };
   const dirtBike = { goal: "A dirt-bike track game.", direction: "Dirt track" };
 
-  it("a Loop message after the game's finished Unreal Loop was answered with Loop off: it starts a new Loop", async () => {
+  it("a message after the game's finished Unreal Loop whose turn starts a Loop starts a new one, until its lead finishes it", async () => {
     const chat = ownSessionChat({ game: unrealGame, recorded: [{ name: "start_autopilot", args: dirtBike }] });
     chat.store.journal = null;
-    const loopOn = {
-      ...ownMessage,
-      text: "Make it a dirt-bike track game.",
-      autopilot: { hours: 1 },
-    };
-    await handleUserMessage(chat.studio as never, loopOn as never);
-
-    assert.deepEqual(loopOn.autopilot, { hours: 1 }, "the message keeps its Loop");
-    assert.deepEqual(loopUnusedWords(chat.asked.said), [], "nothing is said of a Loop that cannot continue");
+    await handleUserMessage(chat.studio as never, { ...ownMessage, text: "Make it a dirt-bike track game." } as never);
     assert.equal(chat.asked.sessions.length, 1);
-    assert.deepEqual(
-      recordable(chat.asked.sessions[0]),
-      ["start_autopilot", "ask_user"],
-      "the chat's own session is handed the Loop's launch",
-    );
-    assert.match(String(chat.asked.sessions[0]?.prompt), /you lead it in this folder, with optional workers/);
+    assert.deepEqual(recordable(chat.asked.sessions[0]), ["start_autopilot"], "the session holds the Loop's start");
     const runs = await chat.registered();
     assert.equal(runs.length, 2, JSON.stringify(chat.log.map((entry) => entry.data.event_type ?? entry.data.type)));
     assert.notEqual(runs[1]?.runId, OWN_RUN, "a new run, never the finished one reopened");
     assert.equal(runs[1]?.resumed, false);
     assert.equal(runs[1]?.goal, dirtBike.goal, "the ask is its goal");
-    assert.equal(runs[1]?.budgets?.wallClockMs, HOUR_MS, "with the Loop's hours");
+    assert.equal(runs[1]?.budgets?.untilSatisfied, true, "until its lead finishes it");
     // The Loop's lead rests (no idle stop ends it): the person's Stop closes it, and the close names its profile.
     (chat.studio as unknown as Studio).cancels.add(OWN_THREAD);
     stopRunsOf(chat.studio as never, OWN_THREAD);
@@ -3632,40 +3401,13 @@ describe("a Loop message after a finished build whose lead was a session of its 
     assert.equal(finished?.profile, "open", "conducted by the one Loop, in place");
   });
 
-  it("with Loop off, a message after the game's finished Unreal Loop is still answered as a chat: one plain turn, no run", async () => {
+  it("a message after the game's finished Unreal Loop whose turn starts none is one plain turn: no run", async () => {
     const chat = ownSessionChat({ game: unrealGame });
     chat.store.journal = null;
     await handleUserMessage(chat.studio as never, { ...ownMessage } as never);
     assert.equal(chat.asked.sessions.length, 1, "one plain turn");
-    // Flipped: the coordinator's builder turn had no launch; the chat's own turn starts a Loop only when asked in words.
-    const launch = chat.asked.sessions[0]?.interviewTools ?? [];
-    assert.deepEqual(
-      launch.map((tool: Json) => [tool.name, tool.onlyWhenAsked]),
-      [["start_autopilot", true]],
-      "a Loop only when the person asks for one in words",
-    );
-    assert.deepEqual(loopUnusedWords(chat.asked.said), []);
+    assert.deepEqual(recordable(chat.asked.sessions[0]), ["start_autopilot"]);
     assert.equal((await chat.registered()).length, 1, "no run started");
-  });
-});
-
-/**
- * golden-boot-glory: after a finished 3 h Loop build, the user asked to "fix it very
- * quickly" — remove two HUD plates. The after-build note told the session that work "of any size — a
- * fix…" goes to the build, so it reopened the run with a fresh three hours that had to be spent: the
- * chat said "until about 9:48 PM", the lead made the fix in seventy seconds, and `finish` was then
- * refused for 159 working minutes.
- */
-describe("a quick fix after a finished Loop build (golden-boot-glory)", () => {
-  const grant = { hours: 3, frameCount: 2, project: "golden-boot-glory", launchTool: "start_autopilot" };
-  const finished = { runId: "run_gb", state: "finished", goal: "a soccer game", landed: true, reopenable: true };
-
-  it("GB1. Loop permits a build but never orders one: a contained change after a finished build is the session's own edit, and only more work reopens it", async () => {
-    const { afterLoopRunNote } = await import("../../src/harness-seed/loop/after-loop-run-prompts.ts");
-    const note = afterLoopRunNote(finished as never, "claude-code", grant);
-    assert.doesNotMatch(note, /of any size/, "a fix is not a build");
-    assert.match(note, /contained change/i, "a contained change is named");
-    assert.match(note, /contained change[^\n]*yourself/i, "the session makes a contained change itself");
   });
 });
 
@@ -3841,7 +3583,6 @@ describe("two starts of a run on one chat at once", () => {
     const studio = {
       host,
       cancels: new Set<string>(),
-      attachedPictures: new Map(),
       activeRuns: new Map(),
       startingRuns: new Map(),
       orphanRuns: new Map(),
@@ -4168,11 +3909,9 @@ describe("the chat's agent briefed like plain Claude Code (lean chat)", () => {
   it("answers a question to a resumed chat instead of telling it to finish the remaining work", async () => {
     const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
     const facts = [{ id: "web-game", path: "index.html" }];
-    for (const launch of [null, { toolName: "start_autopilot", hours: 1, frameCount: 0, project: "td" }]) {
-      const resumed = buildContractorBrief({ ask: "How do I play it?", resume: true, facts, launch });
-      assert.ok(resumed.startsWith("How do I play it?"), resumed);
-      assert.doesNotMatch(resumed, /left off|remaining work/i, `told to keep going: ${resumed}`);
-    }
+    const resumed = buildContractorBrief({ ask: "How do I play it?", resume: true, facts });
+    assert.ok(resumed.startsWith("How do I play it?"), resumed);
+    assert.doesNotMatch(resumed, /left off|remaining work/i, `told to keep going: ${resumed}`);
   });
 
   it("gives a new web game none of the judge-era template rules", async () => {
@@ -4201,8 +3940,7 @@ describe("an engine's plugin turned on from the chat's card (mp-unity)", () => {
     const engine = "claude-code";
     const unity = { plugin: "unity", name: "Unity", tool: "unity__new-game", makes: ["unity-project"] };
     const ask = "I turned on the Unity plugin from your card. Go on with what I asked.";
-    const launch = { toolName: "start_autopilot", hours: 0.5, frameCount: 0, project: "cube-arena" };
-    const resumed = buildContractorBrief({ ask, resume: true, engine, facts: [], kinds: [unity], launch });
+    const resumed = buildContractorBrief({ ask, resume: true, engine, facts: [], kinds: [unity] });
     assert.ok(resumed.includes(`When the request names Unity, call ${toolCall(engine, unity.tool)}`), resumed);
     const made = buildContractorBrief({
       ask,
@@ -4210,7 +3948,6 @@ describe("an engine's plugin turned on from the chat's card (mp-unity)", () => {
       engine,
       facts: [{ id: "unity-project", path: "unity" }],
       kinds: [unity],
-      launch,
     });
     assert.ok(!made.includes(toolCall(engine, unity.tool)), "a folder that has its kind is not told again");
   });
@@ -4324,17 +4061,6 @@ describe("an Unreal game is never checked as a web page", () => {
     for (const skill of webOnly) assert.ok(!request.prompt.includes(`[${skill}]`), `${skill} stays out of its brief`);
     assert.equal(request.onCapture, undefined, "no capture of a folder that holds notes");
     assert.doesNotMatch(request.prompt, /lights the user's Reload/, "no web preview Reload to light");
-  });
-
-  it("a Loop question after an edit to an Unreal game takes no web health pass either", async () => {
-    const { rig } = await unrealGameRig({
-      studioToolCalls: [{ name: "ask_user", args: { question: "A second lighthouse?" } }],
-    });
-    await rig.core.sendUserMessage("Add a lighthouse", { engine: "vendor", project: GAME, autopilot: { hours: 1 } });
-    const { events, said } = await afterTurn(rig);
-    assert.equal(customEvents(events, "interview_question").length, 1, "the question is still asked");
-    assert.equal(customEvents(events, "build_observation").length, 0);
-    assert.doesNotMatch(said, /black screen|loads clean|console error/);
   });
 });
 
@@ -4648,11 +4374,7 @@ describe("a Resume pressed as the pause shows", () => {
     const paused = (n: number) => (log: Log) =>
       customEvents(log, "autopilot_paused").length + customEvents(log, "run_finished").length >= n;
 
-    await rig.core.sendUserMessage("Make a small walled garden to explore", {
-      thread,
-      engine: "vendor",
-      autopilot: { hours: 1 },
-    });
+    await rig.core.sendUserMessage("Make a small walled garden to explore", { thread, engine: "vendor" });
     const first = await waitForLog(rig.core, leading(1), 60_000, "the run's lead at work");
     const runId = String((customEvents(first, "run_registered")[0] as Record<string, unknown>).runId);
 
@@ -4787,14 +4509,12 @@ describe("a local model that cannot see images (issue #47)", () => {
   });
 });
 
-describe("a Loop chat whose turn made the game's project (an Unreal game)", () => {
-  it("LL1. the session that goes on is told to launch the build with its launch tool, never to build the game itself", () => {
+describe("a chat whose turn made the game's project (an Unreal game)", () => {
+  // Flipped: with Loop on the session was told to start the build with its launch tool; it decides itself now.
+  it("LL1. the session that goes on is told to go on with what it said, and no rule about a Loop", () => {
     const unreal = [{ id: "unreal-project", path: "unreal" }];
-    const loopOn = factsReadyPrompt(unreal, "mcp__studio__start_autopilot");
-    assert.match(loopOn, /mcp__studio__start_autopilot/);
-    assert.match(loopOn, /start it now with mcp__studio__start_autopilot/);
-    assert.doesNotMatch(loopOn, /Go on with what you said you would do/);
-    assert.match(factsReadyPrompt(unreal), /Go on with what you said you would do/, "without Loop it builds on");
+    assert.match(factsReadyPrompt(unreal), /Go on with what you said you would do/);
+    assert.doesNotMatch(factsReadyPrompt(unreal), /start_autopilot|Loop/);
   });
 });
 
@@ -5177,24 +4897,13 @@ describe("a run whose every role was set to think at max effort", () => {
 describe("a chat in a game linked to an engine other than Unreal", () => {
   it("EG1. its brief never gives web-page rules, the preview's Reload or the web Loop, whether or not the host lists facts", async () => {
     const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const { launchRules } = await import("../../src/harness-seed/loop/launch-prompts.ts");
-    const launch = { toolName: "start_build", hours: 2 };
-    const toy = { ask: "make the garden", gameEngine: "toy-engine", engineProject: "/g/garden/Garden.toyproj", launch };
+    const toy = { ask: "make the garden", gameEngine: "toy-engine", engineProject: "/g/garden/Garden.toyproj" };
     const webWords = [/window\.__studio/, /Reload/, /holds a web game/, /builders working in parallel/];
     for (const [name, brief] of [
       ["with facts", buildContractorBrief({ ...toy, facts: [{ id: "toy-project", path: "." }] })],
       ["an older caller that names only the engine", buildContractorBrief(toy)],
     ] as const)
       for (const words of webWords) assert.doesNotMatch(brief, words, `${name}: ${words}`);
-    const unnamedLoop = launchRules("claude-code", launch, "toy-engine").join("\n");
-    assert.doesNotMatch(
-      unnamedLoop,
-      /builders working in parallel/,
-      "with no Loop named, another engine's is the one Loop",
-    );
-    // Flipped (Loop phase 4): a reviewer checked its finish; the lead finishes it.
-    assert.match(unnamedLoop, /finish it when the goal is reached/);
-    assert.match(launchRules("claude-code", launch, "unreal").join("\n"), /the Unreal Loop/, "Unreal's stays Unreal's");
   });
 });
 
@@ -5584,7 +5293,7 @@ describe("an engine app the chat finds not ready", () => {
     const reason = MOMENT_WORDS.NotReady("WalkLab");
     assert.doesNotMatch(reason, /button|send a message/i, "where Unreal stands, never an errand for the person");
     const facts = [{ id: CoreFact.UnrealProject, path: "WalkLab", source: "link" }] as never;
-    const prompt = factsReadyPrompt(facts, undefined, reason);
+    const prompt = factsReadyPrompt(facts, reason);
     assert.ok(prompt.includes(reason), prompt);
     assert.match(prompt, /Get it ready with your own tools/);
     assert.doesNotMatch(factsReadyPrompt(facts), /isn't ready/, "a ready app adds nothing");

@@ -1,7 +1,7 @@
 /**
  * First launch: one welcome screen in two states, then the subscription to build with.
  *
- * Welcome: a prompt types itself into a copy of the composer (Loop on) and the pointer sends
+ * Welcome: a prompt types itself into a copy of the composer and the pointer sends
  * it; the prompt lands on the lead's sheet, then the workers and a second opinion join (art.ts).
  * Clicking the composer takes the person's own idea, which waits in the real composer afterwards.
  * Connect: Claude Code and ChatGPT sign in through the same flows as Settings → Model Providers.
@@ -422,7 +422,7 @@ type WelcomeModel = ReturnType<typeof useWelcome>;
 
 /** The composer copy on the stage: the idea, the composer's icons and Send. */
 function WelcomeComposer({ w }: { w: WelcomeModel }): JSX.Element {
-  const { beat, phase, writing, draft, value, composerOn, run } = w;
+  const { beat, phase, writing, draft, value, composerOn } = w;
   const pressing = beat === 0 && phase === 3;
   const nothingToSend = writing && !draft.trim();
   return (
@@ -450,11 +450,6 @@ function WelcomeComposer({ w }: { w: WelcomeModel }): JSX.Element {
       <div className="flex min-w-0 items-center gap-1" aria-hidden="true">
         <span className="composer-icon composer-add">
           <Icon name="plus" />
-        </span>
-        {/* A new key each time the bar comes back, so the Loop's ∞ draws itself once more. */}
-        <span key={`${run}:${beat}`} className="onboarding-loop composer-text-button">
-          <Icon name="infinity" />
-          <span className="onboarding-loop-label">Loop</span>
         </span>
         <span className="min-w-0 flex-1" />
       </div>

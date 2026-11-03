@@ -45,18 +45,12 @@ export interface ActiveRun {
   stops?: number;
 }
 
-/** A finished build reopened: the reopened run hears what was said after `after` (reopen-run.ts). */
-export interface RunReopen {
-  after: string | null;
-}
-
-/** A run to start: from the interview, the run IPC, a resumed journal, or a finished build reopened (`reopen`). */
+/** A run to start: from the chat's launch, the run IPC, or a resumed journal. */
 export type RunStart = {
   type: "run_start";
   threadId: string;
   run: RunSpec | Run;
   resume?: boolean;
-  reopen?: RunReopen;
 };
 
 /** The loop's own state, and the scoped ctx every unit of work runs with. */
@@ -69,9 +63,6 @@ export interface Studio {
    * front): their turn keeps the Stop instead of clearing it. Absent from an older main.ts.
    */
   stoppedMessages?: Set<string>;
-  // Attached pictures outlive their message: the composer clears the chips the moment they are sent,
-  // but a launch can come several messages later — they ride along until a run launches.
-  attachedPictures: Map<string, unknown[]>;
   /** runId → { run, threadId }, kept through the post-run self-improvement so Stop still lands. */
   activeRuns: Map<string, ActiveRun>;
   startingRuns: Map<string, ActiveRun>;

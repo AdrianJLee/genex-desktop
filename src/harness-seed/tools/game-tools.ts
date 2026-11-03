@@ -1,90 +1,23 @@
 /**
- * Building games — the tools the studio uses to do its day job.
+ * Building games — the tools the studio uses to do its day job. A Loop's start is not one of them:
+ * only a chat's own session is handed it (loop/start-autopilot.ts).
  *
  * Every file operation goes through the substrate rather than `node:fs` so that path containment
  * and change notification stay true no matter how the agent rewrites this file.
  */
 import type { AnyRecord, HarnessTool, ToolCtx } from "../types/harness.d.ts";
-import { clampRunHours, hoursNamed, MAX_RUN_HOURS } from "../loop/config.ts";
 import { HostMethod } from "../loop/host-methods.ts";
-import { EngineId } from "../loop/model-roles.ts";
 import { StopReason } from "../loop/outage.ts";
-import { RunMode } from "../loop/run-events.ts";
 import { MINUTE_MS } from "../loop/time.ts";
-import { TurnStop } from "../loop/turn-record.ts";
 import { isRecord } from "../loop/json.ts";
-import { LoopProfile, loopProfileOf, ProjectStarter, ProjectTool } from "../loop/folder-facts.ts";
-import { OPEN_LAUNCH_WORDS } from "../loop/open-loop-prompts.ts";
-import { UNTIL_DONE_WORDS } from "../loop/until-done-prompts.ts";
-import { storeItemsOf } from "../loop/store-items.ts";
+import { ProjectStarter, ProjectTool } from "../loop/folder-facts.ts";
 
 /** How long `run_command` lets a command run when the call names no timeout. */
 const COMMAND_TIMEOUT_MS = 2 * MINUTE_MS;
 /** Bytes in the kilobyte an attached picture's size is said in. */
 const KB = 1024;
-/** How many words of the ask a new folder's name keeps, and how long that name may be. */
-const SLUG_WORDS = 3;
-const MAX_SLUG_CHARS = 40;
-/** The folder a run builds in when its words leave no name. */
-const FALLBACK_FOLDER = "game";
-/** Words that say nothing about which game this is, left out of its folder's name. */
-const SLUG_STOP = new Set([
-  "a",
-  "an",
-  "the",
-  "and",
-  "or",
-  "i",
-  "want",
-  "make",
-  "game",
-  "some",
-  "kind",
-  "just",
-  "like",
-  "really",
-  "very",
-]);
 
 const str = (description: string) => ({ type: "string", description });
-/** What a launch's goal is: the user's ask. */
-const GOAL_WORDS = "one paragraph in the user's words";
-/** What a launch's reference is: whatever the user named, if anything. */
-const DIRECTION_WORDS = "optional: a game, film or picture the user named as a reference, in their words";
-
-/** What a launch sells in the game's Genex store: never cut, listed by the build with its picture (loop/store-items.ts). */
-const STORE_ITEMS_WORDS =
-  'each thing the user sells for Nex, Genex\'s currency (a class, a character, a skin, an item), as {"name","price","type","description"}: price in whole Nex as they named it (Genex takes the nearest step on the store grid), 100 when they named none; type "durable" for what is kept once bought (a class, a character, a skin), "consumable" only for what is used up. The build lists each in the game\'s store with its picture; an item can also be added or changed at any time with genex__cli, no launch needed. Leave it out when nothing is sold for Nex: coins, gold or gems are a currency the game keeps itself';
-
-/** A store item list parameter: objects, or their JSON array as text from an engine that sends every field as a string. */
-const storeList = () => ({
-  type: "array",
-  items: {
-    type: "object",
-    properties: {
-      name: { type: "string" },
-      price: { type: "number" },
-      type: { type: "string" },
-      description: { type: "string" },
-    },
-    required: ["name"],
-  },
-  acceptJsonString: true,
-  description: STORE_ITEMS_WORDS,
-});
-
-/**
- * A launch's hours, for a Loop an Auto chat was asked for in words (delegated-turn.ts `autoLaunchFor`
- * bridges this tool only while it has them); with Loop on the composer's hours win.
- */
-const LOOP_HOURS_WORDS =
-  "The hours the user named, digits only (3, 1.5); 0 when they said until done; leave it out when they named none (the Loop switch's hours, if on, else until done).";
-
-/** A launch's store items as the run carries them (chat-dispatch.ts `intakeRun`); none when unnamed. */
-function storeArgs(args: AnyRecord): { storeItems?: AnyRecord[] } {
-  const storeItems = storeItemsOf(args.store_items);
-  return storeItems.length ? { storeItems } : {};
-}
 
 /** Does the call name a folder other than the one this chat is pinned to? */
 function pinnedElsewhere(args: AnyRecord, ctx: ToolCtx): boolean {
@@ -102,20 +35,6 @@ function pinProject(args: AnyRecord, ctx: ToolCtx): { project?: string; error?: 
   if (!args.project) return { error: "No project is open in this chat." };
   return { project: args.project };
 }
-
-/**
- * The Loop a chat's own turn asks for in words, when no Loop switch's commission reached the call (a
- * direct engine's tool loop, Loop off): the hours named, else until done. None in a run's turn or the
- * Studio's own chat: those never start a Loop.
- */
-function loopAskedInChat(args: AnyRecord, ctx: ToolCtx): AnyRecord | null {
-  if (ctx.runId || ctx.studioThread) return null;
-  const hours = hoursNamed(args.hours);
-  return hours > 0 ? { hours } : {};
-}
-
-/** The Loop a launch is for: the Loop switch's commission, else the one the chat asked for in words. */
-const autopilotOf = (args: AnyRecord, ctx: ToolCtx): AnyRecord | null => ctx.autopilot ?? loopAskedInChat(args, ctx);
 
 export const tools: HarnessTool[] = [
   {
@@ -351,160 +270,4 @@ export const tools: HarnessTool[] = [
       };
     },
   },
-
-  {
-    name: "start_unattended_run",
-    description:
-      "Start a timed Loop — when Loop is on and the ask is a build of the game or work that needs hours, never for research, a plan or a small change. It starts from this folder as you leave it when your reply ends: call it once, last, then recap.",
-    parameters: {
-      type: "object",
-      properties: {
-        goal: str(GOAL_WORDS),
-        direction: str(DIRECTION_WORDS),
-        project: str("folder slug for a chat that has no folder yet, lowercase; a chat already bound to one keeps it"),
-        store_items: storeList(),
-      },
-      required: ["goal"],
-    },
-    async execute(args, ctx) {
-      const loop = ctx.loop;
-      const noHours = typeof loop?.hours !== "number" || loop.hours <= 0;
-      if (!loop || noHours) {
-        return {
-          ok: false,
-          content:
-            "No Loop hours reached this call, so nothing started. Start the Loop with start_autopilot and the hours the user named instead.",
-        };
-      }
-      const frames = attachedFrames(loop.frames);
-      // This slug only ever names a chat that has no folder yet: the launch stamps the chat's
-      // own folder over it (turn-loop) and a bound thread wins outright (main.ts). It used to
-      // outrank the binding, and the run then built in a second, empty folder while the user
-      // typed into the chat attached to the first.
-      const project = slugProject(args.project || args.direction || args.goal);
-      const hours = clampRunHours(loop.hours);
-      const { engine: builderEngine, model: builderModel } = commissionedBuilder(loop, ctx);
-      const run = {
-        goal: String(args.goal).trim(),
-        project,
-        reference: {
-          name: String(args.direction ?? "").trim() || String(args.goal).trim(),
-          shots: [],
-          ...(frames.length ? { frames } : {}),
-        },
-        hours,
-        engine: builderEngine,
-        ...(builderModel ? { model: builderModel } : {}),
-        ...storeArgs(args),
-      };
-      return {
-        ok: true,
-        content: `Starting ${hours}h.`,
-        stopTurn: TurnStop.LaunchRun,
-        details: { run },
-      };
-    },
-  },
-
-  {
-    name: "start_autopilot",
-    description:
-      "Start a Loop — when Loop is on and the ask is a build of the game or work that needs hours, or, Loop on or off, when the user asks for a Loop in words; never for research, a plan or a small change. It starts from this folder as you leave it when your reply ends. Call it once, last, then recap.",
-    parameters: {
-      type: "object",
-      properties: {
-        goal: str(GOAL_WORDS),
-        direction: str(DIRECTION_WORDS),
-        project: str("folder slug for a chat that has no folder yet, lowercase; a chat already bound to one keeps it"),
-        store_items: storeList(),
-        hours: { type: "number", description: LOOP_HOURS_WORDS },
-      },
-      required: ["goal"],
-    },
-    async execute(args, ctx) {
-      const autopilot = autopilotOf(args, ctx);
-      if (!autopilot) {
-        return {
-          ok: false,
-          content: "A Loop starts from the chat, not from a build's own turn: nothing started.",
-        };
-      }
-      const frames = attachedFrames(autopilot.frames);
-      // This slug only ever names a chat that has no folder yet: the launch stamps the chat's
-      // own folder over it (turn-loop) and a bound thread wins outright (main.ts). It used to
-      // outrank the binding, and the run then built in a second, empty folder while the user
-      // typed into the chat attached to the first.
-      const project = slugProject(args.project || args.direction || args.goal);
-      // No cap set means run until the lead finishes it — with a 24h safety ceiling.
-      const capped = typeof autopilot.hours === "number" && autopilot.hours > 0;
-      const hours = capped ? clampRunHours(autopilot.hours) : MAX_RUN_HOURS;
-      // Same leak guard as start_unattended_run: the interview's borrowed local model must not
-      // become the contractor's model.
-      const { engine: builderEngine, model: builderModel } = commissionedBuilder(autopilot, ctx);
-      const run = {
-        goal: String(args.goal).trim(),
-        project,
-        mode: RunMode.Autopilot,
-        reference: {
-          name: String(args.direction ?? "").trim() || String(args.goal).trim(),
-          shots: [],
-          ...(frames.length ? { frames } : {}),
-        },
-        hours,
-        // ∞ is its own fact, not the 24h ceiling above: the app reads it back as "until satisfied".
-        ...(capped ? {} : { untilSatisfied: true }),
-        engine: builderEngine,
-        ...(builderModel ? { model: builderModel } : {}),
-        // The composer's roles panel: orchestrator / workers / judges, applied at launch
-        // (model-roles.ts) — the interview's own model is never inferred as the builders'.
-        ...(autopilot.roles && typeof autopilot.roles === "object" ? { roles: autopilot.roles } : {}),
-        ...storeArgs(args),
-      };
-      const clock = capped ? `Building for up to ${hours} h` : await untilDoneWords(ctx, ctx.project ?? project);
-      return {
-        ok: true,
-        content: `${clock}.`,
-        stopTurn: TurnStop.LaunchRun,
-        details: { run },
-      };
-    },
-  },
 ];
-
-/** How an ∞ build runs, as the launch tool answers: until its lead finishes it. */
-async function untilDoneWords(ctx: ToolCtx, project: string): Promise<string> {
-  // A game list Genex can't read leaves the web words, as before.
-  const listed = await Promise.resolve()
-    .then(() => ctx.call(HostMethod.GameList, {}))
-    .catch(() => null);
-  const game = Array.isArray(listed) ? listed.find((one) => one?.name === project) : undefined;
-  return game && loopProfileOf(game) === LoopProfile.Open ? OPEN_LAUNCH_WORDS.building : `Building ${UNTIL_DONE_WORDS}`;
-}
-
-/** The reference stills the composer attached, without empty slots. */
-function attachedFrames(frames: AnyRecord[] | null | undefined): AnyRecord[] {
-  return (frames ?? []).filter((frame: AnyRecord | null) => frame?.data);
-}
-
-/**
- * Who builds the commissioned run. ctx.model is whatever this interview chat ran on. When a
- * contractor is the builder the chat borrowed a local model — that model belongs to the chat,
- * never to the builder.
- */
-function commissionedBuilder(commission: AnyRecord, ctx: ToolCtx): { engine: string; model: string | undefined } {
-  const engine = commission.builderEngine ?? ctx.engine ?? EngineId.Ollama;
-  const model = commission.builderModel ?? (engine === ctx.engine ? ctx.model : undefined);
-  return { engine, model };
-}
-
-/** A new folder's name from the words of the ask: its first few telling words, joined by dashes. */
-function slugProject(text: unknown): string {
-  const words = String(text ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]+/g, " ")
-    .split(/\s+/)
-    // A word whose other half was not Latin ("game-магазин") keeps a dash at its edge: drop it.
-    .map((word) => word.replace(/^-+|-+$/g, ""))
-    .filter((word) => word && !SLUG_STOP.has(word));
-  return (words.slice(0, SLUG_WORDS).join("-") || FALLBACK_FOLDER).slice(0, MAX_SLUG_CHARS);
-}

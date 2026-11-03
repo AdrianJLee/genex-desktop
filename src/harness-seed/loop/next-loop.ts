@@ -8,7 +8,7 @@ import { launchFromIntake } from "./chat-dispatch.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind } from "./run-events.ts";
 import { nextLoopOf, type NextLoop } from "./next-loop-record.ts";
-import { tools as gameTools } from "../tools/game-tools.ts";
+import { startAutopilot } from "./start-autopilot.ts";
 import type { AnyRecord, Run } from "../types/harness.d.ts";
 import type { Studio } from "./studio-state.ts";
 
@@ -51,11 +51,16 @@ export async function startNextLoop(studio: Studio, threadId: string, run: Run):
 
 /** The new run's spec, as the Loop's own start (`start_autopilot`) writes it for the run's engine and model. */
 async function nextRunSpec(run: Run, next: NextLoop): Promise<AnyRecord> {
-  const start = gameTools.find((tool) => tool.name === "start_autopilot");
-  if (!start) throw new Error("this harness has no Loop start");
-  const autopilot = { ...(next.hours ? { hours: next.hours } : {}), ...(run.roles ? { roles: run.roles } : {}) };
-  const ctx = { engine: run.engine, model: run.model, project: run.project, autopilot };
-  const outcome = (await start.execute({ goal: next.goal, direction: next.direction }, ctx as never)) as AnyRecord;
+  const ctx = {
+    engine: run.engine,
+    model: run.model,
+    project: run.project,
+    ...(run.roles ? { roles: run.roles } : {}),
+  };
+  const outcome = (await startAutopilot.execute(
+    { goal: next.goal, direction: next.direction },
+    ctx as never,
+  )) as AnyRecord;
   const spec = outcome?.details?.run;
   if (!spec) throw new Error(String(outcome?.content ?? "the Loop's start answered no run"));
   return spec;

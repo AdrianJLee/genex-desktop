@@ -33,7 +33,6 @@ import { CoreFact, LoopProfile } from "../../src/shared/project-facts.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { PluginOffer } from "../../src/shared/project-tools.ts";
 import { ToolPermissionState } from "../../src/shared/permissions.ts";
-import { HOUR_MS } from "../../src/shared/duration.ts";
 import { AppLookAccessKind } from "../../src/shared/jobs.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 
@@ -122,9 +121,6 @@ describe("the open-projects dev fixture", () => {
     // As the in-place Loop writes it: timed in `budgets`, closed in its own words with its lead's row.
     assert.equal(closes[0]?.stoppedBecause, OPEN_TIME_UP);
     assert.deepEqual(Object.keys((closes[0] as { facets?: object } | undefined)?.facets ?? {}), ["lead"]);
-    const graph = buildRunGraph(await chat(OPEN_PROJECTS.godot), String(closes[0]?.runId));
-    const run = graph?.nodes.find((node) => node.kind === GraphNodeKind.Run);
-    assert.equal(run?.kind === GraphNodeKind.Run ? run.durationMs : undefined, HOUR_MS, "the graph reads it as timed");
   });
 
   it("the Godot game's Loop going in place draws its worker and no final look nobody asked for, and the worker's question waits", async () => {

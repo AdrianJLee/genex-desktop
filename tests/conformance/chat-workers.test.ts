@@ -72,12 +72,12 @@ function harnessInProcess(chat: Chat): { dispatched: Array<Record<string, unknow
 }
 
 /** Open the seed's pool for the chat turn `turn`, on the core, as a delegated chat turn does. */
-function openPoolFor(chat: Chat, ctx: CtxRecorder, turn: string, commission: Record<string, unknown> | null = null) {
+function openPoolFor(chat: Chat, ctx: CtxRecorder, turn: string, roles: Record<string, unknown> | null = null) {
   return openChatWorkers(ctx.ctx as never, {
     threadId: chat.threadId,
     turn,
     engine: "claude-code",
-    commission,
+    roles,
     project: chat.game,
     gameDir: chat.project.dir,
     folderLabel: `AI Games/${chat.game}`,
@@ -135,8 +135,8 @@ async function seedTurn(
     steer?: string;
     /** What the person said in the message the turn answers. */
     text?: string;
-    /** The Loop commission the turn's message carries (`loop`), its roles included. */
-    commission?: Record<string, unknown>;
+    /** The roles the turn's message carries (the composer's roles panel). */
+    roles?: Record<string, unknown>;
     delegate?: (params: Record<string, unknown>) => Promise<unknown>;
     abort?: (params: Record<string, unknown>) => unknown;
   },
@@ -174,7 +174,7 @@ async function seedTurn(
     project: chat.game,
     ...(options.steer ? { steer: quietSteer(options.steer) } : {}),
     ...(options.runId ? { runId: options.runId } : {}),
-    ...(options.commission ? { loop: options.commission } : {}),
+    ...(options.roles ? { roles: options.roles } : {}),
   };
   const error = await runDelegatedTurn(host.ctx as never, turn as never).then(
     () => null,
@@ -464,7 +464,7 @@ describe("workers in a chat", () => {
     }
   });
 
-  it("a chat turn whose message carries a Loop's roles hands them to its workers: they start on the Workers role's engine and model", {
+  it("a chat turn whose message carries roles hands them to its workers: they start on the Workers role's engine and model", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await workerChat();
@@ -476,7 +476,7 @@ describe("workers in a chat", () => {
       chatWorkerTool({ threadId: chat.threadId, turn, name, args });
     const host = await seedTurn(chat, {
       steer: turn,
-      commission: { hours: 2, roles: { builder: CODEX_MODEL, engines: { builder: CODEX } } },
+      roles: { builder: CODEX_MODEL, engines: { builder: CODEX } },
       delegate: async (params) => {
         if (params.worker) {
           workers.push(params);
@@ -500,7 +500,7 @@ describe("workers in a chat", () => {
     const chat = await workerChat();
     const { ctx } = harnessInProcess(chat);
     const turn = await chat.personSays();
-    await openPoolFor(chat, ctx, turn, { roles: { builder: CODEX_MODEL, engines: { builder: CODEX } } });
+    await openPoolFor(chat, ctx, turn, { builder: CODEX_MODEL, engines: { builder: CODEX } });
     try {
       const count = chat.seen.length;
       await chatWorkerTool({

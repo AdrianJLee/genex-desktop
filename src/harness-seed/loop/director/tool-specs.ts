@@ -69,7 +69,6 @@ export const WRAP_UP_SPEC: LiveToolSpec = {
         type: "string",
         description: "Asked to start a new Loop after: what it builds (it starts once this run closes).",
       },
-      next_hours: { type: "string", description: "Its hours, if named." },
     },
     required: ["user_asked"],
   },

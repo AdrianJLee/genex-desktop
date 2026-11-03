@@ -1,6 +1,6 @@
 /**
  * What a build sells in its game's Genex store: each thing the user prices in Nex (Genex's
- * currency), named by the chat at the launch (`store_items`, tools/game-tools.ts). The run's scope
+ * currency), named by the chat at the launch (`store_items`, start-autopilot.ts). The run's scope
  * carries them (`storeScopeItems`), which scope-prompts.ts shows every agent that reads the goal, so
  * no plan can cut them; the build draws each item's picture and lists it with `genex__cli shop add`,
  * which refuses an item without one. Any agent lists or changes items that way at any time, so a

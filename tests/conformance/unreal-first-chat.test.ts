@@ -245,7 +245,7 @@ describe("the turn that makes a game's Unreal project", () => {
       assert.ok(blocked.said.includes(NOT_OPENED), healths.join(","));
       assert.deepEqual(
         [blocked.delegated[1]?.resume, blocked.delegated[1]?.prompt],
-        ["s1", factsReadyPrompt(servedFactsOf(game(true) as never), undefined, NOT_OPENED)],
+        ["s1", factsReadyPrompt(servedFactsOf(game(true) as never), NOT_OPENED)],
         healths.join(","),
       );
     }
@@ -260,7 +260,7 @@ describe("the turn that makes a game's Unreal project", () => {
     });
     // Flipped on purpose: the session goes on, told the app is still opening, as with a block.
     assert.equal(waited.delegated.length, 2, "the agent goes on, told it is still opening");
-    assert.equal(waited.delegated[1]?.prompt, factsReadyPrompt(servedFactsOf(game(true) as never), undefined, OPENING));
+    assert.equal(waited.delegated[1]?.prompt, factsReadyPrompt(servedFactsOf(game(true) as never), OPENING));
     assert.ok(waited.said.includes(READY_WORDS.timedOut(OPENING)), waited.said.join(" | "));
     assert.ok(!waited.said.includes(NOT_OPENED));
   });

@@ -9,8 +9,6 @@ export default {
   "(done)": "（已完成）",
   "(named {count, plural, one {# time} other {# times}} now)": "（已被指出 {count, plural, other {# 次}}）",
   "**Build to start:** {ask}": "**待开始的构建：** {ask}",
-  "15 minutes less": "减少 15 分钟",
-  "15 minutes more": "增加 15 分钟",
   "1 credit ≈ 1¢": "1 积分 ≈ 1¢",
   "2 to 20 characters.": "2 到 20 个字符。",
   "3D": "3D",
@@ -23,8 +21,6 @@ export default {
   "64-bit PCs": "64 位 PC",
   "<added>+{count}</added> this month": "本月 <added>+{count}</added>",
   "<name>{title}</name> <live>is live!</live>": "<name>{title}</name> <live>已上线！</live>",
-  'A "beat a real game" run needs at least two screenshots of the reference.':
-    "“超越真实游戏”构建至少需要两张参考游戏的截图。",
   "A ChatGPT connection change is already in progress.": "ChatGPT 连接已在更改中。",
   "A GLB for the game plus reference renders to check it.": "为游戏生成一个 GLB，并附带用于检查的参考渲染图。",
   "A Loop in {game} is using Unreal.": "{game} 中的 Loop 正在使用 Unreal。",
@@ -181,8 +177,6 @@ export default {
   "A stealth game where a cat steals socks from a sleeping house": "猫咪在熟睡的房子里偷袜子的潜行游戏",
   "A survival game on a raft that grows from things you fish out of the sea":
     "木筏求生游戏，把海里捞上来的东西用来扩建木筏",
-  "A team of AIs builds and tests your idea for up to {limit}.": "一组 AI 会制作并测试你的创意，最长 {limit}。",
-  "A team of AIs builds and tests your idea until it’s done.": "一组 AI 会制作并测试你的创意，直到完成。",
   "A tide pool explorer collecting shells before the waves return": "趁潮水回来前捡贝壳的潮池探险",
   "A tiny planet you walk around, planting trees until it turns green": "一颗可以绕着走的小星球，不停种树直到它变绿",
   "A tiny racing game on a kitchen table with toy cars": "在厨房餐桌上用玩具车比赛的迷你赛车游戏",
@@ -1048,9 +1042,7 @@ export default {
   "Curated release": "精选版本",
   "Current build failed; no stale output was exported": "当前构建失败；未导出过时的输出",
   "Current cover": "当前封面",
-  Custom: "自定义",
   "Custom theme": "自定义主题",
-  "Custom time limit": "自定义时间限制",
   "Customize theme": "自定义主题",
   Cut: "剪切",
   "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.":
@@ -1122,7 +1114,6 @@ export default {
   "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
     "“帮我完成”会打开启动器，由这个对话通过电脑控制在里面安装 Unreal。约 45 GB。需要登录 Epic 时，只有你本人能登录。",
   "Does it feel alive? {score} of {max}": "感觉有生气吗？{score}/{max}",
-  "Does what you ask, then stops.": "按你说的做，然后停下。",
   "Don't allow": "不允许",
   "Don't ask again for this action in {source}.": "在 {source} 中不再询问此操作。",
   "Don't use Godot": "不使用 Godot",
@@ -1638,10 +1629,6 @@ export default {
   "Home background": "主页背景",
   "Hooks can run commands with your access.": "钩子可以用你的权限运行命令。",
   Horns: "犄角",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. It builds until about {end}. Keep the app open.":
-    "时长——你离开时助手们继续制作，审查员只保留让游戏变好的改动。会制作到 {end} 左右。请保持应用打开。",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. No cap: it runs until what you asked for is checked working, and stops by about {end} whatever happens. Keep the app open.":
-    "时长——你离开时助手们继续制作，审查员只保留让游戏变好的改动。不设上限：一直运行到确认你要的功能可用，无论如何都会在 {end} 左右停止。请保持应用打开。",
   Hover: "悬停",
   "How Harness works": "Harness 的工作原理",
   "How does Harness build a game?": "Harness 如何制作游戏？",
@@ -1996,19 +1983,9 @@ export default {
   "Looking through the assets": "正在浏览素材",
   "Looking up Blueprint nodes": "正在查找蓝图节点",
   "Looking…": "正在查找…",
-  "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling (harness-seed/loop) into its own loop code and restart itself — or restore the seed copies so the next launch upgrades them. Your brief is saved above; send it again once the loop code is current.":
-    "Loop 无法启动：Studio 自身的循环代码早于输入框中的 Loop 功能，因此不知道如何运行定时构建。要修复它，请在对话中让 Studio 把基础文件中的 Loop 处理（harness-seed/loop）合并到它自己的循环代码中并重启——或恢复基础文件副本，让下次启动时更新它们。你的任务说明已保存在上方；循环代码更新后再次发送即可。",
-  "Loop can’t run in this game yet, so Keep building can’t start it.":
-    "这个游戏暂时无法运行 Loop，所以“继续制作”无法启动它。",
   "Loop finished · Changes kept in your project": "Loop 已结束 · 改动保留在你的项目中",
   "Loop from {day}": "{day}的 Loop",
-  "Loop mode": "Loop 模式",
   "Loop not started": "Loop 未启动",
-  "Loop time limit": "Loop 时间限制",
-  "Loops need the {engine} project inside this game’s folder, so Rewind can undo each step; {project} is in {place}. Make a new one from the {engine} button, or move {project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.":
-    "Loop 需要 {engine} 项目位于这个游戏的文件夹内，回退才能撤销每一步；{project} 位于 {place}。用 {engine} 按钮新建一个，或把 {project} 移到这个游戏的文件夹里并在那里选择它。在此之前，它会按你说的做，然后停下。",
-  "Loops need this game’s {engine} project inside its folder, so Rewind can undo each step. A new {engine} project made from the {engine} button goes there. Until then, it does what you ask, then stops.":
-    "Loop 需要这个游戏的 {engine} 项目位于它的文件夹内，回退才能撤销每一步。用 {engine} 按钮新建的 {engine} 项目会放在那里。在此之前，它会按你说的做，然后停下。",
   "Luau checks are added: scripts are checked at each worker's end and before a build finishes.":
     "已添加 Luau 检查：脚本会在每个助手结束时和构建完成前接受检查。",
   "Luau checks are already on this computer.": "这台电脑上已经有 Luau 检查了。",
@@ -2094,7 +2071,6 @@ export default {
   "Mobile support for {title}": "{title} 的移动端支持",
   "Mobile support saved": "移动端支持已保存",
   Mode: "模式",
-  "Mode options": "模式选项",
   "Model Providers": "模型提供方",
   "Model discovery disconnected.": "查找模型时连接断开。",
   "Model discovery timed out. Try again.": "查找模型超时。请重试。",
@@ -2237,7 +2213,6 @@ export default {
   "No such account: {account}": "没有这个账号：{account}",
   "No supported UI colors found. Choose a Genex token file or a VS Code color theme.":
     "未找到支持的 UI 颜色。请选择 Genex 令牌文件或 VS Code 颜色主题。",
-  "No time limit": "无时间限制",
   "No unlocked system keyring is available. Start GNOME Keyring or KWallet and unlock it, then restart Genex.":
     "没有可用的已解锁系统密钥环。请启动 GNOME Keyring 或 KWallet 并解锁，然后重启 Genex。",
   "Nobody answered": "无人回应",
@@ -2331,8 +2306,6 @@ export default {
   "OS credential access is disabled for this process.": "此进程已禁用系统凭据访问。",
   "OS encryption is unavailable; secret storage remains locked.": "系统加密不可用；密钥存储保持锁定。",
   Off: "关闭",
-  "Off — one build pass in this chat, shown as it goes. Set hours for a reviewed build that runs on its own: ∞ until what you asked for is checked working, or a number of hours.":
-    "关闭——在此对话中制作一轮，过程实时可见。设置时长，可让经过审查的构建自动运行：∞ 表示直到确认你要的功能可用，或指定小时数。",
   "Off. Your agent can't use Genex tools.": "已关闭。智能体无法使用 Genex 工具。",
   "Off: friends see your name only.": "关闭：好友只能看到你的名字。",
   Offline: "离线",
@@ -3776,11 +3749,7 @@ export default {
   "This build of Genex has build metrics sharing removed.": "此 Genex 版本已移除构建指标分享。",
   "This build of the studio can't pick a build back up yet — its own loop code predates timed builds.":
     "此版本的 Studio 还无法继续构建——它的循环代码早于定时构建。",
-  "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's harness-seed/loop needs to be merged into it, or the seed copies restored so the next launch upgrades them.)":
-    "此版本的 Studio 还无法运行定时构建——你的任务说明已保存在上方，等 Studio 自行更新后再次发送即可开始构建。（它的循环代码早于定时构建：需要把基础文件中的 harness-seed/loop 合并进去，或恢复基础文件副本，让下次启动时更新它们。）",
   "This build turned out not to run — reload to go back to your game": "这个构建无法运行——重新加载即可回到你的游戏",
-  "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.":
-    "此构建的助手或审查员使用本地模型运行，而 Studio 自身的循环代码还不支持——你的任务说明已保存在上方。请为所有任务选择同一类引擎后再次发送，或让 Studio 把基础文件中的 harness-seed/loop 合并到它自己的循环代码中（或恢复基础文件副本），让下次启动时更新它们。",
   "This change no longer differs from what Harness has now.": "这项更改与 Harness 现在的内容已经没有区别了。",
   "This change was already undone.": "这项更改已经撤销过了。",
   "This chat has no game folder yet.": "这个对话还没有游戏文件夹。",
@@ -4928,10 +4897,7 @@ export default {
   unknown: "未知",
   "unknown error": "未知错误",
   "unknown project {name}": "未知项目 {name}",
-  "until about {end}": "到 {end} 左右",
-  "until satisfied · by ~{end}": "直到满意 · 约 {end} 前",
   "up to {count, plural, one {# worker} other {# workers}} at once": "最多 {count, plural, other {# 个助手}}同时进行",
-  "up to {time}": "最多 {time}",
   "up {percent}%": "上升 {percent}%",
   "use your {publisher} account": "使用你的 {publisher} 账号",
   "used a tool": "使用了工具",
@@ -5161,8 +5127,6 @@ export default {
   "{done} of {size} GB": "{done} / {size} GB",
   "{done} of {total}": "{done} / {total}",
   "{done} of {total} MB": "{done} / {total} MB",
-  "{elapsed} of {budget}": "{elapsed}/{budget}",
-  "{elapsed} of {budget} min": "{elapsed}/{budget} 分钟",
   "{engine} always uses its sandbox": "{engine} 始终使用自己的沙盒",
   "{engine} can’t stop to ask yet": "{engine} 暂时无法中途询问",
   "{engine} default": "{engine} 默认",
@@ -5210,16 +5174,12 @@ export default {
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · {time} 开始",
   "{health} · {count, plural, one {# tool} other {# tools}}": "{health} · {count, plural, other {# 个工具}}",
-  "{hours, plural, one {# hour} other {# hours}}": "{hours, plural, other {# 小时}}",
-  "{hours, plural, one {# hour} other {# hours}} {minutes, plural, one {# minute} other {# minutes}}":
-    "{hours, plural, other {# 小时}} {minutes, plural, other {# 分钟}}",
   "{hours} h": "{hours} 小时",
   "{hours} h {minutes} m": "{hours} 小时 {minutes} 分钟",
   "{hours} h {minutes} min": "{hours} 小时 {minutes} 分钟",
   "{hours}+ h": "{hours}+ 小时",
   "{hours}h": "{hours} 小时",
   "{hours}h {minutes}m": "{hours} 小时 {minutes} 分钟",
-  "{hours}h{minutes}": "{hours} 小时 {minutes} 分",
   "{hours}h {minutes}m": "{hours} 小时 {minutes} 分",
   "{input} in / {output} out per M tokens": "每百万 token：输入 {input} / 输出 {output}",
   "{kept} · {count} finished.": "{kept} · {count} 个已完成。",
@@ -5246,7 +5206,6 @@ export default {
   "{max} files at most": "最多 {max} 个文件",
   "{max} pictures at most": "最多 {max} 张图片",
   "{millions}M": "{millions}M",
-  "{minutes, plural, one {# minute} other {# minutes}}": "{minutes, plural, other {# 分钟}}",
   "{minutes} m": "{minutes} 分钟",
   "{minutes} min": "{minutes} 分钟",
   "{minutes} min left": "剩余 {minutes} 分钟",

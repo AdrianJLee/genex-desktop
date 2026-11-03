@@ -27,18 +27,16 @@ const ENGINES = [CLAUDE, CODEX, undefined];
 const ASK = "make a rally racing game";
 const PROJECT = "/Users/me/AI Games/rally/unreal/Rally.uproject";
 const SHAPE = { entry: "index.html", main: "src/main.js", build: null };
-const LAUNCH = { toolName: "start_unattended_run", hours: 2, frameCount: 0, project: "rally" };
-/** What every Auto chat is handed (flipped from none): the Loop's start, for a Loop asked for in words. */
+/** What every chat's own session is handed: the Loop's start. */
 const AUTO_LOOP = "start_autopilot";
 /** The Unreal plugin's kind, as the host lists it while the plugin is on. */
 const UNREAL_KIND = { plugin: "unreal", name: "Unreal Editor", tool: UNREAL_NEW_GAME_TOOL, makes: ["unreal-project"] };
 
-/** What a web brief varies by: the engine reading it, fresh or not, own shape, Loop, follow-up, resumed. */
+/** What a web brief varies by: the engine reading it, fresh or not, own shape, follow-up, resumed. */
 const WEB_BRIEF_AXES: Record<string, readonly unknown[]> = {
   engine: ENGINES,
   scaffolded: [false, true],
   ownShape: [false, true],
-  launch: [null, LAUNCH],
   messages: [[], [{ role: "user", content: "make pong" }]],
   resume: [false, true],
 };
@@ -232,14 +230,6 @@ describe("a chat turn and the engine question", () => {
     assert.equal(capture, true, "it is still a web game until the user chooses");
   });
 
-  it("with Loop on, the same question rides beside the launch, one question card only", async () => {
-    const recorder = chatTurn({ tools: [NEW_GAME_TOOL] });
-    await runDelegatedTurn(recorder.ctx as never, { ...NEW_CHAT, loop: { hours: 2 } });
-    const { prompt, bridged } = handed(recorder);
-    assert.ok(lines(prompt).includes(RULE));
-    assert.deepEqual(bridged, ["start_unattended_run", "ask_user"]);
-  });
-
   it("a game linked to Unreal is never asked, and its builder gets no web capture", async () => {
     const linked = game("rally", { engine: { kind: GameEngine.Unreal, project: PROJECT, linkedAt: "" } });
     const recorder = chatTurn({ games: [linked], tools: [NEW_GAME_TOOL] });
@@ -309,12 +299,6 @@ describe("a game the app made before the chat's first ask", () => {
     assert.ok(lines(prompt).includes(RULE));
     assert.deepEqual(bridged, [AUTO_LOOP, "ask_user"]);
     assert.equal(capture, true, "it is still a web game until the user chooses");
-  });
-
-  it("with Loop on, the same question rides beside the launch", async () => {
-    const { prompt, bridged } = await turnOn({}, { ...ON_ITS_GAME, loop: { hours: 2 } });
-    assert.ok(lines(prompt).includes(RULE));
-    assert.deepEqual(bridged, ["start_unattended_run", "ask_user"]);
   });
 
   it("is never asked once it has a kind, the game is linked to Unreal, or the plugin is off", async () => {
@@ -411,7 +395,7 @@ describe("the end of a turn whose game was linked to Unreal during it", () => {
   it("a game linked to Unreal by the turn gets no preview load, no build_observation and no black-screen line", async () => {
     const cases: Record<string, [Record<string, unknown>, Record<string, unknown>]> = {
       "its report": [{}, {}],
-      "a Loop question beside it": [{ loop: { hours: 2 } }, QUESTION],
+      "a question beside it": [{}, QUESTION],
     };
     for (const [label, [turn, answer]] of Object.entries(cases)) {
       const { previewCalls, observations, said } = await turnOn(WEB, UNREAL, turn, answer);

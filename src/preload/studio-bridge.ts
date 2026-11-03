@@ -213,7 +213,6 @@ function runCalls(bridge: BridgeCalls) {
     showBuild: (project, commit) => invoke("studio:build.show", { project, commit }),
     landBuild: (project, commit) => invoke("studio:build.land", { project, commit }),
     buildProblem: (project) => invoke("studio:build.problem", { project }),
-    startRun: (spec) => invoke("studio:run.start", spec),
     stopRun: (runId) => invoke("studio:run.stop", { runId }),
     finishRun: (runId, threadId) => invoke("studio:run.finish", { runId, threadId }),
     resumeAutopilot: (runId) => invoke("studio:autopilot.resume", { runId }),

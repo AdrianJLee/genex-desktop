@@ -43,7 +43,6 @@ import {
 import {
   ComposerRoom,
   EngineRefOther,
-  HoursBucket,
   ModelRefOther,
   type PlanAction,
   type QuestionVia,
@@ -120,15 +119,6 @@ export function effortRef(value: string | null | undefined): ReasoningEffort | u
   return isEffort(value) ? value : undefined;
 }
 
-/** How many hours a Loop runs, bucketed; `none` when it is off or has no limit. */
-export function hoursBucket(loop: { on: boolean; hours: number | null }): HoursBucket {
-  const { on, hours } = loop;
-  if (!on || hours === null || hours <= 0) return HoursBucket.None;
-  if (hours <= 1) return HoursBucket.One;
-  if (hours <= 4) return HoursBucket.Few;
-  return hours <= 8 ? HoursBucket.Several : HoursBucket.Long;
-}
-
 /** The last user message's words in a log record, if it carries one. */
 function userWords(event: EventEnvelope): string | null {
   if (event.data.type !== EventKind.Messages) return null;
@@ -169,7 +159,6 @@ export interface SendFacts {
   key: string | null;
   engineKind?: EngineKind | undefined;
   effort?: string | undefined;
-  loop: { on: boolean; hours: number | null };
   planReview: boolean;
   pictures: number;
   files: number;
@@ -198,8 +187,6 @@ export function messageSentProperties(
     ...(facts.engineKind ? { engine_kind: facts.engineKind } : {}),
     model: modelRef(facts.key),
     ...(effort ? { effort } : {}),
-    loop_on: facts.loop.on,
-    loop_hours_bucket: hoursBucket(facts.loop),
     plan_review: facts.planReview,
     pictures: facts.pictures,
     files: facts.files,

@@ -69,13 +69,6 @@ export function hasSessionRoles(engine: string | null | undefined): boolean {
   return isDelegated(engine) || SESSION_ENGINES.includes(engine as string);
 }
 
-/**
- * This copy crosses a game run's jobs to and from a completion-only local engine (`crossesTo`).
- * main.ts claims the local-roles capability only when it does (local-roles-served.ts): a kept
- * older copy drops such a cross but keeps the slot's model on the run's own engine.
- */
-export const SERVES_LOCAL_ROLES = true;
-
 /** The completion-only local engines whose jobs run on their own models in the classic loop. */
 const COMPLETION_ROLE_ENGINES = new Set<string>([EngineId.Ollama]);
 

@@ -314,7 +314,7 @@ skipped) and asserts no run id, sha or ref survives translation, and that no ren
 words.ts holds a translation. `morning-words`/`run-graph`/`build-progress` replay synthetic director and probe fixtures (`tests/fixtures/director-loop-run.json` and
 `tests/fixtures/nested-probes.json`) and pin what the morning
 card, the Builds header and the stage say about it. `door.test.ts` covers the opening chat and
-the run's promised clock, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
+the composer's instruction, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
 the ported rail's tokens, and `run-controls.test.ts` the one-Stop rule across the whole
 renderer plus the keep-awake wiring in main. Behaviour that needs a window — the two chat Stop
 controls, immediate thread cancellation, the blocker held past the request, the morning card
@@ -511,8 +511,8 @@ source there until it ends: a stale build refuses every UI operation, and a rest
 Drive only through hooks: the welcome's `[data-onboarding-action="next"]`, then `"start"` (only
 `"skip"` means nothing is signed in: stop and ask; never sign in yourself); the home composer's
 `[aria-label="Model settings"]` role rows `[data-role]` and `[data-model-choice]`, the
-`[aria-label^="Effort:"]` pill, then arrow keys on `[data-effort-slider]`, `[aria-label="Mode"]` with
-`[aria-label="Loop time limit"] [data-value]`, and `textarea[aria-label="Prompt"]`. Answer a
+`[aria-label^="Effort:"]` pill, then arrow keys on `[data-effort-slider]`, and
+`textarea[aria-label="Prompt"]`. Answer a
 `[data-chat-question]`, plan review or permission card only as a recorded human intervention.
 Watch with `runs` and `status`; no new record for a long while, or a `lastFailure`, is the cue to
 read `logs`. A run paused by an engine limit or a loop crash continues from

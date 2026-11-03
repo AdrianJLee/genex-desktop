@@ -23,7 +23,7 @@ export const TurnStop = {
   MaxRounds: "max_rounds",
   /** The run's wall clock ran out mid-turn. */
   Deadline: "deadline",
-  /** A Loop chat commissioned a run: the outcome's `details.run` is its spec. */
+  /** The chat's session started a Loop: the outcome's `details.run` is its spec. */
   LaunchRun: "launch_run",
   /** The harness restarts itself into an edit (`restart_studio`). */
   Restart: "restart",

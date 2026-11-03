@@ -46,8 +46,6 @@ const MESSAGE = {
 /** The argument in which each held build says what it would build. */
 const LAUNCH_ASK: Record<BuildLaunch, string> = {
   [BuildLaunch.StartAutopilot]: "goal",
-  [BuildLaunch.StartUnattendedRun]: "goal",
-  [BuildLaunch.ReopenRun]: "text",
   [BuildLaunch.ResumeRun]: "text",
 };
 

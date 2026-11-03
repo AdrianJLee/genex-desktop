@@ -450,7 +450,7 @@ describe("the end of a turn that changed what the project is", () => {
     for (const [label, row] of Object.entries(rows)) assert.equal((await turnOn(row)).length, 1, label);
   });
 
-  it("a switch sent while the session goes on with the new kind still switches it: the Loop turned on reaches it", async () => {
+  it("a switch sent while the session goes on with the new kind still switches it: another model reaches it", async () => {
     const log: Array<{ id: string; data: Record<string, unknown> }> = [];
     let legs = 0;
     let cut = () => {};
@@ -500,29 +500,20 @@ describe("the end of a turn that changed what the project is", () => {
     try {
       await send("port it");
       await continuing;
-      await send("make it in the loop", { autopilot: {} });
+      await send("use sonnet for it", { model: "sonnet" });
       for (let n = 0; n < 2000 && legs < 3; n++) await new Promise((resolve) => setImmediate(resolve));
       const delegated = recorder.paramsOf("engine.delegate");
       assert.equal(delegated.length, 3, "the session went on after the cut");
       const prompt = String(delegated[2]?.prompt);
       assert.ok(prompt.startsWith("While you were working, the user changed how you work"), prompt);
-      assert.match(prompt, /make it in the loop/);
-      const loopMessage = [...messageQueueState(log as never).messages.values()].find(
-        (m) => m.action?.text === "make it in the loop",
+      assert.match(prompt, /use sonnet for it/);
+      const switched = [...messageQueueState(log as never).messages.values()].find(
+        (m) => m.action?.text === "use sonnet for it",
       );
-      assert.equal(loopMessage?.state, "delivered");
+      assert.equal(switched?.state, "delivered");
     } finally {
       cut();
       queue.stop();
     }
-  });
-
-  it("with Loop on, the session that goes on starts the build with its launch tool instead of building it itself", async () => {
-    const delegated = await turnOn({ before: WEB, after: GODOT, turn: { autopilot: { roles: {} } } });
-    assert.equal(delegated.length, 2, "one turn, then one continuation");
-    const prompt = String(delegated[1]?.prompt);
-    assert.equal(prompt, factsReadyPrompt([{ id: "godot-project", path: "." }], "mcp__studio__start_autopilot"));
-    assert.ok(prompt.includes("mcp__studio__start_autopilot"), "it names the launch tool as this engine calls it");
-    assert.ok(!prompt.includes("Go on with what you said you would build first"), "it is not told to build itself");
   });
 });

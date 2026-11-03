@@ -718,7 +718,7 @@ export class MessageQueue {
     // Pictures that cannot be read stay behind: the words still reach the session, and the
     // message never waits as Sending… until a restart.
     for (const item of items)
-      if (item.attachmentsArtifact && !item.stills) await this.#attach(threadId, item).catch(() => {});
+      if (item.attachmentsArtifact && !item.stills) await attachStills(this.host, threadId, item).catch(() => {});
     // A switch is never read as words mid-turn: the session is cut at its next step and goes on with it.
     const switching = items.some((item) => joinKindOf(item, turn.settings) === JoinKind.Switch);
     const answer = await this.host
@@ -932,7 +932,8 @@ export class MessageQueue {
     this.host.notify("coordinator.processing", { threadId, messageId: action.messageId });
     let failed = false;
     try {
-      for (const item of [action, ...carried]) if (item.attachmentsArtifact) await this.#attach(threadId, item);
+      for (const item of [action, ...carried])
+        if (item.attachmentsArtifact) await attachStills(this.host, threadId, item);
       await this.process(action, this.#steerHandle(threadId, thread, turn));
     } catch (err: any) {
       failed = true;
@@ -965,14 +966,6 @@ export class MessageQueue {
     await this.#requeue(threadId, thread, turn, left).catch(() => {});
     turn.closed = true;
     thread.turn = null;
-  }
-  /** Put a message's stills back on it, from the artifact they were kept in. */
-  async #attach(threadId: string, action: QueueAction): Promise<void> {
-    const attachments = (await this.host.call(HostMethod.ArtifactRead, {
-      threadId,
-      artifactId: action.attachmentsArtifact,
-    })) as AnyRecord | null;
-    if (attachments?.stills) action.stills = attachments.stills;
   }
   stop(): void {
     this.#stopped = true;
@@ -1020,6 +1013,15 @@ export function steerMessageOf(item: QueueAction): SteerMessage {
     ...(images.length ? { images } : {}),
     ...(fromThePerson(item) ? {} : { from: MessageFrom.Genex }),
   };
+}
+
+/** Put a message's stills back on it, from the artifact they were kept in (`attachmentsArtifactOf`). */
+export async function attachStills(host: Pick<Host, "call">, threadId: string, action: QueueAction): Promise<void> {
+  const attachments = (await host.call(HostMethod.ArtifactRead, {
+    threadId,
+    artifactId: action.attachmentsArtifact,
+  })) as AnyRecord | null;
+  if (attachments?.stills) action.stills = attachments.stills;
 }
 
 /** The artifact a message's pictures are kept in, beside the log that keeps only their count. */

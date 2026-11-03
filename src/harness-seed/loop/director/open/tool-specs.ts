@@ -34,17 +34,15 @@ const OPEN_FINISH: LiveToolSpec = {
   },
 };
 
-/** What `save_point` does: Genex's checkpoint of the folder now. */
-const SAVE_POINT_DOES =
-  "Keep the project's folder as it is now in Genex's checkpoint: the project's plugins save their apps first, and their notes and pictures come back. rewind goes back to one.";
-/** What it keeps where no plugin saves the project's app before the checkpoint. */
+/** What `save_point` keeps where no plugin saves the project's app before the checkpoint. */
 const FILES_ONLY =
   "No plugin saves this project's app: the checkpoint keeps the files on disk only, so save inside the app first.";
 
 /** `save_point`: Genex's checkpoint of the folder now, under the lead's label. */
 const SAVE_POINT: LiveToolSpec = {
   name: OpenTool.SavePoint,
-  description: SAVE_POINT_DOES,
+  description:
+    "Keep the project's folder as it is now in Genex's checkpoint: the project's plugins save their apps first, and their notes and pictures come back. rewind goes back to one.",
   parameters: {
     type: "object",
     properties: {
@@ -68,16 +66,14 @@ const REWIND: LiveToolSpec = {
   },
 };
 
-/** What `restart` does: the project's app closed and reopened, when the turn ends; no file changes. */
-const RESTART_DOES =
-  "Close and reopen the project's app when this turn ends (its plugin's restore steps, with no file changed): after changes the app only reads when it opens.";
-/** What it does too on a project with an Unreal project in it. */
+/** What `restart` does too on a project with an Unreal project in it. */
 const RESTART_REBUILDS = "It rebuilds the game's C++ source as the app reopens.";
 
 /** `restart`: the project's app closed and reopened, when the turn ends; no file changes. */
 const RESTART: LiveToolSpec = {
   name: OpenTool.Restart,
-  description: RESTART_DOES,
+  description:
+    "Close and reopen the project's app when this turn ends (its plugin's restore steps, with no file changed): after changes the app only reads when it opens.",
   parameters: { type: "object", properties: { why: text("Why it needs a restart, in a few words.") } },
 };
 
@@ -104,7 +100,7 @@ const OPEN_STATUS: LiveToolSpec = {
 };
 
 /** What the project makes of the open lead's save points: whether a plugin saves its app first, restarts it, and rebuilds its C++. */
-export interface OpenProject {
+interface OpenProject {
   restart?: boolean;
   workers?: number;
   /** A plugin saves the project's app before Genex's checkpoint (`checkpoint.before`). */

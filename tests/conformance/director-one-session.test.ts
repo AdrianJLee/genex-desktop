@@ -285,11 +285,9 @@ for (const engine of ["claude-code", "codex"]) {
       assert.match(results.integrated, /^Merged w1's work into your folder\. Health check: /, results.integrated);
       assert.ok(!/DIRECTOR\.md/.test(lead[0]!.prompt), "no memory file in its brief");
       // Flipped: the brief opened YOU LEAD THIS LOOP and said whose session it is; the session is the chat's
-      // own, and its first message is Genex's one line: the Loop started, where it builds, its goal.
-      assert.match(
-        lead[0]!.prompt,
-        /^The Loop started; it builds in \S*integration, a git worktree of this game\. Its goal: /,
-      );
+      // own, and its first message is Genex's one line: the Loop started, and its goal. Flipped again: the
+      // line named the worktree it builds in; its session's added folder is that worktree.
+      assert.match(lead[0]!.prompt, /^The Loop started\. Its goal: /);
       assert.equal(await chatBookmark(rig, threadId), chatSession, "the chat's bookmark is still its session");
 
       // The chat goes on after the close in that same session: a question is answered there, with

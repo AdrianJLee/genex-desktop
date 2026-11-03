@@ -43,6 +43,7 @@ import {
   handNotes,
   runOver,
   saysSomething,
+  startedASession,
   toldThrough,
   type TurnAsk,
   type TurnSaid,
@@ -477,10 +478,6 @@ function openSessionRefused(loopRun: LoopRun): Partial<DelegateResult> | null {
   return null;
 }
 
-/** Did the session read its message before it ended: it has a session and took a turn. */
-const startedWorking = (result: Partial<DelegateResult>): boolean =>
-  Boolean(result?.sessionId) && (result?.turns ?? 0) > 0;
-
 /**
  * What a turn's message told the lead: heard and told once the turn worked on it, or answered; when
  * it failed first (an error, a limit, a cut before it read it), the chat's words and Genex's lines of
@@ -493,7 +490,7 @@ async function settleAsk(
   ask: TurnAsk,
   result: Partial<DelegateResult>,
 ): Promise<void> {
-  if (result?.ok !== true && !startedWorking(result)) {
+  if (result?.ok !== true && !startedASession(result)) {
     wake.owedLead = ask.lead;
     return;
   }
@@ -624,21 +621,14 @@ async function keepWake(loopRun: LoopRun, wake: WakeState, now: number): Promise
   await loopRun.saveJournal();
 }
 
-/** The lead rests: the journal holds what a restart needs, and the run's jobs are read again at once. */
-async function rest(loopRun: LoopRun, wake: WakeState, now: number): Promise<void> {
+/** The lead rests until something is due (`sleepUntilDue`), the journal holding what a restart needs; false once the Loop is done. */
+async function restUntilDue(loopRun: LoopRun, wake: WakeState, kit: TurnKit): Promise<boolean> {
+  const now = kit.clock.now();
   wake.asleepSince = now;
-  loopRun.resting = true;
   // The run's jobs are read again at once: a job the turn started is at work.
   loopRun.jobsReadAt = null;
   await keepWake(loopRun, wake, now);
-}
-
-/** The lead rests until something is due (`sleepUntilDue`); false once the Loop is done. */
-async function restUntilDue(loopRun: LoopRun, wake: WakeState, kit: TurnKit): Promise<boolean> {
-  await rest(loopRun, wake, kit.clock.now());
-  const due = await sleepUntilDue(loopRun, wake, kit);
-  loopRun.resting = false;
-  return due;
+  return sleepUntilDue(loopRun, wake, kit);
 }
 
 /** One turn of the lead's, then what waits for its end before the next (an open Loop's `afterTurn`). */

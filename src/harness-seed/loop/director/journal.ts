@@ -57,8 +57,8 @@ export function journalText(journal: AnyRecord): string | null {
 }
 
 /** The wake loop's own state, as the journal keeps it (wake.ts `journalWake` writes it). */
-export function wakeRecord(wake: Pick<WakeState, "wrapCause" | "freshSessions">): AnyRecord {
-  return { freshSessions: wake.freshSessions, wrapCause: wake.wrapCause };
+export function wakeRecord(wake: Pick<WakeState, "freshSessions">): AnyRecord {
+  return { freshSessions: wake.freshSessions };
 }
 
 /** Does this run pick up one its journal kept: a Resume of a Loop's run? */

@@ -78,8 +78,8 @@ by `main/core/conversation.ts` `runControl` (the harness's `run.control`), which
 `resume_run` that session recorded. The host records each call it answers, so the chat shows the
 session's own mirror of one as no second row, and a resume the session only recorded shows once,
 when the chat does it (`renderer/chat-entries.ts` `recordedByHost`, `isHostRunTool`). `run_status`
-reads the run's durable progress (an older log's `director_continued`, and a steer's
-`run_steering_delivered`, are not progress and stay off its list). A steer (`run_steering`) is the
+reads the run's durable progress (a steer's `run_steering_delivered` is not progress and stays off
+its list). A steer (`run_steering`) is the
 record of words for a run: the chat's words its lead took ([live chat](#live-chat-during-a-build)),
 a note about a build (main's `runFeedback`), or a Resume's. The lead reads the chat's words from its
 line and a note as it comes; each one it heard is recorded `run_steering_delivered` how `lead`.
@@ -336,8 +336,8 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   is open and nothing older waits: the `run_steering` names the message's attachments artifact
   (`attachmentsArtifactOf`), from which the lead's loop reads its pictures as image blocks. Its
   receipt then carries `coordinator_message_delivered {into: <runId>, how: "lead"}` and a
-  `run_steering {runId, text, sourceMessageId, attachmentsArtifact?, from?}` the lead's inbox
-  reads (`steers`): the words as typed, never waiting, never
+  `run_steering {runId, text, sourceMessageId, attachmentsArtifact?, from?}`, the record a Resume
+  reads it back from: the words as typed, never waiting, never
   processed, no turn or checkpoint of its own, and its bubble sits where it was delivered. A message that waited (sent while the run prepared) is handed the same
   way once `beforeProcess` (`chatWaitsFor`) answers with the lead's door. What the lead does not
   take waits for the close and is answered then, but holds nothing back: words sent after it
@@ -377,8 +377,8 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   journal, and a session that kept no new round skips the pass (`run-dispatch.ts` `keptNewRounds`).
   Stop pauses the queue — a cancelled run takes no more messages — and hands over to the oldest
   queued message
-  once the run has closed. What the lead never heard when its run ended (a Stop, a limit, a
-  crash — one while the run prepared too — or the close) goes back to the queue
+  once the run has closed. What of the chat's the lead never heard when its run ended (a Stop, a
+  limit, a crash — one while the run prepared too — or the close) goes back to the queue
   (`coordinator_message_requeued`, `LeadLine.release`) before `run_finished`, so Stop hands over to
   it too and it waits again; one handed as the line was released goes back at once. A lead's
   delivered message settles in the chat's state when its run closes. The chat answers what went

@@ -210,13 +210,11 @@ async function prepareTheStart(loopRun: LoopRun): Promise<StartOfRun> {
 
 /**
  * The Loop's first lines to its lead: that it started (or resumed), with its goal as the chat's
- * session wrote it and, for a web game, the worktree it builds in; then what the project's plugins
- * said as it prepared.
+ * session wrote it; then what the project's plugins said as it prepared.
  */
 function startLines(loopRun: LoopRun, start: StartOfRun): string[] {
   const { goal } = loopRun.run;
-  const worktree = leadsOpenLoop(loopRun) ? null : loopRun.integrationWorktree;
-  const line = resumedFromJournal(loopRun) ? LOOP_WORDS.resumed(goal, worktree) : LOOP_WORDS.started(goal, worktree);
+  const line = resumedFromJournal(loopRun) ? LOOP_WORDS.resumed(goal) : LOOP_WORDS.started(goal);
   return [line, ...start.notes];
 }
 

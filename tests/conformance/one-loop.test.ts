@@ -1629,8 +1629,10 @@ describe("the one Loop's guards while Genex brings the app back", () => {
       assert.ok(await resting.host.until(() => resting.host.workers.length === 1 && restsAfter(resting.host, 1)()));
       resting.state.broken = true;
       await done;
-      const reasons = resting.host.appended("director_continued").flatMap((wake) => wake.reasons as string[]);
-      assert.ok(!reasons.includes("app_stopping"), reasons.join(", "));
+      // Flipped: it read the resting lead's wakes (`director_continued`), which nothing records now;
+      // no message the lead was sent is that line alone.
+      const prompts = resting.host.prompts();
+      assert.ok(!prompts.includes(OPEN_NEWS.appStopping), prompts.join(" | "));
     },
   );
 
@@ -1836,6 +1838,39 @@ describe("the one Loop's close and a recovery under way", () => {
       );
       toy.host.steerTakes = true;
       const report = await toy.host.start();
+      assert.match(String(answers.at(-1)), /^Accepted/);
+      assert.ok(report.lastCheckpoint, "the lead's work after the way back is kept");
+      assert.doesNotMatch(String(report.summary), /took the folder back/);
+    },
+  );
+
+  it(
+    "a way back the message that woke the lead told it is heard too: a finish in that turn keeps its later work and says nothing of it",
+    TEST_TIMEOUT,
+    async () => {
+      const answers: unknown[] = [];
+      const toy = await crashingToy(
+        [
+          async ({ host, tool }) => {
+            await tool("save_point", { label: "One", summary: "the first room" });
+            toy.state.broken = true;
+            // The turn takes nothing said into it: the way back waits for the next message.
+            const offered = () => host.steered.some((s) => s.text === OPEN_NEWS.wentBack("One"));
+            assert.ok(await host.until(offered), "the way back was said into the turn");
+            return undefined;
+          },
+          async ({ host, tool }) => {
+            await writeFile(path.join(host.dir, "redo.txt"), "the work done again\n");
+            answers.push(
+              await tool("finish", { review: "yes", summary: "The level is built again.", proof: "redo.txt" }),
+            );
+            return undefined;
+          },
+        ],
+        { reopenFixes: false, backFixes: true },
+      );
+      const report = await toy.host.start();
+      assert.ok(String(toy.host.prompts()[1]).endsWith(OPEN_NEWS.wentBack("One")), "the way back woke the lead");
       assert.match(String(answers.at(-1)), /^Accepted/);
       assert.ok(report.lastCheckpoint, "the lead's work after the way back is kept");
       assert.doesNotMatch(String(report.summary), /took the folder back/);

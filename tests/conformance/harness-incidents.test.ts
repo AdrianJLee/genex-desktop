@@ -1582,9 +1582,11 @@ describe("the lead's later turns (wake loop)", () => {
     assert.equal(turns[2]!.resume, undefined, "a fresh session");
     assert.equal(turns[2]!.prompt, turns[1]!.prompt, "the turn's own message");
     const told = (turns[2]!.notices ?? []).join("\n");
+    // Flipped: the start line named the web build's worktree ("The Loop started; it builds in …"); its
+    // session's added folder is that worktree, and `run_status` names it.
     assert.match(
       told,
-      /Your earlier session was lost \(the session could not be resumed\); this session is new\.\nThe Loop started; it builds in /,
+      /Your earlier session was lost \(the session could not be resumed\); this session is new\.\nThe Loop started\. Its goal: /,
     );
     assert.doesNotMatch(told, /YOUR NOTES|THE RUN SO FAR|WHAT HAPPENED/);
     assert.equal(finished.stoppedBecause, "the lead finished the run");
@@ -2279,6 +2281,29 @@ describe("live chat during a build, reviewed", () => {
     assert.deepEqual(chat.requeued(), [], "the lead heard both: Stop gives neither back");
   });
 
+  it("LC19. a note about a build ahead of a chat message the lead never heard: Stop gives the chat its message back, the note stays with the run", async () => {
+    const chat = liveChat();
+    chat.hooks.cuts = false;
+    const NOTE = "[USER FEEDBACK on Sky · try 2] make it darker";
+    const one = chat.loopRun();
+    await one.run(async () => {
+      chat.append([{ type: "custom", event_type: "run_steering", payload: { runId: chat.RUN, text: NOTE } }]);
+      await settleOn(() => one.line.unheard().length === 1);
+      await chat.say("and the moon?");
+      await settleOn(() => one.line.unheard().length === 2);
+      one.ctx.cancelled = true;
+      return worked;
+    });
+    chat.closeBuild();
+    assert.deepEqual(chat.requeued(), ["and the moon?"], "the chat answers its own message");
+    const resumed = createRunInbox(one.ctx as never, { threadId: `t_${chat.RUN}`, runId: chat.RUN });
+    assert.deepEqual(
+      (await resumed.notes()).map((note) => note.text),
+      [NOTE],
+      "a Resume hands the note to its lead",
+    );
+  });
+
   /** Where each of the chat's messages stands, by its words. */
   const standing = (chat: ReturnType<typeof liveChat>) =>
     Object.fromEntries(
@@ -2763,6 +2788,30 @@ describe("a person's words woke the lead inside a digest (digest-wake)", () => {
       "woken by the note as written, and by nothing after it",
     );
     assert.equal(one.calls[1]!.said?.from, MessageFrom.Person);
+  });
+
+  it("DW8. a line the turn could not take yet is said again with the next one, and no later line is told past it", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    chat.ticks.push((now) => {
+      if (now >= chat.T0 + 10 * MINUTE_MS) one.state.finished = true;
+    });
+    await one.run(async (turn) => {
+      if (turn > 1) return worked;
+      // No session takes input yet (the call waits for the folder another chat's turn holds): refused.
+      noteEnd(one, chat.at.now, SKY_DONE);
+      await settleOn(() => chat.steers.length === 1);
+      chat.hooks.native = true;
+      noteEnd(one, chat.at.now, SEA_DONE);
+      await settleOn(() => chat.steers.length === 2);
+      return { ...worked, steered: chat.steers[1]!.messages.map((m: SteerMessage) => m.id) };
+    });
+    assert.deepEqual(
+      chat.steers.map((steer) => steer.messages.map((m: SteerMessage) => m.text)),
+      [[SKY_DONE], [SKY_DONE, SEA_DONE]],
+      "the refused line goes in again, before the one after it",
+    );
+    assert.equal(one.calls.length, 1, "both read in the turn: nothing wakes the lead for them again");
   });
 
   it("DW6. a worker's and a job's end are facts: what ended and how, with no instruction after them", () => {

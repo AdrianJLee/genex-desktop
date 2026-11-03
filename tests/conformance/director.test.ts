@@ -463,7 +463,8 @@ describe("a Loop's lead through the real core and harness", () => {
     const folderLabel = project.dir.split("/").slice(-2).join("/");
     const context = [lead.system ?? "", ...(lead.notices ?? [])].join("\n");
     assert.ok(context.includes(`the folder \`${folderLabel}\``), "the game's folder");
-    assert.match(lead.prompt, /^The Loop started; it builds in /);
+    // Flipped: the line named the worktree it builds in ("The Loop started; it builds in …").
+    assert.match(lead.prompt, /^The Loop started\. Its goal: /);
     // It sits in the game folder and builds in the integration worktree it leads.
     const worktree = lead.director!.root;
     assert.equal(await realpath(lead.cwd), await realpath(project.dir), "the lead sits in the game folder");
@@ -1176,10 +1177,8 @@ describe("a Loop interrupted and resumed", () => {
         // Flipped: the resumed brief said THE RUN RESUMES with the branch's commits beyond its start, and
         // THE USER SAYS the instruction the chat resumed it with; the chat's own session wrote that into
         // resume_run, and is the lead, so it opens with Genex's line, run_status naming the branch.
-        assert.match(
-          prompts[1]!,
-          /^The Loop resumed after a pause; it builds in \S*integration, a git worktree of this game;/,
-        );
+        // Flipped again: the line named the worktree it builds in.
+        assert.match(prompts[1]!, /^The Loop resumed after a pause; workers from before it no longer run\. Its goal: /);
         assert.match(
           results.finished2,
           /^The Loop is closed — the integrated build [0-9a-f]{10} is live/,

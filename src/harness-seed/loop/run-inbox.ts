@@ -102,8 +102,7 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   const said = Boolean(p.text?.trim() || p.attachmentsArtifact);
   const userSteer = d.event_type === RunEvent.RunSteering && said && p.source !== SteeringSource.Director;
   if (userSteer) fold.instructions.push({ id: event.id, ...p });
-  if (d.event_type === RunEvent.RunSteeringDelivered && p.how === SteerDelivery.Lead)
-    settleLeadSteers(fold, p.sourceMessageId);
+  if (d.event_type === RunEvent.RunSteeringDelivered) settleLeadSteers(fold, p.sourceMessageId ?? p.messageId);
 }
 
 /** A chat message the run's lead took (live chat): the queue recorded it for the lead, by the message it came from. */
@@ -116,16 +115,16 @@ const tookFromChat = (steer: Steer): boolean => steer.how === SteerDelivery.Lead
 const isNote = (steer: Steer): boolean => !steer.how && !steer.sourceMessageId;
 
 /**
- * The steers a run's lead took from this chat message so far are settled for the run (live
- * chat): heard, or back with the chat — and a note, by its own id, once the lead heard it. One
- * recorded later from the same message — the chat's own `resume_run` — is new.
+ * The steer a record names is settled for the run: by its own id (a note the lead heard, or any steer
+ * a paused run's log records handed over), or by the chat message a lead took it from (live chat:
+ * heard, or back with the chat). One recorded later from the same message — the chat's own
+ * `resume_run` — is new.
  */
-function settleLeadSteers(fold: InboxFold, messageId: unknown): void {
-  if (!messageId) return;
-  for (const steer of fold.instructions) {
-    const heardNote = isNote(steer) && steer.id === messageId;
-    if (heardNote || (tookFromChat(steer) && steer.sourceMessageId === messageId)) fold.settledByLead.add(steer.id);
-  }
+function settleLeadSteers(fold: InboxFold, named: unknown): void {
+  if (!named) return;
+  for (const steer of fold.instructions)
+    if (steer.id === named || (tookFromChat(steer) && steer.sourceMessageId === named))
+      fold.settledByLead.add(steer.id);
 }
 
 /** Has the run's current session (since its latest registration) been asked to wrap up? */
@@ -149,9 +148,9 @@ function leadItemOf(threadId: string, steer: Steer): QueueAction {
   };
 }
 
-/** The steers of one kind the run's lead has not heard (nor the chat answered), oldest first. */
-const unsettled = (fold: InboxFold, kind: (steer: Steer) => boolean): Steer[] =>
-  fold.instructions.filter((steer) => kind(steer) && !fold.settledByLead.has(steer.id));
+/** Of `steers` (all the run's by default), those of one kind its lead has not heard (nor the chat answered), oldest first. */
+const unsettled = (fold: InboxFold, kind: (steer: Steer) => boolean, steers = fold.instructions): Steer[] =>
+  steers.filter((steer) => kind(steer) && !fold.settledByLead.has(steer.id));
 
 /** Reads the run's thread from `after` (the whole log by default): its steers and its finish request. */
 export function createRunInbox(
@@ -161,6 +160,8 @@ export function createRunInbox(
   let cursor = after;
   let draining: Promise<void> | null = null;
   const fold = emptyInboxFold();
+  /** How many of the fold's steers `notes` has read: each note is handed once. */
+  let notesRead = 0;
   async function drain() {
     if (draining) return draining;
     draining = (async () => {
@@ -188,10 +189,12 @@ export function createRunInbox(
       await drain();
       return unsettled(fold, tookFromChat).map((steer) => leadItemOf(threadId, steer));
     },
-    /** The person's notes about the run's builds its lead has not heard, oldest first. */
+    /** The person's notes about the run's builds its lead has not heard and this inbox has not read yet, oldest first. */
     async notes(): Promise<QueueAction[]> {
       await drain();
-      return unsettled(fold, isNote).map((steer) => leadItemOf(threadId, steer));
+      const fresh = fold.instructions.slice(notesRead);
+      notesRead = fold.instructions.length;
+      return unsettled(fold, isNote, fresh).map((steer) => leadItemOf(threadId, steer));
     },
   };
 }

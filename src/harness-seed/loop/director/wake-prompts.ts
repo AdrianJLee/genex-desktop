@@ -5,17 +5,12 @@
  * lead reads them as written.
  */
 
-/** A web game's lead builds in the run's worktree, not in the folder its session sits in: the line says where. */
-const builds = (worktree: string | null): string =>
-  worktree ? `; it builds in ${worktree}, a git worktree of this game` : "";
-
 /** What Genex tells a Loop's lead. */
 export const LOOP_WORDS = {
   /** The Loop's first line: its goal, as the chat's session wrote it when it started the Loop. */
-  started: (goal: string, worktree: string | null = null) => `The Loop started${builds(worktree)}. Its goal: ${goal}`,
+  started: (goal: string) => `The Loop started. Its goal: ${goal}`,
   /** A resumed Loop's first line. */
-  resumed: (goal: string, worktree: string | null = null) =>
-    `The Loop resumed after a pause${builds(worktree)}; workers from before it no longer run. Its goal: ${goal}`,
+  resumed: (goal: string) => `The Loop resumed after a pause; workers from before it no longer run. Its goal: ${goal}`,
   /** The wrap-up turn the person's Finish starts. */
   finishAsked: "The person asked the Loop to finish: it closes when this turn ends.",
   /** The wrap-up turn a failed turn starts. */

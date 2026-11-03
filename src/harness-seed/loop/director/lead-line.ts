@@ -3,9 +3,9 @@
  * hands the lead a message the person sends (loop/live-chat.ts) instead of holding it until the
  * run is over, and the lead's own loop reads it from here (director/news.ts): at its next step in a
  * turn under way, or as the message that wakes it. What the lead heard is recorded on the run's log,
- * so a later run of the run never tells it again (run-inbox.ts). What it never heard when its run
- * ends goes back to the chat, where it waits for a turn of its own — so Stop still hands over to it.
- * A message sent before the line opens (the run still prepares its start) waits for it.
+ * so a later run of the run never tells it again (run-inbox.ts). What of the chat's it never heard
+ * when its run ends goes back to the chat, where it waits for a turn of its own — so Stop still hands
+ * over to it. A message sent before the line opens (the run still prepares its start) waits for it.
  */
 import { HostMethod } from "../host-methods.ts";
 import { EventKind, RunEvent } from "../run-events.ts";
@@ -40,10 +40,10 @@ export interface LeadLine {
   /** No more messages: the run is over for its lead. */
   shut(): void;
   /**
-   * A message was handed to it (`giveBack` returns it to the chat): a turn under way hears it at
-   * once. One handed already, by its id, is handed once.
+   * A message was handed to it: a turn under way hears it at once. `giveBack` returns it to the chat;
+   * one with none is the run's inbox's (a note, a Resume's), and stays with the run.
    */
-  hear(item: QueueAction, giveBack: GiveBack): void;
+  hear(item: QueueAction, giveBack?: GiveBack): void;
   /** Settles when the next message is handed to it. */
   heard(): Promise<void>;
   /** The messages handed to it that the lead has not heard yet, in the order sent. */
@@ -54,7 +54,7 @@ export interface LeadLine {
    */
   heardThrough(item: QueueAction): Promise<void>;
   /**
-   * The run is over: no more messages, and those its lead never heard go back to the chat. One
+   * The run is over: no more messages, and the chat's own its lead never heard go back to it. One
    * handed after this goes back at once.
    */
   release(): Promise<void>;
@@ -98,7 +98,7 @@ export function openLeadLine(
   let released = false;
   let heardCount = 0;
   let next = signal();
-  const handed: Array<{ item: QueueAction; giveBack: GiveBack }> = [];
+  const handed: Array<{ item: QueueAction; giveBack?: GiveBack }> = [];
   const line: LeadLine = {
     runId,
     threadId,
@@ -111,12 +111,11 @@ export function openLeadLine(
     },
     hear: (item, giveBack) => {
       // Handed as the run ended (its line was released while the receipt was written): nobody
-      // is left to hear it, so it goes back to the chat at once.
+      // is left to hear it, so a chat message goes back to the chat at once.
       if (released) {
-        void giveBack([item]).catch(() => {});
+        if (giveBack) void giveBack([item]).catch(() => {});
         return;
       }
-      if (item.messageId && handed.some((one) => one.item.messageId === item.messageId)) return;
       handed.push({ item, giveBack });
       const was = next;
       next = signal();
@@ -135,10 +134,10 @@ export function openLeadLine(
     release: async () => {
       line.shut();
       released = true;
-      const unheard = handed.splice(heardCount);
+      const back = handed.splice(heardCount).filter((one) => one.giveBack);
       heardCount = handed.length;
-      const first = unheard[0];
-      if (first) await first.giveBack(unheard.map(({ item }) => item)).catch(() => {});
+      const giveBack = back[0]?.giveBack;
+      if (giveBack) await giveBack(back.map(({ item }) => item)).catch(() => {});
     },
   };
   lines.set(runId, line);

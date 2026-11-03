@@ -96,6 +96,31 @@ describe("a run's inbox, read from the log", () => {
       { threadId: THREAD, messageId: "m4", text: "Genex turned the Blender plugin on.", from: "genex" },
     ]);
   });
+
+  it("a note about a build comes to the lead once, and never one a lead already got — by its heard record or the hand-over a paused run's log kept", async () => {
+    const log = fakeLog([
+      custom("run_registered", { runId: RUN }),
+      steer("[USER FEEDBACK] make the sky red"),
+      // How the seed before this one recorded a note it told the lead: by the steer's id, with no `how`.
+      custom("run_steering_delivered", { runId: RUN, messageId: "000002", facetId: "build", stage: "next brief" }),
+      steer("[USER FEEDBACK on Sky · try 2] darker"),
+      custom("run_steering_delivered", { runId: RUN, sourceMessageId: "000004", how: "lead" }),
+      steer("[USER FEEDBACK on Sea · try 1] calmer"),
+      custom("autopilot_paused", { runId: RUN }),
+      custom("run_registered", { runId: RUN, resumed: true }),
+    ]);
+    const inbox = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
+    assert.deepEqual(await inbox.notes(), [
+      { threadId: THREAD, messageId: "000006", text: "[USER FEEDBACK on Sea · try 1] calmer" },
+    ]);
+    assert.deepEqual(await inbox.notes(), [], "each note once");
+    log.append(steer("and the moon too"));
+    assert.deepEqual(
+      (await inbox.notes()).map((note) => note.text),
+      ["and the moon too"],
+      "a later one as it comes",
+    );
+  });
 });
 
 describe("a run read from the log", () => {

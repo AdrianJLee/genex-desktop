@@ -105,8 +105,6 @@ export interface LoopRunData {
   toolsInFlight?: number;
   /** The wake loop drives the lead's session (wake.ts sets it as it starts). */
   waking?: boolean;
-  /** The lead rests between turns (wake.ts sets it). */
-  resting?: boolean;
   /** The lead: its chat's own session, in the game folder (lead-session.ts). */
   lead?: LeadSeat | null;
   /** Genex's context, the lead's system text: the same as its chat's own turns send (chat-session.ts `chatContext`). */

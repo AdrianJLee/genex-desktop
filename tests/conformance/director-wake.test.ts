@@ -96,12 +96,10 @@ describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () =
    * only the loop's own state, and a Resume takes back the wakes (K5).
    */
   // Flipped: the record also kept the wake loop's kind (`loop: "wake"`), its wakes and when they were
-  // (the hourly cap's window), when it last woke and since when it slept; nothing reads them now.
-  it("J1. the journal keeps the wake loop's own state: why the wrap-up started, and the fresh sessions it spent", () => {
-    assert.deepEqual(wakeRecord({ wrapCause: WrapCause.Failed, freshSessions: 1 }), {
-      freshSessions: 1,
-      wrapCause: WrapCause.Failed,
-    });
+  // (the hourly cap's window), when it last woke and since when it slept, and why the wrap-up started
+  // (`wrapCause`); a Resume reads none of them.
+  it("J1. the journal keeps the wake loop's own state: the fresh sessions it spent", () => {
+    assert.deepEqual(wakeRecord({ freshSessions: 1 }), { freshSessions: 1 });
   });
 });
 
@@ -194,7 +192,7 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
 describe("the lost-session allowance across a Resume", () => {
   it("is kept on the journal, so a Resume does not hand a run fresh sessions it already spent", async () => {
     const { wakeRecord, restoredWake } = await import("../../src/harness-seed/loop/director/journal.ts");
-    const saved = wakeRecord({ wrapCause: null, freshSessions: 2 });
+    const saved = wakeRecord({ freshSessions: 2 });
     const restored = restoredWake(JSON.parse(JSON.stringify(saved)));
     assert.equal(restored.freshSessions, 2);
   });

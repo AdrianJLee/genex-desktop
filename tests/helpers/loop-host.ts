@@ -98,8 +98,6 @@ export type LoopHost = {
    * (live chat), as the chat's queue hands it, and kept in the run's inbox as its record.
    */
   say: (text: string) => Promise<void>;
-  /** The person's messages the lead's line gave back to the chat, by their words, in order. */
-  givenBack: string[];
   /** The chat is in Plan mode: Genex holds every writing moment and checkpoint back. */
   planning: boolean;
   /** Whether the lead's session takes what is steered into its turn (`engine.steer`); it takes nothing by default. */
@@ -531,14 +529,10 @@ export function loopHost(options: {
     return plain(method, params);
   };
   let said = 0;
-  host.givenBack = [];
   host.say = async (text) => {
     host.inbox.said.push(text);
     await host.until(() => Boolean(leadLineOf(host.run.runId)));
-    const item = { threadId: host.threadId, messageId: `m-said-${++said}`, text };
-    leadLineOf(host.run.runId)?.hear(item, async (items) => {
-      host.givenBack.push(...items.map((one) => String(one.text)));
-    });
+    leadLineOf(host.run.runId)?.hear({ threadId: host.threadId, messageId: `m-said-${++said}`, text });
   };
   host.trail = () => [...host.log];
   host.appended = (eventType) =>

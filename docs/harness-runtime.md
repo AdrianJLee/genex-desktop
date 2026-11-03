@@ -204,7 +204,8 @@ identity: a local turn's, the director's, and every worker's (the pool's, the di
 conflict, base and facet builders; `loop/workers/identity.ts`). A classic Autopilot's builders keep
 their own brief. A local turn's prompt (`loop/prompt.ts`) tells a folder with no kind yet to start web
 with `start_web_game` or find a plugin with `plugins_find`, naming each kind's tool, and one of its
-own files to look through them first. A local turn's operating rules are split:
+own files to look through them first; only it lists the workspace's skills (`formatSkillIndex`): a
+session's turn, a Loop lead's included, is told none. A local turn's operating rules are split:
 `prompts/operating-rules.md` for every turn and `prompts/operating-rules-web.md` only for a web
 game; a kept agent-edited `operating-rules.md` from before the split still carries the web rules,
 so a web game then reads them twice; it and a kept `loop/prompt.ts` that reads no
@@ -866,10 +867,9 @@ job that ended, the project's app that stopped or came back, a rewind or restart
 that ran, what Genex did with the folder). A worker's line is `worker w1 "Sky" ended: done.`, a job's
 `job j1 "Light bake" (… started by you) failed (exit 3) after 4 min.`: what ended and how, no
 instruction after it. The lead's first message is Genex's line that the Loop started, with its goal
-as the chat's session wrote it into `start_autopilot` (a web game's also names the worktree it builds
-in) and a line per note the plugins gave at `run.prepare`, `from: genex`: the chat's session already
-holds the person's words, and Genex's context is its system text. A resting lead is woken by the
-person's message at once — the leading unheard messages of one sender joined as written, pictures as
+as the chat's session wrote it into `start_autopilot`, and a line per note the plugins gave at
+`run.prepare`, `from: genex`: the chat's session already holds the person's words, and Genex's
+context is its system text. A resting lead is woken by the person's message at once — the leading unheard messages of one sender joined as written, pictures as
 image blocks, `from: person`, Genex's untold lines beside them as a notice — or, with no message
 waiting, by Genex's untold lines alone, `from: genex`: an app that stopped at once, a worker's or a
 job's end `WAKE_DEBOUNCE_MS` after the first of them, a folder line never (`wake-schedule.ts`
@@ -877,17 +877,21 @@ job's end `WAKE_DEBOUNCE_MS` after the first of them, a folder line never (`wake
 run stands. While a turn works, one watch (`watchTurn`) says each new line into it (`engine.steer`,
 `interrupt: false`, `from: genex`) and hands it each message the person sends as written
 (`interrupt` when the turn may be cut: an engine that takes no input mid-turn, its first turn
-included, outside a tool call); a line or a message the session took counts as heard while it works,
-and what it never read (`DelegateResult.steered`) is told again with its next message. A turn the
+included, outside a tool call); the lines its own message carries, and a line or a message the
+session took, count as heard while it works, and what it never read (`DelegateResult.steered`) is
+told again with its next message. A line it did not take (no session takes input yet: the call waits
+for the folder, or out an outage) goes in again with the next one, before it. A turn the
 person's words cut short resumes at once with those words, and Genex's own lines of a message no turn
 worked on (its start, its wrap-up) go beside them. What the lead heard is kept in two places only:
-the line, which records each message heard (`run_steering_delivered` how `lead`) and gives back
-what was never heard when the run ends, and the run's `waitSeq`, which the journal keeps (a Resume
-tells what is past it). The person's notes about a build (a reply to a build, main's `runFeedback`)
-reach the run's inbox and no queue, so the watch hands them to the line as they come; a resumed run's
-line is handed the messages its lead took and never heard before the app quit. A fresh session for
-a lost one is asked the turn's own message, with Genex's line that the earlier session was lost
-(`LEAD_FRESH_START`) and how the Loop began beside it, and the chat so far for a session new to the
+the line, which records each message heard (`run_steering_delivered` how `lead`) and gives the chat
+back its own messages never heard when the run ends, and the run's `waitSeq`, which the journal keeps
+(a Resume tells what is past it). The person's notes about a build (a reply to a build, main's
+`runFeedback`) reach the run's inbox and no queue, so the watch hands each to the line once as it
+comes, and one never heard stays with the run for its Resume; a resumed run's line is handed the
+messages its lead took and never heard before the app quit. A steer a `run_steering_delivered`
+names (by its id, or by the chat message it came from) is never handed again, an older seed's
+hand-over record included. A fresh session for a lost one is asked the turn's own message, with
+Genex's line that the earlier session was lost (`LEAD_FRESH_START`) and how the Loop began beside it, and the chat so far for a session new to the
 chat (`freshChat`).
 
 #### Claims, the person's finish and worker approvals

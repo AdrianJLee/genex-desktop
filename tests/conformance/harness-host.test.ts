@@ -352,7 +352,7 @@ describe("harness host: self-modification", () => {
           goal: "wedge",
           project: "pong",
           reference: { name: "Pong (1972)", shots: [] },
-          budgets: { wallClockMs: 60_000 },
+          budgets: {},
         },
       })
       .catch(() => {});
@@ -444,7 +444,7 @@ describe("harness host: crash handling", () => {
             goal: "explode",
             project: "pong",
             reference: { name: "ref", shots: [] },
-            budgets: { wallClockMs: 1_000 },
+            budgets: {},
           },
         })
         .catch(() => {});

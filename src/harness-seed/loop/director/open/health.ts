@@ -65,13 +65,9 @@ const RECOVERY_SETTLE_MS = OPEN_CLOSE_MS / 2;
 /** Whether the Loop began to close, or closed: a recovery under way stops at its next step, and says nothing. */
 const closing = (loopRun: LoopRun): boolean => closeUnderWay(loopRun.state) || loopRun.state.finished;
 
-/** Until when a reopened app may take to answer: `REOPEN_WAIT_MS` from now, within the run. */
-const reopenUntil = (loopRun: LoopRun, open: OpenLoop): number =>
-  Math.min(open.clock.now() + REOPEN_WAIT_MS, loopRun.finalDeadline);
-
 /** Waits until the project's app answers again; why it didn't, or null once it does (or the run was stopped). */
 async function answersAgain(loopRun: LoopRun, open: OpenLoop): Promise<Failed | null> {
-  const until = reopenUntil(loopRun, open);
+  const until = open.clock.now() + REOPEN_WAIT_MS;
   const stopped = () => closing(loopRun);
   const ready = await waitReady(loopRun.ctx, loopRun.game, runScope(loopRun), open.clock, until, stopped);
   if (ready.ok || loopRun.ctx.cancelled || closing(loopRun)) return null;

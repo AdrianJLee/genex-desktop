@@ -115,7 +115,7 @@ it("a local lead starts real persisted local workers in copies, merges their wor
       engine: "bonsai",
       model,
       reference: { name: "parts", shots: [] },
-      budgets: { wallClockMs: 15 * 60000 },
+      budgets: {},
     });
     const log = await waitForLog(
       rig.core,

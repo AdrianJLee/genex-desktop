@@ -14,7 +14,7 @@ project, and graph: a request to wait for the remaining workers could start a se
 
 ## Ownership
 
-- The harness owns run identity, the plan, worktrees, scheduling, deadline and cancellation.
+- The harness owns run identity, the plan, worktrees, scheduling and cancellation.
   It reserves one run per thread/project synchronously, before planning or any model request.
 - The chat owns conversation: the harness's queue (`loop/message-queue.ts`) and the chat's own
   session. Messages are persisted before acknowledgement and queued in order per chat. A
@@ -56,11 +56,9 @@ project, and graph: a request to wait for the remaining workers could start a se
   Optional **Resume** also keeps the journal; a run interrupted by a quit or a crash is repaired
   at boot as paused, keyed on its journal artifact rather than on `mode`, so a director run is
   resumable too. A resumed
-  director run goes on from its journal with the working time it had left — never a fresh
-  budget — and time spent paused
-  does not count (a run whose worked time used its working time
-  gets only its wrap-up) — with the workers, the defects nobody owns and the news from before the
-  pause in its lead's first digest
+  director run goes on from its journal with no clock, as every Loop
+  ([what ends a Loop](harness-runtime.md#what-ends-a-loop)), with the workers, the defects nobody
+  owns and the news from before the pause in its lead's first digest
   ([the full journal](agent/architecture.md#the-run-director-workers-and-judging)). Starting a
   second run while one owns the project is rejected independently of any model prompt or UI
   state. A run that has begun writing its own end (`ActiveRun.closing`, set just before its
@@ -260,9 +258,9 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
 - **A turn that starts a Loop.** A turn whose session launches a Loop hands its workers on
   (`workers/carry.ts`): a Loop in the game folder takes the turn's pool over (its run's pool is the
   same pool re-scoped to the run, `run-pool.ts` `runPool`), so they keep going as the run's; for a
-  Loop on a copy the launch waits only for a writer in the game folder (`LAND_WAIT_MS`); any other
+  Loop on a copy the launch waits for a writer in the game folder to end (`landWorkers`); any other
   still at work stops, a copy's work kept on its ref.
-  A pool no run takes within `CARRY_TAKE_MS`, or whose launch failed, closes. The launch takes the
+  A pool whose run was refused at its start, or whose launch failed, closes (`closeCarriedPool`). The launch takes the
   settings of the message the turn followed last (`details.followed`, `chat-dispatch.ts`
   `followedSettings`).
 - **Delivered is final.** The turn it joined answers it: it never gets a processing event or a
@@ -313,8 +311,9 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   harness sent; a lead reads only that worktree of the run's folder, beside the game folder and the
   run's own artifacts. Its lock is that worktree, not the game folder, so the chat's other turns
   there and Make it live go on while it thinks; a turn refused because the lock is held
-  (`DelegationRefusal.FolderBusy`, the error's `code`) is asked again after a wait, and a first turn
-  refused for good ends as a failed turn rather than the run's crash (`wake.ts` `askSession`). The
+  (`DelegationRefusal.FolderBusy`, the error's `code`) is asked again after each wait until the lock
+  is free, as an open Loop's lead waits for its folder; a Stop during the wait ends it as a failed
+  turn rather than the run's crash (`wake.ts` `waitsForFolder`). The
   host keeps a `chatSession` lead's session as the chat's `contractor` after each turn; the harness
   writes its `contractor_session` when it changed (`bookmarkLead`). Claude Code reads without
   Write, Edit or Bash; Codex, which can always write where it is started, runs from a scratch
@@ -379,8 +378,7 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   turn cut before its session began is asked its brief again,
   never crashing the run); otherwise `interrupt: false` leaves the turn alone, as for a fresh lead's
   first turn, which has no session to resume yet. Genex's own lines said into a turn — a worker or
-  a job ended (`turn-news.ts`, `open/news.ts`), the working time's lines (`cap-lines.ts`) — go
-  `from: genex`. Words a turn did not read, or that a turn failed
+  a job ended (`turn-news.ts`, `open/news.ts`) — go `from: genex`. Words a turn did not read, or that a turn failed
   before working on, open its next message (`wake.owed`). A cut is never a failed turn. A message
   is heard once a turn works on (or answers) the message that told it, or reads it mid-turn
   (`LeadLine.heardThrough`, counted after the inbox is read), and is recorded heard

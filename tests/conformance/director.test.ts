@@ -29,7 +29,6 @@ import {
   type FakePreview,
   type Rig,
 } from "../helpers/studio-rig.ts";
-import { StopWhy } from "../../src/harness-seed/loop/finish-contract.ts";
 import { buildRunGraph } from "../../src/renderer/run-graph.ts";
 import { directorTool } from "../../src/harness-seed/loop/director.ts";
 
@@ -234,7 +233,7 @@ async function webRun(
     mode: "autopilot",
     engine: "codex",
     reference: { name: "plaza", shots: [] },
-    budgets: { wallClockMs: 15 * 60_000 },
+    budgets: {},
   });
   const events = await waitForLog(
     rig.core,
@@ -289,7 +288,6 @@ function finishingLoopRun(over: { finishing?: boolean; hold?: Promise<void> } = 
   const loopRun: Record<string, any> = {
     ctx: { cancelled: false },
     run: { runId: "run_finish", project: "finish-game", goal: "a red plaza", engine: "codex" },
-    softDeadline: Date.now() + 60 * 60_000,
     report: {},
     state,
     inbox: { finishing: async () => over.finishing === true, steers: async () => [], steering: async () => [] },
@@ -318,28 +316,28 @@ describe("the lead's finish", () => {
     assert.equal(theirs.closes[0]?.victory, false, "a Finish the person asked for claims nothing");
   });
 
-  it("a timed build's finish once its hours are spent closes as its time running out; an idle or asked-for wrap-up does not", async () => {
-    const { finish } = await import("../../src/harness-seed/loop/director/integrate.ts");
-    const timed = { wallClockMs: 60 * 60_000, completionPolicy: "duration" };
-    // A wrap-up brings `softDeadline` to now whatever its cause; the run's own clock keeps its cap.
-    const wrappedUp = (cap: number, over: { finishing?: boolean } = {}) => {
-      const run = finishingLoopRun(over);
-      run.loopRun.run.budgets = timed;
-      run.loopRun.softDeadline = Date.now() - 1000;
-      run.loopRun.clock = { started: cap - 60 * 60_000, softDeadline: cap, finalDeadline: cap + 15 * 60_000 };
-      return run;
+  it("a Stop that refused a closing finish's landing pauses the build; one after it landed ends nothing more", async () => {
+    // Moved from loop-time-cap.test.ts (no clock); its time-out half went with the clock.
+    const { endedAs } = await import("../../src/harness-seed/loop/director/integrate.ts");
+    const STOPPED = { ok: false, why: "stopped", reason: "stopped by the user" };
+    const LANDED = { ok: true, how: "fresh-health-pass", line: "made live" };
+    const closing = (over: { cancelled: boolean; state: Record<string, unknown> }, landed: object = STOPPED) => {
+      const loopRun = {
+        ctx: { cancelled: over.cancelled },
+        journal: { phase: "running" },
+        report: {} as Record<string, unknown>,
+        run: { runId: "run_w", project: "plaza", budgets: {} },
+        state: { integrationHead: "a".repeat(40), ...over.state },
+      };
+      endedAs(loopRun as never, landed);
+      return loopRun;
     };
-    const late = wrappedUp(Date.now() - 60_000);
-    await finish(late.loopRun as never, { summary: "where it got to", land: "no" });
-    assert.equal(late.closes[0]?.ended, StopWhy.Time, "the wrap-up at the cap: the hours ran out");
-    const idle = wrappedUp(Date.now() + 60 * 60_000);
-    await finish(idle.loopRun as never, { summary: "nothing more to do", land: "no" });
-    assert.equal(idle.closes.length, 1, "an idle lead's wrap-up closes it");
-    assert.equal(idle.closes[0]?.ended, undefined, "with an hour left, not as its time running out");
-    const asked = wrappedUp(Date.now() + 60 * 60_000, { finishing: true });
-    await finish(asked.loopRun as never, { summary: "as far as it got", land: "no", victory: "no" });
-    assert.equal(asked.closes.length, 1, "the person's own finish closes it");
-    assert.equal(asked.closes[0]?.ended, undefined, "the person's finish is no time-out");
+    const finish = { summary: "done", land: true, victory: true, at: 0 };
+    const stopped = closing({ cancelled: true, state: { finish } });
+    assert.equal(stopped.report.executionStatus, "paused", "Resume picks it up");
+    assert.equal(stopped.report.stillToFix, undefined, "a pause keeps its own words, with no list");
+    const late = closing({ cancelled: true, state: { finish } }, LANDED);
+    assert.equal(late.report.executionStatus, "completed", "a Stop after the landing: the build is done, no Resume");
   });
 
   it("a finish with no summary closes nothing; a second finish while one is under way is refused at once, and the run closes once", async () => {
@@ -477,7 +475,8 @@ describe("a Loop's lead through the real core and harness", () => {
     assert.ok(worker.cwd.includes(path.join("autopilot", runId)), worker.cwd);
 
     // Tool answers, across the studio → harness dispatch.
-    assert.ok(results.status0.time.hardMinutesLeft <= 30, JSON.stringify(results.status0.time));
+    // Flipped (no clock): run_status names no time left.
+    assert.equal(results.status0.time, undefined, JSON.stringify(results.status0.time));
     assert.equal(results.status0.integration.worktree, worktree);
     assert.deepEqual(results.status0.workers, []);
     assert.ok(
@@ -1100,7 +1099,7 @@ describe("a Loop interrupted and resumed", () => {
             mode: "autopilot",
             engine: "codex",
             reference: { name: "sign", shots: [] },
-            budgets: { wallClockMs: 30 * 60_000 },
+            budgets: {},
           })
           .catch(() => {});
         await waitForLog(rig.core, () => Boolean(results.head), 120_000, "the first session's merge");

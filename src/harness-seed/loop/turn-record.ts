@@ -21,8 +21,6 @@ export const TurnStop = {
   EngineLimited: "engine_limited",
   /** The loop spent every tool round it was given. */
   MaxRounds: "max_rounds",
-  /** The run's wall clock ran out mid-turn. */
-  Deadline: "deadline",
   /** The chat's session started a Loop: the outcome's `details.run` is its spec. */
   LaunchRun: "launch_run",
   /** The harness restarts itself into an edit (`restart_studio`). */

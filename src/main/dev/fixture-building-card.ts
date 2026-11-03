@@ -1,15 +1,13 @@
 /**
  * The `building-card` fixture: a racing Loop still going, for the chat's Building card and its list
  * of parts, after five earlier Loops of the same chat that finished, so Builds holds its six builds
- * in the picker (more than its three tabs). Of the
- * plan's five parts two are added, one works on its second round with its time left, one was
- * stopped and restarted (`replaces`, one row) and works on its first round, and one has not
- * started; the Loop was given 4 hours, and its lead takes the chat's messages (live chat). Written
- * once the app has started: the start closes every run an earlier app left open, so a Loop still
- * going written before it would read as stopped.
+ * in the picker (more than its three tabs). Of the plan's five parts two are added, one works on its
+ * second round, one was stopped and restarted (`replaces`, one row) and works on its first round, and
+ * one has not started; its lead takes the chat's messages (live chat). Written once the app has
+ * started: the start closes every run an earlier app left open, so a Loop still going written before
+ * it would read as stopped.
  */
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
-import { HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { WorkerEnd, WorkerIsolation, WorkerStopCode } from "../../shared/workers.ts";
@@ -62,10 +60,6 @@ const EARLIER: readonly EarlierLoop[] = [
     parts: [["garage", "Garage and paint picker", "0f60718293a4b5c6d7e8f90a1b2c3d4e5f607182"]],
   },
 ];
-/** The time the Loop was given, shown under the card's clock ("up to 4h"). */
-const LOOP_MS = 4 * HOUR_MS;
-/** How long the car part's round has left when the fixture is written. */
-const CARS_LEFT_MS = 25 * MINUTE_MS;
 
 /** The plan's parts, in its order: id and title. */
 const PLAN: ReadonlyArray<[string, string]> = [
@@ -132,8 +126,8 @@ function finishedLoop(project: string, loop: EarlierLoop): EventData[] {
   ];
 }
 
-/** The Loop: its plan, two parts added, one at work with its time left, one restarted, one waiting. */
-function buildingLoop(project: string, now: number): EventData[] {
+/** The Loop: its plan, two parts added, one at work, one restarted, one waiting. */
+function buildingLoop(project: string): EventData[] {
   const run = fixtureRun({ runId: RUN_ID, project });
   const stopped = "stopped by the director: the facades start again on the new street grid";
   return [
@@ -142,7 +136,6 @@ function buildingLoop(project: string, now: number): EventData[] {
       goal: GOAL,
       engine: EngineId.ClaudeCode,
       model: FIXTURE_MODEL,
-      budgets: { wallClockMs: LOOP_MS },
     }),
     run(CustomEvent.AutopilotStarted, {
       director: true,
@@ -173,7 +166,6 @@ function buildingLoop(project: string, now: number): EventData[] {
       facetId: "cars",
       facetTitle: "Cars: clear-coat finish",
       iteration: 2,
-      deadlineMs: now + CARS_LEFT_MS,
     }),
     ...begins(run, "world", "World: building facades"),
     roundEnds(run, "world", "World: building facades", stopped),
@@ -199,5 +191,5 @@ export async function seedBuildingCard(core: StudioCore, project: string, thread
   const events = await core.store.listEvents(threadId);
   if (events.some((e) => customRecord(e.data)?.payload.runId === RUN_ID)) return;
   const earlier = EARLIER.flatMap((loop) => finishedLoop(project, loop));
-  await core.append([...earlier, ...buildingLoop(project, Date.now())], threadId);
+  await core.append([...earlier, ...buildingLoop(project)], threadId);
 }

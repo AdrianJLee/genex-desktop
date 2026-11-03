@@ -12,20 +12,12 @@
  * and a seed upgrade keeps an older copy of either the agent edited, which never imported it.
  */
 import { HostMethod } from "../host-methods.ts";
-import { MINUTE_MS, SECOND_MS } from "../time.ts";
+import { SECOND_MS } from "../time.ts";
 import { WorkerIsolation } from "./contract.ts";
 import type { WorkerPool } from "./pool.ts";
 import { isWorking, persist, recordsArtifact, type WorkerRecord, WorkerState, type WorkerScope } from "./records.ts";
 
-/**
- * How long a carried pool waits for its run to take it before its workers stop, as a turn's would:
- * long enough for a run that waits to start (its folder busy, a sign-in checked), short enough that
- * workers whose run never came do not work on unwatched.
- */
-export const CARRY_TAKE_MS = 10 * MINUTE_MS;
-/** How long a launch waits for its turn's workers to finish before the rest stop and the build starts. */
-export const LAND_WAIT_MS = 30 * MINUTE_MS;
-/** How often a landing wait looks for a Stop, and a carried pool whether its run took it. */
+/** How often a landing wait looks for a Stop. */
 const LAND_POLL_MS = SECOND_MS;
 
 /** What becomes of a chat turn's workers as it ends: stop (the default), finish first, or carry into its build. */
@@ -36,8 +28,8 @@ export const WorkersEnd = {
 } as const;
 export type WorkersEnd = (typeof WorkersEnd)[keyof typeof WorkersEnd];
 
-/** Pools a launched Loop takes over, by chat, with the turn that started them and what ends their wait. */
-const carried = new Map<string, { pool: WorkerPool; turn: string; taken: () => void }>();
+/** Pools a launched Loop takes over, by chat, with the turn that started them. */
+const carried = new Map<string, { pool: WorkerPool; turn: string }>();
 
 /** A writer works in the game folder itself: it holds the chat's lock for its life, which no run can take over. */
 function writesInPlace(record: WorkerRecord): boolean {
@@ -54,30 +46,13 @@ export function carriedEnd(pool: WorkerPool): WorkersEnd {
 
 /**
  * Hand this chat turn's pool to the Loop it launched. The run's pool takes it once it opens
- * (`takeCarriedPool`); one nobody takes within `CARRY_TAKE_MS` closes, its workers stopped.
+ * (`takeCarriedPool`); a launch whose run never takes it (refused at its start, or failed) closes it
+ * (`closeCarriedPool`), its workers stopped.
  */
 export function carryPool(threadId: string, turn: string, pool: WorkerPool): void {
   const earlier = takeCarriedPool(threadId);
   if (earlier) void earlier.pool.close().catch(() => {});
-  let isTaken = false;
-  carried.set(threadId, {
-    pool,
-    turn,
-    taken: () => {
-      isTaken = true;
-    },
-  });
-  void closeUntaken(threadId, pool, () => isTaken);
-}
-
-/** Close a carried pool its run has not taken within `CARRY_TAKE_MS`; a pool taken meanwhile stops the wait. */
-async function closeUntaken(threadId: string, pool: WorkerPool, taken: () => boolean): Promise<void> {
-  const { clock } = pool.state.scope;
-  const until = clock.now() + CARRY_TAKE_MS;
-  while (!taken() && clock.now() < until) await clock.sleep(Math.min(LAND_POLL_MS, until - clock.now()));
-  if (taken() || carried.get(threadId)?.pool !== pool) return;
-  carried.delete(threadId);
-  await pool.close().catch(() => {});
+  carried.set(threadId, { pool, turn });
 }
 
 /** The pool a Loop launched from this chat takes over, if one waits; it is the taker's from now on. */
@@ -85,11 +60,10 @@ export function takeCarriedPool(threadId: string): { pool: WorkerPool; turn: str
   const waiting = carried.get(threadId);
   if (!waiting) return null;
   carried.delete(threadId);
-  waiting.taken();
-  return { pool: waiting.pool, turn: waiting.turn };
+  return waiting;
 }
 
-/** A launch that did not start: the pool it was to take over closes, its workers stopped. */
+/** A launch whose run did not take its pool (it never started, or was refused): the pool closes, its workers stopped. */
 export async function closeCarriedPool(threadId: string): Promise<void> {
   const waiting = takeCarriedPool(threadId);
   await waiting?.pool.close().catch(() => {});
@@ -125,23 +99,21 @@ export async function adoptPool(
 
 /**
  * Let a turn's writers in the game folder finish before the build its launch starts: what they
- * write lands in the folder the build starts from. They are waited for, up to `LAND_WAIT_MS` and
- * until a Stop, then the pool closes as a turn's does: anything still at work stops (a reader, a
- * copy whose work nobody is left to mark, a writer waiting on the person or past the wait). Says
- * so on the status line.
+ * write lands in the folder the build starts from. They are waited for until they end or a Stop,
+ * then the pool closes as a turn's does: anything still at work stops (a reader, a copy whose work
+ * nobody is left to mark, a writer waiting on the person). Says so on the status line.
  */
 export async function landWorkers(
   pool: WorkerPool,
   ctx: { readonly cancelled?: boolean; setStatus?: (status: string) => void },
 ): Promise<void> {
   const { clock } = pool.state.scope;
-  const until = clock.now() + LAND_WAIT_MS;
   const running = () =>
     pool.state.records.filter((record) => record.state === WorkerState.Running && writesInPlace(record));
   if (running().length) ctx.setStatus?.("starting the Loop once the workers finish");
-  while (running().length && !ctx.cancelled && clock.now() < until) {
+  while (running().length && !ctx.cancelled) {
     const runs = running().flatMap((record) => pool.state.runs.get(record.id) ?? []);
-    await Promise.race([...runs, clock.sleep(Math.min(LAND_POLL_MS, until - clock.now()))]);
+    await Promise.race([...runs, clock.sleep(LAND_POLL_MS)]);
   }
   await pool.close();
 }

@@ -570,6 +570,19 @@ describe("Genex event log", () => {
     });
   });
 
+  it("reads a run whose start names no clock, as every Loop's now does, as goal-bound", async () => {
+    const noClock = path.join(scratch, "exoharness-no-clock");
+    const store = await EventStore.open(noClock, "studio", {
+      now: () => PROMPT_AT + 9000,
+      ids: createUuidv7Generator(),
+    });
+    const thread = await store.createThread({ title: "eval", threadId: "eval-thread" });
+    const start = customEventData(CustomEvent.RunRegistered, { runId: "run_b", project: "proj", budgets: {} });
+    await store.appendEvents(thread, [start]);
+    const { inApp } = await readGenexEvents(noClock, PROMPT_AT);
+    assert.deepEqual(inApp.budgets, { completionPolicy: "goal" });
+  });
+
   it("reads the first preview_ready, the judges' completion calls by role, and a close's stop code", () => {
     const envelope = (ms: number, n: number, data: EventData): EventEnvelope => ({
       id: `evt_${String(n).padStart(3, "0")}`,

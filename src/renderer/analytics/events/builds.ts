@@ -287,7 +287,6 @@ export type RunFinishedProperties = {
   duration_ms: number | null;
   /** The time it worked, pauses left out; null when it started before this launch. */
   worked_ms: number | null;
-  loop_hours: number | null;
   rounds_accepted: number;
   rounds_rejected: number;
   profile: LoopProfile | null;
@@ -353,7 +352,6 @@ export type BuildsEventProperties = {
     step: FinishCheckStep;
     rejections: number | null;
     stopped: boolean;
-    time_left: boolean;
     done_count: number;
     not_done_count: number;
     reviewer_engine: EngineId | null;
@@ -511,8 +509,6 @@ const lengthOf = (value: unknown): number => (Array.isArray(value) ? value.lengt
 export const amountOf = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 const flagOf = (value: unknown): boolean | null => (typeof value === "boolean" ? value : null);
-const hoursOf = (value: unknown): number | null =>
-  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 
 /** A vocabulary's word, or `other` for a string it does not know; null for none. */
 function wordOrOther<V extends string>(vocabulary: Readonly<Record<string, V>>, value: unknown): V | Unlisted | null {
@@ -826,7 +822,6 @@ const finishCheck: Reader = (payload, at, memory) => {
       step,
       rejections: amountOf(payload.rejections),
       stopped: payload.stopped === true,
-      time_left: payload.timeLeft === true,
       done_count: lengthOf(payload.done),
       not_done_count: lengthOf(payload.notDone),
       reviewer_engine: oneOf(EngineId, fieldsOf(payload.reviewer).engine),
@@ -888,7 +883,6 @@ const runFinished: Reader = (payload, at, memory) => {
       victory: payload.victory === true,
       duration_ms: amountOf(payload.durationMs),
       worked_ms: before && closed ? workedMs(closed.worked, at.at) : null,
-      loop_hours: hoursOf(fieldsOf(payload.stillToFix).hours),
       rounds_accepted: rounds.accepted,
       rounds_rejected: rounds.rejected,
       profile: oneOf(LoopProfile, payload.profile),

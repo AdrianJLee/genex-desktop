@@ -10,9 +10,7 @@ import { HOOK_PROMPTS } from "../hooks-prompts.ts";
 import { HostMethod } from "../host-methods.ts";
 import { RunEvent } from "../run-events.ts";
 import { askSecondOpinion, pictureFile, picturesIn, SECOND_OPINION_WORDS } from "../second-opinion.ts";
-import { minutes } from "../time.ts";
 import { WorkerTool } from "../workers/contract.ts";
-import { capRefusesWorker, runNow } from "./cap-lines.ts";
 import { retainSpan, timedOperation } from "./timing.ts";
 import { plainly } from "./rules.ts";
 import { DirectorTool, headSynced } from "./tool-specs.ts";
@@ -52,14 +50,8 @@ export function resolveRoot(
 
 /** Where the run stands, as `run_status` answers. */
 export async function statusText(loopRun: LoopRun): Promise<AnyRecord> {
-  const { finalDeadline, inbox, integrationRef, integrationWorktree, pool, softDeadline, started, state } = loopRun;
-  const now = Date.now();
+  const { inbox, integrationRef, integrationWorktree, pool, state } = loopRun;
   return {
-    time: {
-      elapsedMin: minutes(now - started),
-      workingMinutesLeft: minutes(softDeadline - now),
-      hardMinutesLeft: minutes(finalDeadline - now),
-    },
     integration: {
       worktree: integrationWorktree,
       head: state.integrationHead ? shortSha(state.integrationHead) : null,
@@ -147,17 +139,12 @@ async function judgeTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
 /** Whether the lead's finish closes the run (or it closed): no worker would run after it. */
 const runOver = (state: LoopRun["state"]): boolean => state.finished || Boolean(state.finish) || closeUnderWay(state);
 
-/**
- * A worker tool, answered by the run's pool; a new worker is refused once the run is finishing, once
- * the user asked to finish, or past the Loop's cap.
- */
+/** A worker tool, answered by the run's pool; a new worker is refused once the run is finishing, or once the user asked to finish. */
 async function poolTool(loopRun: LoopRun, name: string, args: AnyRecord): Promise<string> {
   const { pool } = loopRun;
   if (!pool) return "this run has no workers";
   if (name === WorkerTool.Start) {
     if (runOver(loopRun.state)) return RUN_OVER_NO_WORKERS;
-    const capped = capRefusesWorker(loopRun, runNow(loopRun));
-    if (capped) return capped;
     if (await finishAsked(loopRun)) return FINISH_ASKED_NO_WORKERS;
   }
   return pool.call(name, args);

@@ -36,7 +36,7 @@ import { HostMethod } from "../../shared/harness-api.ts";
 import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
 import { PluginSourceKind } from "../../shared/plugins.ts";
-import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { SECOND_MS } from "../../shared/duration.ts";
 import { CredentialState } from "../../substrate/session-credentials.ts";
 import { StudioPlatform } from "../../shared/boot.ts";
 import { recommendModels, type HardwareInfo } from "../../substrate/hardware.ts";
@@ -528,8 +528,6 @@ async function checkCredentialedPlugins(buildSmoke: BuildSmoke): Promise<void> {
 }
 
 /** The build smoke's fixture game, its thread and run, and the helpers every scenario uses. */
-/** The time the follow smoke's run was given: its status reads "… of 30 min". */
-const FOLLOW_RUN_WALL_CLOCK_MS = 30 * MINUTE_MS;
 /** How long a follow shot waits for the restored window to paint. */
 const FOLLOW_SHOT_SETTLE_MS = 700;
 /** Longer than Live's old automatic swap took (five seconds): long enough to see that nothing swaps now. */
@@ -1841,7 +1839,7 @@ async function checkFollowRounds(buildSmoke: BuildSmoke): Promise<FollowRun> {
   await followEvent(CustomEvent.RunStarted, {
     goal: "Follow active rounds",
     mode: "director",
-    budgets: { wallClockMs: FOLLOW_RUN_WALL_CLOCK_MS },
+    budgets: {},
   });
   await followEvent(CustomEvent.AutopilotStarted, { director: true, maxParallel: 2, facets: [] });
   for (const id of ["water", "fish"]) {
@@ -1899,15 +1897,15 @@ async function checkFollowRounds(buildSmoke: BuildSmoke): Promise<FollowRun> {
   return { followRun, followEvent };
 }
 
-/** The build's time against its budget, and the lead's node while every part waits for it. */
+/** The build's worked time, with no limit beside it, and the lead's node while every part waits for it. */
 async function checkRunTimeAndLead(buildSmoke: BuildSmoke, { followRun, followEvent }: FollowRun): Promise<void> {
   const { check, waitFor } = buildSmoke;
   const { pushUiEvent } = buildSmoke.ctx;
   await followShot(buildSmoke, "follow-working");
   check(
-    "the build's time is told against the time it was given on the stage, and as its cap in the chat",
+    "the build's time is told as the time it worked on the stage, with no limit there or in the chat",
     await waitFor(
-      `document.querySelector('[data-testid="build-status"]')?.textContent.includes(' of 30 min')&&!!document.querySelector('[data-build-status]')?.textContent.includes('up to 30m')&&!document.querySelector('[data-build-activity],[data-worker-state]')`,
+      `!!document.querySelector('[data-testid="build-status"]')?.textContent.includes(' min')&&!document.querySelector('[data-testid="build-status"]')?.textContent.includes(' of ')&&!!document.querySelector('[data-build-status]')&&!document.querySelector('[data-build-status]')?.textContent.includes('up to')&&!document.querySelector('[data-build-activity],[data-worker-state]')`,
     ),
   );
   // Every part judged and done, nothing merged yet: the lead has the run, and the graph says so.
@@ -3222,7 +3220,7 @@ async function checkScriptedDirector(computerSmoke: ComputerSmoke): Promise<void
     mode: "autopilot",
     engine: EngineId.Codex,
     reference: { name: "sign", shots: [] },
-    budgets: { wallClockMs: 10 * 60_000 },
+    budgets: {},
   });
   const dirFinished = (await core.listAllEvents())
     .filter((e) => e.data.type === EventKind.Custom && e.data.event_type === CustomEvent.RunFinished)

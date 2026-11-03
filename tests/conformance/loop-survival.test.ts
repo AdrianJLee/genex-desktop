@@ -19,8 +19,6 @@ import { copyProject, Project } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { summarizeRun } from "../../src/shared/run-summary.ts";
 
-const MINUTE = 60_000;
-
 /** A run's record, as the runner is chosen for it. */
 const RUN = { runId: "run-survival", goal: "a level", project: "lantern", engine: "claude-code" };
 
@@ -146,17 +144,20 @@ describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
       dir,
       facts: [{ id: "unreal-project", path: "." }],
       manifest: unrealManifest as unknown as LoopManifest,
-      // Flipped: a goal Loop, whose claim may come at any time (a timed one claims only in its last turn).
-      run: { runId: "run-one-loop", budgets: { wallClockMs: 30 * MINUTE, completionPolicy: "goal" } },
+      // Flipped (no clock): the run named 30 minutes of working time; a Loop has none. A turn that
+      // ends with nothing at work closes it, so the person's words wake each next turn.
+      run: { runId: "run-one-loop", budgets: {} },
       turns: [
-        async ({ tool }) => {
+        async ({ host, tool }) => {
           await work("a");
           await tool("save_point", { label: "One", summary: "first" });
+          host.inbox.said.push("Go on.");
           return undefined;
         },
-        async ({ tool }) => {
+        async ({ host, tool }) => {
           await work("b");
           await tool("rewind", { label: "One" });
+          host.inbox.said.push("Go on.");
           return undefined;
         },
         async ({ tool }) => {

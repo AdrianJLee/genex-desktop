@@ -1,12 +1,11 @@
 /**
- * What a web game's Loop lead reads: its brief (who it is, the goal, its time, where it builds, its
- * tools), the wrap-up, a resumed run's note and the words after an engine's limit. Mechanics only:
+ * What a web game's Loop lead reads: its brief (who it is, the goal, where it builds, its tools), the
+ * wrap-up and a resumed run's note. Mechanics only:
  * what the game is and how it looks, plays or is built are the user's and the lead's to decide.
  * Model-facing: the lead reads it as written.
  */
 import { shortSha } from "../git.ts";
 import { appIdentity } from "../project-prompts.ts";
-import { minutes } from "../time.ts";
 import { folderLabelOf } from "../workers/identity.ts";
 import { MAX_WORKERS_AT_ONCE, WorkerTool } from "../workers/contract.ts";
 import { DirectorTool } from "./tool-specs.ts";
@@ -25,8 +24,6 @@ const HEALTH_WORDS: Readonly<Record<string, string>> = {
 /** What the web lead's brief is made of. */
 export interface DirectorBriefFacts {
   run: Run;
-  softDeadline: number;
-  finalDeadline: number;
   integrationWorktree: string;
   baseCommit: string | null;
   /** The game folder the chat's session sits in. */
@@ -44,16 +41,6 @@ export interface DirectorBriefFacts {
 /** What a lead is told of Genex's plugin search, by the tools' own names. */
 const PLUGIN_SEARCH_LINE = `PLUGINS: Genex's plugin search: ${ProjectTool.PluginsFind}; ${ProjectTool.PluginsSuggest} shows the person its card.`;
 
-/** The time paragraph: the hours are a cap, and finish ends the Loop whenever the goal is reached. */
-function timeWords({
-  softDeadline,
-  finalDeadline,
-}: Pick<DirectorBriefFacts, "softDeadline" | "finalDeadline">): string {
-  const left = Math.max(0, minutes(softDeadline - Date.now()));
-  const all = Math.max(0, minutes(finalDeadline - Date.now()));
-  return `TIME: about ${left} working minutes (${all} in all). The time is a cap, not a quota: call finish when the goal is reached.`;
-}
-
 /** The lead's brief, Genex's identity first (a fresh session reads this brief alone). */
 export function directorBrief(facts: DirectorBriefFacts): string {
   const { run, integrationWorktree, baseCommit, gameFolder, skills = [] } = facts;
@@ -61,7 +48,6 @@ export function directorBrief(facts: DirectorBriefFacts): string {
     appIdentity({ folderLabel: folderLabelOf(gameFolder, run.project), facts: facts.facts ?? [] }),
     `YOU LEAD THIS LOOP. You are this chat's own session, leading a Loop on the game "${run.project}". Your cwd is the game folder the user sees (${gameFolder}). You build in the run's integration worktree (${integrationWorktree}), a git worktree of the game at ${shortSha(baseCommit ?? "")}, by its full path; commit there. Leave the game folder as the user left it: finish lands the integration branch there.`,
     `THE GOAL: ${run.goal}`,
-    timeWords(facts),
     `WORKERS (optional, up to ${facts.workersAtOnce ?? MAX_WORKERS_AT_ONCE} at once): ${WorkerTool.Start} hands one task to a worker in the background, with the tools you have. A writer works in its own copy of the integration branch (isolation copy); ${WorkerTool.Mark} used merges its work into the integration worktree, and Genex runs one health check of the merged build (the page loads, no uncaught errors, the screenshot is not blank). A reader (isolation read) looks and writes nothing. ${WorkerTool.Wait}, ${WorkerTool.Status}, ${WorkerTool.Steer} and ${WorkerTool.Stop} reach them.`,
     `SECOND OPINION (optional): ${DirectorTool.Judge} hands pictures you name (or a screenshot of the integration build) and your question to a model that did none of the work. It decides nothing.`,
     PLUGIN_SEARCH_LINE,
@@ -73,17 +59,15 @@ export function directorBrief(facts: DirectorBriefFacts): string {
   ].join("\n\n");
 }
 
-/** The wrap-up's message: the working time is over, and what is left to do. */
+/** The wrap-up's message: what is left to do (`wrapLead` says why it started). */
 export function wrapUpPrompt({
   run,
-  finalDeadline,
   integrationHead,
   integrationHealthy,
   running = [],
   userAsked = false,
 }: {
   run: Run;
-  finalDeadline: number;
   integrationHead: string | null;
   integrationHealthy: boolean | null;
   running?: readonly string[];
@@ -92,7 +76,7 @@ export function wrapUpPrompt({
   const head = integrationHead ? shortSha(integrationHead) : "none";
   const health = HEALTH_WORDS[String(integrationHealthy)] ?? "";
   return [
-    `Run ${run.runId}: ${userAsked ? "the user asked to finish" : "the working time is over"}; ${minutes(finalDeadline - Date.now())} minutes remain. Start no worker.`,
+    `Run ${run.runId}: start no worker.`,
     running.length
       ? `Workers still running: ${running.join(", ")} — finish stops them; merge what you want to keep first.`
       : "",
@@ -120,9 +104,4 @@ export function resumeNote({
     ? ` — ${aheadOfBase} ${commits} beyond the starting point ${shortSha(baseCommit ?? "")}`
     : "";
   return `THE RUN RESUMES: the integration branch stands at ${shortSha(forkCommit ?? "")}${ahead}. Workers from before the pause no longer run; run_status lists the run.`;
-}
-
-/** What the lead's session is told after an engine limit it was made to wait out. */
-export function limitResumePrompt(waitedMinutes: number): string {
-  return `The engine's limit paused you for ${waitedMinutes} minutes; your workers kept running. Call run_status, then continue where you were.`;
 }

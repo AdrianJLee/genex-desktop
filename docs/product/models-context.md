@@ -50,7 +50,7 @@ restores only the game); modes an engine cannot honour are greyed
 ([by engine](../tool-permissions.md#other-engines)). Chats keep their mode; new ones inherit the
 last Auto, Manual or Accept edits. Chats and leads work anywhere on your Mac with your access,
 workers with the lead's tools in your mode but never in sign-ins, Genex's data or other games; a
-question lapses unanswered after five minutes ([details](../tool-permissions.md)).
+question waits for your answer ([details](../tool-permissions.md)).
 
 Read denials cover sensitive system/account locations; Codex's are advisory, not whole-disk
 isolation.

@@ -66,6 +66,8 @@ describe("the loop's self-test (the architect's bar)", () => {
   it("passes on the shipped seed", async () => {
     const result = await runSelftest();
     assert.equal(result.ok, true);
-    assert.ok(result.passed.length >= 9);
+    // Flipped (no clock): at least nine steps passed; the working time's two (its clock, its wrap-up
+    // reserve) went with the clock.
+    assert.ok(result.passed.length >= 7);
   });
 });

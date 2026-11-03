@@ -286,8 +286,8 @@ the [feature map](feature-map.md). A file a chat names links once main confirms 
 **Composer.** What the composer's controls show is specified in the
 [prompt composer design](design.md#prompt-composer). It has no Loop control: a send carries
 text, pictures, plan review and the message's `roles`, and the chat's agent decides whether to start
-a Loop (`start_autopilot`), which runs `budgets.untilSatisfied` under a 24 h `wallClockMs` ceiling
-(`chat-dispatch.ts` `LOOP_BUDGETS`). The
+a Loop (`start_autopilot`), which runs with no time limit
+([what ends a Loop](../harness-runtime.md#what-ends-a-loop)). The
 permissions pill (`ComposerPermissionMenu`) sets a Claude chat's mode. A
 saved `fast` preference is dropped. One composer effort (`ComposerEffort`,
 `effortScale`/`unifiedEffort` over the orchestrator's levels) is mapped per role by `nearestEffort`
@@ -573,18 +573,17 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
 - Workers are Genex's one worker pool (`loop/workers/`): a copy worker forks from the integration
   head and `worker_mark used` merges its work back, then the one health check runs
   (`director/integrate.ts` `afterMerge`, `loop/health-check.ts`: the host's `preview.observe` in a
-  window of the run's own). A lock is refused on a web Loop; past the cap, or once finish was asked,
-  no worker starts.
+  window of the run's own). A lock is refused on a web Loop; once finish was asked, no worker
+  starts.
 - The wake loop (`loop/director/wake.ts`, rules `wake-schedule.ts`, words `wake-prompts.ts`): the
   lead ends its turn and the harness resumes the session with a digest (the user's words verbatim,
   what happened, where the run stands) when the user speaks or asks to finish, a worker ends or
-  asks, a job ends, the app crashes, a turn reaches its cap or the wrap-up is due; no heartbeat or
-  reminder wakes it, and a lead that ended a turn simply rests until one of those happens (an open Loop's lead
-  whose turn changed something is woken again at once); each wake appends `director_continued`.
+  asks, a job ends, the app crashes or the wrap-up is due; no heartbeat or reminder wakes it. A
+  lead that ended a turn rests while workers or jobs are at work, and a turn that ends with nothing
+  at work closes the Loop; each wake appends `director_continued`.
 - The full journal (`loop/director/journal.ts`): each save writes the run's record on
-  `journal.director` (clock with `workedMs`, health, recent log, wake state). A Resume gets the
-  working time left (`loopRunClock`, paused time excluded) and reads the rest back
-  (`restoreLoopRun`).
+  `journal.director` (health, recent log, wake state). A Resume reads it back (`restoreLoopRun`);
+  an earlier seed's `clock` in it is read by nothing.
 - The chat's messages reach the lead as written, each with its sender, once per steer and run:
   mid-turn one steer each, and after a cut the resume of one sender's words at a time (the
   person's `from: person`); Genex's own messages and lines said into a turn go `from: genex`
@@ -597,7 +596,8 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
   [after the build](../conversation-lifecycle.md#after-the-build-the-same-session)).
 - Each turn of the lead's session ends with a host-written `session_activity` (`completed`,
   `interrupted` or `failed`), never a `turn_ended`, so the chat shows the build between turns.
-- The Loop's time is a soft cap (`loop/time-cap.ts`); both closes are one function (`closeTheLoopRun`).
+- A Loop has no clock ([what ends a Loop](../harness-runtime.md#what-ends-a-loop)); both closes are
+  one function (`closeTheLoopRun`).
 
 **Refs and the user's repository.** Everything a run must find later lives on the studio's refs:
 `refs/studio/runs/<runId>/integration`, its workers' copies' refs and `refs/studio/snap/<id>`
@@ -616,8 +616,8 @@ untouched; the mandatory rescue snapshot is named on
 **Verdicts.** Every health check and close leaves one record, `verdictRecord()` in `loop/verdict.ts`:
 `{ pass, build, against, observed, measured, seen, decision, because }`, where `because` has no id,
 sha or harness word; the lead's health checks and close append `director_verdict`. The Builds result
-panel shows the staged build's newest record (`headVerdict`). An engine limit is waited out when it
-resets well before the deadline; otherwise the run closes paused, naming the limit.
+panel shows the staged build's newest record (`headVerdict`). An engine limit pauses the run, naming
+the limit; the host's auto-resume resumes it at the limit's reset.
 
 **Landing.** At the close the harness stops workers, syncs the head and lands when the head moved
 beyond the start and passed its health check; it asks no judge. A claim is the lead's word

@@ -107,7 +107,7 @@ Every project's Loop is the director's wake loop, in one of two profiles (`LoopP
 - **Profile**: `web` for a web game at the root beside nothing but `web-game`/`blender-assets`
   facts (an integration copy, builders, judges, landing); `open` for any other project.
 - **Open Loop / lead in place**: the open profile (`loop/director/open/`): the chat's own session
-  writes in the game folder (`director.inPlace`), in turns of at most 45 minutes, starts workers
+  writes in the game folder (`director.inPlace`), starts workers
   from the run pool (the plugins' worker types among them) and claims `finish`, which a reviewer
   checks. Not the web run's **Lead / one session**, which builds in the integration worktree.
 - **Save point**: the open lead's checkpoint (`save_point`): Genex's snapshot of the game folder
@@ -163,11 +163,6 @@ Every project's Loop is the director's wake loop, in one of two profiles (`LoopP
   `finish_check` record (`src/main/core/finish-review.ts`). A yes closes the run as reviewed; a no
   goes back to the lead and decides nothing. Builds draws it as Checking, Not yet, Done or Stopped
   (`FinishCheckState`, `FinishLook` in `src/renderer/run-tree.ts`).
-- **Soft cap**: a Loop's time (`loop/time-cap.ts`): a heads-up 15 minutes before, time's up
-  at the cap (no new workers then), 15 minutes' grace (`GRACE_MS`), then Genex closes it with what
-  is and isn't done ("not checked by a reviewer" when no claim reached one since it last opened);
-  a Loop the chat starts runs until its lead finishes, under a 24-hour cap (a timed Loop from an
-  older version keeps its hours). The lead's finish ends it early.
 
 ## Three meanings of "loop"
 

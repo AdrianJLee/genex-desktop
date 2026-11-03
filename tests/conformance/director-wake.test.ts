@@ -3,14 +3,13 @@ import { describe, it } from "node:test";
 import {
   afterTurn,
   DirectorLoop,
-  passDeadline,
+  nextWake,
   TurnEnd,
-  WRAP_UP_MARGIN_MS,
   WrapCause,
 } from "../../src/harness-seed/loop/director/wake-schedule.ts";
 import * as wakePrompts from "../../src/harness-seed/loop/director/wake-prompts.ts";
 import { wakeRecord } from "../../src/harness-seed/loop/director/journal.ts";
-import { HOUR_MS, MINUTE_MS } from "../../src/harness-seed/loop/time.ts";
+import { HOUR_MS } from "../../src/harness-seed/loop/time.ts";
 import {
   bookmarkLead,
   chatBookmark,
@@ -22,39 +21,29 @@ import { CHAT_SO_FAR_MESSAGES, chatSoFar } from "../../src/harness-seed/loop/dir
 const T0 = Date.UTC(2026, 8, 25, 14, 0, 0);
 
 describe("when the lead is woken (wake-schedule.ts)", () => {
-  it("W7. a turn that ends with nothing running rests the lead: never asked what next, never wrapped up for being quiet", () => {
-    const quiet = { ok: true, closed: false, workingTimeLeft: true, finishRequested: false };
-    // Flipped (phase 5 audit): the second idle turn used to start the wrap-up (`WrapCause.Idle`) after an
-    // "idle_ask" wake; the lead rests until something happens or the working time ends.
+  // Flipped (no clock): the rows for the working time's wrap-up (`WrapCause.Deadline`), the open
+  // Loop's turn cap (`TurnEnd.Continue`) and carry-on (`TurnEnd.CarryOn`) and the pass's deadline
+  // (`passDeadline`) are gone with them: a Loop has no clock.
+  it("W7. a turn that ends rests the lead; the person's Finish or a failed turn starts the one wrap-up", () => {
+    const quiet = { ok: true, closed: false, finishRequested: false };
     assert.deepEqual(afterTurn(quiet), { next: TurnEnd.Sleep });
     assert.deepEqual(afterTurn({ ...quiet, closed: true }), { next: TurnEnd.Close });
     assert.deepEqual(afterTurn({ ...quiet, ok: false }), { next: TurnEnd.WrapUp, wrapCause: WrapCause.Failed });
-    assert.deepEqual(afterTurn({ ...quiet, workingTimeLeft: false }), {
-      next: TurnEnd.WrapUp,
-      wrapCause: WrapCause.Deadline,
-    });
-    assert.deepEqual(afterTurn({ ...quiet, workingTimeLeft: false, finishRequested: true, ok: false }), {
+    assert.deepEqual(afterTurn({ ...quiet, finishRequested: true }), {
       next: TurnEnd.WrapUp,
       wrapCause: WrapCause.Finish,
     });
-    assert.deepEqual(
-      afterTurn({ ...quiet, worked: true }),
-      { next: TurnEnd.CarryOn },
-      "an open Loop's lead whose turn changed something is woken again at once",
-    );
+    assert.deepEqual(afterTurn({ ...quiet, finishRequested: true, ok: false }), {
+      next: TurnEnd.WrapUp,
+      wrapCause: WrapCause.Finish,
+    });
   });
 
   it("W7b (provider lost). a turn a lost provider failed closes the run paused — never the wrap-up that lands a build", () => {
     // A wrap-up after a lost provider would land a build nobody could check.
-    const lost = {
-      ok: false,
-      closed: false,
-      providerLost: true,
-      workingTimeLeft: true,
-      finishRequested: false,
-    };
+    const lost = { ok: false, closed: false, providerLost: true, finishRequested: false };
     assert.deepEqual(afterTurn(lost), { next: TurnEnd.Close });
-    assert.deepEqual(afterTurn({ ...lost, workingTimeLeft: false }), { next: TurnEnd.Close });
+    assert.deepEqual(afterTurn({ ...lost, finishRequested: true }), { next: TurnEnd.Close });
     assert.deepEqual(afterTurn({ ...lost, ok: true }), { next: TurnEnd.Close });
     assert.deepEqual(
       afterTurn({ ...lost, providerLost: false }),
@@ -63,35 +52,19 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     );
   });
 
-  it("a turn cut by its own cap goes on at once, never into the wrap-up as a failed turn", () => {
-    const quiet = { ok: true, closed: false, workingTimeLeft: true, finishRequested: false };
-    const capped = { ...quiet, ok: false, capped: true };
-    assert.deepEqual(afterTurn(capped), { next: TurnEnd.Continue });
-    assert.deepEqual(afterTurn({ ...capped, ok: true }), { next: TurnEnd.Continue });
-    // The run is over, or its working time is: the cap changes nothing then.
-    assert.deepEqual(afterTurn({ ...capped, closed: true }), { next: TurnEnd.Close });
-    assert.deepEqual(afterTurn({ ...capped, providerLost: true }), { next: TurnEnd.Close });
-    assert.deepEqual(afterTurn({ ...capped, workingTimeLeft: false }), {
-      next: TurnEnd.WrapUp,
-      wrapCause: WrapCause.Deadline,
-    });
-    // Without the cap, a failed turn wraps up as it always did.
-    assert.deepEqual(afterTurn({ ...capped, capped: false }), { next: TurnEnd.WrapUp, wrapCause: WrapCause.Failed });
-  });
-
-  it("W9. a pass the lead asks for in the wrap-up has the wrap-up's time, not the working deadline that moved to its start", () => {
-    const clocks = { softDeadline: T0 + HOUR_MS, finalDeadline: T0 + 2 * HOUR_MS };
-    assert.equal(passDeadline({ ...clocks, now: T0 }), T0 + HOUR_MS, "while working: the working deadline");
-    assert.equal(
-      passDeadline({ ...clocks, now: T0 + HOUR_MS + MINUTE_MS }),
-      T0 + 2 * HOUR_MS - WRAP_UP_MARGIN_MS,
-      "wrapping up: the run's end, less the wrap-up's margin",
-    );
-    // A finish request moved the working deadline to the moment it started the wrap-up.
-    assert.equal(
-      passDeadline({ now: T0, softDeadline: T0, finalDeadline: T0 + HOUR_MS }),
-      T0 + HOUR_MS - WRAP_UP_MARGIN_MS,
-    );
+  it("W8. no clock wakes a resting lead: with nothing unread and nobody waiting, nothing is ever due", () => {
+    for (const now of [T0, T0 + HOUR_MS, T0 + 48 * HOUR_MS]) {
+      const view = {
+        now,
+        unread: [],
+        asleepFromSeq: 0,
+        asleepSince: T0,
+        userWaiting: false,
+        finishNew: false,
+        wakesAt: [],
+      };
+      assert.equal(nextWake(view), null, `nothing due ${(now - T0) / HOUR_MS} h on`);
+    }
   });
 });
 

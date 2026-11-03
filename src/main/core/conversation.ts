@@ -665,8 +665,7 @@ export class ConversationService {
       .catch((err) =>
         this.#core.append([{ type: EventKind.Error, message: `Could not resume ${runId}: ${String(err)}` }], threadId),
       );
-    // A lead's build goes on with the working time it had left (the harness's journal.ts `loopRunClock`).
-    return "Resume requested for the same run. Its saved plan and completed work will be retained; a lead's build goes on with the working time it had left, and time spent paused does not count.";
+    return "Resume requested for the same run. Its saved plan and completed work will be retained.";
   }
 
   /** The build a show or land names, the game it is in, and the commit it means (none for live or an unknown name). */

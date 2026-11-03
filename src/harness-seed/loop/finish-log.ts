@@ -1,7 +1,7 @@
 /**
  * What a finish check reads of its run's log besides its inbox: which of the run's messages are the
- * person's own words and which the chat's agent relayed (`resume_run`, a reopen's ask
- * are its words, not the person's), and the newest round of the run's checks so far, so a round's
+ * person's own words and which the chat's agent relayed (`resume_run`'s ask is its words, not the
+ * person's), and the newest round of the run's checks so far, so a round's
  * number never repeats whatever the journal that kept the count. A log that cannot be read says
  * every message was relayed and no round was recorded. A module of its own, so the shipped parts that
  * read the inbox need no new name.

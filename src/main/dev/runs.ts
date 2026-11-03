@@ -24,13 +24,6 @@ export interface RunRecords {
   readArtifact(threadId: string, artifactId: string): Promise<unknown>;
 }
 
-/** The run's clock as its journal last saved it. */
-export interface DevRunClock {
-  softDeadline: string | null;
-  finalDeadline: string | null;
-  workedMs: number | null;
-}
-
 /** One run, as `runs` reports it. */
 export interface DevRun {
   runId: string;
@@ -44,7 +37,6 @@ export interface DevRun {
   workedMs: number;
   /** Its journal's phase, when it has a journal. */
   phase: string | null;
-  clock: DevRunClock | null;
   /** Its own newest record: when, and which. */
   lastEventAt: string | null;
   lastEventType: string | null;
@@ -64,7 +56,7 @@ interface RunTrail {
 }
 
 /** The journal fields `runs` reports. */
-type Journal = { phase?: unknown; director?: { clock?: Record<string, unknown> } } | null;
+type Journal = { phase?: unknown } | null;
 
 const text = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
@@ -90,17 +82,6 @@ function runTrails(events: readonly EventEnvelope[]): Map<string, RunTrail> {
 function listedRuns(events: readonly EventEnvelope[], active: boolean): RunExecution[] {
   const current = active ? (runExecution(events)?.runId ?? null) : null;
   return [...runExecutions(events).values()].filter((run) => run.state !== RunState.Finished || run.runId === current);
-}
-
-function clockOf(journal: Journal): DevRunClock | null {
-  const clock = journal?.director?.clock;
-  if (!clock) return null;
-  const worked = clock.workedMs;
-  return {
-    softDeadline: text(clock.softDeadline),
-    finalDeadline: text(clock.finalDeadline),
-    workedMs: typeof worked === "number" && Number.isFinite(worked) ? worked : null,
-  };
 }
 
 /** The journal a Resume continues from (`studio-core.ts` `resumeAutopilot`), or null. */
@@ -129,7 +110,6 @@ async function describe(
     endedAt: run.endedAt,
     workedMs: workedMs(run.worked, now),
     phase,
-    clock: clockOf(journal),
     lastEventAt: trail?.last?.at ?? null,
     lastEventType: trail?.last?.type ?? null,
     stoppedBecause: text(close?.stoppedBecause),

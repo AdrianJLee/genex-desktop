@@ -125,7 +125,6 @@ export async function realNearest(target: string): Promise<string> {
  */
 export async function workerChat(
   options: {
-    leadAskTimeoutMs?: number;
     consentTimeoutMs?: number;
     neverTouchGames?: string[];
     /** How the core starts agent jobs (`job-tools`); a lite core's default is the sandbox's. */

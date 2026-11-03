@@ -3,14 +3,12 @@
  * bridges it in each turn of the chat's own session on the person's words; a run's turn, words
  * Genex wrote and the Studio's chat never have it). It lives here, outside `tools/`, so a direct engine's tool loop, which cannot lead a Loop,
  * is never handed it. The session decides when to call it; the tool says only what it does. The
- * harness runs it once the reply has ended (chat-dispatch.ts `launchFromIntake`), and every Loop
- * goes until its lead finishes it (`LOOP_BUDGETS` there).
+ * harness runs it once the reply has ended (chat-dispatch.ts `launchFromIntake`).
  */
 import type { AnyRecord, HarnessTool, ToolCtx } from "../types/harness.d.ts";
 import { RunMode } from "./run-events.ts";
 import { storeItemsOf } from "./store-items.ts";
 import { TurnStop } from "./turn-record.ts";
-import { UNTIL_DONE_WORDS } from "./until-done-prompts.ts";
 
 /** How many words of the ask a new folder's name keeps, and how long that name may be. */
 const SLUG_WORDS = 3;
@@ -117,6 +115,6 @@ export const startAutopilot: HarnessTool = {
       ...(ctx.roles ? { roles: ctx.roles } : {}),
       ...storeArgs(args),
     };
-    return { ok: true, content: `Building ${UNTIL_DONE_WORDS}.`, stopTurn: TurnStop.LaunchRun, details: { run } };
+    return { ok: true, content: "Building.", stopTurn: TurnStop.LaunchRun, details: { run } };
   },
 };

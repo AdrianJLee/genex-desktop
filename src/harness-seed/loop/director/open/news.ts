@@ -4,17 +4,14 @@
  * project's app that stopped and what Genex did. Each goes into the turn under way (`engine.steer`, never
  * cutting it short), once; a line the session read (`DelegateResult.steered`, settled when its call
  * ends) is not told again by a digest, and one it did not read rides the next digest as news always
- * did — a line a replaced session took included. The lines of the Loop's cap ride the same rounds
- * (cap-lines.ts, whose time's-up alone may cut a session that can't read it). The health watch looks
- * at the project's app on the same rounds. While the lead rests, the wake loop's own rounds read the
+ * did — a line a replaced session took included. The health watch looks at the project's app on the
+ * same rounds. While the lead rests, the wake loop's own rounds read the
  * questions and the app.
  */
 import type { DelegateResult } from "../../../types/host-api.d.ts";
 import { HostMethod } from "../../host-methods.ts";
 import { MessageFrom } from "../../steer-delivery.ts";
 import { closeUnderWay } from "../close-latch.ts";
-import { settleCapLines, steerCapLine } from "../cap-lines.ts";
-import { StopReason } from "../../outage.ts";
 import { SECOND_MS } from "../../time.ts";
 import { RUN_POOL_WORDS } from "../../workers/prompts.ts";
 import { waitingWorkers } from "../../workers/questions.ts";
@@ -98,14 +95,13 @@ function newsFor(loopRun: LoopRun, open: OpenLoop, watch: TurnWatch): LoopRunLog
     .filter((entry) => !watch.tried.has(entry.seq));
 }
 
-/** Whether the Loop is closing or closed: its lead hears no more news, and no reminder. */
+/** Whether the Loop is closing or closed: its lead hears no more news. */
 const closing = (loopRun: LoopRun): boolean => loopRun.state.finished || closeUnderWay(loopRun.state);
 
 /**
- * One look at a turn under way: the app, the questions, the jobs, then the news and the reminder.
- * A Loop Genex paused, or one the person stopped, ends the session again instead (one its first abort
- * missed: the host had not seated it yet); a closing Loop's lead hears nothing more, and one whose
- * finish is checked no reminder to save.
+ * One look at a turn under way: the app, the questions, the jobs, then the news. A Loop Genex paused,
+ * or one the person stopped, ends the session again instead (one its first abort missed: the host had
+ * not seated it yet); a closing Loop's lead hears nothing more.
  */
 async function lookOnce(loopRun: LoopRun, open: OpenLoop, watch: TurnWatch, pollJobs: () => Promise<void>) {
   if (open.halted || loopRun.ctx.cancelled === true) return abortLead(loopRun);
@@ -121,19 +117,6 @@ async function lookOnce(loopRun: LoopRun, open: OpenLoop, watch: TurnWatch, poll
     open.heard.add(entry.seq);
     watch.taken.set(id, entry.seq);
   }
-  // The heads-up before the Loop's cap and the time's-up at it (cap-lines.ts).
-  if (!closing(loopRun)) await steerCapLine(loopRun, open.clock.now());
-}
-
-/**
- * Whether one session call of the lead's took an act of its own: a tool call (a session that only
- * answers reports one turn; an engine that counts none is given the benefit of the doubt), or a cut
- * at its cap, which only a session at work reaches.
- */
-function sessionActed(result: Partial<DelegateResult> | undefined): boolean {
-  if (!result) return false;
-  if (result.stopReason === StopReason.Deadline) return true;
-  return typeof result.turns !== "number" || result.turns > 1;
 }
 
 /** Whether one session call of the lead's opened a session that read its message (the wake loop's `startedWorking`). */
@@ -150,8 +133,8 @@ function settleTaken(open: OpenLoop, watch: TurnWatch, result: Partial<DelegateR
 /**
  * Watches one session call of an open Loop's lead (the module's header) until `stop`; `pollJobs`
  * reads the run's job ends into its log, as the resting loop does. `settle` takes the call's result:
- * what its session did not read is told again, and whether it acted is kept for the turn's end
- * (`OpenLoop.sessionActed`).
+ * what its session did not read is told again, and whether it read its message is kept
+ * (`OpenLoop.sessionWorked`).
  */
 export function watchOpenTurn(
   loopRun: LoopRun,
@@ -181,9 +164,6 @@ export function watchOpenTurn(
     },
     settle: (result) => {
       settleTaken(open, watch, result);
-      settleCapLines(loopRun, result);
-      // Every call of the turn counts: a turn cut short and resumed acted if any of its calls did.
-      if (sessionActed(result)) open.sessionActed = true;
       if (startedASession(result)) open.sessionWorked = true;
     },
   };

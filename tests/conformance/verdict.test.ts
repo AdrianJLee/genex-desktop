@@ -540,7 +540,7 @@ describe("every pass of a real run writes one", () => {
       mode: "autopilot",
       engine: "codex",
       reference: { name: "plaza", shots: [] },
-      budgets: { wallClockMs: 15 * 60_000 },
+      budgets: {},
     });
     const events = await waitForLog(
       rig.core,

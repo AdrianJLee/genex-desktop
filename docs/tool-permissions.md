@@ -71,8 +71,8 @@ Bypass itself (its own safety checks) is allowed by the host at once, with no ca
 applied once its control arrives. Each question is routed by the host (`#leadAsk`) for the chat's
 mode at that moment, whether or not the person is talking to it: Bypass allows one running in
 another mode, or one its screen asked first (by `toolUseId`), Plan denies (a build is approved work), Auto, Manual and Accept edits
-card, withdrawn when nobody answers within `LEAD_ASK_TIMEOUT_MS` (five minutes); an archived
-chat's is denied at once. Every call but a read (Read, Glob, Grep, LS, NotebookRead), the
+card that waits for the person, as the chat's own session's does; an archived chat's is denied at
+once. Every call but a read (Read, Glob, Grep, LS, NotebookRead), the
 session's own bookkeeping (ToolSearch, TodoWrite) and the studio's `mcp__studio__*` tools passes
 the host's screen first (`#screenLeadCall`, a PreToolUse hook, which Claude Code runs before its
 deny, ask and allow rules and in every mode): while the session runs in Auto, Accept edits or
@@ -355,10 +355,8 @@ Its questions go to the chat ([`chat-permissions.ts`](../src/main/core/chat-perm
 `forWorker`, `#workerAsk`): a chat closed since denies at once, Bypass allows one running in another
 mode, Plan denies, and anything else is a `tool_permission` card naming the worker
 (`ToolPermissionEvent.worker`; the card reads "Scene builder wants to …"). A run worker's card waits
-as a lead's does (`#workerCard`): it outlives the chat's turns and is withdrawn when nobody answers
-within `LEAD_ASK_TIMEOUT_MS`, which the worker reads as not a no: the person may be away, the call
-did not run, and it carries on with the rest of the work; a turn worker's waits until its turn
-ends. Only the asking call waits: the lead and the other workers go on, and no run halts or drops
+as a lead's does (`#workerCard`): it outlives the chat's turns and waits for the person; a turn
+worker's waits until its turn ends. Only the asking call waits: the lead and the other workers go on, and no run halts or drops
 work over a pending card (`goal_update blocker=approval_required` leaves the run going). The person's answer, a switch to Bypass, a Stop or the worker's end settle it too. "Always" keeps grants as for the chat's own session (never a
 mode), so the next worker and the chat's own session stand on them. No agent's message answers a
 card: the harness cannot write `tool_permission` rows (`refuseHostRecords`), and a steered message
@@ -409,12 +407,13 @@ workCwd`: a web lead's in the build it leads, never the game folder it sits in; 
 chat's jobs; a worker only its own of its run or turn.
 
 The card (`askForJob`, `tool: "Job"`) follows the asker's terms: the chat's own session's ends with
-its turn, a lead's waits `LEAD_ASK_TIMEOUT_MS` and outlives the turn, a worker's names the worker
+its turn, a lead's waits for the person and outlives the turn, a worker's names the worker
 and waits as its other questions do (a run worker's as a lead's). Its
 question is plain words ("Scene builder wants to run Unreal build in the background"); the command
 sits only in the row's `input` (`{title, command, folder}`), folded under Details. No "always".
 
-A job ends by itself, by `job_stop`, at its time limit (`hours`, 2 by default, at most 24), when
+A job ends by itself, by `job_stop`, at the time limit its starter set (`hours`, one minute at
+least; a job with none has no deadline), when
 its run settles (the harness's own `run.settled`: its lead's and its workers' jobs), when the chat
 turn that started its worker returns, and when Genex quits. A harness crash or restart ends none. When Genex itself died, its next start marks
 each job still recorded as running interrupted and ends its process group (Windows: its tree,
@@ -665,9 +664,8 @@ builds with its own hands; its run's other worktrees, other runs and `runs/` sta
 `#ask` appends a pending `tool_permission` row (input digest bounded, plan ≤32k characters),
 emits `tool.permission` and waits on `ToolPermissions`
 ([`src/main/tool-permissions.ts`](../src/main/tool-permissions.ts)): the plugin consent ledger
-without a timeout (a worker's card included), except a lead's card, withdrawn after `LEAD_ASK_TIMEOUT_MS`
-(5 minutes, `by: timeout`, "Withdrawn: nobody answered"; Claude reads "Nobody answered within 5
-minutes: the person may be away. This is not a no…", carrying on with the rest). The person's answer, Stop (`stopThread`, `engine.abort`, harness death, app
+without a timeout, for every card (a lead's and a worker's included; an older chat's rows settled
+`by: timeout` still read "Withdrawn: nobody answered"). The person's answer, Stop (`stopThread`, `engine.abort`, harness death, app
 stop), the session's abort or the end of the turn settles it; a lead's card is not
 the chat's turn (`outlivesTurn`), so another turn ending (a picture or slash command answered on its
 own) leaves it waiting. A withdrawn request reaches Claude as a deny in the host's own words ("The user stopped this work before answering."), never as words
@@ -711,8 +709,8 @@ Loop run must confirm the two known changes: builders can no longer read sibling
   and neither has Grok Build's, whose builds then run as the person (`runsAsPerson`). Bonsai and Codex ask about no read, and their
   "always" offers no standing grant.
 
-- One card can hold a lead's turn for up to five minutes. In Manual a run nobody watches waits that long on each question;
-  Auto or Bypass keep it going.
+- One card holds a lead's call until the person answers it. In Manual a run nobody watches waits on
+  each question (its workers and jobs go on); Auto or Bypass keep it going.
 - A lead has no sandbox: whatever its chat's mode allows runs with the person's
   access, as in the chat's own session, edits and commands in the game folder included, so it can
   change the live game under the run. Its prompt has it build in the integration worktree and
@@ -732,9 +730,8 @@ Loop run must confirm the two known changes: builders can no longer read sibling
   nothing (`nothing-new`), deliveries included. What else a plugin writes there (a package install)
   is committed with the lead's own uncommitted edits before the next merge or worker fork
   (`commitLeadEdits`), or lands with the final edits after the last one.
-- A plugin's consent card holds a lead's call for up to nine minutes, the plugins' own timeout
-  rather than `LEAD_ASK_TIMEOUT_MS`. A lead nobody answers through (another engine, a turn that is
-  not the chat's) has its plugins and connectors too, acting on its build as a director's in its
+- A plugin's consent card holds a lead's call for up to nine minutes, the plugins' own timeout.
+  A lead nobody answers through (another engine, a turn that is not the chat's) has its plugins and connectors too, acting on its build as a director's in its
   worktree: read-only for its engine, not writing nothing.
 - A director with its own hands, a builder and the other run sessions carry the chat's thread in
   their plugin bindings: another turn of the chat ending still withdraws their consent cards and

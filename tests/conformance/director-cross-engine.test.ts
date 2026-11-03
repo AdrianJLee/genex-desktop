@@ -123,7 +123,7 @@ describe("a run on two subscriptions", () => {
       model: "opus",
       roles: ROLES,
       reference: { name: "plaza", shots: [] },
-      budgets: { wallClockMs: 15 * 60_000 },
+      budgets: {},
     });
     const events = await waitForLog(
       rig.core,
@@ -207,7 +207,7 @@ describe("a run on two subscriptions", () => {
       model: "opus",
       roles: ROLES,
       reference: { name: "sign", shots: [] },
-      budgets: { wallClockMs: 15 * 60_000 },
+      budgets: {},
     });
     const events = await waitForLog(
       rig.core,
@@ -288,7 +288,7 @@ describe("a run on two subscriptions", () => {
       model: "opus",
       roles: { planner: "opus", builder: "opus", judge: "vl", engines: { judge: "ollama" } },
       reference: { name: "plaza", shots: [] },
-      budgets: { wallClockMs: 15 * 60_000 },
+      budgets: {},
     });
     const events = await waitForLog(
       rig.core,

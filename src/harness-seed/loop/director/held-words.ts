@@ -1,6 +1,6 @@
 /**
- * The person's words for a run Genex's moments held back: its start, or its lead's turns past every
- * ask. Genex's own hold (Plan mode, the person using an app a lock guards, Genex unable to tell
+ * The person's words for a run Genex's moments held back: its start, or a lead's turn the run could
+ * not wait for (its wrap-up, a Stop). Genex's own hold (Plan mode, the person using an app a lock guards, Genex unable to tell
  * whether they were, something else at work there) is worded for the person from its typed hold,
  * never from its reason, which is written for agents; a plugin's step's block keeps its reason. A
  * module of its own, so the shipped director and wake loop need no new name from a module an agent
@@ -70,18 +70,18 @@ export function resumeHeldWords(held: HeldBack): string | null {
   return heldFor(held, RESUME_HELD);
 }
 
-/** Why the lead's turns stopped after every ask was held, for the person, as {@link runHeldWords} words it. */
+/** Why the lead's turn stopped when it was held while the run could not wait, for the person, as {@link runHeldWords} words it. */
 export function turnsHeldWords(held: HeldBack): string {
   return heldFor(held, TURNS_HELD) ?? MESSAGE.TurnsHeld(held.reason);
 }
 
 /**
- * A lead's turn Genex's moments kept holding back past every ask: a failed turn no session ran,
- * carrying the person's words for why (`turnsHeldWords`).
+ * A lead's turn Genex's moments held back while the run could not wait (its wrap-up, a Stop): a
+ * failed turn no session ran, carrying the person's words for why (`turnsHeldWords`).
  */
 export type HeldTurn = { ok: false; turns: 0; errorText: string; heldBack: true };
 
-/** The failed turn a hold past every ask makes, with the person's words for it. */
+/** The failed turn such a hold makes, with the person's words for it. */
 export const heldTurnResult = (words: string): HeldTurn => ({ ok: false, turns: 0, errorText: words, heldBack: true });
 
 /** Why the run ended when its last failed turn was one Genex's moments held back: the person's words, or null for any other turn. */

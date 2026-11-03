@@ -30,8 +30,6 @@ import { asksReviewer, fakeFinishReview, reviewerAnswer } from "./reviewer.ts";
 import { type BusHost, checkpoint, fire, restore } from "./unreal-moment-bus.ts";
 
 const run = promisify(execFile);
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
 /** How long a test waits, in real time, for something it expects the Loop to do. */
 const UNTIL_MS = 15_000;
 
@@ -468,7 +466,7 @@ export function loopHost(options: {
       mode: "autopilot",
       engine: "claude-code",
       reference: { name: "Level", shots: [] },
-      budgets: { wallClockMs: 3 * HOUR, completionPolicy: "goal" },
+      budgets: {},
       ...options.run,
     },
     turns: [...(options.turns ?? [])],

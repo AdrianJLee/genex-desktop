@@ -349,10 +349,8 @@ describe("the finish check on the Builds graph", () => {
     assert.ok(node);
     assert.equal(node.state, FinishCheckState.NotYet, "a no with time left never reads as not finished");
     const round = node.rounds[0] as FinishRound;
-    assert.deepEqual(
-      [round.reasons, round.done, round.notDone, round.timeLeft],
-      [[met], ["Laps run"], [NO_TIMER], true],
-    );
+    // Flipped (no clock): an older record's `timeLeft` is read no more.
+    assert.deepEqual([round.reasons, round.done, round.notDone], [[met], ["Laps run"], [NO_TIMER]]);
     assert.deepEqual(leftOf(round), [NO_TIMER], "what is left, never what the reviewer checked");
     assert.deepEqual(roundNoteOf(round, node), { text: FINISH_CHECK_WORDS.keepsWorking, quiet: true });
     assert.equal(finishCheckFace(node).word, FINISH_CHECK_WORDS.leftWord(1));

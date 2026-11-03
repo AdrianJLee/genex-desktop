@@ -55,12 +55,10 @@ import { isWindows } from "./toolchain.ts";
 
 export type { JobClock, JobEndTree, JobKill, JobProbe, JobTail };
 
-/** How long a job may run when its starter names no limit. */
-export const JOB_DEFAULT_HOURS = 2;
-/** The longest a job may run. */
-export const JOB_MAX_HOURS = 24;
 /** The shortest limit a job may be given: one minute. */
 const JOB_MIN_HOURS = MINUTE_MS / HOUR_MS;
+/** The longest wait a timer can hold (Node's `setTimeout`, 2^31 - 1 ms, about 24 days): a longer limit is held to it. */
+const TIMER_MAX_MS = 2 ** 31 - 1;
 /** The most jobs of one game running at once. */
 export const MAX_RUNNING_JOBS_PER_GAME = 8;
 /** The ended jobs of one game whose records and logs are kept; older ones are removed. */
@@ -122,7 +120,7 @@ export interface JobStartRequest {
   command: string;
   cwd: string;
   policy: Partial<SandboxPolicy>;
-  /** Its time limit in hours (default {@link JOB_DEFAULT_HOURS}, one minute to {@link JOB_MAX_HOURS}). */
+  /** Its time limit in hours, one minute at least, when its starter sets one; none otherwise. */
   hours?: number;
   mode: PermissionMode;
 }
@@ -172,10 +170,10 @@ function sameScope(a: JobScope, b: JobScope): boolean {
   return true;
 }
 
-/** A job's time limit in milliseconds: its hours, clamped. */
-function deadlineMs(hours: number | undefined): number {
-  const asked = typeof hours === "number" && Number.isFinite(hours) ? hours : JOB_DEFAULT_HOURS;
-  return Math.min(JOB_MAX_HOURS, Math.max(JOB_MIN_HOURS, asked)) * HOUR_MS;
+/** A job's time limit in milliseconds, when its starter set hours (one minute at least); null for none. */
+function deadlineMs(hours: number | undefined): number | null {
+  if (typeof hours !== "number" || !Number.isFinite(hours)) return null;
+  return Math.min(TIMER_MAX_MS, Math.max(JOB_MIN_HOURS, hours) * HOUR_MS);
 }
 
 /** Ended first by end number, then running ones by start. */
@@ -388,6 +386,7 @@ export class JobService {
       throw error;
     }
     const startedAt = this.#clock.now();
+    const limitMs = deadlineMs(request.hours);
     const record: JobRecord = {
       id,
       title: jobTitle(request.title, request.command),
@@ -396,17 +395,17 @@ export class JobService {
       cwd: request.cwd,
       startedAt: new Date(startedAt).toISOString(),
       state: JobState.Running,
-      deadlineAt: new Date(startedAt + deadlineMs(request.hours)).toISOString(),
+      ...(limitMs === null ? {} : { deadlineAt: new Date(startedAt + limitMs).toISOString() }),
       pid: child.pid,
       logFile,
       logBytes: 0,
       mode: request.mode,
     };
-    return this.#run(record, child, log, deadlineMs(request.hours));
+    return this.#run(record, child, log, limitMs);
   }
 
-  /** Watch a spawned job to its end, write its record, arm its time limit and announce it. */
-  #run(record: JobRecord, child: ChildProcess, log: WriteStream, limitMs: number): Promise<JobRecord> {
+  /** Watch a spawned job to its end, write its record, arm its time limit (when it has one) and announce it. */
+  #run(record: JobRecord, child: ChildProcess, log: WriteStream, limitMs: number | null): Promise<JobRecord> {
     child.stdin?.end();
     const draining = pipeJobOutput(child, log, this.#logMaxBytes, (bytes, capped) => {
       record.logBytes = bytes;
@@ -414,6 +413,7 @@ export class JobService {
     });
     const exit = jobEnd(child, () => this.#clearLeftovers(live), this.#clock, JOB_DRAIN_MS, draining);
     const arm = () => {
+      if (limitMs === null) return;
       live.deadline = this.#clock.setTimeout(() => void this.#stopLive(live, { state: JobState.TimedOut }), limitMs);
     };
     const started = this.#announce(record, arm);

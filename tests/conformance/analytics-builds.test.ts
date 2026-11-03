@@ -220,7 +220,7 @@ describe("runs from the log", () => {
       victory: false,
       duration_ms: 80 * MINUTE_MS,
       worked_ms: 20 * MINUTE_MS,
-      loop_hours: 1.5,
+      // Flipped (no clock): `loop_hours: 1.5` was the close's hours; a Loop has none to tell.
       rounds_accepted: 2,
       rounds_rejected: 1,
       profile: LoopProfile.Web,
@@ -339,7 +339,7 @@ describe("runs from the log", () => {
       step: FinishCheckStep.Rejected,
       rejections: 2,
       stopped: false,
-      time_left: true,
+      // Flipped (no clock): `time_left: true` was the record's working time left; a settle names none.
       done_count: 1,
       not_done_count: 2,
       reviewer_engine: EngineId.ClaudeCode,

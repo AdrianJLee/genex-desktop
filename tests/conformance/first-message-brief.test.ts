@@ -375,11 +375,8 @@ describe("who runs the brief", () => {
     }
     const pending = buildContractorBrief({ ...options, facts: [] });
     assert.match(pending, /holds nothing yet/);
-    const now = Date.now();
     const director = directorBrief({
       run: { runId: "r", project: NAME, goal: "g" },
-      softDeadline: now + 1,
-      finalDeadline: now + 2,
       integrationWorktree: "/w",
       baseCommit: null,
     } as never);
@@ -387,8 +384,6 @@ describe("who runs the brief", () => {
     assert.match(director, /a web game/);
     const placed = directorBrief({
       run: { runId: "r", project: NAME, goal: "g" },
-      softDeadline: now + 1,
-      finalDeadline: now + 2,
       integrationWorktree: "/w",
       baseCommit: null,
       facts: [fact(CoreFact.WebGame, "site"), fact(CoreFact.UnrealProject)],
@@ -406,11 +401,8 @@ const RUN = { runId: "run_w", project: NAME, goal: "a keep to explore", engine: 
 
 describe("every worker's brief", () => {
   it("a lead's brief names the plugin search and its card; a worker's names the search only", () => {
-    const now = Date.now();
     const director = directorBrief({
       run: RUN,
-      softDeadline: now + 1,
-      finalDeadline: now + 2,
       integrationWorktree: "/w",
       baseCommit: null,
     } as never);

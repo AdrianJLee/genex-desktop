@@ -15,7 +15,6 @@ import { SECOND_MS, sleep } from "../time.ts";
 import { NotLandedReason, VerdictPass, VerdictRule } from "../verdict.ts";
 import { poolWorkerId } from "../workers/events.ts";
 import { closeRunPool } from "../workers/run-pool.ts";
-import { StopWhy } from "../finish-contract.ts";
 import { yes } from "./args.ts";
 import { closeUnderWay, holdFinish, latchClose, releaseFinish } from "./close-latch.ts";
 import { LandingHow, landingWords } from "./rules.ts";
@@ -223,17 +222,10 @@ async function finishHeld(loopRun: LoopRun, args: AnyRecord): Promise<string> {
     because: "the lead finished the run",
     summary,
     victory,
-    ...(pastItsCap(loopRun) ? { ended: StopWhy.Time } : {}),
   });
   return landed.ok
     ? FINISH_WORDS.closed(state.integrationHead, String(landed.line ?? ""), leftOf(landed))
     : FINISH_WORDS.closedUnlanded(landed.reason ?? null);
-}
-
-/** Whether a finish comes once the run's hours are spent, against the run's own clock. */
-function pastItsCap(loopRun: LoopRun): boolean {
-  const cap = loopRun.clock?.softDeadline ?? loopRun.softDeadline;
-  return Number.isFinite(cap) && Date.now() >= cap;
 }
 
 // ── the close ──
@@ -246,8 +238,6 @@ export interface CloseOptions {
   victory?: boolean;
   /** A lost provider paused the run: it lands nothing, and says so. */
   paused?: boolean;
-  /** Why the run stops short of its goal, for its result card. */
-  ended?: StopWhy;
 }
 
 /**
@@ -262,9 +252,8 @@ export function closeTheLoopRun(loopRun: LoopRun, options: CloseOptions): Promis
 
 /** The close itself (`closeTheLoopRun`). */
 async function closeOnce(loopRun: LoopRun, options: CloseOptions): Promise<AnyRecord> {
-  const { land = true, because = null, summary = null, victory = false, paused = false, ended } = options;
+  const { land = true, because = null, summary = null, victory = false, paused = false } = options;
   const { ctx, report, run } = loopRun;
-  if (ended) loopRun.state.endedWhy = ended;
   await closeRunPool(run.runId);
   let landed: AnyRecord;
   if (ctx.cancelled) landed = notLanded(STOPPED_BY_USER, NotLandedReason.Stopped);

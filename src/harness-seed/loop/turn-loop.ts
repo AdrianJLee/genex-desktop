@@ -51,7 +51,6 @@ export interface TurnOptions {
   runId?: string;
   iteration?: number;
   setup?: AnyRecord | null;
-  deadlineMs?: number;
   maxRounds?: number;
   contextWindow?: number | null;
   extraSystem?: string;

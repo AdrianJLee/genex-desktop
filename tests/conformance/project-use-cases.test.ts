@@ -45,7 +45,6 @@ import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { FinishCheckStep } from "../../src/harness-seed/loop/finish-contract.ts";
-import { GRACE_MS } from "../../src/harness-seed/loop/time-cap.ts";
 import type { Run } from "../../src/harness-seed/types/harness.d.ts";
 import { PERMISSION_MODES, PermissionMode, type ToolPermissionEvent } from "../../src/shared/permissions.ts";
 import { APP_LOOK_TOOL_NAME, JobTool } from "../../src/shared/jobs.ts";
@@ -1738,8 +1737,11 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
     const snapshot = trail.indexOf("snapshot.create");
     assert.ok(snapshot >= 0 && snapshot < trail.indexOf("engine.delegate"), trail.join(", "));
   });
+  // Flipped (no clock): an unlimited Loop was capped at 24 hours with a grace after them, and an idle
+  // lead's Loop closed when that time ran out; a Loop has no clock, and a turn that ends with nothing
+  // at work closes it.
   it(
-    "an unlimited Loop runs until the finish check passes, capped at 24 hours; the credit cap lives in the run record",
+    "a Loop runs with no time limit until its lead finishes it; the credit cap lives in the run record",
     LOOP_TIMEOUT,
     async () => {
       const unlimited = { wallClockMs: 2 * HOUR, untilSatisfied: true, completionPolicy: "goal" };
@@ -1755,15 +1757,15 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
         { budgets: unlimited },
       );
       host.reviews.push(reviewerAnswer("no", ["the door does not open"]));
-      await host.start();
+      const done = host.start();
+      // The lead rests on its worker after the no, however long; the worker's end wakes it.
+      assert.ok(await host.until(() => host.workers.length === 1 && host.reviewed().length === 1));
+      host.pass(48 * HOUR);
+      await host.workers[0]?.end({ summary: "the door opens" });
+      await done;
       const id = `autopilot_${host.run.runId}`;
-      const journal = host.artifacts.get(id) as { run: Run; director: { clock: Record<string, string> } };
-      const { started, finalDeadline } = journal.director.clock;
-      assert.equal(
-        Date.parse(finalDeadline) - Date.parse(started),
-        24 * HOUR + GRACE_MS,
-        "24 hours at most, then the grace to wrap up",
-      );
+      const journal = host.artifacts.get(id) as { run: Run; director: { clock?: unknown } };
+      assert.equal(journal.director.clock, undefined, "the journal keeps no clock");
       const steps = host.appended("finish_check").map((check) => check.step);
       assert.deepEqual(
         steps.filter((step) => step !== FinishCheckStep.Checking),
@@ -1795,7 +1797,9 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
         { budgets: unlimited },
       );
       const report = await idle.start();
-      assert.equal(report.stoppedBecause, "the Loop's time ran out; here is where it stands");
+      assert.equal(idle.leadCalls().length, 1, "its turn ended with nothing at work: the Loop closed");
+      assert.doesNotMatch(String(report.stoppedBecause), /time ran out/);
+      assert.equal(report.stoppedBecause, "the lead's turn ended with nothing at work");
       assert.equal(idle.reviewed().length, 0, "no reviewer was asked");
     },
   );

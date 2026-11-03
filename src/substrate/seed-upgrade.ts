@@ -257,15 +257,6 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   { file: "loop/director.ts", marker: "LoopProfile.Open" },
   { file: "loop/director/wake.ts", marker: "activeWork(" },
   { file: "loop/director/loop-run.ts", marker: "open?: OpenLoop" },
-  // An open Loop's worked time is on its own clock.
-  { file: "loop/director/loop-run.ts", marker: "open?.clock.now()" },
-  // An open Loop's turn has a cap it goes on from at once (judged when its session returned), its
-  // lead is idle only after a turn that kept and changed nothing, its workers' questions and its
-  // app's crashes wake it, and the wake loop runs its between-turns work and mid-turn news.
-  { file: "loop/director/wake-schedule.ts", marker: "TurnEnd.Continue" },
-  { file: "loop/director/wake-schedule.ts", marker: "turn.worked" },
-  { file: "loop/director/wake.ts", marker: "TurnEnd.Continue" },
-  { file: "loop/director/wake.ts", marker: "turnReturnedAt" },
   // A web page missing its files is refused by Genex's own gate (builtin-hooks.ts), from the typed
   // list game.validate answers and only where a web game is served.
   { file: "loop/chat-dispatch.ts", marker: "readiness?.missing" },
@@ -279,14 +270,6 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   { file: "loop/after-loop-run.ts", marker: "inPlace" },
   { file: "loop/after-loop-run-prompts.ts", marker: "inPlaceControls(" },
   { file: "loop/studio-state.ts", marker: "NeedsSession" },
-  // A Loop's hours are a soft cap (time-cap.ts): its clock gives a grace after them, a claim is
-  // checked whenever it comes, the lead hears the heads-up and the time's-up mid-turn and starts no
-  // worker from the cap on, and a close out of time says no reviewer read a claim.
-  { file: "loop/director/setup.ts", marker: "capClock(" },
-  { file: "loop/director/wake.ts", marker: "withCapWatch(" },
-  { file: "loop/director/wake.ts", marker: "withCapWords(" },
-  { file: "loop/director/wake.ts", marker: "turnEndAtCap(" },
-  { file: "loop/director/tools.ts", marker: "capRefusesWorker(" },
   // Loop phase 4: judges inform and decide nothing. A claim closes on the lead's word, a reviewer
   // reads it only when asked (`review=yes`) and its no decides nothing, and the open Loop's judges
   // play only when the lead asks. A kept copy from before still loads, but still asks its judges.

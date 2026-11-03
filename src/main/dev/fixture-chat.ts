@@ -16,7 +16,6 @@ import type { StudioCore } from "../studio-core.ts";
 import { ChatCheckpoints, CheckpointPhase } from "../chat-checkpoints.ts";
 import { FIXTURE_MODEL, FixtureName, fixtureRun, SHOT } from "./fixture-kit.ts";
 import { ExecutionStatus } from "../../shared/run-state.ts";
-import { MINUTE_MS } from "../../shared/duration.ts";
 
 /** Why a chat fixture cannot be seeded. */
 const MESSAGE = {
@@ -28,8 +27,6 @@ const CHAT_MESSAGES = 600;
 const TOOL_READS = 55;
 const FAILED_READ = 53;
 const LAST_READ = TOOL_READS - 1;
-/** The time limit the long chat's builds were given. */
-const FIXTURE_BUILD_LIMIT_MS = 30 * MINUTE_MS;
 
 /** A long game chat, and a build under way in it that made a cover and names files in its reply. */
 export async function seedChatHistory(core: StudioCore, project: { name: string; dir: string }, threadId: string) {
@@ -54,7 +51,6 @@ export async function seedChatHistory(core: StudioCore, project: { name: string;
   );
   await append(CustomEvent.RunStarted, {
     goal: "A bridge and a village at dusk",
-    budgets: { wallClockMs: FIXTURE_BUILD_LIMIT_MS },
     engine: EngineId.Ollama,
     model: FIXTURE_MODEL,
   });
@@ -267,7 +263,6 @@ export async function activateLiveChat(
     [
       run(CustomEvent.RunStarted, {
         goal: "A bridge and a village at dusk",
-        budgets: { wallClockMs: FIXTURE_BUILD_LIMIT_MS },
         engine: EngineId.Ollama,
         model: FIXTURE_MODEL,
       }),

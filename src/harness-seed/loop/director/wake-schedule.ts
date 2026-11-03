@@ -3,8 +3,8 @@
  * loop (wake.ts), with no run of their own. A leaf: it imports only time.ts, so every part of the run
  * may type its lines with it. The lead ends its turn when it decides to; nothing of it runs between
  * turns; the studio wakes the same session when something happens: the person speaks or asks to
- * finish, a worker ends or asks, a job ends, the project's app stops, the working time ends. No timer
- * wakes it otherwise. What counts is decided by typed fields, never by reading a line's English.
+ * finish, a worker ends or asks, a job ends, the project's app stops. No timer wakes it. What counts
+ * is decided by typed fields, never by reading a line's English.
  */
 import { HOUR_MS, SECOND_MS } from "../time.ts";
 
@@ -31,6 +31,8 @@ export const NoteKind = {
   AppCrashed: "app_crashed",
   /** The project's app stopped answering under an open Loop, and Genex is bringing it back: said, never woken for. */
   AppStopping: "app_stopping",
+  /** What an open Loop's lead asked for at its turn's end (a rewind, a restart) has run, and how it went. */
+  AskDone: "ask_done",
 } as const;
 export type NoteKind = (typeof NoteKind)[keyof typeof NoteKind];
 
@@ -43,6 +45,7 @@ export const NOTE_WAKE = {
   [NoteKind.WorkerAsks]: WakeUrgency.Now,
   [NoteKind.AppCrashed]: WakeUrgency.Now,
   [NoteKind.AppStopping]: WakeUrgency.Never,
+  [NoteKind.AskDone]: WakeUrgency.Now,
   [NoteKind.WorkerEnded]: WakeUrgency.Soon,
   [NoteKind.JobEnded]: WakeUrgency.Soon,
 } as const satisfies Record<NoteKind, WakeUrgency>;
@@ -53,11 +56,8 @@ export const WakeCause = {
   FinishRequested: "finish_requested",
   /** A line with no kind, written while the lead slept. */
   News: "news",
+  /** The one wrap-up turn, at once after a turn that ended with the person's Finish asked, or failed. */
   WrapUp: "wrap_up",
-  /** An open Loop's lead reached its turn's cap with working time left: it goes on at once. */
-  TurnCap: "turn_cap",
-  /** An open Loop's lead whose turn changed something, woken at once with whatever else is due. */
-  CarryOn: "carry_on",
 } as const;
 export type WakeCause = (typeof WakeCause)[keyof typeof WakeCause];
 /** Why one wake happened: a kind of line, or a cause of its own. */
@@ -65,7 +65,6 @@ export type WakeReason = NoteKind | WakeCause;
 
 /** Why the wrap-up started. The journal keeps it: never rename a value. */
 export const WrapCause = {
-  Deadline: "deadline",
   Failed: "failed",
   Finish: "finish",
 } as const;
@@ -76,21 +75,15 @@ export const TurnEnd = {
   Sleep: "sleep",
   WrapUp: "wrap_up",
   Close: "close",
-  /** An open Loop's turn reached its own cap: the lead is woken again at once, never rested. */
-  Continue: "continue",
-  /** An open Loop's lead whose turn changed something: woken again at once. */
-  CarryOn: "carry_on",
 } as const;
 export type TurnEnd = (typeof TurnEnd)[keyof typeof TurnEnd];
 
 /** News that is not the user's settles this long before it wakes the lead, and what else arrives rides along. */
 export const WAKE_DEBOUNCE_MS = 5 * SECOND_MS;
-/** At most this many wakes in any window of `WAKE_WINDOW_MS`; the user, finish and the wrap-up are never held back. */
+/** At most this many wakes in any window of `WAKE_WINDOW_MS`; the user and finish are never held back. */
 export const MAX_WAKES_PER_HOUR = 30;
 /** The window the wake cap counts in. */
 export const WAKE_WINDOW_MS = HOUR_MS;
-/** A wrap-up turn ends this long before the run's end. */
-export const WRAP_UP_MARGIN_MS = 30 * SECOND_MS;
 
 /** A line of the run's log as the waker reads it. */
 export interface WakeLine {
@@ -112,8 +105,6 @@ export interface WakeView {
   userWaiting: boolean;
   /** The user asked to finish, and no message has said so yet. */
   finishNew: boolean;
-  softDeadline: number;
-  wrapping: boolean;
   /** When the lead was woken, recently. */
   wakesAt: readonly number[];
 }
@@ -159,12 +150,6 @@ function userCandidates(view: WakeView): Candidate[] {
   return out;
 }
 
-/** The studio's own reason: the end of the working time. */
-function timerCandidates(view: WakeView): Candidate[] {
-  if (view.wrapping) return [];
-  return [{ at: view.softDeadline, reason: WakeCause.WrapUp, capped: false }];
-}
-
 /** The earliest a capped wake may happen: once the oldest wake of a full window has left it, or now. */
 function capLiftsAt(view: WakeView): number {
   const recent = view.wakesAt.filter((at) => at > view.now - WAKE_WINDOW_MS);
@@ -179,7 +164,7 @@ function capLiftsAt(view: WakeView): number {
  */
 export function nextWake(view: WakeView): Wake | null {
   const liftsAt = capLiftsAt(view);
-  const due = [...userCandidates(view), ...lineCandidates(view), ...timerCandidates(view)];
+  const due = [...userCandidates(view), ...lineCandidates(view)];
   const candidates = due.map((c) => ({
     ...c,
     at: c.capped ? Math.max(c.at, liftsAt) : c.at,
@@ -197,13 +182,7 @@ export interface TurnFacts {
   closed: boolean;
   /** A provider is lost under the run: the run pauses. */
   providerLost?: boolean;
-  /** Working time is left and nobody asked to finish. */
-  workingTimeLeft: boolean;
   finishRequested: boolean;
-  /** The turn ended because it reached its own cap (an open Loop's), not because the lead ended it. */
-  capped?: boolean;
-  /** The turn changed something (an open Loop's lead builds by itself). */
-  worked?: boolean;
 }
 
 /** What the loop does next, and why a wrap-up starts. */
@@ -213,33 +192,15 @@ export interface TurnVerdict {
 }
 
 /**
- * A turn has ended. The lead rests until something happens — the person speaks or asks to finish, a
- * worker or job ends, the working time ends — however much is running: nothing wakes it to ask what
- * next, and a quiet lead is never wrapped up for being quiet. A turn cut by its own cap (an open
- * Loop's), or one that changed something (an open Loop's lead builds by itself), goes on at once.
- * Out of working time — or asked by the user to finish — it wraps up; a failed turn does too, unless
- * a lost provider failed it: then the run closes paused.
+ * A turn has ended. Asked by the person to finish, the lead gets its one wrap-up turn at once; a
+ * failed turn does too, unless a lost provider failed it: then the run closes paused. Otherwise it
+ * rests until something happens — the person speaks or asks to finish, a worker or a job ends — and
+ * with nothing at work and nothing to be woken for, the Loop closes as a bare agent's turn ends
+ * (wake.ts `sleepUntilDue`): nothing wakes it to ask what next.
  */
 export function afterTurn(turn: TurnFacts): TurnVerdict {
   if (turn.closed || turn.providerLost === true) return { next: TurnEnd.Close };
-  if (!turn.workingTimeLeft) {
-    const wrapCause = turn.finishRequested ? WrapCause.Finish : WrapCause.Deadline;
-    return { next: TurnEnd.WrapUp, wrapCause };
-  }
-  if (turn.capped === true) return { next: TurnEnd.Continue };
+  if (turn.finishRequested) return { next: TurnEnd.WrapUp, wrapCause: WrapCause.Finish };
   if (!turn.ok) return { next: TurnEnd.WrapUp, wrapCause: WrapCause.Failed };
-  if (turn.worked === true) return { next: TurnEnd.CarryOn };
   return { next: TurnEnd.Sleep };
-}
-
-/** The clocks a pass is held to. */
-export interface PassClocks {
-  now: number;
-  softDeadline: number;
-  finalDeadline: number;
-}
-
-/** Until when a pass the lead asks for may run: the working deadline while there is working time, else the wrap-up's own end. */
-export function passDeadline({ now, softDeadline, finalDeadline }: PassClocks): number {
-  return now < softDeadline ? softDeadline : finalDeadline - WRAP_UP_MARGIN_MS;
 }

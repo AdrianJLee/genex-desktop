@@ -1,14 +1,12 @@
 /**
  * A web game's Loop without a rig: the run as prepareLoopRun leaves it, its parts the real ones
  * (`bindLoopRun`), on a host that records what it is asked and answers from a table the test gives.
- * Every clock here is a number the test chooses, and the run's sleeps pass no time.
+ * The run's sleeps pass no time.
  */
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
 import * as loopRunFunctions from "../../src/harness-seed/loop/director/loop-run.ts";
 import * as toolFunctions from "../../src/harness-seed/loop/director/tools.ts";
 import * as integrateFunctions from "../../src/harness-seed/loop/director/integrate.ts";
-import { wrapReserveMs } from "../../src/harness-seed/loop/director/journal.ts";
-import { HOUR_MS } from "../../src/harness-seed/loop/time.ts";
 
 /** The rows' own start. */
 export const T0 = Date.UTC(2026, 8, 26, 1, 0, 0);
@@ -22,9 +20,6 @@ export interface FakeHost {
 }
 /** A fresh fake host with nothing seen yet. */
 export const fakeHost = (): FakeHost => ({ calls: [], journals: [] });
-
-/** The run's own clock in these rows: an hour, the wrap-up reserve at its end. */
-export const CLOCK = { started: T0, softDeadline: T0 + HOUR_MS - wrapReserveMs(HOUR_MS), finalDeadline: T0 + HOUR_MS };
 
 /** The events the run appended, by type, in order. */
 export function appended(host: FakeHost): Array<{ type: string; payload: Record<string, any> }> {
@@ -45,7 +40,7 @@ export function fakeLoopRun(host: FakeHost, over: Record<string, unknown> = {}, 
     project: "plaza",
     goal: "a plaza",
     engine: "codex",
-    budgets: { wallClockMs: HOUR_MS },
+    budgets: {},
   };
   const ctx = {
     threadId: "t1",
@@ -73,10 +68,6 @@ export function fakeLoopRun(host: FakeHost, over: Record<string, unknown> = {}, 
       addressed: async () => [],
       backlog: async () => [],
     },
-    started: CLOCK.started,
-    softDeadline: CLOCK.softDeadline,
-    finalDeadline: CLOCK.finalDeadline,
-    clock: { ...CLOCK },
     priorJournal: null,
     report: { notes: [], workers: {}, iterations: [], verdicts: [] },
     projectDir: "/games/plaza",
@@ -98,8 +89,6 @@ export function fakeLoopRun(host: FakeHost, over: Record<string, unknown> = {}, 
       finish: null,
       finished: false,
       judges: 0,
-      softDeadline: CLOCK.softDeadline,
-      finalDeadline: CLOCK.finalDeadline,
     },
     journal: { runId: "run_j", run, director: { sessionId: null, workers: {}, notes: [] } },
     logSeq: 0,

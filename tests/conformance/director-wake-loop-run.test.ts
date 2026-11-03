@@ -170,8 +170,9 @@ describe("the lead is woken, not kept in one long turn", () => {
 
     const threadId = await rig.core.threadForGame(project.name);
     const journal = (await rig.core.store.readArtifact(threadId, `autopilot_${runId}`)) as Record<string, any>;
-    // The run's own clock is the run's record, not the wake loop's (journal.ts; it moved from `wake.clock`).
-    assert.match(String(journal.director.clock.finalDeadline), /^\d{4}-\d\d-\d\dT/);
+    // Flipped (no clock): the record held the run's clock (`director.clock.finalDeadline`); a Loop has none.
+    assert.equal(journal.director.clock, undefined, "the record keeps no clock");
+    assert.ok(journal.director.wake, "it keeps the wake state");
   });
 
   it("R2. a user's message wakes a sleeping lead within seconds, word for word, at the top", {

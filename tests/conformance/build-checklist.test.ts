@@ -184,7 +184,7 @@ describe("the Building card's checklist", () => {
 });
 
 describe("the building-card dev fixture", () => {
-  it("is a Loop still going whose card lists two parts added, one working with its time left, a restart on one row, and one waiting", async () => {
+  it("is a Loop still going whose card lists two parts added, one working, a restart on one row, and one waiting", async () => {
     const { seedBuildingCard } = await import("../../src/main/dev/fixture-building-card.ts");
     const log: EventEnvelope[] = [];
     let seq = 0;
@@ -217,7 +217,9 @@ describe("the building-card dev fixture", () => {
         [BUILD_CHECKLIST_WORDS.together, PartMark.Next],
       ],
     );
-    assert.match(String(list?.rows[2]?.status), /^Working · ~2[45] min$/);
+    // Flipped (no clock): the part at work showed its round's time left ("Working · ~25 min"); a Loop's
+    // round has no deadline, so it shows its round.
+    assert.equal(list?.rows[2]?.status, BUILD_CHECKLIST_WORDS.workingRound(2));
     assert.equal(list?.rows[3]?.status, BUILD_CHECKLIST_WORDS.workingRound(1), "the restart's own first round");
     assert.equal(checklistCaption(list!, false), "2 of 5 parts added · 2 working");
     assert.equal(

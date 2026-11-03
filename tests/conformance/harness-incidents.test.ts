@@ -77,7 +77,8 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
   }
 });
 import { tmpDir } from "../helpers/tmp.ts";
-import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../src/harness-seed/loop/time.ts";
+import { HOUR_MS, MINUTE_MS } from "../../src/harness-seed/loop/time.ts";
+import { JOB_POLL_MS } from "../../src/harness-seed/loop/jobs/watch.ts";
 import { describeUnknownImage, sniffImage } from "../../src/substrate/image-sniff.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { runTurn } from "../../src/harness-seed/loop/turn-loop.ts";
@@ -105,6 +106,14 @@ type FakeEngineHooks = {
 };
 
 /** A scripted contractor + judge on the rig; `complete` sees the flattened prompt, `delegate` the request. */
+/** Settles once `signal` aborts (a Stop), or at once when it already has or there is none. */
+function untilAborted(signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    if (!signal || signal.aborted) return resolve();
+    signal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
+
 function registerFakeEngine(rig: Rig, hooks: FakeEngineHooks, id = "fake-delegate"): void {
   rig.core.engines.register({
     id,
@@ -1241,6 +1250,9 @@ describe("one session answers the chat (no-coordinator)", () => {
           return { summary: "Stopping the build.", sessionId: "chat" };
         }
         leadPrompts.push(request.prompt);
+        // Flipped (no clock): the lead's turn ended at once and the lead rested until the Stop; a turn
+        // that ends with nothing at work closes the Loop now, so this one works until the Stop.
+        await untilAborted(request.signal);
         return { summary: "Looking at the plaza.", sessionId: request.resume ?? "lead-1" };
       },
     });
@@ -1253,7 +1265,7 @@ describe("one session answers the chat (no-coordinator)", () => {
       mode: "autopilot",
       engine: "fake-delegate",
       reference: { name: "plaza", shots: [], kind: "direction" },
-      budgets: { wallClockMs: 3_600_000 },
+      budgets: {},
     } as never);
     void running.catch(() => {});
     await waitForLog(
@@ -1425,7 +1437,9 @@ describe("the chat's agent decides when a Loop starts (always-launch)", () => {
     assert.equal("onlyWhenAsked" in (launch ?? {}), false);
     assert.doesNotMatch(String(chat[0]?.prompt), /Never say a Loop started|Loop switch|asks in words/);
     assert.equal(run?.goal, ask.goal);
-    assert.equal(run?.budgets?.untilSatisfied, true, "until its lead finishes it, whatever hours the call named");
+    // Flipped (no clock): the run's budgets named a day's ceiling and `untilSatisfied`; a run has no clock now.
+    assert.equal(run?.budgets?.untilSatisfied, undefined, "no clock: whatever hours the call named");
+    assert.equal(run?.budgets?.wallClockMs, undefined, "no working time");
     assert.deepEqual(run?.roles, roles, "the roles the message carries");
   });
 
@@ -1584,7 +1598,10 @@ describe("the lead's later turns (wake loop)", () => {
     return { turns, events, finished: customEvents(events, "run_finished").find((e) => e.runId === runId)! };
   }
 
-  it("I1. the lead's session limit on a later turn is waited out and the same session carries on", async () => {
+  // Flipped (no clock): a limit that reset within the turn's time was waited out in process, and a
+  // longer one paused the run; one rule now: the run pauses, and the host's auto-resume resumes it at
+  // the reset (`auto-resume.ts`).
+  it("I1. the lead's session limit on a later turn pauses the run with the reset the host resumes it at", async () => {
     const { turns, finished } = await lateTurnLoopRun("late-limit", async (request, turn) => {
       const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
       if (turn === 1) {
@@ -1596,13 +1613,12 @@ describe("the lead's later turns (wake loop)", () => {
       await call("finish", { summary: "the sky is blue", land: "no" });
       return { sessionId: "lead-1", summary: "finished" };
     });
-    assert.equal(turns.length, 3, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
-    assert.equal(turns[2]!.resume, turns[1]!.resume, "the same session carries on");
-    assert.equal(turns[2]!.resume, "lead-1");
-    assert.match(turns[2]!.prompt, /limit paused you/);
-    assert.match(turns[2]!.prompt, /WHAT HAPPENED/, "with the news it had not heard");
-    assert.equal(finished.stoppedBecause, "the lead finished the run");
-    assert.doesNotMatch(String(finished.stoppedBecause), /paused/);
+    assert.equal(turns.length, 2, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
+    assert.equal(finished.executionStatus, "paused", String(finished.stoppedBecause));
+    assert.equal(finished.landed, false);
+    const limit = finished.limit as { kind?: string; retryAfterMs?: number };
+    assert.equal(limit.kind, "rate_limit");
+    assert.equal(limit.retryAfterMs, 1_500, "the reset the host's auto-resume waits for");
   });
 
   it("I3. a provider outage on a later lead turn is waited out, and the same session carries on", async () => {
@@ -1648,6 +1664,17 @@ describe("the lead's later turns (wake loop)", () => {
     assert.match(turns[2]!.prompt, /YOUR NOTES[\s\S]*the sky first; the plaza after it/);
     assert.match(turns[2]!.prompt, /WHAT HAPPENED/);
     assert.equal(finished.stoppedBecause, "the lead finished the run");
+  });
+
+  // Flipped: the ordinary end was worded as a session that stopped short ("the lead's session ended
+  // (on its own) before it called finish").
+  it("no-clock. a web lead's turn that ends with nothing at work closes the Loop in its ordinary end's words", async () => {
+    const { turns, finished } = await lateTurnLoopRun("idle-end", async () => ({
+      sessionId: "lead-1",
+      summary: "the sky is blue",
+    }));
+    assert.equal(turns.length, 1, "no wake and no wrap-up turn after it");
+    assert.match(String(finished.stoppedBecause), /^the lead's turn ended with nothing at work; /);
   });
 
   it("D11. the lead's account disabled on a wake pauses the run: workers stopped, nothing landed, no wrap-up, the user told what to fix", async () => {
@@ -1710,13 +1737,14 @@ function clockNight(inbox: Record<string, unknown> = {}) {
   };
   const loopRun = {
     state,
-    ctx: { cancelled: false },
+    // The host lists the run's jobs (none) as the app does; anything else it answers with nothing.
+    ctx: {
+      cancelled: false,
+      call: async (method: string): Promise<unknown> => (method === HostMethod.JobsList ? { jobs: [], seq: 0 } : null),
+    },
     report: {},
     waitSeq: 0,
     logSeq: 0,
-    started: T0,
-    softDeadline: T0 + 3 * HOUR_MS,
-    finalDeadline: T0 + 3.5 * HOUR_MS,
     run: { runId: "run_w", project: "sky", goal: "a blue sky", reference: { kind: "direction" } },
     journal: { director: { workers: {}, notes: [] } },
     inbox: { steers: async () => [], steering: async () => [], finishing: async () => false, ...inbox },
@@ -1789,6 +1817,9 @@ describe("the wake loop, reviewed", () => {
     w.ticks.push((now) => {
       if (now >= w.T0 + MINUTE_MS && !said.length) said.push("make the sky red");
       if (now >= w.T0 + 10 * MINUTE_MS && said.length === 1) said.push("and the benches oak");
+      if (now < w.T0 + 30 * MINUTE_MS || w.worker.state !== "running") return;
+      w.worker.state = "done";
+      w.note("sky ended: the sky is painted", "worker_ended");
     });
     const { talk, calls } = w.lead((turn) => {
       // Each turn takes the lead twenty seconds; it finishes on the first wake past 25 minutes.
@@ -1803,8 +1834,9 @@ describe("the wake loop, reviewed", () => {
     assert.match(calls[1]!.prompt, /THE USER SAYS[\s\S]*make the sky red/, "the words reach the lead");
     assert.match(calls[2]!.prompt, /THE USER SAYS[\s\S]*and the benches oak/, "and the next ones, when they come");
     assert.doesNotMatch(calls[2]!.prompt, /make the sky red/, "said once");
-    // Flipped (phase 5): no heartbeat wakes a resting lead; nothing comes until the wrap-up.
-    assert.match(heads[3]!, /the working time is over/, "then nothing until the wrap-up");
+    // Flipped (phase 5): no heartbeat wakes a resting lead; nothing came until the wrap-up.
+    // Flipped (no clock): no wrap-up comes for time; nothing comes until its worker ends.
+    assert.match(heads[3]!, /a worker ended/, "then nothing until its worker ends");
     assert.equal(w.wakes().filter((reasons) => reasons.includes("user_message")).length, 2);
   });
 });
@@ -1984,9 +2016,6 @@ function liveChat() {
       report: {},
       waitSeq: 0,
       logSeq: 0,
-      started: at.now,
-      softDeadline: at.now + 3 * HOUR_MS,
-      finalDeadline: at.now + 3.5 * HOUR_MS,
       threadId: THREAD,
       run: { runId: RUN, project: "plaza", goal: "a dusk plaza", reference: { kind: "direction" } },
       resume,
@@ -2011,7 +2040,7 @@ function liveChat() {
         keep: async (result) => {
           if (result?.sessionId) talk.sessionId = result.sessionId;
         },
-        session: async (prompt, _sid, _timeoutMs, said) => {
+        session: async (prompt, _sid, said) => {
           calls.push({ prompt, at: at.now, ...(said ? { said: { ...said } } : {}) });
           return (await script(calls.length)) as never;
         },
@@ -2547,14 +2576,17 @@ describe("live chat during a build, reviewed", () => {
     const chat = liveChat();
     chat.hooks.native = true;
     const one = chat.loopRun();
-    // Working time is over: the first turn is the wrap-up.
-    one.n.softDeadline = chat.at.now - 1;
-    await one.run(async () => {
+    // Flipped (no clock): the working time being over made the first turn the wrap-up; the person's
+    // Finish makes the turn after the first one the wrap-up.
+    one.n.inbox = { ...one.n.inbox, finishing: async () => true };
+    await one.run(async (turn) => {
+      if (turn === 1) return worked;
       void chat.say("also add rain");
       await settleOn(() => chat.steers.length > 0);
       one.state.finished = true;
       return { ...worked, steered: chat.steers.map((steer) => steer.messages[0].id) };
     });
+    assert.match(String(one.calls[1]?.prompt), /The user asked to finish, so the wrap-up starts now/);
     assert.equal(chat.steers[0]?.interrupt, false, "the wrap-up is never cut short");
     assert.deepEqual(
       chat.steers[0]?.messages.map(({ id: _id, ...said }: Record<string, unknown>) => said),
@@ -2574,9 +2606,11 @@ describe("live chat during a build, reviewed", () => {
   it("LC18. words a wrap-up turn could not read go back to the chat when its line is released, and the chat answers them", async () => {
     const chat = liveChat();
     const one = chat.loopRun();
-    one.n.softDeadline = chat.at.now - 1;
+    // Flipped (no clock): as LC17, the person's Finish makes the second turn the wrap-up.
+    one.n.inbox = { ...one.n.inbox, finishing: async () => true };
     await one.run(async (turn) => {
-      if (turn === 1) {
+      if (turn === 1) return worked;
+      if (turn === 2) {
         void chat.say("also add rain");
         await settleOn(() => chat.steers.length > 0);
       }
@@ -2828,13 +2862,18 @@ describe("one session, reviewed", () => {
     assert.ok(calls[1]!.at > calls[0]!.at, "after a wait on the loop's own clock");
   });
 
-  it("OS4. a first turn the lead's lock stays busy for ends as a failed turn — the run closes on its own terms, not in a crash", async () => {
+  // Flipped: a web lead's lock busy for four asks ended its turn as failed (`MAX_BUSY_RETRIES`); every
+  // lead now waits for its lock as an open Loop's lead waits for its folder: until it is free, or a Stop.
+  it("OS4. a first turn the lead's lock stays busy for waits until the person stops the run — never a failed turn, never a crash", async () => {
     const w = clockNight();
-    const { talk } = w.lead(() => {
+    const { talk, calls } = w.lead(() => {
+      if (calls.length === 12) w.loopRun.ctx.cancelled = true;
       throw Object.assign(new Error("busy"), { code: "folder_busy" });
     });
     const outcome = await w.run(talk);
-    assert.equal(outcome.failed?.ok, false, "the loop says which turn failed");
+    assert.equal(calls.length, 12, "asked again after each wait until the Stop");
+    assert.equal(outcome.failed, null, "no wrap-up for a failed turn");
+    assert.equal(outcome.wrapCause, null);
   });
 
   /**
@@ -3069,13 +3108,13 @@ describe("one session, reviewed", () => {
   });
 });
 
-describe("the Loop's time limit", () => {
+describe("a Loop has no time limit", () => {
   /**
    * The composer's ∞ ("until satisfied") reached the log as a plain 24-hour budget, so every
-   * surface that read the run back called it a 24 h build. There are no hours to pick now: every
-   * Loop is recorded as until satisfied, whatever hours its start named.
+   * surface that read the run back called it a 24 h build. There are no hours to pick, and a Loop
+   * has no clock: its start names no hours, whatever hours the call named.
    */
-  it("L1. a Loop is recorded as until satisfied, not as a 24-hour cap, whatever hours its start named", async () => {
+  it("L1. a Loop's start names no hours and no 24-hour cap, whatever hours its call named", async () => {
     const { startAutopilot } = await import("../../src/harness-seed/loop/start-autopilot.ts");
     const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
     const outcome = await startAutopilot.execute({ goal: "g", direction: "d", hours: 3 }, ctxRecorder().ctx);
@@ -3084,6 +3123,101 @@ describe("the Loop's time limit", () => {
     // Flipped: the start wrote its hours (3) and untilSatisfied only for ∞; it writes neither now.
     assert.equal("hours" in run, false);
     assert.equal("untilSatisfied" in run, false);
+  });
+
+  /*
+   * no-clock: a Loop ran under a clock of its own — a turn cap that cut and woke its lead, a carry-on
+   * wake after a turn that changed something, a heads-up and a time's-up, a wrap-up at its working
+   * deadline and a close at the end of its grace — so a lead resting on a long worker was wrapped up
+   * for the time, and one done with nothing at work was kept open until the clock ran out.
+   */
+  it("no-clock. a lead resting on its worker for two days hears no time and is woken only by the worker's end", async () => {
+    const w = clockNight();
+    w.ticks.push((now) => {
+      if (now < w.T0 + 48 * HOUR_MS || w.worker.state !== "running") return;
+      w.worker.state = "done";
+      w.note("sky ended: the sky is painted", "worker_ended");
+    });
+    const { talk, calls } = w.lead((turn) => {
+      if (turn === 2) w.state.finished = true;
+      return { ok: true, sessionId: "lead-1" };
+    });
+    const outcome = await w.run(talk);
+    assert.equal(calls.length, 2, calls.map((c) => c.prompt.split("\n")[0]).join(" | "));
+    assert.ok(calls[1]!.at >= w.T0 + 48 * HOUR_MS, "woken only once its worker ended");
+    assert.match(calls[1]!.prompt, /a worker ended/);
+    assert.equal(outcome.wrapCause, null, "no wrap-up for time");
+    for (const call of calls) assert.doesNotMatch(call.prompt, /working minutes|time's up|minutes left/i);
+  });
+
+  it("no-clock. a lead turn that ends with nothing at work closes the Loop at once: no wake, no wrap-up turn", async () => {
+    const w = clockNight();
+    w.worker.state = "done";
+    const { talk, calls } = w.lead(() => ({ ok: true, sessionId: "lead-1" }));
+    const outcome = await w.run(talk);
+    assert.equal(calls.length, 1);
+    assert.equal(outcome.wrapCause, null);
+    assert.ok(w.at.now < w.T0 + MINUTE_MS, "closed as its turn ended, not when a clock ran out");
+  });
+
+  /**
+   * A lead resting on one job of its run that runs for an hour (the worker is done), on a host that
+   * lists the run's jobs as `jobs.list` does; `failRunningRead` names which read of the running jobs
+   * (one with no `endedAfter`) the host cannot answer.
+   */
+  function restingOnAJob(failRunningRead: number | null) {
+    const w = clockNight();
+    w.worker.state = "done";
+    const endsAt = w.T0 + HOUR_MS;
+    const job = { id: "job-1", title: "Long build", state: "running", role: "lead" };
+    const reads = { all: 0, running: 0 };
+    // The job's end is a line of the run's log, as the run writes it.
+    Object.assign(w.loopRun, { note: w.note });
+    Object.assign(w.loopRun.ctx, {
+      call: async (method: string, params: { endedAfter?: number }) => {
+        if (method !== HostMethod.JobsList) return null;
+        reads.all += 1;
+        if (params.endedAfter === undefined && ++reads.running === failRunningRead)
+          throw new Error("jobs.list: the host's deadline passed");
+        if (w.at.now < endsAt) return { jobs: [job], seq: 0 };
+        return { jobs: [{ ...job, state: "exited", exitCode: 0, endSeq: 1 }], seq: 1 };
+      },
+    });
+    const { talk, calls } = w.lead((turn) => {
+      if (turn === 2) w.state.finished = true;
+      return { ok: true, sessionId: "lead-1" };
+    });
+    return { w, endsAt, reads, calls, run: () => w.run(talk) };
+  }
+
+  it("no-clock. a read of the run's jobs the host could not answer closes nothing: the lead is woken by its job's end", async () => {
+    const resting = restingOnAJob(1);
+    await resting.run();
+    assert.equal(resting.calls.length, 2, "the Loop stayed open while its job ran");
+    assert.ok(resting.calls[1]!.at >= resting.endsAt, "woken once its job ended");
+    assert.match(resting.calls[1]!.prompt, /a job of the run ended/);
+  });
+
+  it("no-clock. a lead resting on a job reads the run's jobs at most twice every JOB_POLL_MS: its ends and what runs", async () => {
+    const resting = restingOnAJob(null);
+    await resting.run();
+    assert.equal(resting.calls.length, 2);
+    const polls = HOUR_MS / JOB_POLL_MS;
+    assert.ok(resting.reads.all <= 2 * polls + 4, `${resting.reads.all} reads over an hour's rest`);
+  });
+
+  it("no-clock. the person's Finish while the lead's turn works gives exactly one wrap-up turn once it ends", async () => {
+    let finishing = false;
+    const w = clockNight({ finishing: async () => finishing });
+    const { talk, calls } = w.lead((turn) => {
+      if (turn === 1) finishing = true;
+      return { ok: true, sessionId: "lead-1" };
+    });
+    const outcome = await w.run(talk);
+    assert.equal(calls.length, 2, "its turn, then the one wrap-up turn");
+    assert.match(calls[1]!.prompt, /The user asked to finish, so the wrap-up starts now/);
+    assert.equal(outcome.wrapCause, "finish");
+    assert.deepEqual(w.wakes(), [["finish_requested", "wrap_up"]], "the wrap-up is woken for at once, not by a clock");
   });
 });
 
@@ -3391,7 +3525,9 @@ describe("a message after a finished build whose lead was a session of its own",
     assert.notEqual(runs[1]?.runId, OWN_RUN, "a new run, never the finished one reopened");
     assert.equal(runs[1]?.resumed, false);
     assert.equal(runs[1]?.goal, dirtBike.goal, "the ask is its goal");
-    assert.equal(runs[1]?.budgets?.untilSatisfied, true, "until its lead finishes it");
+    // Flipped (no clock): the new Loop was recorded `untilSatisfied` under a day's ceiling; it has no clock.
+    assert.equal(runs[1]?.budgets?.untilSatisfied, undefined, "until its lead finishes it: no clock");
+    assert.equal(runs[1]?.budgets?.wallClockMs, undefined);
     // The Loop's lead rests (no idle stop ends it): the person's Stop closes it, and the close names its profile.
     (chat.studio as unknown as Studio).cancels.add(OWN_THREAD);
     stopRunsOf(chat.studio as never, OWN_THREAD);
@@ -3956,7 +4092,6 @@ describe("an engine's plugin turned on from the chat's card (mp-unity)", () => {
 describe("what the lead is told about its workers", () => {
   it("GGR-11. the brief said '8 of 8 worker windows free' of a pool whose workers could use six: it says how many workers may run at once", async () => {
     const { directorBrief } = await import("../../src/harness-seed/loop/director/briefs.ts");
-    const now = Date.now();
     const brief = directorBrief({
       run: {
         runId: "ggr",
@@ -3965,8 +4100,6 @@ describe("what the lead is told about its workers", () => {
         engine: "claude-code",
       },
       capacity: { max: 8, free: 8, memory: { freeMb: 13091 } },
-      softDeadline: now + 120 * MINUTE_MS,
-      finalDeadline: now + 135 * MINUTE_MS,
       integrationWorktree: "/runs/ggr/integration",
       baseCommit: "a".repeat(40),
     } as never);
@@ -4791,35 +4924,11 @@ describe("the most workers at once", () => {
   });
 });
 
-describe("a worker wait inside the lead's capped turn", () => {
-  it("LT1. the turn's cap cut a four-minute worker_wait short and the turn's continuation re-sent its guidance: a wait ends before the turn must, saying so", async () => {
-    const { turnRoomNote, waitWithinTurn } = await import("../../src/harness-seed/loop/director/open/turn-room.ts");
-    const { noteTurnEnds } = await import("../../src/harness-seed/loop/director/turn-ends.ts");
-    const state = {};
-    const now = 1_000_000;
-    noteTurnEnds(state, now + 4 * MINUTE_MS);
-    const near = waitWithinTurn({ state } as never, { seconds: "240" }, now);
-    assert.equal(near.args.seconds, 150, "the wait returns 90 s before the turn must end");
-    assert.equal(near.endsBy, now + 4 * MINUTE_MS);
-    // Told as the wait returns, not as it began.
-    assert.match(turnRoomNote(Number(near.endsBy), now + 150 * SECOND_MS), /turn ends in about 2 minutes/);
-    const far = waitWithinTurn({ state } as never, { seconds: "60" }, now);
-    assert.deepEqual(far, { args: { seconds: "60" }, endsBy: null }, "a wait that fits is left alone");
-    // The pool lets no wait run past 240 s: a longer ask that fits once capped is left alone too.
-    noteTurnEnds(state, now + 10 * MINUTE_MS);
-    assert.equal(waitWithinTurn({ state } as never, { seconds: "600" }, now).endsBy, null);
-    const none = waitWithinTurn({ state: {} } as never, { seconds: "240" }, now);
-    assert.equal(none.endsBy, null, "a turn with no end noted waits as asked");
-  });
-});
-
 describe("the user's ask to finish a running build (director/wrap-up.ts)", () => {
   it("FA4. the wrap-up after the user's ask never invites a claim: their finish closes the run with no reviewer, so no win is claimed", async () => {
     const { wrapUpPrompt } = await import("../../src/harness-seed/loop/director/briefs.ts");
-    const now = Date.now();
     const brief = {
       run: { runId: "run_f", project: "racer", goal: "a racer" },
-      finalDeadline: now + 30 * 60_000,
       integrationHead: "a".repeat(40),
       integrationHealthy: true,
       workers: [],
@@ -4827,16 +4936,16 @@ describe("the user's ask to finish a running build (director/wrap-up.ts)", () =>
     const asked = wrapUpPrompt({ ...brief, userAsked: true } as never);
     assert.doesNotMatch(asked, /victory=yes/, asked);
     assert.match(asked, /claims nothing/);
-    assert.match(wrapUpPrompt(brief as never), /victory=yes/, "the clock's wrap-up still may claim the goal");
+    assert.match(wrapUpPrompt(brief as never), /victory=yes/, "a failed turn's wrap-up still may claim the goal");
 
     // The open Loop: a finish after the person's ask closes at once, with no reviewer.
     const { openClosing } = await import("../../src/harness-seed/loop/director/open/prompts.ts");
-    const open = (wrapCause: string) =>
-      openClosing({ wrapping: true, wrapCause, idleAsk: false, minutesLeft: 20 } as never);
+    const open = (wrapCause: string) => openClosing({ wrapping: true, wrapCause } as never);
     assert.doesNotMatch(open("finish"), /reviewer needs/, open("finish"));
     assert.match(open("finish"), /no reviewer/);
-    // Flipped (phase 5): a review is the lead's to ask for; the clock's wrap-up names none.
-    assert.match(open("deadline"), /Only if the goal is reached, call finish/);
+    // Flipped (phase 5): a review is the lead's to ask for; a failed turn's wrap-up names none.
+    // Flipped (no clock): that wrap-up was the clock's (`deadline`); a Loop has none.
+    assert.match(open("failed"), /Only if the goal is reached, call finish/);
   });
 
   it("FA6. an open Loop starts no worker once anybody asked it to finish — the app's own Finish too, not only the lead's wrap_up", async () => {
@@ -5182,17 +5291,18 @@ describe("the lead and its workers are free agents (Loop phase 3)", () => {
 
 describe("the Loop's stop and nudge rules, audited after phase 5", () => {
   // Flipped: a lead whose turn ended with nothing running was asked once what next, and a second quiet
-  // turn started the wrap-up (`WrapCause.Idle`); the phase 5 rules wake a lead on events and time only.
+  // turn started the wrap-up (`WrapCause.Idle`); the phase 5 rules wake a lead on events only.
+  // Flipped (no clock): the working time no longer wakes a resting lead (`WakeCause.WrapUp` at its
+  // working deadline): with nothing unread and nobody waiting, nothing is due.
   it("PA1. a lead that ends a turn with nothing running rests: nothing asks it what next, and being quiet starts no wrap-up", async () => {
-    const { afterTurn, nextWake, TurnEnd, WakeCause, WrapCause } = await import(
+    const { afterTurn, nextWake, TurnEnd, WrapCause } = await import(
       "../../src/harness-seed/loop/director/wake-schedule.ts"
     );
     const { wakeRules } = await import("../../src/harness-seed/loop/director/wake-prompts.ts");
-    const quiet = { ok: true, closed: false, workingTimeLeft: true, finishRequested: false };
+    const quiet = { ok: true, closed: false, finishRequested: false };
     assert.equal(afterTurn(quiet).next, TurnEnd.Sleep, "the first quiet turn");
     assert.equal(afterTurn(quiet).next, TurnEnd.Sleep, "and every one after it");
     assert.equal(Object.values(WrapCause).includes("idle" as never), false, "no wrap-up is started by idleness");
-    const hour = 3_600_000;
     const resting = nextWake({
       now: 1_000,
       unread: [],
@@ -5200,11 +5310,9 @@ describe("the Loop's stop and nudge rules, audited after phase 5", () => {
       asleepSince: 1_000,
       userWaiting: false,
       finishNew: false,
-      softDeadline: 1_000 + hour,
-      wrapping: false,
       wakesAt: [],
     });
-    assert.deepEqual(resting, { at: 1_000 + hour, reasons: [WakeCause.WrapUp] }, "only the working time wakes it");
+    assert.equal(resting, null, "no clock wakes it");
     assert.doesNotMatch(wakeRules(), /asks once what next|the wrap-up starts/);
   });
 

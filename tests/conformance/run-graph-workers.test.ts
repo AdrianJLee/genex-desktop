@@ -591,7 +591,7 @@ describe("the lead and its background work", () => {
           why: null,
           claim: "Done.",
           stopped: false,
-          timeLeft: false,
+          // Flipped (no clock): a round said whether working time was left (`timeLeft: false`).
         },
       ],
       over: false,

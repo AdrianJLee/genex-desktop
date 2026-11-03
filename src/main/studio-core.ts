@@ -430,8 +430,6 @@ export interface StudioCoreOptions {
    * ceiling, so the engine hears "declined" rather than a timeout).
    */
   consentTimeoutMs?: number;
-  /** How long a build's lead's permission card waits for the person (default 5 minutes); a test seam. */
-  leadAskTimeoutMs?: number;
   /** The locks' clock and its timers, and an agent's call's wait (default four minutes); a test seam. */
   locks?: Pick<LockServiceOptions, "agentWaitMs" | "now" | "sleep" | "timeout">;
   /** The clock a moment's shared limit runs on (`HookServiceOptions`); a test seam. */

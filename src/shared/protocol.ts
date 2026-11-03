@@ -263,17 +263,12 @@ export interface RunSpec {
   project: string;
   /** "autopilot": the wire name of a Loop's run, kept for the records it is in. */
   mode?: "autopilot";
-  /** What the run aims at: a named game's stills, or a direction in words. Completion is controlled by budgets. */
+  /** What the run aims at: a named game's stills, or a direction in words. */
   reference: RunReference;
   /** observationDelays: backoff (ms) before re-trying a blind camera — a test/ops knob. */
   budgets: {
-    wallClockMs: number;
-    /** The composer's ∞: run until what was asked is verified and nothing blocks it; `wallClockMs` is then only the safety ceiling. */
-    untilSatisfied?: boolean;
     /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
     creditCap?: number;
-    /** Explicit intent; absent records retain legacy untilSatisfied semantics. */
-    completionPolicy?: "goal" | "duration";
     maxIterations?: number;
     observationDelays?: number[];
     /** v2 loop knobs: the pre-evidence code review (default on) and its model half (default on for delegated engines). */

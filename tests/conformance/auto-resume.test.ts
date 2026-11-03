@@ -1,9 +1,9 @@
 /**
  * Host auto-resume (src/main/core/auto-resume.ts): a build an engine limit paused resumes once the
- * limit resets, and one the loop's crash paused resumes once the loop runs again — at most
- * AUTO_RESUMES_MAX times a run, never after the user's Stop or Finish, never with too little working
- * time or memory left. Decided from typed fields only: the close's `limit`, the host's own crash
- * record, `run_control` actions and `run_auto_resumed` counts.
+ * limit resets, every time, and one the loop's crash paused resumes once the loop runs again — a
+ * crash's and an outage's at most AUTO_RESUMES_MAX times a run, never after the user's Stop or
+ * Finish, never with too little memory left. Decided from typed fields only: the close's `limit`,
+ * the host's own crash record, `run_control` actions and `run_auto_resumed` counts.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -88,13 +88,15 @@ function plainPause(at: number, extra: Record<string, unknown> = {}): EventEnvel
   ];
 }
 
-const autoResumed = (at: number, runId = RUN) =>
-  custom(at, CustomEvent.RunAutoResumed, { runId, cause: AutoResumeCause.LimitReset, attempt: 1 });
+const autoResumed = (at: number, runId = RUN, cause: AutoResumeCause = AutoResumeCause.LimitReset) =>
+  custom(at, CustomEvent.RunAutoResumed, { runId, cause, attempt: 1 });
 
 const PAUSED_AT = T0 + 60 * MINUTE_MS;
 const RESET_MS = 30 * MINUTE_MS;
 const DUE = PAUSED_AT + RESET_MS + LIMIT_RESET_MARGIN_MS;
 const rateLimit = { kind: EngineFailureKind.RateLimit, retryAfterMs: RESET_MS };
+/** A provider outage that paused the run at `at`. */
+const outage = (at: number) => ({ kind: EngineFailureKind.Unavailable, retryAfterMs: null, at });
 
 const facts = (patch: Partial<AutoResumeFacts> = {}): AutoResumeFacts => ({
   runId: RUN,
@@ -280,8 +282,10 @@ describe("autoResumePlan: when a paused build resumes on its own", () => {
       now: DUE + HOUR_MS + RESET_MS + LIMIT_RESET_MARGIN_MS,
       want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 2 },
     },
+    // Flipped (no clock): a third limit pause was the user's (`Spent`); the lead's limits no longer
+    // wait in the run, so each one the host resumes at its reset, however many came before.
     {
-      name: `after ${AUTO_RESUMES_MAX} automatic resumes it is the user's`,
+      name: "a limit's resumes spend nothing: a third limit pause resumes at its reset",
       events: () => [
         ...limited(),
         autoResumed(DUE),
@@ -291,7 +295,33 @@ describe("autoResumePlan: when a paused build resumes on its own", () => {
         ...limitPause(DUE + 2 * HOUR_MS, rateLimit),
       ],
       now: DUE + 2 * HOUR_MS + RESET_MS + LIMIT_RESET_MARGIN_MS,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 3 },
+    },
+    {
+      name: `after ${AUTO_RESUMES_MAX} automatic resumes for an outage or a crash, another outage is the user's`,
+      events: () => [
+        ...limited(),
+        autoResumed(DUE, RUN, AutoResumeCause.ProviderOutage),
+        resumedStart(DUE),
+        autoResumed(DUE + HOUR_MS, RUN, AutoResumeCause.LoopRestart),
+        resumedStart(DUE + HOUR_MS),
+        ...limitPause(DUE + 2 * HOUR_MS, outage(DUE + 2 * HOUR_MS)),
+      ],
+      now: DUE + 2 * HOUR_MS + OUTAGE_RESUME_AFTER_MS,
       want: { action: AutoResumeAction.None, skip: AutoResumeSkip.Spent },
+    },
+    {
+      name: "a limit pause after those resumes still resumes at its reset",
+      events: () => [
+        ...limited(),
+        autoResumed(DUE, RUN, AutoResumeCause.ProviderOutage),
+        resumedStart(DUE),
+        autoResumed(DUE + HOUR_MS, RUN, AutoResumeCause.LoopRestart),
+        resumedStart(DUE + HOUR_MS),
+        ...limitPause(DUE + 2 * HOUR_MS, rateLimit),
+      ],
+      now: DUE + 2 * HOUR_MS + RESET_MS + LIMIT_RESET_MARGIN_MS,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 3 },
     },
     {
       name: "another run's automatic resumes are not counted",
@@ -299,11 +329,13 @@ describe("autoResumePlan: when a paused build resumes on its own", () => {
       now: DUE,
       want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
     },
+    // Flipped (no clock): a run whose start named little working time left was not resumed
+    // (`AutoResumeSkip.NoTimeLeft`); a run has no working time, so an old record's hours change nothing.
     {
-      name: "too little working time left is not worth a resume",
-      events: () => [registered(T0, { wallClockMs: 65 * MINUTE_MS }), ...limitPause(PAUSED_AT, rateLimit)],
-      now: DUE,
-      want: { action: AutoResumeAction.None, skip: AutoResumeSkip.NoTimeLeft },
+      name: "a run an older start record gave an hour, which worked 55 minutes, resumes at its reset all the same",
+      events: () => [registered(T0, { wallClockMs: HOUR_MS }), ...limitPause(T0 + 55 * MINUTE_MS, rateLimit)],
+      now: T0 + 55 * MINUTE_MS + RESET_MS + LIMIT_RESET_MARGIN_MS,
+      want: { action: AutoResumeAction.Resume, cause: AutoResumeCause.LimitReset, attempt: 1 },
     },
     {
       name: "a run until satisfied has no clock to run out",
@@ -669,7 +701,8 @@ describe("AutoResumeService: the planner wired to timers and the resume path", (
 
   it("a resume that fails is still counted, so a failing resume cannot repeat forever", async () => {
     let attempts = 0;
-    let log: EventEnvelope[] = [registered(), ...limitPause(PAUSED_AT, rateLimit)];
+    // An outage's resumes are counted; a limit's wait for a reset of its own.
+    let log: EventEnvelope[] = [registered(), ...limitPause(PAUSED_AT, outage(PAUSED_AT))];
     const lines: string[] = [];
     const service = new AutoResumeService({
       enabled: () => true,

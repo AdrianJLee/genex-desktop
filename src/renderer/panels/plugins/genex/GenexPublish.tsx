@@ -889,6 +889,7 @@ function PublishBody({
           platforms={platforms}
           shown={!celebrate}
           native={record.state?.native}
+          onGenex={Boolean(record.state?.slug)}
           hostedWeb={record.state?.hostedWeb}
           onRemoveWeb={() => void record.act(GenexAction.PublishRemoveWeb)}
         />

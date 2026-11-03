@@ -72,6 +72,11 @@ export interface NativeSessionsDeps {
   record(slug: string): Promise<InstallRecord | null>;
   /** Start a game in its sandbox (`spawnNativeGame`). */
   spawn(request: NativeGameRequest): Promise<GameProcess>;
+  /**
+   * The program to start in place of the installed one, with arguments before the game's own, or
+   * null for the installed one (Windows: Unreal's game binary past its launcher, `unreal-launcher.ts`).
+   */
+  program?(app: string, executable: string): Promise<{ binary: string; args: string[] } | null>;
   /** Whether the process has a window on screen, and bring it forward (`native-windows.ts`). */
   hasWindow(pid: number): Promise<boolean>;
   show(pid: number): Promise<void>;
@@ -220,6 +225,18 @@ export class NativeSessions {
     }
   }
 
+  /** The program `program` names for this game, or null (no resolver, none named, or it failed). */
+  async #program(slug: string, app: string, executable: string): Promise<{ binary: string; args: string[] } | null> {
+    try {
+      return (await this.#deps.program?.(app, executable)) ?? null;
+    } catch (error) {
+      this.#deps.log(
+        `native game ${slug} starts as installed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
   /**
    * Start the game in its sandbox with a fresh temporary folder and its way to Genex, both given
    * back if it does not start.
@@ -233,16 +250,16 @@ export class NativeSessions {
     await mkdir(saves, { recursive: true });
     const scratch = await mkdtemp(path.join(this.#deps.root, `${SCRATCH}${slug}-`));
     const { bundleId, bundleName } = record;
-    const binary = path.join(app, record.executable);
+    const chosen = await this.#program(slug, app, record.executable);
     const genex = await this.#openGenex(slug);
     const request: NativeGameRequest = {
-      binary,
+      binary: chosen?.binary ?? path.join(app, record.executable),
       app,
       saves,
       scratch,
       bundleId,
       bundleName,
-      args: launchArgs(record),
+      args: [...(chosen?.args ?? []), ...launchArgs(record)],
       // The game's own name on Genex too: a build made before its first publish knows no other.
       ...(genex ? { genex: { ports: genex.ports, env: { ...genex.env, GENEX_GAME: slug } } } : {}),
     };

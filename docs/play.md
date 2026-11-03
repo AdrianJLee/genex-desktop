@@ -217,6 +217,8 @@ is.
   trusts (`NATIVE_BUILD_HOSTS`: `cdn.genex.technology` by exact name, so a game's own
   `<slug>.genex.technology` site never hands out an app), with no port or credentials, never
   redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
+  A Windows app Genex built from an Unreal game's project on its own computers (Publish's Build on
+  Genex, [plugins](plugins.md)) comes as any other row.
 - The build a computer installs is its platform's for its own processor, else a universal Mac app,
   else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
   (`buildFor`). Games launch on the Mac, on Linux and on Windows. Play names the computer "this Mac" on a Mac and "this
@@ -279,7 +281,11 @@ is.
   in a job killed with the host (also with no other desktops, logging off, clipboard reads or system
   settings); the host ends it when Genex's process or the host's stdin ends, says when its window
   is up (Genex counts it as on screen then), brings that window forward once, and passes Quit on as
-  `WM_CLOSE`. A game opens full screen with its engine's own argument
+  `WM_CLOSE`. An Unreal game whose binary carries Microsoft's Visual C++ runtime beside it (Build on
+  Genex ships it there) starts past Unreal's launcher: the launcher reads the runtime from the
+  registry and would ask to install one the game already has, so Play starts the binary its
+  resources name, inside the app, with their arguments (`unreal-launcher.ts`); any other app
+  starts its launcher, which offers its installer. A game opens full screen with its engine's own argument
   (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
   engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
   Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;

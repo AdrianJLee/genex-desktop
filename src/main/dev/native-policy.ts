@@ -21,6 +21,7 @@ const NATIVE_CHANNELS = [
   // Publish from Studio's dialog uploads the game to Genex with the user's real account.
   "studio:plugins.genex-publish",
   "studio:plugins.genex-publish-apps",
+  "studio:plugins.genex-cloud-build",
   "studio:subscription.signin",
   "studio:subscription.forget-studio-login",
   // Building with Genex opens genex.games's build page in the person's browser, where it signs the

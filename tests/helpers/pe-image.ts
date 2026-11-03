@@ -1,7 +1,9 @@
 /**
  * Minimal Windows PE images for the package's Visual C++ runtime checks
  * (scripts/package-vc-runtime.cjs): the headers, one section, and an import table and a delay-load
- * table naming the DLLs a test gives. Nothing runs them; they are read only.
+ * table naming the DLLs a test gives, and for Play's start of an Unreal game
+ * (main/play/unreal-launcher.ts) a resource table of `RT_RCDATA` strings, as Unreal's launcher
+ * carries them. Nothing runs them; they are read only.
  */
 
 /** PE machine types an image can claim. */
@@ -19,6 +21,8 @@ export interface PeImageSpec {
   delayedAsVa?: boolean;
   /** A 32-bit (PE32) image instead of PE32+. */
   pe32?: boolean;
+  /** `RT_RCDATA` resources by id, each a UTF-16 string ending in a NUL, as Unreal's launcher stores them. */
+  rcdata?: readonly { id: number; text: string }[];
 }
 
 const LFANEW = 0x40;
@@ -31,6 +35,43 @@ const IMAGE_BASE_32 = 0x400000;
 const IMAGE_BASE_64 = 0x140000000;
 const IMPORT_DESCRIPTOR = 20;
 const DELAY_DESCRIPTOR = 32;
+const RESOURCE_DIRECTORY = 2;
+const RT_RCDATA = 10;
+const LANG_EN_US = 1033;
+const RESOURCE_TABLE = 16;
+const RESOURCE_ENTRY = 8;
+const RESOURCE_DATA_ENTRY = 16;
+const SUBDIRECTORY = 0x80000000;
+
+/** A resource directory tree (type, then id, then language) holding `rcdata`, placed at `rva`. */
+function resourceTree(rcdata: readonly { id: number; text: string }[], rva: number): Buffer {
+  const typeTable = RESOURCE_TABLE + RESOURCE_ENTRY;
+  const idTables = typeTable + RESOURCE_TABLE + rcdata.length * RESOURCE_ENTRY;
+  const idTableSize = RESOURCE_TABLE + RESOURCE_ENTRY;
+  const dataEntries = idTables + rcdata.length * idTableSize;
+  let dataAt = dataEntries + rcdata.length * RESOURCE_DATA_ENTRY;
+  const texts = rcdata.map(({ text }) => Buffer.from(`${text}\0`, "utf16le"));
+  const tree = Buffer.alloc(dataAt + texts.reduce((sum, text) => sum + text.length, 0));
+  tree.writeUInt16LE(1, 14);
+  tree.writeUInt32LE(RT_RCDATA, RESOURCE_TABLE);
+  tree.writeUInt32LE(SUBDIRECTORY + typeTable, RESOURCE_TABLE + 4);
+  tree.writeUInt16LE(rcdata.length, typeTable + 14);
+  rcdata.forEach(({ id }, i) => {
+    const idTable = idTables + i * idTableSize;
+    const dataEntry = dataEntries + i * RESOURCE_DATA_ENTRY;
+    const text = texts[i] ?? Buffer.alloc(0);
+    tree.writeUInt32LE(id, typeTable + RESOURCE_TABLE + i * RESOURCE_ENTRY);
+    tree.writeUInt32LE(SUBDIRECTORY + idTable, typeTable + RESOURCE_TABLE + i * RESOURCE_ENTRY + 4);
+    tree.writeUInt16LE(1, idTable + 14);
+    tree.writeUInt32LE(LANG_EN_US, idTable + RESOURCE_TABLE);
+    tree.writeUInt32LE(dataEntry, idTable + RESOURCE_TABLE + 4);
+    tree.writeUInt32LE(rva + dataAt, dataEntry);
+    tree.writeUInt32LE(text.length, dataEntry + 4);
+    text.copy(tree, dataAt);
+    dataAt += text.length;
+  });
+  return tree;
+}
 
 /** Where the optional header's data directories start, for a test that rewrites one. */
 export function dataDirectoryOffset(index: number, pe32 = false): number {
@@ -63,6 +104,9 @@ export function peImageBytes(spec: PeImageSpec = {}): Buffer {
     section.writeUInt32LE(delayedAsVa ? imageBase + rva : rva, descriptor + 4);
   });
   for (const { name, at } of names) section.write(name, at, "latin1");
+  const resourceAt = section.length;
+  const resources = spec.rcdata?.length ? resourceTree(spec.rcdata, SECTION_RVA + resourceAt) : Buffer.alloc(0);
+  const body = Buffer.concat([section, resources]);
 
   const optionalSize = (pe32 ? 96 : 112) + DIRECTORY_COUNT * 8;
   const headers = Buffer.alloc(SECTION_FILE);
@@ -78,11 +122,15 @@ export function peImageBytes(spec: PeImageSpec = {}): Buffer {
   headers.writeUInt32LE(DIRECTORY_COUNT, OPTIONAL + (pe32 ? 92 : 108));
   if (imports.length) headers.writeUInt32LE(SECTION_RVA + importTable, dataDirectoryOffset(IMPORT_DIRECTORY, pe32));
   if (delayed.length) headers.writeUInt32LE(SECTION_RVA + delayTable, dataDirectoryOffset(13, pe32));
+  if (resources.length) {
+    headers.writeUInt32LE(SECTION_RVA + resourceAt, dataDirectoryOffset(RESOURCE_DIRECTORY, pe32));
+    headers.writeUInt32LE(resources.length, dataDirectoryOffset(RESOURCE_DIRECTORY, pe32) + 4);
+  }
   const sectionHeader = OPTIONAL + optionalSize;
   headers.write(".idata", sectionHeader, "latin1");
-  headers.writeUInt32LE(section.length, sectionHeader + 8);
+  headers.writeUInt32LE(body.length, sectionHeader + 8);
   headers.writeUInt32LE(SECTION_RVA, sectionHeader + 12);
-  headers.writeUInt32LE(section.length, sectionHeader + 16);
+  headers.writeUInt32LE(body.length, sectionHeader + 16);
   headers.writeUInt32LE(SECTION_FILE, sectionHeader + 20);
-  return Buffer.concat([headers, section]);
+  return Buffer.concat([headers, body]);
 }

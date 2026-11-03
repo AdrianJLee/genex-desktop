@@ -7,10 +7,14 @@
  */
 import { sizeWords } from "../../../../shared/byte-size.ts";
 import {
+  CloudBuildFailure,
+  CloudBuildState,
   GenexBuildReview,
+  type GenexCloudBuild,
   GenexListingState,
   type GenexNativeRecord,
   type GenexNativeSent,
+  type MacNotarizeFailure,
 } from "../../../../shared/genex.ts";
 import { CoreFact, type FactRef } from "../../../../shared/project-facts.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../../../shared/publish-platforms.ts";
@@ -38,6 +42,14 @@ export const PlatformEnd = {
   Rejected: "rejected",
   /** The last Publish could not send it. */
   Failed: "failed",
+  /** This computer can't make it, and Genex can build it on its own computers. */
+  CloudBuild: "cloud-build",
+  /** Genex built it: it can build it again from the game as it is now. */
+  CloudRebuild: "cloud-rebuild",
+  /** Genex's build of it failed, for a reason trying again may fix. */
+  CloudRetry: "cloud-retry",
+  /** Genex is building it now. */
+  Building: "building",
   /** The web row of a game with no web build that Genex still plays one of: it can be taken off. */
   RemoveWeb: "remove-web",
 } as const;
@@ -63,21 +75,23 @@ export function webOfferFor(facts: readonly FactRef[]): WebOffer {
   return facts.some((fact) => fact.id === CoreFact.UnrealProject) ? WebOffer.Unavailable : WebOffer.Quiet;
 }
 
-/** The rows of each computer's own system, in `process.platform` spelling. */
-const HOST_TARGET: Readonly<Record<string, PublishTarget>> = {
-  darwin: PublishTarget.Mac,
-  win32: PublishTarget.Windows,
-  linux: PublishTarget.Linux,
+/**
+ * The apps of an Unreal game each computer packages, in `process.platform` spelling: a Mac app on a
+ * Mac; a Windows one on Windows, and a Linux one there too with Epic's cross-compile toolchain.
+ */
+const UNREAL_MADE_HERE: Readonly<Record<string, ReadonlySet<PublishTarget>>> = {
+  darwin: new Set([PublishTarget.Mac]),
+  win32: new Set([PublishTarget.Windows, PublishTarget.Linux]),
 };
 
 /**
- * The only system a game's apps are made on here, or null when the agent makes any: an Unreal game
- * is packaged on the system it is for (Unreal makes no Mac app on Windows, nor a Windows or Linux one
- * on a Mac), so the other rows say where it is made instead of offering "Make with agent".
+ * The systems a game's apps are made for here, or null when the agent makes any: an Unreal game is
+ * packaged only for what this computer packages (`UNREAL_MADE_HERE`), so the other rows say where it
+ * is made instead of offering "Make with agent". Null too on a computer Genex packages no Unreal game on.
  */
-export function appsMadeOnly(facts: readonly FactRef[], hostPlatform: string): PublishTarget | null {
+export function appsMadeHere(facts: readonly FactRef[], hostPlatform: string): ReadonlySet<PublishTarget> | null {
   if (!facts.some((fact) => fact.id === CoreFact.UnrealProject)) return null;
-  return HOST_TARGET[hostPlatform] ?? null;
+  return Object.hasOwn(UNREAL_MADE_HERE, hostPlatform) ? (UNREAL_MADE_HERE[hostPlatform] ?? null) : null;
 }
 
 /** One platform's row as the dialog draws it. */
@@ -115,11 +129,21 @@ const REVIEW_END: Record<GenexBuildReview, PlatformEnd> = {
   [GenexBuildReview.Rejected]: PlatformEnd.Rejected,
 };
 
-/** Where an app Publish sends stands: being sent, on Genex (this build or a newer one), or not sent. */
-function sendEnd(row: PublishPlatform, native: GenexNativeRecord | undefined): PlatformEnd {
+/** The app on Genex for `row` when it is this build or a newer one, else none. */
+function currentSent(row: PublishPlatform, native: GenexNativeRecord | undefined) {
   const sent = native?.sent.find(forRow(row));
   const builtAt = row.builtAt ? Date.parse(row.builtAt) : 0;
-  if (sent && Date.parse(sent.publishedAt) >= builtAt) return sent.review ? REVIEW_END[sent.review] : PlatformEnd.Sent;
+  return sent && Date.parse(sent.publishedAt) >= builtAt ? sent : undefined;
+}
+
+/** A row's detail, saying so when its app on Genex is notarized under the creator's Apple ID. */
+const withNotarized = (detail: string, row: PublishPlatform, native: GenexNativeRecord | undefined): string =>
+  currentSent(row, native)?.notarized ? [detail, WORDS.notarized].filter(Boolean).join(" · ") : detail;
+
+/** Where an app Publish sends stands: being sent, on Genex (this build or a newer one), or not sent. */
+function sendEnd(row: PublishPlatform, native: GenexNativeRecord | undefined): PlatformEnd {
+  const sent = currentSent(row, native);
+  if (sent) return sent.review ? REVIEW_END[sent.review] : PlatformEnd.Sent;
   if (native?.sending) return PlatformEnd.Sending;
   return native?.failed.some(forRow(row)) ? PlatformEnd.Failed : PlatformEnd.None;
 }
@@ -146,9 +170,9 @@ function webWords(row: PublishPlatform, offer: WebOffer, hostedWeb: boolean): { 
   return { detail, end: PlatformEnd.None };
 }
 
-/** Whether a native row is an app this computer can't make (`appsMadeOnly`) and has none ready to send. */
-const madeElsewhere = (row: PublishPlatform, madeOnly: PublishTarget | null): boolean =>
-  madeOnly !== null && row.target !== madeOnly && row.state !== PublishPlatformState.Ready;
+/** Whether a native row is an app this computer can't make (`appsMadeHere`) and has none ready to send. */
+const madeElsewhere = (row: PublishPlatform, madeHere: ReadonlySet<PublishTarget> | null): boolean =>
+  madeHere !== null && !madeHere.has(row.target) && row.state !== PublishPlatformState.Ready;
 
 /** A native row this computer can't make: where it is made while missing, else why it is old; no press. */
 const elsewhereWords = (row: PublishPlatform & { target: NativeTarget }, now: number) => ({
@@ -156,18 +180,68 @@ const elsewhereWords = (row: PublishPlatform & { target: NativeTarget }, now: nu
   end: PlatformEnd.None,
 });
 
+/** The rows whose app Genex builds on its own computers when this one can't: an Unreal game's Windows app. */
+const CLOUD_TARGETS: ReadonlySet<PublishTarget> = new Set([PublishTarget.Windows]);
+
+/** The builds still running on Genex's computers. */
+const RUNNING_CLOUD: ReadonlySet<CloudBuildState> = new Set([
+  CloudBuildState.Queued,
+  CloudBuildState.Building,
+  CloudBuildState.Publishing,
+]);
+
+/** The newest build Genex made, or makes, of `row`'s app; none before the first. */
+function newestCloudBuild(row: PublishPlatform, native: GenexNativeRecord | undefined): GenexCloudBuild | undefined {
+  const builds = (native?.cloud?.builds ?? []).filter(forRow(row));
+  return builds.reduce<GenexCloudBuild | undefined>(
+    (newest, build) => (!newest || Date.parse(build.startedAt) > Date.parse(newest.startedAt) ? build : newest),
+    undefined,
+  );
+}
+
+/** What a failed build on Genex says, and whether trying again can help. */
+function cloudFailureWords(build: GenexCloudBuild): { detail: string; end: PlatformEnd } {
+  const failure = build.failure ?? CloudBuildFailure.Failed;
+  const detail = WORDS.cloudFailed[failure] ?? WORDS.cloudFailed[CloudBuildFailure.Failed];
+  return { detail, end: failure === CloudBuildFailure.Quota ? PlatformEnd.None : PlatformEnd.CloudRetry };
+}
+
+/**
+ * A row this computer can't make that Genex builds instead: offered once the game is on Genex
+ * (`onGenex`), then building, on Genex, or failed; null for a row Genex does not build, or while the
+ * Genex plugin and its CLI can't ask for builds.
+ */
+function cloudWords(
+  row: PublishPlatform & { target: NativeTarget },
+  native: GenexNativeRecord | undefined,
+  now: number,
+  onGenex: boolean,
+): { detail: string; end: PlatformEnd } | null {
+  if (!CLOUD_TARGETS.has(row.target) || native?.cloud?.supported !== true) return null;
+  if (!onGenex) return { detail: WORDS.cloudPublishFirst, end: PlatformEnd.None };
+  const build = newestCloudBuild(row, native);
+  if (!build) return { detail: WORDS.cloudOffer, end: PlatformEnd.CloudBuild };
+  if (RUNNING_CLOUD.has(build.state))
+    return { detail: WORDS.cloudBuilding(build.startedAt, now), end: PlatformEnd.Building };
+  if (build.state === CloudBuildState.Failed) return cloudFailureWords(build);
+  const built = WORDS.built(build.finishedAt ?? build.startedAt, now);
+  return { detail: [WORDS.sent, built].join(" · "), end: PlatformEnd.CloudRebuild };
+}
+
 /**
  * The rows in the order they come, each as words; `native` is how the last Publish's apps went,
- * `webOffer` what a game with no web version is offered for one, `madeOnly` the one system this
- * computer makes the game's apps for (`appsMadeOnly`), `hostedWeb` whether Genex's page for the
- * game plays a web version (`GenexPublishState.hostedWeb`).
+ * `webOffer` what a game with no web version is offered for one, `madeHere` the systems this
+ * computer makes the game's apps for (`appsMadeHere`), `onGenex` whether the game has a page on
+ * Genex, which an app Genex builds goes on, `hostedWeb` whether Genex's page for the game plays a
+ * web version (`GenexPublishState.hostedWeb`).
  */
 export function platformRows(
   platforms: readonly PublishPlatform[],
   now: number,
   native?: GenexNativeRecord,
   webOffer: WebOffer = WebOffer.Quiet,
-  madeOnly: PublishTarget | null = null,
+  madeHere: ReadonlySet<PublishTarget> | null = null,
+  onGenex = false,
   hostedWeb = false,
 ): PlatformRow[] {
   return platforms.map((row) => {
@@ -179,9 +253,9 @@ export function platformRows(
         size: null,
         state: row.state,
       };
-    const words = madeElsewhere(row, madeOnly)
-      ? elsewhereWords(row, now)
-      : { detail: nativeDetail(row, now), end: nativeEnd(row, native) };
+    const words = madeElsewhere(row, madeHere)
+      ? (cloudWords(row, native, now, onGenex) ?? elsewhereWords(row, now))
+      : { detail: withNotarized(nativeDetail(row, now), row, native), end: nativeEnd(row, native) };
     return {
       target: row.target,
       name: WORDS.name[row.target],
@@ -332,9 +406,18 @@ export function reachLine(
   return lines.length > 0 ? lines.join(" ") : null;
 }
 
-/** A line for each app the last Publish could not send, in the CLI's words. */
+/**
+ * A line for each app the last Publish could not send, in the CLI's words, and for each that went
+ * without the notarizing its creator asked for, why.
+ */
 export function failureLines(platforms: readonly PublishPlatform[], native: GenexNativeRecord | undefined): string[] {
-  return platforms.filter((row) => isNative(row) && row.uploads).flatMap((row) => failureLine(row, native));
+  const shown = platforms.filter((row) => isNative(row) && row.uploads);
+  const unsent = shown.flatMap((row) => failureLine(row, native));
+  const unnotarized = shown
+    .map((row) => currentSent(row, native)?.notarizeFailure)
+    .filter((failure): failure is MacNotarizeFailure => failure !== undefined)
+    .map((failure) => WORDS.notarizeFailed[failure]);
+  return [...unsent, ...unnotarized];
 }
 
 /** A sent app's line when it did not reach players: not sent and why, or turned down by Genex and why. */

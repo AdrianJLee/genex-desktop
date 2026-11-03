@@ -114,6 +114,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.genex-publish-platforms": "genexPublishPlatforms",
   "studio:plugins.genex-publish": "genexPublish",
   "studio:plugins.genex-publish-apps": "genexPublishApps",
+  "studio:plugins.genex-cloud-build": "genexCloudBuild",
   "studio:plugins.index": "pluginsIndex",
   "studio:plugins.install-github": "pluginInstallGithub",
   "studio:plugins.lookup-github": "pluginLookupGithub",
@@ -425,6 +426,7 @@ export interface StudioInvokePayloads {
     replaceNativePage?: boolean;
   };
   "studio:plugins.genex-publish-apps": { project: string; title?: string; remix?: boolean };
+  "studio:plugins.genex-cloud-build": { project: string; platform: string };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };
   "studio:plugins.lookup-github": { link: string; version?: GithubVersion };

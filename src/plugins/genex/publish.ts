@@ -71,6 +71,12 @@ export const MESSAGE = {
   /** {@link MESSAGE.NoApps} as Publish's refusal. */
   NoAppsRefusal: () => t("This game has no Mac, Windows or Linux app ready to publish."),
   ListingRefused: "Genex did not list the game in the gallery.",
+  /** A build on Genex asked for a game with no page there, which the app would go on. */
+  NotOnGenexRefusal: () => t("Publish the game first, then Genex can build it"),
+  /** A build on Genex asked through a CLI without `genex native build`. */
+  CloudBuildsUnavailableRefusal: () => t("This version of Genex can’t build apps on Genex yet"),
+  /** A build on Genex asked without the game's folder to stage its project from. */
+  NoGameFolderRefusal: () => t("Open the game to build its app on Genex"),
   /** A taken-down game keeps its web version on Genex for the appeal. */
   TakenDownRefusal: () => t("This game was taken down, so Genex keeps its web version for now."),
   /** Genex stopped partway through taking the web version off; the same press finishes it. */

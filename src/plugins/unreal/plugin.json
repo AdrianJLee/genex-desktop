@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.47.0",
+  "version": "0.47.1",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
@@ -262,13 +262,18 @@
     {
       "name": "package-game",
       "facts": ["unreal-project"],
-      "description": "Package this Unreal game as the app its players install, for this computer's system: a Mac app on a Mac, a Windows program on Windows (Unreal makes no app for another system). Genex saves the open work in Unreal first (Unreal stays open), then runs Epic's BuildCookRun (Shipping) in the background into unreal/Builds/Mac/ or unreal/Builds/Windows/, where Publish finds it. A first package compiles every shader and takes minutes. Answers {started, system} at once; read package-status until it is done or failed. stop: true ends a running package.",
+      "description": "Package this Unreal game as the app its players install: a Mac app on a Mac; on Windows, a Windows program, or a Linux one with system: \"linux\" (Unreal makes no Mac app off a Mac and no Windows app off Windows). A Linux package needs Epic's free Linux cross-compile toolchain for this Unreal: without it the call refuses with the installer's link, which you give the user, then package again once they ran it. Genex saves the open work in Unreal first (Unreal stays open), then runs Epic's BuildCookRun (Shipping) in the background into unreal/Builds/Mac/, unreal/Builds/Windows/ or unreal/Builds/Linux/, where Publish finds it. One package runs at a time per game. A first package compiles every shader and takes minutes. Answers {started, system} at once; read package-status (with the same system) until it is done or failed. stop: true ends a running package.",
       "parameters": {
         "type": "object",
         "properties": {
           "stop": {
             "type": "boolean",
             "description": "Optional. true ends the running package instead."
+          },
+          "system": {
+            "type": "string",
+            "enum": ["mac", "windows", "linux"],
+            "description": "Optional. The system the app is for; this computer's own when left out. On Windows, \"linux\" packages a Linux app."
           }
         }
       }
@@ -276,10 +281,16 @@
     {
       "name": "package-status",
       "facts": ["unreal-project"],
-      "description": "How this game's package stands: running, done (with the app's path inside the game and how long it took), failed (with its first error lines) or stopped; idle names an app already in this system's build folder.",
+      "description": "How this game's package for a system stands (system: \"linux\" for a Linux package on Windows; this computer's own system when left out): running, done (with the app's path inside the game and how long it took), failed (with its first error lines) or stopped; idle names an app already in that system's build folder.",
       "parameters": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "system": {
+            "type": "string",
+            "enum": ["mac", "windows", "linux"],
+            "description": "Optional. The system the app is for; this computer's own when left out. On Windows, \"linux\" packages a Linux app."
+          }
+        }
       }
     },
     {

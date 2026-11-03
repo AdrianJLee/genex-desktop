@@ -29,6 +29,7 @@ import {
   ViewerEscape,
   viewerEscape,
   justLiked,
+  likeFlipped,
   nativeViewsUp,
   noteOn,
   PlateState,
@@ -282,6 +283,31 @@ describe("Play counts", () => {
       [Number.POSITIVE_INFINITY, "0"],
     ];
     for (const [value, expected] of table) assert.equal(formatCount(value), expected, `formatCount(${value})`);
+  });
+});
+
+describe("A game page's Like", () => {
+  it("turns at the press, before genex.games answers: the heart flips and the count moves by one, never below none", () => {
+    const table: [{ liked: boolean; likes: number }, { liked: boolean; likes: number }][] = [
+      [
+        { liked: false, likes: 3 },
+        { liked: true, likes: 4 },
+      ],
+      [
+        { liked: true, likes: 4 },
+        { liked: false, likes: 3 },
+      ],
+      [
+        { liked: false, likes: 0 },
+        { liked: true, likes: 1 },
+      ],
+      // A count that lagged the person's own like still never reads below none.
+      [
+        { liked: true, likes: 0 },
+        { liked: false, likes: 0 },
+      ],
+    ];
+    for (const [before, after] of table) assert.deepEqual(likeFlipped(before), after, JSON.stringify(before));
   });
 });
 

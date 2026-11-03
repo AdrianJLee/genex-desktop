@@ -38,7 +38,7 @@ import { ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { NATIVE_WORDS, nativeHereWords, notHereWords, PLAY_CARD_MENU_WORDS, PLAY_WORDS } from "../words.ts";
-import { formatCount } from "./play-model.ts";
+import { formatCount, type LikeShown, likeFlipped } from "./play-model.ts";
 import { GamePhase, type GameStanding, gameStanding, installPercent, minutesSince } from "./native-model.ts";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
 import { PlatformMarks, platformNames } from "./NativeBadge.tsx";
@@ -351,11 +351,15 @@ function ShareButton({ game }: { game: PlayGameDetail }): JSX.Element {
 /** Like, Comments (genex.games' page, where they live) and Share. */
 function Pills({ game }: { game: PlayGameDetail }): JSX.Element {
   const web = usePlayWeb();
-  const [like, setLike] = useState({ liked: game.liked, likes: game.likes });
+  const [like, setLike] = useState<LikeShown>({ liked: game.liked, likes: game.likes });
+  // The heart turns at the press; genex.games' answer then sets the count, and a failure puts it back.
   const toggle = async () => {
+    const before = like;
+    setLike(likeFlipped(before));
     try {
-      setLike(await studio().api.playLike(game.slug, !like.liked));
+      setLike(await studio().api.playLike(game.slug, !before.liked));
     } catch {
+      setLike(before);
       studio().notify(PLAY_WORDS.bar.notes[PlayNote.LikeFailed], ToastTone.Error);
     }
   };

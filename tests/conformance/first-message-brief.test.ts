@@ -10,7 +10,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
-import { directorBrief } from "../../src/harness-seed/loop/director/briefs.ts";
 import { WorkerIsolation } from "../../src/harness-seed/loop/workers/contract.ts";
 import { workerBrief } from "../../src/harness-seed/loop/workers/prompts.ts";
 import { CoreFact } from "../../src/harness-seed/loop/folder-facts.ts";
@@ -256,40 +255,11 @@ describe("the context, whatever the folder holds", () => {
   });
 });
 
-describe("who runs the session", () => {
-  it("every lead brief says it runs inside Genex, which folder, what it holds, and what a Genex plugin is", () => {
-    const director = directorBrief({
-      run: { runId: "r", project: NAME, goal: "g" },
-      integrationWorktree: "/w",
-      baseCommit: null,
-    } as never);
-    assert.match(director, IDENTITY);
-    assert.match(director, /a web game/);
-    const placed = directorBrief({
-      run: { runId: "r", project: NAME, goal: "g" },
-      integrationWorktree: "/w",
-      baseCommit: null,
-      facts: [fact(CoreFact.WebGame, "site"), fact(CoreFact.UnrealProject)],
-      gameFolder: "/Users/me/AI Games/keep-site",
-    } as never);
-    assert.match(
-      placed,
-      /folder `AI Games\/keep-site`; it holds a web game in `site\/`, an Unreal Engine project at its root/,
-    );
-  });
-});
-
-/** A director's run and one of its builders, as the briefs read them. */
-const RUN = { runId: "run_w", project: NAME, goal: "a keep to explore", engine: CLAUDE };
-
+// Flipped: a web lead's brief said it runs inside Genex and named the plugin search and its card
+// ("PLUGINS: … plugins_find; plugins_suggest shows the person its card"); the lead is the chat's own
+// session, whose system text and tools say both (one-loop.test.ts "its first message is one Genex line").
 describe("every worker's brief", () => {
-  it("a lead's brief names the plugin search and its card; a worker's names the search only", () => {
-    const director = directorBrief({
-      run: RUN,
-      integrationWorktree: "/w",
-      baseCommit: null,
-    } as never);
-    assert.match(director, /plugins_find; plugins_suggest shows the person its card/);
+  it("a worker's names the plugin search only", () => {
     const worker = workerBrief({
       identity: { folderLabel: "AI Games/keep", facts: [] },
       task: "read the level",

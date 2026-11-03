@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   afterTurn,
-  DirectorLoop,
   nextWake,
+  NoteKind,
   TurnEnd,
+  WAKE_DEBOUNCE_MS,
   WrapCause,
 } from "../../src/harness-seed/loop/director/wake-schedule.ts";
-import * as wakePrompts from "../../src/harness-seed/loop/director/wake-prompts.ts";
 import { wakeRecord } from "../../src/harness-seed/loop/director/journal.ts";
-import { HOUR_MS } from "../../src/harness-seed/loop/time.ts";
+import { HOUR_MS, MINUTE_MS } from "../../src/harness-seed/loop/time.ts";
 import {
   bookmarkLead,
   chatBookmark,
@@ -52,42 +52,40 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     );
   });
 
-  it("W8. no clock wakes a resting lead: with nothing unread and nobody waiting, nothing is ever due", () => {
-    for (const now of [T0, T0 + HOUR_MS, T0 + 48 * HOUR_MS]) {
-      const view = {
-        now,
-        unread: [],
-        asleepFromSeq: 0,
-        asleepSince: T0,
-        userWaiting: false,
-        finishNew: false,
-        wakesAt: [],
-      };
-      assert.equal(nextWake(view), null, `nothing due ${(now - T0) / HOUR_MS} h on`);
-    }
-  });
-});
+  /** What the waker reads while the lead rests: nobody waiting, nothing untold, asleep since T0. */
+  const quietView = { now: T0, untold: [], asleepSince: T0, personWaiting: false };
+  const line = (seq: number, at: number, kind: NoteKind) => ({ seq, at, kind });
 
-describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
-  it("P7. what the user says is bounded: the newest messages, each clipped, and how many earlier ones are left out", () => {
-    const { USER_SAYS_CHARS, USER_SAYS_MAX } = wakePrompts as unknown as Record<string, number>;
-    assert.equal(typeof USER_SAYS_MAX, "number", "the block has a bound");
-    const said = Array.from({ length: USER_SAYS_MAX + 5 }, (_, i) => `message ${i} ${"x".repeat(3 * USER_SAYS_CHARS)}`);
-    const block = wakePrompts.userSaysBlock(said).split("\n");
-    assert.equal(block[0], "THE USER SAYS (verbatim, oldest first):");
-    assert.equal(block[1], "- (5 earlier messages not shown)");
-    const shown = block.slice(2);
-    assert.equal(shown.length, USER_SAYS_MAX);
-    assert.ok(shown[0]!.startsWith("- message 5 "), shown[0]!.slice(0, 40));
-    assert.ok(
-      shown.every((line) => line.length <= USER_SAYS_CHARS + 4),
-      "each clipped to its bound",
-    );
-    // A block under the bound is word for word.
+  it("W8. no clock wakes a resting lead: with nothing untold and nobody waiting, nothing is ever due", () => {
+    for (const now of [T0, T0 + HOUR_MS, T0 + 48 * HOUR_MS])
+      assert.equal(nextWake({ ...quietView, now }), null, `nothing due ${(now - T0) / HOUR_MS} h on`);
+  });
+
+  // Flipped: a wake answered its reasons ("user_message", "news", the line kinds) for a digest's
+  // heading and the `director_continued` record; it is a time now, and what wakes the lead is what it reads.
+  it("W9. the person's message wakes the lead at once; so does a line that cannot wait; the rest settle first", () => {
+    const now = T0 + MINUTE_MS;
+    assert.equal(nextWake({ ...quietView, now, personWaiting: true }), now);
+    assert.equal(nextWake({ ...quietView, now, untold: [line(1, now, NoteKind.AppCrashed)] }), now);
+    const ends = [line(1, now, NoteKind.WorkerEnded), line(2, now + 2_000, NoteKind.WorkerEnded)];
     assert.equal(
-      wakePrompts.userSaysBlock(["make the sky red"]),
-      "THE USER SAYS (verbatim, oldest first):\n- make the sky red",
+      nextWake({ ...quietView, now, untold: ends }),
+      now + WAKE_DEBOUNCE_MS,
+      "one wake for both, from the first",
     );
+    for (const kind of [NoteKind.AppStopping, NoteKind.Folder])
+      assert.equal(
+        nextWake({ ...quietView, now, untold: [line(1, now, kind)] }),
+        null,
+        `${kind} is said, never woken for`,
+      );
+  });
+
+  // Flipped: at most thirty wakes an hour (`MAX_WAKES_PER_HOUR`); the 31st waited for the hour to pass.
+  it("W10. no hourly cap: the 31st worker's end in an hour wakes the lead as the first did", () => {
+    const at = T0 + 31 * MINUTE_MS;
+    const view = { ...quietView, now: at, asleepSince: at, untold: [line(31, at, NoteKind.WorkerEnded)] };
+    assert.equal(nextWake(view), at + WAKE_DEBOUNCE_MS);
   });
 });
 
@@ -97,24 +95,12 @@ describe("what the journal keeps of the wake loop (journal.ts wakeRecord)", () =
    * log — is written on every save now (director-journal.test.ts K2); the wake loop's record keeps
    * only the loop's own state, and a Resume takes back the wakes (K5).
    */
-  it("J1. the journal keeps the wake loop's own state: why the wrap-up started, and the wakes with when they were", () => {
-    const iso = (ms: number) => new Date(ms).toISOString();
-    const record = wakeRecord({
+  // Flipped: the record also kept the wake loop's kind (`loop: "wake"`), its wakes and when they were
+  // (the hourly cap's window), when it last woke and since when it slept; nothing reads them now.
+  it("J1. the journal keeps the wake loop's own state: why the wrap-up started, and the fresh sessions it spent", () => {
+    assert.deepEqual(wakeRecord({ wrapCause: WrapCause.Failed, freshSessions: 1 }), {
+      freshSessions: 1,
       wrapCause: WrapCause.Failed,
-      wakes: 2,
-      wakesAt: [T0 + 1, T0 + 2],
-      lastWakeAt: T0 + 2,
-      asleepSince: T0 + 3,
-    });
-    assert.deepEqual(record, {
-      loop: DirectorLoop.Wake,
-      // The lost sessions it replaced, so a Resume does not start that allowance again.
-      freshSessions: 0,
-      wrapCause: WrapCause.Failed,
-      wakes: 2,
-      wakesAt: [iso(T0 + 1), iso(T0 + 2)],
-      lastWakeAt: iso(T0 + 2),
-      asleepSince: iso(T0 + 3),
     });
   });
 });
@@ -205,37 +191,11 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
   });
 });
 
-describe("a wake digest over its budget", () => {
-  it("leaves out the oldest news and says so, keeping the newest", async () => {
-    const { fitHappened } = await import("../../src/harness-seed/loop/director/wake.ts");
-    const happened = Array.from({ length: 400 }, (_, i) => `worker sky landed round ${i}: ${"detail ".repeat(30)}`);
-    const render = (lines: readonly string[]) => ["WOKEN", ...lines, "Decide, act, and end your turn."].join("\n");
-    const fitted = fitHappened(happened, render, 2_000);
-    assert.ok(render(fitted).length / 4 <= 2_000, `within the budget: ${Math.round(render(fitted).length / 4)} tokens`);
-    assert.match(fitted[0] ?? "", /earlier events left out/, "the cut is said, first");
-    assert.match(fitted.at(-1) ?? "", /round 399/, "the newest news stays");
-    assert.deepEqual(
-      fitHappened(happened.slice(0, 3), render, 2_000),
-      happened.slice(0, 3),
-      "news that fits is left alone",
-    );
-  });
-});
-
 describe("the lost-session allowance across a Resume", () => {
   it("is kept on the journal, so a Resume does not hand a run fresh sessions it already spent", async () => {
     const { wakeRecord, restoredWake } = await import("../../src/harness-seed/loop/director/journal.ts");
-    const now = Date.now();
-    const saved = wakeRecord({
-      idleAsked: false,
-      wrapCause: null,
-      wakes: 4,
-      wakesAt: [now - 1000],
-      lastWakeAt: now - 1000,
-      asleepSince: null,
-      freshSessions: 2,
-    } as never);
-    const restored = restoredWake(JSON.parse(JSON.stringify(saved)), now) as { freshSessions?: number };
+    const saved = wakeRecord({ wrapCause: null, freshSessions: 2 });
+    const restored = restoredWake(JSON.parse(JSON.stringify(saved)));
     assert.equal(restored.freshSessions, 2);
   });
 });

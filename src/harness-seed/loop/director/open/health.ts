@@ -149,7 +149,7 @@ async function halt(loopRun: LoopRun, open: OpenLoop, words: string): Promise<vo
 /**
  * Ends the lead's session under way in the folder, addressed to the session the host seated as this
  * run's lead in place: a call the host has not seated yet is missed, so the turn's watch says it
- * again while the Loop stays paused (`news.ts`).
+ * again while the Loop stays paused (`../news.ts`).
  */
 export async function abortLead(loopRun: LoopRun): Promise<void> {
   const lead = { cwd: loopRun.projectDir, lead: loopRun.run.runId };
@@ -193,11 +193,9 @@ async function recover(loopRun: LoopRun, open: OpenLoop, reason: string): Promis
   const stopped = await stopWritersInPlace(open, OPEN_NEWS.writerStoppedWhy);
   // Its stop may take a while: a close or a Stop meanwhile leaves the folder as it is.
   if (givesUp(loopRun)) return;
-  const restoresBefore = open.restores;
   const back = await backTo(loopRun, open, last, stopped);
   if (loopRun.ctx.cancelled || !back) return;
-  // Back, though the app still doesn't answer: the Resume's first message tells the lead the folder went back.
-  if (open.restores > restoresBefore && !closing(loopRun)) open.journal.carried.push(wentBackLine(last.label, stopped));
+  // Back, though the app still doesn't answer: the line `backTo` wrote tells the lead with the Resume's first message.
   await halt(loopRun, open, backHeldWords(back) ?? appLostWords(back.why));
 }
 

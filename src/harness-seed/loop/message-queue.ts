@@ -1012,7 +1012,7 @@ function leadRecords(item: QueueAction, door: LeadDoor): Array<{ event_type: Run
 }
 
 /** A message as `engine.steer` hands it to the session: its words, its pictures, and Genex's mark when Genex wrote it. */
-function steerMessageOf(item: QueueAction): SteerMessage {
+export function steerMessageOf(item: QueueAction): SteerMessage {
   const images: DelegateImage[] = item.stills ?? [];
   return {
     id: item.messageId as string,

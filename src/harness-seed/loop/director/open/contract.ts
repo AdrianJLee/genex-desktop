@@ -51,8 +51,6 @@ export interface OpenJournal {
   savePoints: OpenSavePoint[];
   /** What the lead asked for when its turn ends: the save point to go back to (resolved when asked), a restart. */
   between: { rewind: OpenRewind | null; restart: boolean };
-  /** Lines the lead's next message carries (what the plugins said, what Genex did between turns). */
-  carried: string[];
   crashes: number;
 }
 
@@ -67,7 +65,6 @@ export function newOpenJournal(): OpenJournal {
     version: 1,
     savePoints: [],
     between: { rewind: null, restart: false },
-    carried: [],
     crashes: 0,
   };
 }
@@ -110,7 +107,6 @@ export function openJournalOf(saved: AnyRecord | null | undefined): OpenJournal 
       .map(savePointOf)
       .filter((point): point is OpenSavePoint => point !== null),
     between: { rewind: rewindOf(between.rewind), restart: between.restart === true },
-    carried: Array.isArray(open.carried) ? open.carried.filter((line): line is string => typeof line === "string") : [],
     crashes: countOf(open.crashes),
   };
 }
@@ -141,8 +137,8 @@ export interface OpenLoop {
   /** The save point count when the lead's turn under way began: a turn that saved none is autosaved. */
   turnSavedFrom: number;
   /**
-   * A session of the lead's read its message in this attempt (`news.ts`): a Stop before any did is a
-   * stopped start (nothing kept), however long the first turn waited.
+   * A session of the lead's read its message in this attempt (`../news.ts`): a Stop before any did is
+   * a stopped start (nothing kept), however long the first turn waited.
    */
   sessionWorked: boolean;
   /** Genex's work between the lead's turns is under way: no recovery of the project's app starts meanwhile. */
@@ -154,13 +150,9 @@ export interface OpenLoop {
   pool: WorkerPool | null;
   /** When the Loop (this process) took the project up: unsaved work and fresh eyes count from here at the least. */
   since: number;
-  /** The log lines a turn under way took mid-turn, by sequence number: no digest tells them again (`news.ts`). */
-  heard: Set<number>;
-  /** The workers' questions already told, by `<worker>:<question>`: each is told once. */
-  asked: Set<string>;
   /** When Genex last asked the project's app whether it is well (`health.ts`). */
   healthAt: number;
-  /** A session call of the lead's is under way (`news.ts` watches it): only then does a pause end a session in the folder. */
+  /** A session call of the lead's is under way (`../news.ts` watches it): only then does a pause end a session in the folder. */
   inTurn: boolean;
   /** A recovery of the project's app under way: nothing is kept or restored between turns, a save point and a finish are refused. */
   recovering: Promise<void> | null;
@@ -170,7 +162,7 @@ export interface OpenLoop {
   restores: number;
   /**
    * The save point a recovery last took the folder back to; null before any. Until the lead hears it
-   * (`news.ts` `wentBackUnheard`), a close says so and keeps nothing over it (`close.ts`).
+   * (`close.ts` `wentBackUnheard`), a close says so and keeps nothing over it.
    */
   wentBack: string | null;
   /** The run log's line that told the lead of that way back, once written; null before. */

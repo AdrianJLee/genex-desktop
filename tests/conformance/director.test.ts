@@ -456,11 +456,14 @@ describe("a Loop's lead through the real core and harness", () => {
     assert.equal(seen.lead.length, 1, "one lead session");
     assert.equal(seen.workers.length, 1, `one worker session — worker_start answered ${results.started}`);
 
-    // The lead's identity reads the game as the run found it: its folder and what it holds.
+    // Flipped: the lead's brief named the game's folder and what it holds ("it holds a web game at its
+    // root, Blender files in `art/`"); its context is the chat's system text, which names the folder and
+    // never what a turn can change, and its first message is Genex's line.
     const lead = seen.lead[0]!;
     const folderLabel = project.dir.split("/").slice(-2).join("/");
-    assert.ok(lead.prompt.includes(`the folder \`${folderLabel}\``), "the game's folder");
-    assert.match(lead.prompt, /it holds a web game at its root, Blender files in `art\/`/, "the game's facts");
+    const context = [lead.system ?? "", ...(lead.notices ?? [])].join("\n");
+    assert.ok(context.includes(`the folder \`${folderLabel}\``), "the game's folder");
+    assert.match(lead.prompt, /^The Loop started; it builds in /);
     // It sits in the game folder and builds in the integration worktree it leads.
     const worktree = lead.director!.root;
     assert.equal(await realpath(lead.cwd), await realpath(project.dir), "the lead sits in the game folder");
@@ -981,7 +984,7 @@ describe("a Loop's lead through the real core and harness", () => {
     let turns = 0;
     let finishedAnswer = "";
     let finishAsked: (runId: string, threadId: string) => Promise<void> = async () => {};
-    const { events } = await webRun(
+    await webRun(
       "director-idle",
       async (request) => {
         if (!request.director) return result("worker", "nothing");
@@ -1011,8 +1014,8 @@ describe("a Loop's lead through the real core and harness", () => {
     );
     assert.equal(turns, 2);
     assert.match(finishedAnswer, /^The Loop is closed/, finishedAnswer);
-    const reasons = customEvents(events, "director_continued").flatMap((event) => (event.reasons as string[]) ?? []);
-    assert.ok(!reasons.includes("idle_ask"), `the lead was never asked what next: ${reasons.join(", ")}`);
+    // Flipped: the wakes' reasons (`director_continued`) said no idle ask came; no wake is recorded now,
+    // and the two turns are the one before the Finish and its wrap-up.
   });
 });
 
@@ -1170,14 +1173,13 @@ describe("a Loop interrupted and resumed", () => {
           ),
           "new guidance is saved before the run resumes",
         );
-        // Flipped (Loop phase 5): the resumed brief says THE RUN RESUMES, no YOU WERE RESUMED.
-        assert.match(prompts[1]!, /THE RUN RESUMES/);
+        // Flipped: the resumed brief said THE RUN RESUMES with the branch's commits beyond its start, and
+        // THE USER SAYS the instruction the chat resumed it with; the chat's own session wrote that into
+        // resume_run, and is the lead, so it opens with Genex's line, run_status naming the branch.
         assert.match(
           prompts[1]!,
-          /THE USER SAYS[^\n]*\n- Keep going and land the saved sign/,
-          "the resumed lead is told the instruction the chat resumed it with",
+          /^The Loop resumed after a pause; it builds in \S*integration, a git worktree of this game;/,
         );
-        assert.match(prompts[1]!, /2 commits beyond the starting point/, "the worker's commit and its merge");
         assert.match(
           results.finished2,
           /^The Loop is closed — the integrated build [0-9a-f]{10} is live/,

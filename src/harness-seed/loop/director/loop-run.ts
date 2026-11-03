@@ -6,7 +6,7 @@
  * argument; `bindLoopRun` puts each on the object as well, so a function reaches the others through
  * the run it was handed.
  */
-import { headOf, shortSha, updateRef } from "../git.ts";
+import { headOf, updateRef } from "../git.ts";
 import { GIT_TIMEOUT_MS } from "../config.ts";
 import { HostMethod } from "../host-methods.ts";
 import { appendRun as appendRunEvent, RunEvent, saveJournal as saveRunJournal } from "../run-events.ts";
@@ -31,21 +31,18 @@ import type * as integrateFunctions from "./integrate.ts";
 import type * as loopRunFunctions from "./loop-run.ts";
 import type * as toolFunctions from "./tools.ts";
 
-/** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
-export const SERVES_LEAD = true;
-
 /** The last judge on the integration branch: the head it looked at, and that it answered. */
 export interface LastJudge extends AnyRecord {
   head?: string | null;
   ok?: boolean;
 }
 
-/** One line of the run's log (`note`). */
+/** One line of the run's log (`note`): one of Genex's facts for the lead. */
 export interface LoopRunLogEntry {
   at: number;
   seq: number;
   text: string;
-  /** What it is about, when it was written outside the lead's own turn (wake-schedule.ts decides what wakes it). */
+  /** What it is about (wake-schedule.ts decides what wakes the lead); a line an earlier seed wrote may have none. */
   kind?: NoteKind;
 }
 
@@ -135,7 +132,7 @@ export interface LoopRunData {
 
 /** A function of the run as the run carries it: bound, so the run itself is already given. */
 type Bound<F> = F extends (loopRun: never, ...args: infer A) => infer R ? (...args: A) => R : never;
-/** The names of a module's functions, as `bindLoopRun` binds them (a constant such as `SERVES_LEAD` is not one). */
+/** The names of a module's functions, as `bindLoopRun` binds them (a constant is not one). */
 type FunctionKey<M> = { [K in keyof M]: M[K] extends (...args: never[]) => unknown ? K : never }[keyof M];
 /** Every function of one of the run's modules, bound to the run (`bindLoopRun`). */
 type BoundModule<M> = { readonly [K in Exclude<FunctionKey<M>, "bindLoopRun">]: Bound<M[K]> };
@@ -224,17 +221,17 @@ export async function saveJournal(loopRun: LoopRun): Promise<number | void> {
 }
 
 /**
- * A line in the run's log: what wakes a resting lead (wake.ts) and what its next message carries.
- * `kind` says what a line written outside the lead's own turn is about; the waker decides by it.
+ * A line in the run's log: one of Genex's facts, which wakes a resting lead or reaches a working one
+ * (director/news.ts). `kind` says what it is about; the waker decides by it.
  */
-export function note(loopRun: LoopRun, text: string, kind?: NoteKind): void {
+export function note(loopRun: LoopRun, text: string, kind: NoteKind): void {
   const { state } = loopRun;
   loopRun.logSeq += 1;
-  state.log.push({ at: Date.now(), seq: loopRun.logSeq, text, ...(kind ? { kind } : {}) });
+  state.log.push({ at: Date.now(), seq: loopRun.logSeq, text, kind });
   if (state.log.length > MAX_LOOP_RUN_LOG) state.log.shift();
 }
 
-/** Every line the lead has not been told yet. */
+/** Every line after `seq`. */
 export function notesSince(loopRun: LoopRun, seq: number): LoopRunLogEntry[] {
   return loopRun.state.log.filter((entry) => (entry.seq ?? 0) > seq);
 }
@@ -247,7 +244,7 @@ export function currentHead(loopRun: LoopRun) {
 
 /**
  * The lead commits in its worktree with its own hands: whatever HEAD says is the integration head,
- * protected by the ref, written to the journal, and named to the lead.
+ * protected by the ref and written to the journal.
  */
 export async function syncHead(loopRun: LoopRun) {
   const { journal, state } = loopRun;
@@ -258,7 +255,6 @@ export async function syncHead(loopRun: LoopRun) {
   await loopRun.protectHead(head);
   await loopRun.saveJournal();
   await loopRun.appendRun(RunEvent.DirectorProgress, { head });
-  loopRun.note(`you committed ${shortSha(head)} — it is now the integration head`);
   return head;
 }
 

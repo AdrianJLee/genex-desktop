@@ -38,9 +38,6 @@ import type { AnyRecord, HarnessCtx, Run } from "../../types/harness.d.ts";
 import type { ReferenceFrame } from "../../types/host-api.d.ts";
 import type { LoopRun, LoopRunData, LoopRunState } from "./loop-run.ts";
 
-/** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
-export const SERVES_LEAD = true;
-
 /** Why a web Loop's worker may not write in the game folder itself: the lead's build is its integration worktree. */
 const LOCK_REFUSED =
   "Not started: in this Loop the build is the integration worktree, so a writer works in a copy (isolation copy) and you merge it with worker_mark.";
@@ -403,12 +400,12 @@ async function prepareOpenLoopRun(
   Object.assign(loopRun, openLoopRunData({ run, threadId, priorJournal, inbox }, game, baseCommit, report));
   loopRun.gameFacts = game.facts;
   loopRun.game = { hookEvents: game.hookEvents };
-  const journal = openJournalOf(priorJournal);
-  const open = openLoopOf(game, journal ? settledAcrossPause(journal) : newOpenJournal(), clock);
+  const open = openLoopOf(game, openJournalOf(priorJournal) ?? newOpenJournal(), clock);
   loopRun.journal.director.open = open.journal;
   loopRun.profile = LoopProfile.Open;
   loopRun.open = open;
   restoreLoopRun(loopRun);
+  settledAcrossPause(loopRun, open);
   await loopRun.saveJournal();
   await openLoopPool(loopRun, open);
   return loopRun;

@@ -202,7 +202,6 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   { file: "loop/delegated-turn.ts", marker: "chatWorkersGrant(" },
   { file: "loop/director/tool-specs.ts", marker: "WorkerTool." },
   { file: "loop/director/tools.ts", marker: "WorkerTool." },
-  { file: "loop/director/wake-prompts.ts", marker: "worker_wait" },
   // A local model's start_web_game names its chat, so the host holds it while that chat plans; and
   // every worker of a director's run is told first that it works inside Genex, on which folder.
   { file: "tools/game-tools.ts", marker: "threadId: ctx.threadId" },
@@ -241,10 +240,9 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   // run and its journal keep the count of no's, and a later close names what isn't done.
   { file: "loop/director/loop-run.ts", marker: "finishTally" },
   { file: "loop/director/journal.ts", marker: "finishTally" },
-  // A claim's review ends before the lead's turn, and the wake loop wakes no lead once a claim's
-  // close has started; a claim's close is latched against the clock's, and so is a crash's.
+  // A claim's review ends before the lead's turn; a claim's close is latched against any other, and
+  // so is a crash's.
   { file: "loop/director/wake.ts", marker: "noteTurnEnds(" },
-  { file: "loop/director/wake.ts", marker: "closeUnderWay(" },
   { file: "loop/director/integrate.ts", marker: "latchClose(" },
   { file: "loop/director.ts", marker: "latchClose(" },
   // A Loop on a project that isn't a web game is led in place (the open profile): the director's

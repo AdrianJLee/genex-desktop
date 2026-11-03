@@ -21,9 +21,6 @@ import { BuildTarget, type LoopRun } from "./loop-run.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { MessageImage } from "../../types/host-api.d.ts";
 
-/** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
-export const SERVES_LEAD = true;
-
 /** What a stopped run answers every tool call with but the studio's own. */
 const STOPPED_BY_USER = "STOPPED BY THE USER: the run is over; end your session now without starting anything";
 /** How much of a note the journal keeps, and of its plain sentence. */

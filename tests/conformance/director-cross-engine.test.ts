@@ -145,8 +145,12 @@ describe("a run on two subscriptions", () => {
     assert.equal(directors.length, 1, "one lead session");
     assert.equal(directors[0]!.engine, "claude-code");
     assert.equal(directors[0]!.request.model, "opus");
-    // Flipped (Loop phase 5): the lead's brief names its run tools plainly (worker_start), no mcp__ names.
-    assert.match(directors[0]!.request.prompt, /\bworker_start\b/, "the lead reads its tools' names");
+    // Flipped: the lead's brief named its run tools (worker_start); its first message is Genex's line,
+    // and the tools are the session's own, by their names.
+    assert.ok(
+      (directors[0]!.request.liveTools ?? []).some((tool) => tool.name === "worker_start"),
+      "the lead has its tools by name",
+    );
     assert.equal(directors[0]!.request.prompt.includes("tool.mjs"), false, "and never the bridge");
     // Flipped (Loop phase 5): a web Loop's finish asks no reviewer; its health check lands it.
 

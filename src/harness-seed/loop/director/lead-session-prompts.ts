@@ -1,6 +1,6 @@
 /**
  * What a Loop's lead reads because it IS its chat's own session (lead-session.ts): the chat so far
- * when its session is a fresh one, and the first line of a fresh session that carries the run.
+ * when its session is a fresh one, and the line a fresh session that carries the run is told first.
  */
 import { clipMarked } from "../text.ts";
 
@@ -30,6 +30,14 @@ export function chatSoFar(lines: readonly ChatLine[]): string {
   return `THE CHAT SO FAR (its latest messages, oldest first) — this chat's own session could not carry on here, so this session is new and this is the conversation the build came from:\n${said}`;
 }
 
-/** The first line of a lead's fresh session (wake-prompts.ts `freshStart`): the run follows. */
-export const LEAD_FRESH_START = (why: string) =>
-  `YOUR EARLIER SESSION WAS LOST (${why}) — this is a fresh one. Your notes and the run so far are below: carry on from where the run stands.`;
+/** Why a fresh session carries the run, in the words its first line gives (`LEAD_FRESH_START`). */
+export const SESSION_LOST_WHY = {
+  resumeFailed: "the session could not be resumed",
+  contextFull: "its context was full",
+  contextOverflowed: "its context overflowed",
+  /** A later turn found no session to resume: the one before it ended without one. */
+  noSession: "no session was left to resume",
+} as const;
+
+/** Genex's first line to a lead's fresh session (wake.ts `openFresh`): how its Loop began follows it. */
+export const LEAD_FRESH_START = (why: string) => `Your earlier session was lost (${why}); this session is new.`;

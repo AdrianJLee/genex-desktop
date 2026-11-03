@@ -133,7 +133,9 @@ const ONE_LOOP_TRAIL = [
 
 /** The fields of the open Loop's record in its journal, sorted. */
 // Flipped (phase 5): no fresh-eyes reminder, so no last reader is kept.
-const OPEN_JOURNAL_KEYS = ["between", "carried", "crashes", "savePoints", "version"];
+// Flipped: the open Loop's journal carried lines for the lead's next message (`carried`); they are
+// lines of the run's log, which the director's own record keeps.
+const OPEN_JOURNAL_KEYS = ["between", "crashes", "savePoints", "version"];
 
 describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
   let host: LoopHost;
@@ -151,13 +153,13 @@ describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
         async ({ host, tool }) => {
           await work("a");
           await tool("save_point", { label: "One", summary: "first" });
-          host.inbox.said.push("Go on.");
+          await host.say("Go on.");
           return undefined;
         },
         async ({ host, tool }) => {
           await work("b");
           await tool("rewind", { label: "One" });
-          host.inbox.said.push("Go on.");
+          await host.say("Go on.");
           return undefined;
         },
         async ({ tool }) => {
@@ -193,7 +195,9 @@ describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
         "director_worker",
         "facet_iteration",
         "integration_merge",
-        "director_continued",
+        // Flipped: each wake was recorded as `director_continued`; what woke the lead is what it read,
+        // and the person's words it read off its line are recorded heard.
+        "run_steering_delivered",
         // Flipped (Loop phase 4): no finish_check, as no reviewer reads a claim the lead asked none for.
         "run_finished",
       ],

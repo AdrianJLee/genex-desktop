@@ -1,11 +1,11 @@
 /**
  * The line a run's lead takes the chat on while its build runs (live chat). The chat's queue
  * hands the lead a message the person sends (loop/live-chat.ts) instead of holding it until the
- * run is over, and the lead's own loop hears it (wake.ts): at once in a turn under way, or as the
- * reason for its next wake. What the lead heard is recorded on the run's log, so a later run of
- * the run never tells it again (run-inbox.ts). What it never heard when its run ends goes back to
- * the chat, where it waits for a turn of its own — so Stop still hands over to it. A message sent
- * before the line opens (the run still prepares its start) waits for it.
+ * run is over, and the lead's own loop reads it from here (director/news.ts): at its next step in a
+ * turn under way, or as the message that wakes it. What the lead heard is recorded on the run's log,
+ * so a later run of the run never tells it again (run-inbox.ts). What it never heard when its run
+ * ends goes back to the chat, where it waits for a turn of its own — so Stop still hands over to it.
+ * A message sent before the line opens (the run still prepares its start) waits for it.
  */
 import { HostMethod } from "../host-methods.ts";
 import { EventKind, RunEvent } from "../run-events.ts";
@@ -39,25 +39,25 @@ export interface LeadLine {
   open(): boolean;
   /** No more messages: the run is over for its lead. */
   shut(): void;
-  /** A message was handed to it (`giveBack` returns it to the chat): a turn under way hears it at once. */
+  /**
+   * A message was handed to it (`giveBack` returns it to the chat): a turn under way hears it at
+   * once. One handed already, by its id, is handed once.
+   */
   hear(item: QueueAction, giveBack: GiveBack): void;
   /** Settles when the next message is handed to it. */
   heard(): Promise<void>;
-  /** How many messages it has been handed so far. */
-  count(): number;
+  /** The messages handed to it that the lead has not heard yet, in the order sent. */
+  unheard(): readonly QueueAction[];
   /**
-   * The lead heard every message handed before the `count` given (in a message it took, or read
-   * mid-turn): recorded on the run's log, when the line was opened with the run's ctx.
+   * The lead heard every message handed up to `item` (in a message it took, or read mid-turn):
+   * recorded on the run's log, when the line was opened with the run's ctx.
    */
-  heardThrough(count: number): Promise<void>;
-  /** The lead's loop answers for what it hears: a loop that never says so hears it all from the inbox. */
-  attend(): void;
+  heardThrough(item: QueueAction): Promise<void>;
   /**
-   * The run is over: no more messages, and those its lead never heard go back to the chat — every
-   * one when `heardNone` (no loop of the lead's ever took the line). One handed after this goes back
-   * at once.
+   * The run is over: no more messages, and those its lead never heard go back to the chat. One
+   * handed after this goes back at once.
    */
-  release(options?: { heardNone?: boolean }): Promise<void>;
+  release(): Promise<void>;
 }
 
 /** The lines open now, by run. */
@@ -96,7 +96,6 @@ export function openLeadLine(
 ): LeadLine {
   let isShut = false;
   let released = false;
-  let attended = false;
   let heardCount = 0;
   let next = signal();
   const handed: Array<{ item: QueueAction; giveBack: GiveBack }> = [];
@@ -117,27 +116,26 @@ export function openLeadLine(
         void giveBack([item]).catch(() => {});
         return;
       }
+      if (item.messageId && handed.some((one) => one.item.messageId === item.messageId)) return;
       handed.push({ item, giveBack });
       const was = next;
       next = signal();
       was.resolve();
     },
     heard: () => next.promise,
-    count: () => handed.length,
-    heardThrough: async (count) => {
-      const through = Math.max(heardCount, Math.min(count, handed.length));
-      const now = handed.slice(heardCount, through).map(({ item }) => item);
+    unheard: () => handed.slice(heardCount).map(({ item }) => item),
+    heardThrough: async (item) => {
+      const through = handed.findIndex((one) => one.item === item) + 1;
+      if (through <= heardCount) return;
+      const now = handed.slice(heardCount, through).map((one) => one.item);
       heardCount = through;
-      if (!now.length || !ctx) return;
+      if (!ctx) return;
       await ctx.call(HostMethod.EventsAppend, { threadId, batch: heardRecords(runId, now) }).catch(() => {});
     },
-    attend: () => {
-      attended = true;
-    },
-    release: async ({ heardNone = false } = {}) => {
+    release: async () => {
       line.shut();
       released = true;
-      const unheard = attended || heardNone ? handed.splice(heardCount) : [];
+      const unheard = handed.splice(heardCount);
       heardCount = handed.length;
       const first = unheard[0];
       if (first) await first.giveBack(unheard.map(({ item }) => item)).catch(() => {});

@@ -1,0 +1,282 @@
+/**
+ * What reaches a Loop's lead from outside its own session, through one channel: the chat's messages
+ * on its line (lead-line.ts), as they were written, and Genex's own lines of the run's log — a worker
+ * or a job that ended, the project's app that stopped or came back, what Genex did with the folder
+ * (`NoteKind`), each one fact. A resting lead is woken with them (`askOf`, wake.ts); a working one
+ * is handed them at its next step (`watchTurn`, `engine.steer`), Genex's never cutting its turn
+ * short. What the lead heard is kept in two places only: the line, for the chat's messages, and the
+ * run's `waitSeq`, for Genex's lines (every one up to it is told: a line a turn took counts while the
+ * turn works, and is untold again when the turn ends without reading it).
+ */
+import type { AnyRecord } from "../../types/harness.d.ts";
+import type { DelegateImage, DelegateResult, SteerMessage } from "../../types/host-api.d.ts";
+import { HostMethod } from "../host-methods.ts";
+import { type QueueAction, steerMessageOf, textsOf, WORDS_APART } from "../message-queue.ts";
+import { fromThePerson, MessageFrom, SteerDelivery } from "../steer-delivery.ts";
+import { SECOND_MS } from "../time.ts";
+import { closeUnderWay } from "./close-latch.ts";
+import type { LeadLine } from "./lead-line.ts";
+import type { LoopRun, LoopRunLogEntry } from "./loop-run.ts";
+import { abortLead } from "./open/health.ts";
+import type { NoteKind } from "./wake-schedule.ts";
+
+/** How often a turn under way is looked at for Genex's lines. */
+const TURN_WATCH_MS = SECOND_MS;
+
+/** What a message to the lead carries besides its words: who wrote them, their pictures, and Genex's lines beside them. */
+export interface TurnSaid {
+  from: MessageFrom;
+  images?: DelegateImage[];
+  notices?: string[];
+}
+
+/** One message to the lead's session, and what it tells it. */
+export interface TurnAsk {
+  prompt: string;
+  said: TurnSaid;
+  /** Genex's lines it carries that no line of the log holds (the Loop's start, the wrap-up): said again when no turn works on it. */
+  lead: readonly string[];
+  /** The last of the chat's messages it carries: every one up to it is heard once a turn works on it. */
+  through: QueueAction | null;
+  /** The last line of the run's log it carries: every one up to it is told once a turn works on it. */
+  toldSeq: number;
+}
+
+/** A line of the run's log with the kind that makes it one of Genex's facts for the lead. */
+type GenexLine = LoopRunLogEntry & { kind: NoteKind };
+
+/**
+ * The run is over for the lead: it finished, the user stopped it, or it failed on its own; or its
+ * close has started; or, an open Loop, it pauses because the project's app couldn't be brought back.
+ */
+export const runOver = (loopRun: LoopRun): boolean =>
+  loopRun.state.finished ||
+  loopRun.ctx.cancelled === true ||
+  Boolean(loopRun.report.failure) ||
+  Boolean(loopRun.state.finish) ||
+  closeUnderWay(loopRun.state) ||
+  Boolean(loopRun.open?.halted);
+
+/** Genex's lines of the run's log the lead has not been told, oldest first. */
+export function untold(loopRun: Pick<LoopRun, "notesSince" | "waitSeq">): GenexLine[] {
+  return loopRun.notesSince(loopRun.waitSeq).filter((entry): entry is GenexLine => entry.kind !== undefined);
+}
+
+/** The lead was told every line of the run's log up to `seq`. */
+export function toldThrough(loopRun: Pick<LoopRun, "waitSeq">, seq: number): void {
+  loopRun.waitSeq = Math.max(loopRun.waitSeq, seq);
+}
+
+/** The chat's unheard messages the next message to the lead is: the leading ones of one sender. */
+function leadingWords(line: LeadLine | null): QueueAction[] {
+  const unheard = line?.unheard() ?? [];
+  const first = unheard[0];
+  if (!first) return [];
+  const other = unheard.findIndex((item) => fromThePerson(item) !== fromThePerson(first));
+  return other < 0 ? [...unheard] : unheard.slice(0, other);
+}
+
+/**
+ * A chat message as the lead is handed it: its words and pictures as sent — read back from where the
+ * chat keeps them when the message came back from the log without them — and Genex's mark when Genex
+ * wrote it.
+ */
+async function messageOf(loopRun: LoopRun, item: QueueAction): Promise<Omit<SteerMessage, "id">> {
+  const { id: _id, ...message } = steerMessageOf(item);
+  if (message.images?.length || typeof item.attachmentsArtifact !== "string") return message;
+  const params = { threadId: loopRun.threadId, artifactId: item.attachmentsArtifact };
+  const kept = (await loopRun.ctx.call(HostMethod.ArtifactRead, params).catch(() => null)) as AnyRecord | null;
+  const images: DelegateImage[] = Array.isArray(kept?.stills) ? kept.stills : [];
+  return images.length ? { ...message, images } : message;
+}
+
+/**
+ * The lead's next message: the chat's unheard messages as they were written, Genex's lines beside
+ * them (`lead`, then the log's untold ones) as a notice — or, with no message waiting, Genex's lines
+ * alone, as Genex's.
+ */
+export async function askOf(loopRun: LoopRun, line: LeadLine | null, lead: readonly string[]): Promise<TurnAsk> {
+  const words = leadingWords(line);
+  const lines = untold(loopRun);
+  const genex = [...lead, ...lines.map((entry) => entry.text)].join("\n");
+  const carried = { lead: [...lead], through: words.at(-1) ?? null, toldSeq: lines.at(-1)?.seq ?? 0 };
+  const first = words[0];
+  if (!first) return { prompt: genex, said: { from: MessageFrom.Genex }, ...carried };
+  const said = await Promise.all(words.map((item) => messageOf(loopRun, item)));
+  const images = said.flatMap((one) => one.images ?? []);
+  const from = fromThePerson(first) ? MessageFrom.Person : MessageFrom.Genex;
+  const beside = { ...(images.length ? { images } : {}), ...(genex ? { notices: [genex] } : {}) };
+  return { prompt: textsOf(said).join(WORDS_APART), said: { from, ...beside }, ...carried };
+}
+
+/** Whether a message to the lead says anything: words, a picture, or Genex's lines. */
+export const saysSomething = (ask: TurnAsk): boolean => Boolean(ask.prompt || ask.said.images?.length);
+
+/** Hands the lead's line what the run's inbox holds for it: no queue holds it, so a Stop leaves it with the run. */
+function handFromInbox(line: LeadLine, items: readonly QueueAction[]): void {
+  for (const item of items) line.hear(item, async () => {});
+}
+
+/**
+ * A resumed run's line is handed again the chat's messages its lead took before the pause and never
+ * heard (the app quit under it).
+ */
+export async function handAgain(loopRun: LoopRun, line: LeadLine | null): Promise<void> {
+  if (line) handFromInbox(line, await loopRun.inbox.unheard().catch(() => []));
+}
+
+/**
+ * The person's notes about the run's builds (a reply to a build, a note on a picture), which reach
+ * the run's inbox and no chat queue: handed to the lead's line as they come, each once.
+ */
+export async function handNotes(loopRun: LoopRun, line: LeadLine | null): Promise<void> {
+  if (line) handFromInbox(line, await loopRun.inbox.notes().catch(() => []));
+}
+
+/** One session call's watch: it ends with the call. */
+export interface TurnWatch {
+  /** The chat's words cut the turn short (an engine that takes no input as it works): it is resumed with them. */
+  cut(): boolean;
+  /** The call ended: the watch stops, and what its session read (`steered`) is heard or told. */
+  end(result: Partial<DelegateResult> | undefined): Promise<void>;
+}
+
+/** What a watch needs besides the run. */
+export interface WatchKit {
+  line: LeadLine | null;
+  clock: { sleep(ms: number): Promise<void> };
+  /** The call's number: what is said into it goes in under ids of its own. */
+  turn: number;
+  /** The message the call opened with: what it carries is never said into it again. */
+  ask: TurnAsk;
+  /** Whether the chat's words may cut the turn short now. */
+  mayCut: () => boolean;
+  /** What each look reads first: the run's job ends, the project's app. */
+  poll: () => Promise<void>;
+}
+
+/** What one watch handed the session and what it took, by the id each went in under. */
+interface Handed {
+  /** Genex's lines offered, by sequence number: each is offered once. */
+  offered: Set<number>;
+  /** The chat's messages offered: they are offered again with the next one sent. */
+  tried: Set<QueueAction>;
+  /** What the session took to read at its next step: a chat message, or a line's sequence number. */
+  taken: Map<string, QueueAction | number>;
+  /** The run's `waitSeq` as the call began: what the session took counts as told only while it works. */
+  toldBefore: number;
+  cut: boolean;
+}
+
+/** Says `messages` into the lead's turn under way; how the host delivered them and which it took. */
+async function steer(loopRun: LoopRun, messages: SteerMessage[], interrupt: boolean) {
+  const params = { threadId: loopRun.threadId, into: loopRun.run.runId, messages, interrupt };
+  const answer = await loopRun.ctx.call(HostMethod.EngineSteer, params).catch(() => null);
+  return { how: answer?.how ?? null, accepted: new Set<string>(answer?.accepted ?? []) };
+}
+
+/**
+ * The chat's messages sent since the turn's own message, each as written, when one of them was not
+ * offered to the turn yet: taken to read at its next step, or — an engine that takes no input as it
+ * works, and the turn may be cut now — cutting it short.
+ */
+async function sayWords(loopRun: LoopRun, kit: WatchKit, handed: Handed): Promise<void> {
+  const unheard = kit.line?.unheard() ?? [];
+  const after = kit.ask.through ? unheard.indexOf(kit.ask.through) + 1 : 0;
+  const taken = new Set(handed.taken.values());
+  const waiting = unheard.slice(after).filter((item) => !taken.has(item));
+  if (!waiting.some((item) => !handed.tried.has(item))) return;
+  for (const item of waiting) handed.tried.add(item);
+  const ids = new Map(waiting.map((item) => [`${loopRun.run.runId}:${kit.turn}:said-${item.messageId}`, item]));
+  const messages = await Promise.all([...ids].map(async ([id, item]) => ({ id, ...(await messageOf(loopRun, item)) })));
+  const answer = await steer(loopRun, messages, kit.mayCut());
+  if (answer.how === SteerDelivery.Interrupt && answer.accepted.size) handed.cut = true;
+  else for (const [id, item] of ids) if (answer.accepted.has(id)) handed.taken.set(id, item);
+}
+
+/**
+ * Genex's lines of the log written since the turn's own message, each offered once, never cutting the
+ * turn short: one the session took is told while the turn works (a close reads it so).
+ */
+async function sayLines(loopRun: LoopRun, kit: WatchKit, handed: Handed): Promise<void> {
+  const fresh = untold(loopRun).filter((entry) => entry.seq > kit.ask.toldSeq && !handed.offered.has(entry.seq));
+  if (!fresh.length) return;
+  for (const entry of fresh) handed.offered.add(entry.seq);
+  const seqs = new Map(fresh.map((entry) => [`${loopRun.run.runId}:${kit.turn}:news-${entry.seq}`, entry]));
+  const messages = [...seqs].map(([id, entry]) => ({ id, text: entry.text, from: MessageFrom.Genex }));
+  const answer = await steer(loopRun, messages, false);
+  for (const [id, entry] of seqs) {
+    if (!answer.accepted.has(id)) continue;
+    handed.taken.set(id, entry.seq);
+    toldThrough(loopRun, entry.seq);
+  }
+}
+
+/**
+ * What the session read of what it took: the chat's messages up to the last one it read are heard,
+ * Genex's lines up to the last one it read are told — and those it took and never read are untold
+ * again (the turn's own message is settled after this, by whether the turn worked on it).
+ */
+async function settle(loopRun: LoopRun, kit: WatchKit, handed: Handed, result: Partial<DelegateResult> | undefined) {
+  const read = new Set(result?.steered ?? []);
+  loopRun.waitSeq = handed.toldBefore;
+  let lastItem: QueueAction | null = null;
+  for (const [id, what] of handed.taken) {
+    if (!read.has(id)) continue;
+    if (typeof what === "number") toldThrough(loopRun, what);
+    else lastItem = what;
+  }
+  if (lastItem) await kit.line?.heardThrough(lastItem);
+}
+
+/** Whether one session call of the lead's opened a session that read its message. */
+const startedASession = (result: Partial<DelegateResult> | undefined): boolean =>
+  Boolean(result?.sessionId) && (result?.turns ?? 0) > 0;
+
+/**
+ * Watches one session call of the lead's until it ends (the module's header): each look reads the
+ * run's job ends and the project's app first (`poll`), then hands the turn what came since its own
+ * message. A Loop Genex paused, or one the person stopped, ends an open Loop's session again instead
+ * (one its first abort missed: the host had not seated it yet); a run that is over hears nothing more.
+ */
+export function watchTurn(loopRun: LoopRun, kit: WatchKit): TurnWatch {
+  const open = loopRun.open;
+  const handed: Handed = {
+    offered: new Set(),
+    tried: new Set(),
+    taken: new Map(),
+    toldBefore: loopRun.waitSeq,
+    cut: false,
+  };
+  let over = false;
+  let stop = () => {};
+  const stopped = new Promise<void>((resolve) => {
+    stop = resolve;
+  });
+  const look = async (): Promise<void> => {
+    if (open && (open.halted || loopRun.ctx.cancelled === true)) return abortLead(loopRun);
+    await kit.poll();
+    if (over || runOver(loopRun)) return;
+    await sayWords(loopRun, kit, handed);
+    await sayLines(loopRun, kit, handed);
+  };
+  if (open) open.inTurn = true;
+  const watching = (async () => {
+    while (!over && !handed.cut) {
+      const spoke = kit.line?.heard();
+      await look().catch(() => {});
+      await Promise.race([kit.clock.sleep(TURN_WATCH_MS), stopped, ...(spoke ? [spoke] : [])]);
+    }
+  })();
+  return {
+    cut: () => handed.cut,
+    end: async (result) => {
+      over = true;
+      if (open) open.inTurn = false;
+      stop();
+      await watching;
+      await settle(loopRun, kit, handed, result);
+      if (open && startedASession(result)) open.sessionWorked = true;
+    },
+  };
+}

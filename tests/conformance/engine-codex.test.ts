@@ -303,6 +303,23 @@ describe("codex engine", () => {
     assert.equal(seen[0]!.env.OPENAI_API_KEY, undefined);
   });
 
+  it("Genex's context opens a new codex exec session's stdin, marked, before its notices and the words, never in argv; a resumed one is not sent it again", async () => {
+    const { fn, seen } = fakeExec(successRun);
+    const { engine, root } = await signedInEngine(fn);
+    const told = { system: "GENEX CONTEXT\nwith a second line", notices: ["Genex cut a call off."] };
+    await engine.delegate({ cwd: root, prompt: "add a moat", from: MessageFrom.Person, ...told });
+    await engine.delegate({ cwd: root, prompt: "add a moat", from: MessageFrom.Person, resume: "thread-1", ...told });
+    const [fresh, resumed] = [seen[0]!, seen[1]!];
+    for (const call of [fresh, resumed])
+      assert.ok(!call.argv.some((arg) => arg.includes("GENEX CONTEXT")), `no argv carries it: ${call.argv.join(" ")}`);
+    assert.ok(
+      fresh.prompt.startsWith(`${GENEX_MARK}\n${told.system}\n\n${GENEX_MARK}\nGenex cut a call off.\n\nadd a moat`),
+      fresh.prompt,
+    );
+    assert.ok(resumed.prompt.startsWith(`${GENEX_MARK}\nGenex cut a call off.\n\nadd a moat`), resumed.prompt);
+    assert.ok(!resumed.prompt.includes("GENEX CONTEXT"), "a resumed session has it in its history");
+  });
+
   /**
    * One session: a waking run's lead is its chat's own session, and no lead is read-only. It
    * resumes the chat's session from the game folder and builds in the integration worktree it leads

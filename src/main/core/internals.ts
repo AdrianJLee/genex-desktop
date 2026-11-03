@@ -8,7 +8,7 @@ import path from "node:path";
 import type { BuildProblem } from "../../shared/build-problem.ts";
 import type { AgentScreen, AgentScreenFrame } from "../../shared/agent-screen.ts";
 import type { PermissionMode } from "../../shared/permissions.ts";
-import type { PluginAppliedSet, PluginBinding } from "../../shared/plugins.ts";
+import type { PluginBinding } from "../../shared/plugins.ts";
 import type { LiveToolResult } from "../../substrate/engines/types.ts";
 import type { GameProject } from "../../substrate/game-workspace.ts";
 import type { SecretPort } from "../../substrate/mcp/store.ts";
@@ -275,10 +275,6 @@ export interface CoreChecks {
   indexEvent(event: EventEnvelope): void;
   readyProject(project: GameProject): Promise<GameProject>;
   recordToolRevision(threadId: string, engine: string, revision?: number): Promise<void>;
-  /** `engine`'s session `session` answered a brief that handed it `applied` (`ConnectionService.recordDelivered`). */
-  recordDeliveredTools(threadId: string, engine: string, session: string, applied: PluginAppliedSet): Promise<void>;
-  /** The plugins and skills `engine`'s session `session` on this thread was last handed (`ConnectionService.lastApplied`). */
-  lastAppliedTools(threadId: string, engine: string, session: string): Promise<PluginAppliedSet | undefined>;
   setGameCover(
     project: string,
     args: Record<string, unknown>,

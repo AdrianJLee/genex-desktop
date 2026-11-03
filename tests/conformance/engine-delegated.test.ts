@@ -15,6 +15,7 @@ import { describe, it } from "node:test";
 import { ClaudeCodeEngine, claudeJudgeContent, compactSdkMessage } from "../../src/substrate/engines/claude-code.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
 import { STEER_STALL_MS, steerFeed, steerSession, userFrame } from "../../src/substrate/engines/claude-steer.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
 import { credentialHomes } from "../../src/substrate/credential-homes.ts";
 import { absoluteRule } from "../../src/substrate/engines/claude-permissions.ts";
 import { EngineError, type DelegateRequest, type Engine } from "../../src/substrate/engines/types.ts";
@@ -1888,6 +1889,55 @@ describe("steering a running Claude Code turn", () => {
         origin: { kind: "human" },
       },
     ]);
+  });
+
+  it("Genex's notices ride the person's frame as marked text blocks before the words, one frame, no empty words block", async () => {
+    const framesOf = async (request: Partial<DelegateRequest>) => {
+      const fake = fakeQuery(successRun);
+      await (await engineWithLogin(fake.fn)).delegate({ prompt: "", cwd: "/tmp/x", ...request } as DelegateRequest);
+      const prompt = fake.seen[0]!.prompt;
+      if (typeof prompt === "string") return prompt;
+      const frames: Array<Record<string, any>> = [];
+      for await (const frame of prompt as unknown as AsyncIterable<Record<string, any>>) frames.push(frame);
+      return frames;
+    };
+    const sketch = { label: "sketch.png", mimeType: "image/png", data: "iVBOR" };
+    const marked = `${GENEX_MARK}\nGenex cut a call off.`;
+    assert.deepEqual(
+      await framesOf({
+        prompt: "add a moat",
+        from: MessageFrom.Person,
+        notices: ["Genex cut a call off."],
+        images: [sketch],
+      }),
+      [
+        {
+          type: "user",
+          message: {
+            role: "user",
+            content: [
+              { type: "text", text: marked },
+              { type: "text", text: "add a moat" },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } },
+            ],
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      ],
+      "one frame, the person's, with no IMAGES ATTACHED line",
+    );
+    const [alone] = (await framesOf({
+      prompt: "",
+      from: MessageFrom.Person,
+      notices: ["Genex cut a call off."],
+    })) as Array<Record<string, any>>;
+    assert.deepEqual(alone?.message.content, [{ type: "text", text: marked }], "no empty words block");
+    assert.equal(
+      await framesOf({ prompt: "add a moat", from: MessageFrom.Person }),
+      "add a moat",
+      "no notices: the words as a string",
+    );
   });
 
   it("a Genex line steered into the turn goes in as isSynthetic with no origin; the person's as origin human", async () => {

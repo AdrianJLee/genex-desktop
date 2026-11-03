@@ -179,7 +179,9 @@ test("a skill for one part of the folder names that part", async () => {
   }
 });
 
-test("the snapshot lists the kinds its tools make, as a game with no kind yet is offered them, and an agent never sees facts or makes", async () => {
+// Flipped back: the kinds were read as for a game with no kind yet while the seed read them as which
+// plugins are on. Nothing reads them so now: a snapshot's kinds are the kind tools that reach its game.
+test("the snapshot lists the kinds its tools make for its game, and an agent never sees facts or makes", async () => {
   const registry = await registryWith([
     tool("greet"),
     tool("new-toy", { makes: [TOY] }),
@@ -188,7 +190,10 @@ test("the snapshot lists the kinds its tools make, as a game with no kind yet is
   try {
     const kind = { plugin: "example", name: exampleManifest.name, tool: "example__new-toy", makes: [TOY] };
     assert.deepEqual(registry.snapshot(WEB).kinds, [kind]);
-    assert.deepEqual(registry.snapshot(TOY_GAME).kinds, [kind], "a toy game too, never its own toy tool");
+    assert.deepEqual(registry.snapshot(TOY_GAME).kinds, [
+      kind,
+      { plugin: "example", name: exampleManifest.name, tool: "example__build", makes: [TOY, CoreFact.WebGame] },
+    ]);
     assert.deepEqual(registry.snapshot(WEB, (name) => name !== "example__new-toy").kinds, [], "not offered");
     for (const handed of registry.snapshot(TOY_GAME).tools) {
       assert.equal(Object.hasOwn(handed, "facts"), false, handed.name);

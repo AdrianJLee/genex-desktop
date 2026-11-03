@@ -324,9 +324,9 @@ describe("the bundled Unity plugin", () => {
       assert.deepEqual(unityTools(), ["unity__new-game", "unity__show-steps"], "and so can a game with no kind yet");
       const offered = registry.snapshot().kinds.filter((kind) => kind.plugin === "unity");
       assert.deepEqual(
-        offered.map((kind) => [kind.label, kind.tool, kind.makes, kind.asksReady]),
-        [["Unity game", "unity__new-game", [CoreFact.UnityProject], true]],
-        "the new game's question offers Unity by its scaffold's label, asking engine-status first",
+        offered.map((kind) => [kind.label, kind.tool, kind.makes]),
+        [["Unity game", "unity__new-game", [CoreFact.UnityProject]]],
+        "a game is offered Unity by its scaffold's label",
       );
     } finally {
       registry.cancel();

@@ -4,7 +4,7 @@ import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
 import { personWrote } from "./person-wrote.ts";
 import { fromThePerson, MessageFrom, SteerDelivery } from "./steer-delivery.ts";
-import { isSlashText, JoinKind, joinKindOf, type OpenOptions } from "./steer-switch.ts";
+import { JoinKind, joinKindOf, type OpenOptions } from "./steer-switch.ts";
 
 /** A user message as the queue holds it: the dispatch action, plus its id once queued. */
 export type QueueAction = AnyRecord & { threadId: string; messageId?: string; text?: string };
@@ -392,7 +392,7 @@ export class MessageQueue {
    * read by a turn a restart cut short goes in front of that turn's replay; one that switched how
    * that turn ran (another engine, model, effort or roles) gets a turn of its own after it instead,
    * with all that turn read after it: the replay runs on the turn's own settings, which the switch
-   * changed. A slash command it read stays read, never run twice (it may have cleared the session).
+   * changed.
    */
   async #restoreMessage(
     threadId: string,
@@ -402,7 +402,7 @@ export class MessageQueue {
   ): Promise<void> {
     if (message.state === MessageState.Delivered) {
       const replayed = this.#replayedTurnOf(thread, message);
-      if (!replayed || isSlashText(message.action?.text)) return;
+      if (!replayed) return;
       const own =
         split.has(replayed.messageId as string) || joinKindOf(message.action ?? {}, replayed) === JoinKind.Switch;
       if (!own) {

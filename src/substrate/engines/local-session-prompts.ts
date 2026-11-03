@@ -3,7 +3,7 @@
  * descriptions, and the notes the studio puts in front of it when a round goes wrong.
  */
 import { MINUTE_MS } from "../../shared/duration.ts";
-import { PERMISSION_MODE_NAMES, PermissionMode } from "../../shared/permissions.ts";
+import { PermissionMode } from "../../shared/permissions.ts";
 
 /** The most of the workspace's own instructions (CLAUDE.md) the system prompt carries. */
 const INSTRUCTIONS_CHARS = 24_000;
@@ -39,11 +39,6 @@ const MODE_NOTE: Record<PermissionMode, string> = {
     "PLAN MODE: the user wants a plan before any change. Inspect what you need with read_file and list_files, change nothing, then reply with your plan in Markdown: what you will change, where and how. The user approves it before you carry it out.",
   [PermissionMode.Bypass]: "Edits and commands run without asking the user.",
 };
-
-/** The note a session reads at its next round when the user switched the chat's mode while it ran. */
-export function modeChangedNote(mode: PermissionMode): string {
-  return `Studio notice: the user switched this chat's permission mode to ${PERMISSION_MODE_NAMES[mode]}. ${MODE_NOTE[mode]}`;
-}
 
 /** What the model reads when the user denied a call with words of their own. */
 export function deniedWithWords(words: string): string {

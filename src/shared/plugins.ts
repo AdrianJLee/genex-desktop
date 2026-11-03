@@ -340,19 +340,13 @@ export function skillScope(skill: Pick<PluginSkill, "engines" | "facts">): strin
 /**
  * A tool a plugin offers that makes a kind of project (its manifest's `makes`), as a session's
  * snapshot lists it: the plugin's id and name, the tool's agent name `<plugin>__<tool>`, and the
- * facts. `asksReady` says the tool declares a `ready` harness tool (a plugin's new-game tool, the
- * one its engine card offers). For a game with no kind yet, the host fills `ready` and `note` from
- * that tool (whether one can be made here now, and the words the engine card offers it with); both
- * are absent when it declares none or its answer didn't come.
+ * facts.
  */
 export interface PluginKindOffer {
   plugin: string;
   name: string;
   tool: string;
   makes: string[];
-  asksReady?: boolean;
-  ready?: boolean;
-  note?: string;
   /** The scaffold this offer is (`PluginScaffold.id`), when the plugin declares scaffolds. */
   scaffold?: string;
   /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */
@@ -778,10 +772,7 @@ export interface PluginInfo {
   /** Agent tools of a local plugin the person allowed to run without asking; cleared when its code changes or it is turned off. */
   allowedTools?: string[];
 }
-/**
- * The plugins and skills one session was handed, as `plugin` ids and `plugin/skill` names: the
- * `tool_registry_applied` record's set, which a resumed session is compared against.
- */
+/** The plugins and skills one session is handed, as `plugin` ids and `plugin/skill` names. */
 export interface PluginAppliedSet {
   plugins: string[];
   skills: string[];

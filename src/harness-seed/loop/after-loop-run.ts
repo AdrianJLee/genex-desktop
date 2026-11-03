@@ -52,16 +52,11 @@ const RESERVE_POLL_MS = SECOND_MS / 20;
 /** The states a run is over in: the chat's own session answers after either. */
 const CLOSED: readonly string[] = [RunState.Finished, RunState.Paused];
 
-/** A run that is over, as the chat's own session is told it and handed its controls. */
+/** A run that is over, as the chat's own session is handed its controls. */
 export interface AfterLoopRun {
   runId: string;
   /** `finished` or `paused`. */
   state: string;
-  goal: string | null;
-  /** Whether its close put the build in the game folder; null when it did not say. */
-  landed: boolean | null;
-  /** Why it stopped, as its close said. */
-  stoppedBecause: string | null;
   /** The engine the turn runs on: the message's, else the one its lead ran on. */
   engine: string;
   /** The turn runs on the engine its lead ran on: only there may it resume the build. */
@@ -111,9 +106,6 @@ export async function afterLeadLoopRun(
   return {
     runId: run.runId,
     state: run.state,
-    goal: typeof run.goal === "string" ? run.goal : null,
-    landed: typeof run.landed === "boolean" ? run.landed : null,
-    stoppedBecause: typeof run.stoppedBecause === "string" ? run.stoppedBecause : null,
     engine,
     onLeadEngine,
     model: action.model ?? leadModel,

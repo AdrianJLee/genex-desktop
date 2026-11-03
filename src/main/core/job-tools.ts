@@ -295,14 +295,16 @@ export interface JobNews {
 }
 
 /**
- * The chat's own session's news of its own jobs: those that ended since it was last told, and
- * those still running. A worker's and a lead's jobs are their own sessions' to follow.
+ * The chat's own session's news of its own jobs: those that ended since it was last told. Those
+ * still running are `job_list`'s to say. A worker's and a lead's jobs are their own sessions' to follow.
  */
 export async function jobNews(core: StudioCore, owner: Pick<JobOwner, "project" | "chatThreadId">): Promise<JobNews> {
-  const jobs = (await core.jobs.list(owner.project)).filter(
-    (record) => record.owner.chatThreadId === owner.chatThreadId && record.owner.role === JobRole.Chat,
+  const ended = (await core.jobs.list(owner.project)).filter(
+    (record) =>
+      record.owner.chatThreadId === owner.chatThreadId &&
+      record.owner.role === JobRole.Chat &&
+      isEndedJob(record) &&
+      record.toldChat !== true,
   );
-  const ended = jobs.filter((record) => isEndedJob(record) && record.toldChat !== true);
-  const running = jobs.filter((record) => !isEndedJob(record));
-  return { notice: jobNotice(ended, running), told: ended.map((record) => record.id) };
+  return { notice: jobNotice(ended), told: ended.map((record) => record.id) };
 }

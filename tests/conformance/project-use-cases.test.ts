@@ -27,7 +27,6 @@ import { chatWorkerTool, closeChatWorkers, openChatWorkers } from "../../src/har
 import { WORKER_TOOLS } from "../../src/harness-seed/loop/workers/specs.ts";
 import { DispatchActionType, HarnessCapability } from "../../src/shared/protocol.ts";
 import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
-import { UNREAL_NEW_GAME_TOOL } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
 import { SnapshotScope } from "../../src/shared/event-log.ts";
@@ -42,7 +41,6 @@ import { FolderHolds } from "../../src/shared/project-facts.ts";
 import { FindNext, PluginOffer } from "../../src/shared/project-tools.ts";
 import { inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
-import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { FinishCheckStep } from "../../src/harness-seed/loop/finish-contract.ts";
 import type { Run } from "../../src/harness-seed/types/harness.d.ts";
@@ -389,6 +387,7 @@ async function siteAndEditorSkills(): Promise<PluginRegistry> {
 /** A tool the host serves, by name, as `plugins.tools` answers it. */
 const servedTool = (name: string, description: string) => ({ name, description, parameters: {} });
 /** The Unreal plugin's tool that makes a game's Unreal project: served only while the plugin is on. */
+const UNREAL_NEW_GAME_TOOL = "unreal__new-game";
 const NEW_GAME_TOOL = servedTool(UNREAL_NEW_GAME_TOOL, "Make the game's Unreal project.");
 /** The Unreal plugin's kind, as the host lists it while the plugin is on. */
 const UNREAL_KIND = { plugin: "unreal", name: "Unreal Editor", tool: UNREAL_NEW_GAME_TOOL, makes: ["unreal-project"] };
@@ -954,7 +953,10 @@ describe("Unreal asked for with the plugin off: find the plugin, or go on with g
     }
   });
 
-  it("plugins_find shows the turn-it-on card; on the person's word only, the lead goes on with generic tools and is told it cannot save inside the editor before checkpoints", async (t) => {
+  // Flipped: on the person's word the lead was also told the Unreal plugin is off and that Genex
+  // can't save inside the editor before a checkpoint; Genex infers no plugin from the facts, and the
+  // session reads the person's words with an Unreal project's context.
+  it("plugins_find shows the turn-it-on card; on the person's word only, the lead goes on with generic tools", async (t) => {
     const game = await lite.core.createGame("Unreal Card");
     // The session looks for the plugin, then suggests what it found.
     const found = (answers: unknown[]) =>
@@ -973,8 +975,7 @@ describe("Unreal asked for with the plugin off: find the plugin, or go on with g
 
     // On the person's word to go on without it, an Unreal project's turn is delegated, never refused.
     const { prompt } = await chatTurnOn(Project.UnrealGame, "Config/DefaultEngine.ini");
-    assert.match(prompt, /Unreal plugin is off/);
-    assert.match(prompt, /can't save inside the editor before a checkpoint/);
+    assert.doesNotMatch(prompt, /Unreal plugin is off|can't save inside the editor/);
   });
   it("without the plugin the lead builds with UnrealBuildTool and UnrealEditor-Cmd as jobs and looks with app_look", {
     skip: process.platform === "win32" && "jobs' process groups are POSIX",
@@ -1369,7 +1370,7 @@ describe("an Unreal game with a web site: two facts, two views", () => {
     assert.deepEqual(factsAt(descriptor, "web-game"), ["site"]);
   });
 
-  it("skills and rules scope by path: the web skill applies under site/, the Unreal skill at the root", async () => {
+  it("skills scope by path: the web skill applies under site/, the Unreal skill at the root; the context names both", async () => {
     const descriptor = await withUnrealOn(async () => listed((await adopted(Project.UnrealAndSite)).game.name));
     const facts = factsOfListed(descriptor);
     const registry = await siteAndEditorSkills();
@@ -1380,11 +1381,8 @@ describe("an Unreal game with a web site: two facts, two views", () => {
     } finally {
       registry.cancel();
     }
-    const lines = buildContractorBrief({ ask: ASK, engine: CLAUDE, facts }).split("\n");
-    const web = lines.filter((line) => line.includes("serves its index.html"));
-    assert.ok(web.length > 0 && web.every((line) => line.startsWith("For the web game in `site/`: ")));
-    const unreal = lines.filter((line) => line.includes("the Unreal editor connector's tools"));
-    assert.ok(unreal.length > 0 && unreal.every((line) => !line.startsWith("For the ")));
+    // Flipped: each kind got rules of its own, named by path, then the context named what is where.
+    // The plugins' guidance (above) is scoped by path, and the context never says what the folder holds.
   });
   it("two observers; Live shows the Unreal card, picked by the facts", async () => {
     const { descriptor, observers, plugins } = await withUnrealOn(async () => {

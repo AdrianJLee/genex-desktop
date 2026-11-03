@@ -33,7 +33,8 @@ import type {
   PermissionReply,
 } from "../../substrate/engines/types.ts";
 import { MODEL_ROW_COUNTS } from "../../substrate/engines/session-cost.ts";
-import { planApprovedNote, planRevisionNote } from "./delegation-prompts.ts";
+import { planApprovedNote } from "./delegation-prompts.ts";
+import { MessageFrom } from "../../shared/engine-requests.ts";
 
 /** How many times one turn's plan may be sent back and planned again before the turn just ends. */
 const MAX_PLAN_REVISIONS = 20;
@@ -51,18 +52,22 @@ const LAUNCH_ASK: Record<BuildLaunch, string> = {
 
 type StudioCall = NonNullable<DelegateResult["studioToolCalls"]>[number];
 
-/** What the session does next after the person answered its plan, or null when the turn ends. */
+/** What the session does next after the person answered its plan, or null when the turn ends: its mode, and who says what. */
 interface PlanNext {
   mode: PermissionMode;
   prompt: string;
+  from: MessageFrom;
 }
 
-/** The person's answer to a plan, as the next pass of the session. */
+/**
+ * The person's answer to a plan, as the next pass of the session: an approval is Genex's line in the
+ * mode they chose; words sending it back are theirs, as they wrote them, still in Plan.
+ */
 function nextPass(engine: string, reply: PermissionReply): PlanNext | null {
   if (reply.decision === PermissionDecision.ApprovePlan)
-    return { mode: engineMode(engine, reply.mode), prompt: planApprovedNote() };
+    return { mode: engineMode(engine, reply.mode), prompt: planApprovedNote(), from: MessageFrom.Genex };
   const words = reply.decision === PermissionDecision.Deny && !("withdrawn" in reply) ? reply.message?.trim() : "";
-  return words ? { mode: PermissionMode.Plan, prompt: planRevisionNote(words) } : null;
+  return words ? { mode: PermissionMode.Plan, prompt: words, from: MessageFrom.Person } : null;
 }
 
 /** A reply that is a plan to approve: a whole turn with words, a session to continue, and nothing launched or asked. */
@@ -179,15 +184,19 @@ async function planOf(input: {
   return plainPlan ? { plan: result.summary, held: false } : null;
 }
 
-/** The next pass of the same session: its stills were already shown, and a steer door opens once per turn. */
+/**
+ * The next pass of the same session: its stills and notices were already read, and a steer door
+ * opens once per turn.
+ */
 function nextRequest(
   request: DelegateRequest,
   permissions: DelegatePermissions,
   next: PlanNext,
   sessionId: string,
 ): DelegateRequest {
-  const { images: _images, steer: _steer, ...rest } = request;
-  return { ...rest, prompt: next.prompt, resume: sessionId, permissions: { ...permissions, mode: next.mode } };
+  const { images: _images, steer: _steer, notices: _notices, ...rest } = request;
+  const { prompt, from, mode } = next;
+  return { ...rest, prompt, from, resume: sessionId, permissions: { ...permissions, mode } };
 }
 
 /** A held build that cannot go to the person (beside a question, a failed turn) or was not approved is dropped. */

@@ -13,7 +13,7 @@ import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts"
 import { servedFactsOf } from "../../src/harness-seed/loop/folder-facts.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { HookEvent, READY_POLL_MS, READY_WAIT_MS, READY_WORDS } from "../../src/harness-seed/loop/hooks.ts";
-import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
+import { factsReadyNotice } from "../../src/harness-seed/loop/project-prompts.ts";
 import { EngineReadiness } from "../../src/plugins/unreal/editor-wait.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
@@ -184,7 +184,7 @@ function tickQuietly(timers: { tick: (ms: number) => void } | undefined, ms: num
 }
 
 /** The prompt the same session goes on with: the game's new kind. */
-const goOnPrompt = (descriptor: ReturnType<typeof game>) => factsReadyPrompt(servedFactsOf(descriptor as never));
+const goOnPrompt = (descriptor: ReturnType<typeof game>) => factsReadyNotice(servedFactsOf(descriptor as never));
 
 describe("the turn that makes a game's Unreal project", () => {
   it("after a turn made the game's Unreal project, the chat waits while health is pending, says why once, then the same session goes on", async (t) => {
@@ -237,7 +237,8 @@ describe("the turn that makes a game's Unreal project", () => {
 
   // Flipped on purpose: a blocked step used to end the turn with the plugin's words asking the person
   // to open the editor, though the agent opens, quits and restarts editors itself.
-  it("says plainly why when a step blocks, then the same session goes on, told to get the app ready itself", async (t) => {
+  // Flipped again: the session was told to get the app ready itself; it is told why it isn't, and only that.
+  it("says plainly why when a step blocks, then the same session goes on, told why its app isn't ready", async (t) => {
     t.mock.timers.enable({ apis: ["setTimeout"] });
     for (const healths of [[Health.Blocked], [Health.Pending, Health.Pending, Health.Blocked]]) {
       const blocked = await turnOn({ healths, timers: t.mock.timers });
@@ -245,7 +246,7 @@ describe("the turn that makes a game's Unreal project", () => {
       assert.ok(blocked.said.includes(NOT_OPENED), healths.join(","));
       assert.deepEqual(
         [blocked.delegated[1]?.resume, blocked.delegated[1]?.prompt],
-        ["s1", factsReadyPrompt(servedFactsOf(game(true) as never), NOT_OPENED)],
+        ["s1", factsReadyNotice(servedFactsOf(game(true) as never), NOT_OPENED)],
         healths.join(","),
       );
     }
@@ -260,7 +261,7 @@ describe("the turn that makes a game's Unreal project", () => {
     });
     // Flipped on purpose: the session goes on, told the app is still opening, as with a block.
     assert.equal(waited.delegated.length, 2, "the agent goes on, told it is still opening");
-    assert.equal(waited.delegated[1]?.prompt, factsReadyPrompt(servedFactsOf(game(true) as never), OPENING));
+    assert.equal(waited.delegated[1]?.prompt, factsReadyNotice(servedFactsOf(game(true) as never), OPENING));
     assert.ok(waited.said.includes(READY_WORDS.timedOut(OPENING)), waited.said.join(" | "));
     assert.ok(!waited.said.includes(NOT_OPENED));
   });
@@ -336,40 +337,31 @@ async function engineQuestion(kinds: unknown[]) {
     { ...TURN, text: "make a lantern-lit city game", newProject: true } as never,
   );
   const [delegated] = recorder.paramsOf("engine.delegate");
-  return { prompt: String(delegated?.prompt ?? ""), plugin: recorder.paramsOf("plugins.invoke") };
+  const bridged = (delegated?.interviewTools as Array<{ name: string }> | undefined)?.map((tool) => tool.name) ?? [];
+  return { prompt: String(delegated?.prompt ?? ""), bridged, plugin: recorder.paramsOf("plugins.invoke") };
 }
 
-describe("the engine question, told how each kind stands", () => {
-  it("the card offers each kind with its plugin's readiness note, and sends a kind that isn't ready to its plugin's button", async () => {
-    const readyNote = 'Offer "Unreal Engine: plays in the Unreal editor on this computer"; call unreal__new-game.';
-    const ready = await engineQuestion([LINK_KIND, { ...UNREAL_KIND, ready: true, note: readyNote }]);
-    assert.ok(ready.prompt.includes(readyNote), "a ready kind is offered in its plugin's words");
-    assert.doesNotMatch(ready.prompt, /finish its setup/);
-    assert.match(
-      ready.prompt,
-      /When it is the web, call [^ ]*start_web_game first/,
-      "the web answer starts the web starter",
-    );
-    assert.deepEqual(ready.plugin, [], "the harness asks no plugin itself");
-
+// Flipped: the brief asked web or Unreal in words, each kind in its plugin's readiness note. The
+// session reads the words alone with the card at hand, and a kind tool that can't make its kind yet
+// says why itself.
+describe("a new game's first turn while a plugin offers a kind", () => {
+  it("reads the words alone, with the question card bridged, and the harness asks no plugin itself", async () => {
     const notReadyNote = "Unreal Engine isn't installed on this computer yet.";
-    const missing = await engineQuestion([{ ...UNREAL_KIND, ready: false, note: notReadyNote }]);
-    assert.ok(missing.prompt.includes(notReadyNote));
-    assert.match(
-      missing.prompt,
-      /don't call mcp__studio__unreal__new-game: tell them to finish its setup from the Unreal Editor button/,
-    );
-
-    const unknown = await engineQuestion([UNREAL_KIND]);
-    assert.match(
-      unknown.prompt,
-      /When the answer \(or the request\) is Unreal Editor, call mcp__studio__unreal__new-game/,
-    );
+    for (const kinds of [
+      [LINK_KIND, { ...UNREAL_KIND, ready: true }],
+      [{ ...UNREAL_KIND, ready: false, note: notReadyNote }],
+    ]) {
+      const turn = await engineQuestion(kinds);
+      assert.equal(turn.prompt, "make a lantern-lit city game");
+      assert.deepEqual(turn.bridged, ["start_autopilot", "ask_user"]);
+      assert.deepEqual(turn.plugin, [], "the harness asks no plugin itself");
+    }
   });
 
-  it("a host that lists no kinds offers no Unreal kind", async () => {
+  it("a host that lists no kinds bridges no card", async () => {
     const none = await engineQuestion([]);
-    assert.doesNotMatch(none.prompt, /THE ENGINE:|unreal__new-game/);
+    assert.equal(none.prompt, "make a lantern-lit city game");
+    assert.deepEqual(none.bridged, ["start_autopilot"]);
   });
 });
 

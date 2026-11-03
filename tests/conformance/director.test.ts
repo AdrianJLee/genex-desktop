@@ -1050,7 +1050,8 @@ describe("a Loop interrupted and resumed", () => {
           // its reply ends.
           if (!request.director && request.liveTools?.some((tool) => tool.name === "run_status")) {
             results.afterLoopRun = request;
-            assert.match(request.prompt, /PAUSED/);
+            // Flipped: an after-run note said the build was PAUSED; the person's words go alone.
+            assert.doesNotMatch(request.prompt, /PAUSED|THE BUILD IS OVER/);
             assert.match(request.prompt, /Keep going and land the saved sign/);
             assert.deepEqual(
               (request.interviewTools ?? []).map((tool) => tool.name),

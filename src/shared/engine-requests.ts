@@ -56,6 +56,8 @@ export interface LiveToolSpec extends StudioToolSpec {
    * tools and plugin tools are flat and never set it.
    */
   inputSchema?: Record<string, unknown>;
+  /** Genex's own tool, which an engine that defers tools loads with the prompt (Claude Code's `alwaysLoad`). */
+  alwaysLoad?: boolean;
 }
 
 /** Builder eyes: the serializable capture grant for the workspace a delegation builds in. */

@@ -26,7 +26,7 @@ import {
 import { type ConversationRecord, type EventEnvelope, ThreadKind } from "../../shared/event-log.ts";
 import { ExecutionStatus, RUN_START_EVENTS } from "../../shared/run-state.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
-import type { McpLiveTool, SilentConnector } from "../../substrate/mcp/registry.ts";
+import type { McpLiveTool } from "../../substrate/mcp/registry.ts";
 import os from "node:os";
 import path from "node:path";
 import { isGrantedRunControl, isRunControl, runControlsFor } from "../../shared/chat-run.ts";
@@ -66,31 +66,16 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { chatTurnOf, openDoor, recordSteerDelivered, settleDoor, type SteerDoor } from "./chat-steer.ts";
 import type { LeadSession, PersonSession } from "./chat-permissions.ts";
 import type { ActiveDelegation } from "./internals.ts";
-import {
-  CallCutOff,
-  PluginCapability,
-  type PluginAppliedSet,
-  type PluginInfo,
-  type PluginTool,
-} from "../../shared/plugins.ts";
+import { CallCutOff, PluginCapability, type PluginInfo, type PluginTool } from "../../shared/plugins.ts";
 import type { PluginRegistry, PluginSnapshot } from "../../substrate/plugins/registry.ts";
 import { type CutOffCall, clearCutOffs, noteCutOff, peekCutOffs } from "./cut-off-calls.ts";
 import { clearUnsaved, peekUnsaved, type UnsavedFile } from "./unsaved-files.ts";
 import {
-  addedNotice,
-  addedSince,
-  anyWithdrawn,
   cutOffNotice,
   type HandedPlugin,
   handedPluginsNote,
   unsavedFilesNotice,
-  leadToolsNote,
-  mainAgentReachNote,
-  personSessionNote,
   silentConnectorLog,
-  silentConnectorsNotice,
-  withdrawnNotice,
-  withdrawnSince,
 } from "./delegation-prompts.ts";
 import { computerTools, type ComputerGrant, type ComputerTools } from "./computer-tools.ts";
 import { delegationMirror, scopedRecord, type ActivityScope, type DelegationMirror } from "./delegation-events.ts";
@@ -114,8 +99,12 @@ import { checkpointWords } from "./plugin-hooks.ts";
 import { CHECKPOINT_TOOL } from "../../substrate/engines/studio-tool-prompts.ts";
 import { HookEvent } from "../../shared/plugin-hooks.ts";
 
-/** Engines whose own system prompt takes a session's lasting context (`DelegateRequest.system`). */
-const SYSTEM_CONTEXT_ENGINES: ReadonlySet<string> = new Set([ProviderId.ClaudeCode]);
+/**
+ * Engines whose own system prompt takes a session's lasting context (`DelegateRequest.system`):
+ * Claude Code's append, Codex's developer instructions (on its app server; a new `codex exec`
+ * session reads it as its first notice, codex.ts `#delegateTexts`).
+ */
+const SYSTEM_CONTEXT_ENGINES: ReadonlySet<string> = new Set([ProviderId.ClaudeCode, ProviderId.Codex]);
 
 /** A brief's parts as one text, the empty ones left out. */
 const joinParts = (parts: readonly string[]): string => parts.filter(Boolean).join("\n\n");
@@ -273,12 +262,6 @@ interface SessionReach {
   worker: WorkerSeat | null;
   extraReads: string[];
   denyReads: string[];
-  /**
-   * It is the chat's main agent on an engine that asks about every call, reads beyond its folders
-   * included (`Engine.permissionPrompts`): it reaches the whole Mac, limited only by the chat's mode,
-   * and its brief says so (`mainAgentReachNote`).
-   */
-  reachesMac: boolean;
 }
 
 /** What one session is: its thread, its reach, its stop signal and its mirrored events. */
@@ -373,18 +356,11 @@ interface SessionTools {
   /** The plugin tools, their guidance and the set behind them: one registry snapshot, taken as the session began. */
   plugins: PluginTool[];
   pluginGuidance: string;
-  applied: PluginAppliedSet;
   /** The plugins behind them as its brief names them, read in the same tick as the snapshot. */
   handed: HandedPlugin[];
-  /** A resumed session's plugins and skills that were handed to it before and are gone now. */
-  withdrawn: PluginAppliedSet | null;
-  /** The in-scope connectors that gave this session no tools, each told to it so it doesn't look for them. */
-  silent: SilentConnector[];
-  /** A resumed session's plugins handed to it now and not before; none for a new session. */
-  added: HandedPlugin[];
-  /** The thread's cut-off calls its brief names; forgotten once the session answers (`#settled`). */
+  /** The thread's cut-off calls its notices name; forgotten once the session answers (`#settled`). */
   cutOffs: CutOffCall[];
-  /** The thread's files too large to save that its brief names; forgotten the same way. */
+  /** The thread's files too large to save that its notices name; forgotten the same way. */
   unsaved: UnsavedFile[];
   builder: ComputerTools | null;
   director: DirectorTools | null;
@@ -1319,7 +1295,6 @@ export class DelegationService {
         worker: null,
         extraReads: [...recorded, ...linked],
         denyReads: [],
-        reachesMac: true,
       };
     }
     const lead = person ? null : await this.#leadSession(p, target, grants, session, seat);
@@ -1331,14 +1306,14 @@ export class DelegationService {
       const extraReads = [...grants.hostReads, ...recorded, ...linked];
       const allowed = [...grants.extraReads, this.#core.games.dirFor(p.project), ...linked];
       const denyReads = await this.workspaceDenyReads(target.cwd, allowed);
-      return { person: placed, lead: null, worker: null, extraReads, denyReads, reachesMac: false };
+      return { person: placed, lead: null, worker: null, extraReads, denyReads };
     }
     if (lead) {
       // A folder it reads is one Accept edits (and Auto, inside its working folders) writes without
       // asking: the host's own folders and those the chat recorded, never a folder the brief names.
       const recorded = await this.#x.permissions.chatReads(session.threadId, p.extraReads ?? [], []);
       const extraReads = [...grants.hostReads, ...recorded, ...linked];
-      return { person: null, lead, worker: null, extraReads, denyReads: [], reachesMac: true };
+      return { person: null, lead, worker: null, extraReads, denyReads: [] };
     }
     const allowed = [...grants.extraReads, this.#core.games.dirFor(p.project)];
     // A reviewer reads its lead's folder and its run's captures: the rest of Genex's data is fenced too.
@@ -1349,7 +1324,6 @@ export class DelegationService {
       worker: null,
       extraReads: grants.extraReads,
       denyReads: [...new Set([...(await this.workspaceDenyReads(target.cwd, allowed)), ...fence])],
-      reachesMac: false,
     };
   }
 
@@ -1415,7 +1389,7 @@ export class DelegationService {
       ...(chat.asks ? { asks: chat.asks } : {}),
     };
     const extraReads = [...new Set([...grants.hostReads, ...recorded, ...runReads])];
-    return { person: null, lead: null, worker, extraReads, denyReads: [], reachesMac: false };
+    return { person: null, lead: null, worker, extraReads, denyReads: [] };
   }
 
   /**
@@ -2198,7 +2172,7 @@ export class DelegationService {
     // Awaits live under the lock — an await before it once let two briefs into one folder.
     if (grants.selfShotsDir) await ensureDir(grants.selfShotsDir);
     if (session.hostTools) await this.#offerConnectors(p, session, tools);
-    if (session.hostTools) await this.#applyPlugins(p, session, engineId, tools);
+    if (session.hostTools) await this.#applyPlugins(session, engineId, tools);
     await this.#prepareWindowTools(p, cwd, grants, windows, tools);
     if (session.hostTools && isChatsOwnSession(p)) await this.#offerChatScreens(p, target, grants, session, tools);
   }
@@ -2250,28 +2224,19 @@ export class DelegationService {
       ...(session.holds ? { holds: session.holds } : {}),
     });
     tools.mcp = report.tools.filter((tool) => offers(session, tool.name));
-    // A connector that gave nothing is said, in the log and to the session, never left to be looked for.
-    tools.silent = report.silent;
+    // A connector that gave nothing is said in the log; the session sees its tools are not there.
     for (const connector of report.silent)
       this.#core.options.onLog?.(`[core] ${silentConnectorLog(connector)} in ${p.project}`, "stderr");
   }
 
   /**
-   * Record the revision this session is handed. A resumed session first learns what it was handed
-   * before and is not now (its transcript still holds those plugins' instructions), and which
-   * plugins it is handed now and was not before (its transcript may say their tools are missing).
-   * The set itself is recorded only once the session answers (`#settled`), so a brief that never
-   * reached it is told again next time, and one that did is told once. Each handed plugin's account
-   * state is read first, for the brief to say which are not set up yet.
+   * Record the revision this session is handed, each handed plugin's account state read first for
+   * its system text to say which are not set up yet. No notice says what changed since it last ran:
+   * its tool list is what it is handed now, while a resumed Claude Code or Codex session keeps the
+   * plugin guidance of the system text it started with.
    */
-  async #applyPlugins(p: DelegateParams, session: DelegationSession, engineId: string, tools: SessionTools) {
+  async #applyPlugins(session: DelegationSession, engineId: string, tools: SessionTools) {
     tools.handed = await withAccounts(this.#core.plugins, tools.handed);
-    if (p.resume) {
-      const before = await this.#x.lastAppliedTools(session.threadId, engineId, p.resume);
-      const withdrawn = withdrawnSince(before, tools.applied);
-      tools.withdrawn = anyWithdrawn(withdrawn) ? withdrawn : null;
-      tools.added = addedSince(before, tools.handed);
-    }
     await this.#x.recordToolRevision(session.threadId, engineId);
   }
 
@@ -2337,7 +2302,7 @@ export class DelegationService {
     return {
       contextPolicy: (await this.#core.contextPreferences.get(engineId, p.model ?? "", p.threadId)).policy,
       ...(await this.#settingsAndReads(p, session)),
-      ...this.#brief(p, session, tools, reach, engineId),
+      ...this.#brief(p, session, tools, engineId),
       // Who wrote the prompt: each engine says it its own way (claude-steer.ts, genex-mark-prompts.ts).
       ...(isMessageFrom(p.from) ? { from: p.from } : {}),
       cwd: target.workCwd,
@@ -2411,61 +2376,55 @@ export class DelegationService {
   }
 
   /**
-   * The brief, with guidance only where there is something to say: an unattended session with no
-   * plugins and no connectors reads exactly the prompt it was given. A session the person answers
-   * on an engine that asks about every call (`reach.reachesMac`) is told it reaches their whole Mac,
-   * whatever the brief says. Calls of its thread cut off before they answered are named first, to a
-   * session that could repeat them (host tools, and a turn, not a compaction, which reads no brief),
-   * until one answers; then, to the same sessions, files Rewind cannot bring back; then, to the chat's
-   * own session, its jobs that ended since it was last told and those still running; then, to a
-   * resumed session, the plugins withdrawn and those turned on since it last ran. A session with host
-   * tools reads each plugin it is handed on a line of its own beside their guidance.
-   *
-   * What holds for the session's whole life (where it reaches, its plugins and their guidance) is
-   * its system context on an engine that takes one (`DelegateRequest.system`): said once there, not
-   * again in every message, where it once grew each chat by thousands of words a turn.
+   * The prompt as the harness wrote it, never with anything glued to it. What holds for the session's
+   * whole life (the harness's `system`, its plugins and their guidance) is its system text on an
+   * engine that takes one (`DelegateRequest.system`), said once there, not again in every message;
+   * an engine with none reads it as the first notice of a new session, its history keeping it after.
+   * Genex's own lines for this message are its notices, each a block of its own the engine marks: the
+   * harness's, then calls of its thread cut off before they answered, to a session that could repeat
+   * them (host tools, and a turn, not a compaction), until one answers; files Rewind cannot bring back,
+   * to the same sessions; and to the chat's own session its jobs that ended since it was last told.
    */
   #brief(
     p: DelegateParams,
     session: DelegationSession,
     tools: SessionTools,
-    reach: SessionReach,
     engineId: string,
-  ): Pick<DelegateRequest, "prompt" | "system"> {
-    const turn = this.#turnParts(p, session, tools);
-    const context = this.#contextParts(p, session, tools, reach);
-    if (!SYSTEM_CONTEXT_ENGINES.has(engineId)) return { prompt: joinParts([...turn, ...context]) };
-    const system = joinParts(context);
-    return { prompt: joinParts(turn), ...(system ? { system } : {}) };
+  ): Pick<DelegateRequest, "prompt" | "system" | "notices"> {
+    const told = this.#notices(p, session, tools);
+    const system = joinParts(this.#contextParts(p, session, tools));
+    const ownSystem = SYSTEM_CONTEXT_ENGINES.has(engineId);
+    const notices = ownSystem || p.resume ? told : [system, ...told].filter(Boolean);
+    return {
+      prompt: p.prompt,
+      ...(ownSystem && system ? { system } : {}),
+      ...(notices.length ? { notices } : {}),
+    };
   }
 
-  /** What this turn alone says: notices of what changed since the session last ran, then the brief. */
-  #turnParts(p: DelegateParams, session: DelegationSession, tools: SessionTools): string[] {
+  /** Genex's own lines for this message, beside the prompt: the harness's, then the host's news since the session last ran. */
+  #notices(p: DelegateParams, session: DelegationSession, tools: SessionTools): string[] {
     const told = session.hostTools && !p.compact;
     tools.cutOffs = told ? peekCutOffs(this.#x.cutOffCalls, p.threadId) : [];
     tools.unsaved = told ? peekUnsaved(this.#x.unsavedFiles, p.threadId) : [];
     return [
+      ...(p.notices ?? []),
       cutOffNotice(tools.cutOffs),
       unsavedFilesNotice(tools.unsaved),
       tools.jobNews.notice,
-      tools.withdrawn ? withdrawnNotice(tools.withdrawn) : "",
-      silentConnectorsNotice(tools.silent),
-      addedNotice(tools.added),
-      p.prompt,
-    ];
+    ].filter(Boolean);
   }
 
-  /** What holds for the session's whole life: where it reaches, its plugins, their guidance and connectors. */
-  #contextParts(p: DelegateParams, session: DelegationSession, tools: SessionTools, reach: SessionReach): string[] {
-    // A lead of a build elsewhere is told its plugins work there; a lead in place works where it sits.
-    const leadsElsewhere = session.leads !== null && !session.leadsInPlace;
-    const toldWhereLeadToolsWork = session.hostTools && leadsElsewhere && tools.plugins.length > 0;
+  /**
+   * The session's system text: the harness's context, its plugins, their guidance and connectors, the
+   * same for a chat's own session and its lead. A resumed Claude Code or Codex session keeps the text
+   * it started with, so of a plugin turned on or off since, only its tool list follows.
+   */
+  #contextParts(p: DelegateParams, session: DelegationSession, tools: SessionTools): string[] {
     return [
-      reach.reachesMac ? mainAgentReachNote() : "",
-      reach.person ? personSessionNote() : "",
+      p.system ?? "",
       session.hostTools ? handedPluginsNote(tools.handed) : "",
       session.hostTools ? tools.pluginGuidance : "",
-      toldWhereLeadToolsWork ? leadToolsNote() : "",
       this.#core.mcp.guidance(tools.mcp),
     ];
   }
@@ -2525,8 +2484,9 @@ export class DelegationService {
         ...(windowTools?.liveTools ?? []),
         ...desktop,
         ...tools.cover,
-        ...tools.project,
-        ...tools.workers,
+        // Genex's own project and worker tools load with the prompt: no brief line restates them.
+        ...tools.project.map(withPrompt),
+        ...tools.workers.map(withPrompt),
         ...tools.jobs,
         ...tools.look,
         ...controls,
@@ -2726,9 +2686,7 @@ export class DelegationService {
       this.#core.emit(UiEvent.ChatStreamEnded, { threadId: session.threadId, streamId, failed: true });
     const { threadId } = p;
     const { sessionId } = result;
-    if (session.hostTools && sessionId)
-      await this.#x.recordDeliveredTools(session.threadId, engineId, sessionId, tools.applied);
-    // A session that failed may never have read its brief: its cut-off calls are named again.
+    // A session that failed may never have read its notices: its cut-off calls are named again.
     if (result.ok) {
       clearCutOffs(this.#x.cutOffCalls, p.threadId, tools.cutOffs);
       clearUnsaved(this.#x.unsavedFiles, p.threadId, tools.unsaved);
@@ -2808,11 +2766,11 @@ async function withAccounts(
   );
 }
 
+/** Genex's own live tool, loaded with the prompt on an engine that defers tools. */
+const withPrompt = (tool: LiveToolSpec): LiveToolSpec => ({ ...tool, alwaysLoad: true });
+
 /** A session's tools before they are prepared: the plugins of the snapshot it began with, and nothing else yet. */
-function sessionTools(
-  plugins: Pick<PluginSnapshot, "tools" | "guidance" | "applied">,
-  handed: HandedPlugin[],
-): SessionTools {
+function sessionTools(plugins: Pick<PluginSnapshot, "tools" | "guidance">, handed: HandedPlugin[]): SessionTools {
   return {
     cover: [],
     project: [],
@@ -2825,11 +2783,7 @@ function sessionTools(
     mcp: [],
     plugins: plugins.tools,
     pluginGuidance: plugins.guidance,
-    applied: plugins.applied,
     handed,
-    withdrawn: null,
-    silent: [],
-    added: [],
     cutOffs: [],
     unsaved: [],
     builder: null,

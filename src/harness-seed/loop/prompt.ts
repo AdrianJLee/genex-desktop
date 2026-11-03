@@ -438,7 +438,7 @@ async function noFactRules(ctx: HarnessCtx, project: string, game: GameProject |
   if (!kindPending(game)) return "";
   const plugins = await ctx.call(HostMethod.PluginsTools, { project }).catch(() => null);
   const kinds = Array.isArray(plugins?.kinds) ? plugins.kinds : [];
-  return pendingKindRule(undefined, kinds, null, game?.holds, false).join("\n");
+  return pendingKindRule(undefined, kinds, game?.holds).join("\n");
 }
 
 /**

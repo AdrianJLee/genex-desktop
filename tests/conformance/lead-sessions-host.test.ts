@@ -10,7 +10,6 @@ import path from "node:path";
 import { after, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { lastContractorSession } from "../../src/harness-seed/loop/chat-session.ts";
-import { leadToolsNote, mainAgentReachNote } from "../../src/main/core/delegation-prompts.ts";
 import { customRecord } from "../../src/shared/custom-events.ts";
 import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
@@ -863,22 +862,17 @@ describe("a build's lead asks the person it answers", () => {
       { label: "the lead in a thread the harness made", extra: leadBrief(forged), thread: forged, asks: false },
       { label: "the lead in another game's chat", extra: leadBrief(otherChat), thread: otherChat, asks: false },
     ];
-    const handed: Array<{ label: string; asks: boolean; permissions: boolean; reachesMac: boolean }> = [];
+    // Flipped: the chat's main agent was also told it reaches the person's whole Mac; its reach is
+    // its seat's (`leadAsks`), and no note says it.
+    const handed: Array<{ label: string; asks: boolean; permissions: boolean }> = [];
     for (const { label, extra, thread } of cases) {
       await delegate(extra, thread);
       const request = seen.at(-1)!;
-      handed.push({
-        label,
-        asks: Boolean(request.leadAsks),
-        permissions: Boolean(request.permissions),
-        // The chat's main agent: told it reaches the person's whole Mac, as the chat's own session is
-        // (flipped: in its system context, told once).
-        reachesMac: (request.system ?? "").includes(mainAgentReachNote()),
-      });
+      handed.push({ label, asks: Boolean(request.leadAsks), permissions: Boolean(request.permissions) });
     }
     assert.deepEqual(
       handed,
-      cases.map(({ label, asks }) => ({ label, asks, permissions: false, reachesMac: asks })),
+      cases.map(({ label, asks }) => ({ label, asks, permissions: false })),
     );
     await core.store.updateThread(threadId, { metadata: { archived: true } });
     await delegate(leadBrief());
@@ -1500,8 +1494,8 @@ describe("a lead has the chat's own session's plugins and connectors, on the bui
       const context = request.system ?? "";
       assert.ok(context.includes(PLUGIN_GUIDANCE), `${label}: the plugins' guidance`);
       assert.ok(context.includes(CONNECTOR_GUIDANCE), `${label}: the connectors' guidance`);
-      // It sits in the game folder: told its plugins work on the build, whose path its brief never names.
-      assert.ok(context.includes(leadToolsNote()), `${label}: told where its plugins work`);
+      // Flipped: a lead of a build elsewhere was told its plugins work on the build. Its system text is
+      // its chat's own; it still never names the build's path.
       assert.equal(`${request.prompt}\n${context}`.includes(built), false, `${label}: never the build's path`);
       assert.deepEqual(heard, ["delivered", "found"], `${label}: answered`);
       const [plugin, connector] = calls;

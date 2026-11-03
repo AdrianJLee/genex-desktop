@@ -589,7 +589,8 @@ describe("live chat during a build", () => {
     assert.equal(lead.length, 1, "no turn of the lead after Stop");
     assert.equal(chats.length, 1, "the chat answers the message that waited");
     assert.equal(chats[0]!.resume, "lead-1", "the session that led the run");
-    assert.match(chats[0]!.prompt, /^\/review\n/, "the command the person sent");
+    // Flipped: the command opened a brief; it goes alone, as the person sent it.
+    assert.equal(chats[0]!.prompt, "/review", "the command the person sent");
   });
 
   it("L7. a run that crashes gives back what its lead never heard before the run closes: the chat keeps it Queued, and answers it", {

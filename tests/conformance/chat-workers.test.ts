@@ -14,7 +14,6 @@ import path from "node:path";
 import { after, describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { chatWorkerTool, closeChatWorkers, openChatWorkers } from "../../src/harness-seed/loop/workers/chat-workers.ts";
-import { WORKERS_BRIEF_LINE } from "../../src/harness-seed/loop/workers/prompts.ts";
 import { keptRef } from "../../src/harness-seed/loop/workers/records.ts";
 import { WORKER_TOOLS } from "../../src/harness-seed/loop/workers/specs.ts";
 import { SessionActivityRole } from "../../src/shared/chat-activity.ts";
@@ -210,6 +209,9 @@ describe("workers in a chat", () => {
     await delegate({ chatTurn: { messageId: turn }, ...grant });
     assert.deepEqual(workerToolsOf(seen.at(-1)).sort(), WORKER_TOOL_NAMES, "the chat's own session");
     assert.ok(!seen.at(-1)?.liveTools?.some((tool) => tool.name === "rm_everything"), "only worker tools pass");
+    // Flipped: a brief line said the session can start workers. Genex's own worker tools load with the prompt instead.
+    const loaded = (seen.at(-1)?.liveTools ?? []).filter((tool) => WORKER_TOOL_NAMES.includes(tool.name as never));
+    assert.ok(loaded.length > 0 && loaded.every((tool) => tool.alwaysLoad === true), "they load with the prompt");
     const notOffered: Array<[string, Record<string, unknown>, string?]> = [
       ["a worker: depth is one", runWorker()],
       ["a run's builder", { cwd: chat.worktree, attribution: { runId: RUN_ID, agentId: "b1" } }],
@@ -231,7 +233,7 @@ describe("workers in a chat", () => {
     assert.deepEqual(workerToolsOf(seen.at(-1)).sort(), WORKER_TOOL_NAMES, "a local model's own session");
   });
 
-  it("the seed's chat turn hands its own session the worker tools and the brief's line; a run's turn, a local model and a turn with no message none", {
+  it("the seed's chat turn hands its own session the worker tools, with no line about them; a run's turn and a turn with no message none", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await workerChat();
@@ -240,7 +242,7 @@ describe("workers in a chat", () => {
     const own = asked(await seedTurn(chat, { steer: turn }));
     const tools = (own.workers as { tools?: Array<{ name: string }> } | undefined)?.tools ?? [];
     assert.deepEqual(tools.map((tool) => tool.name).sort(), WORKER_TOOL_NAMES, "the chat's own session");
-    assert.ok(String(own.prompt).includes(WORKERS_BRIEF_LINE), "its brief says it runs workers");
+    assert.equal(own.prompt, "build the level", "the words alone: the tools say it runs workers");
     assert.deepEqual(own.chatTurn, { messageId: turn });
     const none: Array<[string, Parameters<typeof seedTurn>[1]]> = [
       ["a run's turn", { steer: turn, runId: RUN_ID }],
@@ -249,7 +251,6 @@ describe("workers in a chat", () => {
     for (const [label, options] of none) {
       const params = asked(await seedTurn(chat, options));
       assert.equal(params.workers, undefined, label);
-      assert.ok(!String(params.prompt).includes(WORKERS_BRIEF_LINE), `${label}: no line`);
     }
     // Flipped (Loop phase 3): a local model's session (Bonsai's) is handed the worker tools too.
     const local = asked(await seedTurn(chat, { steer: await chat.personSays(), engine: "bonsai" }));

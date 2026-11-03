@@ -185,32 +185,33 @@ before, is the web method's), and a Loop's brief reads only those whose facts re
 (`loop/loop-skills.ts`): a web Loop's playbook is the same text as before, and an open Loop's brief
 carries the workspace skills that name its folder's facts, never the web method.
 
-A builder's brief is written from the game's facts (`buildContractorBrief`'s `facts`; an older
-caller that names only the engine keeps the engine's rules). Every brief opens with Genex's
-identity (`appIdentity`, `loop/project-prompts.ts`) from the game's facts: the chat's, a local
-turn's, the director's, and every worker's (the pool's, the director's single, conflict, base and
-facet builders; `loop/workers/identity.ts`). A
-classic Autopilot's builders keep their own brief. A folder with no
-kind yet is told to start web with `start_web_game` or find a plugin with `plugins_find` (a folder of
-notes is told to read them first); with an engine plugin's kind on offer (`plugins.tools`'s
-`kinds`) every fresh brief until it has a kind asks with the question card (a request naming an
-engine none of its options covers goes to `plugins_find` instead), a resumed session keeps the card
-while the folder has no kind, and a brief without the card (a local turn's too) names each kind's
-tool for a request that names that engine. The web starter's rules reach such a brief as the web
-answer's only. A folder of its own files of a kind no
-rule knows is told to look through them first. Each kind gets its own rules, named by folder when
-there are several. A kind no plugin that is on covers (Unity, Blender, an Unreal plugin, a Godot or
-Unreal project with its plugin off, an unknown one) calls `plugins_find` first, shows the card with
-`plugins_suggest` and ends its reply, offers to write a plugin when none fits, and goes on with its
-files and the shell only on the person's word (`pluginFirstRule`); a kind a plugin that is on makes
-(one of `kinds` names it, as Godot's plugin does Genex's own `godot-project`) skips that. An Unreal project the game is not
-linked to is never worked on through the Unreal tools: they reach the Unreal panel's project until
-`use-project` links it. A local turn's
-operating rules are split: `prompts/operating-rules.md` for every turn and
-`prompts/operating-rules-web.md` only for a web game; a kept agent-edited `operating-rules.md` from
-before the split still carries the web rules, so a web game then reads them twice; it, a kept
-`loop/prompt.ts` that reads no `operating-rules-web.md` and a kept `loop/chat-session.ts` that never
-names `start_web_game` are in `SEED_CALL_CHANGES`.
+The chat's own session reads the person's words as they wrote them (`from: person`), on its first
+turn and every later one; pictures go as image blocks. What it knows of Genex is its system text,
+`chatContext` (`loop/chat-session.ts`), sent as `engine.delegate`'s `system` on every turn, the same
+text for the chat's whole life, the lead's turns included (`director.ts` `seatTheLead`). A resumed
+session keeps the system text it started with (Claude Code 2.1.314 until a compaction, `codex exec
+resume`), so it holds only what no turn changes: Genex's identity (`appIdentity`,
+`loop/project-prompts.ts`: the folder, that Genex shows a web game in Live and what a Genex plugin
+is, never what the folder holds), that the person may not be a programmer, the language rule and
+the chat's Run button. What the folder holds is the session's to see: a game's own `CLAUDE.md` names
+the build Genex runs before every preview, and a plugin's guidance says how its kind is built and
+linked; a turn that changes the kind tells the session in Genex's line (`factsReadyNotice`). The Loop's start,
+workers, the checkpoint, the kind tools, `start_web_game` and `plugins_find` are tools, never
+restated: Genex's own project and worker tools load with the prompt on Claude Code
+(`LiveToolSpec.alwaysLoad`), and the question card (`ask_user`) is bridged while the folder has no
+kind and a plugin on offers one (`plugins.tools`'s `kinds`). A session that starts in a chat that
+began before it (a resume that failed, another engine) is told the chat so far as one Genex notice
+(`chat-continuity.ts` `historyNotice`: the last compaction's handover, then the newest messages
+that fit, `brief-window.ts`), beside the same words. Every other brief still opens with Genex's
+identity: a local turn's, the director's, and every worker's (the pool's, the director's single,
+conflict, base and facet builders; `loop/workers/identity.ts`). A classic Autopilot's builders keep
+their own brief. A local turn's prompt (`loop/prompt.ts`) tells a folder with no kind yet to start web
+with `start_web_game` or find a plugin with `plugins_find`, naming each kind's tool, and one of its
+own files to look through them first. A local turn's operating rules are split:
+`prompts/operating-rules.md` for every turn and `prompts/operating-rules-web.md` only for a web
+game; a kept agent-edited `operating-rules.md` from before the split still carries the web rules,
+so a web game then reads them twice; it and a kept `loop/prompt.ts` that reads no
+`operating-rules-web.md` are in `SEED_CALL_CHANGES`.
 
 Every game chat message is the chat's own turn: its build's lead's while that build runs, the chat's
 own session otherwise, which keeps the run's controls (`run_status`, `show_build`, `land_build`, and
@@ -346,8 +347,9 @@ recoveries the restore and crash moments followed by `health` until it is quiet,
 `endOfTurnCheckpoint` (`checkpoint.take` only if unsaved) and, after a turn that linked the game to
 an engine project or switched its link, waits on `health` (`waitReady`, up to `READY_WAIT_MS`); any
 other kind change goes on at once. When the app never gets ready (a step blocks, or the cap passes)
-the chat says why once and the same session goes on, its prompt carrying the reason
-(`factsReadyPrompt`'s `notReady`): the agent opens, reopens or waits for the app itself. Only Genex's
+the chat says why once and the same session goes on, told Genex's line with the reason
+(`factsReadyNotice`'s `notReady`, a fact and nothing more): the agent opens, reopens or waits for the
+app itself. Only Genex's
 own hold for the person using the app keeps it from going on. Genex's own hold of that checkpoint or of `turn.start` is said
 in the person's words (`hold`), and Plan mode says nothing; so is Genex's hold of a run's start,
 its lead's turns, a crash's reopen and the way back after it (`loop/director/held-words.ts`,
@@ -954,8 +956,8 @@ Claude Code's would have been: the worker's roots (in Bypass the home folder too
 and the never-touch list denied, no network. The host reads the tool as `Bash` (its question card,
 the never-touch screen, the log). Its commands run under Git Bash, one at a time, nothing in the
 background, and a saved "always allow" rule for `Bash` does not cover them. A chat's session runs
-its commands in Bash on a turn the person answers and through `run_command` on an unattended one, so
-a resumed session is told which shell this turn has (`SHELL_THIS_TURN`). Where a CLI still refuses
+its commands in Bash on a turn the person answers and through `run_command` on an unattended one;
+the turn's tool list is what says which shell it has. Where a CLI still refuses
 its box, it refuses the session before the model says anything, and the engine reports it
 as `StopReason.SandboxUnavailable` with the CLI's own words (`engines/claude-code.ts`
 `sandboxRefusal`); a session that already replied keeps its ordinary failure. The refusal holds that

@@ -770,48 +770,17 @@ describe("seed upgrade across the harness step flag", () => {
     assert.ok(note.length <= 300, "one memory value stays within the memory policy's limit");
   });
 
-  // Flipped (phase 5): kept rules are no longer checked for the web rules' sentence; rules from before
-  // the archive epoch were archived (seed-archive.ts), and the shipped rules no longer say it.
-  it("a kept chat brief from before new games started empty is reported once and noted", async () => {
-    const root = await tmpDir("seed-step-first-brief-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-    const brief = "loop/chat-session.ts";
-    // The older shape: a brief that never tells a game with no kind to call start_web_game.
-    const copy = await readFile(path.join(ws, brief), "utf8");
-    assert.ok(copy.includes("pendingKindRule("), "the shipped brief names the first step");
-    await writeFile(
-      path.join(ws, brief),
-      `${copy.replaceAll("pendingKindRule(", "olderRule(")}\n// the agent's own change\n`,
-    );
-    const report = await applySeed({
-      seedDir: shipped,
-      workspaceDir: ws,
-      manifestFile: manifest,
-      backupDir: path.join(root, "backup"),
-    });
-    assert.deepEqual(report.outdatedCalls ?? [], [brief], "the file once");
-    const memory = seedCallMemory({}, report.outdatedCalls ?? []);
-    const briefNote = String(memory[`${SEED_CALL_MEMORY_PREFIX}${brief}`]);
-    assert.match(briefNote, /calls the host the older way/);
-    assert.ok(briefNote.length <= 300, "within the memory policy's limit");
-    // The chat turn's note names what the brief now takes.
-    const turnNote = String(seedCallMemory({}, [TURN])[`${SEED_CALL_MEMORY_PREFIX}${TURN}`]);
-    assert.match(turnNote, /calls the host the older way/);
-    assert.ok(turnNote.length <= 300, "within the memory policy's limit");
-  });
-
-  it("a kept loop entry, chat turn or chat brief from before chat workers is reported once and noted for the agent", async () => {
+  // Flipped (chat brief): a kept chat brief that named no first step for a game with no kind, and one
+  // with no workers line, were reported. The chat's context names neither: the tools do.
+  it("a kept loop entry or chat turn from before chat workers is reported once and noted for the agent", async () => {
     const root = await tmpDir("seed-step-chat-workers-");
     const ws = path.join(root, "workspace");
     const manifest = path.join(root, "manifest.json");
     await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-    // The older shapes: no "workers" claim, no worker pool around a chat turn, no workers line in the brief.
+    // The older shapes: no "workers" claim, no worker pool around a chat turn.
     const older: ReadonlyArray<readonly [string, readonly string[]]> = [
       ["loop/main.ts", ['"workers"']],
       [TURN, ["withChatWorkers(", "chatWorkersGrant("]],
-      ["loop/chat-session.ts", ["WORKERS_BRIEF_LINE"]],
     ];
     for (const [file, markers] of older) {
       let copy = await readFile(path.join(ws, file), "utf8");
@@ -879,7 +848,6 @@ describe("seed upgrade across the harness step flag", () => {
       // After a Loop in place: a resume in its journal's kind, and the chat's status alone.
       ["loop/run-dispatch.ts", "resumedProfile(", /resumedProfile/],
       ["loop/after-loop-run.ts", "inPlace", /inPlace/],
-      ["loop/after-loop-run-prompts.ts", "inPlaceControls(", /inPlaceControls/],
     ];
     for (const [file, marker] of older) {
       const root = await tmpDir("seed-step-open-loop-");

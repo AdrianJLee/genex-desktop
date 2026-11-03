@@ -18,13 +18,7 @@ import { runStudioTurn } from "./studio-chat.ts";
 import { HostMethod } from "./host-methods.ts";
 import { runDelegatedTurn } from "./delegated-turn.ts";
 import { resolveContextWindow, runToolLoop } from "./tool-loop.ts";
-import {
-  buildContractorBrief,
-  isContinueAsk,
-  lastContractorSession,
-  nameFromAsk,
-  resolveChatProject,
-} from "./chat-session.ts";
+import { lastContractorSession, nameFromAsk, resolveChatProject } from "./chat-session.ts";
 import type { AnyRecord, HarnessCtx } from "../types/harness.d.ts";
 import type { ModelPreferences, ReferenceFrame, RunRoles } from "../types/host-api.d.ts";
 import type { SteerHandle } from "./message-queue.ts";
@@ -72,14 +66,7 @@ export interface TurnOutcome {
   details?: AnyRecord;
 }
 
-export {
-  isContinueAsk,
-  lastContractorSession,
-  resolveChatProject,
-  buildContractorBrief,
-  nameFromAsk,
-  resolveContextWindow,
-};
+export { lastContractorSession, resolveChatProject, nameFromAsk, resolveContextWindow };
 
 /** Run one chat turn on the runner its engine calls for. */
 export async function runTurn(ctx: HarnessCtx, options: TurnOptions): Promise<TurnOutcome> {

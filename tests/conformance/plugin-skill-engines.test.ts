@@ -18,7 +18,6 @@ import { CoreFact, type FactRef } from "../../src/shared/project-facts.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { planningCapabilities } from "../../src/main/planning-capabilities.ts";
-import { offersUnrealGame } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 import { capabilityFactsOf, copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
 import { makeResources } from "../helpers/resources.ts";
@@ -190,28 +189,37 @@ const ENGINE_FACT_OF: Record<string, string> = {
   unreal: CoreFact.UnrealProject,
 };
 
-test("a game of each engine is offered its own engine's kind and handed its own engine's tools", async () => {
+// Flipped: a game of each engine was offered its own engine's kind, read as for a game with no kind
+// yet, while the seed read the kinds as which plugins are on. A snapshot's kinds are the kind tools
+// that reach its game: an engine's way in reaches a game with no kind yet (and a web game), never a
+// game that already has an engine's kind.
+test("a game of each engine is offered no kind and handed its own engine's tools; a game with no kind yet each engine's", async () => {
   const resources = await makeResources({ tsc: false });
   const registry = await bundledRegistry(path.join(resources, "plugins"), ALL_ON);
   try {
     for (const row of ENGINE_GAMES) {
       const { kinds, tools } = registry.snapshot(row.facts);
-      const fact = ENGINE_FACT_OF[row.plugin] ?? "";
-      assert.ok(
-        kinds.some((kind) => kind.plugin === row.plugin && kind.makes.includes(fact)),
-        `${row.label}: its engine's plugin is on and makes its kind`,
+      assert.deepEqual(
+        kinds.map((kind) => kind.tool),
+        [],
+        `${row.label}: no kind`,
       );
       assert.ok(
         tools.some((tool) => tool.name === row.own),
         `${row.label}: ${row.own}`,
       );
     }
-    const pending = registry.snapshot().kinds;
-    for (const plugin of Object.keys(ENGINE_FACT_OF))
-      assert.ok(
-        pending.some((kind) => kind.plugin === plugin),
-        `a game with no kind yet is offered ${plugin}'s`,
-      );
+    assert.deepEqual(
+      registry.snapshot().kinds.map((kind) => [kind.tool, kind.makes]),
+      [
+        ["godot__new-game", [CoreFact.GodotProject]],
+        ["roblox__new-game", [CoreFact.RobloxProject]],
+        ["unity__new-game", [CoreFact.UnityProject]],
+        ["unreal__new-game", [CoreFact.UnrealProject]],
+        ["unreal__new-plugin", [CoreFact.UnrealProject, CoreFact.UnrealPlugin]],
+      ],
+      "a game with no kind yet is offered each engine's",
+    );
   } finally {
     registry.cancel();
   }
@@ -461,10 +469,11 @@ test("the bundled plugins' web guidance is what it was before skills named engin
       [...UNREAL_EDITOR_TOOLS, "unreal__skill"],
       "an Unreal game has the editor tools a web game lacks, and the reader of its guides",
     );
-    // The seed reads the plugin as offering a new Unreal game exactly while it is on.
-    assert.equal(offersUnrealGame(now.snapshot().tools), true);
+    // The plugin's new-game tool is handed exactly while it is on.
+    const newGame = () => now.snapshot().tools.some((tool) => tool.name === "unreal__new-game");
+    assert.equal(newGame(), true);
     await now.setEnabled("unreal", false);
-    assert.equal(offersUnrealGame(now.snapshot().tools), false);
+    assert.equal(newGame(), false);
   } finally {
     now.cancel();
     old.cancel();

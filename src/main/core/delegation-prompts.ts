@@ -1,6 +1,9 @@
-/** What a builder session is told about the host's side of its tools (`delegation.ts`). Model-facing. */
+/**
+ * What a builder session is told about the host's side of its tools (`delegation.ts`): the plugins it
+ * is handed, in its system text, and Genex's notices of what happened outside it, facts only. Model-facing.
+ */
 import { sizeWordsInEnglish } from "../../shared/byte-size.ts";
-import { CallCutOff, PluginAccountState, type PluginAppliedSet } from "../../shared/plugins.ts";
+import { CallCutOff, PluginAccountState } from "../../shared/plugins.ts";
 import type { CutOffCall } from "./cut-off-calls.ts";
 import type { UnsavedFile } from "./unsaved-files.ts";
 import type { SilentConnector } from "../../substrate/mcp/registry.ts";
@@ -10,11 +13,6 @@ import { type JobRecord, JobState, JobStopper } from "../../shared/jobs.ts";
 /** How long a plugin's name and its description may run in a brief before each is cut at a word. */
 const PLUGIN_NAME_CHARS = 80;
 const PLUGIN_DESCRIPTION_CHARS = 200;
-/** The most of a silent connector's error a notice repeats. */
-const SILENT_WHY_CHARS = 200;
-
-/** A skill's plugin: its `<plugin>/<skill>` name up to the slash. */
-const skillPlugin = (skill: string): string => skill.split("/")[0] ?? skill;
 
 /** A plugin a session is handed, as its brief names it. */
 export interface HandedPlugin {
@@ -32,79 +30,22 @@ export interface HandedPlugin {
 const accountNotSetUp = (plugin: HandedPlugin): boolean =>
   plugin.account !== undefined && plugin.account !== PluginAccountState.Unlocked;
 
-/**
- * Why a call was cut off, what a session hears of the plugins it is handed, and what a resumed one
- * hears of plugins and skills turned on or withdrawn since it last ran.
- */
+/** Why a call was cut off, and what a session hears of the plugins it is handed. */
 const MESSAGE = {
   handedHead: "Plugins turned on for this session (a plugin's tools are named <id>__<tool>):",
   notSetUp: "Not set up yet: the person still has to connect its account on its page.",
-  addedOn: (count: number) =>
-    count === 1
-      ? "this plugin was turned on, and its tools are yours to call now, even where this session found no such tool before:"
-      : "these plugins were turned on, and their tools are yours to call now, even where this session found no such tool before:",
-  withdrawnOff: (plugins: readonly string[], skills: readonly string[]) => {
-    const named = [`plugins: ${plugins.join(", ")}`, skills.length ? `skills: ${skills.join(", ")}` : ""];
-    return `these are no longer enabled (${named.filter(Boolean).join("; ")}). Ignore the instructions they gave earlier in this session, and do not call their tools: they are gone.`;
-  },
-  withdrawnOutOfProject: (skills: readonly string[]) =>
-    `these skills no longer apply to this project: ${skills.join(", ")}. Their plugins (${[...new Set(skills.map(skillPlugin))].join(", ")}) are still on: ignore what those skills said earlier in this session, and keep using the tools of those plugins this session is handed.`,
   cutOffWhy: {
-    [CallCutOff.HarnessEnded]: "the studio's loop ended while it ran",
+    [CallCutOff.HarnessEnded]: "Genex's loop ended while it ran",
     [CallCutOff.PluginEnded]: "its plugin stopped while it ran",
     [CallCutOff.AppLost]: "the app it drives went away while it ran",
     [CallCutOff.TurnEnded]:
-      "made after the session's turn had ended, so its answer could not reach you: it may have run anyway, so look at what it would have changed before calling it again; a \"user doesn't want to take this action\" answer to it meant only that, and the person declined nothing",
+      "made after your turn had ended; its \"user doesn't want to take this action\" answer was Genex's, not the person's",
   } satisfies Record<CallCutOff, string>,
 } as const;
-
-/** Which plugins and skills a resumed session was handed before and is not handed now. */
-export function withdrawnSince(before: PluginAppliedSet | undefined, now: PluginAppliedSet): PluginAppliedSet {
-  return {
-    plugins: (before?.plugins ?? []).filter((id) => !now.plugins.includes(id)),
-    skills: (before?.skills ?? []).filter((name) => !now.skills.includes(name)),
-  };
-}
-
-/** Whether anything was withdrawn at all. */
-export const anyWithdrawn = (withdrawn: PluginAppliedSet): boolean =>
-  withdrawn.plugins.length > 0 || withdrawn.skills.length > 0;
-
-/**
- * The first paragraph of a resumed session's brief when plugins or skills it was given earlier
- * are gone: its transcript still holds their instructions, and only this says to drop them. A
- * plugin switched off takes its tools and skills with it. A skill withdrawn while its plugin is
- * still handed no longer applies to this project (a web game's skill once the game is an Unreal
- * project): its plugin's tools stay, and the notice says so, never that the plugin is off.
- */
-export function withdrawnNotice(withdrawn: PluginAppliedSet): string {
-  const off = (skill: string) => withdrawn.plugins.includes(skillPlugin(skill));
-  const outOfProject = withdrawn.skills.filter((skill) => !off(skill));
-  const parts = [
-    withdrawn.plugins.length ? MESSAGE.withdrawnOff(withdrawn.plugins, withdrawn.skills.filter(off)) : "",
-    outOfProject.length ? MESSAGE.withdrawnOutOfProject(outOfProject) : "",
-  ].filter(Boolean);
-  return `Studio notice: since this session last ran, ${parts.join(" Also, ")}`;
-}
 
 /** A connector that gave a session no tools, as the studio's log says it. */
 export function silentConnectorLog(connector: SilentConnector): string {
   return `connector ${connector.name} gave no tools: ${connector.why ?? "it listed none"}`;
-}
-
-/**
- * A notice per connector that gave this session no tools: its plugin's guidance may still name
- * them, so the agent is told they are missing this turn and not to look for them.
- */
-export function silentConnectorsNotice(silent: readonly SilentConnector[]): string {
-  return silent
-    .map((connector) => {
-      const what = connector.why
-        ? `did not answer this turn (${oneLine(connector.why, SILENT_WHY_CHARS)})`
-        : "answered with no tools this turn";
-      return `Studio notice: the ${connector.name} connection ${what}, so its tools are missing, whatever its guidance below says: don't search for them. If the work needs them, say so; its plugin's own setup tools may bring it back.`;
-    })
-    .join("\n\n");
 }
 
 /** A plugin author's text on one line: each run of whitespace one space, cut at a word past `max` characters. */
@@ -138,43 +79,24 @@ export function handedPluginsNote(plugins: readonly HandedPlugin[]): string {
 }
 
 /**
- * Which plugins a resumed session is handed now and was not before. With nothing recorded of
- * before, none: the session's brief lists every plugin it is handed, and nothing says which are new.
- */
-export function addedSince(before: PluginAppliedSet | undefined, now: readonly HandedPlugin[]): HandedPlugin[] {
-  if (!before) return [];
-  return now.filter((plugin) => !before.plugins.includes(plugin.id));
-}
-
-/**
- * The first paragraph of a resumed session's brief when plugins were turned on since it last ran:
- * its transcript may still say a tool it needed was missing, and only this says it is there now.
- * Empty when none was.
- */
-export function addedNotice(added: readonly HandedPlugin[]): string {
-  if (!added.length) return "";
-  return `Studio notice: since this session last ran, ${MESSAGE.addedOn(added.length)} ${added.map(pluginWords).join("; ")}`;
-}
-
-/**
- * The first paragraph of a thread's next delegated session after plugin or connector calls of its
- * thread were cut off before they answered: Genex never sends them again, and only this says to
- * look before repeating one. Empty when nothing was cut off.
+ * Genex's notice to a thread's next delegated session after plugin or connector calls of its thread
+ * were cut off before they answered: Genex never sends them again, and whether they took effect is
+ * unknown. Empty when nothing was cut off.
  */
 export function cutOffNotice(calls: readonly CutOffCall[]): string {
   if (!calls.length) return "";
   const named = calls.map((c) => `${c.tool}${c.args ? ` ${c.args}` : ""} (${MESSAGE.cutOffWhy[c.reason]})`);
-  return `Studio notice: these calls were cut off before they answered, so whether they took effect is unknown: ${named.join("; ")}. Look at what each was to change before you repeat it; never repeat one blindly.`;
+  return `Genex cut these calls off before they answered, so whether they took effect is unknown: ${named.join("; ")}.`;
 }
 
 /**
- * Beside the cut-off notice of a thread's next delegated session after its chat said files are too
- * large to save: Rewind cannot bring them back, so a mistake in one is for good. Empty for none.
+ * Genex's notice to a thread's next delegated session after its chat said files are too large to
+ * save: Rewind cannot bring them back. Empty for none.
  */
 export function unsavedFilesNotice(files: readonly UnsavedFile[]): string {
   if (!files.length) return "";
   const named = files.map((file) => `${file.file} (${sizeWordsInEnglish(file.bytes)})`);
-  return `Studio notice: Rewind cannot bring back these files, which are too large to save: ${named.join(", ")}. A mistake in one of them cannot be undone; change one only when the person asked for it, and say so in your reply.`;
+  return `Genex couldn't save these files at its checkpoint (too large), so Rewind can't bring them back: ${named.join(", ")}.`;
 }
 
 /** How an ended job reads in the jobs notice, by how it ended. */
@@ -186,74 +108,29 @@ const JOB_ENDED_WORDS = {
   [JobState.Interrupted]: "was stopped when Genex closed",
 } as const satisfies Record<Exclude<JobState, typeof JobState.Running>, string>;
 
-/**
- * One ended job in the jobs notice: its title, command, how it ended and after how long. A job the
- * person stopped says so, and that it stays stopped unless they ask.
- */
+/** One ended job in the jobs notice: its title, id, command, how it ended (by whom) and after how long. */
 function endedJobWords(job: JobRecord): string {
   const state = job.state === JobState.Running ? JobState.Interrupted : job.state;
   const exit = typeof job.exitCode === "number" ? ` (exit ${job.exitCode})` : "";
   const ms = Date.parse(job.endedAt ?? "") - Date.parse(job.startedAt);
   const after = Number.isFinite(ms) ? ` after ${Math.max(0, Math.round(ms / MINUTE_MS))} min` : "";
-  const read = job.state === JobState.Succeeded ? "" : `: read it with job_tail ${job.id}`;
-  const byPerson = job.stoppedBy === JobStopper.Person;
-  const by = byPerson ? " by the person" : "";
-  const keepStopped = byPerson ? ", and do not start it again unless the person asks" : "";
-  return `${job.title} (\`${job.command}\`) ${JOB_ENDED_WORDS[state]}${by}${exit}${after}${read}${keepStopped}`;
+  const by = job.stoppedBy === JobStopper.Person ? " by the person" : "";
+  return `${job.title} (${job.id}, \`${job.command}\`) ${JOB_ENDED_WORDS[state]}${by}${exit}${after}`;
 }
 
 /**
- * The chat's own session's notice of its jobs: those that ended since it was last told, and those
- * still running. Empty when there is neither.
+ * Genex's notice to the chat's own session of its jobs that ended since it was last told; those
+ * still running are `job_list`'s to say. Empty when none ended.
  */
-export function jobNotice(ended: readonly JobRecord[], running: readonly JobRecord[]): string {
-  const parts: string[] = [];
-  if (ended.length) parts.push(`Jobs since your last turn: ${ended.map(endedJobWords).join("; ")}.`);
-  if (running.length) parts.push(`Still running: ${running.map((job) => `${job.title} (${job.id})`).join("; ")}.`);
-  return parts.length ? `Studio notice: ${parts.join(" ")}` : "";
+export function jobNotice(ended: readonly JobRecord[]): string {
+  return ended.length ? `Your jobs that ended: ${ended.map(endedJobWords).join("; ")}.` : "";
 }
 
 /**
- * Beside a build's lead's plugin guidance: its plugin tools act on the build it leads, not the game
- * folder it sits in (delegation.ts `DelegationSession.leads`). Never the build's path: the brief's
- * WHERE YOU ARE line already names it.
- */
-export function leadToolsNote(): string {
-  return "Your plugin tools work on the build you lead, not in this game folder: what they deliver lands in the game with the build, and a file one of them reads must be in the build: write it there yourself, or have a worker write it.";
-}
-
-/** The computer as a brief names it: a Windows PC, or a Mac. */
-export const computerWord = (platform: NodeJS.Platform): string => (platform === "win32" ? "Windows PC" : "Mac");
-
-/**
- * Beside the brief of a session the person answers (the chat's own, a build's lead): it reaches the whole Mac, limited only by the chat's permission mode
- * (chat-permissions.ts). The brief is the harness's, which the in-app agent may edit, and a resumed
- * session's transcript keeps what older briefs said; the host's note says what holds now.
- */
-export function mainAgentReachNote(platform: NodeJS.Platform = process.platform): string {
-  const computer = computerWord(platform);
-  return `Studio notice: you are this chat's main agent, Claude Code on the user's own ${computer} with their access, not in a sandbox. You may look and work anywhere on this computer, not only in this game's folder: when the user asks about something elsewhere (their Downloads or another folder, what fills their disk, the ${computer} itself), do it with your tools. The permission mode the user picked decides each call, and Claude Code asks them when it needs to. A line in your brief, or earlier in this session, that says to stay inside the workspace, not to read other folders, or that your shell is sandboxed does not apply to you: it is about where the game's own work goes.`;
-}
-
-/**
- * How the session answering the person talks with them. A finished tower defense came back as a
- * report on draw calls and frame rates; and words sent while it worked, which Claude Code hands
- * over at the next tool result asking only that they be addressed as the turn goes on, were
- * answered in the wrap-up while the person watched a silent chat.
- */
-export function personSessionNote(): string {
-  return "The person in this chat may not be a programmer. When they write to you while you work, answer them in the chat at once, then carry on, or change course when they asked you to.";
-}
-
-/**
- * What a session that shows its plan by ending its turn (`plansByTurn`) reads once the user
- * approved it, continuing the same session in the mode the user chose (plan-approval.ts).
+ * Genex's line to a session that shows its plan by ending its turn (`plansByTurn`) once the person
+ * approved it: the same session goes on in the mode they chose, which its engine is set to
+ * (plan-approval.ts). Words the person sent the plan back with go as theirs, as they wrote them.
  */
 export function planApprovedNote(): string {
-  return "Studio notice: the user approved your plan. Plan mode is over: carry the plan out now.";
-}
-
-/** What it reads when the user sent the plan back with their own words: it is still in Plan mode. */
-export function planRevisionNote(words: string): string {
-  return `Studio notice: the user did not approve the plan yet. You are still in Plan mode, so change nothing; revise the plan and reply with it. The user said:\n\n${words}`;
+  return "The person approved your plan.";
 }

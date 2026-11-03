@@ -25,7 +25,6 @@ import {
 } from "../../src/harness-seed/loop/prompt.ts";
 import { compactThread } from "../../src/harness-seed/loop/compact.ts";
 import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
-import { isContinueAsk } from "../../src/harness-seed/loop/turn-loop.ts";
 import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
@@ -33,6 +32,10 @@ const rigs: Rig[] = [];
 afterEach(async () => {
   await Promise.all(rigs.splice(0).map((rig) => rig.stop().catch(() => {})));
 });
+
+/** What a session reads: Genex's notices (the chat so far, its context on an engine with no system channel), then the words. */
+const read = (request: { notices?: readonly string[]; prompt?: string } | undefined): string =>
+  [...(request?.notices ?? []), request?.prompt ?? ""].join("\n\n");
 
 function vendorEngine(
   briefs: Array<{ cwd: string; resume?: string; prompt?: string }>,
@@ -47,7 +50,7 @@ function vendorEngine(
     delegate: async (request) => {
       briefs.push({
         cwd: request.cwd,
-        prompt: request.prompt,
+        prompt: read(request),
         ...(request.resume ? { resume: request.resume } : {}),
       });
       request.onEvent?.({ type: "system", payload: { subtype: "init", model: "vendor-1" } });
@@ -464,13 +467,6 @@ describe("per-game threads", () => {
     );
   });
 
-  it("keep-going phrasing is a continue, even with a typo", () => {
-    assert.equal(isContinueAsk("keeep going plz"), true);
-    assert.equal(isContinueAsk("Keep going from where we left off."), true);
-    assert.equal(isContinueAsk("continue"), true);
-    assert.equal(isContinueAsk("I want a rainy night city"), false);
-  });
-
   it("status is per-thread: a busy chat never paints the others", async () => {
     const rig = await startRig({ replies: [{ text: "done thinking" }] });
     rigs.push(rig);
@@ -852,7 +848,8 @@ describe("context management", () => {
     assert.ok(briefs[1]!.cwd.endsWith("megastructure"));
   });
 
-  it("keep going after a session-less auth failure still briefs the original ask", async () => {
+  // Flipped: the original ask rode in the brief; it is in the chat so far, one Genex notice beside the words.
+  it("keep going after a session-less auth failure still tells the new session the original ask", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const briefs: Array<{ cwd: string; resume?: string; prompt?: string }> = [];
@@ -877,7 +874,11 @@ describe("context management", () => {
       await new Promise((resolve) => setTimeout(resolve, 150));
     }
     assert.equal(briefs[1]!.resume, undefined, "there is no session to resume after auth died before init");
-    assert.match(briefs[1]!.prompt ?? "", /Make Blame!/, "the original ask is in the brief, not just keep going");
+    assert.match(
+      briefs[1]!.prompt ?? "",
+      /user: Make Blame!/,
+      "the original ask is in the chat so far, not just keep going",
+    );
     assert.ok(briefs[1]!.cwd.endsWith("blame"));
   });
 
@@ -1028,19 +1029,17 @@ describe("Compact now on a session chat", () => {
     await waitForLog(rig.core, turnsEnded(3), 30000, "turn after compaction");
     const next = requests.at(-1);
     assert.equal(next?.resume, undefined, "a fresh session, not the compacted one");
-    assert.match(String(next?.prompt), /The plaza has a working fountain; the market stalls are next/);
-    assert.match(String(next?.prompt), /Now add the market stalls\./);
+    // Flipped: the handover and the latest exchanges were glued into the brief; they are one Genex
+    // notice now, and the words go alone.
+    assert.equal(next?.prompt, "Now add the market stalls.");
+    assert.match(read(next), /The plaza has a working fountain; the market stalls are next/);
     assert.match(
-      String(next?.prompt),
-      /Recent conversation[\s\S]*user: Make the water glow at night\./,
+      read(next),
+      /The latest of it:[\s\S]*user: Make the water glow at night\./,
       "the latest exchanges stay verbatim",
     );
-    assert.doesNotMatch(String(next?.prompt), /user: Build a plaza/, "the first exchange is the handover's");
-    assert.doesNotMatch(
-      String(next?.prompt),
-      /Original request/,
-      "the handover says what was asked; a kept message is not the original",
-    );
+    assert.doesNotMatch(read(next), /user: Build a plaza/, "the first exchange is the handover's");
+    assert.doesNotMatch(read(next), /Original request/, "the handover says what was asked");
   });
 
   it("an engine with its own compaction compacts the session in place, and the next turn resumes it", async () => {
@@ -1064,7 +1063,7 @@ describe("Compact now on a session chat", () => {
     await waitForLog(rig.core, turnsEnded(2), 30000, "turn after compaction");
     const next = requests.at(-1);
     assert.equal(next?.resume, "ses_1", "the compacted session goes on");
-    assert.doesNotMatch(String(next?.prompt), /fountain glows/, "it holds its own summary; none is pasted in");
+    assert.doesNotMatch(read(next), /fountain glows/, "it holds its own summary; none is pasted in");
   });
 
   it("when the engine's own compaction does not run, the session writes the handover instead", async () => {
@@ -1130,7 +1129,7 @@ describe("Compact now on a session chat", () => {
     assert.deepEqual(overlaps, [false, false], "no turn ran beside the handover");
     const next = requests.at(-1);
     assert.equal(next?.resume, undefined, "the queued message starts the fresh session, not the compacted one");
-    assert.match(String(next?.prompt), /The plaza has a working fountain; the market stalls are next/);
+    assert.match(read(next), /The plaza has a working fountain; the market stalls are next/);
   });
 
   it("a compaction the host could not record as the session's end still lands, and still ends it", async () => {
@@ -1169,8 +1168,8 @@ describe("Compact now on a session chat", () => {
 /**
  * The person may switch the chat's model at any message, and the chat must
  * stay one conversation. A session goes on only while it is the chat's latest: one that missed
- * another model's turns is not resumed. A fresh session whose brief cannot carry the conversation
- * is briefed with a written summary, which a Codex compaction cannot give (it keeps its own sealed).
+ * another model's turns is not resumed. A fresh session is told the chat so far as one Genex
+ * notice: the last written handover and the newest messages that fit, with no extra summary call.
  */
 describe("switching the chat's model", () => {
   type DelegateRequest = import("../../src/substrate/engines/types.ts").DelegateRequest;
@@ -1215,7 +1214,7 @@ describe("switching the chat's model", () => {
     }
   }
 
-  it("a model switched back to starts fresh, briefed with what the other model did", async () => {
+  it("a model switched back to starts fresh, told what the other model did", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const asked: Asked[] = [];
@@ -1234,13 +1233,13 @@ describe("switching the chat's model", () => {
     const next = asked.at(-1);
     assert.equal(next?.engine, "claudish");
     assert.equal(next?.resume, undefined, "its old session missed the other model's turns");
-    assert.match(
-      String(next?.prompt),
-      /Recent conversation[\s\S]*user: Add a fountain\.[\s\S]*user: Make the water glow\./,
-    );
+    assert.equal(next?.prompt, "Now add lanterns.");
+    assert.match(read(next), /The latest of it:[\s\S]*user: Add a fountain\.[\s\S]*user: Make the water glow\./);
   });
 
-  it("a chat its brief cannot carry is summarised before the switched-to model starts", async () => {
+  // Flipped: a chat its brief could not carry was summarised on the switched-to model first, in a
+  // hidden model call. The new session is told the newest messages that fit.
+  it("a long chat is never summarised before the switched-to model starts: it is told the newest messages that fit", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const asked: Asked[] = [];
@@ -1259,22 +1258,20 @@ describe("switching the chat's model", () => {
     assert.deepEqual(summaries, [], "Codex compacts natively; nothing of ours is written");
 
     await say(rig, thread, [["claudish", "Now add lanterns."]], asks.length);
-    assert.deepEqual(summaries, ["claudish"], "one summary, written on the model the chat switched to");
+    assert.deepEqual(summaries, [], "no summary is written");
     const next = asked.at(-1);
     assert.equal(next?.engine, "claudish");
     assert.equal(next?.resume, undefined);
-    assert.ok(String(next?.prompt).includes(WRITTEN_SUMMARY), "the fresh session is briefed with it");
+    assert.equal(next?.prompt, "Now add lanterns.");
+    assert.match(read(next), /user: Step 12: add part 12\./, "the newest messages, verbatim");
     const compacted = customEvents(await rig.core.store.listEvents(thread), "compacted");
     assert.deepEqual(
       compacted.map((p) => [p.engine, p.native === true, Boolean(p.summary)]),
-      [
-        ["codexish", true, false],
-        ["claudish", false, true],
-      ],
+      [["codexish", true, false]],
     );
   });
 
-  it("a short chat fits the brief whole: switching writes no summary", async () => {
+  it("a short chat is told whole: switching writes no summary", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const asked: Asked[] = [];
@@ -1289,6 +1286,6 @@ describe("switching the chat's model", () => {
     ]);
     assert.deepEqual(summaries, []);
     assert.equal(asked.at(-1)?.resume, undefined);
-    assert.match(String(asked.at(-1)?.prompt), /user: Build a plaza\./);
+    assert.match(read(asked.at(-1)), /user: Build a plaza\./);
   });
 });

@@ -393,11 +393,9 @@ export interface PluginSnapshot {
   tools: PluginTool[];
   guidance: string;
   applied: PluginAppliedSet;
-  /** The kinds the plugins that are on make (`makes`), as a game with no kind yet is offered them. */
+  /** The tools on offer that make a kind of project in the game's folder (`makes`). */
   kinds: PluginKindOffer[];
 }
-/** The game the snapshot's kinds are read for. Kept while the seed reads kinds as which plugins are on (delegated-turn.ts `pluginsOff`). */
-const NO_KIND_YET: GameKind = { facts: [] };
 /** A manifest tool as an agent sees it: named `<id>__<tool>`, without the host program, audience, scope, locks or readiness. */
 function agentTool(id: string, tool: PluginManifestTool): PluginTool {
   const {
@@ -467,16 +465,9 @@ function skillGuidance({ manifest, reach }: PluginPart, game: GameKind): string[
     return isFileSkill(s) ? fileSkillIndexLine(manifest.id, s, where) : `[${manifest.id}/${s.name}]${where}\n${s.text}`;
   });
 }
-/** One reaching kind tool as the snapshot offers it (with whether it answers its readiness). */
+/** One reaching kind tool as the snapshot offers it. */
 function kindOffer(manifest: PluginManifest, t: PluginManifestTool): PluginKindOffer {
-  const tool = `${manifest.id}__${t.name}`;
-  return {
-    plugin: manifest.id,
-    name: manifest.name,
-    tool,
-    makes: [...(t.makes ?? [])],
-    ...(t.ready ? { asksReady: true } : {}),
-  };
+  return { plugin: manifest.id, name: manifest.name, tool: `${manifest.id}__${t.name}`, makes: [...(t.makes ?? [])] };
 }
 /**
  * The kinds one plugin's reaching tools make, as the snapshot lists them: one offer per scaffold
@@ -1390,15 +1381,13 @@ export class PluginRegistry {
    * view of the live plugins: a session that took them apart could be told about a skill whose
    * tools it was never given, or given tools it was never told about. All are those for a game
    * `scope` (`gameKindOf`: facts alone, `[]` being no kind yet and served as a web game; facts and
-   * what the folder holds; or an engine of the older vocabulary), by `pluginReach`, but the kinds,
-   * read as for a game with no kind yet; a skill that applies only in part of the folder says
-   * where. A session narrowed to some tools (`offered`, a run's sub-agent) gets
+   * what the folder holds; or an engine of the older vocabulary), by `pluginReach`; a skill that
+   * applies only in part of the folder says where. A session narrowed to some tools (`offered`, a run's sub-agent) gets
    * those, and the guidance, skills and skill reader of only the plugins they belong to.
    */
   snapshot(scope: readonly FactRef[] | GameKind | GameEngine = [], offered?: ToolOffered): PluginSnapshot {
     const game = gameKindOf(scope);
-    const live = this.#live();
-    const parts = live
+    const parts = this.#live()
       .map((p) => ({ manifest: p.manifest, reach: pluginReach(p.manifest, game, offered) }))
       .filter((part) => takesPart(part, offered !== undefined));
     return {
@@ -1408,9 +1397,7 @@ export class PluginRegistry {
         plugins: parts.map((part) => part.manifest.id),
         skills: parts.flatMap(({ manifest, reach }) => reach.skills.map((s) => `${manifest.id}/${s.name}`)),
       },
-      kinds: live.flatMap((p) =>
-        kindOffers({ manifest: p.manifest, reach: pluginReach(p.manifest, NO_KIND_YET, offered) }),
-      ),
+      kinds: parts.flatMap(kindOffers),
     };
   }
   tools(): PluginTool[] {

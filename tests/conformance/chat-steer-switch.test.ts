@@ -1,16 +1,16 @@
 /**
  * Messages without a queue: a message the person sends while the chat's turn works reaches that
  * turn at the session's next step, whatever it changes. One that changes how the turn runs — another
- * model, effort, engine or roles — cuts the session there and
- * the turn goes on with that message's settings; a slash command runs as a leg of its own and the
- * turn carries on after it. These drive the runner (chat-steer.ts) through the real queue.
+ * model, effort, engine or roles — cuts the session there and the turn goes on with that message's
+ * settings, which are the next leg's call, never words; a slash command waits for a turn of its own,
+ * as one typed while Claude Code works runs once its turn ends. These drive the runner
+ * (chat-steer.ts) through the real queue.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { DelegateResult } from "../../src/substrate/engines/types.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { type LegSwitch, steeredCall, type TurnSwitches } from "../../src/harness-seed/loop/chat-steer.ts";
-import { afterCommandPrompt, switchedTurnPrompt } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
 
 const deferred = <T = void>() => {
   let resolve!: (value: T) => void;
@@ -107,16 +107,15 @@ function switchesFor(calls: any[], applied: any[] = []): TurnSwitches {
           calls.push({ prompt, resume, images, on });
           return ok("switched", on === "codex" ? "c1" : "s1");
         },
-        fresh: () => "FRESH BRIEF",
         newSession: on === "codex",
-        notes: [on === "codex" ? "CODEX TAKES OVER" : "ANOTHER MODEL"],
       };
     },
   };
 }
 
 describe("a message that changes how the turn runs: the turn goes on with its settings", () => {
-  it("another model mid-answer: the same session goes on at its next step, on the message's settings, told what changed", async () => {
+  // Flipped: the resumed leg opened with what changed ("You now run on …"). The model is its call's.
+  it("another model mid-answer: the same session goes on at its next step, on the message's settings, with its words alone", async () => {
     const calls: any[] = [],
       started = deferred(),
       results: DelegateResult[] = [];
@@ -142,20 +141,17 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     assert.equal(calls.length, 2);
     assert.deepEqual(
       calls[1],
-      {
-        prompt: switchedTurnPrompt(["ANOTHER MODEL"], "use sonnet for this"),
-        resume: "s1",
-        images: [],
-        on: "model",
-      },
-      "the same session, on the switched call, the change said first",
+      { prompt: "use sonnet for this", resume: "s1", images: [], on: "model" },
+      "the same session, on the switched call, the words as written",
     );
     assert.equal(q.state("use sonnet for this")!.state, "delivered", "read by this turn: no turn of its own");
     assert.equal(results[0].summary, "switched");
     q.queue.stop();
   });
 
-  it("another engine: a new session starts, told the brief, everything the turn was told, and what changed", async () => {
+  // Flipped: the new session was told a fresh brief and what changed; it gets the turn's words and
+  // everything the turn was told (the caller adds the chat so far as a notice).
+  it("another engine: a new session starts with the turn's words and everything the turn was told", async () => {
     const calls: any[] = [],
       started = deferred();
     const q = cuttingQueue(async (action, steer) => {
@@ -167,7 +163,6 @@ describe("a message that changes how the turn runs: the turn goes on with its se
           calls.push({ prompt, resume, on: "start" });
           return legUntilCut(q, started, stopped("s1", 3));
         },
-        fresh: () => "OLD BRIEF",
         switches: switchesFor(calls),
       });
     });
@@ -175,12 +170,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await started.promise;
     await q.send("let codex finish it", { engine: "codex" });
     await until(() => q.state("build the boss")?.state === "handled");
-    assert.deepEqual(calls[1], {
-      prompt: switchedTurnPrompt(["CODEX TAKES OVER"], "FRESH BRIEF\n\nlet codex finish it"),
-      resume: null,
-      images: [],
-      on: "codex",
-    });
+    assert.deepEqual(calls[1], { prompt: "PROMPT\n\nlet codex finish it", resume: null, images: [], on: "codex" });
     q.queue.stop();
   });
 
@@ -219,145 +209,23 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     q.queue.stop();
   });
 
-  it("a slash command runs as a leg of its own in the same session, then the turn carries on with what came with it", async () => {
-    const calls: any[] = [],
-      started = deferred();
-    const q = cuttingQueue(async (action, steer) => {
-      if (action.text !== "build the boss") return;
-      await steeredCall({ cancelled: false }, steer, {
-        prompt: "PROMPT",
-        call: async (prompt, resume) => {
-          calls.push({ prompt, resume });
-          if (calls.length === 1) return legUntilCut(q, started, stopped("s1", 3));
-          return ok(`leg ${calls.length}`, "s1");
-        },
-        switches: switchesFor(calls),
-      });
-    });
-    await q.send("build the boss");
-    await started.promise;
-    await q.send("/review");
-    await until(() => q.state("build the boss")?.state === "handled");
-    assert.deepEqual(
-      calls.slice(1),
-      [
-        { prompt: "/review", resume: "s1" },
-        { prompt: afterCommandPrompt(true), resume: "s1" },
-      ],
-      "the command alone, then the work it cut short carried on",
-    );
-    q.queue.stop();
-  });
-
-  it("a command whose leg runs no model turn (/compact) runs once, and the work it cut short carries on", async () => {
-    const calls: any[] = [],
-      started = deferred();
-    const q = cuttingQueue(async (action, steer) => {
-      if (action.text !== "build the boss") return;
-      await steeredCall({ cancelled: false }, steer, {
-        prompt: "PROMPT",
-        call: async (prompt, resume) => {
-          calls.push({ prompt, resume });
-          if (calls.length === 1) return legUntilCut(q, started, stopped("s1", 3));
-          // The command's own leg answers with no model turn (a third run answers with one, so a
-          // command run again and again ends and the assertion below names it).
-          const compacts = calls.filter((c) => c.prompt === "/compact").length;
-          if (prompt === "/compact") return ok("Compacted.", "s1", { turns: compacts < 3 ? 0 : 1 });
-          return ok("carried on", "s1");
-        },
-        switches: switchesFor(calls),
-      });
-    });
-    await q.send("build the boss");
-    await started.promise;
-    await q.send("/compact");
-    await until(() => q.state("build the boss")?.state === "handled");
-    assert.deepEqual(
-      calls.slice(1).map((c) => c.prompt),
-      ["/compact", afterCommandPrompt(true)],
-    );
-    q.queue.stop();
-  });
-
-  it("a command cut off before it worked (the person wrote again at once) is sent again, then the turn carries on", async () => {
+  // Flipped: a command cut the work short, ran as a leg of its own, and Genex's line carried the
+  // work on after it. It waits now, as in Claude Code: the work is never cut for it.
+  it("a slash command sent while the turn works never cuts it: it waits for a turn of its own", async () => {
     const calls: any[] = [],
       started = deferred(),
-      reviewing = deferred();
-    const q = cuttingQueue(async (action, steer) => {
-      if (action.text !== "build the boss") return;
-      await steeredCall({ cancelled: false }, steer, {
-        prompt: "PROMPT",
-        call: async (prompt, resume) => {
-          calls.push({ prompt, resume });
-          if (calls.length === 1) return legUntilCut(q, started, stopped("s1", 3));
-          // The command's first leg is cut before its session did anything.
-          if (calls.length === 2) return legUntilCut(q, reviewing, stopped("s1", 0));
-          return ok(`leg ${calls.length}`, "s1");
-        },
-        switches: switchesFor(calls),
-      });
-    });
-    await q.send("build the boss");
-    await started.promise;
-    await q.send("/review");
-    await reviewing.promise;
-    await q.send("and fog");
-    await until(() => q.state("build the boss")?.state === "handled");
-    assert.deepEqual(
-      calls.slice(1).map((c) => c.prompt),
-      ["/review", "/review", "and fog", afterCommandPrompt(true)],
-    );
-    q.queue.stop();
-  });
-
-  it("a command sent while the turn was being prepared runs after the turn's own work, which is not carried on again", async () => {
-    const calls: any[] = [],
-      preparing = deferred(),
-      prepared = deferred();
-    const q = cuttingQueue(async (action, steer) => {
-      if (action.text !== "build the boss") return;
-      await steer.expect();
-      preparing.resolve();
-      await prepared.promise;
-      await steeredCall({ cancelled: false }, steer, {
-        prompt: "PROMPT",
-        call: async (prompt, resume) => {
-          calls.push({ prompt, resume });
-          return ok(`leg ${calls.length}`, "s1");
-        },
-        switches: switchesFor(calls),
-      });
-    });
-    await q.send("build the boss");
-    await preparing.promise;
-    await q.send("/review");
-    prepared.resolve();
-    await until(() => q.state("build the boss")?.state === "handled");
-    assert.deepEqual(calls, [
-      { prompt: "PROMPT", resume: null },
-      { prompt: "/review", resume: "s1" },
-    ]);
-    q.queue.stop();
-  });
-
-  it("Stop before a command runs gives it back: it waits for a turn of its own", async () => {
-    const calls: any[] = [],
-      started = deferred(),
+      finish = deferred(),
       seen: string[] = [];
-    const ctx = { cancelled: false };
     const q = cuttingQueue(async (action, steer) => {
       seen.push(action.text);
       if (action.text !== "build the boss") return;
-      await steeredCall(ctx, steer, {
+      await steeredCall({ cancelled: false }, steer, {
         prompt: "PROMPT",
         call: async (prompt, resume) => {
           calls.push({ prompt, resume });
-          if (calls.length === 1) {
-            const result = await legUntilCut(q, started, stopped("s1", 3));
-            ctx.cancelled = true;
-            return result;
-          }
-          return ok("never", "s1");
+          started.resolve();
+          await finish.promise;
+          return ok("built", "s1");
         },
         switches: switchesFor(calls),
       });
@@ -365,9 +233,11 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await q.send("build the boss");
     await started.promise;
     await q.send("/review");
+    finish.resolve();
     await until(() => seen.length === 2);
-    assert.deepEqual(seen, ["build the boss", "/review"]);
-    assert.equal(calls.length, 1, "nothing ran after the Stop");
+    assert.deepEqual(seen, ["build the boss", "/review"], "a turn of its own, after the turn");
+    assert.deepEqual(calls, [{ prompt: "PROMPT", resume: null }], "the turn ran once, never cut");
+    assert.deepEqual(q.asked, [], "never handed to the session mid-turn");
     q.queue.stop();
   });
 });

@@ -94,11 +94,6 @@ describe("the rename in one module's source", () => {
         'import type { LoopRunState } from "../director/loop-run.ts";',
       ],
       [
-        "loop/chat-session.ts",
-        'import { afterNightNote } from "./after-night-prompts.ts";',
-        'import { afterLoopRunNote } from "./after-loop-run-prompts.ts";',
-      ],
-      [
         "loop/main.ts",
         'export { nightRefusal } from "./run-dispatch.ts";',
         'export { loopRunRefusal } from "./run-dispatch.ts";',

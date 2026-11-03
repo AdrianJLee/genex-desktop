@@ -335,6 +335,8 @@ export interface LiveToolSpec extends StudioToolSpec {
    * tools and plugin tools are flat and never set it.
    */
   inputSchema?: Record<string, unknown>;
+  /** Genex's own tool, which an engine that defers tools loads with the prompt (Claude Code's `alwaysLoad`). */
+  alwaysLoad?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -380,6 +382,13 @@ export interface HarnessDelegateParams {
    * cover step), which the engine shows as not the person's. Absent: a brief.
    */
   from?: MessageFrom;
+  /**
+   * What the session should know for its whole life, put first in its system text (the chat's
+   * `chatContext`): the same text on every turn while the game is the same, never in the prompt.
+   */
+  system?: string;
+  /** Genex's own lines for this message (the chat so far, for a new session): never the person's words. */
+  notices?: string[];
   project: string;
   /** Build here instead of the live game folder — a facet worktree under scratch. */
   cwd?: string;
@@ -613,19 +622,13 @@ export interface PluginTool {
 /**
  * A tool a plugin offers that makes a kind of project (its manifest's `makes`), as a session's
  * snapshot lists it: the plugin's id and name, the tool's agent name `<plugin>__<tool>`, and the
- * facts. `asksReady` says the tool declares a `ready` harness tool (a plugin's new-game tool, the
- * one its engine card offers). For a game with no kind yet, the host fills `ready` and `note` from
- * that tool (whether one can be made here now, and the words the engine card offers it with); both
- * are absent when it declares none or its answer didn't come.
+ * facts.
  */
 export interface PluginKindOffer {
   plugin: string;
   name: string;
   tool: string;
   makes: string[];
-  asksReady?: boolean;
-  ready?: boolean;
-  note?: string;
   /** The scaffold this offer is (`PluginScaffold.id`), when the plugin declares scaffolds. */
   scaffold?: string;
   /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */

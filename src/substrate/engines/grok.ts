@@ -32,7 +32,7 @@ import { cliVersion, resolveCodingCli } from "./external-cli.ts";
 import { releaseStaleLocks } from "./ownership-locks.ts";
 import { StudioBridge, answerBridgeCall, bridgeTools } from "./studio-bridge.ts";
 import { JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
-import { textAsSent } from "./genex-mark-prompts.ts";
+import { textsAsSent } from "./genex-mark-prompts.ts";
 import { leadBuildWrites } from "./session-commands.ts";
 import {
   GROK_HOSTS,
@@ -671,7 +671,7 @@ export class GrokEngine implements Engine {
   ): string {
     const plan = chatMode(request) === PermissionMode.Plan && ctx.scratch;
     return [
-      textAsSent({ text: request.prompt, from: request.from }),
+      ...textsAsSent(request),
       ctx.bridge?.instructions() ?? "",
       plan
         ? planModeNote(ctx.cwd, ctx.scratch ?? "")

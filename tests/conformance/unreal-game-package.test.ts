@@ -14,7 +14,7 @@ import {
   createGamePackageTools,
   type GamePackageDeps,
   GamePackageState,
-  type GamePackageStatus,
+  type GamePackageAnswer,
   packageErrors,
   type RunUat,
   uatEnv,
@@ -63,7 +63,7 @@ function depsFor(project: string, runUat: RunUat, options: { answers?: boolean; 
 }
 
 /** `package-status` until the job is no longer running. */
-async function settled(status: () => Promise<GamePackageStatus>): Promise<GamePackageStatus> {
+async function settled(status: () => Promise<GamePackageAnswer>): Promise<GamePackageAnswer> {
   for (;;) {
     const now = await status();
     if (now.state !== GamePackageState.Running) return now;
@@ -134,9 +134,15 @@ describe("packaging an Unreal game", () => {
     const tools = createGamePackageTools(deps);
     const context = contextIn(game);
     assert.deepEqual(await tools.handlers["package-game"]({}, context, "/storage"), { started: true, system: "Mac" });
+    assert.deepEqual(
+      await tools.handlers["package-status"]({}, context, "/storage"),
+      { state: GamePackageState.Running, system: "Mac", jobRunning: true },
+      "Genex reads that the package runs, to wake the chat when it ends",
+    );
     const done = await settled(() => tools.handlers["package-status"]({}, context, "/storage"));
     assert.equal(done.state, GamePackageState.Done, done.line);
     assert.equal(done.app, "unreal/Builds/Mac/Dust-Mac-Shipping.app");
+    assert.equal(done.jobRunning, false);
     assert.deepEqual(saves, ["dust"], "the open Unreal saved first");
     assert.equal(launches.length, 1);
     // After a restart, the app on disk is still named.
@@ -146,6 +152,7 @@ describe("packaging an Unreal game", () => {
       state: GamePackageState.Idle,
       system: "Mac",
       app: "unreal/Builds/Mac/Dust-Mac-Shipping.app",
+      jobRunning: false,
     });
   });
 

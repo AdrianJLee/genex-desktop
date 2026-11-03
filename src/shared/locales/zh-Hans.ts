@@ -4920,6 +4920,8 @@ export default {
   "when a turn starts": "回复开始时",
   "when a worker ends": "助手结束时",
   "when a worker starts": "助手启动时",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "其工具启动的任务运行期间，用于查看它是否已结束",
   "while it holds a lock, to see whether you are using it": "持有锁期间，用于查看你是否正在使用",
   wide: "睁大",
   worker: "助手",

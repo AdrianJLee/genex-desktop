@@ -27,7 +27,7 @@ exports work with no enabled plugins.
   (`toolbar requires apiVersion 2`, `network requires apiVersion 2`,
   `mcpServers requires apiVersion 2`, `tools[].confirmation requires apiVersion 2`) rather than silently ignored, so a package cannot
   claim API 1 and still ship API 2 behaviour.
-- API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills, `tools[].audience` and (bundled Genex only) `tools[].host`, and the sections that shape a project's Loop: `detect`, `facts` and `tools[].makes` ([Project facts](#project-facts)), `workspace` and `assets`, `workerTypes`, `scaffolds`, `folders`, `hooks`, `locks` (with `needs` and `tools[].ready`) and `observers`. Lower-version manifests cannot claim those declarations.
+- API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills, `tools[].audience` and (bundled Genex only) `tools[].host`, and the sections that shape a project's Loop: `detect`, `facts` and `tools[].makes` ([Project facts](#project-facts)), `workspace` and `assets`, `workerTypes`, `scaffolds`, `folders`, `hooks`, `locks` (with `needs` and `tools[].ready`), `observers` and `tools[].jobStatus`. Lower-version manifests cannot claim those declarations.
 - API 3's `observe` also takes an optional `still` (additive; no manifest field or capability of
   its own). A host older than the option ignores it and answers an ordinary observation, so a
   caller checks the answer for `still`, then `stillProblem`, and handles neither (the SDK types the
@@ -182,6 +182,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `hooks[]` | 3 | Up to 32 `{on, tool, facts?, messages?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
 | `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
 | `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`); Genex itself no longer asks it |
+| `tools[].jobStatus` | 3 | Agent tools only: the tool answers `{started: true}` and its job runs on, and this other agent tool of the manifest (no `confirmation`, `host` or `needs`) says how it stands with a boolean `jobRunning`. Genex reads it while the job runs and, once `false`, starts the next turn of the chat whose own agent started it ([harness runtime](harness-runtime.md)); the trust dialog names it among the steps Genex runs on its own |
 | `tools[].asset` | 3 | Agent tools only: `{kind, prompt?, tool?}`, the kind of asset a call makes; see [Assets being made](#assets-being-made) |
 | `icon` | any | The plugin's picture: a `.png`, `.jpg`, `.webp` or `.svg` file in the package, at most 512 KiB, square and full-bleed (Studio rounds the corners); see [Icons](#icons) |
 
@@ -2534,7 +2535,10 @@ editor's derived data, Zen store and shader workers, all of which UnrealBuildToo
 On Windows `RunUAT.bat` runs through cmd.exe with every path whole in quotes (`quotedScriptLine`); a
 path with a quote, `%` or `!`, or on a network share, is refused first. `package-status` answers the
 state, the app relative to the game, the seconds and a failure's first error lines with the
-computer's paths taken out; after a restart, idle with the app found on disk. Publish then finds the
+computer's paths taken out, and `jobRunning`; after a restart, idle with the app found on disk.
+`package-game`, `plugin-build`, `plugin-test`, `plugin-package`, `add-cpp-module` and
+`add-motion-matching` name their status tool as `jobStatus`, and each status answers `jobRunning`,
+so the chat that started a job is woken when it ends. Publish then finds the
 app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole
 build (no program inside a Windows build's folder is a build of its own, and Unreal's
 `UEPrereqSetup` is a helper) and never a project's own `Binaries` beside its `.uproject`, which hold

@@ -10,7 +10,7 @@ const JOB_REACH =
 /** `job_start`: a long command in the background, in the chat's permission mode. */
 export const JOB_START_TOOL: LiveToolSpec = {
   name: JobTool.Start,
-  description: `Start a long command in the background: a build, a headless run, a server, a render. Give it a short plain title the person will read, like 'Unreal build'. It keeps running after your turn; Genex tells you when it ends. Your own shell is for quick commands; its background shells end with your turn. ${JOB_REACH}`,
+  description: `Start a long command in the background: a build, a headless run, a server, a render. Give it a short plain title the person will read, like 'Unreal build'. It keeps running after your turn; Genex tells you when it ends (the chat's own agent by starting its next turn, so it may end its turn meanwhile). Your own shell is for quick commands; its background shells end with your turn. ${JOB_REACH}`,
   parameters: {
     type: "object",
     properties: {

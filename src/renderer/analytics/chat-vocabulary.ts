@@ -38,6 +38,8 @@ export const SendSource = {
   LoopHeld: "loop_held",
   /** Genex asking the agent for the game's cover once a build landed (never sent from the renderer). */
   CoverStep: "cover_step",
+  /** Genex telling the agent a background job it started ended (never sent from the renderer). */
+  JobEnded: "job_ended",
   /** Words another surface left for this chat and asked it to send. */
   Handoff: "handoff",
 } as const;

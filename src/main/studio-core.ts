@@ -69,6 +69,7 @@ import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
+import { coreJobWake, wakeForJob } from "./core/job-wake.ts";
 import {
   type BootNotice,
   BootReason,
@@ -876,17 +877,24 @@ export class StudioCore {
 
   /** The job registry, and what an earlier app left running closed as interrupted. */
   async #openJobs(): Promise<void> {
+    // The ends an earlier app left are told at the chat's next turn; only an end heard live wakes a chat.
+    let live = false;
+    const wake = coreJobWake(this);
     this.jobs = new JobService({
       root: this.layout.jobs,
       spawn: this.options.jobSpawn ?? ((request) => this.sandbox.spawnLongLived(request)),
       probe: this.options.jobProbe,
       onLog: (line) => this.options.onLog?.(line, "stderr"),
       onStarted: (record) => recordJobStarted(this, record),
-      onEnded: (record) => recordJobEnded(this, record),
+      onEnded: async (record) => {
+        await recordJobEnded(this, record);
+        if (live) await wakeForJob(record, { ...wake, jobs: this.jobs });
+      },
     });
     await this.jobs
       .reconcile()
       .catch((error) => this.options.onLog?.(`[core] closing left jobs failed: ${errorMessage(error)}`, "stderr"));
+    live = true;
   }
 
   /** Stop a settled run's jobs, in every game; the run stays in `runJobStops` until their ends are recorded. */
@@ -1720,6 +1728,7 @@ export class StudioCore {
 
   async stop(): Promise<void> {
     this.#planReviews?.stop();
+    this.#pluginTools?.jobWatches.dispose();
     // A pause appended before `start()` may have planned a resume: it, and the hold on the Mac
     // awake that it asked for, end with the core either way.
     this.#autoResume.dispose();

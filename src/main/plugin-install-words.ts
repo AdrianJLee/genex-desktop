@@ -237,15 +237,17 @@ const OWN_STEP_WORDS = {
   observers: () => t("when a reviewer checks a finish"),
   personFirst: () => t("while it holds a lock, to see whether you are using it"),
   ready: () => t("before a project of its kind is made"),
+  jobStatus: () => t("while a job one of its tools started runs, to see whether it has ended"),
 } as const;
 
-/** Every step of the plugin Genex runs without a card: its hooks' moments, its observers, its person-first probes and its readiness checks. */
+/** Every step of the plugin Genex runs without a card: its hooks' moments, its observers, its person-first probes, its readiness checks and its jobs' status reads. */
 function ownSteps(manifest: PluginManifest): string[] {
   const moments = [...new Set((manifest.hooks ?? []).map((hook) => MOMENT_WORDS[hook.on]()))];
   const declared = {
     observers: (manifest.observers ?? []).length > 0,
     personFirst: (manifest.locks ?? []).some((lock) => lock.personFirst !== undefined),
     ready: manifest.tools.some((tool) => tool.ready !== undefined),
+    jobStatus: manifest.tools.some((tool) => tool.jobStatus !== undefined),
   };
   const others = (Object.keys(OWN_STEP_WORDS) as Array<keyof typeof OWN_STEP_WORDS>).filter((step) => declared[step]);
   return [...moments, ...others.map((step) => OWN_STEP_WORDS[step]())];

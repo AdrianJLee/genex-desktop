@@ -573,7 +573,7 @@ function assertUpdateReviewed(
   if (reason === PluginChangeReason.Reloaded && reviewedLaunch(next) !== reviewedLaunch(current))
     throw needsReview(MESSAGE.ServersChanged());
   // Nor of the steps Genex runs on its own, with no card: a hook, an observer, a lock's person-first
-  // probe, a folder workers may write in, a harness tool or a readiness check.
+  // probe, a folder workers may write in, a harness tool, a readiness check or a job's status read.
   if (reason === PluginChangeReason.Reloaded && harnessSteps(next) !== harnessSteps(current))
     throw needsReview(MESSAGE.StepsChanged());
 }
@@ -587,6 +587,7 @@ function harnessSteps(m: PluginManifest): string {
     folders: m.folders ?? [],
     harness: m.tools.filter((tool) => !isAgentTool(tool)),
     ready: m.tools.map((tool) => [tool.name, tool.ready ?? null]),
+    jobStatus: m.tools.map((tool) => [tool.name, tool.jobStatus ?? null]),
   });
 }
 const hasCapability = (p: { manifest: PluginManifest } | undefined, capability: PluginCapability) =>
@@ -1516,6 +1517,19 @@ export class PluginRegistry {
       if (needs) return locksNamed(manifest, needs);
     }
     return [];
+  }
+  /**
+   * The status tool an enabled plugin's agent tool names for its job (`jobStatus`), by agent names
+   * (`<plugin>__<tool>`), with the status tool's parameters; null for a tool that declares none.
+   */
+  jobStatusOf(agentName: string): { status: string; parameters: string[] } | null {
+    const [id = "", tool = "", ...extra] = agentName.split("__");
+    const p = this.#installed.get(id);
+    if (extra.length || !isLive(p)) return null;
+    const statusName = p?.manifest.tools.find((t) => t.name === tool)?.jobStatus;
+    const status = p?.manifest.tools.find((t) => t.name === statusName);
+    if (!status) return null;
+    return { status: `${id}__${status.name}`, parameters: Object.keys(status.parameters.properties) };
   }
   /**
    * The longest one call of a plugin tool (by agent name) may run in its backend: the host's

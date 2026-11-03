@@ -56,13 +56,17 @@ export type CppEditorTool = (typeof CppEditorTool)[keyof typeof CppEditorTool];
 
 /** How adding the module goes: its state, why it failed, and how long it took once done. */
 export type CppAdding = JobRecord<CppAddState>;
-/** `cpp-status`'s answer: whether C++ compiles here, Xcode's state, the platform, the game's module and the add job. */
+/**
+ * `cpp-status`'s answer: whether C++ compiles here, Xcode's state, the platform, the game's module,
+ * the add job, and whether that job runs now (`jobRunning`, read by Genex to wake the chat when it ends).
+ */
 export type CppStatus = {
   canCompile: boolean;
   xcode: XcodeState;
   platform: string;
   module: string | null;
   adding: CppAdding;
+  jobRunning: boolean;
 };
 /** `add-cpp-module`'s answer: started in the background, or the module the game already has. */
 export type AddCppAnswer = { started: true } | { module: string; already: true };
@@ -377,6 +381,7 @@ async function cppStatus(deps: CppToolsDeps, jobs: Jobs, storage: string, game: 
     platform: deps.platform,
     module,
     adding: { ...adding },
+    jobRunning: adding.state === CppAddState.Adding,
   };
 }
 

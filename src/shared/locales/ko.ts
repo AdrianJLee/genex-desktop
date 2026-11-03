@@ -5095,6 +5095,8 @@ export default {
   "when a turn starts": "턴 시작 시",
   "when a worker ends": "작업자 종료 시",
   "when a worker starts": "작업자 시작 시",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "도구가 시작한 작업이 실행 중일 때, 끝났는지 확인할 때",
   "while it holds a lock, to see whether you are using it": "잠금 중, 사용자가 쓰고 있는지 확인할 때",
   wide: "크게 뜬",
   worker: "작업자",

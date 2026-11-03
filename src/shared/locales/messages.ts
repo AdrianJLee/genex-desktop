@@ -4662,6 +4662,7 @@ export const MESSAGES = [
   "when a worker ends",
   "when a worker starts",
   "when the lead asks for one",
+  "while a job one of its tools started runs, to see whether it has ended",
   "while it holds a lock, to see whether you are using it",
   "wide",
   "worker",

@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.47.0",
+  "version": "0.48.0",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
@@ -230,9 +230,10 @@
     },
     {
       "name": "add-cpp-module",
+      "jobStatus": "cpp-status",
       "facts": ["unreal-project"],
       "needs": ["editor"],
-      "description": "Add the game's C++ module, once the user confirms: Genex saves their open work in Unreal, then quits and reopens it in the background; after C++ changes call restart to rebuild. Answers {started} at once, or the module the game has; read cpp-status.",
+      "description": "Add the game's C++ module, once the user confirms: Genex saves their open work in Unreal, then quits and reopens it in the background; after C++ changes call restart to rebuild. Answers {started} at once, or the module the game has; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; cpp-status says how it went.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -250,9 +251,10 @@
     },
     {
       "name": "add-motion-matching",
+      "jobStatus": "motion-status",
       "facts": ["unreal-project"],
       "needs": ["editor"],
-      "description": "Add the Game Animation Sample's Motion Matching content to this game, once the user confirms: Genex saves their open work in Unreal, quits it, clones the sample's character, clips and pose databases into the game (kept out of its checkpoints), merges the sample's settings and plugins, and opens Unreal again; its first open takes about ten minutes. Needs the sample from Fab or the Epic Games Launcher among the user's Unreal projects. Answers {started} at once, or {already}; read motion-status. Then motion_character gives a character the sample's Motion Matching.",
+      "description": "Add the Game Animation Sample's Motion Matching content to this game, once the user confirms: Genex saves their open work in Unreal, quits it, clones the sample's character, clips and pose databases into the game (kept out of its checkpoints), merges the sample's settings and plugins, and opens Unreal again; its first open takes about ten minutes. Needs the sample from Fab or the Epic Games Launcher among the user's Unreal projects. Answers {started} at once, or {already}; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; motion-status says how it went. Then motion_character gives a character the sample's Motion Matching.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -261,8 +263,9 @@
     },
     {
       "name": "package-game",
+      "jobStatus": "package-status",
       "facts": ["unreal-project"],
-      "description": "Package this Unreal game as the app its players install, for this computer's system: a Mac app on a Mac, a Windows program on Windows (Unreal makes no app for another system). Genex saves the open work in Unreal first (Unreal stays open), then runs Epic's BuildCookRun (Shipping) in the background into unreal/Builds/Mac/ or unreal/Builds/Windows/, where Publish finds it. A first package compiles every shader and takes minutes. Answers {started, system} at once; read package-status until it is done or failed. stop: true ends a running package.",
+      "description": "Package this Unreal game as the app its players install, for this computer's system: a Mac app on a Mac, a Windows program on Windows (Unreal makes no app for another system). Genex saves the open work in Unreal first (Unreal stays open), then runs Epic's BuildCookRun (Shipping) in the background into unreal/Builds/Mac/ or unreal/Builds/Windows/, where Publish finds it. A first package compiles every shader and takes minutes. Answers {started, system} at once; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; package-status says how it went. stop: true ends a running package.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -284,9 +287,10 @@
     },
     {
       "name": "plugin-build",
+      "jobStatus": "plugin-status",
       "facts": ["unreal-plugin"],
       "needs": ["editor"],
-      "description": "Build this game's Unreal plugin with its host project, once the user confirms: Genex saves their open work in Unreal and quits it, then builds in the background and opens Unreal again after a good build (after a failed one it stays closed). Answers {started} at once; read plugin-status for the result and the errors to fix.",
+      "description": "Build this game's Unreal plugin with its host project, once the user confirms: Genex saves their open work in Unreal and quits it, then builds in the background and opens Unreal again after a good build (after a failed one it stays closed). Answers {started} at once; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; plugin-status has the result and the errors to fix.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -300,8 +304,9 @@
     },
     {
       "name": "plugin-test",
+      "jobStatus": "plugin-status",
       "facts": ["unreal-plugin"],
-      "description": "Run the plugin's automation tests headless in the background (no window; Unreal can stay open). Tests whose names start with filter run (the plugin's name unless given). Answers {started, filter} at once; read plugin-status for passes, failures and the summary. stop: true ends a running test run.",
+      "description": "Run the plugin's automation tests headless in the background (no window; Unreal can stay open). Tests whose names start with filter run (the plugin's name unless given). Answers {started, filter} at once; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; plugin-status has passes, failures and the summary. stop: true ends a running test run.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -319,8 +324,9 @@
     },
     {
       "name": "plugin-package",
+      "jobStatus": "plugin-status",
       "facts": ["unreal-plugin"],
-      "description": "Package the plugin for this computer (the Mac, or Win64 on Windows) with Epic's BuildPlugin in the background, into unreal/Saved/Genex/Packages/<Plugin>/ with a note beside it. Answers {started} at once; read plugin-status. stop: true ends a running package.",
+      "description": "Package the plugin for this computer (the Mac, or Win64 on Windows) with Epic's BuildPlugin in the background, into unreal/Saved/Genex/Packages/<Plugin>/ with a note beside it. Answers {started} at once; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; plugin-status says how it went. stop: true ends a running package.",
       "parameters": {
         "type": "object",
         "properties": {

@@ -5292,6 +5292,8 @@ export default {
   "when a turn starts": "au début d’un tour",
   "when a worker ends": "quand un assistant termine",
   "when a worker starts": "quand un assistant démarre",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "pendant qu’une tâche lancée par l’un de ses outils tourne, pour voir si elle est finie",
   "while it holds a lock, to see whether you are using it": "tant qu’il détient un verrou, pour voir si tu l’utilises",
   wide: "écarquillés",
   worker: "assistant",

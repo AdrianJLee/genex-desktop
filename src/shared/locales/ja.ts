@@ -5218,6 +5218,8 @@ export default {
   "when a turn starts": "ターンの開始時",
   "when a worker ends": "ワーカーの終了時",
   "when a worker starts": "ワーカーの開始時",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "ツールが始めたジョブの実行中、終わったかどうかを確かめるため",
   "while it holds a lock, to see whether you are using it": "ロックを持っている間、使用中かどうかを確かめるため",
   wide: "見開き",
   worker: "ワーカー",

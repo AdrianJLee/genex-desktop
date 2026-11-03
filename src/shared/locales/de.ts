@@ -5330,6 +5330,8 @@ export default {
   "when a turn starts": "wenn eine Runde beginnt",
   "when a worker ends": "wenn ein Helfer fertig ist",
   "when a worker starts": "wenn ein Helfer startet",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "während ein Job läuft, den eines seiner Tools gestartet hat, um zu sehen, ob er fertig ist",
   "while it holds a lock, to see whether you are using it":
     "während es eine Sperre hält, um zu prüfen, ob du gerade selbst daran arbeitest",
   wide: "weit",

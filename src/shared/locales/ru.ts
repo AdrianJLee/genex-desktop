@@ -5188,6 +5188,8 @@ export default {
   "when a turn starts": "когда начинается ход агента",
   "when a worker ends": "когда помощник заканчивает работу",
   "when a worker starts": "когда запускается помощник",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "пока идёт задача, запущенная одним из его инструментов, чтобы узнать, закончилась ли она",
   "while it holds a lock, to see whether you are using it":
     "пока он держит блокировку — чтобы понять, не работаешь ли ты там сам",
   wide: "широкий",

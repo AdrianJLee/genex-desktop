@@ -5,6 +5,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { SECOND_MS } from "../../shared/duration.ts";
 import type { StudioErrorCode } from "../../shared/error-codes.ts";
 import { errorCode } from "../../shared/errors.ts";
+import { failedChannel, type StudioInvokeChannel } from "../../shared/ipc-channels.ts";
 import { problemWords } from "../words.ts";
 
 export const TOAST_MS = 4 * SECOND_MS;
@@ -23,16 +24,23 @@ export interface ToastItem {
   tone: ToastTone;
   /** The failure's typed code, when an error toast came from one (`errorCode`). */
   code?: StudioErrorCode;
+  /** The app call that failed, when an error toast came from one (`failedChannel`). */
+  channel?: StudioInvokeChannel;
 }
 
-/** App's toast channel, as panels receive it; an error toast may say its failure's code. */
-export type Notify = (text: string, tone?: ToastTone, code?: StudioErrorCode | null) => void;
+/** App's toast channel, as panels receive it; an error toast may say its failure's code and the call that failed. */
+export type Notify = (
+  text: string,
+  tone?: ToastTone,
+  code?: StudioErrorCode | null,
+  channel?: StudioInvokeChannel | null,
+) => void;
 
-/** A `.catch` handler that says what went wrong in the user's words, with the failure's code. */
+/** A `.catch` handler that says what went wrong in the user's words, with the failure's code and call. */
 export const notifyProblem =
   (notify: Notify) =>
   (error: unknown): void =>
-    notify(problemWords(error), ToastTone.Error, errorCode(error));
+    notify(problemWords(error), ToastTone.Error, errorCode(error), failedChannel(error));
 
 export interface ToastsState {
   items: ToastItem[];
@@ -44,9 +52,11 @@ export function toastAdded(
   text: string,
   tone: ToastTone,
   code: StudioErrorCode | null = null,
+  channel: StudioInvokeChannel | null = null,
 ): ToastsState {
   const id = state.lastId + 1;
-  return { items: [...state.items, { id, text, tone, ...(code ? { code } : {}) }], lastId: id };
+  const item = { id, text, tone, ...(code ? { code } : {}), ...(channel ? { channel } : {}) };
+  return { items: [...state.items, item], lastId: id };
 }
 
 export function toastDismissed(state: ToastsState, id: number): ToastsState {
@@ -65,8 +75,13 @@ export function createToastsStore(
   const store = createStore<ToastsState>()(() => ({ items: [], lastId: 0 }));
   const dismiss = (id: number): void => store.setState((state) => toastDismissed(state, id), true);
   return Object.assign(store, {
-    notify(text: string, tone: ToastTone = ToastTone.Info, code: StudioErrorCode | null = null): void {
-      store.setState((state) => toastAdded(state, text, tone, code), true);
+    notify(
+      text: string,
+      tone: ToastTone = ToastTone.Info,
+      code: StudioErrorCode | null = null,
+      channel: StudioInvokeChannel | null = null,
+    ): void {
+      store.setState((state) => toastAdded(state, text, tone, code, channel), true);
       const id = store.getState().lastId;
       setTimer(() => dismiss(id), TOAST_MS);
     },

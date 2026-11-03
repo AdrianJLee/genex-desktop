@@ -1404,6 +1404,7 @@ export const MESSAGES = [
   "Genex {version} is ready to install.",
   "Genex {version} is the latest version.",
   "Genex's folder for the Luau checks isn't a plain folder, so Genex wrote nothing.",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.",
   "Genex’s protected space needs an update",
   "Get",
   "Get Genex credits on genex.games",

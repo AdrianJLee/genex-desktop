@@ -75,6 +75,8 @@ export interface LoginControllerDeps {
   /** The installed CLI each sign-in runs; the studio's own resolver unless a test gives another. */
   requireCli?: typeof requireCodingCli;
   findBinary?: typeof findClaudeBinary;
+  /** Write one line to the app's log (`studio.log`). */
+  log?: (line: string) => void;
 }
 
 export function createLoginControllers({
@@ -89,6 +91,7 @@ export function createLoginControllers({
   onOpenCodeSignedIn,
   onGrokSignedIn,
   onCursorSignedIn,
+  log,
 }: LoginControllerDeps): {
   codexLogin: CodexLoginController;
   claudeLogin: ClaudeLoginController;
@@ -100,6 +103,7 @@ export function createLoginControllers({
   const codexLogin = new CodexLoginController({
     resolveCli: () => requireCli(EngineId.Codex),
     openExternal,
+    log,
     onState: (state) => {
       // Transient login data never enters the persisted event store or buffered diagnostics.
       showCodexState(state);

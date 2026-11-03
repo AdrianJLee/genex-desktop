@@ -43,6 +43,7 @@ import {
   type JobPhases,
   jobPhaseChanges,
   LiveOutcome,
+  LiveWaitSaw,
   LiveTrigger,
   NodeKind,
   PartTrouble,
@@ -601,10 +602,14 @@ describe("the stage", () => {
       firstMessageAt: T0 - 9 * MINUTE_MS,
       state: { drawCalls: 12, flow: { phase: "menu", playing: false } },
       gameRef: REF,
+      probes: { pageSeenAt: T0 + SECOND_MS, saw: LiveWaitSaw.ThisGame, mainAnswered: true },
     });
     assert.deepEqual(properties, {
       outcome: LiveOutcome.Shown,
       load_ms: 4 * SECOND_MS,
+      page_seen_ms: SECOND_MS,
+      wait_saw: LiveWaitSaw.ThisGame,
+      main_answered: true,
       trigger: LiveTrigger.FirstBuildAuto,
       first_in_launch: true,
       game_age_ms: 10 * MINUTE_MS + 4 * SECOND_MS,
@@ -616,6 +621,17 @@ describe("the stage", () => {
       crash_reason: null,
     });
     assert.equal(liveShownProperties({ ...inputWithout(), load: { since: T0 } }).trigger, null);
+    const unseen = liveShownProperties({
+      ...inputWithout(),
+      probes: { pageSeenAt: null, saw: LiveWaitSaw.Nothing, mainAnswered: false },
+    });
+    assert.deepEqual(
+      [unseen.page_seen_ms, unseen.wait_saw, unseen.main_answered],
+      [null, LiveWaitSaw.Nothing, false],
+      "a wait that never saw the page says so",
+    );
+    const refused = liveShownProperties(inputWithout());
+    assert.deepEqual([refused.page_seen_ms, refused.wait_saw, refused.main_answered], [null, null, null]);
   });
 
   it("suspects a blank game only after it showed and drew nothing for a while", () => {

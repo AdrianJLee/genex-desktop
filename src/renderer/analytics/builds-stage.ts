@@ -19,6 +19,7 @@ import {
   type LiveGameShownProperties,
   LiveOutcome,
   type LiveTrigger,
+  type LiveWaitSaw,
   NodeKind,
   type PlanningEnd,
   pluginRef,
@@ -77,6 +78,8 @@ export interface LiveShown {
   gameRef: string | null;
   /** Why this game's page failed or went away, as the probe or the refusal said (`loadFailure`, `gone`); unchecked. */
   failure?: { load: unknown; gone: unknown } | null;
+  /** When a probe first saw this game's page, what the last one saw, and whether main had answered the load; absent for a refused load. */
+  probes?: { pageSeenAt: number | null; saw: LiveWaitSaw; mainAnswered: boolean };
 }
 
 const timeOf = (iso: string | null): number | null => {
@@ -88,9 +91,13 @@ const timeOf = (iso: string | null): number | null => {
 export function liveShownProperties(shown: LiveShown): LiveGameShownProperties {
   const says = gameSays(shown.state);
   const created = timeOf(shown.gameCreatedAt);
+  const seenAt = shown.probes?.pageSeenAt;
   return {
     outcome: shown.outcome,
     load_ms: elapsedMs(shown.load.since, shown.now),
+    page_seen_ms: seenAt === null || seenAt === undefined ? null : elapsedMs(shown.load.since, seenAt),
+    wait_saw: shown.probes?.saw ?? null,
+    main_answered: shown.probes?.mainAnswered ?? null,
     trigger: shown.load.trigger ?? null,
     first_in_launch: shown.firstInLaunch,
     game_age_ms: created === null ? null : elapsedMs(created, shown.now),

@@ -11,11 +11,11 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
-import { isUserCancelled, errorCode } from "../../../shared/errors.ts";
+import { isUserCancelled } from "../../../shared/errors.ts";
 import { projectName } from "../../../shared/game-engine.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
 import { runPluginAction } from "../../plugin-actions.ts";
-import { type Notify, ToastTone } from "../../state/toasts.ts";
+import { type Notify, ToastTone, notifyProblem } from "../../state/toasts.ts";
 import { Button } from "../../ui/Button.tsx";
 import { OPEN_PLUGINS_EVENT } from "../../ui/ComposerAddMenu.tsx";
 import type { GameProject } from "../../types.ts";
@@ -27,7 +27,7 @@ import {
   unrealOpener,
   unrealProjectOf,
 } from "../../unreal-game.ts";
-import { problemWords, UNREAL_WORDS } from "../../words.ts";
+import { UNREAL_WORDS } from "../../words.ts";
 import { openPluginSetup } from "../../plugin-setup.ts";
 import { type StatusPoll, startStatusPoll } from "../../status-poll.ts";
 import {
@@ -160,7 +160,7 @@ async function press(deps: PressDeps, which: StageAct): Promise<boolean> {
 
 /** Shows a press's failure, unless the person cancelled it in a confirmation. */
 const failed = (deps: PressDeps) => (err: unknown) => {
-  if (!isUserCancelled(err)) deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+  if (!isUserCancelled(err)) notifyProblem(deps.onNotice)(err);
 };
 
 /**

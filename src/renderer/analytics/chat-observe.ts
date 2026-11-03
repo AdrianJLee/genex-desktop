@@ -12,7 +12,7 @@ import { PlanReviewState } from "../../shared/composer.ts";
 import { type CustomEventData, CustomEvent, customPayload, customRecord } from "../../shared/custom-events.ts";
 import type { EngineKind } from "../../shared/engine-descriptor.ts";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
-import { EngineFailureKind, isLimitKind, type LimitKind } from "../../shared/engine-requests.ts";
+import { EngineFailureKind, harnessTurnFailure, isLimitKind, type LimitKind } from "../../shared/engine-requests.ts";
 import { type EventData, type EventEnvelope, EventKind } from "../../shared/event-log.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
 import {
@@ -160,6 +160,25 @@ function turnLimit(
 const turnFailureKind = (turn: OpenTurn | undefined, metadata: Record<string, unknown> | undefined) =>
   failureKind(turn?.failure) ?? failureKind(metadata?.failure);
 
+/**
+ * A host method's wire name in shape (`engine.complete`, `snapshot.markHealthy`): main keeps only
+ * real ones on the record (`isHostMethod`), and the renderer, which does not load the host's API,
+ * lets nothing else through.
+ */
+const HOST_METHOD_SHAPE = /^[a-z]+(?:\.[a-zA-Z]+){1,2}$/;
+const isHostMethodShaped = (method: string): boolean => HOST_METHOD_SHAPE.test(method);
+
+/** Why a turn the harness ran threw, as `chat_turn_ended` carries it; nothing when its record says none. */
+function harnessFailureProperties(recorded: unknown) {
+  const failure = harnessTurnFailure(recorded, isHostMethodShaped);
+  if (!failure) return {};
+  return {
+    failure_code: failure.code,
+    ...(failure.method ? { failure_method: failure.method } : {}),
+    ...(failure.name ? { error_name: failure.name } : {}),
+  };
+}
+
 /** `chat_turn_ended`, from the turn this launch saw begin (if it did) and its closing record. */
 export function turnEndedProperties(
   turn: OpenTurn | undefined,
@@ -180,6 +199,7 @@ export function turnEndedProperties(
     streamed: turn?.streamed ?? false,
     stream_failed: turn?.streamFailed ?? false,
     ...(failure ? { failure_kind: failure } : {}),
+    ...harnessFailureProperties(end.metadata?.harnessFailure),
     ...limit,
     launched_build: outcome === TurnOutcome.LaunchRun,
   };

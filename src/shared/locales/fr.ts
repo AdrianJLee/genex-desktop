@@ -5936,6 +5936,8 @@ export default {
   "Drag to turn": "Fais glisser pour tourner",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex ne l’a pas encore confirmé. Il apparaîtra dans Mes objets dès que ce sera fait. Tu ne seras pas débité deux fois.",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.":
+    "Les agents de Genex n’ont pas démarré, ce message n’est donc arrivé nulle part. Cliquez sur Réessayer à côté de « Les agents n’ont pas démarré », puis renvoyez-le.",
   "Genex’s protected space needs an update": "L’espace protégé de Genex a besoin d’une mise à jour",
   Get: "Obtenir",
   "Get in {game}": "Obtenir dans {game}",

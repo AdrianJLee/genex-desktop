@@ -21,6 +21,7 @@ import { BootFailure, type BootFailureCode, SandboxProblemCode, StartPassage } f
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../../shared/duration.ts";
 import { EngineStatusCode } from "../../../shared/engine-descriptor.ts";
 import { isStudioErrorCode, type StudioErrorCode } from "../../../shared/error-codes.ts";
+import { isInvokeChannel, type StudioInvokeChannel } from "../../../shared/ipc-channels.ts";
 import { UiEvent } from "../../../shared/ui-events.ts";
 import { type SessionState, SessionStatus } from "../../state/session.ts";
 import type { Studio } from "../../state/studio.ts";
@@ -240,8 +241,15 @@ export function unresponsiveProperties(payload: unknown): { duration_ms: number 
   return { duration_ms: measured ? Math.round(ms) : null };
 }
 
-/** `error_toast_shown`'s properties: the failure's code (null when it had none) and the screen it showed on. */
-export type ErrorToastProperties = { code: StudioErrorCode | null; screen: string };
+/**
+ * `error_toast_shown`'s properties: the failure's code and the app call that failed (each null when
+ * the toast had none), and the screen it showed on.
+ */
+export type ErrorToastProperties = {
+  code: StudioErrorCode | null;
+  channel: StudioInvokeChannel | null;
+  screen: string;
+};
 
 /** The error toasts added since `before`, as `error_toast_shown`. */
 export function errorToastsShown(
@@ -251,7 +259,11 @@ export function errorToastsShown(
 ): ErrorToastProperties[] {
   return after.items
     .filter((toast) => toast.id > before.lastId && toast.tone === ToastTone.Error)
-    .map((toast) => ({ code: isStudioErrorCode(toast.code) ? toast.code : null, screen }));
+    .map((toast) => ({
+      code: isStudioErrorCode(toast.code) ? toast.code : null,
+      channel: isInvokeChannel(toast.channel) ? toast.channel : null,
+      screen,
+    }));
 }
 
 /** `workspace_load_retried`'s properties: which Retry of this launch, whether it loaded, and how long it took. */

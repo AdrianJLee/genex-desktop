@@ -742,6 +742,8 @@ const { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin } = creat
   openExternal: (url) => shell.openExternal(url),
   subscription,
   pushUiEvent,
+  // Each step a sign-in reaches, so a log a person sends says where a sign-in that hung stopped.
+  log: (line) => studioLog.write("main", line),
   onOpenCodeSignedIn: async () => {
     if (core?.engines.has(EngineId.OpenCode)) await core.engines.get(EngineId.OpenCode).refreshModels?.(true);
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenCode } });
@@ -2163,6 +2165,11 @@ function threadsIpcDeps(studio: StudioCore, engines: EngineBoot): ThreadsIpcDeps
     playWeb: playOrigin.web,
     analytics,
     launchFacts: handLaunchFacts,
+    agentsProblem: () => {
+      const boot = bootGate.state();
+      return boot.phase === BootPhase.Ready ? (boot.failureCode ?? null) : null;
+    },
+    log: (line) => studioLog.write("main", line),
   };
 }
 

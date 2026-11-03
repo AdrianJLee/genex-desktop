@@ -20,6 +20,7 @@ import type { FakeReply } from "../helpers/fake-ollama.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { CustomEvent, customPayload } from "../../src/shared/custom-events.ts";
 import { EventKind, MessageUsageSource } from "../../src/shared/event-log.ts";
+import { TurnFailureCode } from "../../src/shared/engine-requests.ts";
 import { repeatedBuildUsages } from "../../src/shared/eval-lane.ts";
 
 /** The seed the rig's harness workspace is copied from, skills included. */
@@ -227,6 +228,47 @@ describe("turn loop", () => {
       "round limit",
     );
     assert.ok(events.some((e) => e.data.type === "error"));
+  });
+});
+
+describe("a local model's context", () => {
+  /** The turn a message on a rig whose Ollama reports `loaded` ends with, its errors, and the completions it asked for. */
+  async function turnWith(loaded: Array<{ name: string; context_length: number }>) {
+    const rig = await startRig({ loaded, replies: [{ text: "A platformer, coming up." }] });
+    rigs.push(rig);
+    await rig.core.sendUserMessage("make a small platformer game please");
+    const log = await waitForLog(rig.core, (l) => l.some((e) => e.data.type === "turn_ended"), 30_000, "turn_ended");
+    const ended = log.find((e) => e.data.type === EventKind.TurnEnded)?.data as {
+      status: string;
+      metadata?: Record<string, unknown>;
+    };
+    const errors = log.flatMap((e) => (e.data.type === EventKind.Error ? [e.data.message] : []));
+    const completions = rig.server.requests.filter((r) => r.path.startsWith("/v1/chat/completions")).length;
+    return { ended, errors, completions };
+  }
+
+  it("asks a model whose context Ollama has not reported yet instead of refusing on a guess", async () => {
+    // Not loaded, Ollama reports no context: the app guessed 8,192 tokens and every such turn failed
+    // in a fraction of a second before Ollama was asked, whatever context Ollama was set to.
+    const { ended, errors, completions } = await turnWith([]);
+    assert.equal(ended.status, "ok", errors.join("\n"));
+    assert.equal(completions, 1);
+  });
+
+  it("says a context too small for the instructions and tools is too small, how to fix it, and why it failed", async () => {
+    const { ended, errors, completions } = await turnWith([{ name: "qwen3.6:27b", context_length: 4096 }]);
+    assert.equal(ended.status, "error");
+    assert.equal(completions, 0, "nothing is sent to a model that cannot hold the turn, and nothing is compacted");
+    assert.deepEqual(ended.metadata?.harnessFailure, { code: TurnFailureCode.ContextTooSmall, name: "Error" });
+    const said = errors.join("\n");
+    assert.match(said, /Ollama runs this model with a 4,096-token context/);
+    assert.match(said, /OLLAMA_CONTEXT_LENGTH=32768/);
+  });
+
+  it("a configured context that holds the turn answers as before", async () => {
+    const { ended, completions } = await turnWith([{ name: "qwen3.6:27b", context_length: 32_768 }]);
+    assert.equal(ended.status, "ok");
+    assert.equal(completions, 1);
   });
 });
 

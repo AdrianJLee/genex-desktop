@@ -5515,6 +5515,8 @@ export default {
   "Drag to turn": "拖动旋转",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex 还没确认。确认后会显示在“我的物品”中。不会重复扣费。",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.":
+    "Genex 的智能体未能启动，所以这条消息没有发出。请点按“智能体未能启动”旁边的“重试”，然后再发送一次。",
   "Genex’s protected space needs an update": "Genex 的受保护空间需要更新",
   Get: "领取",
   "Get in {game}": "在 {game} 中获取",

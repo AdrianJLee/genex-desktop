@@ -5704,6 +5704,8 @@ export default {
   "Drag to turn": "드래그해서 돌리기",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex가 아직 확인하지 않았어요. 확인되면 내 아이템에 나타나요. 두 번 청구되지 않아요.",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.":
+    "Genex 에이전트가 시작되지 않아 이 메시지는 전달되지 않았어요. ‘에이전트가 시작되지 않았어요’ 옆의 ‘다시 시도’를 누른 뒤 다시 보내 주세요.",
   "Genex’s protected space needs an update": "Genex 보호 공간을 업데이트해야 해요",
   Get: "받기",
   "Get in {game}": "{game}에서 받기",

@@ -55,6 +55,10 @@ interface LoginAttempt {
   closed?: Promise<void>;
   timer?: ReturnType<typeof setTimeout>;
   cancelled: boolean;
+  /** When it started, how many lines `codex login` printed, and whether one was a sign-in link: for the log. */
+  startedAt: number;
+  outputLines: number;
+  linkSeen: boolean;
 }
 
 interface CodexLoginDependencies {
@@ -69,6 +73,9 @@ interface CodexLoginDependencies {
   timeoutMs?: number;
   /** The operating system the CLI runs on; the host's by default. */
   platform?: NodeJS.Platform;
+  /** Write one line to the app's log: each step a sign-in takes, never its output or link. */
+  log?: (line: string) => void;
+  now?: () => number;
 }
 
 /** Runs only Codex's fixed login command. This is not a shell or a token broker. */
@@ -94,8 +101,33 @@ export class CodexLoginController {
   }
 
   #update(patch: Partial<CodexLoginState>): void {
+    const before = this.#state.phase;
     this.#state = { ...this.#state, ...patch, revision: this.#state.revision + 1 };
+    if (this.#state.phase !== before) this.#logStep();
     this.#deps.onState(this.snapshot());
+  }
+
+  /** Say in the log which step the sign-in reached, how long it took and what the CLI had done by then. */
+  #logStep(): void {
+    const attempt = this.#attempt;
+    if (!this.#deps.log || !attempt) return;
+    const { phase, method, problem } = this.#state;
+    const child = attempt.child;
+    this.#deps.log(
+      codexLoginStepLine({
+        phase,
+        method,
+        problem: problem ?? null,
+        ms: this.#now() - attempt.startedAt,
+        outputLines: attempt.outputLines,
+        linkSeen: attempt.linkSeen,
+        cliRunning: Boolean(child && child.exitCode === null && child.signalCode === null),
+      }),
+    );
+  }
+
+  #now(): number {
+    return (this.#deps.now ?? Date.now)();
   }
 
   #line(line: string): void {
@@ -108,7 +140,7 @@ export class CodexLoginController {
       this.#update({ visible: true });
       return this.snapshot();
     }
-    const attempt: LoginAttempt = { home, cancelled: false };
+    const attempt: LoginAttempt = { home, cancelled: false, startedAt: this.#now(), outputLines: 0, linkSeen: false };
     this.#attempt = attempt;
     this.#url = null;
     // The browser sign-in needs no window over the app: the page opens on its own and the button
@@ -164,6 +196,7 @@ export class CodexLoginController {
     const consume = (stream: keyof PendingOutput, chunk: string, flush = false): void => {
       for (const line of takeLines(pending, stream, chunk, flush)) {
         if (this.#attempt !== attempt || attempt.cancelled) return;
+        attempt.outputLines += 1;
         this.#readLine(stripVTControlCharacters(line), method);
       }
     };
@@ -197,6 +230,7 @@ export class CodexLoginController {
   #readLine(plain: string, method: LoginMethod): void {
     for (const match of plain.matchAll(URL_IN_OUTPUT)) {
       const url = allowedLoginUrl(match[0]);
+      if (url && this.#attempt) this.#attempt.linkSeen = true;
       if (url) {
         this.#url = url;
         this.#update({ hasBrowserUrl: true });
@@ -276,6 +310,24 @@ export class CodexLoginController {
     await this.cancel();
     this.#update({ visible: false, lines: [], deviceCode: undefined });
   }
+}
+
+/** What the log says of one sign-in step: counts and codes only, never the CLI's words or its link. */
+export function codexLoginStepLine(step: {
+  phase: CodexLoginState["phase"];
+  method: CodexLoginState["method"];
+  problem: CodexLoginProblem | null;
+  ms: number;
+  outputLines: number;
+  linkSeen: boolean;
+  cliRunning: boolean;
+}): string {
+  const problem = step.problem ? ` (${step.problem})` : "";
+  return (
+    `codex sign-in: ${step.phase}${problem} after ${Math.round(step.ms)} ms, ${step.method}; ` +
+    `the CLI printed ${step.outputLines} lines, ${step.linkSeen ? "a" : "no"} sign-in link, and is ` +
+    `${step.cliRunning ? "still running" : "not running"}`
+  );
 }
 
 /** Why a finished login is not a ChatGPT sign-in, or null when it is one. */

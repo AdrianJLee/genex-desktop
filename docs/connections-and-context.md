@@ -587,7 +587,14 @@ Resetting policy also refreshes the displayed threshold to its effective inherit
   complete tool-round boundaries before exceeding the selected policy. Completed operations
   are not replayed to recover from overflow. An irreducible task that cannot fit fails honestly.
 - **Completion-only Ollama:** the local harness performs its own context checkpoint. Explicit
-  policy does not run alongside a second silent history-window truncation.
+  policy does not run alongside a second silent history-window truncation. Before the model is
+  asked, the tool loop checks that the instructions and tools fit 70% of the window
+  (`promptThatFits`, `loop/tool-loop.ts`). It checks only a window the engine measured: a model
+  Ollama has not loaded reports none (`contextEstimated` on the engine's model), so the turn goes
+  to Ollama, which answers with its real context. A measured window too small for the instructions
+  and tools alone (Ollama's 4,096-token default) fails at once with a `context_too_small`
+  failure. It compacts nothing, and its message names a context length that fits and where Ollama
+  sets it.
 
 ### Compact now
 

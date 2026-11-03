@@ -917,6 +917,8 @@ export interface EngineDescriptor {
     /** The model the provider's catalog names as its default; the picker lists it for "default". */
     providerDefault?: boolean;
     contextWindow: number;
+    /** The window is the engine's guess, not a figure the provider reported (an Ollama model not loaded yet). */
+    contextEstimated?: boolean;
     supportsFast?: boolean;
     supportsTools: boolean;
     supportsVision: boolean;
@@ -1680,9 +1682,17 @@ export interface HarnessHostApi {
     result: { turnId: string; sessionId: string; head: string };
   };
   "turn.append": { params: { turnId: string; batch: EventData[] }; result: string };
-  /** End a turn; `outcome` is how the loop ended it (a TurnStop code), kept on its `turn_ended`. */
+  /**
+   * End a turn; `outcome` is how the loop ended it (a TurnStop code), and `failure` why a turn that
+   * threw failed (a `TurnFailureCode`, the host call and the error's type), both kept on its `turn_ended`.
+   */
   "turn.end": {
-    params: { turnId: string; status?: "ok" | "error" | "cancelled"; outcome?: string };
+    params: {
+      turnId: string;
+      status?: "ok" | "error" | "cancelled";
+      outcome?: string;
+      failure?: { code: string; method?: string; name?: string };
+    };
     result: string | null;
   };
 

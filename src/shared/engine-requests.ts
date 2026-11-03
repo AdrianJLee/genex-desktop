@@ -196,6 +196,77 @@ export interface TurnFailure {
   limit?: TurnLimit;
 }
 
+/**
+ * Why a chat turn the harness ran threw, as `turn.end`'s `failure` names it and `turn_ended` keeps
+ * it (`harnessFailure`): the seed's `TurnFailureCode` (`harness-seed/loop/turn-record.ts`), held to
+ * this copy by `seed-contracts.test.ts`. Persisted in the log: never rename a value.
+ */
+export const TurnFailureCode = {
+  /** The model's context cannot hold the turn's instructions and tools, whatever the history. */
+  ContextTooSmall: "context_too_small",
+  /** The conversation still does not fit the model's context after compaction. */
+  ContextFull: "context_full",
+  /** A host call the turn made failed (`method` names it). */
+  HostCall: "host_call",
+  /** A host call outlived its deadline (`method` names it). */
+  HostDeadline: "host_deadline",
+  /** The engine's call failed (its kind is on the turn's `completion_call`). */
+  Engine: "engine",
+  /** Anything else the harness's own code threw (`name` is its error's type). */
+  Harness: "harness",
+} as const;
+export type TurnFailureCode = (typeof TurnFailureCode)[keyof typeof TurnFailureCode];
+
+/** The error types a turn's failure may name: the built-in ones and the host's own; any other reads `other`. */
+export const TurnErrorName = {
+  Error: "Error",
+  TypeError: "TypeError",
+  RangeError: "RangeError",
+  ReferenceError: "ReferenceError",
+  SyntaxError: "SyntaxError",
+  AbortError: "AbortError",
+  SubstrateError: "SubstrateError",
+  RpcDeadline: "RpcDeadline",
+  InvalidParams: "InvalidParams",
+  UnknownMethod: "UnknownMethod",
+  Other: "other",
+} as const;
+export type TurnErrorName = (typeof TurnErrorName)[keyof typeof TurnErrorName];
+
+/** What a failed chat turn says about why it failed: a code, the host call and the error's type, never its words. */
+export interface HarnessTurnFailure {
+  code: TurnFailureCode;
+  /** The host method whose call failed (`HostMethod`'s wire name). */
+  method?: string;
+  name?: TurnErrorName;
+}
+
+const TURN_FAILURE_CODES: ReadonlySet<string> = new Set(Object.values(TurnFailureCode));
+const TURN_ERROR_NAMES: ReadonlySet<string> = new Set(Object.values(TurnErrorName));
+
+/** Is `value` one of the codes a turn's failure may name? */
+export const isTurnFailureCode = (value: unknown): value is TurnFailureCode =>
+  typeof value === "string" && TURN_FAILURE_CODES.has(value);
+
+/** An error type as a turn's failure keeps it: one of `TurnErrorName`, else `other`; none without a name. */
+export function turnErrorName(value: unknown): TurnErrorName | undefined {
+  if (typeof value !== "string" || value === "") return undefined;
+  return TURN_ERROR_NAMES.has(value) ? (value as TurnErrorName) : TurnErrorName.Other;
+}
+
+/**
+ * A turn failure from what the harness sent or the log kept, every field checked: a code of the
+ * app's, a method `isMethod` knows and a known error type. Null when there is no usable code.
+ */
+export function harnessTurnFailure(value: unknown, isMethod: (method: string) => boolean): HarnessTurnFailure | null {
+  if (value === null || typeof value !== "object") return null;
+  const { code, method, name } = value as Record<string, unknown>;
+  if (!isTurnFailureCode(code)) return null;
+  const errorName = turnErrorName(name);
+  const knownMethod = typeof method === "string" && isMethod(method);
+  return { code, ...(knownMethod ? { method } : {}), ...(errorName ? { name: errorName } : {}) };
+}
+
 /** Is `kind` a provider's limit? */
 export const isLimitKind = (kind: string): kind is LimitKind =>
   kind === EngineFailureKind.RateLimit || kind === EngineFailureKind.UsageLimit;

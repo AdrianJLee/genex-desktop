@@ -5835,6 +5835,8 @@ export default {
   "Drag to turn": "ドラッグで回転",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genexでまだ確認できていません。確認されるとマイアイテムに表示されます。二重に請求されることはありません。",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.":
+    "Genex のエージェントが起動しなかったため、このメッセージはどこにも届きませんでした。「エージェントが起動しませんでした」の横の「もう一度試す」を押してから、もう一度送信してください。",
   "Genex’s protected space needs an update": "Genexの保護スペースを更新する必要があります",
   Get: "入手",
   "Get in {game}": "{game}で入手",

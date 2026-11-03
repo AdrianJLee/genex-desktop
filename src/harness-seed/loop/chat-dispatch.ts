@@ -4,7 +4,7 @@
  * paused run it resumes, and the Loop the turn started.
  */
 import { runTurn, type TurnOptions, type TurnOutcome } from "./turn-loop.ts";
-import { sayInTurn, TurnStatus, TurnStop } from "./turn-record.ts";
+import { sayInTurn, turnFailureOf, TurnStatus, TurnStop } from "./turn-record.ts";
 import { dropSteeringBacklog } from "./steering-backlog.ts";
 import { afterLeadLoopRun, holdsSession, resumeAfterReply, type AfterLoopRun } from "./after-loop-run.ts";
 import { conversationThrough, latestRun } from "./run-inbox.ts";
@@ -317,7 +317,8 @@ async function failChatTurn(host: Host, ctx: HarnessCtx, turnId: string, err: an
     turnId,
     batch: [{ type: EventKind.Error, message: MESSAGE.turnFailed(err?.message ?? err) }],
   });
-  await host.call(HostMethod.TurnEnd, { turnId, status: TurnStatus.Error });
+  // Why it failed, in typed words the app counts turns by: the message stays in the chat.
+  await host.call(HostMethod.TurnEnd, { turnId, status: TurnStatus.Error, failure: turnFailureOf(err) });
   host.notify("chat.error", { message: err?.message ?? String(err) });
 }
 

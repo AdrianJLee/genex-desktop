@@ -17,7 +17,7 @@ import { EngineId, supportsSessions } from "./model-roles.ts";
 import { runStudioTurn } from "./studio-chat.ts";
 import { HostMethod } from "./host-methods.ts";
 import { runDelegatedTurn } from "./delegated-turn.ts";
-import { resolveContextWindow, runToolLoop } from "./tool-loop.ts";
+import { contextEstimated, resolveContextWindow, runToolLoop } from "./tool-loop.ts";
 import { lastContractorSession, nameFromAsk, resolveChatProject } from "./chat-session.ts";
 import type { AnyRecord, HarnessCtx } from "../types/harness.d.ts";
 import type { ModelPreferences, ReferenceFrame, RunRoles } from "../types/host-api.d.ts";
@@ -83,5 +83,7 @@ export async function runTurn(ctx: HarnessCtx, options: TurnOptions): Promise<Tu
   const descriptor = described.find((e) => e.id === engine);
   if (supportsSessions(descriptor))
     return runDelegatedTurn(ctx, { ...options, engine, engineLabel: descriptor?.label ?? engine });
-  return runToolLoop(ctx, { ...options, engine, contextWindow: contextWindowOf(options.model) });
+  // A window the engine only guesses is not one to refuse a turn over (`contextEstimated`).
+  const estimated = contextEstimated(described, engine, options.model);
+  return runToolLoop(ctx, { ...options, engine, contextWindow: estimated ? null : contextWindowOf(options.model) });
 }

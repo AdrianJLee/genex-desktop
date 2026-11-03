@@ -9,6 +9,8 @@ import { SendFailure } from "../../shared/composer.ts";
 import type { EngineBoot } from "../engine-boot.ts";
 import type { AnalyticsConfig } from "../../shared/analytics.ts";
 import type { LaunchFacts } from "../../shared/app-session.ts";
+import type { BootFailureCode } from "../../shared/boot.ts";
+import { t } from "../../shared/i18n.ts";
 
 /** Why a thread read (or a tag's retry) from the renderer is refused. */
 const MESSAGE = {
@@ -16,6 +18,14 @@ const MESSAGE = {
   fixtureBootstrapUnavailable: "Fixture bootstrap unavailable",
   fixtureThreadUnavailable: "Fixture thread unavailable",
   invalidPage: "Invalid conversation page",
+  /** Said in the chat for a send the harness never got because the agents did not start. */
+  agentsNotStarted: () =>
+    t(
+      "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.",
+    ),
+  /** The log's line for a send that failed: codes only, never the message or its error's words. */
+  sendFailedLine: (failure: SendFailure, agents: BootFailureCode | null) =>
+    `a message could not be sent (${failure})${agents ? `: the agents did not start (${agents})` : ""}`,
 } as const;
 
 export interface ThreadsIpcDeps {
@@ -40,6 +50,10 @@ export interface ThreadsIpcDeps {
   analytics: AnalyticsConfig | null;
   /** How this launch started and the session before it ended: answered once, then null (`session-marker.ts`). */
   launchFacts?(): Promise<LaunchFacts | null>;
+  /** Why the open studio's agents would not start, as its code; null while they run. */
+  agentsProblem?(): BootFailureCode | null;
+  /** Write one line to the app's log (`studio.log`). */
+  log?(line: string): void;
 }
 
 /** A sent message's failed @ tag tried again or taken off: the renderer names the tag, main re-checks it as a send does. */
@@ -120,8 +134,12 @@ export function registerThreadsIpc(handle: IpcHandle, deps: ThreadsIpcDeps): voi
     } catch (err) {
       // The composer already cleared the draft, and the renderer's send is fire-and-forget —
       // a swallowed rejection here would leave no trace of the ask ever failing.
-      const message = String(errorMessage(err));
       const failure = errorCodeIn(SendFailure, err) ?? SendFailure.Other;
+      // Agents that did not start (a Windows PC without its sandbox set up) take no message: say
+      // so in words a person can act on, and in the log why, where "harness is not running" said neither.
+      const agents = failure === SendFailure.HarnessNotRunning ? (deps.agentsProblem?.() ?? null) : null;
+      deps.log?.(MESSAGE.sendFailedLine(failure, agents));
+      const message = agents ? MESSAGE.agentsNotStarted() : String(errorMessage(err));
       await appendErrorDurably(payload.thread, `The message could not be sent: ${message}`);
       pushUiEvent({
         type: UiEvent.ChatError,

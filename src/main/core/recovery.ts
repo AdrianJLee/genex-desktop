@@ -27,7 +27,7 @@ import {
 } from "../../substrate/seed-upgrade.ts";
 import { type TypeCheckResult, diagnosticsFor, typeCheckText, TypeCheckFailure } from "../../substrate/type-gate.ts";
 import type { ForkBoot } from "./self-edit-gate.ts";
-import { archiveArtifacts, seedCallMemory, seedMoveMemory } from "../seed-upgrade-notice.ts";
+import { archiveArtifacts, seedMoveMemory } from "../seed-upgrade-notice.ts";
 import { type SnapshotRecord, checkOutNewRepo, HARNESS_WORKSPACE } from "../../substrate/snapshots.ts";
 import type { ThreadFold } from "../../substrate/event-store.ts";
 import { interruptedTurnsIn } from "../../substrate/turns.ts";
@@ -351,8 +351,7 @@ export class RecoveryService {
    * Keep the agent's memory in step with the seed's moves (seed-upgrade.ts SEED_MOVES): a kept
    * file that still defines code other harness files now import from its new home gets a note,
    * and a note that no longer holds is taken back. Every boot, since the agent may carry its edit
-   * over at any time. A kept file that still calls the host the older way (SEED_CALL_CHANGES) gets
-   * its own note. Needs the event store; a failure is logged, never fatal to the boot.
+   * over at any time. Needs the event store; a failure is logged, never fatal to the boot.
    */
   async noteSeedMoves(): Promise<void> {
     const report = this.#x.seedReport;
@@ -361,7 +360,7 @@ export class RecoveryService {
     try {
       const memory = ((await this.#core.store.readArtifact<Record<string, unknown>>(this.#core.mainThread, "memory")) ??
         {}) as Record<string, unknown>;
-      const next = seedCallMemory(seedMoveMemory(memory, report.moved ?? []), report.outdatedCalls ?? []);
+      const next = seedMoveMemory(memory, report.moved ?? []);
       if (JSON.stringify(next) !== JSON.stringify(memory))
         await this.#core.store.writeArtifact(this.#core.mainThread, "memory", next);
     } catch (err) {

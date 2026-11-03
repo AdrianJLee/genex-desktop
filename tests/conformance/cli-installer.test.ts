@@ -8,7 +8,7 @@ import {
   installerSource,
   type InstallerRun,
 } from "../../src/substrate/cli-installer.ts";
-import { CliInstallProblem } from "../../src/shared/cli-install.ts";
+import { CliInstallProblem, installsInApp } from "../../src/shared/cli-install.ts";
 import type { CodingProvider } from "../../src/shared/coding-cli.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -64,7 +64,21 @@ test("a CLI with no installer for this system fails before anything is fetched o
     run: neverRuns,
   });
   assert.equal(outcome.ok, false);
-  assert.equal(!outcome.ok && outcome.problem, "download");
+  assert.equal(!outcome.ok && outcome.problem, "unsupported", "nothing failed to download: there is nothing to fetch");
+});
+
+test("the app offers an in-app install exactly where the main process has an installer to run", () => {
+  const providers: CodingProvider[] = ["claude-code", "codex", "opencode", "grok", "cursor"];
+  for (const provider of providers)
+    for (const platform of ["darwin", "linux", "win32"] as const)
+      assert.equal(
+        installsInApp(provider, platform),
+        installerSource(provider, platform) !== null,
+        `${provider} on ${platform}`,
+      );
+  assert.equal(installsInApp("opencode", "win32"), false, "OpenCode installs on Windows only by package manager");
+  for (const hostile of ["__proto__", "constructor", "toString", "", "gemini"])
+    assert.equal(installsInApp(hostile, "win32"), true, `${hostile} names no rule, so nothing is held back`);
 });
 
 test("an installer runs from its saved file under the shell it was written for, never through a command line", () => {

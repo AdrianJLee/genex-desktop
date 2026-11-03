@@ -5761,4 +5761,10 @@ export default {
   Shots: "截图",
   "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, other {{count} 次游玩}}",
   "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, other {{count} 个赞}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex 无法在这台电脑上安装 {name}。请按它的指南安装，然后再检查一次。",
+  "Install {name} with its guide, then check again.": "请按指南安装 {name}，然后再检查一次。",
+  "Open install guide": "打开安装指南",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "在 Windows 上，OpenCode 需按指南用 Chocolatey、Scoop 或 npm 安装。装好后再检查一次。",
 } satisfies LocaleCatalog;

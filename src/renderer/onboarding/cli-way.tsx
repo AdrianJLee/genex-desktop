@@ -30,8 +30,16 @@ const TerminalView = lazy(() => import("../panels/TerminalView.tsx"));
 /** An engine list without the CLI yet reads as not installed until the engines arrive. */
 const NOT_INSTALLED = { status: { code: EngineStatusCode.NotInstalled } };
 
-/** One CLI as first launch drives it: its state, its trouble, and what each button does. */
-export function useCli(provider: CliProvider, engines: EngineDescriptor[], onEnginesRefresh: () => void) {
+/**
+ * One CLI as first launch drives it: its state, its trouble, and what each button does. `guide` is
+ * its install guide, which `openGuide` opens where Genex can't install it itself (null elsewhere).
+ */
+export function useCli(
+  provider: CliProvider,
+  engines: EngineDescriptor[],
+  onEnginesRefresh: () => void,
+  guide?: string,
+) {
   const engine = engines.find((candidate) => candidate.id === provider);
   const install = useCliInstall(provider);
   const { terminal: terminalKind, signIn: startSignIn } = CLI_SIGN_IN[provider];
@@ -68,6 +76,13 @@ export function useCli(provider: CliProvider, engines: EngineDescriptor[], onEng
       press(cliInstallAction(row));
       run(install.install);
     },
+    openGuide:
+      guide && !install.inApp
+        ? () => {
+            press(ProviderAction.InstallGuide);
+            run(() => window.studio.openUrl(guide));
+          }
+        : null,
     recheck: () => {
       press(cliRecheckAction(row));
       run(recheck);

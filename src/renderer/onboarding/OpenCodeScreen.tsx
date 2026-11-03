@@ -13,6 +13,7 @@ import { OpenCodeRowState } from "../panels/opencode-row.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
 import { defaultModelKey } from "../model-choices.ts";
+import { METERED_PROVIDER_WORDS } from "../words.ts";
 import { safeStorage } from "../storage.ts";
 import { rememberWelcomeModel } from "../stored-model.ts";
 import { MeteredMark } from "./art.ts";
@@ -38,7 +39,7 @@ const SIGN_IN_WORDS = {
 
 /** OpenCode as first launch drives it: its state, its trouble, and what each button does. */
 export const useOpenCode = (engines: EngineDescriptor[], onEnginesRefresh: () => void): Cli =>
-  useCli(EngineId.OpenCode, engines, onEnginesRefresh);
+  useCli(EngineId.OpenCode, engines, onEnginesRefresh, METERED_PROVIDER_WORDS.openCode.guide);
 export type OpenCode = Cli;
 
 /** The free models to pick from, the one picked, and the pick. */
@@ -109,9 +110,15 @@ function OpenCodeControl({ code }: { code: OpenCode }): JSX.Element {
     case OpenCodeRowState.Installing:
       return <Status busy>{WORDS.installing}</Status>;
     case OpenCodeRowState.NotInstalled:
+      // Where Genex can't install it (Windows), Set up could only fail: its guide installs it.
       return (
-        <Button variant="accent-tint" size="lg" className="onboarding-connect-action" onClick={code.install}>
-          {WORDS.setUp}
+        <Button
+          variant="accent-tint"
+          size="lg"
+          className="onboarding-connect-action"
+          onClick={code.openGuide ?? code.install}
+        >
+          {code.openGuide ? WORDS.installGuide : WORDS.setUp}
         </Button>
       );
     case OpenCodeRowState.FreeOnly:
@@ -165,7 +172,7 @@ function OpenCodeAside({ code, free }: { code: OpenCode; free: FreeModels | null
           <button type="button" className="onboarding-link" data-state="idle" onClick={code.recheck}>
             {WORDS.checkAgain}
           </button>
-          <p className="onboarding-note">{WORDS.setUpNote}</p>
+          <p className="onboarding-note">{code.openGuide ? WORDS.guideNote : WORDS.setUpNote}</p>
         </>
       );
     case OpenCodeRowState.Installing:

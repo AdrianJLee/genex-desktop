@@ -4,11 +4,18 @@
  * Main owns the job; this reads it once and then follows its events.
  */
 import { useCallback, useEffect, useState } from "react";
-import { CliInstallOperation, CliInstallPhase, CliInstallProblem, type CliInstallJob } from "../shared/cli-install.ts";
+import {
+  CliInstallOperation,
+  CliInstallPhase,
+  CliInstallProblem,
+  type CliInstallJob,
+  installsInApp,
+} from "../shared/cli-install.ts";
 import { t } from "../shared/i18n.ts";
 import { providerInfo } from "../shared/providers.ts";
 import { UiEvent } from "../shared/ui-events.ts";
 import { reportCliInstallRefused } from "./analytics/welcome-report.ts";
+import { hostPlatform } from "./platform.ts";
 import { problemWords } from "./words.ts";
 
 /** What each failed install says, by why it failed. */
@@ -18,6 +25,8 @@ const PROBLEM: Record<CliInstallProblem, (name: string) => string> = {
   [CliInstallProblem.Installer]: (name) => t("{name} didn't install. Try again.", { name }),
   [CliInstallProblem.TimedOut]: (name) => t("Installing {name} took too long. Try again.", { name }),
   [CliInstallProblem.NotFound]: (name) => t("{name} installed, but Genex can't find it. Try again.", { name }),
+  [CliInstallProblem.Unsupported]: (name) =>
+    t("Genex can't install {name} on this computer. Install it with its guide, then check again.", { name }),
 };
 
 /** What a failed install says, or null when the job did not fail. */
@@ -37,7 +46,11 @@ export function newerReport(current: CliInstallJob | null, next: CliInstallJob):
   return alreadyFinished ? current : next;
 }
 
-/** `provider`'s in-app install: the latest job, whether it runs, what went wrong, and Install. */
+/**
+ * `provider`'s in-app install: the latest job, whether it runs, what went wrong, and Install.
+ * `inApp` is false where its vendor publishes no installer Genex can run (`installsInApp`): the row
+ * offers the install guide instead of an Install that can only fail.
+ */
 export function useCliInstall(provider: string) {
   const [job, setJob] = useState<CliInstallJob | null>(null);
   const [refused, setRefused] = useState<string | null>(null);
@@ -80,5 +93,6 @@ export function useCliInstall(provider: string) {
     }
   }, [provider]);
   const installing = job?.phase === CliInstallPhase.Installing;
-  return { job, installing, problem: refused ?? cliInstallProblemWords(job), install, update };
+  const inApp = installsInApp(provider, hostPlatform());
+  return { job, installing, inApp, problem: refused ?? cliInstallProblemWords(job), install, update };
 }

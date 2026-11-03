@@ -116,8 +116,11 @@ Install (Update for a CLI too old) in Settings → Model Providers and the chat'
 Set up in first launch, installs Claude Code or Codex with its vendor's own installer, in the background:
 `install.sh` on macOS and Linux, `install.ps1` on Windows, from `claude.ai` and
 `chatgpt.com/codex`. Settings installs OpenCode the same way from `opencode.ai/install` (macOS and
-Linux only; it publishes no Windows script) into `~/.opencode/bin`, and updates it with
-`opencode upgrade`; Grok Build from `x.ai/cli/install.sh` (`install.ps1` on Windows) into
+Linux only) into `~/.opencode/bin`, and updates it with `opencode upgrade`. OpenCode publishes no
+Windows script (it installs there with Chocolatey, Scoop or npm), so on Windows its row and its
+first-launch screen offer its install guide and Check again instead of Install
+(`installsInApp` in [cli-install.ts](../src/shared/cli-install.ts)), and an install asked for anyway
+fails as `unsupported`, never as a download; Grok Build from `x.ai/cli/install.sh` (`install.ps1` on Windows) into
 `~/.grok/bin`, updated with `grok update`; and Cursor from `cursor.com/install` (`?win32=true` on
 Windows) into `~/.local/bin` (`%LOCALAPPDATA%\cursor-agent` on Windows), updated with
 `cursor-agent update`. Cursor's installer also links `~/.local/bin/agent`, a name Grok Build's

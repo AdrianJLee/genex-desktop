@@ -6252,4 +6252,10 @@ export default {
   "{n, plural, one {{count} play} other {{count} plays}}":
     "{n, plural, one {{count}× gespielt} other {{count}× gespielt}}",
   "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, one {{count} Like} other {{count} Likes}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex kann {name} auf diesem Computer nicht installieren. Installier es mit seiner Anleitung und prüf dann noch mal.",
+  "Install {name} with its guide, then check again.": "Installier {name} mit seiner Anleitung und prüf dann noch mal.",
+  "Open install guide": "Installationsanleitung öffnen",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "Unter Windows wird OpenCode laut Anleitung mit Chocolatey, Scoop oder npm installiert. Prüf danach noch mal.",
 } satisfies LocaleCatalog;

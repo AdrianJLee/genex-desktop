@@ -6145,4 +6145,10 @@ export default {
     "{n, plural, one {{count} запуск} few {{count} запуска} many {{count} запусков} other {{count} запуска}}",
   "{n, plural, one {{count} like} other {{count} likes}}":
     "{n, plural, one {{count} лайк} few {{count} лайка} many {{count} лайков} other {{count} лайка}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex не может установить {name} на этот компьютер. Установи его по инструкции и нажми «Проверить снова».",
+  "Install {name} with its guide, then check again.": "Установи {name} по инструкции и нажми «Проверить снова».",
+  "Open install guide": "Открыть инструкцию",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "На Windows OpenCode ставится по инструкции через Chocolatey, Scoop или npm. Потом нажми «Проверить снова».",
 } satisfies LocaleCatalog;

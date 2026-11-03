@@ -2748,6 +2748,9 @@ export const METERED_PROVIDER_WORDS = {
   couldNotCheck: t("Couldn't check"),
   checkAgain: t("Check again"),
   tryAgain: t("Try again"),
+  installGuide: t("Install guide"),
+  /** A CLI Genex can't install on this computer (`installsInApp`): the person follows its guide. */
+  installByGuideLine: (name: string) => t("Install {name} with its guide, then check again.", { name }),
   account: t("Account"),
   checkConnection: t("Check connection"),
   checkConnectionLine: t("Also refreshes the model list"),

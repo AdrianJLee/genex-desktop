@@ -5965,4 +5965,10 @@ export default {
   Shots: "스크린샷",
   "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, other {플레이 {count}회}}",
   "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, other {좋아요 {count}개}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex는 이 컴퓨터에 {name}을(를) 설치할 수 없어요. 가이드대로 설치한 다음 다시 확인해 주세요.",
+  "Install {name} with its guide, then check again.": "가이드대로 {name}을(를) 설치한 다음 다시 확인해 주세요.",
+  "Open install guide": "설치 가이드 열기",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "Windows에서는 가이드대로 Chocolatey, Scoop 또는 npm으로 OpenCode를 설치해요. 그다음 다시 확인해 주세요.",
 } satisfies LocaleCatalog;

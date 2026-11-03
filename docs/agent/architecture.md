@@ -575,20 +575,21 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
   (`director/integrate.ts` `afterMerge`, `loop/health-check.ts`: the host's `preview.observe` in a
   window of the run's own). A lock is refused on a web Loop; once finish was asked, no worker
   starts.
-- The wake loop (`loop/director/wake.ts`, rules `wake-schedule.ts`, words `wake-prompts.ts`): the
-  lead ends its turn and the harness resumes the session with a digest (the user's words verbatim,
-  what happened, where the run stands) when the user speaks or asks to finish, a worker ends or
-  asks, a job ends, the app crashes or the wrap-up is due; no heartbeat or reminder wakes it. A
-  lead that ended a turn rests while workers or jobs are at work, and a turn that ends with nothing
-  at work closes the Loop; each wake appends `director_continued`.
+- The wake loop (`loop/director/wake.ts`, rules `wake-schedule.ts`, the one channel `news.ts`,
+  Genex's own lines `wake-prompts.ts`): the lead ends its turn and the harness resumes the session
+  with the person's message as they wrote it, or with Genex's one-line facts (a worker or a job
+  ended, the app stopped or came back, the person's Finish, a failed turn), marked as Genex's; no
+  heartbeat, reminder or digest. What comes while a turn works reaches it at its next step. A lead
+  that ended a turn rests while workers or jobs are at work, and a turn that ends with nothing at
+  work closes the Loop; the lead calls `run_status` for where the run stands
+  ([what wakes a Loop's lead](../harness-runtime.md#what-wakes-a-loops-lead)).
 - The full journal (`loop/director/journal.ts`): each save writes the run's record on
   `journal.director` (health, recent log, wake state). A Resume reads it back (`restoreLoopRun`);
   an earlier seed's `clock` in it is read by nothing.
-- The chat's messages reach the lead as written, each with its sender, once per steer and run:
-  mid-turn one steer each, and after a cut the resume of one sender's words at a time (the
-  person's `from: person`); Genex's own messages and lines said into a turn go `from: genex`
-  (`MessageFrom`), which each engine shows as not the person's. A wake's digest still carries them
-  under THE USER SAYS.
+- The chat's messages reach the lead as written, each with its sender, once: mid-turn one steer
+  each, and as a wake or after a cut the leading messages of one sender joined as written (the
+  person's `from: person`); Genex's own messages and lines go `from: genex` (`MessageFrom`), which
+  each engine shows as not the person's.
 - Live chat (`loop/live-chat.ts`, `director/lead-line.ts`) and one session
   (`director/lead-session.ts`, `after-loop-run.ts`, the host's `#leadRoot`): the
   lead is the chat's own session, one per chat, which goes on after the close

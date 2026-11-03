@@ -71,18 +71,18 @@ is product copy, not this glossary.
 - **Run**: the Loop's run as one explicit object (`prepareLoopRun` in
   `loop/director/setup.ts`); every function of the run takes it first (`loop/director/loop-run.ts`),
   and what needs no run is beside it: `rules.ts` (the landing's words, plain card sentences),
-  `args.ts`, `briefs.ts` and `tool-specs.ts`.
+  `args.ts` and `tool-specs.ts`.
 - **Health check**: the one check before a web game's merge settles and before its build lands —
   the page loads, no uncaught error, a frame that is not blank — the host's `preview.observe` in a
   window of the Loop's own (`loop/health-check.ts`).
 - **Second opinion**: a model that did none of the work, asked by the lead about pictures and a
   question it chooses (`judge`, `loop/second-opinion.ts`), or a reviewer asked with `finish
   review=yes` (`loop/finish-check.ts`); it decides nothing.
-- **Wake / digest**: how the director's session is driven (`loop/director/wake.ts`). The lead
-  ends its turn after each decision and the harness wakes the same session when something happens
-  (`wake-schedule.ts` decides when, from typed `NoteKind` lines and timers). The digest opens each
-  wake: the user's words verbatim, what happened and where the run stands (`wake-prompts.ts`). A
-  turn cut short for the person's words resumes with those words alone.
+- **Wake**: how the director's session is driven (`loop/director/wake.ts`). The lead ends its turn
+  when it decides to and the harness wakes the same session when something happens
+  (`wake-schedule.ts` decides when, from typed `NoteKind` lines): with the person's message as they
+  wrote it, or Genex's one-line facts (`director/news.ts`), never a digest. A turn cut short for the
+  person's words resumes with those words alone.
 - **Lead / one session**: a waking web run's director that is its chat's own session (one per chat), building in
   the integration worktree with its own hands beside its workers, never read-only
   (`loop/director/lead-session.ts`). After the close the same

@@ -426,6 +426,8 @@ const imageCounts = (message: QueuedMessage): ImageCounts => (message.action ?? 
 /** How many of a message's pictures the composer attached (never more than it carried). */
 const attached = ({ pickedImages, imageCount }: ImageCounts): number =>
   Math.min(pickedImages ?? imageCount ?? 0, imageCount ?? 0);
+/** How many of a queued message's pictures go back to the composer with it: the ones the composer attached. */
+export const composerPictures = (message: QueuedMessage): number => attached(imageCounts(message));
 
 /** A message that has a user bubble, with that bubble's id. */
 type Bubbled = QueuedMessage & { eventId: string };

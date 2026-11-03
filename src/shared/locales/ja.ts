@@ -2973,6 +2973,9 @@ export default {
   "Remove plugin": "プラグインを削除",
   "Remove preset": "プリセットを削除",
   "Remove queued message": "待機中のメッセージを削除",
+  "Edit queued message": "待機中のメッセージを編集",
+  "Send now": "今すぐ送信",
+  "Stop and send now": "停止して今すぐ送信",
   "Remove tag": "タグを外す",
   "Remove the waiting messages first: this harness cannot take them back.":
     "先に待機中のメッセージを削除してください。このHarnessはそれを取り消せません。",

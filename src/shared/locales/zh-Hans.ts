@@ -2803,6 +2803,9 @@ export default {
   "Remove plugin": "移除插件",
   "Remove preset": "删除预设",
   "Remove queued message": "移除排队中的消息",
+  "Edit queued message": "编辑排队中的消息",
+  "Send now": "立即发送",
+  "Stop and send now": "停止并立即发送",
   "Remove tag": "移除标记",
   "Remove the waiting messages first: this harness cannot take them back.":
     "请先移除排队中的消息：这个 Harness 无法撤回它们。",

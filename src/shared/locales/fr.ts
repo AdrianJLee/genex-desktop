@@ -3030,6 +3030,9 @@ export default {
   "Remove plugin": "Supprimer le plugin",
   "Remove preset": "Supprimer le préréglage",
   "Remove queued message": "Retirer le message en attente",
+  "Edit queued message": "Modifier le message en attente",
+  "Send now": "Envoyer maintenant",
+  "Stop and send now": "Arrêter et envoyer maintenant",
   "Remove tag": "Retirer le tag",
   "Remove the waiting messages first: this harness cannot take them back.":
     "Retire d’abord les messages en attente : ce Harness ne peut pas les reprendre.",

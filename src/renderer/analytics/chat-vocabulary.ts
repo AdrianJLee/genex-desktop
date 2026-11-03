@@ -132,7 +132,7 @@ export const LeftTo = { OtherChat: "other_chat", Home: "home" } as const;
 export type LeftTo = (typeof LeftTo)[keyof typeof LeftTo];
 
 /** How Stop was asked. */
-export const StopVia = { Button: "button", Escape: "escape" } as const;
+export const StopVia = { Button: "button", Escape: "escape", SendNow: "send_now" } as const;
 export type StopVia = (typeof StopVia)[keyof typeof StopVia];
 
 /** Why a Stop press did nothing. */

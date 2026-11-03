@@ -324,6 +324,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   session's yes covers every app. The turn answering an assist the person pressed (or approved on its
   card) asks neither: that press was their yes, and the grant keeps the turn to the plugin's apps. A yes stands while the driver fails to connect (missing grants, no
   driver): the next call retries without a new card. A stop ends it, and the next call asks again.
+  A card nobody answers before it expires is no answer (`DesktopAnswer.Unanswered`): the model reads
+  that nobody answered and nothing moved, never that the person said no, and the next call asks again.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; on Windows the same by
   executable (`NEVER_DRIVEN_WINDOWS_APPS`), every packaged app's frame (`ApplicationFrameHost.exe`,

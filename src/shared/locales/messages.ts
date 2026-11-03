@@ -3668,6 +3668,8 @@ export const MESSAGES = [
   "Toggle Developer Tools",
   "Toggle Full Screen",
   "Toggle terminal",
+  "Told a worker: {said}",
+  "Told “{task}”: {said}",
   "Too large to run locally",
   "Too large to save, so it stays as it is: {names}.",
   "Too large to save, so they stay as they are: {names}.",

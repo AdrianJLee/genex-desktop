@@ -4131,6 +4131,8 @@ export default {
   "Toggle Developer Tools": "Инструменты разработчика",
   "Toggle Full Screen": "Полноэкранный режим",
   "Toggle terminal": "Показать или скрыть терминал",
+  "Told a worker: {said}": "Сказал помощнику: {said}",
+  "Told “{task}”: {said}": "Сказал «{task}»: {said}",
   "Too large to run locally": "Слишком большая для локального запуска",
   "Too large to save, so it stays as it is: {names}.":
     "Файл слишком большой для сохранения и останется как есть: {names}.",

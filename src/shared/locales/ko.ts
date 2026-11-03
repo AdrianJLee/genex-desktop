@@ -4053,6 +4053,8 @@ export default {
   "Toggle Developer Tools": "개발자 도구",
   "Toggle Full Screen": "전체 화면",
   "Toggle terminal": "터미널 열기/닫기",
+  "Told a worker: {said}": "작업자에게 전달: {said}",
+  "Told “{task}”: {said}": "“{task}”에 전달: {said}",
   "Too large to run locally": "로컬에서 실행하기엔 너무 커요",
   "Too large to save, so it stays as it is: {names}.": "저장하기에 너무 커서 그대로 둬요: {names}.",
   "Too large to save, so they stay as they are: {names}.": "저장하기에 너무 커서 그대로 둬요: {names}.",

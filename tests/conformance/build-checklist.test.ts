@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { savePointRound } from "../../src/harness-seed/loop/director/open/graph.ts";
 import { buildChecklist, checklistCaption, PartMark } from "../../src/renderer/chat/build-checklist.ts";
+import { EntryAction, EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
 import { buildHistory } from "../../src/renderer/build-progress.ts";
 import { BuildBarShape, buildBarShape } from "../../src/renderer/panels/run-graph/bar-shape.ts";
 import { BUILD_CHECKLIST_WORDS } from "../../src/renderer/words.ts";
@@ -263,6 +264,10 @@ describe("the building-card dev fixture", () => {
       6,
       "the five earlier Loops' asks and this one's; seeding again writes nothing",
     );
+    const told = toEntries(log).flatMap((entry) =>
+      entry.kind === EntryKind.Action && entry.action === EntryAction.Told ? [entry.text] : [],
+    );
+    assert.deepEqual(told, ["Told “Cars: clear-coat finish”: Change from the person: make the cars red."]);
   });
 
   it("gives the chat more builds than the Builds bar shows as tabs, so it holds them in its picker", async () => {

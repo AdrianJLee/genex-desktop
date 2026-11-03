@@ -27,7 +27,7 @@ import { ChatQuestion } from "./ChatQuestion.tsx";
 import { EngineLinkLine } from "./EngineLinkLine.tsx";
 import { RewindLine } from "./RewindLine.tsx";
 import { JobLine } from "./JobLine.tsx";
-import { WorkerLine } from "./WorkerLine.tsx";
+import { ToldLine, WorkerLine } from "./WorkerLine.tsx";
 import { AppAccessLine } from "./AppAccessLine.tsx";
 import { WentAheadLine } from "./WentAheadLine.tsx";
 import { JudgeLine } from "./JudgeLine.tsx";
@@ -319,7 +319,7 @@ function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryK
 
 /**
  * The action entries that are one quiet line: an engine link, a rewind that put files back, a job,
- * a worker, a missing permission, an agent that went ahead of the person, a judge's play.
+ * a worker, what a worker was told, a missing permission, an agent that went ahead of the person, a judge's play.
  */
 function quietLine(
   entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
@@ -331,6 +331,7 @@ function quietLine(
     return <RewindLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Job) return <JobLine entry={entry} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Worker) return <WorkerLine entry={entry} />;
+  if (entry.action === EntryAction.Told) return <ToldLine entry={entry} />;
   if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.WentAhead) return <WentAheadLine entry={entry} />;
   if (entry.action === EntryAction.Judge && entry.judge) return <JudgeLine judge={entry.judge} />;

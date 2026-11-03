@@ -4162,6 +4162,8 @@ export default {
   "Toggle Developer Tools": "デベロッパーツール",
   "Toggle Full Screen": "フルスクリーン",
   "Toggle terminal": "ターミナルの表示を切り替え",
+  "Told a worker: {said}": "ワーカーに伝えた：{said}",
+  "Told “{task}”: {said}": "「{task}」に伝えた：{said}",
   "Too large to run locally": "大きすぎてローカルでは動かせません",
   "Too large to save, so it stays as it is: {names}.": "保存するには大きすぎるため、そのままになります：{names}。",
   "Too large to save, so they stay as they are: {names}.": "保存するには大きすぎるため、そのままになります：{names}。",

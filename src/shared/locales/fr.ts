@@ -4223,6 +4223,8 @@ export default {
   "Toggle Developer Tools": "Outils de développement",
   "Toggle Full Screen": "Plein écran",
   "Toggle terminal": "Afficher ou masquer le terminal",
+  "Told a worker: {said}": "Dit à un assistant : {said}",
+  "Told “{task}”: {said}": "Dit à « {task} » : {said}",
   "Too large to run locally": "Trop lourd pour tourner en local",
   "Too large to save, so it stays as it is: {names}.":
     "Ce fichier est trop volumineux pour être sauvegardé et reste tel quel : {names}.",

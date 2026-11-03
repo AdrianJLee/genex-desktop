@@ -2355,6 +2355,9 @@ export const WORKER_LINE_WORDS = {
       ? `${t("{task}: didn't finish.", { task: title })} ${asSentence(WORKER_STOP_WORDS[because])}`
       : t("{task}: didn't finish.", { task: title }),
   stopped: (title: string) => t("{task}: stopped.", { task: title }),
+  /** The lead redirected a worker (`worker_steer`): the worker's task, when known, and what it was told. */
+  told: (title: string | null, said: string) =>
+    title ? t("Told “{task}”: {said}", { task: title, said }) : t("Told a worker: {said}", { said }),
 } as const;
 
 /**

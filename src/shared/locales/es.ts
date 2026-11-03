@@ -4214,6 +4214,8 @@ export default {
   "Toggle Developer Tools": "Herramientas para desarrolladores",
   "Toggle Full Screen": "Pantalla completa",
   "Toggle terminal": "Mostrar u ocultar terminal",
+  "Told a worker: {said}": "Le dije a un ayudante: {said}",
+  "Told “{task}”: {said}": "Le dije a “{task}”: {said}",
   "Too large to run locally": "Demasiado grande para ejecutarlo en local",
   "Too large to save, so it stays as it is: {names}.":
     "Es demasiado grande para guardarlo, así que se queda como está: {names}.",

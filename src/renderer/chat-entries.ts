@@ -44,6 +44,7 @@ import {
 } from "../shared/game-assets.ts";
 import { GENEX_COVER_TOOL, GENEX_PLUGIN_ID, GenexCoverOperation } from "../shared/genex.ts";
 import { SteerDelivery } from "../shared/message-queue.ts";
+import { poolWorkerId, WorkerTool } from "../shared/workers.ts";
 import { ExecutionStatus, RoundOutcome, roundOutcome } from "../shared/run-state.ts";
 import { skillUpdatedWords } from "../shared/skill-words.ts";
 import { MINUTE_MS } from "../shared/duration.ts";
@@ -95,7 +96,9 @@ import {
   showWords,
   snapshotWords,
   soundsLikeTrouble,
+  firstSentence,
   TRANSCRIPT_WORDS,
+  WORKER_LINE_WORDS,
   toolActivityWords,
   toolWords,
   usingPluginWords,
@@ -145,6 +148,8 @@ export const EntryAction = {
   Job: "job",
   /** A worker a lead started (`worker_started`): one line naming its task, rewritten as it ends. */
   Worker: "worker",
+  /** A session redirected a worker (`worker_steer`): one line, what it told it. */
+  Told: "told",
   /** Genex can't see app windows yet (`app_look_access`): one line, with Open Privacy settings per pane. */
   AppAccess: "app-access",
   /** A blind judge played the game for the chat's own session (`chat_judge_result`): one line, the question inside. */
@@ -620,6 +625,8 @@ interface ChatDraft {
   endedJobs: Set<string>;
   /** Each worker's line by its graph and id (`workerKeyOf`), with what its records said, so later ones rewrite it. */
   workerLines: Map<string, { entry: ActionEntry; line: WorkerLine }>;
+  /** Each worker's task by the id its records name (`pool.w2`), a run's too: what a steer's line calls it. */
+  workerTitles: Map<string, string>;
   /** The chat's newest result card: only it offers Keep building. */
   latestResult: MorningEntry | null;
 }
@@ -672,6 +679,7 @@ function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, str
     jobs: new Map(),
     endedJobs: new Set(),
     workerLines: new Map(),
+    workerTitles: new Map(),
     latestResult: null,
     rounds: { kept: 0, undone: 0, firstShot: null, lastShot: null },
     rowByCall: new Map(),
@@ -1079,6 +1087,7 @@ function readDelegatedTurn(chat: ChatDraft, eventId: string, scope: string, payl
     // next tool call does not say better. Only what it *did* gets a row.
     if (part.type !== "tool_use" || !part.name) continue;
     if (recordedByHost(chat, part.name)) continue;
+    if (readSteer(chat, key, part)) continue;
     addDelegatedToolRow(chat, eventId, scope + (part.id ?? key), part, payload);
   }
 }
@@ -1139,6 +1148,23 @@ function addDelegatedToolRow(
   toolGroup(chat, eventId).rows.push(row);
   chat.rowByCall.set(row.key, row);
   trackCaller(chat, row.key, payload);
+}
+
+/**
+ * A session redirecting a worker it started (`worker_steer`): a line of its own with the worker's
+ * task and the first sentence it was told, as Claude Code shows the call. Folded among the turn's
+ * tool calls, a steer that acts on the person's message mid-build read as that message ignored.
+ */
+function readSteer(chat: ChatDraft, key: string, part: DelegatedPart): boolean {
+  if (part.name?.trim().replace(STUDIO_TOOL_PREFIX, "") !== WorkerTool.Steer) return false;
+  const input = typeof part.input === "object" && part.input ? (part.input as { id?: unknown; text?: unknown }) : {};
+  const said = typeof input.text === "string" ? firstSentence(input.text) : "";
+  if (!said) return false;
+  const title = typeof input.id === "string" ? (chat.workerTitles.get(poolWorkerId(input.id)) ?? null) : null;
+  closeGroup(chat);
+  const text = WORKER_LINE_WORDS.told(title, said);
+  chat.entries.push({ id: key, kind: EntryKind.Action, tag: SystemTag.TheLead, action: EntryAction.Told, text });
+  return true;
 }
 
 /** Who made a delegated call: the run it answers for, and whether a build's worker (a facet) made it. */
@@ -1382,6 +1408,7 @@ const ofRun = (payload: { runId?: unknown }): boolean => typeof payload.runId ==
  */
 function narrateWorkerStarted(chat: ChatDraft, event: EventEnvelope): void {
   const payload = customPayload(event.data, CustomEvent.WorkerStarted);
+  if (payload?.workerId && payload.title) chat.workerTitles.set(payload.workerId, payload.title);
   const key = payload && !ofRun(payload) ? workerKeyOf(payload) : null;
   if (!payload || !key) return;
   const known = chat.workerLines.get(key)?.line;

@@ -3904,6 +3904,8 @@ export default {
   "Toggle Developer Tools": "开发者工具",
   "Toggle Full Screen": "全屏",
   "Toggle terminal": "显示/隐藏终端",
+  "Told a worker: {said}": "已告诉一个助手：{said}",
+  "Told “{task}”: {said}": "已告诉“{task}”：{said}",
   "Too large to run locally": "太大，无法在本地运行",
   "Too large to save, so it stays as it is: {names}.": "文件太大无法保存，将保持原样：{names}。",
   "Too large to save, so they stay as they are: {names}.": "这些文件太大无法保存，将保持原样：{names}。",

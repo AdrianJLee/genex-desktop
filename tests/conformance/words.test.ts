@@ -1051,7 +1051,7 @@ describe("tools", () => {
 
   it("names the lead's and the chat's run tools, never 'used …'", () => {
     const names = [
-      ...Object.values(DirectorTool).filter((name) => name !== DirectorTool.ResolveRoot),
+      ...Object.values(DirectorTool),
       // Every lead's and the chat's worker tools, the same six everywhere.
       ...Object.values(WorkerTool),
       // The background-work tools and the look-only app tool the chat, leads and workers share.

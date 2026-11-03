@@ -2,22 +2,14 @@
  * Genex's own gates, registered for the facts they guard and run beside the plugins' hooks at the
  * same moments: code, never advice. A gate reads typed fields only (never the words of a problem),
  * and reaches a game only where the facts it names are served at the root, the folder a Loop works
- * in, of a game whose Loop is the web method's. Its answer is shaped like a plugin's (`HookReport`'s `blocked` and `notes`), so a caller merges
+ * in. Its answer is shaped like a plugin's (`HookReport`'s `blocked` and `notes`), so a caller merges
  * it after `fireHooks`.
  *
  * A module of its own: the parts that call it may be ones an agent kept from before, and a kept copy
  * exports only what it did then.
  */
 import type { HookReport } from "../types/host-api.d.ts";
-import {
-  CoreFact,
-  FACT_ROOT,
-  type FactsOfDescriptor,
-  hasFact,
-  LoopProfile,
-  loopProfileOf,
-  servedFactsOf,
-} from "./folder-facts.ts";
+import { CoreFact, FACT_ROOT, type FactsOfDescriptor, hasFact, servedFactsOf } from "./folder-facts.ts";
 import { GENEX, HookEvent } from "./hooks.ts";
 
 /** Genex's own gates, by the name a block carries as its step. Never rename a value. */
@@ -56,13 +48,8 @@ const MESSAGE = {
     `${name} is not ready for a run: ${missing.map((file) => `${file} is missing`).join("; ")}. Fix that first (a chat build can), then start again.`,
 } as const;
 
-/**
- * The gates that reach a game at a moment: those whose facts it is served by at its root, and only
- * for a web game's Loop (`loopProfileOf`): a project led in place is never asked for a web page,
- * whatever else its folder holds.
- */
+/** The gates that reach a game at a moment: those whose facts it is served by at its root. */
 export function gatesOn(on: HookEvent, game: FactsOfDescriptor): BuiltinGate[] {
-  if (loopProfileOf(game) !== LoopProfile.Web) return [];
   const served = servedFactsOf(game);
   return BUILTIN_HOOKS.filter((hook) => hook.on === on && hook.facts.some((id) => hasFact(served, id, FACT_ROOT))).map(
     (hook) => hook.gate,

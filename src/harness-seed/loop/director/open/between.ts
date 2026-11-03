@@ -29,7 +29,8 @@ import { closeUnderWay } from "../close-latch.ts";
 import { NoteKind } from "../wake-schedule.ts";
 import { folderChanged } from "./close.ts";
 import { asksPending, type OpenLoop, type OpenRewind } from "./contract.ts";
-import { heldForLead, OPEN_NEWS } from "./prompts.ts";
+import { heldForLead } from "../held-words.ts";
+import { OPEN_NEWS } from "./prompts.ts";
 import { checkpointNow, queued, recordSavePoint } from "./save-point.ts";
 import { writersInPlace } from "./writers.ts";
 

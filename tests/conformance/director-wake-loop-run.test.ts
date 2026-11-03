@@ -160,8 +160,9 @@ describe("the lead is woken, not kept in one long turn", () => {
     // Flipped: the wake was recorded as `director_continued` "worker_ended"; what woke the lead is what it read.
     assert.deepEqual(customEvents(events, "director_continued"), []);
     const finishedEvent = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
-    // Flipped (Loop phase 5): the close names the lead.
-    assert.equal(finishedEvent.stoppedBecause, "the lead finished the run");
+    // Flipped (Loop phase 5): the close names the lead. Flipped again (one Loop): a web game's Loop
+    // closes in place on the lead's word, as every Loop does ("the lead finished the run" was its landing's).
+    assert.equal(finishedEvent.stoppedBecause, "the lead says the goal is reached");
     assert.match(results.integrated, /^Merged w1's work into your folder/, results.integrated);
 
     const threadId = await rig.core.threadForGame(project.name);

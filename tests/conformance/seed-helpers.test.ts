@@ -5,7 +5,6 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { LABEL_SHA_LENGTH, SHORT_SHA_LENGTH, shortSha } from "../../src/harness-seed/loop/git.ts";
 import { CLIP_QUOTE, clip, clipMarked } from "../../src/harness-seed/loop/text.ts";
 import {
   CANCEL_POLL_MS,
@@ -17,8 +16,6 @@ import {
   sleepUnlessCancelled,
 } from "../../src/harness-seed/loop/time.ts";
 import { NotLandedReason, VerdictRule, verdictRecord } from "../../src/harness-seed/loop/verdict.ts";
-
-const SHA = "0123456789abcdef0123456789abcdef01234567";
 
 describe("time", () => {
   it("counts in milliseconds", () => {
@@ -63,14 +60,6 @@ describe("text cut to fit", () => {
     assert.equal(clipMarked("abcdef", 3), "abc…");
     assert.equal(clipMarked("abc", 3), "abc");
     assert.equal(clipMarked(undefined, 3), "");
-  });
-});
-
-describe("a commit as a line quotes it", () => {
-  it("keeps as much as a sentence or a label needs", () => {
-    assert.equal(shortSha(SHA), SHA.slice(0, SHORT_SHA_LENGTH));
-    assert.equal(shortSha(SHA, LABEL_SHA_LENGTH), SHA.slice(0, LABEL_SHA_LENGTH));
-    assert.equal(shortSha("abc"), "abc");
   });
 });
 

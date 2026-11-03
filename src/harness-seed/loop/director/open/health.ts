@@ -35,7 +35,7 @@ import type { LoopRun } from "../loop-run.ts";
 import { closeUnderWay, finishUnderWay } from "../close-latch.ts";
 import { NoteKind } from "../wake-schedule.ts";
 import { HEALTH_POLL_MS, MAX_REOPENS, OPEN_CLOSE_MS, type OpenLoop, type OpenSavePoint } from "./contract.ts";
-import { appLostWords, backHeldWords, crashHeldWords } from "./hold-words.ts";
+import { appLostWords, backHeldWords, crashHeldWords } from "../held-words.ts";
 import { OPEN_NEWS } from "./prompts.ts";
 import { stopWritersInPlace } from "./writers.ts";
 

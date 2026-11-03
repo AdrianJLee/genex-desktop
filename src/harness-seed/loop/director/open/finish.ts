@@ -1,7 +1,9 @@
 /**
- * The open lead's `finish`: its claim that the project meets the request. Genex's finish moment runs
- * first (a plugin may hold the finish back: the lead hears why and keeps working); then the claim
- * closes the Loop in place on the lead's word (Loop phase 4). With `review=yes` the lead asks a
+ * The lead's `finish`: its claim that the project meets the request. Genex's finish moment runs
+ * first (a plugin may hold the finish back: the lead hears why and keeps working), and a web game's
+ * page gets one health check in the game folder (it loads, throws nothing uncaught, its frame is not
+ * blank: a failing one comes back to the lead, and the Loop goes on); then the claim closes the Loop
+ * in place on the lead's word (Loop phase 4). With `review=yes` the lead asks a
  * reviewer that did none of the work for a second opinion first (`../../finish-check.ts`), reading
  * the game folder, the lead's proof and the observers' captures: a yes closes the Loop as reviewed,
  * and a no comes back with its reasons and decides nothing. A finish the person asked for needs no
@@ -29,7 +31,9 @@ import { remainingOf } from "../../finish-remaining.ts";
 import { fireHooks, HookEvent, runScope } from "../../hooks.ts";
 import { HOOK_PROMPTS } from "../../hooks-prompts.ts";
 import { CLIP_REASON, clipMarked, hasText } from "../../text.ts";
-import { SECOND_MS, sleep } from "../../time.ts";
+import { SECOND_MS } from "../../time.ts";
+import { servedAsWeb } from "../../folder-facts.ts";
+import { checkHealth, healthLine } from "../../health-check.ts";
 import { yes } from "../args.ts";
 import { closeUnderWay, holdFinish, releaseFinish } from "../close-latch.ts";
 import { CLAIM_WORDS } from "../second-opinion-prompts.ts";
@@ -61,8 +65,8 @@ export const MESSAGE = {
 /** How often a close running past the lead's call is looked at, until the call must answer. */
 const CLOSE_POLL_MS = SECOND_MS;
 
-/** The Loop's clock: the wake loop's, else the wall clock (a run a kept older setup made). */
-const clockOf = (loopRun: LoopRun): OpenClock => loopRun.open?.clock ?? { now: Date.now, sleep };
+/** The Loop's clock: the wake loop's. */
+const clockOf = (loopRun: LoopRun): OpenClock => loopRun.open.clock;
 
 /** Whether the Loop is closing or closed: nothing more is claimed or ended then. */
 const closing = (loopRun: LoopRun): boolean =>
@@ -190,6 +194,18 @@ async function checked(loopRun: LoopRun, claim: FinishClaim, started: number): P
   }
 }
 
+/**
+ * A web game's page, checked once in the game folder before its Loop closes: what is wrong with it,
+ * or null when it is healthy, the project is no web game, or no check could be made.
+ */
+async function pageProblems(loopRun: LoopRun): Promise<string | null> {
+  const { ctx, gameFacts, open, run } = loopRun;
+  if (!servedAsWeb({ facts: gameFacts, holds: open.holds })) return null;
+  const target = { project: run.project, runId: run.runId, label: "director/finish" };
+  const check = await checkHealth(ctx, target, { sleep: clockOf(loopRun).sleep });
+  return check.ok || check.unchecked ? null : OPEN_WORDS.unhealthy(healthLine(check));
+}
+
 /** The claim itself, once the finish is the lead's alone: the moment, then the close on the lead's word or after the review it asked for. */
 async function claimFinish(loopRun: LoopRun, args: AnyRecord, started: number): Promise<string> {
   if (await loopRun.inbox.finishing().catch(() => false)) {
@@ -201,6 +217,8 @@ async function claimFinish(loopRun: LoopRun, args: AnyRecord, started: number): 
   const review = yes(args.review, false);
   const held = await fireHooks(loopRun.ctx, loopRun.game, HookEvent.Finish, runScope(loopRun));
   if (held.blocked) return HOOK_PROMPTS.finishHeld(held.blocked.reason);
+  const unhealthy = await pageProblems(loopRun);
+  if (unhealthy) return unhealthy;
   if (!review) {
     const closed = await closeWithinCall(loopRun, { victory: true, because: MESSAGE.leadClaimed }, started);
     return closed ? CLAIM_WORDS.closedOnClaim : OPEN_WORDS.closing;

@@ -414,24 +414,12 @@ export function servedFacts(game: GameKind): FactRef[] {
 export const servedAsWebGame = (game: GameKind): boolean => hasFact(servedFacts(game), CoreFact.WebGame, ROOT);
 
 /**
- * How a Loop works on a project: the web method (an integration copy, builders, judges, landing) or
- * in place. Persisted in `autopilot_started.profile`: never rename a value.
+ * How a Loop worked on its project: in place (`open`, as every Loop does now), or in an integration
+ * copy (`web`, a web game's Loop an earlier Genex ran, read for history). Persisted in
+ * `autopilot_started.profile`: never rename a value.
  */
 export const LoopProfile = { Web: "web", Open: "open" } as const;
 export type LoopProfile = (typeof LoopProfile)[keyof typeof LoopProfile];
-
-/** The facts a web Loop's folder may hold beside its page. */
-export const WEB_LOOP_FACTS: ReadonlySet<string> = new Set<string>([CoreFact.WebGame, CoreFact.BlenderAssets]);
-
-/**
- * The profile a Loop on a game takes: web when a web game is served at its root (one with no kind
- * yet is) and every fact it is served by is one a web Loop's folder may hold; open otherwise (an
- * engine's project or plugin anywhere, a plugin's kind, or no web game at the root).
- */
-export function loopProfileOf(game: GameKind): LoopProfile {
-  const webOnly = servedFacts(game).every((fact) => WEB_LOOP_FACTS.has(fact.id));
-  return servedAsWebGame(game) && webOnly ? LoopProfile.Web : LoopProfile.Open;
-}
 
 /**
  * A game as a scope reads it: one given by its facts alone (`[]`: no kind yet), by its facts and

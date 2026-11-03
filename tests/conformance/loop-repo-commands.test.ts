@@ -9,16 +9,12 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   GIT,
-  commitAll,
   gitAt,
-  gitlinks,
   headOf,
   isAncestor,
-  landIntegration,
   mergeNoFf,
   refArg,
   resetClean,
-  unversionedNested,
   updateRef,
 } from "../../src/harness-seed/loop/git.ts";
 import { runRef } from "../../src/harness-seed/loop/repo.ts";
@@ -72,11 +68,14 @@ describe("the command lines", () => {
 });
 
 describe("running git in a worktree", () => {
+  // Flipped (one Loop): it drove `commitAll`, whose only callers were the web Loop's; the command
+  // lines it ran are the same two.
   it("commits a model-written message exactly, in two commands, and runs none of it", async () => {
     const dir = await repo();
     const recorder = shellCtx();
     await writeFile(path.join(dir, "new.js"), "export const x = 1;\n");
-    await commitAll(recorder.ctx, dir, HOSTILE, { allowEmpty: true, label: "facet:hud:git" });
+    await gitAt(recorder.ctx, dir, GIT.addAll, { label: "facet:hud:git" });
+    await gitAt(recorder.ctx, dir, GIT.commit(HOSTILE, { allowEmpty: true }), { label: "facet:hud:git" });
     assert.equal(await fixtureGit(dir, ["log", "-1", "--format=%B"]), HOSTILE);
     assert.equal(await fixtureGit(dir, ["status", "--porcelain"]), "", "everything was staged and committed");
     assert.deepEqual((await readdir(dir)).sort(), [".git", "index.html", "new.js"], "nothing in the message ran");
@@ -145,27 +144,6 @@ describe("running git in a worktree", () => {
     assert.ok(await stat(path.join(dir, "stray.js")), "a failed reset stops before the clean");
     await resetClean(recorder.ctx, dir, missing, { bestEffort: true });
     await assert.rejects(stat(path.join(dir, "stray.js")), "best-effort still cleans after a reset that failed");
-  });
-
-  it("lists a commit's nested-repository pointers, and which nested paths a build still holds as one", async () => {
-    const dir = await repo();
-    const inner = await repo({ "inner.txt": "inner\n" });
-    const innerHead = await fixtureGit(inner, ["rev-parse", "HEAD"]);
-    await fixtureGit(dir, ["update-index", "--add", "--cacheinfo", `160000,${innerHead},vendor/engine`]);
-    await fixtureGit(dir, ["commit", "-q", "-m", "a gitlink"]);
-    const recorder = shellCtx();
-    assert.deepEqual(await gitlinks(recorder.ctx, dir, "HEAD"), ["vendor/engine"]);
-    assert.deepEqual(
-      await unversionedNested(
-        (command: string) => sh(command, dir).then((out) => out.stdout),
-        ["vendor/engine", "src"],
-      ),
-      ["vendor/engine"],
-    );
-    recorder.handle("run.exec", () => {
-      throw new Error("the host is gone");
-    });
-    assert.deepEqual(await gitlinks(recorder.ctx, dir, "HEAD"), [], "a command that cannot run answers none");
   });
 });
 
@@ -251,24 +229,5 @@ describe("merging", () => {
     const failed = await mergeNoFf(recorder.ctx, "/w", "a".repeat(40), { message: "m", rpcErrors: "fail" });
     assert.equal(failed.ok, false);
     assert.equal(!failed.ok && failed.error, "the host is gone");
-  });
-
-  it("lands a build in the live folder, and aborts rather than force anything over the user's work", async () => {
-    const { dir, theirs, before } = await conflicting();
-    const recorder = shellCtx({ pong: dir });
-    const landed = await landIntegration(recorder.ctx, {
-      project: "pong",
-      head: theirs,
-      message: "director run_a: integrated build",
-      label: "director:run_a:land",
-    });
-    assert.equal(landed.ok, false);
-    assert.equal(await fixtureGit(dir, ["rev-parse", "HEAD"]), before);
-    assert.equal(await fixtureGit(dir, ["status", "--porcelain"]), "");
-    assert.deepEqual(
-      recorder.paramsOf("run.exec").map((p) => p.project),
-      ["pong", "pong"],
-      "the merge and its abort both ran in the live folder",
-    );
   });
 });

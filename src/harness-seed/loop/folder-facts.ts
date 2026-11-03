@@ -176,47 +176,21 @@ export function servedAsWeb(game: FactsOfDescriptor): boolean {
 }
 
 /**
- * How a Loop works on a project: the web method (an integration copy, builders, judges, landing) or
- * in place (the app's `LoopProfile`). Persisted in `autopilot_started.profile`: never rename a value.
+ * How a Loop worked on its project: in place (`open`, as every Loop does now), or in an integration
+ * copy (`web`, a web game's Loop an earlier Genex ran). Persisted in `autopilot_started.profile`:
+ * never rename a value.
  */
 export const LoopProfile = { Web: "web", Open: "open" } as const;
 export type LoopProfile = (typeof LoopProfile)[keyof typeof LoopProfile];
 
-/** The facts a web Loop's folder may hold beside its page (the app's `WEB_LOOP_FACTS`). */
-export const WEB_LOOP_FACTS: ReadonlySet<string> = new Set<string>([CoreFact.WebGame, CoreFact.BlenderAssets]);
-
-/**
- * The profile a Loop on a game takes, as the app's `loopProfileOf`: web when a web game is served at
- * its root and every fact it is served by is one a web Loop's folder may hold; open otherwise.
- */
-export function loopProfileOf(game: FactsOfDescriptor): LoopProfile {
-  const webOnly = servedFactsOf(game).every((fact) => WEB_LOOP_FACTS.has(fact.id));
-  return servedAsWeb(game) && webOnly ? LoopProfile.Web : LoopProfile.Open;
-}
-
-/** What a Loop says when its game is of a kind Genex can't name, and why a folder's Loop works in place. */
+/** What a Loop says when its game is of a kind Genex can't name. */
 const MESSAGE = {
   unknownKind: (project: string) =>
     `A Loop can't start on ${project} yet: its folder holds files of a kind Genex doesn't know. Say in the chat what the project is, or turn on a Genex plugin for it, then start the Loop again.`,
-  noWebAtRoot: "no web game at the folder's root",
-  unread: "nothing it can name",
 } as const;
 
 /**
- * Why a game's Loop works in place, in words for the person: the facts no web Loop's folder holds,
- * each with where Genex found it ("godot-project in assets/pack"), else that no web game is at the root.
- */
-export function openLoopBecause(game: FactsOfDescriptor): string {
-  const deciding = servedFactsOf(game).filter((fact) => !WEB_LOOP_FACTS.has(fact.id));
-  if (deciding.length)
-    return deciding
-      .map((fact) => `${fact.id} ${fact.path === ROOT ? "at the folder's root" : `in ${fact.path}`}`)
-      .join(", ");
-  return kindUnknown(game) ? MESSAGE.unread : MESSAGE.noWebAtRoot;
-}
-
-/**
- * A Loop on a game with no kind yet is a web Loop: the game takes the web starter first. A game of a
+ * A Loop on a game with no kind yet starts it as a web game: it takes the web starter first. A game of a
  * kind Genex can't name is never handed one: the Loop stops with a sentence saying it needs a kind.
  * `games` is the library as the caller listed it; a game not in it (one the caller is about to make)
  * is left to its maker.

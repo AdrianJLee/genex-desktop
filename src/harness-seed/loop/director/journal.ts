@@ -1,7 +1,7 @@
 /**
  * The run's record in its run journal (`autopilot_<runId>`, the harness's own and durable): what a
- * run needs to go on after a restart, a crash or a pause — the integration's last health check, the log and how much of it the lead has heard, and the wake
- * loop's own state. Every save writes it (`recordLoopRun`, called by loop-run.ts `saveJournal`); a
+ * run needs to go on after a restart, a crash or a pause — the log and how much of it the lead has
+ * heard, and the wake loop's own state. Every save writes it (`recordLoopRun`, called by loop-run.ts `saveJournal`); a
  * resumed run reads it back (`restoreLoopRun`, called by setup.ts `prepareLoopRun`). Its functions
  * take the run explicitly; they are not bound onto it.
  */
@@ -28,16 +28,14 @@ function logRecord(log: readonly LoopRunLogEntry[]): LoopRunLogEntry[] {
 }
 
 /**
- * Put the run's record on its journal (`journal.director`), as every save does: the integration's
- * last health check, the log and how much of it the lead has heard, and where its job ends and its
- * finish checks stand.
+ * Put the run's record on its journal (`journal.director`), as every save does: the log and how much
+ * of it the lead has heard, and where its job ends and its finish checks stand.
  */
 export function recordLoopRun(loopRun: LoopRun): void {
   const director = loopRun.journal?.director;
   if (!director || !loopRun.state) return;
   const { state } = loopRun;
   Object.assign(director, {
-    integrationHealthy: state.integrationHealthy,
     log: logRecord(state.log),
     logSeq: loopRun.logSeq,
     heardSeq: loopRun.waitSeq,
@@ -77,15 +75,13 @@ function restoreLog(loopRun: LoopRun, saved: AnyRecord): void {
 }
 
 /**
- * A resumed run reads its journal back: the last health check, the log and how much of it the lead
- * had heard, its judges' count, its job cursor and its finish checks. The integration head comes back
- * through `startingCommits` (setup.ts). Called before the run writes a line of its own.
+ * A resumed run reads its journal back: the log and how much of it the lead had heard, its judges'
+ * count, its job cursor and its finish checks. Called before the run writes a line of its own.
  */
 export function restoreLoopRun(loopRun: LoopRun): void {
   if (!resumedFromJournal(loopRun)) return;
   const saved = loopRun.priorJournal?.director ?? {};
   const { state } = loopRun;
-  if (typeof saved.integrationHealthy === "boolean") state.integrationHealthy = saved.integrationHealthy;
   restoreLog(loopRun, saved);
   state.judges = Number.isInteger(saved.judges) && saved.judges > 0 ? saved.judges : 0;
   state.jobsCursor = countOf(saved.jobsCursor);

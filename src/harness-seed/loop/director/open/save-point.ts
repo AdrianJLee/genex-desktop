@@ -13,10 +13,11 @@ import type { CheckpointAnswer, HookImage } from "../../../types/host-api.d.ts";
 import { type CheckpointAsk, notesText, runScope, takeCheckpoint } from "../../hooks.ts";
 import { clip, hasText } from "../../text.ts";
 import type { LoopRun } from "../loop-run.ts";
-import { MAX_SAVE_POINT_LABEL, newOpenJournal, type OpenJournal, type OpenSavePoint } from "./contract.ts";
+import { MAX_SAVE_POINT_LABEL, type OpenJournal, type OpenSavePoint } from "./contract.ts";
 import { savePointRound } from "./graph.ts";
 import { SHOWS_WORDS } from "./evidence-prompts.ts";
-import { heldForLead, OPEN_WORDS } from "./prompts.ts";
+import { heldForLead } from "../held-words.ts";
+import { OPEN_WORDS } from "./prompts.ts";
 import { shownPicture } from "./shown-picture.ts";
 
 /** A taken checkpoint's answer. */
@@ -25,8 +26,8 @@ type Taken = Extract<CheckpointAnswer, { snapshot: unknown }>;
 /** What a save point is asked for: its label and summary, and whether Genex asked for it (an autosave). */
 export type SavePointAsk = { label: string; summary: string; auto: boolean };
 
-/** The open Loop's journal (a new one on a run a kept older setup made). */
-const journalOf = (loopRun: LoopRun): OpenJournal => loopRun.open?.journal ?? newOpenJournal();
+/** The Loop's own journal. */
+const journalOf = (loopRun: LoopRun): OpenJournal => loopRun.open.journal;
 
 /** The Loop's clock now. */
 const nowOf = (loopRun: LoopRun): number => loopRun.open?.clock.now() ?? Date.now();

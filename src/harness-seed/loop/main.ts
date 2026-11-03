@@ -17,7 +17,7 @@ import { resolveContextWindow } from "./turn-loop.ts";
 import { EngineId, supportsSessions } from "./model-roles.ts";
 import { compactThread } from "./compact.ts";
 import { compactSession } from "./session-compact.ts";
-import { directorTool } from "./director.ts";
+import { directorTool } from "./director/tool-specs.ts";
 import { chatWorkerTool } from "./workers/chat-workers.ts";
 import { loadSkills } from "./skills.ts";
 import { runSelftest } from "./selftest.ts";

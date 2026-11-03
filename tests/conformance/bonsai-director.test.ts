@@ -124,7 +124,9 @@ it("a local lead starts real persisted local workers in copies, merges their wor
       "local director finish",
     );
     const finished = customEvents(log, "run_finished").find((e) => e.runId === runId)!;
-    assert.equal(finished.landed, true, JSON.stringify({ finished, results }));
+    // Flipped (one Loop): the integrated build landed in the game folder (`landed: true`); the Loop
+    // works in the folder, so the merged parts are there, and it closes on the lead's word.
+    assert.equal(finished.stoppedBecause, "the lead says the goal is reached", JSON.stringify({ finished, results }));
     for (const id of ["plaza", "sign"])
       assert.match(
         await readFile(path.join(project.dir, `src/${id}.js`), "utf8").catch(() => JSON.stringify(results)),

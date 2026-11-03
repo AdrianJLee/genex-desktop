@@ -1,20 +1,14 @@
 /**
  * The Loop's run as one explicit object, and the functions of it every part shares. `prepareLoopRun`
- * (setup.ts) builds it: the run, the folder the lead builds in (a web game's
- * integration worktree, or the project's own folder for a Loop in place), `state` (the heads, the
- * log, the close), the journal and the report. Every function of the run takes it as its first
- * argument; `bindLoopRun` puts each on the object as well, so a function reaches the others through
- * the run it was handed.
+ * (setup.ts) builds it: the run, the project's own folder the lead builds in, `state` (the log, the
+ * close), the journal and the report. Every function of the run takes it as its first argument;
+ * `bindLoopRun` puts each on the object as well, so a function reaches the others through the run it
+ * was handed.
  */
-import { headOf, updateRef } from "../git.ts";
-import { GIT_TIMEOUT_MS } from "../config.ts";
-import { HostMethod } from "../host-methods.ts";
 import { appendRun as appendRunEvent, RunEvent, saveJournal as saveRunJournal } from "../run-events.ts";
-import type { FactRef, LoopProfile } from "../folder-facts.ts";
+import type { FactRef } from "../folder-facts.ts";
 import type { HookedGame } from "../hooks.ts";
 import { isWorking, type WorkerRecord } from "../workers/records.ts";
-import { isCommit } from "../shell.ts";
-import type { HealthCheck } from "../health-check.ts";
 import { verdictRecord } from "../verdict.ts";
 import { journalText, recordLoopRun } from "./journal.ts";
 import { plainly } from "./rules.ts";
@@ -26,16 +20,7 @@ import type { LeadSeat } from "./lead-session.ts";
 import type { OpenLoop } from "./open/contract.ts";
 import type { NoteKind } from "./wake-schedule.ts";
 import type { FinishTally } from "../finish-check.ts";
-import type { WorkerPool } from "../workers/pool.ts";
-import type * as integrateFunctions from "./integrate.ts";
 import type * as loopRunFunctions from "./loop-run.ts";
-import type * as toolFunctions from "./tools.ts";
-
-/** The last judge on the integration branch: the head it looked at, and that it answered. */
-export interface LastJudge extends AnyRecord {
-  head?: string | null;
-  ok?: boolean;
-}
 
 /** One line of the run's log (`note`): one of Genex's facts for the lead. */
 export interface LoopRunLogEntry {
@@ -46,19 +31,12 @@ export interface LoopRunLogEntry {
   kind?: NoteKind;
 }
 
-/** The run's `state`: the heads, the log and the close — everything that changes for the whole run. */
+/** The run's `state`: the log and the close — everything that changes for the whole run. */
 export interface LoopRunState {
   run: Run;
   threadId: string;
   projectDir: string;
   baseCommit: string | null;
-  /** Where the lead builds: a web game's integration worktree, or the project's folder for a Loop in place. */
-  integrationWorktree: string;
-  integrationHead: string | null;
-  /** The last health check of each head (health-check.ts), as merges and the close took them. */
-  healthByHead: Map<string | null | undefined, HealthCheck>;
-  /** Whether the integration head passed its last health check; null before one. */
-  integrationHealthy: boolean | null;
   /** The provider loss that pauses the run: an engine limit, a lost sign-in, an outage the lead could not wait out. */
   limit: EngineLimit | null;
   log: LoopRunLogEntry[];
@@ -68,12 +46,10 @@ export interface LoopRunState {
   judges: number;
   /** The end number of the run's last job end the lead has had (`jobs.list`, loop/jobs/watch.ts). */
   jobsCursor?: number;
-  /** Where an open Loop's finish checks stand (open/finish.ts); absent until the lead claims the goal. */
+  /** Where the Loop's finish checks stand (open/finish.ts); absent until the lead claims the goal. */
   finishTally?: FinishTally;
   /** The user's ask to finish, as the lead recorded it with `wrap_up` (wrap-up.ts). */
   finishAsk?: FinishAsk | null;
-  /** The last judge the lead asked about the integration branch. */
-  lastJudge?: LastJudge | null;
 }
 
 /** What the run knows (`prepareLoopRun`, setup.ts). */
@@ -84,24 +60,20 @@ export interface LoopRunData {
   resume: boolean;
   inbox: RunInbox;
   priorJournal: AnyRecord | null;
-  /** What the game's folder holds once it is ready (`game.list`'s `facts`). */
+  /** What the game's folder holds (`game.list`'s `facts`). */
   gameFacts?: FactRef[];
   /** The game as far as Genex's moments go (`game.list`'s `hookEvents`). */
   game?: HookedGame;
   report: AnyRecord;
+  /** The game folder: the lead and the run's merges work in it. */
   projectDir: string;
   baseCommit: string | null;
-  forkCommit: string | null;
-  integrationWorktree: string;
-  integrationRef: string;
-  /** The paths the game's history holds as repositories of their own (gitlinks at the fork point). */
-  nestedRepos?: string[];
   state: LoopRunState;
   journal: AnyRecord;
   logSeq: number;
   waitSeq: number;
   toolCalls: number;
-  /** The lead's tool calls under way (tools.ts `handler`): a turn inside one is never cut short for the chat. */
+  /** The lead's tool calls under way (open/tools.ts): a turn inside one is never cut short for the chat. */
   toolsInFlight?: number;
   /** The wake loop drives the lead's session (wake.ts sets it as it starts). */
   waking?: boolean;
@@ -113,18 +85,14 @@ export interface LoopRunData {
   journaledSeq?: number;
   /** The journal as its last save wrote it (journal.ts `journalText`). */
   journalSaved?: string | null;
-  /** How the Loop works on its project (folder-facts.ts `loopProfileOf`): a web game's, or in place (`open`). */
-  profile?: LoopProfile;
-  /** A Loop in place's own record (open/contract.ts): its facts, journal, git-write queue, clock and pool. */
-  open?: OpenLoop;
+  /** The Loop's own record (open/contract.ts): its facts, journal, git-write queue, clock and pool. */
+  open: OpenLoop;
   /** The run's own waits (the wake clock's sleep, when one was given); absent: the wall clock. */
   sleep?: (ms: number) => Promise<void>;
-  /** A web game's Loop's worker pool (the run's pool, its workers' copies merging into the integration worktree). */
-  pool?: WorkerPool | null;
   /** How many of the run's jobs ran when they were last read (null: the host could not say), and when (`active-work.ts`). */
   jobsRunning?: number | null;
   jobsReadAt?: number | null;
-  /** What waits for the end of each of the lead's turns before the next (an open Loop's); the wake loop awaits it. */
+  /** What waits for the end of each of the lead's turns before the next; the wake loop awaits it. */
   afterTurn?: () => Promise<void>;
 }
 
@@ -135,19 +103,8 @@ type FunctionKey<M> = { [K in keyof M]: M[K] extends (...args: never[]) => unkno
 /** Every function of one of the run's modules, bound to the run (`bindLoopRun`). */
 type BoundModule<M> = { readonly [K in Exclude<FunctionKey<M>, "bindLoopRun">]: Bound<M[K]> };
 
-/** The run: its data, and every function of its modules bound to it by `bindLoopRun`. */
-export interface LoopRun
-  extends LoopRunData,
-    BoundModule<typeof loopRunFunctions>,
-    BoundModule<typeof toolFunctions>,
-    BoundModule<typeof integrateFunctions> {}
-
-/** The builds a lead names by word: the integration branch (its own worktree) and the live folder the user sees. */
-export const BuildTarget = {
-  Integration: "integration",
-  Live: "live",
-} as const;
-export type BuildTarget = (typeof BuildTarget)[keyof typeof BuildTarget];
+/** The run: its data, and every function of its module bound to it by `bindLoopRun`. */
+export interface LoopRun extends LoopRunData, BoundModule<typeof loopRunFunctions> {}
 
 /** The run's log keeps this many lines; the waker reads them by sequence number, not by index. */
 const MAX_LOOP_RUN_LOG = 400;
@@ -184,15 +141,6 @@ export function decision(loopRun: LoopRun, text: string, plain?: string | null):
     plain: plainly(plain ?? text),
     at: new Date().toISOString(),
   });
-}
-
-/** Keep `head` reachable on the run's integration ref: a worktree's commits go with it otherwise. */
-export async function protectHead(loopRun: LoopRun, head: string | null | undefined): Promise<void> {
-  const { ctx, integrationRef, run } = loopRun;
-  if (!isCommit(head) || !integrationRef) return;
-  await updateRef(ctx, { project: run.project }, integrationRef, head, {
-    label: `director:${run.runId}:protect`,
-  }).catch(() => {});
 }
 
 /**
@@ -234,35 +182,12 @@ export function notesSince(loopRun: LoopRun, seq: number): LoopRunLogEntry[] {
   return loopRun.state.log.filter((entry) => (entry.seq ?? 0) > seq);
 }
 
-/** What the integration worktree stands on right now. */
-export function currentHead(loopRun: LoopRun) {
-  const { ctx, integrationWorktree, run } = loopRun;
-  return headOf(ctx, integrationWorktree, { label: `director:${run.runId}:head` });
-}
-
-/**
- * The lead commits in its worktree with its own hands: whatever HEAD says is the integration head,
- * protected by the ref and written to the journal.
- */
-export async function syncHead(loopRun: LoopRun) {
-  const { journal, state } = loopRun;
-  const head = await loopRun.currentHead().catch(() => null);
-  if (!head || head === state.integrationHead) return state.integrationHead;
-  state.integrationHead = head;
-  journal.director.integrationHead = head;
-  await loopRun.protectHead(head);
-  await loopRun.saveJournal();
-  await loopRun.appendRun(RunEvent.DirectorProgress, { head });
-  return head;
-}
-
 /** The workers of the run's pool still at work. */
 export function runningWorkers(loopRun: LoopRun): WorkerRecord[] {
-  const pool = loopRun.pool ?? loopRun.open?.pool ?? null;
-  return (pool?.state.records ?? []).filter(isWorking);
+  return (loopRun.open?.pool?.state.records ?? []).filter(isWorking);
 }
 
-/** Every build this run checked gets the same record, on the same event path as `director_worker`. */
+/** Every check this run made gets the same record, on the same event path as `director_worker`. */
 export async function recordVerdict(loopRun: LoopRun, fields: Parameters<typeof verdictRecord>[0]) {
   const { report } = loopRun;
   const record = verdictRecord(fields);
@@ -270,25 +195,6 @@ export async function recordVerdict(loopRun: LoopRun, fields: Parameters<typeof 
   if (report.verdicts.length > MAX_REPORT_VERDICTS) report.verdicts.shift();
   await loopRun.appendRun(RunEvent.DirectorVerdict, record);
   return record;
-}
-
-/** git in the integration worktree for a question an empty answer settles (`unversionedNested`). */
-export function nestedGit(loopRun: LoopRun, command: string, label?: string | null): Promise<string> {
-  const { ctx, integrationWorktree } = loopRun;
-  return ctx
-    .call(HostMethod.RunExec, {
-      command,
-      cwd: integrationWorktree,
-      timeoutMs: GIT_TIMEOUT_MS.quick,
-      ...(label ? { label } : {}),
-    })
-    .then((result: { stdout?: string }) => String(result?.stdout ?? ""))
-    .catch(() => "");
-}
-
-/** Load the live folder in the user's own window again, once something there changed. */
-export async function reloadLive(loopRun: LoopRun): Promise<void> {
-  await loopRun.ctx.call(HostMethod.PreviewLoad, { project: loopRun.run.project }).catch(() => {});
 }
 
 /**

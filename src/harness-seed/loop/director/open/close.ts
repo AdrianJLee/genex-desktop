@@ -20,7 +20,7 @@ import { SECOND_MS, sleep } from "../../time.ts";
 import { closeRunPool } from "../../workers/run-pool.ts";
 import { latchClose } from "../close-latch.ts";
 import type { LoopRun } from "../loop-run.ts";
-import { asksPending, newOpenJournal, type OpenJournal } from "./contract.ts";
+import { asksPending, type OpenJournal } from "./contract.ts";
 import { FOLDER_GIT } from "./folder-git.ts";
 import { leadRowAtClose, openCloseOf } from "./graph.ts";
 
@@ -61,8 +61,8 @@ const MESSAGE = {
   askDropped: "The rewind or restart the lead asked for last didn't run: the Loop closed first.",
 } as const;
 
-/** The open Loop's own journal, or a new one on a run a kept older setup made. */
-const journalOf = (loopRun: LoopRun): OpenJournal => loopRun.open?.journal ?? newOpenJournal();
+/** The Loop's own journal. */
+const journalOf = (loopRun: LoopRun): OpenJournal => loopRun.open.journal;
 
 /**
  * The save point a recovery took the folder back to while the lead has not heard so (no message

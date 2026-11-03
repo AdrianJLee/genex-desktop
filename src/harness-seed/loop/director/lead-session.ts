@@ -3,9 +3,8 @@
  * per chat.
  *
  * The run resumes the session the chat's bookmark names (`contractor_session`), in the game folder
- * where that session lives, and it builds with its own hands — in a web game's integration worktree
- * it leads, beside its workers, or in the folder itself — never read-only, limited only by the chat's
- * permission mode. A lead model of its own on that engine is the session's model option. After the
+ * where that session lives, and it builds there with its own hands, beside its workers — never
+ * read-only, limited only by the chat's permission mode. A lead model of its own on that engine is the session's model option. After the
  * close the chat goes on in the same session, before, during and after the build one conversation.
  *
  * When the chat has no session this lead can continue — none yet, its bookmark names another

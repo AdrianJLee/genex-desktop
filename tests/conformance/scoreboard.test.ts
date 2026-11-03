@@ -67,7 +67,7 @@ describe("the loop's self-test (the architect's bar)", () => {
     const result = await runSelftest();
     assert.equal(result.ok, true);
     // Flipped (no clock): at least nine steps passed; the working time's two (its clock, its wrap-up
-    // reserve) went with the clock.
-    assert.ok(result.passed.length >= 7);
+    // reserve) went with the clock. Flipped (one Loop): the landing's step went with the landing.
+    assert.ok(result.passed.length >= 6);
   });
 });

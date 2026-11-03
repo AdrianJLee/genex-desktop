@@ -3,7 +3,7 @@
  * the harness on every `game.list` descriptor). A copy of the app's `shared/game-engine.ts`
  * vocabulary, held equal to it by `seed-contracts.test.ts`. A game with no engine record is a web
  * game; anything that would treat a game as a web page (the brief's template rules, the preview
- * health check, the web Loop) asks this first. `GameEngine` names the engines the seed's own code
+ * health check) asks this first. `GameEngine` names the engines the seed's own code
  * knows; a linked game's engine is any id an installed plugin declares.
  */
 import type { GameProject } from "../types/host-api.d.ts";

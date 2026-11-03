@@ -9,7 +9,6 @@ import { appendRun as appendRunEvent, RunEvent, saveJournal as saveRunJournal } 
 import type { FactRef } from "../folder-facts.ts";
 import type { HookedGame } from "../hooks.ts";
 import { isWorking, type WorkerRecord } from "../workers/records.ts";
-import { verdictRecord } from "../verdict.ts";
 import { journalText, recordLoopRun } from "./journal.ts";
 import { plainly } from "./rules.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../../types/harness.d.ts";
@@ -106,8 +105,6 @@ export interface LoopRun extends LoopRunData, BoundModule<typeof loopRunFunction
 
 /** The run's log keeps this many lines; the waker reads them by sequence number, not by index. */
 const MAX_LOOP_RUN_LOG = 400;
-/** The report keeps this many verdicts, the most recent. */
-const MAX_REPORT_VERDICTS = 200;
 
 /** Each run's own clock (the wake loop's), by its run object. */
 const RUN_CLOCKS = new WeakMap<object, () => number>();
@@ -183,16 +180,6 @@ export function notesSince(loopRun: LoopRun, seq: number): LoopRunLogEntry[] {
 /** The workers of the run's pool still at work. */
 export function runningWorkers(loopRun: LoopRun): WorkerRecord[] {
   return (loopRun.open.pool?.state.records ?? []).filter(isWorking);
-}
-
-/** Every check this run made gets the same record, on the same event path as `director_worker`. */
-export async function recordVerdict(loopRun: LoopRun, fields: Parameters<typeof verdictRecord>[0]) {
-  const { report } = loopRun;
-  const record = verdictRecord(fields);
-  report.verdicts.push(record);
-  if (report.verdicts.length > MAX_REPORT_VERDICTS) report.verdicts.shift();
-  await loopRun.appendRun(RunEvent.DirectorVerdict, record);
-  return record;
 }
 
 /**

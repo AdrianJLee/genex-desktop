@@ -114,14 +114,7 @@ async function callsIn(chat: Chat, extra: Record<string, unknown>, calls: Call[]
 /** The chat's own session answering a message the person sent now. */
 const ownTurn = async (chat: Chat) => ({ chatTurn: { messageId: await chat.personSays() } });
 
-/** A lead of the chat's run that sits in the game folder and leads a build of its own (a web lead). */
-async function webLead(chat: Chat) {
-  const root = await chat.copyOf(RUN_ID, "integration");
-  const director = { runId: RUN_ID, threadId: chat.threadId, project: chat.game, root, setup: null, tools: [] };
-  return { brief: { readOnly: true, director: { ...director, chatSession: true } }, root: await realpath(root) };
-}
-
-/** A lead of the chat's run that works in the game folder in place, as the Unreal lead does. */
+/** The chat's run's lead, in the game folder as every project's lead is. */
 const inPlaceLead = (chat: Chat) => ({
   director: { runId: RUN_ID, threadId: chat.threadId, project: chat.game, root: chat.gameDir, setup: null, tools: [] },
 });
@@ -161,8 +154,8 @@ describe("job tools", () => {
     const chat = await jobChat();
     const own = await callsIn(chat, await ownTurn(chat), []);
     assert.deepEqual(jobToolsOf(own.request), JOB_TOOLS, "the chat's own session");
-    const lead = await webLead(chat);
-    assert.deepEqual(jobToolsOf((await callsIn(chat, lead.brief, [])).request), JOB_TOOLS, "a lead");
+    // Flipped (one Loop): the lead sat in a copy of the folder (the web Loop's); it sits in the game folder.
+    assert.deepEqual(jobToolsOf((await callsIn(chat, inPlaceLead(chat), [])).request), JOB_TOOLS, "a lead");
     assert.deepEqual(jobToolsOf((await callsIn(chat, chat.runWorker(), [])).request), JOB_TOOLS, "a writing worker");
     const none: Array<[string, Record<string, unknown>, string?]> = [
       ["a reader worker", chat.runWorker("r1", chat.worktree, { readOnly: true })],
@@ -393,30 +386,27 @@ describe("job tools", () => {
     assert.deepEqual(await chat.core.jobs.list(chat.game), [], "no record");
   });
 
-  it("a web lead's job runs in the worktree it leads and never writes the game folder; the Unreal lead's runs in the game folder", {
+  it("a lead's job runs in the game folder; a lead brief rooted anywhere else seats no lead and starts nothing", {
     ...POSIX,
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await jobChat();
     await chat.core.setPermissionMode(chat.threadId, PermissionMode.Auto);
-    const web = await webLead(chat);
-    const led = await callsIn(chat, web.brief, [[JobTool.Start, { title: "Build", command: LONG }]]);
+    const led = await callsIn(chat, inPlaceLead(chat), [[JobTool.Start, { title: "Build", command: LONG }]]);
     startedId(led.answers[0] ?? "");
-    const webJob = chat.spawned.at(-1);
-    assert.equal(webJob?.cwd, web.root, "in the worktree it leads");
-    assert.deepEqual(webJob?.policy.allowWrite, [web.root], "writing only that worktree");
-    assert.ok(webJob?.policy.denyWrite?.includes(chat.gameDir), "never the game folder it sits in");
-
-    const inPlace = await callsIn(chat, inPlaceLead(chat), [[JobTool.Start, { title: "Build", command: LONG }]]);
-    startedId(inPlace.answers[0] ?? "");
-    const placeJob = chat.spawned.at(-1);
-    assert.equal(placeJob?.cwd, chat.gameDir, "in the game folder");
-    assert.deepEqual(placeJob?.policy.allowWrite, [chat.gameDir], "writing it in place");
-    const owners = (await chat.core.jobs.list(chat.game)).map((job) => [job.owner.role, job.owner.scope]);
-    assert.deepEqual(owners, [
-      [JobRole.Lead, { kind: JobScopeKind.Run, runId: RUN_ID }],
-      [JobRole.Lead, { kind: JobScopeKind.Run, runId: RUN_ID }],
-    ]);
+    const job = chat.spawned.at(-1);
+    assert.equal(job?.cwd, chat.gameDir, "in the game folder");
+    assert.deepEqual(job?.policy.allowWrite, [chat.gameDir], "writing it in place");
+    // Flipped (one Loop): a lead in a copy of the folder (the web Loop's integration worktree) ran its
+    // jobs there; no Loop leads from a copy now, so such a brief seats no lead.
+    const elsewhere = await chat.copyOf(RUN_ID, "integration");
+    const copied = inPlaceLead(chat);
+    const stray = { ...copied, director: { ...copied.director, root: elsewhere } };
+    const refused = await callsIn(chat, stray, []);
+    assert.deepEqual(jobToolsOf(refused.request), [], "no job tools for a lead outside the game folder");
+    assert.equal(chat.spawned.length, 1, "nothing more spawned");
+    const owners = (await chat.core.jobs.list(chat.game)).map((row) => [row.owner.role, row.owner.scope]);
+    assert.deepEqual(owners, [[JobRole.Lead, { kind: JobScopeKind.Run, runId: RUN_ID }]]);
   });
 
   it("a session sees and stops only its chat's jobs, and a worker only its own", {

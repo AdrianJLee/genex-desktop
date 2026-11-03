@@ -31,8 +31,7 @@ import { track } from "../analytics/client.ts";
 import { WorkspaceEvent } from "../analytics/events/workspace.ts";
 import { gameRef } from "../analytics/game-ref.ts";
 import { gameCreatedProperties, launchFailedProperties } from "../analytics/workspace-properties.ts";
-import { noteStageSwitch } from "../analytics/workspace-trackers.ts";
-import { GameCreatedFrom, LaunchFailReason, LaunchStage, StageSwitchVia } from "../analytics/workspace-vocabulary.ts";
+import { GameCreatedFrom, LaunchFailReason, LaunchStage } from "../analytics/workspace-vocabulary.ts";
 import { shouldWelcome } from "../onboarding/state.ts";
 import {
   browserStorage,
@@ -70,7 +69,7 @@ import {
   returnTaken,
   type LaunchStore,
 } from "./launch.ts";
-import { createLayoutStore, stageViewChosen, type LayoutStore } from "./layout.ts";
+import { createLayoutStore, type LayoutStore } from "./layout.ts";
 import { createModelPickerStore, type ModelPickerStore } from "./model-picker.ts";
 import { createProviderUsageStore, type ProviderUsageStore, usageReported } from "./provider-usage.ts";
 import { createLibraryStore, delegationChanged, gameAdded, libraryBootstrapped, type LibraryStore } from "./library.ts";
@@ -482,13 +481,6 @@ function applyUiEvent(
     }
     case UiEvent.PersonFirst:
       threads.setState((state) => personFirstReported(state, event.payload), true);
-      break;
-    case UiEvent.StageShow:
-      // The chat put a build on screen for the game on the stage: that is Live, so Live shows.
-      if (event.payload.project === projectOf(threads.getState())) {
-        noteStageSwitch(StageSwitchVia.ChatStageShow);
-        layout.setState((state) => stageViewChosen(state, event.payload.view), true);
-      }
       break;
     case UiEvent.UpdateReady:
       update.setState((state) => updateDownloaded(state, event.payload), true);

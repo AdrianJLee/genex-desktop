@@ -23,7 +23,6 @@ import type { LoopRun } from "../loop-run.ts";
 import { asksPending, newOpenJournal, type OpenJournal } from "./contract.ts";
 import { FOLDER_GIT } from "./folder-git.ts";
 import { leadRowAtClose, openCloseOf } from "./graph.ts";
-import { wentBackUnheard } from "./news.ts";
 
 /** How an open Loop ends: whether the goal was reached, why it ended, and what a reviewer found not done. */
 export interface OpenEnd {
@@ -64,6 +63,17 @@ const MESSAGE = {
 
 /** The open Loop's own journal, or a new one on a run a kept older setup made. */
 const journalOf = (loopRun: LoopRun): OpenJournal => loopRun.open?.journal ?? newOpenJournal();
+
+/**
+ * The save point a recovery took the folder back to while the lead has not heard so (no message
+ * or turn carried the line that tells it), or null: a close says it, and keeps nothing over it.
+ */
+function wentBackUnheard(loopRun: Pick<LoopRun, "open" | "waitSeq">): string | null {
+  const open = loopRun.open;
+  if (!open?.wentBack) return null;
+  const seq = open.wentBackSeq;
+  return seq !== null && loopRun.waitSeq >= seq ? null : open.wentBack;
+}
 
 /** The game folder's uncommitted changes (`FOLDER_GIT.status`), trimmed; null when git couldn't say. */
 async function folderStatus(loopRun: LoopRun): Promise<string | null> {

@@ -57,9 +57,10 @@ project, and graph: a request to wait for the remaining workers could start a se
   at boot as paused, keyed on its journal artifact rather than on `mode`, so a director run is
   resumable too. A resumed
   director run goes on from its journal with no clock, as every Loop
-  ([what ends a Loop](harness-runtime.md#what-ends-a-loop)), with the workers, the defects nobody
-  owns and the news from before the pause in its lead's first digest
-  ([the full journal](agent/architecture.md#the-run-director-workers-and-judging)). Starting a
+  ([what ends a Loop](harness-runtime.md#what-ends-a-loop)): its lead's first message is Genex's
+  line that it resumed, with the run's lines it was not told before the pause
+  ([what wakes a Loop's lead](harness-runtime.md#what-wakes-a-loops-lead)); `run_status` names the
+  rest ([the full journal](agent/architecture.md#the-run-director-workers-and-judging)). Starting a
   second run while one owns the project is rejected independently of any model prompt or UI
   state. A run that has begun writing its own end (`ActiveRun.closing`, set just before its
   `run_finished` or `autopilot_paused` is appended) no longer owns it: a Resume pressed as the
@@ -77,30 +78,21 @@ by `main/core/conversation.ts` `runControl` (the harness's `run.control`), which
 `resume_run` that session recorded. The host records each call it answers, so the chat shows the
 session's own mirror of one as no second row, and a resume the session only recorded shows once,
 when the chat does it (`renderer/chat-entries.ts` `recordedByHost`, `isHostRunTool`). `run_status`
-reads the run's durable progress (a director's wakes, `director_continued`, and a steer's
-hand-overs, `run_steering_delivered`, are not progress and stay off its list). A steer is an
-instruction addressed to a run, optionally to a facet: the chat's words its lead took
-([live chat](#live-chat-during-a-build)), a graph note's, or a Resume's. Only these instructions and
-explicit gallery feedback reach worker briefs; chat questions do not. Delivery has two speeds, and both are recorded as
-`run_steering_delivered`: this means placed in front of a worker, not successfully implemented.
-Unaddressed guidance waits for the next brief (stage `next brief`). An instruction addressed to a
-worker, a `worker_steer now=yes`, and any steer to a single session (which has no boundary)
-interrupt that worktree's build turn — the host verb `engine.interrupt {cwd}` aborts the turn,
-the engine hands back its session id, and the loop resumes that same session with the steer in
-front of everything (`facet_steered`) — and are recorded with stage `now`. Messages during
-planning or base creation remain in the same inbox.
-Delivery and wrap-up are read from the log (`loop/run-inbox.ts`): a resumed session of the same
-run hands over only steers with no `run_steering_delivered` yet, and a `finish` counts only after
-the run's latest `run_registered` (`finishRequested`, the app's copy in `shared/chat-run.ts`).
-A resumed run never inherits an earlier wrap-up, and Wrap up after Resume is recorded again.
+reads the run's durable progress (a steer's `run_steering_delivered` is not progress and stays off
+its list). A steer (`run_steering`) is the
+record of words for a run: the chat's words its lead took ([live chat](#live-chat-during-a-build)),
+a note about a build (main's `runFeedback`), or a Resume's. The lead reads the chat's words from its
+line and a note as it comes; each one it heard is recorded `run_steering_delivered` how `lead`.
+A Resume's words are the chat's own session's, which is the lead, so no lead is told them again.
+Wrap-up is read from the log (`loop/run-inbox.ts`): a `finish` counts only after the run's latest
+`run_registered` (`finishRequested`, the app's copy in `shared/chat-run.ts`). A resumed run never
+inherits an earlier wrap-up, and Wrap up after Resume is recorded again.
 Steering that reaches a classic build after its last round stays with that build: kept on its report
 and handed over only if it goes on, never written into the game's NOTES.md, which every later chat
 reads. The chat removes the "Steering backlog" section older builds left there before it answers
 (`loop/steering-backlog.ts`), and prompts built from NOTES.md leave it out.
-Its lead's first message still says every earlier steer once, since the run may have opened a fresh session that never heard them —
-all but the chat's messages a run's lead heard or gave back ([live chat](#live-chat-during-a-build));
-on the wake loop they open that message's digest, read from the journal (THE USER SAYS: the newest
-20, each cut at 2,000 characters, with a count of those left out).
+A resumed run's lead is handed again the chat's messages it took and never heard before the pause
+(the app quit under it), never one it heard or gave back ([live chat](#live-chat-during-a-build)).
 
 Wrap up (Builds, `studio:run.finish`, `conversation.ts` `requestRunFinish`; the lead's own
 `wrap_up` while it builds) is distinct from Stop: it lets in-flight facet attempts finish, prevents
@@ -113,17 +105,9 @@ session makes itself, and the build stays paused.
 run is never started again: more work is a new Loop ([after the build](#after-the-build-the-same-session)).
 
 In a director run (a session-capable engine's Autopilot, including managed Bonsai) the workers are the
-director's, not the plan's: a steer without a facet wakes a resting director at once and opens
-its next digest word for word (THE USER SAYS; a director in the middle of a turn hears it when that
-turn ends — a chat message handed to a waking lead reaches that turn itself), and the director
-forwards what applies with
-`worker_steer`; a
-facet-addressed instruction needs a plan facet, and since the lead's mandatory `plan` records
-its workers on the journal there is one: an instruction naming a planned worker is accepted and
-routed to that worker, interrupting its build turn (`inbox.addressed()`, `routeUserSteers`), and
-one naming a worker that is not building right now reaches the director as "USER SAYS about
-<id> … it is yours to act on" rather than being dropped. It is rejected only before `plan` has
-been called, or for an id the plan does not have. Wrap up
+director's: the person's words reach the lead as they wrote them, at once if it rests and at its
+next step if it works ([what wakes a Loop's lead](harness-runtime.md#what-wakes-a-loops-lead)), and
+the lead forwards what applies with `worker_steer`. Wrap up
 tells the director the user asked to finish; the director integrates what is ready and calls
 `finish` itself, and the close still judges the build before it makes it live
 ([harness runtime](harness-runtime.md#goal-completion-and-worker-approvals)). Stop aborts the director's session and its workers' (`engine.abort {project}`) —
@@ -297,9 +281,10 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   (`leadSeat`, on a Resume too) on the chat's bookmark — its latest `contractor_session` — when its
   engine and game are the lead's (`continuesChat`); a lead model of its own on that engine is the
   session's model option. There is one session per chat: with no bookmark, or one on another
-  engine, the lead opens a session that becomes the chat's. A fresh lead session — none to resume, one lost, a later turn with none — is told
-  the chat's latest 20 messages first (`freshChat`), then its brief and the digest; reference stills
-  reach a fresh session and the lead's first turn.
+  engine, the lead opens a session that becomes the chat's. A fresh lead session — none to resume, one lost, a later turn with none — is asked
+  its turn's own message, with Genex's notices beside it: the chat's latest 20 messages (`freshChat`),
+  and for a lost one that it was lost and how the Loop began; reference stills reach a fresh session
+  and the lead's first turn.
   The delegation names no `cwd` (the game folder), is `readOnly`, and its director grant's `root` is
   the integration worktree, with `chatSession` when it is the chat's. The host honours that grant
   (`#leadRoot`) only for a `readOnly` delegation in this game's live folder, and only for a root
@@ -324,11 +309,7 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   commits there (`syncHead` adopts its commits before each run tool); workers take the parts that
   run side by side. It keeps no `.studio/DIRECTOR.md` (`prepareLoopRun({ oneSession })`
   restores none, `keepMemory` keeps none; an older run's file stays in its artifacts): the
-  journal and its digests carry the run. The brief, the build card, the fresh start, the resume
-  note, a worker from before a pause, `worker_start`'s answer and `integrate`'s description speak
-  to that lead when `run.lead` is set (`LEAD_BRIEF` and the other lead words in
-  `lead-session-prompts.ts`), and to a director with its own hands otherwise; the playbook names
-  both seats, and `longTurnRules` gives the long turn's director its hands back. A merge conflict
+  journal carries the run, and `run_status` answers where it stands. A merge conflict
   goes to a worker (`director/conflict-worker.ts` `resolveByWorker`): a single `merge-<id>` from
   the integration branch, owning the conflicted files, with the merge opened in its worktree before
   its session (`mergeFirst`, keyed by a symbol a model's JSON cannot carry); the studio commits the
@@ -355,36 +336,34 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   is open and nothing older waits: the `run_steering` names the message's attachments artifact
   (`attachmentsArtifactOf`), from which the lead's loop reads its pictures as image blocks. Its
   receipt then carries `coordinator_message_delivered {into: <runId>, how: "lead"}` and a
-  `run_steering {runId, text, sourceMessageId, attachmentsArtifact?, from?}` the lead's inbox
-  reads (`steers`): the words as typed, never waiting, never
+  `run_steering {runId, text, sourceMessageId, attachmentsArtifact?, from?}`, the record a Resume
+  reads it back from: the words as typed, never waiting, never
   processed, no turn or checkpoint of its own, and its bubble sits where it was delivered. A message that waited (sent while the run prepared) is handed the same
   way once `beforeProcess` (`chatWaitsFor`) answers with the lead's door. What the lead does not
   take waits for the close and is answered then, but holds nothing back: words sent after it
   still reach the lead, in order among themselves (`chatWaitsFor` answers null when a line opens
   or shuts, and the queue hands past it). The lead may so answer a later message before the chat
   answers the one that waited; each bubble sits where it was delivered.
-- **Hearing it.** A resting lead is woken at once (a user wake, never debounced) with THE USER
-  SAYS. A turn under way hears it in that turn: the wake loop takes the words off the inbox and
+- **Hearing it.** The lead reads the chat's words from its line (`LeadLine.unheard`), and only
+  there ([what wakes a Loop's lead](harness-runtime.md#what-wakes-a-loops-lead)). A resting lead is
+  woken at once, with their words alone as its message (`from: person`, the leading unheard messages
+  of one sender joined as written, pictures as image blocks; Genex's untold lines beside them as a
+  notice). A turn under way is handed them by its one watch (`director/news.ts` `watchTurn`), which
   calls `engine.steer {threadId, into: <runId>}` — the director's delegation carries `chatTurn:
-  {messageId: <runId>}` on a waking run, which the host honours only for that run's director
-  grant. Each message is a steer of its own, as written, with its pictures and its sender (Genex's
-  `from: genex`); Claude Code reads them at its next step. Any other engine, on a turn
-  with a session to resume — the first too, so a Codex lead is never deaf for a whole open Loop
-  turn — not the wrap-up and not inside a director tool call (`toolsInFlight`, whose answer a cut
-  would lose), is interrupted and resumed in the same session with their words alone, as the
-  person's — or Genex's, one sender's at a time, the rest handed to the resumed turn at once (a
-  lost session's fresh brief quotes the person's under THE USER SAYS) — (a turn cut before it read
-  its message is asked it again, the words after it; a first
-  turn cut before its session began is asked its brief again,
-  never crashing the run); otherwise `interrupt: false` leaves the turn alone, as for a fresh lead's
-  first turn, which has no session to resume yet. Genex's own lines said into a turn — a worker or
-  a job ended (`turn-news.ts`, `open/news.ts`) — go `from: genex`. Words a turn did not read, or that a turn failed
-  before working on, open its next message (`wake.owed`). A cut is never a failed turn. A message
-  is heard once a turn works on (or answers) the message that told it, or reads it mid-turn
-  (`LeadLine.heardThrough`, counted after the inbox is read), and is recorded heard
-  (`run_steering_delivered {sourceMessageId, how: "lead"}`). The chat's wakes never count in the
-  hourly wake cap. That an ask to stop or finish is `wrap_up`, quoting their words, is said once:
-  in `wrap_up`'s own description (`director/tool-specs.ts` `WRAP_UP_SPEC`).
+  {messageId: <runId>}` on a waking run, which the host honours only for that run's director grant.
+  Each message is a steer of its own, as written, with its pictures and its sender (Genex's `from:
+  genex`); Claude Code reads them at its next step. Any other engine, on a turn with a session to
+  resume — the first too, so a Codex lead is never deaf for a whole turn — not the wrap-up and not
+  inside a director tool call (`toolsInFlight`, whose answer a cut would lose), is interrupted and
+  resumed in the same session with those words alone (and, when it was cut before it read its own
+  message, Genex's lines of that message beside them, never crashing the run); otherwise
+  `interrupt: false` leaves the turn alone, as for a fresh lead's first turn, which has no session to
+  resume yet. Words a turn did not read, or that a turn failed before working on, stay unheard on the
+  line and open its next message. A cut is never a failed turn. A message is heard once a turn works
+  on (or answers) the message that carried it, or reads it mid-turn (`LeadLine.heardThrough`), and is
+  recorded heard (`run_steering_delivered {sourceMessageId, how: "lead"}`). That an ask to stop or
+  finish is `wrap_up`, quoting their words, is said once: in `wrap_up`'s own description
+  (`director/tool-specs.ts` `WRAP_UP_SPEC`).
 - **Answering.** What the lead writes is planner text, mirrored as chat bubbles and streamed like
   any reply; the prompts ask it to answer the user directly and briefly, to write otherwise only
   when a part lands, the build can be looked at, something broke, the plan changed or the build is
@@ -398,8 +377,8 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   journal, and a session that kept no new round skips the pass (`run-dispatch.ts` `keptNewRounds`).
   Stop pauses the queue — a cancelled run takes no more messages — and hands over to the oldest
   queued message
-  once the run has closed. What the lead never heard when its run ended (a Stop, a limit, a
-  crash — one while the run prepared too — or the close) goes back to the queue
+  once the run has closed. What of the chat's the lead never heard when its run ended (a Stop, a
+  limit, a crash — one while the run prepared too — or the close) goes back to the queue
   (`coordinator_message_requeued`, `LeadLine.release`) before `run_finished`, so Stop hands over to
   it too and it waits again; one handed as the line was released goes back at once. A lead's
   delivered message settles in the chat's state when its run closes. The chat answers what went

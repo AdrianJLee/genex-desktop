@@ -27,6 +27,7 @@ import { GameEngine } from "../../src/shared/game-engine.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
 import { createRunInbox, type RunInbox } from "../../src/harness-seed/loop/run-inbox.ts";
 import { runWakeLoop, type DirectorTalk } from "../../src/harness-seed/loop/director/wake.ts";
+import { LOOP_WORDS } from "../../src/harness-seed/loop/director/wake-prompts.ts";
 import { landIntegration } from "../../src/harness-seed/loop/director/integrate.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { chatWaitsFor, leadDoor, stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
@@ -77,6 +78,8 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
 import { tmpDir } from "../helpers/tmp.ts";
 import { HOUR_MS, MINUTE_MS } from "../../src/harness-seed/loop/time.ts";
 import { JOB_POLL_MS } from "../../src/harness-seed/loop/jobs/watch.ts";
+import { jobEndLine } from "../../src/harness-seed/loop/jobs/prompts.ts";
+import { RUN_POOL_WORDS } from "../../src/harness-seed/loop/workers/prompts.ts";
 import { describeUnknownImage, sniffImage } from "../../src/substrate/image-sniff.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { runTurn } from "../../src/harness-seed/loop/turn-loop.ts";
@@ -1438,10 +1441,12 @@ describe("a resumed run inherited the session before it (resume-inbox)", () => {
     return { log, append, ctx };
   }
 
-  it("resume-inbox. a Resume forgets the earlier wrap-up and hands nothing over twice", async () => {
+  // Flipped: the inbox recorded each steer handed over (`run_steering_delivered`, stage "next brief"),
+  // so a resumed session could hand one over twice; it hands nothing over now — the lead reads its line.
+  it("resume-inbox. a Resume forgets the earlier wrap-up, and reading the run's steers writes nothing", async () => {
     const { log, append, ctx } = resumedLog();
     const loopRun = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
-    await loopRun.steering(undefined);
+    assert.deepEqual(await loopRun.steering(), ["brighter sky"]);
     append(
       custom("run_control", { action: "finish" }),
       custom("autopilot_paused", {}),
@@ -1450,20 +1455,8 @@ describe("a resumed run inherited the session before it (resume-inbox)", () => {
     const resumedAt = log.length;
     const resumed = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
     assert.equal(await resumed.finishing(), false, "the resumed run was never asked to wrap up");
-    await resumed.steering(undefined);
-    assert.deepEqual(log.slice(resumedAt), [], "nothing the first session handed over goes out again");
-  });
-
-  it("resume-inbox-fresh. a fresh director after a Resume hears the earlier instruction once, handed over no second time", async () => {
-    const { log, append, ctx } = resumedLog();
-    const loopRun = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
-    assert.deepEqual(await loopRun.steering(undefined, true, { onlyNew: true }), ["brighter sky"]);
-    append(custom("autopilot_paused", {}), custom("run_registered", { resumed: true }));
-    const resumedAt = log.length;
-    const resumed = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
-    assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), ["brighter sky"]);
-    assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), [], "once per run");
-    assert.deepEqual(log.slice(resumedAt), [], "the first run already handed it over");
+    assert.deepEqual(await resumed.steering(), ["brighter sky"]);
+    assert.deepEqual(log.slice(resumedAt), [], "nothing is written for a read");
   });
 });
 
@@ -1568,7 +1561,10 @@ describe("the lead's later turns (wake loop)", () => {
     assert.equal(finished.stoppedBecause, "the lead finished the run", "the run was not wrapped up for it");
   });
 
-  it("I2. a session lost on a later turn is replaced by a fresh one with the brief, the lead's notes and the news", async () => {
+  // Flipped: the fresh session's prompt was "YOUR EARLIER SESSION WAS LOST … Your notes and the run so far
+  // are below", the brief, YOUR NOTES, THE RUN SO FAR and the digest; it is the turn's own message, with
+  // Genex's line beside it that the session was lost, and how the Loop began.
+  it("I2. a session lost on a later turn is replaced by a fresh one with the turn's own message, the loss and the Loop's start beside it", async () => {
     const { turns, finished } = await lateTurnLoopRun("late-lost", async (request, turn) => {
       const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
       if (turn === 1) {
@@ -1584,10 +1580,15 @@ describe("the lead's later turns (wake loop)", () => {
     assert.equal(turns.length, 3, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
     assert.equal(turns[1]!.resume, "lead-1");
     assert.equal(turns[2]!.resume, undefined, "a fresh session");
-    assert.match(turns[2]!.prompt, /^YOUR EARLIER SESSION WAS LOST/);
-    assert.match(turns[2]!.prompt, /YOU LEAD THIS LOOP/);
-    assert.match(turns[2]!.prompt, /YOUR NOTES[\s\S]*the sky first; the plaza after it/);
-    assert.match(turns[2]!.prompt, /WHAT HAPPENED/);
+    assert.equal(turns[2]!.prompt, turns[1]!.prompt, "the turn's own message");
+    const told = (turns[2]!.notices ?? []).join("\n");
+    // Flipped: the start line named the web build's worktree ("The Loop started; it builds in …"); its
+    // session's added folder is that worktree, and `run_status` names it.
+    assert.match(
+      told,
+      /Your earlier session was lost \(the session could not be resumed\); this session is new\.\nThe Loop started\. Its goal: /,
+    );
+    assert.doesNotMatch(told, /YOUR NOTES|THE RUN SO FAR|WHAT HAPPENED/);
     assert.equal(finished.stoppedBecause, "the lead finished the run");
   });
 
@@ -1672,7 +1673,13 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     logSeq: 0,
     run: { runId: "run_w", project: "sky", goal: "a blue sky", reference: { kind: "direction" } },
     journal: { director: { workers: {}, notes: [] } },
-    inbox: { steers: async () => [], steering: async () => [], finishing: async () => false, ...inbox },
+    inbox: {
+      steering: async () => [],
+      unheard: async () => [],
+      notes: async () => [],
+      finishing: async () => false,
+      ...inbox,
+    },
     routeUserSteers: async () => {},
     runningWorkers: () => [...state.workers.values()].filter((w) => w.state === "running"),
     notesSince: (seq: number) => log.filter((entry) => entry.seq > seq),
@@ -1709,10 +1716,8 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     };
     return { talk, calls };
   }
-  const run = (talk: DirectorTalk) =>
-    runWakeLoop(loopRun as never, talk, () => "You are the DIRECTOR of run run_w", clock);
-  const wakes = () => events.filter((e) => e.type === "director_continued").map((e) => e.payload.reasons as string[]);
-  return { T0, at, ticks, loopRun, state, worker, note, lead, run, wakes };
+  const run = (talk: DirectorTalk) => runWakeLoop(loopRun as never, talk, [LOOP_WORDS.started("a blue sky")], clock);
+  return { T0, at, ticks, loopRun, state, worker, note, lead, run };
 }
 
 /** A wake that is no wrap-up: the running worker ends five minutes in, and the lead hears of it. */
@@ -1730,39 +1735,24 @@ function workerEndsSoon(w: ReturnType<typeof clockNight>): void {
  * nothing, or have its last looks cut off by a wrap-up that started early.
  */
 describe("the wake loop, reviewed", () => {
-  it("I4. a store that refuses the hand-over of the user's words still tells the lead them once, and does not wake it again and again", async () => {
-    const said: string[] = [];
-    // The host's events.append fails: taking a steer (which records its hand-over) throws; reading does not.
-    const w = clockNight({
-      steers: async (_facet?: string, consume = true) => {
-        if (consume) throw new Error("events.append failed");
-        return said.map((text) => ({ text }));
-      },
+  // Flipped: the person's words came from the run's inbox, which records their hand-over, so a store
+  // that refused the record needed a list of words told unrecorded (`heardUnrecorded`); the lead now
+  // reads them from its line, and the record that it heard them is only the chat's receipt.
+  it("I4. a store that refuses the record that the lead heard the person's words still tells it them once, and wakes it once for each", async () => {
+    const chat = liveChat();
+    chat.hooks.refuseHeard = true;
+    chat.sayAt(chat.T0 + MINUTE_MS, "make the sky red");
+    chat.sayAt(chat.T0 + 10 * MINUTE_MS, "and the benches oak");
+    const one = chat.loopRun();
+    await one.run((turn) => {
+      if (turn === 3) one.state.finished = true;
+      return worked;
     });
-    w.ticks.push((now) => {
-      if (now >= w.T0 + MINUTE_MS && !said.length) said.push("make the sky red");
-      if (now >= w.T0 + 10 * MINUTE_MS && said.length === 1) said.push("and the benches oak");
-      if (now < w.T0 + 30 * MINUTE_MS || w.worker.state !== "running") return;
-      w.worker.state = "done";
-      w.note("sky ended: the sky is painted", "worker_ended");
-    });
-    const { talk, calls } = w.lead((turn) => {
-      // Each turn takes the lead twenty seconds; it finishes on the first wake past 25 minutes.
-      w.at.now += 20_000;
-      if (turn >= 8 || w.at.now > w.T0 + 25 * MINUTE_MS) w.state.finished = true;
-      return { ok: true, sessionId: "lead-1" };
-    });
-    await w.run(talk);
-
-    const heads = calls.map((c) => c.prompt.split("\n")[0]);
-    assert.equal(calls.length, 4, heads.join(" | "));
-    assert.match(calls[1]!.prompt, /THE USER SAYS[\s\S]*make the sky red/, "the words reach the lead");
-    assert.match(calls[2]!.prompt, /THE USER SAYS[\s\S]*and the benches oak/, "and the next ones, when they come");
-    assert.doesNotMatch(calls[2]!.prompt, /make the sky red/, "said once");
-    // Flipped (phase 5): no heartbeat wakes a resting lead; nothing came until the wrap-up.
-    // Flipped (no clock): no wrap-up comes for time; nothing comes until its worker ends.
-    assert.match(heads[3]!, /a worker ended/, "then nothing until its worker ends");
-    assert.equal(w.wakes().filter((reasons) => reasons.includes("user_message")).length, 2);
+    assert.deepEqual(
+      one.calls.slice(1).map((c) => c.prompt),
+      ["make the sky red", "and the benches oak"],
+      "each said once, as written, each its own wake",
+    );
   });
 });
 
@@ -1777,19 +1767,6 @@ async function settleOn(check: () => boolean, turns = 2_000): Promise<boolean> {
     await nextTurn();
   }
   return check();
-}
-
-/** What a message to the lead says the user said: the lines under THE USER SAYS, or none. */
-function userSaysIn(prompt: string): string[] {
-  const from = prompt.indexOf("THE USER SAYS");
-  if (from < 0) return [];
-  return prompt
-    .slice(from)
-    .split("\n\n")[0]!
-    .split("\n")
-    .slice(1)
-    .filter((line) => line.startsWith("- "))
-    .map((line) => line.slice(2));
 }
 
 /**
@@ -1821,6 +1798,8 @@ function liveChat() {
     cuts: boolean;
     native?: boolean;
     steerAnswer?: Promise<void>;
+    /** The store refuses the record that the lead heard a message. */
+    refuseHeard?: boolean;
   } = {
     gated: 0,
     cuts: true,
@@ -1842,6 +1821,8 @@ function liveChat() {
         hooks.gated += 1;
         await hooks.gate;
       }
+      const heard = (p.batch ?? []).some((data: Record<string, any>) => data.event_type === "run_steering_delivered");
+      if (hooks.refuseHeard && heard) throw new Error("events.append failed");
       return append(p.batch ?? []);
     }
     if (method === HostMethod.EventsList) {
@@ -1958,6 +1939,15 @@ function liveChat() {
     // As director.ts opens it: live while the run goes on, recording on the run's own log.
     const line = openLeadLine(RUN, THREAD, () => !state.finished && !ctx.cancelled && !n.report.failure, ctx as never);
     const calls: Array<{ prompt: string; at: number; said?: Record<string, unknown> }> = [];
+    /** The app quits under this run: nothing of it moves again, its clock included. */
+    let quit = false;
+    const runClock = {
+      now: clock.now,
+      sleep: (ms: number) => (quit ? new Promise<void>(() => {}) : clock.sleep(ms)),
+    };
+    const appQuits = () => {
+      quit = true;
+    };
     /** The run, each of the lead's turns answered by `script`; its line released when it ends, as director.ts does. */
     const run = async (script: (turn: number) => unknown) => {
       const talk: DirectorTalk = {
@@ -1970,10 +1960,10 @@ function liveChat() {
           return (await script(calls.length)) as never;
         },
       };
-      await runWakeLoop(n as never, talk, () => `You are the DIRECTOR of run ${RUN}`, clock, line);
+      await runWakeLoop(n as never, talk, [LOOP_WORDS.started("a dusk plaza")], runClock, line);
       await line.release();
     };
-    return { n, state, ctx, line, calls, run };
+    return { n, state, ctx, line, calls, run, appQuits };
   }
   const closeBuild = () => {
     build.done = true;
@@ -2139,6 +2129,7 @@ describe("live chat during a build, reviewed", () => {
       // The app quits in the middle of the turn: nothing more of this run happens, nothing is given back.
       await settleOn(() => chat.steers.length === 1);
       chat.queue.stop();
+      one.appQuits();
     } else {
       await quit;
       chat.closeBuild();
@@ -2148,13 +2139,13 @@ describe("live chat during a build, reviewed", () => {
   }
 
   /** Run two of the same run, resumed: the first message it opens with. */
-  async function resumedFirstPrompt(chat: ReturnType<typeof liveChat>): Promise<string> {
+  async function resumedFirst(chat: ReturnType<typeof liveChat>) {
     const two = chat.loopRun({ resume: true });
     await two.run(() => {
       two.state.finished = true;
       return worked;
     });
-    return two.calls[0]!.prompt;
+    return two.calls[0]!;
   }
 
   it("LC1a. Stop, then Resume: the resumed lead is told only what the chat said since, never the run's chat again", async () => {
@@ -2170,19 +2161,25 @@ describe("live chat during a build, reviewed", () => {
         payload: { runId: chat.RUN, text: "then keep going", sourceMessageId: chat.idOf("and add some fog") },
       },
     ]);
-    assert.deepEqual(userSaysIn(await resumedFirstPrompt(chat)), ["then keep going"]);
+    // Flipped: the resumed lead was told "then keep going" as the person's; the chat's session wrote it
+    // into `resume_run` itself, and that session is the lead, so it opens with Genex's line alone.
+    const first = await resumedFirst(chat);
+    assert.equal(first.prompt, LOOP_WORDS.started("a dusk plaza"));
+    assert.equal(first.said?.from, MessageFrom.Genex);
   });
 
   it("LC1b. the app quits mid-turn, then Resume: the lead is told what it never heard — and nothing it had", async () => {
     const chat = await loopRunOne("restart");
     assert.deepEqual(chat.requeued(), [], "a quit gives nothing back: the words stay with the run");
-    assert.deepEqual(userSaysIn(await resumedFirstPrompt(chat)), ["then light the lamps", "and add some fog"]);
+    const first = await resumedFirst(chat);
+    assert.equal(first.prompt, "then light the lamps\n\nand add some fog", "as written, the person's");
+    assert.equal(first.said?.from, MessageFrom.Person);
   });
 
   it("LC1c. the engine's limit pauses the run, then Resume: what went back to the chat is not told again, nor what the lead heard", async () => {
     const chat = await loopRunOne("limit");
     assert.deepEqual(chat.requeued(), ["then light the lamps", "and add some fog"]);
-    assert.deepEqual(userSaysIn(await resumedFirstPrompt(chat)), []);
+    assert.equal((await resumedFirst(chat)).prompt, LOOP_WORDS.started("a dusk plaza"));
   });
 
   it("LC2. a lead in the middle of a tool call is never cut short for the chat; a cut turn resumes with the person's words alone", async () => {
@@ -2236,8 +2233,9 @@ describe("live chat during a build, reviewed", () => {
       return worked;
     });
     assert.equal(one.calls.length, 3, one.calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
-    assert.deepEqual(userSaysIn(one.calls[1]!.prompt), ["is the sky dusk yet?"]);
-    assert.deepEqual(userSaysIn(one.calls[2]!.prompt), ["is the sky dusk yet?"], "the wrap-up says them again");
+    assert.equal(one.calls[1]!.prompt, "is the sky dusk yet?");
+    assert.equal(one.calls[2]!.prompt, "is the sky dusk yet?", "the wrap-up says them again");
+    assert.match(String(one.calls[2]!.said?.notices), /^Your last turn failed \(the provider broke\): the Loop closes/);
     assert.deepEqual(chat.requeued(), [], "heard in the wrap-up: nothing goes back to the chat");
   });
 
@@ -2262,33 +2260,48 @@ describe("live chat during a build, reviewed", () => {
     assert.ok(await settleOn(() => chat.answered.length === 1), "the chat answers it");
   });
 
-  it("LC6. a message handed while the lead's message is being read from the inbox is heard with it, and never given back", async () => {
+  // Flipped: the race was a message handed while the lead's message was read from the run's inbox;
+  // the lead reads its line, so what waits there is read whole, each message as written.
+  it("LC6. what the person sent while the lead could not read it wakes it once, every message as written, none given back", async () => {
     const chat = liveChat();
-    chat.sayAt(chat.T0 + MINUTE_MS, "is the sky dusk yet?");
-    let seen = false;
-    let armed = false;
-    let fired = false;
-    chat.hooks.beforeList = async () => {
-      seen ||= chat.log.some((e) => e.data.event_type === "run_steering");
-      if (!armed || fired) return;
-      fired = true;
-      await chat.say("and the benches oak");
-    };
+    chat.hooks.cuts = false;
     const one = chat.loopRun();
-    // The lead's poll has seen the question and the wake is decided (the schedule reads the log's
-    // lines last): the next read of the inbox is the one that tells the lead.
-    const lines = one.n.notesSince;
-    one.n.notesSince = (seq: number) => {
-      armed ||= seen;
-      return lines(seq);
-    };
-    await one.run((turn) => {
-      if (turn === 2) one.ctx.cancelled = true;
+    await one.run(async (turn) => {
+      if (turn === 2) {
+        one.ctx.cancelled = true;
+        return worked;
+      }
+      void chat.say("is the sky dusk yet?");
+      void chat.say("and the benches oak");
+      await settleOn(() => chat.steers.length === 2);
       return worked;
     });
-    assert.ok(fired);
-    assert.deepEqual(userSaysIn(one.calls[1]!.prompt), ["is the sky dusk yet?", "and the benches oak"]);
+    assert.equal(one.calls.length, 2);
+    assert.equal(one.calls[1]!.prompt, "is the sky dusk yet?\n\nand the benches oak");
     assert.deepEqual(chat.requeued(), [], "the lead heard both: Stop gives neither back");
+  });
+
+  it("LC19. a note about a build ahead of a chat message the lead never heard: Stop gives the chat its message back, the note stays with the run", async () => {
+    const chat = liveChat();
+    chat.hooks.cuts = false;
+    const NOTE = "[USER FEEDBACK on Sky · try 2] make it darker";
+    const one = chat.loopRun();
+    await one.run(async () => {
+      chat.append([{ type: "custom", event_type: "run_steering", payload: { runId: chat.RUN, text: NOTE } }]);
+      await settleOn(() => one.line.unheard().length === 1);
+      await chat.say("and the moon?");
+      await settleOn(() => one.line.unheard().length === 2);
+      one.ctx.cancelled = true;
+      return worked;
+    });
+    chat.closeBuild();
+    assert.deepEqual(chat.requeued(), ["and the moon?"], "the chat answers its own message");
+    const resumed = createRunInbox(one.ctx as never, { threadId: `t_${chat.RUN}`, runId: chat.RUN });
+    assert.deepEqual(
+      (await resumed.notes()).map((note) => note.text),
+      [NOTE],
+      "a Resume hands the note to its lead",
+    );
   });
 
   /** Where each of the chat's messages stands, by its words. */
@@ -2363,7 +2376,7 @@ describe("live chat during a build, reviewed", () => {
     line.hear({ threadId: "t_crash", messageId: "m1", text: "is it started?" }, giveBack);
     line.hear({ threadId: "t_crash", messageId: "m2", text: "and the sky?" }, giveBack);
     // What director.ts does when the run crashes before `runWakeLoop` ever took the line.
-    await line.release({ heardNone: true });
+    await line.release();
     assert.deepEqual(back, [["is it started?", "and the sky?"]]);
   });
 
@@ -2434,7 +2447,9 @@ describe("live chat during a build, reviewed", () => {
     assert.equal(one.calls[1]?.said?.from, "person");
   });
 
-  it("LC13. a first turn cut before its session began is asked its brief again with the words, never crashing the run", async () => {
+  // Flipped: the brief was asked again with the words glued after it ("SINCE THEN: THE USER SAYS…");
+  // the turn resumes with the words that cut it, Genex's start line beside them.
+  it("LC13. a first turn cut before its session began is resumed with the words, its start line beside them, never crashing the run", async () => {
     const chat = liveChat();
     // The host's answer to the cut reaches the loop only after the failure the cut caused.
     let answer = () => {};
@@ -2454,9 +2469,8 @@ describe("live chat during a build, reviewed", () => {
       throw new EngineError("aborted", "codex", "stopped before the contractor started");
     });
     assert.equal(one.calls.length, 2, one.calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
-    const [brief = "", again = ""] = one.calls.map((c) => c.prompt);
-    assert.ok(again.includes(brief), "the brief is asked again");
-    assert.deepEqual(userSaysIn(again), ["stop building"]);
+    assert.equal(one.calls[1]!.prompt, "stop building");
+    assert.deepEqual(one.calls[1]!.said?.notices, [LOOP_WORDS.started("a dusk plaza")], "the start it never read");
   });
 
   it("LC14. a first turn with no session to resume yet is left alone: the words open the next message", async () => {
@@ -2472,7 +2486,7 @@ describe("live chat during a build, reviewed", () => {
       return { ok: true, sessionId: "lead-9", turns: 2 };
     });
     assert.equal(chat.steers[0]?.interrupt, false, "a cut would leave nothing to resume");
-    assert.deepEqual(userSaysIn(String(one.calls[1]?.prompt)), ["is it started?"]);
+    assert.equal(one.calls[1]?.prompt, "is it started?");
   });
 
   it("LC15. a picture sent before (its file the game's already) reaches the lead with the words as typed", async () => {
@@ -2511,7 +2525,8 @@ describe("live chat during a build, reviewed", () => {
       one.state.finished = true;
       return { ...worked, steered: chat.steers.map((steer) => steer.messages[0].id) };
     });
-    assert.match(String(one.calls[1]?.prompt), /The user asked to finish, so the wrap-up starts now/);
+    // Flipped: "The user asked to finish, so the wrap-up starts now." and the web wrap-up's rules.
+    assert.equal(one.calls[1]?.prompt, LOOP_WORDS.finishAsked);
     assert.equal(chat.steers[0]?.interrupt, false, "the wrap-up is never cut short");
     assert.deepEqual(
       chat.steers[0]?.messages.map(({ id: _id, ...said }: Record<string, unknown>) => said),
@@ -2609,9 +2624,10 @@ describe("live chat during a build, reviewed", () => {
   it("LM2. a worker's end said into the lead's turn is Genex's, and Claude Code takes it as not the person's", async () => {
     const chat = liveChat();
     const one = chat.loopRun();
-    const line = { at: chat.T0, seq: 1, text: 'worker sky "Sky": done.', kind: "worker_ended" };
-    one.state.log.push(line);
+    const line = { at: chat.T0, seq: 1, text: 'worker sky "Sky" ended: done.', kind: "worker_ended" };
     await one.run(async () => {
+      one.n.logSeq = 1;
+      one.state.log.push(line);
       await settleOn(() => chat.steers.length > 0);
       one.state.finished = true;
       return worked;
@@ -2637,6 +2653,189 @@ describe("live chat during a build, reviewed", () => {
     assert.equal(frame.isSynthetic, true);
     assert.equal("origin" in frame, false, "never the person's: no human origin");
     feed.dispose();
+  });
+});
+
+/**
+ * A resting lead was woken with a digest around the person's words: "WOKEN AT 09:01 UTC — the user
+ * spoke; a worker ended", "THE USER SAYS (verbatim, oldest first):", "WHAT HAPPENED:", "WHERE THE
+ * RUN STANDS:" and "Act on it…", and every worker's or job's end carried what to do next. Now a
+ * resting lead is woken by the person's message alone, as they wrote it, or by Genex's one-line
+ * facts, marked as Genex's; what comes while it works reaches that turn at its next step.
+ */
+describe("a person's words woke the lead inside a digest (digest-wake)", () => {
+  /** A line of the run's log, as a worker's end writes it while the lead rests. */
+  const noteEnd = (one: ReturnType<ReturnType<typeof liveChat>["loopRun"]>, at: number, text: string) => {
+    one.n.logSeq += 1;
+    one.state.log.push({ at, seq: one.n.logSeq, text, kind: "worker_ended" });
+  };
+  const SKY_DONE = 'worker w1 "Sky" ended: done.';
+  const SEA_DONE = 'worker w2 "Sea" ended: failed.';
+
+  it("DW1. words sent while the lead rests wake it with the words alone; two workers' ends ride beside them as Genex's", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    const at = chat.T0 + MINUTE_MS;
+    let ended = 0;
+    chat.ticks.push((now) => {
+      if (ended === 0 && now >= at) noteEnd(one, at, SKY_DONE), (ended = 1);
+      if (ended === 1 && now >= at + 2_000) noteEnd(one, at + 2_000, SEA_DONE), (ended = 2);
+    });
+    chat.sayAt(at + 3_000, "hdrp или urp?");
+    await one.run((turn) => {
+      if (turn === 2) one.state.finished = true;
+      return worked;
+    });
+    assert.equal(one.calls.length, 2, one.calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+    assert.equal(one.calls[1]!.prompt, "hdrp или urp?", "the person's words, as they wrote them");
+    assert.equal(one.calls[1]!.said?.from, MessageFrom.Person);
+    assert.deepEqual(one.calls[1]!.said?.notices, [`${SKY_DONE}\n${SEA_DONE}`], "Genex's lines beside them, marked");
+    assert.deepEqual(chat.steers, [], "nothing said again into the turn they woke");
+  });
+
+  it("DW2. the person's message sent while the lead works reaches that turn as they wrote it, and the turn answers it", async () => {
+    const chat = liveChat();
+    chat.hooks.native = true;
+    const one = chat.loopRun();
+    await one.run(async () => {
+      void chat.say("is the door done?");
+      await settleOn(() => chat.steers.length > 0);
+      one.state.finished = true;
+      return { ...worked, steered: chat.steers.flatMap((steer) => steer.messages.map((m: SteerMessage) => m.id)) };
+    });
+    assert.equal(one.calls.length, 1, "no wake after it: the turn it reached answered it");
+    const said = chat.steers.flatMap((steer) => steer.messages.map(({ id: _id, ...m }: SteerMessage) => m));
+    assert.deepEqual(said, [{ text: "is the door done?" }], "verbatim, the person's");
+    const heard = chat.log
+      .filter((e) => e.data.event_type === "run_steering_delivered" && e.data.payload.how === "lead")
+      .map((e) => e.data.payload.sourceMessageId);
+    assert.deepEqual(heard, [chat.idOf("is the door done?")], "recorded as heard by the lead");
+    assert.deepEqual(chat.requeued(), [], "never given back for a second answer");
+  });
+
+  it("DW3. a worker's end wakes a resting lead with that one line, Genex's", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    const at = chat.T0 + MINUTE_MS;
+    chat.ticks.push((now) => {
+      if (now >= at && one.state.log.length === 0) noteEnd(one, at, SKY_DONE);
+    });
+    await one.run((turn) => {
+      if (turn === 2) one.state.finished = true;
+      return worked;
+    });
+    assert.equal(one.calls.length, 2);
+    assert.equal(one.calls[1]!.prompt, SKY_DONE);
+    assert.equal(one.calls[1]!.said?.from, MessageFrom.Genex);
+    assert.equal(one.calls[1]!.said?.notices, undefined);
+  });
+
+  it("DW4. a worker's end while the lead works is said into that turn once, Genex's, and wakes nobody after", async () => {
+    const chat = liveChat();
+    chat.hooks.native = true;
+    const one = chat.loopRun();
+    // The run ends ten minutes on: no wake came for the line its turn read.
+    chat.ticks.push((now) => {
+      if (now >= chat.T0 + 10 * MINUTE_MS) one.state.finished = true;
+    });
+    await one.run(async () => {
+      noteEnd(one, chat.at.now, SKY_DONE);
+      await settleOn(() => chat.steers.length > 0);
+      return { ...worked, steered: chat.steers.flatMap((steer) => steer.messages.map((m: SteerMessage) => m.id)) };
+    });
+    assert.equal(one.calls.length, 1, "read in its turn: nothing woke the lead for it after");
+    const said = chat.steers.flatMap((steer) => steer.messages.map(({ id: _id, ...m }: SteerMessage) => m));
+    assert.deepEqual(said, [{ text: SKY_DONE, from: MessageFrom.Genex }]);
+    assert.equal(chat.steers[0]!.interrupt, false, "Genex's line never cuts the turn short");
+    assert.equal(one.n.waitSeq, 1, "told");
+  });
+
+  it("DW5. a session lost on a wake opens a fresh one with the turn's own message, Genex's lines beside it", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    chat.sayAt(chat.T0 + MINUTE_MS, "hdrp или urp?");
+    await one.run((turn) => {
+      if (turn === 2) throw new Error("No conversation found with session ID: lead-1");
+      one.state.finished = turn === 3;
+      return worked;
+    });
+    assert.equal(one.calls.length, 3, one.calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+    assert.equal(one.calls[2]!.prompt, "hdrp или urp?", "the turn's own message, never a replay around it");
+    assert.equal(one.calls[2]!.said?.from, MessageFrom.Person);
+    const [told = ""] = (one.calls[2]!.said?.notices ?? []) as string[];
+    assert.match(told, /^Your earlier session was lost \(the session could not be resumed\)/);
+    assert.match(told, /The Loop started/, "and how the Loop began");
+    assert.doesNotMatch(told, /YOUR NOTES|THE RUN SO FAR|WHAT HAPPENED/);
+  });
+
+  it("DW7. a note the person left about a build, which reaches the run and no chat queue, wakes a resting lead with its words, once", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    const NOTE = "[USER FEEDBACK on Sky · try 2] make it darker";
+    let left = false;
+    chat.ticks.push((now) => {
+      if (left || now < chat.T0 + MINUTE_MS) return;
+      left = true;
+      chat.append([{ type: "custom", event_type: "run_steering", payload: { runId: chat.RUN, text: NOTE } }]);
+    });
+    chat.ticks.push((now) => {
+      if (now >= chat.T0 + 10 * MINUTE_MS) one.state.finished = true;
+    });
+    await one.run(() => worked);
+    assert.deepEqual(
+      one.calls.map((c) => c.prompt),
+      [LOOP_WORDS.started("a dusk plaza"), NOTE],
+      "woken by the note as written, and by nothing after it",
+    );
+    assert.equal(one.calls[1]!.said?.from, MessageFrom.Person);
+  });
+
+  it("DW8. a line the turn could not take yet is said again with the next one, and no later line is told past it", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    chat.ticks.push((now) => {
+      if (now >= chat.T0 + 10 * MINUTE_MS) one.state.finished = true;
+    });
+    await one.run(async (turn) => {
+      if (turn > 1) return worked;
+      // No session takes input yet (the call waits for the folder another chat's turn holds): refused.
+      noteEnd(one, chat.at.now, SKY_DONE);
+      await settleOn(() => chat.steers.length === 1);
+      chat.hooks.native = true;
+      noteEnd(one, chat.at.now, SEA_DONE);
+      await settleOn(() => chat.steers.length === 2);
+      return { ...worked, steered: chat.steers[1]!.messages.map((m: SteerMessage) => m.id) };
+    });
+    assert.deepEqual(
+      chat.steers.map((steer) => steer.messages.map((m: SteerMessage) => m.text)),
+      [[SKY_DONE], [SKY_DONE, SEA_DONE]],
+      "the refused line goes in again, before the one after it",
+    );
+    assert.equal(one.calls.length, 1, "both read in the turn: nothing wakes the lead for them again");
+  });
+
+  it("DW6. a worker's and a job's end are facts: what ended and how, with no instruction after them", () => {
+    assert.equal(RUN_POOL_WORDS.ended("w1", "Sky", "done"), SKY_DONE);
+    const job = {
+      id: "j1",
+      title: "Unreal build",
+      command: "make",
+      role: "worker",
+      worker: "w2",
+      state: "failed",
+      exitCode: 2,
+      durationMs: 4 * MINUTE_MS,
+      stoppedBy: null,
+    };
+    assert.equal(
+      jobEndLine(job as never),
+      'job j1 "Unreal build" (`make`, started by worker w2) failed (exit 2) after 4 min.',
+    );
+    const stopped = { ...job, state: "stopped", exitCode: null, stoppedBy: "person" };
+    assert.equal(
+      jobEndLine(stopped as never),
+      'job j1 "Unreal build" (`make`, started by worker w2) was stopped by the person after 4 min.',
+    );
   });
 });
 
@@ -2963,7 +3162,9 @@ describe("one session, reviewed", () => {
     assert.equal(clean.landed.ok, true, clean.landed.reason);
     assert.deepEqual(clean.landed.leftInGame, ["notes.txt"]);
     assert.equal(await clean.git("status", "--porcelain"), "?? notes.txt");
-    assert.match(clean.notes.join("\n"), /still has uncommitted changes the landing left as they were — notes\.txt/);
+    // Flipped: the landing also wrote it as a line of the run's log, which no message carried; finish's
+    // answer names the stray (`leftInGame`, integrate.ts FINISH_WORDS.closed).
+    assert.deepEqual(clean.notes, []);
 
     // A hook of the user's that refuses the merge, beside an unrelated stray: git's words, not the stray's blame.
     const hooked = await landingOver(async (git, dir) => {
@@ -3066,7 +3267,8 @@ describe("a Loop has no time limit", () => {
     const outcome = await w.run(talk);
     assert.equal(calls.length, 2, calls.map((c) => c.prompt.split("\n")[0]).join(" | "));
     assert.ok(calls[1]!.at >= w.T0 + 48 * HOUR_MS, "woken only once its worker ended");
-    assert.match(calls[1]!.prompt, /a worker ended/);
+    // Flipped: "WOKEN AT … — a worker ended" around it; the worker's own line now.
+    assert.equal(calls[1]!.prompt, "sky ended: the sky is painted");
     assert.equal(outcome.wrapCause, null, "no wrap-up for time");
     for (const call of calls) assert.doesNotMatch(call.prompt, /working minutes|time's up|minutes left/i);
   });
@@ -3116,7 +3318,8 @@ describe("a Loop has no time limit", () => {
     await resting.run();
     assert.equal(resting.calls.length, 2, "the Loop stayed open while its job ran");
     assert.ok(resting.calls[1]!.at >= resting.endsAt, "woken once its job ended");
-    assert.match(resting.calls[1]!.prompt, /a job of the run ended/);
+    // Flipped: "WOKEN AT … — a job of the run ended"; the job's own line now.
+    assert.match(resting.calls[1]!.prompt, /^job job-1 "Long build" /);
   });
 
   it("no-clock. a lead resting on a job reads the run's jobs at most twice every JOB_POLL_MS: its ends and what runs", async () => {
@@ -3136,9 +3339,11 @@ describe("a Loop has no time limit", () => {
     });
     const outcome = await w.run(talk);
     assert.equal(calls.length, 2, "its turn, then the one wrap-up turn");
-    assert.match(calls[1]!.prompt, /The user asked to finish, so the wrap-up starts now/);
+    // Flipped: "The user asked to finish, so the wrap-up starts now." and the `director_continued`
+    // reasons it was recorded under; Genex's one line, at once, not by a clock.
+    assert.equal(calls[1]!.prompt, LOOP_WORDS.finishAsked);
+    assert.ok(calls[1]!.at - calls[0]!.at < MINUTE_MS, "at once, not by a clock");
     assert.equal(outcome.wrapCause, "finish");
-    assert.deepEqual(w.wakes(), [["finish_requested", "wrap_up"]], "the wrap-up is woken for at once, not by a clock");
   });
 });
 
@@ -3727,38 +3932,6 @@ describe("a tool call the turn stopped before running", () => {
   });
 });
 
-describe("a steer read twice at once", () => {
-  it("is handed to one reader, not both, while the hand-over is being recorded", async () => {
-    const { createRunInbox } = await import("../../src/harness-seed/loop/run-inbox.ts");
-    const log: Array<{ id: string; data: Record<string, unknown> }> = [
-      {
-        id: "e1",
-        data: { type: "custom", event_type: "run_steering", payload: { runId: "r", text: "make it blue" } },
-      },
-    ];
-    const ctx = {
-      call: async (method: string, params: { batch?: Array<Record<string, unknown>>; after?: string }) => {
-        if (method === HostMethod.EventsList)
-          return params.after ? log.slice(log.findIndex((e) => e.id === params.after) + 1) : [...log];
-        if (method === HostMethod.EventsAppend) {
-          // A host that takes a moment to write: the second reader arrives meanwhile.
-          await nextTurn();
-          for (const data of params.batch ?? []) log.push({ id: `e${log.length + 1}`, data });
-        }
-        return null;
-      },
-    };
-    const inbox = createRunInbox(ctx as never, { threadId: "t", runId: "r" });
-    const [first, second] = await Promise.all([
-      inbox.steering(undefined, true, { onlyNew: true }),
-      inbox.steering(undefined, true, { onlyNew: true }),
-    ]);
-    assert.deepEqual([...first, ...second], ["make it blue"], "one delivery of one steer");
-    const deliveries = log.filter((e) => e.data.event_type === "run_steering_delivered");
-    assert.equal(deliveries.length, 1, "and one hand-over record");
-  });
-});
-
 describe("Stop on a one-facet Autopilot run", () => {
   it("pauses the run where it was: no finalization is journaled for Resume to skip ahead to", async () => {
     const rig = await startRig();
@@ -4008,22 +4181,13 @@ describe("an engine's plugin turned on from the chat's card (mp-unity)", () => {
 });
 
 describe("what the lead is told about its workers", () => {
-  it("GGR-11. the brief said '8 of 8 worker windows free' of a pool whose workers could use six: it says how many workers may run at once", async () => {
-    const { directorBrief } = await import("../../src/harness-seed/loop/director/briefs.ts");
-    const brief = directorBrief({
-      run: {
-        runId: "ggr",
-        project: "golden-goal-rush",
-        goal: "an 11v11 broadcast soccer match",
-        engine: "claude-code",
-      },
-      capacity: { max: 8, free: 8, memory: { freeMb: 13091 } },
-      integrationWorktree: "/runs/ggr/integration",
-      baseCommit: "a".repeat(40),
-    } as never);
-    // Flipped (phase 5): the count is the pool's own cap, which refuses a start past it.
-    assert.match(brief, /up to 8 at once/);
-    assert.doesNotMatch(brief, /8 of 8 worker windows free/);
+  // Flipped: the web lead's brief said it ("WORKERS (optional, up to 8 at once)"); the brief is gone, and
+  // the count is the tool's own description, as an open Loop's lead reads it.
+  it("GGR-11. the brief said '8 of 8 worker windows free' of a pool whose workers could use six: worker_start says how many workers may run at once", async () => {
+    const { directorTools } = await import("../../src/harness-seed/loop/director/tool-specs.ts");
+    const start = directorTools([], 6).find((tool) => tool.name === "worker_start");
+    assert.match(String(start?.description), /Up to 6 at once/);
+    assert.doesNotMatch(String(start?.description), /worker windows free/);
   });
 });
 
@@ -4849,27 +5013,14 @@ describe("the most workers at once", () => {
 });
 
 describe("the user's ask to finish a running build (director/wrap-up.ts)", () => {
-  it("FA4. the wrap-up after the user's ask never invites a claim: their finish closes the run with no reviewer, so no win is claimed", async () => {
-    const { wrapUpPrompt } = await import("../../src/harness-seed/loop/director/briefs.ts");
-    const brief = {
-      run: { runId: "run_f", project: "racer", goal: "a racer" },
-      integrationHead: "a".repeat(40),
-      integrationHealthy: true,
-      workers: [],
-    };
-    const asked = wrapUpPrompt({ ...brief, userAsked: true } as never);
-    assert.doesNotMatch(asked, /victory=yes/, asked);
-    assert.match(asked, /claims nothing/);
-    assert.match(wrapUpPrompt(brief as never), /victory=yes/, "a failed turn's wrap-up still may claim the goal");
-
-    // The open Loop: a finish after the person's ask closes at once, with no reviewer.
-    const { openClosing } = await import("../../src/harness-seed/loop/director/open/prompts.ts");
-    const open = (wrapCause: string) => openClosing({ wrapping: true, wrapCause } as never);
-    assert.doesNotMatch(open("finish"), /reviewer needs/, open("finish"));
-    assert.match(open("finish"), /no reviewer/);
-    // Flipped (phase 5): a review is the lead's to ask for; a failed turn's wrap-up names none.
-    // Flipped (no clock): that wrap-up was the clock's (`deadline`); a Loop has none.
-    assert.match(open("failed"), /Only if the goal is reached, call finish/);
+  // Flipped: the wrap-up's message said what to call and claim ("Call finish now … victory=yes only if
+  // the goal is reached", "THE PERSON ASKED THE LOOP TO FINISH: this is your last turn…"); it is Genex's
+  // one line now, and what the lead may do is finish's and wrap_up's own descriptions.
+  it("FA4. the wrap-up after the person's ask never invites a claim: its one line says why the turn is the last", () => {
+    for (const line of [LOOP_WORDS.finishAsked, LOOP_WORDS.turnFailed("the provider broke")]) {
+      assert.doesNotMatch(line, /victory|claim|review|call /i, line);
+      assert.match(line, /closes when this turn ends/);
+    }
   });
 
   it("FA6. an open Loop starts no worker once anybody asked it to finish — the app's own Finish too, not only the lead's wrap_up", async () => {
@@ -5198,22 +5349,12 @@ describe("the Loop's stop and nudge rules, audited after phase 5", () => {
     const { afterTurn, nextWake, TurnEnd, WrapCause } = await import(
       "../../src/harness-seed/loop/director/wake-schedule.ts"
     );
-    const { wakeRules } = await import("../../src/harness-seed/loop/director/wake-prompts.ts");
     const quiet = { ok: true, closed: false, finishRequested: false };
     assert.equal(afterTurn(quiet).next, TurnEnd.Sleep, "the first quiet turn");
     assert.equal(afterTurn(quiet).next, TurnEnd.Sleep, "and every one after it");
     assert.equal(Object.values(WrapCause).includes("idle" as never), false, "no wrap-up is started by idleness");
-    const resting = nextWake({
-      now: 1_000,
-      unread: [],
-      asleepFromSeq: 0,
-      asleepSince: 1_000,
-      userWaiting: false,
-      finishNew: false,
-      wakesAt: [],
-    });
+    const resting = nextWake({ now: 1_000, untold: [], asleepSince: 1_000, personWaiting: false });
     assert.equal(resting, null, "no clock wakes it");
-    assert.doesNotMatch(wakeRules(), /asks once what next|the wrap-up starts/);
   });
 
   // Flipped: the lead's answer to a reviewer's no counted a row of no's ("2 of 3 in a row stop the Loop")

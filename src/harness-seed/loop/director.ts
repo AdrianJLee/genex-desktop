@@ -13,15 +13,12 @@
  */
 import path from "node:path";
 import { plannerModel, roleEffort, RoleKey } from "./model-roles.ts";
-import { GIT, gitAt } from "./git.ts";
 import { closeSettled, closeUnderWay, latchClose } from "./director/close-latch.ts";
-import { fireHooks, HookEvent, holdOf, notesText, runScope } from "./hooks.ts";
+import { fireHooks, HookEvent, holdOf, hooksOn, notesText, runScope } from "./hooks.ts";
 import { type HeldBack, heldTurnEnding, runHeldWords } from "./director/held-words.ts";
-import { LoopProfile } from "./folder-facts.ts";
-import { loopSkills } from "./loop-skills.ts";
+import { CoreFact, LoopProfile } from "./folder-facts.ts";
 import { closeRunPool } from "./workers/run-pool.ts";
 import { leadsOpenLoop } from "./director/open/active-work.ts";
-import { briefWriter } from "./director/open/brief.ts";
 import { closeInPlace } from "./director/open/close.ts";
 import { MESSAGE as END_WORDS, openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
@@ -36,15 +33,15 @@ import { chatContext } from "./chat-session.ts";
 import { folderLabelOf } from "./workers/identity.ts";
 import { EngineFailure, engineLimitOf } from "./outage.ts";
 import { isProviderLoss, noteProviderLoss, pauseDecision, pauseEnding } from "./provider-loss.ts";
-import { isCommit } from "./shell.ts";
 import { CLIP_QUOTE } from "./text.ts";
 import { NotLandedReason } from "./verdict.ts";
 import * as loopRunFunctions from "./director/loop-run.ts";
 import * as toolFunctions from "./director/tools.ts";
 import * as integrateFunctions from "./director/integrate.ts";
 import { prepareLoopRun } from "./director/setup.ts";
-import { directorBrief, resumeNote } from "./director/briefs.ts";
 import { directors, directorTools } from "./director/tool-specs.ts";
+import { resumedFromJournal } from "./director/journal.ts";
+import { LOOP_WORDS } from "./director/wake-prompts.ts";
 import { runWakeLoop, SYSTEM_CLOCK, WAKE_ENDING } from "./director/wake.ts";
 import { WrapCause } from "./director/wake-schedule.ts";
 import { openLeadLine, type LeadLine } from "./director/lead-line.ts";
@@ -52,7 +49,8 @@ import { bookmarkLead, freshChat, leadSeat } from "./director/lead-session.ts";
 import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
 import type { LoopRun } from "./director/loop-run.ts";
-import type { DirectorTalk, TurnSaid, WakeClock } from "./director/wake.ts";
+import type { TurnSaid } from "./director/news.ts";
+import type { DirectorTalk, WakeClock } from "./director/wake.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type {
   DelegateImage,
@@ -62,8 +60,8 @@ import type {
   ReferenceFrame,
 } from "../types/host-api.d.ts";
 
-/** One message to the lead's session: its prompt, and who wrote it when it is not a brief. */
-type LeadAsk = Pick<HarnessDelegateParams, "prompt" | "from">;
+/** One message to the lead's session: its prompt, who wrote it, and Genex's lines beside it. */
+type LeadAsk = Pick<HarnessDelegateParams, "prompt" | "from" | "notices">;
 
 export { directorTool } from "./director/tool-specs.ts";
 
@@ -99,7 +97,7 @@ function delegateTurn(
   loopRun: LoopRun,
   images: DelegateImage[],
   tools: LiveToolSpec[],
-  { prompt, from }: LeadAsk,
+  { prompt, from, notices }: LeadAsk,
   sessionId: string | null | undefined,
 ): Promise<DelegateResult> {
   const { ctx, integrationWorktree, lead, run, threadId } = loopRun;
@@ -108,6 +106,7 @@ function delegateTurn(
     engine: run.engine,
     prompt,
     ...(from ? { from } : {}),
+    ...(notices?.length ? { notices } : {}),
     // The chat's own context: the session it continues reads one system text, its cache kept.
     ...(loopRun.context ? { system: loopRun.context } : {}),
     project: run.project,
@@ -133,8 +132,8 @@ function delegateTurn(
 }
 
 /**
- * What one turn of the lead sends. A fresh lead session knows nothing of the chat it leads for: it
- * is told the chat so far first, and that message is Genex's brief, never the person's words alone.
+ * What one turn of the lead sends: its message as its sender wrote it, Genex's lines beside it — and
+ * for a fresh lead session, which knows nothing of the chat it leads for, the chat so far first.
  */
 async function leadAsk(
   loopRun: LoopRun,
@@ -143,8 +142,8 @@ async function leadAsk(
   said: TurnSaid | undefined,
 ): Promise<LeadAsk> {
   const chat = loopRun.lead && !sid ? await freshChat(loopRun.ctx, loopRun.threadId) : "";
-  if (chat) return { prompt: `${chat}\n\n${prompt}` };
-  return said?.from ? { prompt, from: said.from } : { prompt };
+  const notices = [chat, ...(said?.notices ?? [])].filter(Boolean);
+  return { prompt, ...(said?.from ? { from: said.from } : {}), ...(notices.length ? { notices } : {}) };
 }
 
 /**
@@ -192,21 +191,6 @@ export function directorTalk(loopRun: LoopRun, images: DelegateImage[], tools: L
   return talk;
 }
 
-/** What a resumed web run's lead is told about its branch. */
-async function resumeWords(loopRun: LoopRun): Promise<string | null> {
-  const { baseCommit, ctx, forkCommit, integrationWorktree, priorJournal, run } = loopRun;
-  if (!priorJournal?.director) return null;
-  const moved = isCommit(forkCommit) && isCommit(baseCommit) && forkCommit !== baseCommit;
-  const aheadOfBase = moved
-    ? Number(
-        await gitAt(ctx, integrationWorktree, GIT.revListCount(baseCommit, forkCommit), {
-          label: `director:${run.runId}:ahead`,
-        }).catch(() => "0"),
-      ) || 0
-    : 0;
-  return resumeNote({ forkCommit, baseCommit, aheadOfBase });
-}
-
 /** What the run stands on as its lead's first turn opens: why a plugin held the start back, and what the plugins said. */
 interface StartOfRun {
   held?: string;
@@ -224,35 +208,14 @@ async function prepareTheStart(loopRun: LoopRun): Promise<StartOfRun> {
   return { notes: notesText(prepared) };
 }
 
-/** The skills whose facts reach this game, by name: the web lead reads one on demand. */
-async function skillNames(loopRun: LoopRun): Promise<string[]> {
-  const skills = await loopSkills(loopRun.ctx.workspace, { facts: loopRun.gameFacts ?? [] }).catch(() => []);
-  return skills.map((skill) => skill.slug);
-}
-
-/** The web lead's brief, from what the run knows (written again for a fresh session). */
-async function webBrief(loopRun: LoopRun, start: StartOfRun): Promise<() => string> {
-  const resume = await resumeWords(loopRun);
-  const skills = await skillNames(loopRun);
-  const notes = start.notes.length
-    ? `WHAT THE GAME'S PLUGINS SAID:\n${start.notes.map((n) => `- ${n}`).join("\n")}`
-    : "";
-  return () =>
-    [
-      directorBrief({
-        run: loopRun.run,
-        integrationWorktree: loopRun.integrationWorktree,
-        baseCommit: loopRun.state.integrationHead,
-        gameFolder: loopRun.projectDir,
-        facts: loopRun.gameFacts ?? null,
-        resume,
-        skills,
-        ...(loopRun.pool ? { workersAtOnce: loopRun.pool.state.allowed } : {}),
-      }),
-      notes,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+/**
+ * The Loop's first lines to its lead: that it started (or resumed), with its goal as the chat's
+ * session wrote it; then what the project's plugins said as it prepared.
+ */
+function startLines(loopRun: LoopRun, start: StartOfRun): string[] {
+  const { goal } = loopRun.run;
+  const line = resumedFromJournal(loopRun) ? LOOP_WORDS.resumed(goal) : LOOP_WORDS.started(goal);
+  return [line, ...start.notes];
 }
 
 /** Why the session ended, in the sentence the report keeps. */
@@ -360,11 +323,11 @@ function leadLine(loopRun: LoopRun): LeadLine {
 async function wakeLoopRun(
   loopRun: LoopRun,
   talk: DirectorTalk,
-  brief: () => string,
+  start: readonly string[],
   line: LeadLine,
   clock: WakeClock,
 ) {
-  const outcome = await runWakeLoop(loopRun, talk, brief, clock, line);
+  const outcome = await runWakeLoop(loopRun, talk, start, clock, line);
   await line.release();
   if (loopRun.state.finished) return;
   if (stoppedBeforeAnyTurn(loopRun)) return closeStoppedStart(loopRun);
@@ -413,7 +376,12 @@ function seatTools(loopRun: LoopRun): LiveToolSpec[] {
     const types = open.pool?.state.types ?? [];
     loopRun.afterTurn = () => openBetweenTurns(loopRun);
     directors.set(loopRun.run.runId, openHandler(loopRun));
-    return openTools(types, { restart: restartsApp(loopRun.game), workers: open.pool?.state.allowed });
+    return openTools(types, {
+      restart: restartsApp(loopRun.game),
+      workers: open.pool?.state.allowed,
+      appSaved: hooksOn(loopRun.game, HookEvent.CheckpointBefore),
+      cppRestart: (loopRun.gameFacts ?? []).some((fact) => fact.id === CoreFact.UnrealProject),
+    });
   }
   directors.set(loopRun.run.runId, (name, args) => loopRun.handler(name, args));
   return directorTools(loopRun.pool?.state.types ?? [], loopRun.pool?.state.allowed);
@@ -439,24 +407,21 @@ async function closeStoppedStart(loopRun: LoopRun): Promise<void> {
 
 /** The run under its lead: its start, the lead's turns, the close of whatever it left open, and the teardown. */
 async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, clock: WakeClock): Promise<void> {
-  let looping = false;
   try {
     const start = await prepareTheStart(loopRun);
     if (start.held) {
-      await line.release({ heardNone: true });
+      await line.release();
       await closeHeldStart(loopRun, start);
       return;
     }
     if (loopRun.ctx.cancelled) {
-      await line.release({ heardNone: true });
+      await line.release();
       await closeStoppedStart(loopRun);
       return;
     }
-    const brief = leadsOpenLoop(loopRun) ? await briefWriter(loopRun, start.notes) : await webBrief(loopRun, start);
-    looping = true;
-    await wakeLoopRun(loopRun, talk, brief, line, clock);
+    await wakeLoopRun(loopRun, talk, startLines(loopRun, start), line, clock);
   } catch (err: any) {
-    await line.release({ heardNone: !looping });
+    await line.release();
     await closeAfterCrash(loopRun, err);
   } finally {
     await line.release();

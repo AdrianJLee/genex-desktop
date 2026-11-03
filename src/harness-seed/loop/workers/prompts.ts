@@ -158,14 +158,10 @@ export const POOL_WORDS = {
 
 /** What a run's lead hears of its pool's workers, beside the workers of its own method. */
 export const RUN_POOL_WORDS = {
-  /** A worker of the run's pool ended: the line that wakes the lead with the rest of its news. */
-  ended: (id: string, title: string, state: string) =>
-    `worker ${id}: ${title} ${state}; ${WorkerTool.Status} ${id} says what it found.`,
+  /** A worker of the run's pool ended: Genex's line that wakes the lead. */
+  ended: (id: string, title: string, state: string) => `worker ${id} "${title}" ended: ${state}.`,
   /** The web method builds in copies: no writer works in the game folder itself. */
   noLock: `Not started: this run builds in copies, never in the game folder itself. Start it with isolation copy (the default: a builder in its own worktree), or isolation read for a reader in place.`,
   /** The heading of the run pool's workers in a status that lists every worker. */
   readers: "Workers from the shared pool:",
-  /** One of the run's own workers waits on the person: the line that wakes the lead (`worker <id>` opens it). */
-  waiting: (id: string, question: string) =>
-    `worker ${id} is waiting for the person: ${question}. Only that call waits, and nobody answering is not a no; go on with the rest of the work, and the other workers keep going.`,
 } as const;

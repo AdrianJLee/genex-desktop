@@ -31,7 +31,7 @@ export interface FinishAsk {
 export async function userQuoted(inbox: LoopRun["inbox"], quote: unknown): Promise<boolean> {
   const words = typeof quote === "string" ? quote.trim() : "";
   if (words.length < MIN_USER_QUOTE_CHARS) return false;
-  const said = await inbox.steering(undefined, false);
+  const said = await inbox.steering();
   return said.some((text) => text.includes(words));
 }
 

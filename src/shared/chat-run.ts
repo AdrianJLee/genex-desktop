@@ -177,11 +177,10 @@ export function finishRequested(events: readonly LogRecord[], runId: string): bo
 
 const PROGRESS = /facet_|autopilot_|integration_|director_|optimization_updated|run_control|run_steering/;
 /**
- * Events that look like progress and are not: a wake of the lead is the lead being told, not the
- * run moving, and with up to thirty an hour they pushed the workers' own events off the list; so
- * did a steer's hand-over, two for every chat message a run's lead takes (live chat).
+ * An event that looks like progress and is not: a steer's hand-over, one for every chat message a
+ * run's lead hears (live chat), would push the workers' own events off the list.
  */
-const NOT_PROGRESS: ReadonlySet<string> = new Set([CustomEvent.DirectorContinued, CustomEvent.RunSteeringDelivered]);
+const NOT_PROGRESS: ReadonlySet<string> = new Set([CustomEvent.RunSteeringDelivered]);
 
 /** Does a snapshot show this event as the run's progress? */
 const isProgress = (eventType: string): boolean => PROGRESS.test(eventType) && !NOT_PROGRESS.has(eventType);

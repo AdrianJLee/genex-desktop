@@ -1,7 +1,9 @@
 /**
- * A run's inbox read from the log (`loop/run-inbox.ts`): what a session hands over and whether the
- * user asked to wrap up come from the run's durable events, so a resumed session neither hands a
- * steer over again nor honours a wrap-up asked of an earlier session. Fake `ctx`, no host.
+ * A run's inbox read from the log (`loop/run-inbox.ts`): whether the person asked the run to wrap up,
+ * the steers on record, and the chat's messages its lead took and never heard come from the run's
+ * durable events, so a resumed session neither honours a wrap-up asked of an earlier session nor
+ * loses a message the app quit under. Reading writes nothing: the lead reads the person's words from
+ * its line (director/lead-line.ts). Fake `ctx`, no host.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -13,8 +15,10 @@ const RUN = "r";
 const THREAD = "t";
 
 const custom = (event_type: string, payload: AnyRecord): AnyRecord => ({ type: "custom", event_type, payload });
-const steer = (text: string, facetId?: string) =>
-  custom("run_steering", { runId: RUN, text, ...(facetId ? { facetId } : {}) });
+const steer = (text: string, extra: AnyRecord = {}) => custom("run_steering", { runId: RUN, text, ...extra });
+/** A chat message the run's lead took (live chat), as live-chat.ts records it. */
+const leadSteer = (text: string, sourceMessageId: string, extra: AnyRecord = {}) =>
+  steer(text, { sourceMessageId, how: "lead", ...extra });
 
 /** A run's thread: `events.list` answers after the cursor it is given, `events.append` adds with new ids. */
 function fakeLog(initial: AnyRecord[]) {
@@ -31,143 +35,95 @@ function fakeLog(initial: AnyRecord[]) {
       return p.after ? events.slice(events.findIndex((e) => e.id === p.after) + 1) : [...events];
     },
   };
-  /** The texts handed over in the records from `from` on, with where they went. */
-  const deliveredSince = (from: number) =>
-    events
-      .slice(from)
-      .filter((e) => e.data?.event_type === "run_steering_delivered")
-      .map((e) => `${e.data.payload.text}→${e.data.payload.facetId}`);
-  return { events, append, ctx, deliveredSince };
+  return { events, append, ctx };
 }
 
+// Flipped: the inbox handed steers over (`run_steering_delivered` stage "next brief"/"now"), once per
+// session (`onlyNew`), to the build's brief or one worker (`addressed`, `backlog`); nothing reads them
+// so now, and the rows for those hand-overs went with them.
 describe("a run's inbox, read from the log", () => {
-  it("a resumed session hands over only what no earlier session did, and forgets an earlier wrap-up", async () => {
-    const log = fakeLog([custom("run_registered", { runId: RUN }), steer("A"), steer("B", "boss")]);
+  it("a resumed session forgets an earlier wrap-up, and reading the steers writes nothing", async () => {
+    const log = fakeLog([custom("run_registered", { runId: RUN }), steer("A"), steer("B", { facetId: "boss" })]);
     const first = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
-    assert.deepEqual(await first.steering(undefined), ["A"]);
-    assert.deepEqual(await first.addressed(), [{ facetId: "boss", text: "B" }]);
-    assert.deepEqual(log.deliveredSince(0), ["A→build", "B→boss"]);
-
-    // Wrapped up, paused, and resumed with a new instruction (`resume_run`).
+    assert.deepEqual(await first.steering(), ["A", "B"]);
     log.append(
       custom("run_control", { runId: RUN, action: "finish" }),
       custom("autopilot_paused", { runId: RUN }),
       steer("C"),
       custom("run_registered", { runId: RUN, resumed: true }),
     );
-    const resumedAt = log.events.length;
+    const before = log.events.length;
     const second = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
     assert.equal(await second.finishing(), false, "the wrap-up was asked of the session before the resume");
-    assert.deepEqual(await second.backlog(), ["C"], "only C is still unread");
-    assert.deepEqual(await second.addressed(), [], "B already reached its worker");
-    assert.deepEqual(log.deliveredSince(resumedAt), []);
-    // The cumulative answer facet briefs and the gauntlet read stays as it was…
-    assert.deepEqual(await second.steering(undefined), ["A", "C"]);
-    // …but only C is recorded as handed over now.
-    assert.deepEqual(log.deliveredSince(resumedAt), ["C→build"]);
-
+    assert.deepEqual(await second.steering(), ["A", "B", "C"]);
+    assert.equal(log.events.length, before, "a read appends nothing");
     log.append(custom("run_control", { runId: RUN, action: "finish" }));
     assert.equal(await second.finishing(), true, "a wrap-up asked of this session counts");
   });
 
-  it("a steer is handed over once when only new ones are asked for", async () => {
-    const log = fakeLog([custom("run_registered", { runId: RUN }), steer("A")]);
+  it("the person's own words only: another run's steer and the lead's own to a worker are no instruction", async () => {
+    const log = fakeLog([
+      steer("Use warm light", { facetId: "light" }),
+      custom("run_steering", { runId: "other", text: "Destroy it" }),
+      steer("Keep walking peaceful"),
+      steer("fix the floating drums", { facetId: "contact", source: "director" }),
+    ]);
     const inbox = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
-    assert.deepEqual(await inbox.steering(undefined, true, { onlyNew: true }), ["A"]);
-    assert.deepEqual(await inbox.steering(undefined, true, { onlyNew: true }), []);
-    log.append(steer("D"));
-    assert.deepEqual(await inbox.steering(undefined, true, { onlyNew: true }), ["D"]);
-    assert.deepEqual(log.deliveredSince(0), ["A→build", "D→build"]);
+    assert.deepEqual(await inbox.steering(), ["Use warm light", "Keep walking peaceful"]);
   });
 
-  it("after a Resume, the new inbox tells an earlier session's steer once more but hands it over no second time", async () => {
-    const log = fakeLog([custom("run_registered", { runId: RUN }), steer("A")]);
-    const first = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
-    assert.deepEqual(await first.steering(undefined, true, { onlyNew: true }), ["A"]);
-
-    log.append(custom("autopilot_paused", { runId: RUN }), custom("run_registered", { runId: RUN, resumed: true }));
-    const resumedAt = log.events.length;
-    // The resumed run's director may be a fresh session that never heard A.
-    const second = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
-    assert.deepEqual(await second.steering(undefined, true, { onlyNew: true }), ["A"]);
-    assert.deepEqual(await second.steering(undefined, true, { onlyNew: true }), [], "once per inbox");
-    assert.deepEqual(log.deliveredSince(resumedAt), [], "the first session already handed A over");
+  it("the messages a lead took and never heard come back for a Resume — never one it heard or the chat answered", async () => {
+    const log = fakeLog([
+      custom("run_registered", { runId: RUN }),
+      leadSteer("is the sky dusk yet?", "m1"),
+      custom("run_steering_delivered", { runId: RUN, sourceMessageId: "m1", how: "lead" }),
+      leadSteer("then light the lamps", "m2", { attachmentsArtifact: "message_attachments_m2" }),
+      leadSteer("and add some fog", "m3"),
+      leadSteer("Genex turned the Blender plugin on.", "m4", { from: "genex" }),
+      // The chat answered m3 itself: it went back when the lead's line was released.
+      custom("coordinator_message_requeued", { messageId: "m3" }),
+      // The chat's own `resume_run` is the chat session's words, not a message the lead took.
+      steer("then keep going", { sourceMessageId: "m5" }),
+    ]);
+    const inbox = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
+    assert.deepEqual(await inbox.unheard(), [
+      {
+        threadId: THREAD,
+        messageId: "m2",
+        text: "then light the lamps",
+        attachmentsArtifact: "message_attachments_m2",
+      },
+      { threadId: THREAD, messageId: "m4", text: "Genex turned the Blender plugin on.", from: "genex" },
+    ]);
   });
 
-  it("a message a lead in its wrap-up was only told is the chat's once it answers it: a resumed run never tells it again", async () => {
-    const told = custom("run_steering", {
-      runId: RUN,
-      text: "add a boss",
-      sourceMessageId: "m1",
-      how: "lead",
-      kept: true,
-    });
-    const log = fakeLog([custom("run_registered", { runId: RUN }), told]);
-    // The run closed before its lead heard it; the chat answers it as a turn of its own, which resumes the run.
-    log.append(
+  it("a note about a build comes to the lead once, and never one a lead already got — by its heard record or the hand-over a paused run's log kept", async () => {
+    const log = fakeLog([
+      custom("run_registered", { runId: RUN }),
+      steer("[USER FEEDBACK] make the sky red"),
+      // How the seed before this one recorded a note it told the lead: by the steer's id, with no `how`.
+      custom("run_steering_delivered", { runId: RUN, messageId: "000002", facetId: "build", stage: "next brief" }),
+      steer("[USER FEEDBACK on Sky · try 2] darker"),
+      custom("run_steering_delivered", { runId: RUN, sourceMessageId: "000004", how: "lead" }),
+      steer("[USER FEEDBACK on Sea · try 1] calmer"),
       custom("autopilot_paused", { runId: RUN }),
-      custom("coordinator_message_processing", { messageId: "m1" }),
       custom("run_registered", { runId: RUN, resumed: true }),
-      steer("add a boss, from the chat"),
+    ]);
+    const inbox = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
+    assert.deepEqual(await inbox.notes(), [
+      { threadId: THREAD, messageId: "000006", text: "[USER FEEDBACK on Sea · try 1] calmer" },
+    ]);
+    assert.deepEqual(await inbox.notes(), [], "each note once");
+    log.append(steer("and the moon too"));
+    assert.deepEqual(
+      (await inbox.notes()).map((note) => note.text),
+      ["and the moon too"],
+      "a later one as it comes",
     );
-    const resumed = createRunInbox(log.ctx as never, { threadId: THREAD, runId: RUN });
-    assert.deepEqual(await resumed.steering(undefined, true, { onlyNew: true }), ["add a boss, from the chat"]);
   });
 });
 
-describe("addressed run inbox", () => {
-  it("retains planning-time guidance, filters targets/questions/other runs, and drains at a boundary", async () => {
-    const events: any[] = [
-      { id: "1", data: { type: "messages", messages: [{ role: "user", content: "Is it ready?" }] } },
-      {
-        id: "2",
-        data: {
-          type: "custom",
-          event_type: "run_steering",
-          payload: { runId: "r", text: "Use warm light", facetId: "light" },
-        },
-      },
-      {
-        id: "3",
-        data: { type: "custom", event_type: "run_steering", payload: { runId: "other", text: "Destroy it" } },
-      },
-      {
-        id: "4",
-        data: { type: "custom", event_type: "run_steering", payload: { runId: "r", text: "Keep walking peaceful" } },
-      },
-      // The director's own steer to a worker is not the user speaking.
-      {
-        id: "4b",
-        data: {
-          type: "custom",
-          event_type: "run_steering",
-          payload: { runId: "r", text: "fix the floating drums", facetId: "contact", source: "director" },
-        },
-      },
-    ];
-    const inbox = createRunInbox(
-      {
-        call: async (_: string, p: any) =>
-          p.after ? events.slice(events.findIndex((e) => e.id === p.after) + 1) : events,
-      } as never,
-      { threadId: "t", runId: "r" },
-    );
-    assert.deepEqual(await inbox.steering("river"), ["Keep walking peaceful"]);
-    assert.deepEqual(await inbox.backlog(), ["Use warm light"]);
-    assert.deepEqual(
-      await inbox.steering("contact"),
-      ["Keep walking peaceful"],
-      "the director's own steer never comes back as an instruction",
-    );
-    assert.deepEqual(await inbox.steering("light"), ["Use warm light", "Keep walking peaceful"]);
-    assert.equal(await inbox.finishing(), false);
-    events.push({
-      id: "5",
-      data: { type: "custom", event_type: "run_control", payload: { runId: "r", action: "finish" } },
-    });
-    assert.equal(await inbox.finishing(), true);
-    assert.deepEqual(await inbox.backlog(), []);
-  });
+describe("a run read from the log", () => {
   it("keeps paused and finished identity after an app restart", () => {
     const es = [
       { data: { type: "custom", event_type: "run_started", payload: { runId: "r", project: "village" } } },

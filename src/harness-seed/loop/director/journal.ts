@@ -6,34 +6,17 @@
  * take the run explicitly; they are not bound onto it.
  */
 import { tallyOf } from "../finish-check.ts";
-import { DirectorLoop, WAKE_WINDOW_MS } from "./wake-schedule.ts";
 import type { AnyRecord } from "../../types/harness.d.ts";
 import type { LoopRun, LoopRunLogEntry } from "./loop-run.ts";
 import type { WakeState } from "./wake.ts";
-
-/** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
-export const SERVES_LEAD = true;
 
 /** How many of the run's log lines the journal keeps, the newest. */
 export const JOURNAL_LOG_LINES = 60;
 
 /** What the wake loop takes back from the journal on a Resume. */
 export interface RestoredWake {
-  wakesAt: number[];
   /** Lost sessions the run has already replaced: the allowance does not start again on a Resume. */
   freshSessions?: number;
-}
-
-/** A time for the journal: ISO, or null. */
-const iso = (ms: number | null | undefined): string | null =>
-  typeof ms === "number" && Number.isFinite(ms) ? new Date(ms).toISOString() : null;
-
-/** A time from the journal — ISO or milliseconds — or null when it is not one. */
-function msOf(value: unknown): number | null {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value !== "string") return null;
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? ms : null;
 }
 
 /** A count from the journal. */
@@ -74,20 +57,8 @@ export function journalText(journal: AnyRecord): string | null {
 }
 
 /** The wake loop's own state, as the journal keeps it (wake.ts `journalWake` writes it). */
-export function wakeRecord(
-  wake: Pick<WakeState, "wrapCause" | "wakes" | "wakesAt" | "lastWakeAt" | "asleepSince"> & {
-    freshSessions?: number;
-  },
-): AnyRecord {
-  return {
-    loop: DirectorLoop.Wake,
-    freshSessions: wake.freshSessions ?? 0,
-    wrapCause: wake.wrapCause,
-    wakes: wake.wakes,
-    wakesAt: wake.wakesAt.map(iso),
-    lastWakeAt: iso(wake.lastWakeAt),
-    asleepSince: iso(wake.asleepSince),
-  };
+export function wakeRecord(wake: Pick<WakeState, "freshSessions">): AnyRecord {
+  return { freshSessions: wake.freshSessions };
 }
 
 /** Does this run pick up one its journal kept: a Resume of a Loop's run? */
@@ -121,12 +92,9 @@ export function restoreLoopRun(loopRun: LoopRun): void {
   if (saved.finishTally !== undefined) state.finishTally = tallyOf(saved.finishTally);
 }
 
-/** The wake loop's own state as the journal kept it: the wakes still in the cap's window and the fresh sessions used. */
-export function restoredWake(saved: unknown, now: number): RestoredWake {
+/** The wake loop's own state as the journal kept it: the fresh sessions used. */
+export function restoredWake(saved: unknown): RestoredWake {
   const record = (saved ?? {}) as AnyRecord;
-  const wakesAt = (Array.isArray(record.wakesAt) ? record.wakesAt : [])
-    .map(msOf)
-    .filter((at: number | null): at is number => at !== null && at > now - WAKE_WINDOW_MS && at <= now);
   const freshSessions = Number.isInteger(record.freshSessions) && record.freshSessions > 0 ? record.freshSessions : 0;
-  return { wakesAt, ...(freshSessions ? { freshSessions } : {}) };
+  return freshSessions ? { freshSessions } : {};
 }

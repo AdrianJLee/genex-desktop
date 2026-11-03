@@ -23,9 +23,6 @@ import type { LoopRun } from "./loop-run.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
 import type { EventData } from "../../types/host-api.d.ts";
 
-/** This part serves a lead that is its chat's own session (lead-session.ts `servesLead`). */
-export const SERVES_LEAD = true;
-
 /** How many of a health check's problems its card on the run's thread names. */
 const HEALTH_CARD_PROBLEMS = 5;
 /** Why a close the user stopped landed nothing: the words the chat reads a stopped run by. */
@@ -350,7 +347,6 @@ export async function landIntegration(loopRun: LoopRun, land: boolean): Promise<
   report.deliveredHead = await headOf(ctx, projectDir).catch(() => null);
   report.integrationHead = state.integrationHead;
   await loopRun.reloadLive();
-  if (changed.paths.length) loopRun.note(FINISH_WORDS.leftInGame(changed.paths));
   return {
     ok: true,
     ...landingClaim(loopRun, state.integrationHead),

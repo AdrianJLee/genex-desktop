@@ -99,27 +99,6 @@ it("run_status includes the current Optimization stage without mixing runs", () 
   assert.equal(snapshot.progress[0].phase, "profiling_candidate");
 });
 
-it("a run's wakes do not crowd the workers out of run_status's progress", () => {
-  const event = (event_type: string, payload: object) => ({ data: { type: "custom", event_type, payload } });
-  // Up to thirty wakes an hour, each a director_continued: an hour of them is more than the list holds.
-  const wakes = Array.from({ length: 30 }, (_, i) =>
-    event("director_continued", { runId: "r", minutesLeft: 90 - i, reasons: ["worker_round"] }),
-  );
-  const snapshot = runSnapshot(
-    [
-      event("run_started", { runId: "r", project: "village" }),
-      event("director_worker", { runId: "r", workerId: "sky", state: "running" }),
-      ...wakes,
-      event("director_worker", { runId: "r", workerId: "sky", state: "done" }),
-    ] as never,
-    "r",
-  );
-  assert.deepEqual(
-    snapshot.progress.map((p) => `${p.type}:${p.state ?? ""}`),
-    ["director_worker:running", "director_worker:done"],
-  );
-});
-
 it("the chat's words to a run's lead do not crowd the workers out of run_status's progress", () => {
   const event = (event_type: string, payload: object) => ({ data: { type: "custom", event_type, payload } });
   // Each message to the lead is a steer, taken off its inbox and heard: only the steer is progress.

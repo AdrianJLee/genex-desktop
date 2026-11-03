@@ -284,8 +284,10 @@ for (const engine of ["claude-code", "codex"]) {
       // Flipped (Loop phase 5): the lead merges a worker's copy with worker_mark used, no integrate.
       assert.match(results.integrated, /^Merged w1's work into your folder\. Health check: /, results.integrated);
       assert.ok(!/DIRECTOR\.md/.test(lead[0]!.prompt), "no memory file in its brief");
-      // Flipped (Loop phase 5): the brief opens YOU LEAD THIS LOOP and says whose session it is.
-      assert.match(lead[0]!.prompt, /You are this chat's own session, leading a Loop/);
+      // Flipped: the brief opened YOU LEAD THIS LOOP and said whose session it is; the session is the chat's
+      // own, and its first message is Genex's one line: the Loop started, and its goal. Flipped again: the
+      // line named the worktree it builds in; its session's added folder is that worktree.
+      assert.match(lead[0]!.prompt, /^The Loop started\. Its goal: /);
       assert.equal(await chatBookmark(rig, threadId), chatSession, "the chat's bookmark is still its session");
 
       // The chat goes on after the close in that same session: a question is answered there, with
@@ -458,14 +460,14 @@ describe("a lead whose chat session cannot be resumed", () => {
     );
     assert.equal(lead[1]!.resume, undefined, "then a fresh one");
     assert.equal(await realpath(lead[1]!.cwd), await realpath(project.dir), "in the game folder too");
-    const fresh = prompts[1]!;
-    // Flipped (Loop phase 5): the brief says YOU LEAD THIS LOOP and THE GOAL, no DIRECTOR or HOW THIS RUN WORKS.
-    const at = ["THE CHAT SO FAR", "make a dusk plaza with a fountain", "YOU LEAD THIS LOOP", "THE GOAL:"].map((mark) =>
-      fresh.indexOf(mark),
-    );
+    // Flipped: the fresh session's prompt was the chat so far glued before the brief (YOU LEAD THIS LOOP,
+    // THE GOAL); its prompt is the turn's own message, the chat so far a notice of Genex's beside it.
+    assert.equal(prompts[1], prompts[0], "the same message, in a fresh session");
+    const told = (lead[1]!.notices ?? []).join("\n");
+    const at = ["THE CHAT SO FAR", "make a dusk plaza with a fountain"].map((mark) => told.indexOf(mark));
     assert.ok(
       at.every((i, n) => i >= 0 && (n === 0 || i > at[n - 1]!)),
-      `in order: ${JSON.stringify(at)}\n${fresh.slice(0, 2_000)}`,
+      `in order: ${JSON.stringify(at)}\n${told.slice(0, 2_000)}`,
     );
     // The fresh session's turn ends after the close it called: the chat's bookmark follows that
     // turn, so wait for it rather than read the bookmark the moment the run closed.
@@ -787,7 +789,9 @@ describe("the same agent after the build", () => {
     const leads = requests.filter((r) => r.kind === Kind.Lead);
     assert.equal(leads.length, 2, requests.map((r) => r.kind).join(", "));
     assert.equal(leads[1]!.request.resume, chatSession, "the resumed run's lead is the chat's own session");
-    assert.match(leadPrompts[1]!, /THE USER SAYS[\s\S]*continue with a red moon/);
+    // Flipped: the resumed lead was told "continue with a red moon" under THE USER SAYS; the chat's own
+    // session wrote it into resume_run, and that session is the lead: it opens with Genex's line.
+    assert.match(leadPrompts[1]!, /^The Loop resumed after a pause/);
     assert.ok(
       customEvents(log, "run_steering").some((e) => e.text === "continue with a red moon"),
       "the instruction is saved on the run before it resumes",

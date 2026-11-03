@@ -34,6 +34,10 @@ const OPEN_FINISH: LiveToolSpec = {
   },
 };
 
+/** What `save_point` keeps where no plugin saves the project's app before the checkpoint. */
+const FILES_ONLY =
+  "No plugin saves this project's app: the checkpoint keeps the files on disk only, so save inside the app first.";
+
 /** `save_point`: Genex's checkpoint of the folder now, under the lead's label. */
 const SAVE_POINT: LiveToolSpec = {
   name: OpenTool.SavePoint,
@@ -62,6 +66,9 @@ const REWIND: LiveToolSpec = {
   },
 };
 
+/** What `restart` does too on a project with an Unreal project in it. */
+const RESTART_REBUILDS = "It rebuilds the game's C++ source as the app reopens.";
+
 /** `restart`: the project's app closed and reopened, when the turn ends; no file changes. */
 const RESTART: LiveToolSpec = {
   name: OpenTool.Restart,
@@ -88,20 +95,39 @@ const PAUSE: LiveToolSpec = {
 const OPEN_STATUS: LiveToolSpec = {
   name: DirectorTool.RunStatus,
   description:
-    "Your save points, your workers and the run's jobs, what the project's folder holds, and how often its app stopped. Read it when the wake message is stale.",
+    "Your save points, your workers and the run's jobs, what the project's folder holds, and how often its app stopped.",
   parameters: { type: "object", properties: {} },
 };
 
+/** What the project makes of the open lead's save points: whether a plugin saves its app first, restarts it, and rebuilds its C++. */
+interface OpenProject {
+  restart?: boolean;
+  workers?: number;
+  /** A plugin saves the project's app before Genex's checkpoint (`checkpoint.before`). */
+  appSaved?: boolean;
+  /** A restart rebuilds the game's C++ too (a project with an Unreal project in it). */
+  cppRestart?: boolean;
+}
+
+/** A tool with a sentence after its own description. */
+const saying = (tool: LiveToolSpec, more: string): LiveToolSpec => ({
+  ...tool,
+  description: `${tool.description} ${more}`,
+});
+
 /**
  * The open lead's tools, with `worker_start` naming the kinds of worker on offer and how many may run
- * at once (`workers`, when the pool knows it), `restart` only when `restart`, and the second opinion
- * (`judge`) on pictures the lead names.
+ * at once (`workers`, when the pool knows it), `save_point` saying it keeps only the files where no
+ * plugin saves the app, `restart` only when `restart` (saying it rebuilds C++ where it does), and the
+ * second opinion (`judge`) on pictures the lead names.
  */
 export function openTools(
   types: readonly WorkerType[] = [],
-  { restart = false, workers }: { restart?: boolean; workers?: number } = {},
+  { restart = false, workers, appSaved = true, cppRestart = false }: OpenProject = {},
 ): LiveToolSpec[] {
-  const saves = restart ? [SAVE_POINT, REWIND, RESTART] : [SAVE_POINT, REWIND];
+  const savePoint = appSaved ? SAVE_POINT : saying(SAVE_POINT, FILES_ONLY);
+  const restartTool = cppRestart ? saying(RESTART, RESTART_REBUILDS) : RESTART;
+  const saves = restart ? [savePoint, REWIND, restartTool] : [savePoint, REWIND];
   const shared = [NOTE_SPEC, WRAP_UP_SPEC];
   return [...shared, OPEN_STATUS, ...workerTools(types, workers), ...saves, secondOpinionSpec(), PAUSE, OPEN_FINISH];
 }

@@ -105,7 +105,7 @@ function lapsedSince(loopRun: LoopRun): () => Promise<string | null> {
 async function check(loopRun: LoopRun, claim: FinishClaim, started: number): Promise<FinishOutcome> {
   const { ctx, gameFacts, inbox, projectDir, run, threadId } = loopRun;
   const clock = clockOf(loopRun);
-  const log = await readFinishLog(ctx, threadId, run.runId, await inbox.steering(undefined, false));
+  const log = await readFinishLog(ctx, threadId, run.runId, await inbox.steering());
   const turn = turnEndsOf(loopRun.state);
   return checkFinish(
     {

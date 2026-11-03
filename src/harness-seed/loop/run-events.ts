@@ -28,7 +28,6 @@ export const RunEvent = {
   AutopilotProviderOutage: "autopilot_provider_outage",
   AutopilotResumed: "autopilot_resumed",
   AutopilotStarted: "autopilot_started",
-  DirectorContinued: "director_continued",
   DirectorProgress: "director_progress",
   DirectorShow: "director_show",
   DirectorVerdict: "director_verdict",

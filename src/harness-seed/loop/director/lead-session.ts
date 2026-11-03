@@ -2,22 +2,15 @@
  * One session: a waking run's lead IS its chat's own contractor session, and there is one session
  * per chat.
  *
- * Before this, launching a build from a chat handed the run to a second mind: a director session
- * of its own, opened in the run's integration worktree beside the chat's contractor session, which
- * knew nothing of the conversation the build came from and wrote a memory file to survive its own
- * compactions. Now the chat's own session leads: the run resumes the session the chat's bookmark
- * names (`contractor_session`), in the game folder where that session lives, and it builds with its
- * own hands in the integration worktree it leads, beside its workers — never read-only, limited only
- * by the chat's permission mode. A lead model of its own on that engine is the session's model
- * option. After the close the chat goes on in the same session, before, during and after the build
- * one conversation.
+ * The run resumes the session the chat's bookmark names (`contractor_session`), in the game folder
+ * where that session lives, and it builds with its own hands — in a web game's integration worktree
+ * it leads, beside its workers, or in the folder itself — never read-only, limited only by the chat's
+ * permission mode. A lead model of its own on that engine is the session's model option. After the
+ * close the chat goes on in the same session, before, during and after the build one conversation.
  *
  * When the chat has no session this lead can continue — none yet, its bookmark names another
- * engine, or it cannot be resumed — the lead starts a fresh one in the game folder with the brief,
- * the chat's latest messages and the digest (`freshChat`), and it becomes the chat's bookmark.
- *
- * The long turn (`run.directorLoop: "turn"`), the classic pipeline and a kept older director.ts
- * keep the separate director in its integration worktree.
+ * engine, or it cannot be resumed — the lead starts a fresh one in the game folder, told the chat's
+ * latest messages beside its first message (`freshChat`), and it becomes the chat's bookmark.
  */
 import { lastContractorSession } from "../chat-session.ts";
 import { HostMethod } from "../host-methods.ts";
@@ -41,16 +34,6 @@ export type DelegationRefusal = (typeof DelegationRefusal)[keyof typeof Delegati
 /** Did the host refuse this delegation because another session holds its lock? It passes: ask again. */
 export function folderBusy(err: unknown): boolean {
   return (err as AnyRecord | null)?.code === DelegationRefusal.FolderBusy;
-}
-
-/**
- * Does every part of the run a lead depends on serve one (`SERVES_LEAD`): its words and its tools for
- * a lead seated in its game folder are there? A seed upgrade keeps a part the agent edited before one
- * session, which never exported it. Such a run seats no lead: a director whose working folder is the
- * integration worktree leads, as it did before.
- */
-export function servesLead(parts: readonly Readonly<Record<string, unknown>>[]): boolean {
-  return parts.every((part) => part.SERVES_LEAD === true);
 }
 
 /** Where a waking run's lead sits and whose session it is (`run.lead`). */

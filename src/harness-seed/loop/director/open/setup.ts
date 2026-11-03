@@ -56,17 +56,15 @@ export function recordCreditCap(run: Run): void {
 }
 
 /**
- * A resumed open Loop's journal with what its lead asked for before the pause settled: a rewind or a
- * restart its last turn's end never ran (a Stop came first) is not run now over the next turn's
- * work, and the lead hears so in its first message.
+ * A resumed open Loop's asks settled across its pause: a rewind or a restart its last turn's end
+ * never ran (a Stop came first) is not run now over the next turn's work, and a line of the run's
+ * log tells the lead so with its first message.
  */
-export function settledAcrossPause(journal: OpenJournal): OpenJournal {
-  const { rewind, restart } = journal.between;
-  const carried = [
-    ...(rewind ? [OPEN_NEWS.rewindDropped(rewind.label)] : []),
-    ...(restart ? [OPEN_NEWS.restartDropped] : []),
-  ];
-  return { ...journal, between: { rewind: null, restart: false }, carried: [...journal.carried, ...carried] };
+export function settledAcrossPause(loopRun: LoopRun, open: OpenLoop): void {
+  const { rewind, restart } = open.journal.between;
+  if (rewind) loopRun.note(OPEN_NEWS.rewindDropped(rewind.label), NoteKind.Folder);
+  if (restart) loopRun.note(OPEN_NEWS.restartDropped, NoteKind.Folder);
+  open.journal.between = { rewind: null, restart: false };
 }
 
 /**
@@ -103,8 +101,6 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     clock,
     pool: null,
     since: clock.now(),
-    heard: new Set(),
-    asked: new Set(),
     healthAt: clock.now(),
     inTurn: false,
     recovering: null,

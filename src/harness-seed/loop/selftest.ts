@@ -4,7 +4,7 @@
  * sentence a card falls back on, what a landing claims and a reviewer's no. No engine, no preview, no
  * network: seconds, deterministic.
  */
-import { afterTurn, nextWake, TurnEnd, WakeCause } from "./director/wake-schedule.ts";
+import { afterTurn, nextWake, TurnEnd } from "./director/wake-schedule.ts";
 import { landingWords, plainly } from "./director/rules.ts";
 import { secondOpinionNo } from "./director/second-opinion-prompts.ts";
 import { healthLine } from "./health-check.ts";
@@ -20,15 +20,7 @@ function check(name: string, condition: unknown): void {
 type SelftestStep = readonly [name: string, run: () => void];
 
 /** A view of a resting lead with nothing going on, at `now`. */
-const quietView = (now: number) => ({
-  now,
-  unread: [],
-  asleepFromSeq: 0,
-  asleepSince: now,
-  userWaiting: false,
-  finishNew: false,
-  wakesAt: [],
-});
+const quietView = (now: number) => ({ now, untold: [], asleepSince: now, personWaiting: false });
 
 /** The self-test, step by step, in the order it runs. */
 const SELFTEST_STEPS: readonly SelftestStep[] = [
@@ -36,8 +28,7 @@ const SELFTEST_STEPS: readonly SelftestStep[] = [
     "wake: the user wakes the lead at once; nothing wakes a quiet run",
     () => {
       const now = 1_000_000;
-      const spoke = nextWake({ ...quietView(now), userWaiting: true });
-      check("user wakes now", spoke?.at === now && spoke.reasons.includes(WakeCause.UserMessage));
+      check("user wakes now", nextWake({ ...quietView(now), personWaiting: true }) === now);
       check("a quiet run is never woken", nextWake(quietView(now)) === null);
     },
   ],

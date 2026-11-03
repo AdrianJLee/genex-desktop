@@ -20,6 +20,7 @@ import { promisify } from "node:util";
 import { runDirector } from "../../src/harness-seed/loop/director.ts";
 import { handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { directorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
+import { leadLineOf } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { type HookEvent, type HookContext, type HookedPlugin, hookEventsOf } from "../../src/shared/plugin-hooks.ts";
 import type { GameKind } from "../../src/shared/project-facts.ts";
@@ -92,6 +93,11 @@ export type LoopHost = {
   artifacts: Map<string, unknown>;
   /** The chat's run inbox: what the person said, and whether they asked to finish. */
   inbox: { said: string[]; finishing: boolean };
+  /**
+   * The person writes in the chat while the Loop runs: their message is handed to the lead's line
+   * (live chat), as the chat's queue hands it, and kept in the run's inbox as its record.
+   */
+  say: (text: string) => Promise<void>;
   /** The chat is in Plan mode: Genex holds every writing moment and checkpoint back. */
   planning: boolean;
   /** Whether the lead's session takes what is steered into its turn (`engine.steer`); it takes nothing by default. */
@@ -506,15 +512,14 @@ export function loopHost(options: {
     handlers: handlers(host),
     ...(options.workspace ? { workspace: options.workspace } : {}),
   });
-  const steering = async (_address?: unknown, consume?: boolean) =>
-    consume ? host.inbox.said.splice(0) : [...host.inbox.said];
+  // The run's inbox as the lead reads it: the person's words on record, whether they asked to finish,
+  // and none the lead took and never heard (`say` hands each to its line, which hears it).
   Object.assign(host.rec.ctx, {
     runInbox: {
       finishing: async () => host.inbox.finishing,
-      steering,
-      steers: async (address?: unknown, consume?: boolean) =>
-        (await steering(address, consume)).map((text) => ({ text })),
-      backlog: async () => [...host.inbox.said],
+      steering: async () => [...host.inbox.said],
+      unheard: async () => [],
+      notes: async () => [],
     },
   });
   const plain = host.rec.ctx.call.bind(host.rec.ctx);
@@ -522,6 +527,12 @@ export function loopHost(options: {
   host.rec.ctx.call = (method: string, params?: Record<string, unknown>) => {
     if (!["hooks.fire", "checkpoint.take", "snapshot.restore"].includes(method)) host.log.push(method);
     return plain(method, params);
+  };
+  let said = 0;
+  host.say = async (text) => {
+    host.inbox.said.push(text);
+    await host.until(() => Boolean(leadLineOf(host.run.runId)));
+    leadLineOf(host.run.runId)?.hear({ threadId: host.threadId, messageId: `m-said-${++said}`, text });
   };
   host.trail = () => [...host.log];
   host.appended = (eventType) =>

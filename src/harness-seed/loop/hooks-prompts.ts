@@ -10,5 +10,4 @@ export const HOOK_PROMPTS = {
   finishHeld: (reason: string) =>
     `Not finished: a plugin of this game holds the finish back: ${reason} Deal with it, then call finish again; the run goes on meanwhile.`,
   workerHeld: (reason: string) => `Not started: a plugin of this game holds the worker back: ${reason}`,
-  turnHeld: (reason: string) => `A plugin of this game held your last turn back before it started: ${reason}`,
 } as const;

@@ -7,8 +7,9 @@
  * of the save point, the plugins' steps around it, then a wait until the app answers) and the restart
  * (the project's restore moments with no file changed, then the wait), both waiting while a worker
  * writes in place. No judge plays between turns: one is the lead's to ask for (`judge_play`). Each
- * outcome is one line the lead's next message carries; what came of a rewind or a restart the lead
- * asked for is a line of the run's log that wakes it (`NoteKind.AskDone`), as a worker's end does.
+ * outcome is one line of the run's log the lead is told with its next message (`NoteKind.Folder`);
+ * what came of a rewind or a restart the lead asked for is one that wakes it (`NoteKind.AskDone`), as
+ * a worker's end does.
  * Never under a running turn, never after the Loop closed, and no recovery starts while this runs.
  */
 import {
@@ -46,10 +47,8 @@ const over = (loopRun: LoopRun, open: OpenLoop): boolean =>
   loopRun.ctx.cancelled === true ||
   Boolean(open.halted);
 
-/** A line the lead's next message carries. */
-const carry = (open: OpenLoop, line: string): void => {
-  open.journal.carried.push(line);
-};
+/** A line the lead is told with its next message: it wakes nobody. */
+const carry = (loopRun: LoopRun, line: string): void => loopRun.note(line, NoteKind.Folder);
 
 /** What came of a rewind or a restart the lead asked for: a line that wakes it. */
 const tellDone = (loopRun: LoopRun, line: string): void => loopRun.note(line, NoteKind.AskDone);
@@ -59,7 +58,7 @@ const tellDone = (loopRun: LoopRun, line: string): void => loopRun.note(line, No
  * say), only what is unsaved where a plugin saves the project's app, and nothing otherwise. A
  * checkpoint Genex held back or that failed is said; one that found nothing unsaved is not.
  */
-async function autosave(loopRun: LoopRun, open: OpenLoop): Promise<void> {
+async function autosave(loopRun: LoopRun): Promise<void> {
   const changed = await folderChanged(loopRun);
   const appSaved =
     hooksOn(loopRun.game, HookEvent.CheckpointBefore) || hooksOn(loopRun.game, HookEvent.CheckpointAfter);
@@ -68,19 +67,19 @@ async function autosave(loopRun: LoopRun, open: OpenLoop): Promise<void> {
   if ("snapshot" in taken) {
     const ask = { label: MESSAGE.autosave, summary: MESSAGE.autosaveSummary, auto: true };
     const point = await recordSavePoint(loopRun, ask, taken);
-    carry(open, OPEN_NEWS.autosaved(point.label));
+    carry(loopRun, OPEN_NEWS.autosaved(point.label));
     return;
   }
   if ("skipped" in taken && taken.skipped === CheckpointSkip.NothingUnsaved) return;
   const why =
     "blocked" in taken ? heldForLead({ reason: taken.blocked, hold: taken.hold, label: taken.label }) : taken.reason;
-  carry(open, OPEN_NEWS.notAutosaved(why));
+  carry(loopRun, OPEN_NEWS.notAutosaved(why));
 }
 
 /** The autosave, unless a worker writes in the folder in place: it would keep that worker's half-done files. */
-async function autosaveUnlessWriting(loopRun: LoopRun, open: OpenLoop, writers: readonly string[]): Promise<void> {
-  if (!writers.length) return autosave(loopRun, open);
-  if ((await folderChanged(loopRun)) !== false) carry(open, OPEN_NEWS.notAutosavedWriter(writers));
+async function autosaveUnlessWriting(loopRun: LoopRun, writers: readonly string[]): Promise<void> {
+  if (!writers.length) return autosave(loopRun);
+  if ((await folderChanged(loopRun)) !== false) carry(loopRun, OPEN_NEWS.notAutosavedWriter(writers));
 }
 
 /** Waits until the project's app answers again, when a plugin says whether it does; why not, or null. */
@@ -158,7 +157,7 @@ async function asksAtTurnEnd(loopRun: LoopRun, open: OpenLoop, writers: readonly
   const { between } = open.journal;
   if (!asksPending(open.journal) || over(loopRun, open)) return;
   if (writers.length) {
-    carry(open, OPEN_NEWS.askWaitsForWriter(writers));
+    carry(loopRun, OPEN_NEWS.askWaitsForWriter(writers));
     return;
   }
   if (between.rewind) await rewind(loopRun, open, between.rewind);
@@ -166,19 +165,19 @@ async function asksAtTurnEnd(loopRun: LoopRun, open: OpenLoop, writers: readonly
 }
 
 /** A turn's end while Genex brings the project's app back: why nothing was kept or restored. */
-function whileRecovering(open: OpenLoop, savedInTurn: boolean): void {
-  if (!savedInTurn) carry(open, OPEN_NEWS.notAutosaved(OPEN_NEWS.bringingBack));
-  if (asksPending(open.journal)) carry(open, OPEN_NEWS.askWaits);
+function whileRecovering(loopRun: LoopRun, open: OpenLoop, savedInTurn: boolean): void {
+  if (!savedInTurn) carry(loopRun, OPEN_NEWS.notAutosaved(OPEN_NEWS.bringingBack));
+  if (asksPending(open.journal)) carry(loopRun, OPEN_NEWS.askWaits);
 }
 
 /** The between-turns work itself (the module's header), once no recovery can start beside it. */
 async function betweenTurns(loopRun: LoopRun, open: OpenLoop): Promise<void> {
   const savedInTurn = open.journal.savePoints.length > open.turnSavedFrom;
-  if (open.recovering) whileRecovering(open, savedInTurn);
+  if (open.recovering) whileRecovering(loopRun, open, savedInTurn);
   else {
     const writers = writersInPlace(open).map((record) => record.id);
     // A turn that kept a save point left nothing for an autosave.
-    if (!savedInTurn) await autosaveUnlessWriting(loopRun, open, writers);
+    if (!savedInTurn) await autosaveUnlessWriting(loopRun, writers);
     await asksAtTurnEnd(loopRun, open, writers);
   }
   // The next turn's save points count from here.

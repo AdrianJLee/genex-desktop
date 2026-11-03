@@ -18,13 +18,6 @@
 import { HostMethod } from "./host-methods.ts";
 import { STUDIO_AS } from "./repo.ts";
 import { commitArg, REFUSED_VALUE_CHARS, shellQuote } from "./shell.ts";
-
-/**
- * This part serves a lead that is its chat's own session (one session): a kept older
- * lead-session.ts sets its strays aside with `GIT.snapshotCommit`, which an older copy of this file
- * lacks, so a run seats a lead only when this says so (lead-session.ts `servesLead`).
- */
-export const SERVES_LEAD = true;
 import { GIT_TIMEOUT_MS } from "./config.ts";
 import { isRecord } from "./json.ts";
 import type { HarnessCtx } from "../types/harness.d.ts";

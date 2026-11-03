@@ -11,7 +11,7 @@ import {
   storedChatEffort,
   rememberChatEffort,
 } from "../../src/renderer/stored-model.ts";
-import { interviewQuestion, interviewForReply } from "../../src/harness-seed/loop/interview-question.ts";
+import { interviewQuestion } from "../../src/harness-seed/loop/interview-question.ts";
 
 const event = (id: number, data: EventData): EventEnvelope => ({
   id: String(id).padStart(6, "0"),
@@ -101,23 +101,6 @@ test("host handoff diagnostics disappear while ordinary explanations and errors 
     }),
   ]);
   assert.equal(entries.length, 2);
-});
-
-test("only the direct answer to an interview question inherits its commissioning options", () => {
-  const intake = "interview_turn";
-  const question = custom(1, "interview_question", { question: "Which scene?", intakeId: intake });
-  const answer = event(2, { type: "messages", messages: [{ role: "user", content: "Ashlands" }] });
-  assert.deepEqual(interviewForReply([question, answer]), intake);
-  assert.equal(interviewForReply([question]), null);
-  assert.equal(
-    interviewForReply([
-      question,
-      answer,
-      event(3, { type: "messages", messages: [{ role: "user", content: "Another message" }] }),
-    ]),
-    null,
-  );
-  assert.equal(interviewForReply([question, answer, custom(3, "run_started", { runId: "r" })]), null);
 });
 
 test("new games inherit the last model while previous conversations keep their model", () => {
@@ -336,7 +319,7 @@ test("a running web lookup says it is looking something up", () => {
 
 test("a run control the host records itself is one row, and a recorded resume shows once, when it runs", () => {
   // The chat's own session after a run calls run_status live: the engine mirrors the call, and
-  // the host records its own request and result (conversation.ts `coordinatorTool`).
+  // the host records its own request and result (conversation.ts `runControl`).
   const mirrored = (id: number, name: string, callId: string, engine = "claude-code") =>
     custom(id, `delegated.${engine}`, {
       kind: "assistant",

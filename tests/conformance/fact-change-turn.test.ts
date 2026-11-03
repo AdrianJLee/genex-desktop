@@ -4,7 +4,8 @@
  * game is going; otherwise Genex snapshots the game first, records what the call replaced as
  * `portedFrom` (the web files stay as the reference, not as a kind), and tells the session to end
  * its reply. The chat's turn whose served facts changed then goes on by itself in the same session,
- * with a brief and tools for the new kind.
+ * with the tools for the new kind, told it in Genex's line; a turn that linked the game to Unreal
+ * ends on the game as it is then, with no web preview checks.
  */
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
@@ -12,8 +13,10 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
+import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
+import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
-import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
+import { factsReadyNotice } from "../../src/harness-seed/loop/project-prompts.ts";
 import { EventKind } from "../../src/shared/event-log.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
@@ -423,21 +426,27 @@ async function turnOn(options: {
 }
 
 describe("the end of a turn that changed what the project is", () => {
-  it("a turn whose project changed kind goes on in the same session with a brief for the new kind", async () => {
+  it("a turn whose project changed kind goes on in the same session, told the new kind in Genex's line", async () => {
     const delegated = await turnOn({ before: WEB, after: GODOT });
     assert.equal(delegated.length, 2, "one build, then one continuation");
+    // Genex's line, said as Genex's: the project's new kind and nothing else.
     assert.deepEqual(
-      [delegated[1]?.resume, delegated[1]?.prompt],
-      ["s1", factsReadyPrompt([{ id: "godot-project", path: "." }])],
+      [delegated[1]?.resume, delegated[1]?.prompt, delegated[1]?.from],
+      ["s1", factsReadyNotice([{ id: "godot-project", path: "." }]), "genex"],
     );
+    // Flipped: the system text was rebuilt for the new kind. A resumed session keeps the one it
+    // started with, so it never says what the folder holds: Genex's line says the new kind.
+    assert.equal(delegated[1]?.system, delegated[0]?.system, "the same system text");
+    assert.doesNotMatch(String(delegated[1]?.system), /it holds/);
     assert.equal(Boolean(delegated[1]?.selfCapture), false, "no web capture for a Godot project");
 
     const fresh = await turnOn({ before: WEB, after: GODOT, resumeFails: true });
     assert.equal(fresh.length, 3, "the resume failed, so a fresh session was started");
-    const brief = String(fresh[2]?.prompt);
     assert.equal(fresh[2]?.resume ?? null, null);
-    assert.ok(brief.includes(factsReadyPrompt([{ id: "godot-project", path: "." }])), "the fresh brief goes on");
-    assert.ok(!brief.includes("window.__studio"), "the fresh brief is for the new kind, not the web game");
+    assert.equal(fresh[2]?.prompt, factsReadyNotice([{ id: "godot-project", path: "." }]), "the same line goes on");
+    assert.equal(fresh[2]?.system, delegated[0]?.system, "the same system text");
+    // Its prompt is Genex's line, not the person's words: the chat so far keeps what they asked.
+    assert.match(String((fresh[2]?.notices as string[] | undefined)?.[0]), /user: port it/, "it reads the ask");
 
     const rows: Record<string, Parameters<typeof turnOn>[0]> = {
       "a game with no kind that took the web starter": { before: [], after: WEB },
@@ -450,7 +459,7 @@ describe("the end of a turn that changed what the project is", () => {
     for (const [label, row] of Object.entries(rows)) assert.equal((await turnOn(row)).length, 1, label);
   });
 
-  it("a switch sent while the session goes on with the new kind still switches it: the Loop turned on reaches it", async () => {
+  it("a switch sent while the session goes on with the new kind still switches it: another model reaches it", async () => {
     const log: Array<{ id: string; data: Record<string, unknown> }> = [];
     let legs = 0;
     let cut = () => {};
@@ -500,29 +509,113 @@ describe("the end of a turn that changed what the project is", () => {
     try {
       await send("port it");
       await continuing;
-      await send("make it in the loop", { autopilot: {} });
+      await send("use sonnet for it", { model: "sonnet" });
       for (let n = 0; n < 2000 && legs < 3; n++) await new Promise((resolve) => setImmediate(resolve));
       const delegated = recorder.paramsOf("engine.delegate");
       assert.equal(delegated.length, 3, "the session went on after the cut");
-      const prompt = String(delegated[2]?.prompt);
-      assert.ok(prompt.startsWith("While you were working, the user changed how you work"), prompt);
-      assert.match(prompt, /make it in the loop/);
-      const loopMessage = [...messageQueueState(log as never).messages.values()].find(
-        (m) => m.action?.text === "make it in the loop",
+      // Flipped: the leg opened with what changed. The model is the leg's option; the words go alone.
+      assert.equal(delegated[2]?.prompt, "use sonnet for it");
+      assert.equal(delegated[2]?.model, "sonnet");
+      const switched = [...messageQueueState(log as never).messages.values()].find(
+        (m) => m.action?.text === "use sonnet for it",
       );
-      assert.equal(loopMessage?.state, "delivered");
+      assert.equal(switched?.state, "delivered");
     } finally {
       cut();
       queue.stop();
     }
   });
+});
 
-  it("with Loop on, the session that goes on starts the build with its launch tool instead of building it itself", async () => {
-    const delegated = await turnOn({ before: WEB, after: GODOT, turn: { autopilot: { roles: {} } } });
-    assert.equal(delegated.length, 2, "one turn, then one continuation");
-    const prompt = String(delegated[1]?.prompt);
-    assert.equal(prompt, factsReadyPrompt([{ id: "godot-project", path: "." }], "mcp__studio__start_autopilot"));
-    assert.ok(prompt.includes("mcp__studio__start_autopilot"), "it names the launch tool as this engine calls it");
-    assert.ok(!prompt.includes("Go on with what you said you would build first"), "it is not told to build itself");
+/**
+ * A turn may link the game to Unreal (its session called `unreal__new-game`): its end looks at the
+ * game as the host lists it then, read again, so a folder that now holds an Unreal project gets no
+ * web preview load, no "fix the black screen" and no failed `build_observation`. A host that cannot
+ * answer leaves the game the turn started with.
+ */
+describe("the end of a turn whose game was linked to Unreal during it", () => {
+  const RALLY = "rally-circuit";
+  const PROJECT = "/Users/me/AI Games/rally/unreal/Rally.uproject";
+  const BLACK = "black canvas: 0.00% of pixels above luma 8 (mean 0.0)";
+  const REPORT = "Made the Unreal project.";
+  const rally = (extra: Record<string, unknown>) => ({ ...game([]), name: RALLY, dir: `/games/${RALLY}`, ...extra });
+  const WEB_RALLY = rally({ facts: WEB });
+  const UNREAL_RALLY = rally({
+    engine: { kind: GameEngine.Unreal, project: PROJECT, linkedAt: "" },
+    facts: [{ id: "unreal-project", path: "unreal", source: "link" }],
+  });
+  const QUESTION = { studioToolCalls: [{ name: "ask_user", args: { question: "A night track too?" } }] };
+
+  /**
+   * One turn on the game: the host lists `before` until the builder has run and `after` once it has
+   * (a throwing `after` is a host that cannot answer); the preview shows a black canvas.
+   */
+  async function linkedTurn(before: unknown, after: unknown, answer = {}) {
+    let built = false;
+    const recorder = ctxRecorder({
+      unknown: { value: null },
+      handlers: {
+        "events.messages": () => [{ role: "user", content: "Unreal Engine" }],
+        "game.contentStamp": () => ({ all: null, source: null }),
+        "game.list": () => {
+          if (!built) return [before];
+          if (after instanceof Error) throw after;
+          return [after];
+        },
+        "plugins.tools": () => ({ tools: [], guidance: "", revision: 1, kinds: [] }),
+        "engine.describe": () => [],
+        "engine.delegate": () => {
+          built = true;
+          return { ok: true, engine: CLAUDE, turns: 1, usage: {}, sessionId: "s", summary: REPORT, ...answer };
+        },
+        "preview.load": () => true,
+        "preview.ready": () => ({ ready: true, ms: 5 }),
+        "preview.status": () => ({ loadError: null }),
+        "preview.console": () => [],
+        "preview.observe": () => ({ ok: false, reasons: [BLACK] }),
+      },
+    });
+    await runDelegatedTurn(recorder.ctx as never, { ...TURN, text: "Unreal Engine", project: RALLY } as never);
+    const observations = recorder
+      .paramsOf("turn.append")
+      .flatMap((p) => (p.batch as Array<{ event_type?: string }>) ?? [])
+      .filter((event) => event.event_type === RunEvent.BuildObservation);
+    const said = recorder.notifications
+      .filter((n) => n.type === "chat.message")
+      .map((n) => String((n.payload as { content?: unknown }).content))
+      .join("\n");
+    return { previewCalls: recorder.sequence("preview."), observations: observations.length, said };
+  }
+
+  it("a game linked to Unreal by the turn gets no preview load, no build_observation and no black-screen line", async () => {
+    for (const [label, answer] of [
+      ["its report", {}],
+      ["a question beside it", QUESTION],
+    ] as const) {
+      const { previewCalls, observations, said } = await linkedTurn(WEB_RALLY, UNREAL_RALLY, answer);
+      assert.deepEqual(previewCalls, [], label);
+      assert.equal(observations, 0, label);
+      assert.doesNotMatch(said, /black screen|loads clean|console error/, label);
+      assert.ok(said.includes(REPORT), `${label}: the builder's report still reaches the chat`);
+    }
+  });
+
+  it("a web game is still checked, and a game linked before the turn still is not", async () => {
+    const web = await linkedTurn(WEB_RALLY, WEB_RALLY);
+    assert.equal(web.previewCalls[0], "preview.load");
+    assert.equal(web.observations, 1);
+    assert.match(web.said, /fix the black screen/);
+    const unreal = await linkedTurn(UNREAL_RALLY, UNREAL_RALLY);
+    assert.deepEqual(unreal.previewCalls, []);
+    assert.equal(unreal.observations, 0);
+  });
+
+  it("a host that cannot read the game again leaves the engine the turn started with", async () => {
+    const web = await linkedTurn(WEB_RALLY, new Error("game.list failed"));
+    assert.equal(web.previewCalls[0], "preview.load");
+    assert.equal(web.observations, 1);
+    const unreal = await linkedTurn(UNREAL_RALLY, new Error("game.list failed"));
+    assert.deepEqual(unreal.previewCalls, []);
+    assert.equal(unreal.observations, 0);
   });
 });

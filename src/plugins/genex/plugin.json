@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.11.2",
+  "version": "1.12.1",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -116,6 +116,7 @@
     },
     {
       "name": "package",
+      "facts": ["web-game"],
       "description": "Add Genex's multiplayer package (@genex-ai/multiplayer) or player-identity package (@genex-ai/embed-sdk) to this game, at the version Studio pins. A game with a package.json installs it with its own package manager; a multiplayer request installs both multiplayer and player identity in one command, with the npm registry open for that command only. It asks nobody. A game made from Studio's template (no package.json) gets Studio's copies mapped into its index.html import map instead, with nothing downloaded, and Studio connects the game. Any other game without package.json cannot add them.",
       "parameters": {
         "type": "object",
@@ -181,7 +182,7 @@
     },
     {
       "name": "genex",
-      "summary": "Genex's own guide to its asset toolkit, with Studio's map from each Genex CLI command to the Studio tool that runs it (genex__asset, genex__publish, genex__cover, genex__cli, genex__cli-paid, genex__package).",
+      "summary": "Genex's own guide to its asset toolkit, with Studio's map from each Genex CLI command to the Studio tool that runs it (genex__asset, genex__publish, genex__cover, genex__cli, genex__cli-paid).",
       "file": "skills/genex/SKILL.md"
     },
     {

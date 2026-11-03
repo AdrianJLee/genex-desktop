@@ -1,13 +1,12 @@
 /**
  * The agents answer in the person's language: in the language they write in, and in the language
  * Genex is set to when a message is Genex's own (a resume, a continue), so those turns never pull
- * the chat back to English. The host names that language (`studio.language`); both the chat's
- * builder and the Loop chat's coordinator are told it.
+ * the chat back to English. The host names that language (`studio.language`); the chat's builder
+ * is told it.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
-import { coordinatorPrompt } from "../../src/harness-seed/loop/coordinator-prompts.ts";
+import { chatContext } from "../../src/harness-seed/loop/chat-session.ts";
 import { appLanguage } from "../../src/harness-seed/loop/app-language.ts";
 import { studioRpc } from "../../src/main/harness-rpc/studio.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
@@ -18,28 +17,13 @@ import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 const RUSSIAN = { tag: "ru", name: "Русский" };
 const SAYS_RUSSIAN = /in the language the user writes to you in[\s\S]*Русский \(ru\)/;
 
-function coordinatorWith(language: typeof RUSSIAN | null) {
-  return coordinatorPrompt({
-    events: [],
-    run: { runId: "r1" },
-    text: "continue",
-    journal: null,
-    history: "",
-    appLanguage: language,
-  });
-}
-
 describe("the agents' language", () => {
-  it("tells a chat's builder the person's language and the app's, in a new brief and a resumed one", () => {
-    assert.match(buildContractorBrief({ ask: "make a maze", appLanguage: RUSSIAN }), SAYS_RUSSIAN);
-    assert.match(buildContractorBrief({ ask: "continue", resume: true, appLanguage: RUSSIAN }), SAYS_RUSSIAN);
-    const unknown = buildContractorBrief({ ask: "make a maze" });
-    assert.match(unknown, /in the language the user writes to you in/, "a host that cannot say keeps the rule");
-  });
-
-  it("tells the Loop chat's coordinator the same", () => {
-    assert.match(coordinatorWith(RUSSIAN), /Reply in the language the user writes to you in[\s\S]*Русский \(ru\)/);
-    assert.match(coordinatorWith(null), /Reply in the language the user writes to you in/);
+  // Flipped: the language rule came with every brief, a resumed one's too. It is the session's
+  // system text now, which every turn sends.
+  it("tells a chat's builder the person's language and the app's, in its context", () => {
+    const context = (appLanguage: typeof RUSSIAN | null) => chatContext({ folderLabel: "maze", appLanguage });
+    assert.match(context(RUSSIAN), SAYS_RUSSIAN);
+    assert.match(context(null), /in the language the user writes to you in/, "a host that cannot say keeps the rule");
   });
 
   it("asks the host for the app's language, and goes on without it when the host cannot say", async () => {

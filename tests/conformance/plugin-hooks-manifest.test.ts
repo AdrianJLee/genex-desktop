@@ -342,7 +342,6 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
   it("the bundled Unreal manifest is valid and its lock's probe needs no lock", () => {
     const raw = JSON.parse(readFileSync("src/plugins/unreal/plugin.json", "utf8")) as PluginManifest;
     const unreal = validateManifest(raw);
-    assert.equal(unreal.version, "0.46.1");
     assert.deepEqual(unreal.locks, [
       { id: "editor", label: "Unreal", per: LockScope.Project, personFirst: "editor-activity" },
     ]);
@@ -376,11 +375,9 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
     assert.deepEqual(messageCheckpointPlan(plugins, unrealKind), [], "but never before each chat message");
   });
 
-  it("the bundled Roblox manifest is valid: its version, its lock, its toolbar button, and no folders", () => {
+  it("the bundled Roblox manifest is valid: its lock, its toolbar button, and no folders", () => {
     const raw = JSON.parse(readFileSync("src/plugins/roblox/plugin.json", "utf8")) as PluginManifest;
     const roblox = validateManifest(raw);
-    // A change to the plugin raises its version above the one dev has (check-plugin-versions).
-    assert.equal(roblox.version, "0.1.32", "a step above the version dev has");
     assert.deepEqual(roblox.locks, [
       { id: "studio", label: "Roblox Studio", per: LockScope.Project, personFirst: "studio-activity" },
     ]);

@@ -2,7 +2,7 @@
  * A Loop the chat started that a plugin's step held back before its first turn (`run_finished`
  * with `startHeld`: Unreal wouldn't reopen, the game's code didn't build): the chat's own agent is
  * told why, in a message the transcript leaves out (`MessageOrigin.LoopHeld`), sent as the
- * person's last message was (its engine, model, effort and Loop), so it fixes what stopped it and
+ * person's last message was (its engine, model, effort and roles), so it fixes what stopped it and
  * starts the Loop again and the person never has to ask. Once per message of the person's: a Loop
  * the agent starts again that is held back too waits for them, and so does one held back after the
  * person wrote again. Genex's own holds (the person using the app, Plan mode) are never `startHeld`.
@@ -24,9 +24,9 @@ export interface HeldStartAsk {
 }
 
 /** The fields of the person's last message a held start's ask is sent with, as their composer sent them. */
-const CARRIED = ["engine", "model", "effort", "preferences", "loop", "autopilot"] as const;
+const CARRIED = ["engine", "model", "effort", "preferences", "roles"] as const;
 
-/** The person's last message's engine, model, effort and Loop, as a send's options. */
+/** The person's last message's engine, model, effort and roles, as a send's options. */
 function carriedOptions(action: QueuedAction | undefined): Partial<ComposerSendOptions> {
   const options: Record<string, unknown> = {};
   for (const key of CARRIED) if (action?.[key] !== undefined) options[key] = action[key];

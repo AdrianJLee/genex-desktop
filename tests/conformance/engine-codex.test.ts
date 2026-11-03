@@ -30,6 +30,8 @@ import { StudioBridge } from "../../src/substrate/engines/studio-bridge.ts";
 import { type DelegatePermissions, EngineError, type WorkerSeat } from "../../src/substrate/engines/types.ts";
 import { NeverTouchKind } from "../../src/substrate/engines/never-touch.ts";
 import { planModeNote } from "../../src/substrate/engines/codex-prompts.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { spawn } from "node:child_process";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -174,18 +176,19 @@ describe("codex engine", () => {
     assert.equal(result.summary, "Partial work");
   });
 
-  it("keeps a read-only coordinator in its stable host-owned directory across resumes", async () => {
+  it("a prompt Genex wrote reads under the non-user mark; the person's words and a brief go in as written", async () => {
     const { fn, seen } = fakeExec(successRun);
     const { engine, root } = await signedInEngine(fn);
-    const cwd = path.join(root, "coordinator");
+    const cwd = path.join(root, "game");
     await mkdir(cwd, { recursive: true });
-    const first = await engine.delegate({ prompt: "Report build progress", cwd, readOnly: true, coordinator: true });
-    await engine.delegate({ prompt: "Report checks", cwd, readOnly: true, coordinator: true, resume: first.sessionId });
-    assert.equal(seen[0]!.cwd, cwd);
-    assert.equal(seen[1]!.cwd, cwd);
-    assert.ok(seen[1]!.argv.includes("resume"));
-    assert.ok(seen[1]!.argv.includes(first.sessionId!));
+    await engine.delegate({ prompt: "The build landed. Make the cover.", from: MessageFrom.Genex, cwd });
+    await engine.delegate({ prompt: "stop building", from: MessageFrom.Person, cwd });
+    await engine.delegate({ prompt: "build pong", cwd });
+    assert.ok(seen[0]!.prompt.startsWith(`${GENEX_MARK}\nThe build landed. Make the cover.`), seen[0]!.prompt);
+    assert.ok(seen[1]!.prompt.startsWith("stop building"));
+    assert.ok(seen[2]!.prompt.startsWith("build pong"));
   });
+
   it("runs the contractor sandboxed, non-interactive, and on the studio's own credential home", async () => {
     const { fn, seen } = fakeExec(successRun);
     const { engine, root } = await signedInEngine(fn);
@@ -300,27 +303,49 @@ describe("codex engine", () => {
     assert.equal(seen[0]!.env.OPENAI_API_KEY, undefined);
   });
 
+  it("Genex's context opens a new codex exec session's stdin, marked, before its notices and the words, never in argv; a resumed one is not sent it again", async () => {
+    const { fn, seen } = fakeExec(successRun);
+    const { engine, root } = await signedInEngine(fn);
+    const told = { system: "GENEX CONTEXT\nwith a second line", notices: ["Genex cut a call off."] };
+    await engine.delegate({ cwd: root, prompt: "add a moat", from: MessageFrom.Person, ...told });
+    await engine.delegate({ cwd: root, prompt: "add a moat", from: MessageFrom.Person, resume: "thread-1", ...told });
+    const [fresh, resumed] = [seen[0]!, seen[1]!];
+    for (const call of [fresh, resumed])
+      assert.ok(!call.argv.some((arg) => arg.includes("GENEX CONTEXT")), `no argv carries it: ${call.argv.join(" ")}`);
+    assert.ok(
+      fresh.prompt.startsWith(`${GENEX_MARK}\n${told.system}\n\n${GENEX_MARK}\nGenex cut a call off.\n\nadd a moat`),
+      fresh.prompt,
+    );
+    assert.ok(resumed.prompt.startsWith(`${GENEX_MARK}\nGenex cut a call off.\n\nadd a moat`), resumed.prompt);
+    assert.ok(!resumed.prompt.includes("GENEX CONTEXT"), "a resumed session has it in its history");
+  });
+
   /**
    * One session: a waking run's lead is its chat's own session, and no lead is read-only. It
-   * resumes the chat's session from the game folder and builds in the integration worktree it leads
-   * (`leadBuilds`), which its box writes beside its own folder; in the chat's Bypass it runs
-   * unboxed, as the chat's own session there does.
+   * resumes the chat's session from the game folder and builds there; in the chat's Bypass it runs
+   * unboxed, as the chat's own session there does. Flipped (one Loop): it also wrote the integration
+   * worktree it led (`leadBuilds`); every lead builds in its game folder now.
    */
-  it("runs a lead from its game folder, resumes the chat's session, and writes the build it leads", async () => {
+  it("runs a lead from its game folder, resumes the chat's session, and writes that folder alone", async () => {
     const { fn, seen } = fakeExec(successRun);
     const { engine, root } = await signedInEngine(fn);
     const game = path.join(root, "game");
-    const build = path.join(root, "scratch", "autopilot", "run_lead", "integration");
     await mkdir(game, { recursive: true });
-    await mkdir(build, { recursive: true });
-    const director = { runId: "run_lead", threadId: "t", project: "game", root: build, chatSession: true };
-    await engine.delegate({ prompt: "lead the run", cwd: game, resume: "chat-thread", leadBuilds: build, director });
+    const director = {
+      runId: "run_lead",
+      threadId: "t",
+      project: "game",
+      root: game,
+      chatSession: true,
+      inPlace: true,
+    };
+    await engine.delegate({ prompt: "lead the run", cwd: game, resume: "chat-thread", director });
     const call = seen[0]!;
     assert.deepEqual(call.argv.slice(0, 3), ["exec", "resume", "chat-thread"]);
     assert.equal(call.cwd, game, "started where its chat's session lives");
     const roots = call.argv.find((arg) => arg.startsWith("sandbox_workspace_write.writable_roots="))!;
     const writable = JSON.parse(roots.slice(roots.indexOf("=") + 1)) as string[];
-    assert.deepEqual(writable, [game, build], "it writes its folder and the build it leads");
+    assert.deepEqual(writable, [game], "it writes its folder");
     assert.doesNotMatch(call.prompt, /you only read|you cannot change/);
 
     const permissions = { mode: "bypassPermissions", allow: [], directories: [], protectWrites: [] };
@@ -329,7 +354,6 @@ describe("codex engine", () => {
       prompt: "lead the run",
       cwd: game,
       resume: "chat-thread",
-      leadBuilds: build,
       director,
       permissions: { ...permissions, ask } as never,
     });

@@ -205,8 +205,7 @@ export const PluginToolAudience = {
 export type PluginToolAudience = (typeof PluginToolAudience)[keyof typeof PluginToolAudience];
 /**
  * Why a plugin call answered without running (its answer, never an error, carries it as
- * `blocker`): the chat is in Plan mode. The seed's copy is `PluginCallBlocker` in
- * `loop/unreal/lead-steps.ts` (seed-contracts.test.ts). Never rename a value.
+ * `blocker`): the chat is in Plan mode. Never rename a value.
  */
 export const PluginCallBlocker = {
   PlanMode: "plan_mode",
@@ -341,19 +340,13 @@ export function skillScope(skill: Pick<PluginSkill, "engines" | "facts">): strin
 /**
  * A tool a plugin offers that makes a kind of project (its manifest's `makes`), as a session's
  * snapshot lists it: the plugin's id and name, the tool's agent name `<plugin>__<tool>`, and the
- * facts. `asksReady` says the tool declares a `ready` harness tool (a plugin's new-game tool, the
- * one its engine card offers). For a game with no kind yet, the host fills `ready` and `note` from
- * that tool (whether one can be made here now, and the words the engine card offers it with); both
- * are absent when it declares none or its answer didn't come.
+ * facts.
  */
 export interface PluginKindOffer {
   plugin: string;
   name: string;
   tool: string;
   makes: string[];
-  asksReady?: boolean;
-  ready?: boolean;
-  note?: string;
   /** The scaffold this offer is (`PluginScaffold.id`), when the plugin declares scaffolds. */
   scaffold?: string;
   /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */
@@ -379,35 +372,35 @@ export interface PluginScaffold {
   game?: boolean;
   facts?: FactRule[];
 }
-/** What of one plugin reaches a game's session: its agent tools, its skills and whether its skill reader does. */
+/** What of one plugin reaches a game's session: its agent tools and its skills. */
 export interface PluginReach {
   tools: PluginManifestTool[];
   skills: PluginSkill[];
-  skillTool: boolean;
 }
 /**
  * What of one plugin reaches a session for a game (`{ facts: [] }`: no kind yet, served as a web
- * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session was: the agent tools whose `facts` reach; the skills
- * whose scope reaches, never through a Unity or Godot game's web export, and, when they name tools,
- * one of those reaches too (a skill follows its tools); the skill reader while a file skill reaches. A narrowed session none of whose offered
- * tools the plugin has gets nothing of it, not even its skills. The registry's snapshot and the
- * capability facts both read this one rule.
+ * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session
+ * was, tools and skills alike never through a Unity or Godot game's web export: the agent tools
+ * whose `facts` reach; the skills whose scope reaches and, when they name tools, one of those
+ * reaches too (a skill follows its tools). A narrowed session none of whose offered tools the
+ * plugin has gets nothing of it, not even its skills. The registry's snapshot, its locks and the
+ * capability facts all read this one rule.
  */
 export function pluginReach(
   manifest: Pick<PluginManifest, "id" | "tools" | "skills">,
   game: GameKind,
   offered?: (agentName: string) => boolean,
 ): PluginReach {
-  const tools = manifest.tools.filter(
-    (t) => isAgentTool(t) && scopeReaches(t.facts, game) && (!offered || offered(`${manifest.id}__${t.name}`)),
-  );
-  if (offered && !tools.length) return { tools, skills: [], skillTool: false };
-  const reaching = new Set(tools.map((t) => t.name));
   const known = withoutEngineWebVersion(game);
+  const tools = manifest.tools.filter(
+    (t) => isAgentTool(t) && scopeReaches(t.facts, known) && (!offered || offered(`${manifest.id}__${t.name}`)),
+  );
+  if (offered && !tools.length) return { tools, skills: [] };
+  const reaching = new Set(tools.map((t) => t.name));
   const skills = manifest.skills.filter(
     (s) => scopeReaches(skillScope(s), known) && (!s.tools || s.tools.some((name) => reaching.has(name))),
   );
-  return { tools, skills, skillTool: skills.some(isFileSkill) };
+  return { tools, skills };
 }
 /** The tool name, after `<pluginId>__`, that reads a plugin's file skills; a manifest may not declare it beside them. */
 export const PLUGIN_SKILL_TOOL = "skill";
@@ -766,7 +759,6 @@ export interface PluginInfo {
   health: PluginHealth;
   error?: string;
   pendingVersion?: string;
-  availableVersion?: string;
   state: "enabled" | "disabled" | "not-enabled";
   origin?: PluginSource;
   scan?: PluginScan;
@@ -780,10 +772,7 @@ export interface PluginInfo {
   /** Agent tools of a local plugin the person allowed to run without asking; cleared when its code changes or it is turned off. */
   allowedTools?: string[];
 }
-/**
- * The plugins and skills one session was handed, as `plugin` ids and `plugin/skill` names: the
- * `tool_registry_applied` record's set, which a resumed session is compared against.
- */
+/** The plugins and skills one session is handed, as `plugin` ids and `plugin/skill` names. */
 export interface PluginAppliedSet {
   plugins: string[];
   skills: string[];

@@ -35,7 +35,7 @@ import type { BackdropShaderRequest, BackdropShaderResult } from "../shared/back
 import type { GameLocation, GameName, GameNameRequest, PlayEngine } from "../shared/game-project.ts";
 import { StudioPlatform } from "../shared/boot.ts";
 import type { GameSoundRequest } from "../shared/game-sound.ts";
-import { latestRun } from "../shared/coordinator.ts";
+import { latestRun } from "../shared/chat-run.ts";
 import { validateCoverSurface } from "../shared/cover-shader.ts";
 import { coverLookName, coverRecipeFromTool } from "../shared/cover-recipe.ts";
 import { CustomEvent, customEventData } from "../shared/custom-events.ts";
@@ -74,7 +74,6 @@ import {
   BootReason,
   type DispatchAction,
   DispatchActionType,
-  harnessRunEnv,
   HarnessCapability,
   HarnessState,
 } from "../shared/protocol.ts";
@@ -431,8 +430,6 @@ export interface StudioCoreOptions {
    * ceiling, so the engine hears "declined" rather than a timeout).
    */
   consentTimeoutMs?: number;
-  /** How long a build's lead's permission card waits for the person (default 5 minutes); a test seam. */
-  leadAskTimeoutMs?: number;
   /** The locks' clock and its timers, and an agent's call's wait (default four minutes); a test seam. */
   locks?: Pick<LockServiceOptions, "agentWaitMs" | "now" | "sleep" | "timeout">;
   /** The clock a moment's shared limit runs on (`HookServiceOptions`); a test seam. */
@@ -763,8 +760,6 @@ export class StudioCore {
       },
       readyProject: (...args) => core.#readyProject(...args),
       recordToolRevision: (...args) => core.#connections.recordApplied(...args),
-      recordDeliveredTools: (...args) => core.#connections.recordDelivered(...args),
-      lastAppliedTools: (...args) => core.#connections.lastApplied(...args),
       setGameCover: (...args) => core.#setGameCover(...args),
       setGameCoverShader: (...args) => core.#setGameCoverShader(...args),
       get settings() {
@@ -1238,7 +1233,7 @@ export class StudioCore {
 
   /** The registry's start, each part of it marked so a slow plugin setup's log says which part held it. */
   async #initPlugins(): Promise<void> {
-    // A first launch also marks each seed it copies.
+    // A first launch, or one that lays a newer seed over an older copy, also marks each seed it copies.
     this.plugins.onInitStep = (step, plugin) =>
       this.options.markBoot?.(`core:plugins-${step}${plugin ? `:${plugin}` : ""}`);
     await this.plugins.init();
@@ -1598,8 +1593,6 @@ export class StudioCore {
       api: this.api(),
       updatesDir: this.layout.updates,
       compileCache: path.join(this.layout.scratch, HARNESS_COMPILE_CACHE_FOLDER),
-      // The harness's environment is an allow-list: the run overrides are handed on by name.
-      env: harnessRunEnv(process.env),
       heartbeatTimeoutMs: HARNESS_HEARTBEAT_TIMEOUT_MS,
       crashLoop: HARNESS_CRASH_LOOP,
       onNotify: (type, payload) => this.#onHarnessNotify(type, payload),
@@ -2131,8 +2124,8 @@ export class StudioCore {
     const where = options.parent === undefined ? {} : { parent: options.parent, allowed };
     const waiting = options.provisional === true ? { provisional: true } : {};
     const ready = await this.#readyProject(await this.games.create(title, { ...where, ...waiting }));
-    // The folder as it was made, once its repository exists: the chat's first build reads
-    // "nothing built yet" from it (the engine question, harness-seed `delegated-turn.ts`).
+    // The folder as it was made, once its repository exists: while it still matches, the game has
+    // no kind yet (`scaffoldStamp`), and it waits for its first build.
     const game = await this.games.rememberScaffold(ready.name);
     await this.threadForGame(game.name);
     return game;
@@ -2626,9 +2619,9 @@ export class StudioCore {
     return { ...this.#x.runPreview };
   }
 
-  /** Reflect stage visibility (and whether the person watches a game in Live) while preserving active observations. */
-  previewStageVisible(visible: boolean, watching = visible, stageGame: string | null = null): Promise<void> {
-    return this.#previews.setStageVisible(visible, watching, stageGame);
+  /** Reflect stage visibility while preserving active observations. */
+  previewStageVisible(visible: boolean): Promise<void> {
+    return this.#previews.setStageVisible(visible);
   }
 
   /** The Live game's sound switch, as the user left it. */
@@ -2681,11 +2674,6 @@ export class StudioCore {
   /** Something would have changed Live: it waits for the person's Reload instead (`live.behind`). */
   offerLive(...args: Parameters<PreviewService["offerLive"]>): ReturnType<PreviewService["offerLive"]> {
     return this.#previews.offerLive(...args);
-  }
-
-  /** A build nobody on the stage asked to see: offered to Live's Reload, never loaded (`PreviewService.offerBuild`). */
-  offerBuild(...args: Parameters<PreviewService["offerBuild"]>): ReturnType<PreviewService["offerBuild"]> {
-    return this.#previews.offerBuild(...args);
   }
 
   /** What waits for this game's Live and the build Live shows: the stage reads it on mount (`live.behind`). */
@@ -2850,12 +2838,6 @@ export class StudioCore {
   /** Whether the host's own records say this run is this game's (`preview.computer`'s run check). */
   _runOfGame(project: string, runId: string): Promise<boolean> {
     return this.#delegation.runOfGame(project, runId);
-  }
-
-  _directorToolsFor(
-    ...args: Parameters<DelegationService["_directorToolsFor"]>
-  ): ReturnType<DelegationService["_directorToolsFor"]> {
-    return this.#delegation._directorToolsFor(...args);
   }
 
   // ── recovery ─────────────────────────────────────────────────────────────────────────────

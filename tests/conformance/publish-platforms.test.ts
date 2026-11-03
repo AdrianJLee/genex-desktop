@@ -641,7 +641,7 @@ describe("Publish's platform rows as the dialog says them", () => {
     assert.equal(nothingToPublish([noWeb, noMac, WINDOWS]), true);
     assert.equal(reachLine([noWeb, noMac, WINDOWS]), "Make a Mac, Windows or Linux app first, then publish it here.");
     assert.equal(
-      reachLine([noWeb, noMac, WINDOWS], false, WebOffer.Make),
+      reachLine([noWeb, noMac, WINDOWS], WebOffer.Make),
       "Make a web version or a Mac, Windows or Linux app first, then publish it here.",
       "a Unity or Godot game can start with its web version",
     );
@@ -669,17 +669,13 @@ describe("Publish's platform rows as the dialog says them", () => {
     );
   });
 
-  it("sends apps only through a Genex plugin that can, and says to update an older one", () => {
+  it("sends apps only through a Genex plugin whose record says it can", () => {
     const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
     const ready = { ...MAC, uploads: true };
     const record = (supported: boolean): GenexNativeRecord => ({ supported, sending: false, sent: [], failed: [] });
-    assert.deepEqual(gateByPlugin([noWeb, ready, WINDOWS], record(true)).platforms[1], ready);
-    const older = gateByPlugin([noWeb, ready, WINDOWS], undefined);
-    assert.equal(older.platforms[1]?.uploads, false, "a plugin from before apps answers no record");
-    assert.equal(older.behind, true);
-    assert.equal(reachLine(older.platforms, older.behind), "Update the Genex plugin in Plugins to publish apps.");
-    assert.equal(gateByPlugin([noWeb, ready, WINDOWS], record(false)).behind, true);
-    assert.equal(gateByPlugin([noWeb, MAC, WINDOWS], undefined).behind, false, "nothing it could send anyway");
+    assert.deepEqual(gateByPlugin([noWeb, ready, WINDOWS], record(true))[1], ready);
+    // Flipped from "says to update an older one": the installed Genex is the one this build ships.
+    assert.equal(gateByPlugin([noWeb, ready, WINDOWS], record(false))[1]?.uploads, false);
   });
 
   it("asks the agent for an app in the game's own name", () => {

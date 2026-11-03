@@ -21,7 +21,7 @@ import {
   declaredPlayerApps,
 } from "./desktop-assist.ts";
 import { engineAppRefusal } from "./desktop-target.ts";
-import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
+import { DesktopAnswer, DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 
 /**
  * What the person reads on the consent card (a short question, one line under it) and the agent
@@ -148,13 +148,13 @@ export async function desktopSessionTools(
   };
   const grants = assistGrants(core);
   const yes = chatYes(core, place.threadId, () => desktop.stopsAll());
-  const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<boolean> => {
-    if (yes.covers(question, app)) return true;
+  const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<DesktopAnswer> => {
+    if (yes.covers(question, app)) return DesktopAnswer.Yes;
     // The person's press (or the card they approved) for this turn's assist already said yes to the
     // session and the grant's apps; any other app (their browser, for the game's page) is asked.
     const grant = grants.forTurn(place.threadId, place.turn);
     const covered = !app || (app.bundleId !== null && grant?.apps.has(app.bundleId) === true);
-    if (grant?.asked && covered) return true;
+    if (grant?.asked && covered) return DesktopAnswer.Yes;
     const { prompt, note } = consentWords(question, app);
     const tool = { ...DESKTOP_CONSENT_TOOL, confirmation: prompt };
     const asked = app ? { app: app.name, bundleId: app.bundleId } : {};
@@ -167,8 +167,11 @@ export async function desktopSessionTools(
       undefined,
       { note },
     );
-    if (answer.approved) yes.keep(question, app);
-    return answer.approved;
+    if (answer.approved) {
+      yes.keep(question, app);
+      return DesktopAnswer.Yes;
+    }
+    return answer.by === "timeout" ? DesktopAnswer.Unanswered : DesktopAnswer.No;
   };
   // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,
   // read afresh on every action.

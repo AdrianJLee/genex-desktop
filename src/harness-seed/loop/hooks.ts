@@ -306,7 +306,7 @@ export function notesText(report: Pick<HookReport, "notes">): string[] {
  * How a wait until the game's apps are ready ended: ready, or why not, whether its time ran out, and
  * whether Genex itself was holding them back (the person using the app) when it did.
  */
-export type ReadyOutcome = { ok: true } | { ok: false; reason: string; timedOut: boolean; held?: boolean };
+type ReadyOutcome = { ok: true } | { ok: false; reason: string; timedOut: boolean; held?: boolean };
 
 /** The clock a wait runs on: a test's own, or the run's. */
 export type ReadyClock = { now: () => number; sleep: (ms: number) => Promise<void> };

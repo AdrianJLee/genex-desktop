@@ -136,16 +136,15 @@ function newRecord(state: PoolState, ask: StartAsk): WorkerRecord {
   };
 }
 
-/** The commit a copy forks from: the scope's own fork point (the lead's folder's head), else a snapshot of the game folder. */
+/** The commit a copy forks from: a snapshot of the game folder. */
 async function forkCommit(state: PoolState, record: WorkerRecord): Promise<string | null> {
-  const { ctx, project, forkFrom } = state.scope;
-  if (forkFrom) return forkFrom();
+  const { ctx, project } = state.scope;
   const reason = POOL_WORDS.snapshotReason(record.id);
   const snapshot = await ctx.call(HostMethod.SnapshotCreate, { scope: "game", reason, project });
   return snapshot?.git?.game ?? null;
 }
 
-/** The copy a writer works in: made from the lead's work so far (a snapshot of the game folder, or the head of the folder the lead builds in). */
+/** The copy a writer works in: made from the lead's work so far (a snapshot of the game folder). */
 async function makeCopy(state: PoolState, record: WorkerRecord): Promise<void> {
   const { ctx, project, runId, threadId } = state.scope;
   // The fork point is committed first, and the copy is made from it: one write, after the lead's.
@@ -176,8 +175,6 @@ export async function startWorker(state: PoolState, args: AnyRecord): Promise<st
   if (unboxed) return refusedStart(state.scope.ctx, unboxed);
   const ask = askOf(state, args);
   if ("refused" in ask) return ask.refused;
-  const isolationRefused = state.scope.refusesIsolation?.(ask.isolation) ?? null;
-  if (isolationRefused) return isolationRefused;
   const room = roomProblem(state);
   if (room) return room;
   const record = newRecord(state, ask);
@@ -289,14 +286,9 @@ function failureWords(err: unknown): string {
 const failureCode = (err: unknown): WorkerStopCode =>
   hostRefused(err) ? WorkerStopCode.HostRefused : WorkerStopCode.Error;
 
-/**
- * Where a worker's session sits: its copy, or — a reader, when the lead builds in a folder of its own
- * (a web game's integration worktree) — that folder; otherwise the host seats it in the game folder.
- */
-function workplaceOf(state: PoolState, record: WorkerRecord): { cwd?: string } {
-  if (record.worktree) return { cwd: record.worktree };
-  const { leadFolder } = state.scope;
-  return record.isolation === WorkerIsolation.Read && typeof leadFolder === "string" ? { cwd: leadFolder } : {};
+/** Where a worker's session sits: its copy; otherwise the host seats it in the game folder. */
+function workplaceOf(record: WorkerRecord): { cwd?: string } {
+  return record.worktree ? { cwd: record.worktree } : {};
 }
 
 /** One leg of a worker's session: its brief or what the lead steered, in a new session or `resume`d. */
@@ -316,7 +308,7 @@ function delegateLeg(
     ...(effort ? { effort } : {}),
     ...(creditCap === undefined ? {} : { creditCap }),
     ...(leg.resume ? { resume: leg.resume } : {}),
-    ...workplaceOf(state, record),
+    ...workplaceOf(record),
     ...(record.isolation === WorkerIsolation.Read ? { readOnly: true } : {}),
     // No tool allowlist: a worker has every plugin tool and connector its lead has; its type is
     // the kind of work (its brief's know-how and default isolation), never a fence.

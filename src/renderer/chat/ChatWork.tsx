@@ -3,12 +3,9 @@
  * log folded in), else a running build's status, else Studio quietly learning, else nothing.
  */
 import { type JSX, type Key, useMemo } from "react";
-import type { AgentScreenFrame } from "../../shared/agent-screen.ts";
-import { leadFrameOf } from "../state/agent-screens.ts";
-import { useAgentScreens } from "../state/hooks.ts";
+import type { RunSummary } from "../../shared/run-summary.ts";
 import { LoadingState } from "../ui/LoadingState.tsx";
 import { Presence, type PresenceChild } from "../ui/Presence.tsx";
-import type { BuildParts } from "./build-checklist.ts";
 import { BuildStatus } from "./BuildStatus.tsx";
 import type { ActivityItem } from "./conversation-entries.ts";
 import { WorkLogContent } from "./WorkLog.tsx";
@@ -25,10 +22,10 @@ export interface ChatWorkProps {
   workKey: Key | null | undefined;
   /** What the busy line says (`busyLabel`). */
   label: string;
-  /** The running build's one line: its parts counted (`checklistCaption`), else what is happening now (`buildCaption`). */
+  /** The running build's one line: its steps counted (`checklistCaption`), else what is happening now (`buildCaption`). */
   caption: string;
-  /** What the running build's card lists its parts from (`build-checklist.ts`), once it has a plan or a worker. */
-  parts: BuildParts | null;
+  /** The running build's summary its card lists its steps from (`build-checklist.ts`), once it has a save point or a worker. */
+  summary: RunSummary | null;
   /** The busy line waits on the user rather than working. */
   waiting: boolean;
   busySince: number | null;
@@ -36,8 +33,6 @@ export interface ChatWorkProps {
   /** The learning pass's own status line. */
   learningLine: string;
   runStarted: number | undefined;
-  /** The time the running build was given, when it was given one. */
-  budgetMs: number | null;
   /** The chat's game, whose running build's lead screen the build status shows. */
   project: string | null;
   onShowBuilds?: () => void;
@@ -55,19 +50,15 @@ const WorkKind = {
 } as const;
 
 /**
- * The line reads the lead's screen itself (a frame of the store's), so a new frame from any worker
- * re-renders at most this line, never the chat around it. A running build is one card: one line
- * counting its parts, and the card opens to their list — added, working, still to come — in place
- * of a line for each worker in the transcript; every detail of a part lives on Builds. The line
- * opens and closes in place, and a work line becoming the build card (or back) closes one as the
- * other opens.
+ * A running build is one card: one line counting its parts, and the card opens to their list —
+ * added, working, still to come — in place of a line for each worker in the transcript; every
+ * detail of a part lives on Builds. The line opens and closes in place, and a work line becoming
+ * the build card (or back) closes one as the other opens.
  */
 export function ChatWork(props: ChatWorkProps): JSX.Element {
-  const { activeRunId, project } = props;
-  const leadFrame = useAgentScreens((s) => (activeRunId ? leadFrameOf(s, project, activeRunId) : undefined));
   return (
     <Presence still={props.still} className="chat-work">
-      {workLine(props, leadFrame)}
+      {workLine(props)}
     </Presence>
   );
 }
@@ -86,7 +77,7 @@ function WorkMaking({ props }: { props: ChatWorkProps }): JSX.Element | null {
 }
 
 /** The line on show, keyed by its kind, or nothing. */
-function workLine(props: ChatWorkProps, leadFrame: AgentScreenFrame | undefined): PresenceChild[] {
+function workLine(props: ChatWorkProps): PresenceChild[] {
   if (props.chatWorking)
     return [
       {
@@ -111,14 +102,12 @@ function workLine(props: ChatWorkProps, leadFrame: AgentScreenFrame | undefined)
       {
         key: WorkKind.Build,
         node: (
-          // The build's lead screen and its parts, named from the person's ask.
+          // The build's parts, named from the person's ask.
           <div data-analytics-mask className="chat-work-build flex min-w-0 flex-col gap-2">
             <BuildStatus
               {...(props.runStarted !== undefined ? { since: props.runStarted } : {})}
-              budgetMs={props.budgetMs}
-              {...(leadFrame ? { frame: leadFrame } : {})}
               {...(props.onShowBuilds ? { onOpenBuilds: props.onShowBuilds } : {})}
-              parts={props.parts}
+              summary={props.summary}
               caption={props.caption}
             />
           </div>

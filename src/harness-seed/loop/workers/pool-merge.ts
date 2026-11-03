@@ -83,8 +83,8 @@ export async function keepWork(state: PoolState, record: WorkerRecord): Promise<
 
 /** The lead's uncommitted files that the worker's commit also changes: git would refuse to merge over them. */
 async function dirtyOverlap(state: PoolState, commit: string): Promise<string[]> {
-  const { ctx, leadFolder } = state.scope;
-  const status = await gitExec(ctx, leadFolder, GIT.status);
+  const { ctx, project } = state.scope;
+  const status = await gitExec(ctx, { project }, GIT.status);
   const dirty = new Set(
     String(status.stdout ?? "")
       .split("\n")
@@ -92,7 +92,7 @@ async function dirtyOverlap(state: PoolState, commit: string): Promise<string[]>
       .flatMap(porcelainPaths),
   );
   if (!dirty.size) return [];
-  const changed = await gitExec(ctx, leadFolder, WORKER_GIT.changedSince(commit));
+  const changed = await gitExec(ctx, { project }, WORKER_GIT.changedSince(commit));
   return String(changed.stdout ?? "")
     .split("\n")
     .map((file) => file.trim())
@@ -122,8 +122,8 @@ function mergeWork(state: PoolState, record: WorkerRecord, commit: string): Prom
  * say: what no worker's work brings into the lead's folder, as no build lands them in a game.
  */
 async function claudeFolderChanges(state: PoolState, commit: string): Promise<string[] | null> {
-  const { ctx, leadFolder } = state.scope;
-  const changed = await gitExec(ctx, leadFolder, WORKER_GIT.everyPathSince(commit)).catch(() => null);
+  const { ctx, project } = state.scope;
+  const changed = await gitExec(ctx, { project }, WORKER_GIT.everyPathSince(commit)).catch(() => null);
   if (changed?.code !== 0) return null;
   return String(changed.stdout ?? "")
     .split("\0")
@@ -132,13 +132,13 @@ async function claudeFolderChanges(state: PoolState, commit: string): Promise<st
 
 /** The merge itself, once the game folder's git is free. */
 async function mergeNow(state: PoolState, record: WorkerRecord, commit: string): Promise<Marked> {
-  const { ctx, leadFolder } = state.scope;
+  const { ctx, project } = state.scope;
   const planted = await claudeFolderChanges(state, commit);
   if (planted === null) return { text: POOL_WORDS.unchecked(record.id), settled: false };
   if (planted.length) return { text: POOL_WORDS.claudeFolder(record.id, planted), settled: false };
   const dirty = await dirtyOverlap(state, commit);
   if (dirty.length) return { text: POOL_WORDS.dirty(record.id, dirty), settled: false };
-  const merge = await mergeNoFf(ctx, leadFolder, commit, {
+  const merge = await mergeNoFf(ctx, { project }, commit, {
     message: POOL_WORDS.mergeMessage(record.id, record.title),
     noEdit: true,
     rpcErrors: "fail",
@@ -146,9 +146,7 @@ async function mergeNow(state: PoolState, record: WorkerRecord, commit: string):
     listConflicts: true,
   });
   if (merge.ok) {
-    // The scope's check of the merged build (a web game's health check) is said with the merge.
-    const checked = (await state.scope.afterMerge?.(record).catch(() => null)) ?? null;
-    const text = [POOL_WORDS.merged(record.id), checked, picturesToLookAt(record)].filter(Boolean).join(" ");
+    const text = [POOL_WORDS.merged(record.id), picturesToLookAt(record)].filter(Boolean).join(" ");
     return { text, settled: true, merged: true };
   }
   const text = merge.conflicts.length

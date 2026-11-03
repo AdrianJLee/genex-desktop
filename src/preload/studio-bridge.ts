@@ -55,7 +55,7 @@ export function createStudioBridge(
   ): Promise<StudioInvokeResult<C>> {
     // Main answers every invoke with `IpcResult` (`main/ipc-handle.ts`), typed by the same map.
     const result = (await ipc.invoke(channel, args[0])) as IpcResult<StudioInvokeResult<C>>;
-    if (!result.ok) throw failure(result);
+    if (!result.ok) throw failure(result, channel);
     return result.value;
   }
   function subscribe<C extends StudioPushChannel>(
@@ -91,10 +91,14 @@ export function createStudioBridge(
   };
 }
 
-/** A failed invoke as the renderer catches it: its words, and its code when it is one of the app's. */
-function failure(result: Extract<IpcResult, { ok: false }>): Error {
+/**
+ * A failed invoke as the renderer catches it: its words, its code when it is one of the app's, and
+ * the channel it failed on (`failedChannel`).
+ */
+function failure(result: Extract<IpcResult, { ok: false }>, channel: StudioInvokeChannel): Error {
   const code = errorCode(result);
-  return code ? new CodedError(code, result.error) : new Error(result.error);
+  const error = code ? new CodedError(code, result.error) : new Error(result.error);
+  return Object.assign(error, { channel });
 }
 
 /** What every group of calls is built from: the raw IPC, and the typed invoke and subscribe over it. */
@@ -213,7 +217,6 @@ function runCalls(bridge: BridgeCalls) {
     showBuild: (project, commit) => invoke("studio:build.show", { project, commit }),
     landBuild: (project, commit) => invoke("studio:build.land", { project, commit }),
     buildProblem: (project) => invoke("studio:build.problem", { project }),
-    startRun: (spec) => invoke("studio:run.start", spec),
     stopRun: (runId) => invoke("studio:run.stop", { runId }),
     finishRun: (runId, threadId) => invoke("studio:run.finish", { runId, threadId }),
     resumeAutopilot: (runId) => invoke("studio:autopilot.resume", { runId }),

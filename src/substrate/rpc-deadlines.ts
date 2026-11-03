@@ -7,8 +7,9 @@
  * with nothing to notice it. Every call now has a class, and a class with a deadline is answered
  * with `RpcDeadline` once it passes; the watchdog sees the harness's own silence again after that.
  *
- * Engine work, runs, snapshots and plugin calls bound themselves (the engines' timeouts, consent
- * windows, the director's tool timeout) and some legitimately take hours, so their class has none.
+ * Engine work, runs, snapshots and plugin calls bound themselves (an engine's timeout when its caller
+ * names one, consent windows, the director's tool timeout) and some legitimately take hours: a user's
+ * work has no hour cap, so their class has none.
  */
 import { MINUTE_MS } from "../shared/duration.ts";
 import type { HarnessHostMethod } from "../shared/harness-api.ts";
@@ -61,7 +62,6 @@ export const RPC_CLASSES = {
   "jobs.list": RpcClass.Record,
   "plugins.find": RpcClass.Record,
   "plugins.suggest": RpcClass.Record,
-  "capabilities.describe": RpcClass.Record,
   "plugins.invoke": RpcClass.Work,
   "mcp.tools": RpcClass.Work,
   "mcp.invoke": RpcClass.Work,
@@ -82,7 +82,7 @@ export const RPC_CLASSES = {
   "finish.review": RpcClass.Work,
   "finish.settle": RpcClass.Record,
   "engine.steer": RpcClass.Work,
-  "coordinator.tool": RpcClass.Work,
+  "run.control": RpcClass.Work,
   "engine.delegations": RpcClass.Record,
   "engine.hardware": RpcClass.Record,
   "game.list": RpcClass.Record,
@@ -109,7 +109,6 @@ export const RPC_CLASSES = {
   "preview.gpuErrors": RpcClass.Page,
   "preview.status": RpcClass.Page,
   "preview.ready": RpcClass.PageLoad,
-  "preview.showing": RpcClass.Page,
   "preview.observe": RpcClass.PageLoad,
   "preview.acquire": RpcClass.PageLoad,
   "preview.release": RpcClass.Page,

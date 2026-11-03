@@ -120,8 +120,8 @@ export function engineRpc(core: StudioCore, x: CoreInternals) {
      * never carries `chatTurn`: only the lead answers the chat during a build.
      */
     [HostMethod.EngineSteer]: async (p) => steerIntoChat(x.activeDelegations, p),
-    [HostMethod.CoordinatorTool]: async (p) =>
-      x.conversation.coordinatorTool(p.threadId, p.runId, p.name, p.args ?? {}, p.messageId),
+    [HostMethod.RunControl]: async (p) =>
+      x.conversation.runControl(p.threadId, p.runId, p.name, p.args ?? {}, p.messageId),
     [HostMethod.EngineDelegations]: async () =>
       [...x.activeDelegations.entries()]
         .filter(([, d]) => d.started === true)

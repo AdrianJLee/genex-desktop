@@ -437,7 +437,7 @@ function EntryRow({
  */
 export interface ComposerPlanMode {
   on: boolean;
-  /** Offered where Mode's Loop is the chat's own: a build that owns the chat keeps its own plan. */
+  /** Offered unless a running or paused build owns the chat: that build keeps its own plan. */
   available: boolean;
   onChange: (on: boolean) => void;
 }

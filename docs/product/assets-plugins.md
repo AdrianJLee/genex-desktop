@@ -33,7 +33,7 @@ refuses empty starters, connects SDK-less games, tests the draft, goes public, s
 the agent kept (after a landed build, a web or engine game's agent hands `genex__cover` a picture, clip optional, as files in
 the game folder; [rules](../plugins.md#first-party-privileges)), plus its project if remixable
 ([Remix](../play.md)); else Studio's plain frame, never blank; consented `genex__cover-set` sends it now; chat shows it. Multiplayer (built, single-player) asks chat (Genex
-off: enable it); Publish needs only the account; both offer Update while older. Agents read
+off: enable it); Publish needs only the account. Agents read
 Genex’s guide via `genex__skill`, not game files. Plugin MCPs connect on first use.
 
 The curated catalog (`plugins.genex.games`; reviewed releases in `genex-games/genex-plugins`) lists
@@ -51,14 +51,14 @@ Connector tools ask before each call unless Settings holds an exact grant (a plu
 tools never ask, its others not in Auto); server hints grant nothing. Plugin uploads show every
 included/excluded file for a second approval. Revoking stops future calls, not remote effects.
 Removal (never Genex's) keeps data, credentials and jobs; updates (newer compatible releases) also keep
-settings: rows offer **Update to x**, the sidebar's **plugin updates** the ticked ones. Built-ins install and update
-unasked. Reusing a plugin's id from another source needs **Replace and erase data** (never a
+settings: rows offer **Update to x**, the sidebar's **plugin updates** the ticked ones. Built-ins install
+unasked and update with Studio at launch. Reusing a plugin's id from another source needs **Replace and erase data** (never a
 bundled id). Reinstall is explicit; local reinstall reviews a fresh snapshot. Host-managed secrets
 never enter composer text.
 
 Skills lists Studio’s own (local chat, planner, director), the game’s, providers’ global and plugin
 skills. Codex says whether workers load its catalog; Claude’s global entries stay excluded. Plugin
-switches cover all games; resumed workers hear what was withdrawn.
+switches cover all games; a resumed session's tools follow them.
 
 ## Where to work
 

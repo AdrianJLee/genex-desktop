@@ -39,7 +39,7 @@ import type { BesideTarget } from "../open-beside.ts";
 import { OPEN_BUILD_EVENT } from "../open-build.ts";
 import { replyAbout } from "../reply-about.ts";
 import { type RunGraph as RunGraphModel, runBuilding, runIdOf } from "../run-graph.ts";
-import { kindPendingGame, type StageWatch, StageView, watchingLive } from "../stage.ts";
+import { kindPendingGame, type StageWatch, StageView } from "../stage.ts";
 import { threadLog } from "../state/event-log.ts";
 import { useEventLog, useLaunch, useShallow, useThreads } from "../state/hooks.ts";
 import { isWorkingStatus } from "../state/threads.ts";
@@ -82,7 +82,7 @@ import { StillsStage } from "./stage/StillsStage.tsx";
 /** Shop loads when it opens: the stage's first paint carries none of it. */
 const ShopStage = lazy(() => import("./shop/ShopStage.tsx"));
 import { UnrealStage } from "./stage/UnrealStage.tsx";
-import { firstMessageAt, planningEnded } from "../analytics/builds-stage.ts";
+import { firstMessageAt, type GraphProjection, planningEnded, slowGraphProperties } from "../analytics/builds-stage.ts";
 import { track } from "../analytics/client.ts";
 import { gameRef } from "../analytics/game-ref.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
@@ -249,17 +249,16 @@ function useStageGraph({
     () => (buildsVisible ? mergeChatEvents(...workerLogs) : EMPTY_WORKER_EVENTS),
     [workerLogs, buildsVisible],
   );
-  const graph = useSharedSnapshot(
-    useMemo(
-      () =>
-        project
-          ? projectBuildGraph(mergeChatEvents(workerEvents, events), threadId, workers, runsRoot, selectedRun, {
-              includeWorkers: buildsVisible,
-            })
-          : null,
-      [events, workerEvents, threadId, workers, runsRoot, project, selectedRun, buildsVisible],
-    ),
-  );
+  const projection = useMemo(() => {
+    if (!project) return null;
+    const started = performance.now();
+    const log = mergeChatEvents(workerEvents, events);
+    const value = projectBuildGraph(log, threadId, workers, runsRoot, selectedRun, { includeWorkers: buildsVisible });
+    const measure = { ms: performance.now() - started, events: log.length, parts: value?.facets.length ?? 0 };
+    return { value, measure: { ...measure, buildsShown: buildsVisible } };
+  }, [events, workerEvents, threadId, workers, runsRoot, project, selectedRun, buildsVisible]);
+  useSlowGraphNote(projection?.measure ?? null);
+  const graph = useSharedSnapshot(projection?.value ?? null);
   // The run's workers write their own threads; the graph reads each one's whole log. A chat turn's
   // workers are pool sessions with no threads named after a run.
   const shownRunId = graph ? runIdOf(graph) : null;
@@ -291,6 +290,21 @@ function useStageGraph({
     );
   }, [events, threadId, runsRoot, history]);
   return { history, graph, runGraph, earlierGraph, firstSaid };
+}
+
+/** When a slow projection of the stage's graph was last sent, across stages: at most one in a while. */
+let slowGraphSentAt: number | null = null;
+
+/** Send a projection of the stage's graph that blocked the window, with its size (`slowGraphProperties`). */
+function useSlowGraphNote(projection: GraphProjection | null): void {
+  useEffect(() => {
+    if (!projection) return;
+    const now = Date.now();
+    const properties = slowGraphProperties(projection, now, slowGraphSentAt);
+    if (!properties) return;
+    slowGraphSentAt = now;
+    track(AnalyticsEvent.BuildsGraphSlow, properties);
+  }, [projection]);
 }
 
 /**
@@ -800,13 +814,12 @@ export function PreviewPanel({
   /** A plugin's toolbar button has its panel up over the stage. */
   const [toolbarOpen, setToolbarOpen] = useState(false);
   // Only the web preview is a game to watch or a page to probe; beside any other view, what waits goes in.
-  // A game waiting for Play is no game watched: a chat's show asked of it may load it.
   const watch: StageWatch = { view: stageView, visible, showEmpty, preview };
   const firstPlan = useFirstPlan(project, status, runGraph);
   const shown = { onLive: previewOnStage && visible, loading: liveLoading, empty: showEmpty };
   const controls = useStageControls(project, live, { ...shown, firstPlan: Boolean(firstPlan) }, onNotice);
   const cover = { ...flags, liveLoading: controls.loader.covering, project, visible, sidebarOverlay, toolbarOpen };
-  useNativeViewBounds(slot, { ...cover, watching: watchingLive(watch) && !live.idle });
+  useNativeViewBounds(slot, cover);
   const trouble = useBuildProblem(project, live.loadLive, onNotice);
   const about = useLiveAbout(loaded, run.firstSaid);
   useLiveProbe({ project: preview ? project : null, stageView, live, buildProblemRef: trouble.buildProblemRef, about });

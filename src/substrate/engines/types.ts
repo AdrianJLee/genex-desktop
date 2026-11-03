@@ -43,6 +43,7 @@ import type {
   DelegateResult,
   LiveToolResult,
   LiveToolSpec,
+  MessageFrom,
   SteerMessage,
   StudioToolSpec,
   ToolDefinition,
@@ -205,14 +206,23 @@ export type DelegateEvent =
 
 export interface DelegateRequest {
   contextPolicy?: import("../../shared/context.ts").ContextPolicy;
-  /** The brief — written by the harness, improved by SkillOpt. */
+  /** The person's words for a chat turn (`from`), or a brief for a session nobody answers. */
   prompt: string;
   /**
-   * What the session should know for its whole life (where it runs, its plugins and their
-   * guidance), said once beside the engine's own system prompt instead of in every message. An
-   * engine with no system prompt of its own to extend reads it ahead of the brief.
+   * Who wrote `prompt` (`HarnessDelegateParams.from`): the person's words alone, or Genex's own
+   * message, which the engine shows as not the person's (`genex-mark-prompts.ts`). Absent: a brief.
+   */
+  from?: MessageFrom;
+  /**
+   * What the session should know for its whole life (Genex's context, its plugins and their
+   * guidance), said once beside the engine's own system prompt instead of in every message. Only an
+   * engine with a system channel is sent it (Claude Code's append, Codex's developer instructions on
+   * its app server); any other, and a new `codex exec` session, reads it as the first notice of a new
+   * session. A resumed session keeps the text it started with.
    */
   system?: string;
+  /** Genex's own lines that ride beside the prompt, each a block of its own ahead of it, unmarked: the engine marks them (`genex-mark-prompts.ts`). */
+  notices?: readonly string[];
   cwd: string;
   model?: string;
   /** Reasoning effort for the contractor's model ("low" | "medium" | "high" | "max"). */
@@ -283,14 +293,12 @@ export interface DelegateRequest {
   liveTools?: LiveToolSpec[];
   onLiveTool?: (name: string, args: Record<string, unknown>) => Promise<LiveToolResult>;
   /**
-   * A session that may look and talk but never edit or run commands (a reviewer, a reader worker), unless it asks in the chat's mode (`leadAsks`: the run's coordinator). Never a
-   * run's lead: the host seats every lead as a full agent.
+   * A session that may look and talk but never edit or run commands (a reviewer, a reader worker).
+   * Never a run's lead: the host seats every lead as a full agent.
    */
   readOnly?: boolean;
   /** A Loop's reviewer: the folder it reads (its cwd is a home of its own, which its brief must not name as the build). */
   reviewer?: { reads: string };
-  /** Host-owned stable coordinator workspace; keep session cwd across chat turns. */
-  coordinator?: boolean;
   /**
    * Stills that go into the builder's prompt as image blocks: the
    * reference frames on a facet's first iteration, reference|build pair images when a style
@@ -314,7 +322,7 @@ export interface DelegateRequest {
    */
   permissions?: DelegatePermissions;
   /**
-   * A build's lead, or the run's coordinator, in a game chat: the chat's main agent, limited only by
+   * A build's lead in a game chat: the chat's main agent, limited only by
    * the chat's mode and the rules the person saved. Its session gets Claude Code's tools, no sandbox
    * and no blanket shell, in its chat's Auto, Accept edits or Bypass, else in Manual
    * (`LeadAsks.mode`), which the picker switches while it runs (`onControl`); every tool call but a
@@ -324,12 +332,6 @@ export interface DelegateRequest {
    * `engine.delegate` has no such field), never together with `permissions`.
    */
   leadAsks?: LeadAsks;
-  /**
-   * A lead's build outside the folder it sits in (a web Loop's integration worktree, its seat's
-   * checked real path): the lead edits, runs and commits there, so whatever box its engine keeps
-   * writes it as it writes the session's own folder. Only the host sets it; never read-only.
-   */
-  leadBuilds?: string;
   /**
    * A worker of a chat's lead, in the chat's mode: its seat, as the host found and built it. Only
    * the host sets it (the harness asks with a grant the host honours on its own finding), never
@@ -429,7 +431,7 @@ export interface AskFirst {
 }
 
 /**
- * What a build's lead or the run's coordinator is handed: a session that asks, and the host's word
+ * What a build's lead is handed: a session that asks, and the host's word
  * on each tool call before anything else decides it. Claude Code applies its mode and allow rules
  * (the saved ones, a game's own `.claude` settings) before it asks, so only a check that runs ahead
  * of them holds while the chat is in a mode the session could not be switched to.

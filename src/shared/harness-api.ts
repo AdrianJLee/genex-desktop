@@ -24,6 +24,7 @@ import type {
   DelegateResult,
   LiveToolResult,
   LiveToolSpec,
+  MessageFrom,
   SteerMessage,
   StudioToolSpec,
   ToolDefinition,
@@ -178,17 +179,12 @@ export interface HarnessCompleteParams {
 
 /** What `engine.delegate` takes: a delegation's serializable half plus the routing fields. */
 export interface HarnessDelegateParams {
-  coordinator?: { runId: string; messageId?: string };
   /**
-   * The chat's own session after a run it led: the run's controls it keeps (`run_status`,
-   * `show_build`, `land_build`, shared/coordinator.ts `RunControl`), answered by the host for this
-   * run and message as the coordinator's tools are. Honoured only for the chat's own session.
+   * The chat's own session after a closed Loop run: the run's controls it keeps (`run_status`,
+   * shared/chat-run.ts `RunControl`), answered by the host for this run and message
+   * (`run.control`). Honoured only for the chat's own session.
    */
-  /**
-   * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
-   * its controls are only the status, never a build to show or land.
-   */
-  runControls?: { runId: string; messageId?: string; inPlace?: boolean };
+  runControls?: { runId: string; messageId?: string };
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
@@ -197,6 +193,18 @@ export interface HarnessDelegateParams {
   chatTurn?: { messageId?: string };
   engine?: string;
   prompt: string;
+  /**
+   * Who wrote `prompt`: the person's words alone, or Genex's own message (a command's result, the
+   * cover step), which the engine shows as not the person's. Absent: a brief.
+   */
+  from?: MessageFrom;
+  /**
+   * What the session should know for its whole life, put first in its system text (the chat's
+   * `chatContext`): the same text on every turn while the game is the same, never in the prompt.
+   */
+  system?: string;
+  /** Genex's own lines for this message (the chat so far, for a new session): never the person's words. */
+  notices?: string[];
   project: string;
   /** Build here instead of the live game folder — a facet worktree under scratch. */
   cwd?: string;
@@ -289,9 +297,17 @@ export interface HarnessHostApi {
     result: { turnId: string; sessionId: string; head: string };
   };
   "turn.append": { params: { turnId: string; batch: EventData[] }; result: string };
-  /** End a turn; `outcome` is how the loop ended it (a TurnStop code), kept on its `turn_ended`. */
+  /**
+   * End a turn; `outcome` is how the loop ended it (a TurnStop code), and `failure` why a turn that
+   * threw failed (a `TurnFailureCode`, the host call and the error's type), both kept on its `turn_ended`.
+   */
   "turn.end": {
-    params: { turnId: string; status?: "ok" | "error" | "cancelled"; outcome?: string };
+    params: {
+      turnId: string;
+      status?: "ok" | "error" | "cancelled";
+      outcome?: string;
+      failure?: { code: string; method?: string; name?: string };
+    };
     result: string | null;
   };
 
@@ -353,8 +369,6 @@ export interface HarnessHostApi {
     params: { project: string; threadId: string; plugin: string; reason?: string };
     result: PluginsSuggestAnswer;
   };
-  /** What this game's builders can use, for a conversation that cannot call it (the local coordinator). */
-  "capabilities.describe": { params: { threadId: string; project?: string }; result: string };
   "plugins.invoke": {
     params: {
       project: string;
@@ -512,12 +526,10 @@ export interface HarnessHostApi {
    * End the held round of a run: the host records its outcome and counts the no's in a row from its
    * own records (`stopped` once they reach the cap). `unanswered` turns the held answer into no
    * answer, with why (a yes that lapsed, a turn that ended); nothing turns a no or no answer into a yes.
-   * `timeLeftMs`, a timed Loop's working time left: with more than `FINISH_TIME_LEFT_MS` no row of
-   * no's stops it (`timeLeft`); an ∞ Loop names none.
    */
   "finish.settle": {
-    params: { project: string; runId: string; round: number; unanswered?: string | null; timeLeftMs?: number | null };
-    result: FinishRoundAnswer & { rejections: number; stopped: boolean; timeLeft?: boolean };
+    params: { project: string; runId: string; round: number; unanswered?: string | null };
+    result: FinishRoundAnswer & { rejections: number; stopped: boolean };
   };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
@@ -531,7 +543,11 @@ export interface HarnessHostApi {
     params: { threadId: string; into: string; messages: SteerMessage[]; interrupt?: boolean; native?: boolean };
     result: { how: SteerDelivery | null; accepted: string[] };
   };
-  "coordinator.tool": {
+  /**
+   * One of the run's controls, or the resume a chat's own session recorded, for this run and the
+   * message asking (shared/chat-run.ts `HostRunTool`): recorded in the chat, answered with words.
+   */
+  "run.control": {
     params: { threadId: string; runId: string; messageId?: string; name: string; args?: Record<string, unknown> };
     result: string;
   };
@@ -637,11 +653,6 @@ export interface HarnessHostApi {
   "preview.status": { params: { handle?: string }; result: PreviewPortStatus };
   /** Readiness is a fact the page reports, not a sleep. */
   "preview.ready": { params: { handle?: string; timeoutMs?: number; gesture?: boolean }; result: ReadyResult };
-  /** What the user's own window is showing right now: their game folder, or a build they chose to play. */
-  "preview.showing": {
-    params: void;
-    result: { project: string; root: string | null; entry: string | undefined; loaded: string | null } | null;
-  };
   "preview.observe": { params: { handle?: string }; result: BuildObservation };
   "preview.acquire": { params: { label?: string }; result: { handle: string } };
   "preview.release": { params: { handle: string }; result: boolean };
@@ -740,7 +751,6 @@ export const HostMethod = {
   PluginsWorkerTypes: "plugins.workerTypes",
   PluginsFind: "plugins.find",
   PluginsSuggest: "plugins.suggest",
-  CapabilitiesDescribe: "capabilities.describe",
   PluginsInvoke: "plugins.invoke",
   McpTools: "mcp.tools",
   McpInvoke: "mcp.invoke",
@@ -761,7 +771,7 @@ export const HostMethod = {
   FinishReview: "finish.review",
   FinishSettle: "finish.settle",
   EngineSteer: "engine.steer",
-  CoordinatorTool: "coordinator.tool",
+  RunControl: "run.control",
   EngineDelegations: "engine.delegations",
   EngineHardware: "engine.hardware",
   GameList: "game.list",
@@ -788,7 +798,6 @@ export const HostMethod = {
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",
   PreviewReady: "preview.ready",
-  PreviewShowing: "preview.showing",
   PreviewObserve: "preview.observe",
   PreviewAcquire: "preview.acquire",
   PreviewRelease: "preview.release",
@@ -799,6 +808,11 @@ export const HostMethod = {
   GuardianWriteSelf: "guardian.write_self",
   UiNotify: "ui.notify",
 } as const satisfies Record<string, HarnessHostMethod>;
+
+const HOST_METHODS: ReadonlySet<string> = new Set(Object.values(HostMethod));
+
+/** Is `value` one of the host's methods, by its wire name? */
+export const isHostMethod = (value: string): boolean => HOST_METHODS.has(value);
 export type HostMethod = (typeof HostMethod)[keyof typeof HostMethod];
 
 // Every method of the contract has a member: a method added without one fails here.
@@ -845,7 +859,6 @@ export const HARNESS_PARAM_SCHEMAS = {
   "snapshot.diff": z.object({ workspace: optionalText }),
   "snapshot.worktree": z.object({ project, commit: optionalText, name: text, runId: optionalText }),
   "snapshot.removeWorktree": z.object({ project, path: text }),
-  "capabilities.describe": z.object({ project: optionalText }),
   "plugins.tools": z.object({ project: optionalText }).nullish(),
   "plugins.workerTypes": z.object({ project }),
   "jobs.list": z.object({ project, runId: optionalText, endedAfter: z.number().nullish() }),
@@ -896,7 +909,7 @@ export const HARNESS_PARAM_SCHEMAS = {
     cwd: optionalText,
     extraReads: z.array(text).nullish(),
     selfCapture: z.object({ project, root: text, runId: optionalText, facetId: optionalText }).nullish(),
-    director: z.object({ project, root: text, runId: text, inPlace: z.boolean().nullish() }).nullish(),
+    director: z.object({ project, root: text, runId: text }).nullish(),
     worker: z
       .object({ id: text, title: text, runId: optionalText, turn: optionalText, research: z.boolean().nullish() })
       .nullish(),
@@ -921,7 +934,6 @@ export const HARNESS_PARAM_SCHEMAS = {
       .min(1)
       .max(FINISH_REASON_CHARS + 1)
       .nullish(),
-    timeLeftMs: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullish(),
   }),
   "desktop.computer": z.object({ project }),
   "game.setCover": z.object({ project }),

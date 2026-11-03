@@ -1,3 +1,4 @@
+import type { MessageFrom } from "./engine-requests.ts";
 import type { ModelPreferences } from "./model-preferences.ts";
 /**
  * Substrate ↔ harness wire protocol.
@@ -65,16 +66,6 @@ export interface DispatchMessage {
   action: DispatchAction;
 }
 
-/** Composer Loop on a chat turn — hours from the stepper, stills the user dropped. */
-export interface LoopCommission {
-  hours: number;
-  frames?: ReferenceFrame[];
-}
-
-/**
- * Composer Autopilot on a chat turn. Hours are the optional "stop after N hours" cap — absent
- * means run until what was asked is verified and nothing blocks it (A2). Frames are the mood board.
- */
 /** Who plans, builds and judges — one model id per job; `undefined`/"default" is the engine's own default. */
 export interface RunRoles {
   /** Explicit reasoning per role; absent means that role model's own default. */
@@ -87,20 +78,6 @@ export interface RunRoles {
    * in that slot is then one of that engine's. Never the orchestrator, which is the run's engine.
    */
   engines?: { builder?: string; judge?: string };
-}
-
-export interface AutopilotCommission {
-  hours?: number;
-  frames?: ReferenceFrame[];
-  /** The composer's roles panel: explicit orchestrator / workers / judges picks (harness-seed/loop/model-roles.ts). */
-  roles?: RunRoles;
-  /** Request host-owned explicit approval before execution (default off). */
-  reviewPlan?: boolean;
-  /**
-   * The person's Keep building tap after a Loop ended with something still to fix: the finished
-   * build reopens, or the next Loop starts, with no turn deciding whether it is a contained change.
-   */
-  keepBuilding?: boolean;
 }
 
 /**
@@ -154,24 +131,17 @@ export type DispatchAction =
       pickedImages?: number;
       /** Reference files this message saved in the game (relative paths); a rewind with files removes them. */
       references?: string[];
-      /** Every file its attached pictures are saved as in the game (relative), already there or not: a run's lead reads them. */
-      pictureFiles?: string[];
-      /** Composer Loop: the chat may start an unattended build when the ask needs one. */
-      loop?: LoopCommission;
-      /** Composer Autopilot: the chat may launch a build that decomposes into facets and runs until satisfied. */
-      autopilot?: AutopilotCommission;
+      /** The composer's roles panel: the workers' and judges' picks, for the turn's workers and a Loop it starts. */
+      roles?: RunRoles;
       /** Words the chat wrote itself (a command's result); the queue keeps it and the transcript hides it. */
       origin?: MessageOrigin;
+      /** Genex wrote these words (any `origin`, a plugin's ask): the agent reads them as not the person's. */
+      from?: MessageFrom;
     }
   | { type: "compact"; threadId: string; engine?: string; model?: string }
   | { type: "cancel"; threadId?: string }
   | { type: "queue_message"; threadId: string; messageId: string; operation: "hold" | "edit" | "remove"; text?: string }
   | { type: "queue_resume"; threadId: string }
-  /**
-   * The chat was rewound (capability "rewind"). `frames`, when present, is the Loop mood board
-   * the interview still has after it (null: none); absent, the board is untouched.
-   */
-  | { type: "rewind"; threadId: string; frames?: ReferenceFrame[] | null }
   | { type: "healthcheck" }
   /** Run the loop's deterministic self-test (the architect's bar); rejects with the first failure. */
   | { type: "selftest" }
@@ -198,7 +168,6 @@ export const DispatchActionType = {
   Cancel: "cancel",
   QueueMessage: "queue_message",
   QueueResume: "queue_resume",
-  Rewind: "rewind",
   Healthcheck: "healthcheck",
   Selftest: "selftest",
   RunStart: "run_start",
@@ -220,23 +189,18 @@ void actionsAreListed;
  * the seed's `loop/main.ts`). The host checks one before it hands that work over. Wire names.
  */
 export const HarnessCapability = {
-  Loop: "loop",
   Autopilot: "autopilot",
   RunStart: "run.start",
   RunStop: "run.stop",
   Compact: "compact",
   Selftest: "selftest",
   Scoreboard: "scoreboard",
-  Coordinator: "coordinator",
   Director: "director",
   MessageQueue: "message-queue",
-  Rewind: "rewind",
   /** A message sent while the chat's own turn works joins that turn (`engine.steer`). */
   Steer: "steer",
   /** The chat's own session may run workers: the harness answers `worker_tool` for its turn. */
   Workers: "workers",
-  /** A build whose jobs cross to or from a completion-only local engine (`crossesCompletionEngine`). */
-  LocalRoles: "local-roles",
 } as const;
 export type HarnessCapability = (typeof HarnessCapability)[keyof typeof HarnessCapability];
 
@@ -293,51 +257,18 @@ export interface RunReference {
   frames?: ReferenceFrame[];
 }
 
-/**
- * The studio's environment variable that sends a Loop on an Unreal game to the Unreal runner it had
- * before the one Loop, for developers until a live Unreal Loop passes on the one Loop. Never a run
- * record field, never shown. The seed's copy is loop/loop-switch.ts.
- */
-export const UNREAL_RUNNER_ENV = "STUDIO_UNREAL_RUNNER";
-
-/** What `UNREAL_RUNNER_ENV` may name: the Unreal runner (`lead`). Never rename a value. */
-export const UnrealRunnerChoice = { Lead: "lead" } as const;
-export type UnrealRunnerChoice = (typeof UnrealRunnerChoice)[keyof typeof UnrealRunnerChoice];
-
-/** The studio's own variables a run's harness reads; nothing else of its environment is handed on. */
-const HARNESS_RUN_ENV = [UNREAL_RUNNER_ENV] as const;
-
-/**
- * What of the studio's own environment the harness it spawns is handed: the run overrides it
- * reads, each when it is set. The harness's environment is an allow-list, so without this an
- * override never reached the runs the harness starts from chat.
- */
-export function harnessRunEnv(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
-  const handed: Record<string, string> = {};
-  for (const name of HARNESS_RUN_ENV) {
-    const value = env[name]?.trim();
-    if (value) handed[name] = value;
-  }
-  return handed;
-}
-
 export interface RunSpec {
   runId: string;
   goal: string;
   project: string;
   /** "autopilot": the wire name of a Loop's run, kept for the records it is in. */
   mode?: "autopilot";
-  /** What the run aims at: a named game's stills, or a direction in words. Completion is controlled by budgets. */
+  /** What the run aims at: a named game's stills, or a direction in words. */
   reference: RunReference;
   /** observationDelays: backoff (ms) before re-trying a blind camera — a test/ops knob. */
   budgets: {
-    wallClockMs: number;
-    /** The composer's ∞: run until what was asked is verified and nothing blocks it; `wallClockMs` is then only the safety ceiling. */
-    untilSatisfied?: boolean;
     /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
     creditCap?: number;
-    /** Explicit intent; absent records retain legacy untilSatisfied semantics. */
-    completionPolicy?: "goal" | "duration";
     maxIterations?: number;
     observationDelays?: number[];
     /** v2 loop knobs: the pre-evidence code review (default on) and its model half (default on for delegated engines). */

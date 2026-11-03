@@ -12,7 +12,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { coverStepAsk, coverStepRuns } from "../../src/main/core/cover-step.ts";
 import { GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
-import { isChatReport, MessageOrigin } from "../../src/shared/protocol.ts";
+import { type DispatchAction, isChatReport, MessageOrigin } from "../../src/shared/protocol.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
+import { coreAssistHost } from "../../src/main/core/desktop-assist.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 
 const THREAD = "t1";
@@ -44,19 +46,20 @@ const closed = (runId: string, payload: Record<string, unknown> = { landed: true
   custom("run_finished", { runId, project: "racer", ...payload });
 
 describe("the Genex cover as a step after a landed build", () => {
-  it("asks the chat's agent for the cover with the person's engine, model and effort, never their Loop, hidden from the chat", () => {
+  it("asks for the cover by its goal alone: no tool, parameter or skill of the Genex plugin is named", () => {
     const events = [queued("m1", PERSON), closed("r1")];
     assert.deepEqual(coverStepRuns(events), ["r1"]);
     const ask = coverStepAsk(THREAD, events, "r1");
     assert.ok(ask);
-    assert.match(ask.text, /genex__skill \{"name":"cover"\}/, "the agent reads the cover skill then");
-    // Flipped from staging a genex-cover demo: the agent makes a picture of its real game by any
-    // means and hands Genex the file paths.
-    assert.match(ask.text, /genex__cover/);
-    assert.match(ask.text, /\{ image: "<path>", clip\?: "<path>" \}/);
-    assert.match(ask.text, /in the game folder/);
-    assert.match(ask.text, /PNG or JPEG, at least 1280×720/);
+    // Flipped from naming genex__skill {"name":"cover"}, genex__cover, its `{ image, clip? }` call
+    // and the picture's format: how to make and keep the cover is the plugin's own to say.
+    assert.match(ask.text, /Genex cover/);
+    assert.doesNotMatch(ask.text, /genex__/);
+    assert.doesNotMatch(ask.text, /[{}]/);
+    assert.doesNotMatch(ask.text, /skill/i);
     assert.doesNotMatch(ask.text, /demo|stage|shoot/i);
+    // Flipped: who wrote it is the message's `from` (Genex's), never a "Genex here:" in its words.
+    assert.doesNotMatch(ask.text, /Genex here/);
     assert.deepEqual(ask.options, {
       engine: "claude-code",
       model: "opus",
@@ -142,5 +145,28 @@ describe("the core asks for the cover when a build lands", () => {
     });
     assert.equal(sent.length, 1);
     assert.equal(sent[0]?.options.origin, MessageOrigin.CoverStep);
+  });
+});
+
+describe("who wrote a message the chat sends", () => {
+  it("one the chat wrote itself (an origin), or a plugin's ask, is queued as Genex's; the person's names nobody", async () => {
+    const { core } = await coreLite();
+    const sent: DispatchAction[] = [];
+    core.host.dispatch = async (action: DispatchAction) => {
+      sent.push(action);
+    };
+    const thread = core.mainThread;
+    await core.sendUserMessage("make the cover", { thread, origin: MessageOrigin.CoverStep });
+    await core.sendUserMessage("a night street race", { thread });
+    assert.deepEqual(
+      sent.map((action) => (action as { from?: string }).from),
+      [MessageFrom.Genex, undefined],
+    );
+    const posted: Array<Record<string, unknown>> = [];
+    core.sendUserMessage = (async (_text: string, options: Record<string, unknown>) => {
+      posted.push(options);
+    }) as never;
+    await coreAssistHost(core).post(thread, "racer", "Toy Engine asks: click Play", "msg_assist");
+    assert.equal(posted[0]?.from, MessageFrom.Genex, "a plugin's ask is Genex's words, not the person's");
   });
 });

@@ -1,6 +1,6 @@
 /**
- * The one health check of a web game's Loop, before a worker's work is merged in and before the
- * build lands: the page loads, it throws no uncaught error, and its frame is not blank. Genex looks
+ * The one health check of a web game's Loop, before it closes on its lead's finish (open/finish.ts):
+ * the page loads, it throws no uncaught error, and its frame is not blank. Genex looks
  * from outside only: it serves the build in a window of its own, waits for it, and asks the host's
  * own check (`preview.observe`), which reads the window's load, the page's uncaught errors and a
  * screenshot of the whole page. A screenshot is kept as the check's picture. The page is loaded once,

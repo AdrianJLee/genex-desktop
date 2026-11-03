@@ -747,7 +747,6 @@ function useAppsPublish(
   native: GenexNativeRecord | undefined,
 ): {
   platforms: PublishPlatform[] | null;
-  behind: boolean;
   apps: string | null;
   waiting: boolean;
   /** Every app Publish would send is on Genex already: the press has nothing new to do. */
@@ -756,11 +755,9 @@ function useAppsPublish(
   inReview: boolean;
 } {
   const read = usePublishPlatforms(project);
-  // An app goes only through a Genex plugin that can send it: an older one is updated first.
-  const { platforms, behind } = read ? gateByPlugin(read, native) : { platforms: null, behind: false };
+  const platforms = read ? gateByPlugin(read, native) : null;
   return {
     platforms,
-    behind,
     apps: platforms && onlyApps(platforms) ? appsLabel(platforms) : null,
     // A game made in an engine with nothing to send yet: the rows say why, and the press waits.
     waiting: platforms !== null && nothingToPublish(platforms),
@@ -843,7 +840,7 @@ function PublishBody({
   const [title, setTitle] = useState<string | null>(null);
   const name = title ?? offeredTitle(record.state, gameTitle, project);
   const publishing = record.pressing === Pressing.Publish || view.running;
-  const { platforms, behind, apps, waiting, upToDate, inReview } = useAppsPublish(project, record.state?.native);
+  const { platforms, apps, waiting, upToDate, inReview } = useAppsPublish(project, record.state?.native);
   const celebrate = useCelebration(view, publishing, inReview);
   const share = useShareWhenLive(project, celebrate);
   // A name changed after it went live is listed again by Publish update ("Save name" while celebrating).
@@ -881,7 +878,6 @@ function PublishBody({
         <PublishPlatforms
           project={project}
           platforms={platforms}
-          behind={behind}
           shown={!celebrate}
           native={record.state?.native}
           onGenex={Boolean(record.state?.slug)}

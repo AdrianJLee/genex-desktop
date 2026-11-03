@@ -5,6 +5,7 @@
  * the user's words (`fixture:pending`, `fixture:stream`, `fixture:plan`, …) choose the script.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
+import { RunControl } from "../../shared/chat-run.ts";
 import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { HOUR_MS } from "../../shared/duration.ts";
@@ -129,7 +130,6 @@ const MESSAGE = {
   streamedReply:
     "The bridge is ready. **You can cross the river now.** I kept the path level with the river bank and added rails along both sides. The village lights are warm and the cover is ready in Assets. You can try the crossing in the preview. The water keeps moving beneath it.",
   modelLimit: "You have reached your model limit. Choose another model.",
-  coordinatorOnly: "Fixture accepts coordinator work only; no vendor worker is started",
   stoppedByYou: "stopped by you",
   commandReply:
     "Converting the engine recordings needs ffmpeg, and my sandbox can’t download it. Run this once, then I’ll convert them:\n\n```bash\nbrew install ffmpeg\n```",
@@ -140,8 +140,6 @@ const LONG_STREAM_MARKER = "fixture:stream-long";
 const PENDING_MARKER = "fixture:pending";
 /** The marker whose reply offers the user a command to run, as a reply the sandbox blocked does. */
 const COMMAND_MARKER = "fixture:command";
-/** Where a coordinator's prompt puts the words it answers. */
-const LATEST_MESSAGE = "LATEST USER MESSAGE:\n";
 
 /**
  * First launch: an empty library, Claude Code waiting for a sign-in, Codex, OpenCode, Grok Build and
@@ -363,8 +361,8 @@ async function streamPieces(
   }
 }
 
-/** A game chat's reply, streamed as a coordinator's text deltas arrive; the whole text is its summary. */
-async function streamCoordinatorReply(id: EngineId, request: DelegateRequest, content: string): Promise<string> {
+/** A game chat's reply, streamed as a session's text deltas arrive; the whole text is its summary. */
+async function streamChatReply(id: EngineId, request: DelegateRequest, content: string): Promise<string> {
   for (const delta of content.match(new RegExp(`[\\s\\S]{1,${LONG_PIECE_CHARS}}`, "g")) ?? []) {
     if (request.signal?.aborted) throw new EngineError(EngineFailureKind.Aborted, id, "Fixture streaming stopped");
     request.onEvent?.({ type: DelegateEventType.TextDelta, payload: { streamId: "fixture-long-reply", delta } });
@@ -395,22 +393,23 @@ async function planReply(id: EngineId, transcript: string) {
 
 async function delegateFixture(id: EngineId, request: DelegateRequest, pendingSessions: Set<string>) {
   const reads = steerReads(request);
-  if (request.prompt.split(LATEST_MESSAGE).at(-1)?.includes(COMMAND_MARKER)) return reads.answer(commandReply(id));
+  if (request.prompt.includes(COMMAND_MARKER)) return reads.answer(commandReply(id));
   if (request.interviewTools?.some((tool) => tool.name === "ask_user"))
     return reads.answer(interviewReply(id, request));
-  if (!request.coordinator) throw new Error(MESSAGE.coordinatorOnly);
   const stopped = await pendingSession(id, request, pendingSessions);
   if (stopped) return reads.answer(stopped);
-  if (request.onLiveTool) await request.onLiveTool("run_status", {});
-  const long = request.prompt.split(LATEST_MESSAGE).at(-1)?.includes(LONG_STREAM_MARKER);
-  const summary = long ? await streamCoordinatorReply(id, request, longReply()) : MESSAGE.plainReply;
+  // After a closed Loop run the chat's own session holds the run's controls: it reads the run first.
+  const controls = request.liveTools?.some((tool) => tool.name === RunControl.RunStatus);
+  if (controls && request.onLiveTool) await request.onLiveTool(RunControl.RunStatus, {});
+  const long = request.prompt.includes(LONG_STREAM_MARKER);
+  const summary = long ? await streamChatReply(id, request, longReply()) : MESSAGE.plainReply;
   return reads.answer({
     ok: true,
     engine: id,
     model: FIXTURE_MODEL,
     turns: 1,
     usage: {},
-    sessionId: "fixture-coordinator-v1",
+    sessionId: "fixture-chat-v1",
     summary,
   });
 }
@@ -447,7 +446,7 @@ async function pendingSession(
   pendingSessions: Set<string>,
 ): Promise<DelegateResult | null> {
   const resumed = request.resume && pendingSessions.has(request.resume) ? request.resume : null;
-  const asked = request.prompt.split(LATEST_MESSAGE).at(-1)?.includes(PENDING_MARKER);
+  const asked = request.prompt.includes(PENDING_MARKER);
   if (!asked && !resumed) return null;
   const sessionId = resumed ?? `fixture-pending-${pendingSessions.size + 1}`;
   pendingSessions.add(sessionId);

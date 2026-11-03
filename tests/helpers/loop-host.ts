@@ -20,7 +20,7 @@ import { promisify } from "node:util";
 import { runDirector } from "../../src/harness-seed/loop/director.ts";
 import { handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { directorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
-import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
+import { leadLineOf } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { type HookEvent, type HookContext, type HookedPlugin, hookEventsOf } from "../../src/shared/plugin-hooks.ts";
 import type { GameKind } from "../../src/shared/project-facts.ts";
 import type { WorkerType } from "../../src/shared/workers.ts";
@@ -30,8 +30,6 @@ import { asksReviewer, fakeFinishReview, reviewerAnswer } from "./reviewer.ts";
 import { type BusHost, checkpoint, fire, restore } from "./unreal-moment-bus.ts";
 
 const run = promisify(execFile);
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
 /** How long a test waits, in real time, for something it expects the Loop to do. */
 const UNTIL_MS = 15_000;
 
@@ -94,6 +92,11 @@ export type LoopHost = {
   artifacts: Map<string, unknown>;
   /** The chat's run inbox: what the person said, and whether they asked to finish. */
   inbox: { said: string[]; finishing: boolean };
+  /**
+   * The person writes in the chat while the Loop runs: their message is handed to the lead's line
+   * (live chat), as the chat's queue hands it, and kept in the run's inbox as its record.
+   */
+  say: (text: string) => Promise<void>;
   /** The chat is in Plan mode: Genex holds every writing moment and checkpoint back. */
   planning: boolean;
   /** Whether the lead's session takes what is steered into its turn (`engine.steer`); it takes nothing by default. */
@@ -124,7 +127,7 @@ export type LoopHost = {
   reviewed: () => Array<Record<string, unknown>>;
   /** Waits, in real time, until `done` holds; whether it did. */
   until: (done: () => boolean) => Promise<boolean>;
-  /** Runs the Loop: the open profile unless the test names another; resolves with its report. */
+  /** Runs the Loop on the test's clock; resolves with its report. */
   start: (options?: { resume?: boolean }) => Promise<Record<string, unknown>>;
   /**
    * Starts the run through the run's start (`handleRunStart`), as Resume or the chat's launch does:
@@ -420,7 +423,6 @@ async function dispatchThrough(host: LoopHost, { resume = false }: { resume?: bo
     host: ctx,
     cancels: new Set<string>(),
     stoppedMessages: new Set<string>(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -469,7 +471,7 @@ export function loopHost(options: {
       mode: "autopilot",
       engine: "claude-code",
       reference: { name: "Level", shots: [] },
-      budgets: { wallClockMs: 3 * HOUR, completionPolicy: "goal" },
+      budgets: {},
       ...options.run,
     },
     turns: [...(options.turns ?? [])],
@@ -509,12 +511,14 @@ export function loopHost(options: {
     handlers: handlers(host),
     ...(options.workspace ? { workspace: options.workspace } : {}),
   });
+  // The run's inbox as the lead reads it: the person's words on record, whether they asked to finish,
+  // and none the lead took and never heard (`say` hands each to its line, which hears it).
   Object.assign(host.rec.ctx, {
     runInbox: {
       finishing: async () => host.inbox.finishing,
-      steering: async (_address?: unknown, consume?: boolean) =>
-        consume ? host.inbox.said.splice(0) : [...host.inbox.said],
-      backlog: async () => [...host.inbox.said],
+      steering: async () => [...host.inbox.said],
+      unheard: async () => [],
+      notes: async () => [],
     },
   });
   const plain = host.rec.ctx.call.bind(host.rec.ctx);
@@ -522,6 +526,12 @@ export function loopHost(options: {
   host.rec.ctx.call = (method: string, params?: Record<string, unknown>) => {
     if (!["hooks.fire", "checkpoint.take", "snapshot.restore"].includes(method)) host.log.push(method);
     return plain(method, params);
+  };
+  let said = 0;
+  host.say = async (text) => {
+    host.inbox.said.push(text);
+    await host.until(() => Boolean(leadLineOf(host.run.runId)));
+    leadLineOf(host.run.runId)?.hear({ threadId: host.threadId, messageId: `m-said-${++said}`, text });
   };
   host.trail = () => [...host.log];
   host.appended = (eventType) =>
@@ -543,7 +553,6 @@ export function loopHost(options: {
       threadId: host.threadId,
       run: structuredClone(host.run) as never,
       resume,
-      profile: LoopProfile.Open,
       clock: { now: host.now, sleep: host.sleep },
     });
   host.dispatch = (options) => dispatchThrough(host, options);

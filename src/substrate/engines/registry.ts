@@ -6,7 +6,7 @@
  * rather than making it: {@link EngineRegistry.fallbackFor} answers "if this engine just failed
  * this way, what could take over?", and the harness decides whether to pause or switch.
  */
-import type { Engine, EngineError, EngineModel } from "./types.ts";
+import { type Engine, type EngineError, type EngineModel, ModelContextSource } from "./types.ts";
 import { EngineKind, EngineStatusCode, type EngineDescriptor } from "../../shared/engine-descriptor.ts";
 import { EngineFailureKind } from "../../shared/engine-requests.ts";
 import { isMetered, providerInfo } from "../../shared/providers.ts";
@@ -195,6 +195,7 @@ function describedModel(m: EngineModel): EngineDescriptor["models"][number] {
     resolvedModel: m.resolvedModel,
     ...(m.providerDefault ? { providerDefault: true } : {}),
     contextWindow: m.contextWindow,
+    ...(m.contextSource === ModelContextSource.Unknown ? { contextEstimated: true } : {}),
     supportsFast: m.supportsFast,
     supportsTools: m.supportsTools,
     supportsVision: m.supportsVision,

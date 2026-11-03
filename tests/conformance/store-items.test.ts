@@ -19,7 +19,7 @@ import {
 import { launchFromIntake } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
 import { argumentProblems } from "../../src/harness-seed/tools/index.ts";
-import { tools as gameTools } from "../../src/harness-seed/tools/game-tools.ts";
+import { startAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
 
 const ASK = "create fisher game with fishing rod for nex";
 const ROD = {
@@ -30,19 +30,17 @@ const ROD = {
 };
 
 describe("a launch names what the user sells for Nex", () => {
-  for (const name of ["start_autopilot", "start_unattended_run"]) {
-    it(`${name} carries store_items onto its run, as a list or as JSON text`, async () => {
-      const tool = gameTools.find((t) => t.name === name);
-      assert.ok(tool);
-      const ctx = { autopilot: { hours: 1 }, loop: { hours: 1 }, engine: "vendor" };
-      for (const store_items of [[ROD], JSON.stringify([ROD])]) {
-        const args = { goal: ASK, direction: "cozy lake", store_items };
-        assert.deepEqual(argumentProblems(tool.parameters as never, args), [], "the launch is not refused");
-        const result = (await tool.execute(args, ctx as never)) as { details?: { run?: Record<string, unknown> } };
-        assert.deepEqual(result.details?.run?.storeItems, [ROD]);
-      }
-    });
-  }
+  it("start_autopilot carries store_items onto its run, as a list or as JSON text", async () => {
+    const ctx = { engine: "vendor" };
+    for (const store_items of [[ROD], JSON.stringify([ROD])]) {
+      const args = { goal: ASK, direction: "cozy lake", store_items };
+      assert.deepEqual(argumentProblems(startAutopilot.parameters as never, args), [], "the launch is not refused");
+      const result = (await startAutopilot.execute(args, ctx as never)) as {
+        details?: { run?: Record<string, unknown> };
+      };
+      assert.deepEqual(result.details?.run?.storeItems, [ROD]);
+    }
+  });
 
   it("gives an item the user priced no price the store's first step, and keeps each name once", () => {
     assert.deepEqual(
@@ -84,10 +82,11 @@ describe("a launch names what the user sells for Nex", () => {
   });
 
   it("names nothing when the launch names no store items", async () => {
-    const tool = gameTools.find((t) => t.name === "start_autopilot");
-    assert.ok(tool);
-    const ctx = { autopilot: { hours: 1 }, engine: "vendor" };
-    const result = (await tool.execute({ goal: "a game with an in-game shop", direction: "d" }, ctx as never)) as {
+    const ctx = { engine: "vendor" };
+    const result = (await startAutopilot.execute(
+      { goal: "a game with an in-game shop", direction: "d" },
+      ctx as never,
+    )) as {
       details?: { run?: Record<string, unknown> };
     };
     assert.equal(result.details?.run?.storeItems, undefined);
@@ -146,7 +145,6 @@ describe("a Loop launch with store items", () => {
     const studio = {
       host,
       cancels: new Set<string>(),
-      attachedPictures: new Map(),
       activeRuns: new Map(),
       startingRuns: new Reservations(),
       orphanRuns: new Map(),

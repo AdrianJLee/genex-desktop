@@ -8,9 +8,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
-import { handler as directorTool } from "../../src/harness-seed/loop/director/tools.ts";
-import { HELD_TURN_WAIT_MS, MAX_HELD_TURNS, whileTurnHeld } from "../../src/harness-seed/loop/director/turn-hold.ts";
-import { runHeldWords, turnsHeldWords as directorTurnsHeld } from "../../src/harness-seed/loop/director/held-words.ts";
+import { HELD_TURN_WAIT_MS, whileTurnHeld } from "../../src/harness-seed/loop/director/turn-hold.ts";
+import { openStartHeld, turnsHeldWords as directorTurnsHeld } from "../../src/harness-seed/loop/director/held-words.ts";
 import {
   endOfTurnCheckpoint,
   fireHooks,
@@ -22,16 +21,6 @@ import {
   turnHeldLine,
   waitReady,
 } from "../../src/harness-seed/loop/hooks.ts";
-import {
-  betweenHeldWords,
-  closeHeldWords,
-  cppHeldWords,
-  crashHeldWords,
-  crashRestoreHeldWords,
-  restartHeldWords,
-  startHeldWords,
-  turnsHeldWords as unrealTurnsHeld,
-} from "../../src/harness-seed/loop/unreal/hold-words.ts";
 import { HOOK_LABEL_CHARS, isHookLabel } from "../../src/shared/plugin-hooks.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
@@ -106,29 +95,6 @@ async function chatTurn(hookEvents: string[] | undefined, blockOn: string | null
     .filter((n) => n.type === "chat.message")
     .map((n) => String((n.payload as { content?: unknown }).content));
   return { recorder, said };
-}
-
-/** A director's run as its tool handler reads it, on a game whose descriptor lists `hookEvents`. */
-function directorRun(hookEvents: string[] | undefined, blockOn: string | null = null) {
-  const recorder = ctxRecorder({ unknown: { value: null }, handlers: { "hooks.fire": fired(blockOn) } });
-  const finishes: unknown[] = [];
-  const loopRun = {
-    ctx: recorder.ctx,
-    run: { project: NAME, runId: "run_harbor" },
-    threadId: TURN.threadId,
-    game: hookEvents ? { hookEvents } : { hookEvents: undefined },
-    state: { integrationHead: null, finished: false, workers: new Map() },
-    journal: { director: {} },
-    toolCalls: 0,
-    keepMemory: async () => {},
-    syncHead: async () => {},
-    saveJournal: async () => {},
-    finish: async (args: unknown) => {
-      finishes.push(args);
-      return "Finished: the build is landed.";
-    },
-  };
-  return { recorder, loopRun, finishes };
 }
 
 describe("Genex's moments, as the seed fires them", { timeout: TEST_TIMEOUT_MS }, () => {
@@ -313,19 +279,8 @@ describe("Genex's moments, as the seed fires them", { timeout: TEST_TIMEOUT_MS }
     for (const id of ids) await finish(host, pool, String(id), { ok: true, sessionId: `s-${id}`, summary: "Read." });
   });
 
-  it("a finish block keeps the director's run going, and the lead hears why", async () => {
-    const held = directorRun([HookEvent.Finish], HookEvent.Finish);
-    const answer = await directorTool(held.loopRun as never, "finish", { summary: "Done." });
-    assert.match(String(answer), /crane is being serviced/);
-    assert.deepEqual(held.finishes, [], "the run is not finished");
-    const free = directorRun([HookEvent.Finish]);
-    assert.equal(
-      await directorTool(free.loopRun as never, "finish", { summary: "Done." }),
-      "Finished: the build is landed.",
-    );
-    assert.equal(free.finishes.length, 1);
-  });
-
+  // Flipped (one Loop): "a finish block keeps the director's run going" drove the web lead's handler;
+  // every Loop's finish moment is the one Loop's (one-loop.test.ts, the toy plugin's finish step).
   it("a checkpoint's label and a moment's turn and label reach the host on one line within its cap", async () => {
     const taken = { snapshot: { snapshot_id: "snap_1", scope: "game", reason: "checkpoint" }, notes: [], images: [] };
     const recorder = ctxRecorder({
@@ -352,15 +307,12 @@ describe("Genex's moments, as the seed fires them", { timeout: TEST_TIMEOUT_MS }
     assert.ok(isHookLabel(fire?.turn) && isHookLabel(fire?.label), JSON.stringify(fire));
   });
 
-  it("a web game's chat turn, director run and pool make no hooks.fire call", async () => {
+  // Flipped (one Loop): it also drove the web lead's finish; a Loop on a project no plugin hooks is
+  // one-loop.test.ts's ("a project no plugin hooks makes no hooks.fire call but the run's own moments").
+  it("a web game's chat turn and pool make no hooks.fire call", async () => {
     const { recorder } = await chatTurn(undefined);
     assert.equal(recorder.paramsOf("engine.delegate").length, 1, "the turn ran");
     assert.deepEqual(recorder.paramsOf("hooks.fire"), [], "a chat turn");
-
-    const director = directorRun(undefined);
-    await directorTool(director.loopRun as never, "finish", { summary: "Done." });
-    assert.equal(director.finishes.length, 1, "the run finished");
-    assert.deepEqual(director.recorder.paramsOf("hooks.fire"), [], "a director's finish");
 
     const repo = await gameRepo();
     const host = poolHost(repo);
@@ -393,15 +345,20 @@ describe("a director's turn a plugin keeps holding back", () => {
     assert.equal(clock.now(), 2 * HELD_TURN_WAIT_MS, "it waited between asks");
   });
 
-  it("gives up with the hold's reason after the cap, or at once when the run can't wait", async () => {
+  // Flipped (no clock): a turn held through `MAX_HELD_TURNS` asks (about five minutes) gave up and
+  // failed; a held turn waits until the plugin lets it start, or the run can't wait (a Stop, its wrap-up).
+  it("waits for as long as the plugin holds it, and gives up with the hold's reason only when the run can't wait", async () => {
     const clock = steppingClock();
     let asked = 0;
     const always = async () => {
       asked += 1;
       return REASON;
     };
-    assert.equal(await whileTurnHeld(always, clock, () => false), REASON);
-    assert.equal(asked, MAX_HELD_TURNS);
+    // The person's Stop comes after a hundred asks: far past the five that used to end the wait.
+    const held = await whileTurnHeld(always, clock, () => asked >= 100);
+    assert.equal(held, REASON, "the person's Stop ends the wait with the hold's reason");
+    assert.equal(asked, 100);
+    assert.equal(clock.now(), 99 * HELD_TURN_WAIT_MS, "it waited between every ask");
     asked = 0;
     assert.equal(await whileTurnHeld(always, steppingClock(), () => true), REASON, "a wrap-up or a run that is over");
     assert.equal(asked, 1);
@@ -433,15 +390,7 @@ describe("Genex's own holds, in the person's words on every surface", () => {
         return endOfTurnCheckpoint(recorder.ctx as never, { project: NAME, threadId: "t1" }, game);
       },
     ],
-    ["the Unreal Loop's start", (hold) => startHeldWords(held(hold))],
-    ["the Unreal Loop's close", (hold) => closeHeldWords(held(hold))],
-    ["the Unreal lead's turns held", (hold) => unrealTurnsHeld(held(hold))],
-    ["a restore or restart between turns", (hold) => betweenHeldWords(held(hold))],
-    ["adding C++", (hold) => cppHeldWords(held(hold))],
-    ["a crash Genex didn't reopen", (hold) => crashHeldWords(held(hold))],
-    ["a restart whose reopen Genex held", (hold) => restartHeldWords(held(hold))],
-    ["a crash whose way back Genex held", (hold) => crashRestoreHeldWords(held(hold))],
-    ["a director run's start", (hold) => runHeldWords(held(hold))],
+    ["a Loop's start", (hold) => openStartHeld(held(hold))],
     ["a director run's lead turns held", (hold) => directorTurnsHeld(held(hold))],
     ["a chat's wait for the game's apps", (hold) => pendingLine(held(hold))],
     [
@@ -469,18 +418,7 @@ describe("Genex's own holds, in the person's words on every surface", () => {
   it("a step's own block keeps its reason: no surface words it as Genex's hold", () => {
     // A step's block: its reason, and no hold of Genex's.
     const step = { reason: "The crane is being serviced.", hold: undefined };
-    for (const words of [
-      startHeldWords,
-      closeHeldWords,
-      unrealTurnsHeld,
-      betweenHeldWords,
-      cppHeldWords,
-      crashHeldWords,
-      restartHeldWords,
-      crashRestoreHeldWords,
-    ])
-      assert.equal(words(step), null);
-    assert.match(runHeldWords(step), /a plugin of this game held it back: The crane is being serviced\./);
+    assert.match(openStartHeld(step), /a plugin of this project held it back: The crane is being serviced\./);
     assert.match(directorTurnsHeld(step), /The crane is being serviced\./);
     assert.match(turnHeldLine(step), /The crane is being serviced\./);
     assert.equal(pendingLine(step), "The crane is being serviced.");

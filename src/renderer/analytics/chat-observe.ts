@@ -8,11 +8,11 @@
  * window that catches up later still reports them right.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
-import { PlanReviewState, SendRefusal } from "../../shared/composer.ts";
+import { PlanReviewState } from "../../shared/composer.ts";
 import { type CustomEventData, CustomEvent, customPayload, customRecord } from "../../shared/custom-events.ts";
 import type { EngineKind } from "../../shared/engine-descriptor.ts";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
-import { EngineFailureKind, isLimitKind, type LimitKind } from "../../shared/engine-requests.ts";
+import { EngineFailureKind, harnessTurnFailure, isLimitKind, type LimitKind } from "../../shared/engine-requests.ts";
 import { type EventData, type EventEnvelope, EventKind } from "../../shared/event-log.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
 import {
@@ -42,7 +42,6 @@ import {
   ContextBucket,
   LeftTo,
   RetryAfterBucket,
-  SendFailStage,
   SignInFrom,
   StopEndedBy,
   TurnOutcome,
@@ -82,7 +81,6 @@ const STATUSES: ReadonlySet<string> = new Set(Object.values(TurnStatus));
 const FAILURE_KINDS: ReadonlySet<string> = new Set(Object.values(EngineFailureKind));
 const REVIEW_STATES: ReadonlySet<string> = new Set(Object.values(PlanReviewState));
 const DELIVERIES: ReadonlySet<string> = new Set(Object.values(SteerDelivery));
-const REFUSALS: ReadonlySet<string> = new Set(Object.values(SendRefusal));
 /** Phases that show a reply is being worked on (the first one is `first_phase`). */
 const ACTIVE_PHASES: ReadonlySet<string> = new Set([
   ChatActivityPhase.Working,
@@ -111,7 +109,6 @@ const isFailureKind = (value: unknown): value is EngineFailureKind =>
 const isReviewState = (value: unknown): value is PlanReviewState =>
   typeof value === "string" && REVIEW_STATES.has(value);
 const isDelivery = (value: unknown): value is SteerDelivery => typeof value === "string" && DELIVERIES.has(value);
-const isRefusal = (value: unknown): value is SendRefusal => typeof value === "string" && REFUSALS.has(value);
 const text = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
 
 /** A turn's outcome from its record: the seed's own word, `none` without one, `other` for any other. */
@@ -163,6 +160,25 @@ function turnLimit(
 const turnFailureKind = (turn: OpenTurn | undefined, metadata: Record<string, unknown> | undefined) =>
   failureKind(turn?.failure) ?? failureKind(metadata?.failure);
 
+/**
+ * A host method's wire name in shape (`engine.complete`, `snapshot.markHealthy`): main keeps only
+ * real ones on the record (`isHostMethod`), and the renderer, which does not load the host's API,
+ * lets nothing else through.
+ */
+const HOST_METHOD_SHAPE = /^[a-z]+(?:\.[a-zA-Z]+){1,2}$/;
+const isHostMethodShaped = (method: string): boolean => HOST_METHOD_SHAPE.test(method);
+
+/** Why a turn the harness ran threw, as `chat_turn_ended` carries it; nothing when its record says none. */
+function harnessFailureProperties(recorded: unknown) {
+  const failure = harnessTurnFailure(recorded, isHostMethodShaped);
+  if (!failure) return {};
+  return {
+    failure_code: failure.code,
+    ...(failure.method ? { failure_method: failure.method } : {}),
+    ...(failure.name ? { error_name: failure.name } : {}),
+  };
+}
+
 /** `chat_turn_ended`, from the turn this launch saw begin (if it did) and its closing record. */
 export function turnEndedProperties(
   turn: OpenTurn | undefined,
@@ -183,6 +199,7 @@ export function turnEndedProperties(
     streamed: turn?.streamed ?? false,
     stream_failed: turn?.streamFailed ?? false,
     ...(failure ? { failure_kind: failure } : {}),
+    ...harnessFailureProperties(end.metadata?.harnessFailure),
     ...limit,
     launched_build: outcome === TurnOutcome.LaunchRun,
   };
@@ -532,12 +549,6 @@ function streamEnded(hearing: Hearing, payload: { threadId: string; failed?: boo
   if (turn && payload.failed === true) turn.streamFailed = true;
 }
 
-/** A message its chat refused for what it commissions; a send that failed is counted where it was sent. */
-function chatRefused(hearing: Hearing, payload: { refusal?: SendRefusal }): void {
-  if (isRefusal(payload.refusal))
-    hearing.send(ChatEvent.MessageSendFailed, { stage: SendFailStage.Refused, code: payload.refusal });
-}
-
 /** One of main's UI events. */
 export function hearUiEvent(hearing: Hearing, event: UiEvent): void {
   if (event.type === UiEvent.CoordinatorProcessing) processing(hearing, event.payload);
@@ -546,7 +557,6 @@ export function hearUiEvent(hearing: Hearing, event: UiEvent): void {
     firstToken(hearing, event.payload.threadId, event.payload.streamId);
   } else if (event.type === UiEvent.ChatDelta) firstToken(hearing, event.payload.threadId, event.payload.streamId);
   else if (event.type === UiEvent.ChatStreamEnded) streamEnded(hearing, event.payload);
-  else if (event.type === UiEvent.ChatError) chatRefused(hearing, event.payload);
   else if (event.type === UiEvent.ContextUsage) {
     const { threadId, percent } = event.payload;
     if (threadId && typeof percent === "number") hearing.memory.context.set(threadId, percent);

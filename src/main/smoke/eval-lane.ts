@@ -13,7 +13,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { PlanReviewState } from "../../shared/composer.ts";
-import { latestRun } from "../../shared/coordinator.ts";
+import { latestRun } from "../../shared/chat-run.ts";
 import type { CodingProvider } from "../../shared/coding-cli.ts";
 import { CustomEvent, customPayload, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
@@ -325,7 +325,7 @@ function object(fields: Fields, key: string): Fields {
 }
 
 /** The commission keys a spec may carry: what the composer sends with a brief, nothing else. */
-const COMMISSION_KEYS: ReadonlySet<string> = new Set(["autopilot", "loop", "reviewPlan", "preferences"]);
+const COMMISSION_KEYS: ReadonlySet<string> = new Set(["reviewPlan", "preferences"]);
 
 function commission(fields: Fields): EvalCommission {
   const value = object(fields, "commission");
@@ -777,13 +777,12 @@ async function stopAtRail(run: LaneRun): Promise<EndedHow> {
   return EndedHow.Deadline;
 }
 
-/** What mode the lane served, from the commission it sent (D3) or its fixture engines. */
+/**
+ * What mode the lane served (D3): its fixture engines, else the one mode this build has — the chat
+ * decides whether to start a Loop, and a Loop goes until its lead finishes it.
+ */
 function modeServed(spec: EvalLaneSpec): LaneModeServed {
-  if (spec.fixture) return LaneModeServed.Fixture;
-  const { autopilot, loop } = spec.commission;
-  const timed = typeof autopilot?.hours === "number" && autopilot.hours > 0;
-  if (autopilot) return timed ? LaneModeServed.AutopilotTimed : LaneModeServed.AutopilotUntilSatisfied;
-  return loop ? LaneModeServed.AutopilotTimed : LaneModeServed.ChatOnly;
+  return spec.fixture ? LaneModeServed.Fixture : LaneModeServed.AutopilotUntilSatisfied;
 }
 
 /** The chat's permission mode as the core now serves it. */

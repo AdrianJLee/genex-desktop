@@ -29,7 +29,7 @@ import { releaseStaleLocks } from "./ownership-locks.ts";
 import { StudioBridge, answerBridgeCall, bridgeTools } from "./studio-bridge.ts";
 import { writeDelegateStills } from "./codex.ts";
 import { JUDGE_RULES, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
-import { leadBuildWrites } from "./session-commands.ts";
+import { textsAsSent } from "./genex-mark-prompts.ts";
 import {
   CURSOR_FILE_STORE,
   CURSOR_HOSTS,
@@ -487,7 +487,7 @@ export class CursorEngine implements Engine {
   ): string {
     const plan = chatMode(request) === PermissionMode.Plan && ctx.scratch;
     return [
-      request.prompt,
+      ...textsAsSent(request),
       ctx.pictures.length ? MESSAGE.Pictures(ctx.pictures) : "",
       ctx.bridge?.instructions() ?? "",
       plan
@@ -505,7 +505,7 @@ export class CursorEngine implements Engine {
 
   /** The command, environment and sandbox of one turn. */
   async #invocation(
-    request: Pick<DelegateRequest, "model" | "resume" | "denyReads" | "cwd" | "prompt" | "leadBuilds">,
+    request: Pick<DelegateRequest, "model" | "resume" | "denyReads" | "cwd" | "prompt">,
     ctx: { access: CursorAccess; cwd: string; runDir: string; prompt: string; signal: AbortSignal },
   ): Promise<CursorInvocation> {
     const compileCache = path.join(this.#scratchRoot, "compile-cache");
@@ -522,24 +522,22 @@ export class CursorEngine implements Engine {
       prompt: ctx.prompt,
       env: cursorSessionEnv({ compileCache }),
       signal: ctx.signal,
-      sandbox: await this.#sandboxOptions(ctx, request.denyReads ?? [], compileCache, request.leadBuilds),
+      sandbox: await this.#sandboxOptions(ctx, request.denyReads ?? [], compileCache),
       domains: [...CURSOR_HOSTS],
     };
   }
 
-  /** The turn's box; a building lead's also writes the build it leads (`leadBuilds`). */
+  /** The turn's box. */
   async #sandboxOptions(
     ctx: { access: CursorAccess; cwd: string; runDir: string },
     denyReads: string[],
     compileCache: string,
-    leadBuilds?: string,
   ): Promise<SandboxOptions> {
     const builds = ctx.access === CursorAccess.Build;
     return cursorSandbox({
       runDir: ctx.runDir,
       gameDir: ctx.cwd,
       gitDirs: builds ? await gitMetadata(ctx.cwd) : [],
-      leadBuilds: builds ? await leadBuildWrites(leadBuilds) : [],
       scratchDir: path.join(this.#scratchRoot, "tmp"),
       compileCache,
       secretPaths: [...this.#protectedPaths, ...denyReads],
@@ -606,15 +604,13 @@ export function cursorSandbox(input: {
   runDir: string;
   gameDir: string;
   gitDirs: string[];
-  /** The build a lead leads and its Git metadata (`leadBuildWrites`). */
-  leadBuilds?: string[];
   scratchDir: string;
   compileCache: string;
   secretPaths: string[];
   toolPath?: () => Promise<string>;
 }): SandboxOptions {
   return {
-    writableRoots: [input.runDir, ...input.gitDirs, ...(input.leadBuilds ?? []), input.compileCache],
+    writableRoots: [input.runDir, ...input.gitDirs, input.compileCache],
     scratchDir: input.scratchDir,
     secretPaths: input.secretPaths,
     // Cursor's settings, chats and sign-in file: its own to read and write in this sandbox alone.
@@ -661,7 +657,7 @@ function absolute(value: string | undefined): string | undefined {
 
 /** What a session's tools may do: a build edits; a read-only session, a lead while its build runs and Plan only look. */
 function sessionAccess(request: DelegateRequest): CursorAccess {
-  const readOnly = Boolean(request.readOnly) && !request.coordinator;
+  const readOnly = Boolean(request.readOnly);
   return readOnly || chatMode(request) === PermissionMode.Plan ? CursorAccess.ReadOnly : CursorAccess.Build;
 }
 

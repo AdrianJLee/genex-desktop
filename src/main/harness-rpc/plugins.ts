@@ -7,8 +7,6 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { CONNECTOR_ARGS_CAP } from "../core/plugin-tools.ts";
 import { IN_PLACE_LOCK, isLockRefused, workerHolder } from "../core/plugin-locks.ts";
 import { isWorkerId, isWorkerTitle, WORKER_NAMING } from "../../shared/workers.ts";
-import { CapabilityAudience } from "../planning-capabilities.ts";
-import { kindsWithReadiness } from "../core/kind-readiness.ts";
 import { stoppableMoment } from "../core/moment-stops.ts";
 import { pluginsFind, pluginsSuggest } from "../core/project-tools.ts";
 
@@ -116,11 +114,8 @@ export function pluginsRpc(core: StudioCore, x: CoreInternals) {
     // One snapshot, so the local harness's tools and their guidance describe the same plugins,
     // those that reach the game it serves.
     [HostMethod.PluginsTools]: async (p = {}) => {
-      const game = await kindOf(core, p?.project);
-      const { tools, guidance, kinds } = core.plugins.snapshot(game);
-      // A game with no kind yet: the engine card offers each kind as its plugin says it stands.
-      const offered = await kindsWithReadiness(core, p?.project, game, kinds);
-      return { tools, guidance, kinds: offered, revision: x.toolRegistryRevision };
+      const { tools, guidance, kinds } = core.plugins.snapshot(await kindOf(core, p?.project));
+      return { tools, guidance, kinds, revision: x.toolRegistryRevision };
     },
     // The kinds of worker a lead may start for this game: those the enabled plugins declare whose
     // tools reach it, read by its facts as its plugin tools are.
@@ -129,9 +124,6 @@ export function pluginsRpc(core: StudioCore, x: CoreInternals) {
     [HostMethod.PluginsFind]: (p = {}) => pluginsFind(core, { fact: p?.fact, text: p?.text }),
     [HostMethod.PluginsSuggest]: (p) =>
       pluginsSuggest(core, { project: p.project, threadId: p.threadId, plugin: p.plugin, reason: p.reason }),
-    /** What this game's builders can use, for a conversation that cannot call it (the local coordinator). */
-    [HostMethod.CapabilitiesDescribe]: async (p) =>
-      (await x.capabilityFacts(p.threadId, p.project, CapabilityAudience.Conversation)).text,
     [HostMethod.PluginsInvoke]: async (p) => {
       const boot = x.harnessBoot;
       const binding = await requirePluginBinding(core, p.project, p.threadId);

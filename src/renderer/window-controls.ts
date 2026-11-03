@@ -1,7 +1,9 @@
 /**
  * The Windows and Linux window controls (Electron's `titleBarOverlay`) follow the theme: after
  * each appearance change the renderer sends main the canvas and ink it just applied. Home says
- * while its background lies under them, and Windows then draws them with no box of their own.
+ * while its background lies under them, and Windows then draws them with no box of their own; a
+ * game page says while its picture does, which shows through them only while their ink is light
+ * (a dark theme's), since a light theme's dark ink would vanish over a game's dark picture.
  * macOS draws its own traffic lights, so nothing is sent there.
  */
 import { useEffect } from "react";
@@ -16,7 +18,18 @@ type ThemeStyle = Pick<CSSStyleDeclaration, "getPropertyValue">;
 
 /** Does Home's background lie under the controls now? */
 let homeUnder = false;
-const homeChanges = new Set<() => void>();
+/** Does a game page's picture lie under them now? */
+let pictureUnder = false;
+const underChanges = new Set<() => void>();
+/** An ink this light or lighter (0–255, the mean of its channels) reads over a dark picture. */
+const LIGHT_INK_MIN = 160;
+
+/** Whether a `#rrggbb` ink is light: a dark theme's. */
+export function isLightInk(hex: string): boolean {
+  const channels = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+  const mean = channels.reduce((sum, channel) => sum + channel, 0) / channels.length;
+  return mean >= LIGHT_INK_MIN;
+}
 
 /** The overlay's colours from the root's computed theme tokens, or null while they are not plain hex. */
 export function windowControlColors(style: ThemeStyle): WindowControlColors | null {
@@ -44,7 +57,23 @@ export const homeUnderControls = ({ resting, covered, viewerUp }: HomeCover): bo
 export function setHomeUnderControls(under: boolean): void {
   if (under === homeUnder) return;
   homeUnder = under;
-  for (const change of homeChanges) change();
+  for (const change of underChanges) change();
+}
+
+/** A game page's picture now lies under the controls, or no longer does. */
+export function setPictureUnderControls(under: boolean): void {
+  if (under === pictureUnder) return;
+  pictureUnder = under;
+  for (const change of underChanges) change();
+}
+
+/** A game page's picture lies under the controls while `under`, until the caller unmounts. */
+export function usePictureUnderControls(under: boolean): void {
+  useEffect(() => {
+    if (!under) return;
+    setPictureUnderControls(true);
+    return () => setPictureUnderControls(false);
+  }, [under]);
 }
 
 /** Home's background lies under the controls while `under`, until the caller unmounts. */
@@ -70,17 +99,18 @@ export function syncWindowControls(
   const send = (): void => {
     const colors = windowControlColors(readStyle());
     if (!colors) return;
-    const controls = { ...colors, seeThrough: homeUnder };
+    const picture = pictureUnder && isLightInk(colors.symbolColor);
+    const controls = { ...colors, seeThrough: homeUnder || picture };
     const key = JSON.stringify(controls);
     if (key === last) return;
     last = key;
     void api.setWindowControls(controls).catch(() => {});
   };
   send();
-  homeChanges.add(send);
+  underChanges.add(send);
   const stopAppearance = subscribeAppearance(send);
   return () => {
-    homeChanges.delete(send);
+    underChanges.delete(send);
     stopAppearance();
   };
 }

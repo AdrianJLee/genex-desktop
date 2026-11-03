@@ -2,7 +2,7 @@
  * Claude Code permissions in a game chat, from the host's side: only the session answering a
  * message the person sent in this game's own chat is handed a mode and a way to ask; every other
  * delegation (builders, anything the harness shapes on its own) keeps the sandboxed contract, and
- * a build's lead or the run's coordinator asks from its own seat (lead-sessions-host.test.ts). A question lands in the chat as a pending card and its answer as a
+ * a build's lead asks from its own seat (lead-sessions-host.test.ts). A question lands in the chat as a pending card and its answer as a
  * settled one; a Stop, the turn's end or a restart withdraws it without anyone's click; and the
  * harness can neither forge the person's chat nor write their questions.
  */
@@ -11,7 +11,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { mainAgentReachNote, personSessionNote } from "../../src/main/core/delegation-prompts.ts";
 import { readsAfterRewind } from "../../src/main/core/rewind.ts";
 import { RecoveryService } from "../../src/main/core/recovery.ts";
 import type { CoreInternals, StudioCore } from "../../src/main/studio-core.ts";
@@ -160,7 +159,6 @@ describe("game chat permissions", () => {
       { readOnly: true },
       { class: "improvement" },
       { ownership: { facetId: "world", owns: ["src/world"], ownsMain: false } },
-      { coordinator: { runId: "run-c" }, readOnly: true, timeoutMs: 300_000 },
     ];
     for (const extra of unattended) {
       const request = await brief(extra);
@@ -171,32 +169,18 @@ describe("game chat permissions", () => {
   });
 
   // The owner asked the chat to read their Downloads and it refused without trying, in Auto: its
-  // brief said to stay inside the game's folder. Only the host knows the session reaches the Mac.
-  it("tells the session answering the person it reaches their whole Mac, and an unattended one nothing of it", async () => {
+  // brief said to stay inside the game's folder. Flipped: the host told it in a note that it reaches
+  // the whole Mac, and told the session answering the person to reply at once. No confinement text
+  // is left to counter, Claude Code knows its own environment and mode, and words sent while it works
+  // reach it as the person's: the session asks in the chat's mode, and reads the words alone.
+  it("hands the session answering the person the chat's mode and the words alone, with no note about its reach", async () => {
     const chat = await brief({ prompt: "Read my downloads folder" });
     assert.ok(chat.permissions, "the chat's session asks");
-    // Flipped: told once, in the session's system context, not again in every message.
-    assert.ok(chat.system?.includes(mainAgentReachNote()), "told it works anywhere on the Mac");
-    assert.ok(chat.prompt.startsWith("Read my downloads folder"), "the brief it was given");
+    assert.equal(chat.prompt, "Read my downloads folder", "the words as written");
+    assert.doesNotMatch(String(chat.system ?? ""), /main agent|not in a sandbox|may not be a programmer/);
     for (const extra of [{ timeoutMs: 60_000 }, { readOnly: true }, { class: "improvement" }]) {
       const request = await brief(extra);
       assert.equal(request.permissions, undefined, `unattended: ${Object.keys(extra).join(", ")}`);
-      const read = [request.prompt, request.system].join("\n");
-      assert.equal(read.includes(mainAgentReachNote()), false, `not told: ${Object.keys(extra).join(", ")}`);
-    }
-  });
-
-  // Asked "how do I play it?" mid-build, the chat's agent kept building for two minutes and folded
-  // the answer into its wrap-up: Claude Code hands such words over at the next tool result with
-  // "address it as you continue", and the person watching the chat read silence. Its wrap-up then
-  // reported draw calls and frame rates to someone who may not be a programmer.
-  it("tells the session answering the person to talk plainly and reply at once to words sent while it works", async () => {
-    const chat = await brief({ prompt: "Make a platformer" });
-    assert.ok(chat.system?.includes(personSessionNote()), "the chat's own session replies first");
-    for (const extra of [{ timeoutMs: 60_000 }, { readOnly: true }]) {
-      const request = await brief(extra);
-      const read = [request.prompt, request.system].join("\n");
-      assert.equal(read.includes(personSessionNote()), false, `nobody to reply to: ${Object.keys(extra).join(", ")}`);
     }
   });
 
@@ -258,7 +242,7 @@ describe("game chat permissions", () => {
     assert.equal((await core.store.getRecord(threadId)).metadata?.permissionMode, "bypassPermissions");
     const chat = await codexBrief();
     assert.ok(chat.denyReads?.includes(core.games.dirFor("perm-other")), "sibling games stay unreadable");
-    assert.equal(chat.prompt.includes(mainAgentReachNote()), false, "not told it reaches the whole Mac");
+    assert.doesNotMatch(chat.prompt, /main agent/, "not told it reaches the whole Mac");
     assert.equal(chat.leadAsks, undefined);
     await api["engine.delegate"]!({ engine: "codex", project, threadId, prompt: "x", timeoutMs: 60_000 });
     assert.equal(seen.at(-1)!.permissions, undefined, "unattended work on it keeps no mode");

@@ -34,7 +34,6 @@ import { chatObservers, type SendEvent } from "../../src/renderer/analytics/chat
 import {
   chatHistoryFacts,
   engineRef,
-  hoursBucket,
   messagesBack,
   modelPickedProperties,
   modelRef,
@@ -54,7 +53,6 @@ import {
   CardSettledBy,
   ComposerRoom,
   ContextBucket,
-  HoursBucket,
   LeftTo,
   PlanAction,
   QuestionVia,
@@ -165,7 +163,6 @@ function facts(overrides: Partial<SendFacts> = {}): SendFacts {
     key: `${EngineId.ClaudeCode}::claude-opus-4-1`,
     engineKind: EngineKind.Delegated,
     effort: "high",
-    loop: { on: true, hours: 3 },
     planReview: false,
     pictures: 1,
     files: 2,
@@ -195,8 +192,6 @@ describe("message_sent", () => {
       engine_kind: EngineKind.Delegated,
       model: "claude-opus-4-1",
       effort: "high",
-      loop_on: true,
-      loop_hours_bucket: HoursBucket.Few,
       plan_review: false,
       pictures: 1,
       files: 2,
@@ -247,18 +242,7 @@ describe("message_sent", () => {
     assert.equal(namesOwnModel(`${EngineId.ClaudeCode}::claude-opus-4-1`), false);
   });
 
-  it("buckets a Loop's hours and keeps only an effort from the app's own scale", () => {
-    assert.deepEqual(
-      [
-        hoursBucket({ on: false, hours: 3 }),
-        hoursBucket({ on: true, hours: null }),
-        hoursBucket({ on: true, hours: 0.5 }),
-        hoursBucket({ on: true, hours: 4 }),
-        hoursBucket({ on: true, hours: 8 }),
-        hoursBucket({ on: true, hours: 12 }),
-      ],
-      [HoursBucket.None, HoursBucket.None, HoursBucket.One, HoursBucket.Few, HoursBucket.Several, HoursBucket.Long],
-    );
+  it("keeps only an effort from the app's own scale", () => {
     const sent = noteMessageSent(createChatMemory(), facts({ effort: "Alice Smith's Kart" }), T0);
     assert.equal("effort" in sent, false);
   });

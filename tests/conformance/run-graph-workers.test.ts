@@ -10,7 +10,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { seedBuildGraph } from "../../src/main/dev/fixture-build-graph.ts";
-import { seedLeadGraph } from "../../src/main/dev/fixture-lead-graph.ts";
 import {
   buildRunGraph,
   type FacetNode,
@@ -213,14 +212,6 @@ const LOOP_ROWS = [
   ],
 ];
 
-const LEAD_EARLIER_ROWS: unknown[] = [
-  ["lead", [["step:lead:1", "in-build", true, "Greybox"]]],
-  ["lead-atmosphere", [["step:lead-atmosphere:1", "in-build", true, "Fog and light"]]],
-  ["agent-blender_model-1", [["session:agent-blender_model-1", "in-build", true, "Blender: Katana"]]],
-  ["agent-texture-1", [["session:agent-texture-1", "delivered", false, "Texture: Wet concrete"]]],
-  ["agent-genex_cast-1", [["session:agent-genex_cast-1", "not-delivered", false, "Meshy: Goblin"]]],
-];
-
 const BUILD_DONE_KINDS = [
   ...["run", "base", "facet", "facet", "iteration", "iteration", "iteration", "iteration", "iteration"],
   ...["iteration", "iteration", "iteration", "iteration", "iteration", "iteration", "iteration", "facet"],
@@ -266,31 +257,6 @@ describe("old runs draw as they did", () => {
     assert.deepEqual(kinds(graph), LOOP_KINDS);
     assert.equal(graph.tree, false);
     assert.deepEqual(rowsOf(graph), LOOP_ROWS);
-  });
-
-  it("the Unreal lead's dev fixture keeps its nodes and its rows", async () => {
-    const events = await seeded(seedLeadGraph);
-    const done = buildRunGraph(ofRun(events, "fixture-lead-done"));
-    const live = buildRunGraph(ofRun(events, "fixture-lead-live"));
-    assert.ok(done && live);
-    assert.deepEqual(kinds(done), [
-      ...["run", "base", "facet", "iteration", "facet", "iteration", "facet", "facet", "facet", "facet", "iteration"],
-      ...["integration", "final", "assets"],
-    ]);
-    assert.deepEqual(rowsOf(done), [
-      ...LEAD_EARLIER_ROWS,
-      ["lead-combat", [["step:lead-combat:1", "in-build", true, "Katana in hand"]]],
-    ]);
-    assert.deepEqual(kinds(live), [
-      ...["run", "base", "facet", "iteration", "facet", "iteration", "facet", "facet", "facet", "facet", "facet"],
-      ...["integration", "final", "assets"],
-    ]);
-    assert.deepEqual(rowsOf(live), [
-      ...LEAD_EARLIER_ROWS,
-      ["lead-combat", [["session:lead-combat", "building", false, "Lead · Katana combat"]]],
-      ["agent-sound-1", [["session:agent-sound-1", "building", false, "Sound: Blade swings"]]],
-    ]);
-    assert.equal(done.tree || live.tree, false);
   });
 
   it("the build-graph dev fixture keeps its nodes and its rows", async () => {
@@ -578,7 +544,7 @@ describe("the lead and its background work", () => {
           why: null,
           claim: "Done.",
           stopped: false,
-          timeLeft: false,
+          // Flipped (no clock): a round said whether working time was left (`timeLeft: false`).
         },
       ],
       over: false,

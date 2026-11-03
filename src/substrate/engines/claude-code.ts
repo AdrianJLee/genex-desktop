@@ -33,7 +33,7 @@ import { credentialHomes } from "../credential-homes.ts";
 import type { Usage } from "../types.ts";
 import type { ModelTokenUsage } from "../../shared/event-log.ts";
 import { claudeAuthStatus, type ClaudeAuthStatus } from "./claude-cli.ts";
-import { steerFeed, steerSession, userFrame, type SteerFeed, type SteerSession } from "./claude-steer.ts";
+import { briefFrame, briefImages, steerFeed, steerSession, type SteerFeed, type SteerSession } from "./claude-steer.ts";
 import { autoModeRules } from "./claude-auto-mode.ts";
 import {
   askingOptions,
@@ -58,7 +58,6 @@ import {
   type CompleteRequest,
   type CompleteResponse,
   type DelegateAsks,
-  type DelegateImage,
   type DelegateRequest,
   type DelegateResult,
   type Engine,
@@ -76,8 +75,8 @@ import {
   CHECKPOINT_TOOL,
   CLAUDE_CAPTURE_TOOL,
   intakeToolReply,
+  isInterview,
   RUN_COMMAND_TOOL,
-  SHELL_THIS_TURN,
   STUDIO_MCP_SERVER,
   STUDIO_SHELL_TOOL,
   STUDIO_TOOL_PREFIX,
@@ -122,7 +121,7 @@ import { StudioPlatform } from "../../shared/boot.ts";
 import { EngineKind, EngineStatusCode, EngineStatusReason, LoginSource } from "../../shared/engine-descriptor.ts";
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { ContextSource } from "../../shared/context.ts";
-import { EngineFailureKind, isInterview, StopReason } from "../../shared/engine-requests.ts";
+import { EngineFailureKind, MessageFrom, StopReason } from "../../shared/engine-requests.ts";
 import { SessionCostLedger, sessionTotals, turnShare } from "./session-cost.ts";
 import { AccountId, accountsRoot, SubscriptionAccounts } from "./subscription-accounts.ts";
 
@@ -552,8 +551,8 @@ export class ClaudeCodeEngine implements Engine {
   /** A CLI that reports message lifecycles folds a pushed message in at its next tool result (claude-steer.ts). */
   readonly steersMidTurn = true;
   /**
-   * A game chat's own session asks the person mid-turn (`DelegateRequest.permissions`), and so do a
-   * build's lead and the run's coordinator, in the chat's mode (`leadAsks`).
+   * A game chat's own session asks the person mid-turn (`DelegateRequest.permissions`), and so does
+   * a build's lead, in the chat's mode (`leadAsks`).
    */
   readonly permissionPrompts = true;
   /** Compact Now sends the resumed session Claude Code's own `/compact`. */
@@ -1382,12 +1381,11 @@ export class ClaudeCodeEngine implements Engine {
     // The running session, for what an answer asks of it after the answer (claude-permissions.ts).
     const running: RunningSession = { stream: null };
     const options = await this.#delegateOptions(request, { cliInstallation, login, controller, running, run });
-    const told = withShellLine(request, Boolean(run.shell), this.#platform);
-    const stream = query({ prompt: sessionPrompt(told, steer, run, controller.signal), options } as never);
+    const stream = query({ prompt: sessionPrompt(request, steer, run, controller.signal), options } as never);
     this.#catalogEpoch.set(stream, this.#catalog.epoch());
     running.stream = stream as RunningSession["stream"];
-    // The mode picker reaches a running turn of a session that asks (the chat's own, a lead's, the
-    // coordinator's, a worker's): the host holds this until the session takes no more control
+    // The mode picker reaches a running turn of a session that asks (the chat's own, a lead's, a
+    // worker's): the host holds this until the session takes no more control
     // requests (its input ended at a result) or its end, whichever comes first.
     run.control = liveControl(rulesAsks(request), stream);
     // Started after the stream exists: a throw during setup must not leave a live timer whose
@@ -1496,8 +1494,8 @@ export class ClaudeCodeEngine implements Engine {
     const outsideCwd = (dir: string): boolean => !isInside(cwd, dir);
     const additional = (request.extraReads ?? []).map((dir) => path.resolve(dir)).filter(outsideCwd);
     // The folders the person granted this chat ("Yes, and allow access to …") join the reads, and
-    // a worker's write roots and the build a lead leads its folders.
-    const granted = [...(rulesAsks(request)?.directories ?? []), ...workerWrites(request), ...leadBuilds(request)]
+    // a worker's write roots its folders.
+    const granted = [...(rulesAsks(request)?.directories ?? []), ...workerWrites(request)]
       .map((dir) => path.resolve(dir))
       .filter(outsideCwd);
     // The config home this session's CLI uses: the studio's, the one the environment names, or
@@ -1539,7 +1537,7 @@ export class ClaudeCodeEngine implements Engine {
         ...(request.preferences ? await this.preferenceSettings(request.model, request.preferences) : {}),
         ...(Object.keys(rules).length ? { permissions: rules } : {}),
         // The chat's own session works in its game folder (the host checked), checkpointed before
-        // each message; a lead or the coordinator answers for a build.
+        // each message; a lead answers for a build.
         ...(rulesAsks(request)
           ? {
               autoMode: autoModeRules({
@@ -2343,43 +2341,27 @@ function sessionPrompt(
   // A resumed session may first answer what it had queued: its input waits for the brief's answer.
   if (!steer && !request.resume) return delegatePrompt(request);
   const session = steer ?? steerSession(() => {});
-  run.feed = steerFeed(session, userFrame(request.prompt, briefImages(request)), signal, () => run.sessionId);
+  run.feed = steerFeed(session, briefFrame(request), signal, () => run.sessionId);
   return run.feed.prompt;
 }
 
 /**
- * The brief of a resumed Windows session with the line naming this turn's shell after it: its turns
- * may run commands in Genex's sandbox or in Bash (`studioShell`), and it remembers the other. A new
- * session's tools say it, a Mac's never changes, and a session with no shell has none to name.
- */
-function withShellLine(request: DelegateRequest, genexShell: boolean, platform: NodeJS.Platform): DelegateRequest {
-  if (platform !== "win32" || !request.resume) return request;
-  const bash = !disallowedToolsFor(request, genexShell).includes(SHELL_TOOL);
-  if (!genexShell && !bash) return request;
-  const line = genexShell ? SHELL_THIS_TURN.Studio : SHELL_THIS_TURN.Bash;
-  return { ...request, prompt: `${request.prompt}\n\n${line}` };
-}
-
-/** The stills a brief carries. */
-function briefImages(request: DelegateRequest): DelegateImage[] {
-  return (request.images ?? []).filter((image) => image?.data);
-}
-
-/**
  * The builder's prompt. Stills go in as image blocks, the same content-block shape the judge uses
- * — a builder that never saw the reference read it nine times in 2,245 turns.
+ * — a builder that never saw the reference read it nine times in 2,245 turns. Genex's own message,
+ * one with pictures, and one with Genex's notices go as a frame (claude-steer.ts `briefFrame`);
+ * any other is the same message as a string.
  */
 function delegatePrompt(request: DelegateRequest): unknown {
-  const images = briefImages(request);
-  if (!images.length) return request.prompt;
+  const plain = request.from !== MessageFrom.Genex && !briefImages(request).length && !request.notices?.length;
+  if (plain) return request.prompt;
   return (async function* () {
-    yield userFrame(request.prompt, images);
+    yield briefFrame(request);
   })();
 }
 
 /**
  * The session's PreToolUse hooks: a worker's never-touch screen first (`neverTouchHook`, every
- * call, reads included, in every mode), and a lead's, coordinator's or asking worker's screen
+ * call, reads included, in every mode), and a lead's or asking worker's screen
  * (`leadScreenHook`), which sees every tool call before Claude Code's own rules do.
  */
 function sessionHooks(request: DelegateRequest, cwd: string, run: RunState): { hooks?: unknown } {
@@ -2463,22 +2445,20 @@ function shellAllows(request: DelegateRequest, genexShell: boolean): string[] {
 
 /**
  * Research is part of the work: the chat, a director and its builders may search and read the
- * web, and so may a read-only lead or coordinator the person may talk to (`leadAsks`), the chat's
- * main agent. Another read-only session answers from what it was handed. A worker researches when it writes, or when its lead asked for research
- * (`WorkerSeat.research`); a reader or a worker in Plan otherwise does not.
+ * web. A read-only session answers from what it was handed. A worker researches when it writes, or
+ * when its lead asked for research (`WorkerSeat.research`); a reader or a worker in Plan otherwise
+ * does not.
  */
 function researches(request: DelegateRequest): boolean {
   if (request.worker) return request.worker.research || !workerReadOnly(request.worker, Boolean(request.readOnly));
-  return !request.readOnly || Boolean(request.leadAsks);
+  return !request.readOnly;
 }
 
 /**
  * The tools the session never gets. No session gets Claude Code's own sub-agents (Agent, Task):
  * Genex runs the workers, under the person's ceiling and the chat's mode. A chat that may launch a
  * build is still a full contractor: it answers, researches or edits itself and launches only when
- * the ask needs a build. A read-only session (a reviewer, a reader) may not even run a command. A
- * read-only lead or coordinator the person may talk to (`leadAsks`), the chat's main agent, keeps
- * what the chat's own session keeps; the chat's mode decides each call.
+ * the ask needs a build. A read-only session (a reviewer, a reader) may not even run a command.
  */
 function disallowedToolsFor(request: DelegateRequest, genexShell = false): string[] {
   const refused = refusedTools(request);
@@ -2489,8 +2469,7 @@ function disallowedToolsFor(request: DelegateRequest, genexShell = false): strin
 /** The tools a session never gets, whoever runs its commands (`disallowedToolsFor`). */
 function refusedTools(request: DelegateRequest): string[] {
   if (request.worker) return workerDisallowedTools(request);
-  if (request.readOnly && !request.leadAsks)
-    return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
+  if (request.readOnly) return [...MESSAGING_TOOLS, ...EDIT_TOOLS, SHELL_TOOL, ...SUBAGENT_TOOLS, ...WEB_TOOLS];
   return [...MESSAGING_TOOLS, ...SUBAGENT_TOOLS, ...(asksOf(request) ? ASKING_TOOLS : [])];
 }
 
@@ -2611,8 +2590,7 @@ export function claudeCodeSystemPrompt(system: string | undefined): Record<strin
 /**
  * How the session is permitted. An unattended contractor edits inside a git-snapshotted
  * workspace, where every edit is recoverable, which is what makes acceptEdits defensible there. A
- * game chat's own session asks the person instead, in the mode they chose; a build's lead or the
- * run's coordinator asks from its chat's Auto, Accept edits or Bypass, or from Manual, and the host
+ * game chat's own session asks the person instead, in the mode they chose; a build's lead asks from its chat's Auto, Accept edits or Bypass, or from Manual, and the host
  * answers (claude-permissions.ts). The picker switches either mid-turn.
  */
 function permissionOptions(request: DelegateRequest, running: RunningSession): Record<string, unknown> {
@@ -2633,25 +2611,17 @@ export function toollessSandbox(platform: NodeJS.Platform = process.platform): {
   return { enabled: platform !== "win32" };
 }
 
-/** The build a lead leads outside its folder (`leadBuilds`), which it writes as its own; none for any other session. */
-function leadBuilds(request: DelegateRequest): string[] {
-  return request.leadBuilds ? [path.resolve(request.leadBuilds)] : [];
-}
-
 /**
  * An unattended session's shell: sandboxed, auto-allowed only because it cannot step outside
  * (allowUnsandboxedCommands: false makes the CLI ignore dangerouslyDisableSandbox entirely), and
- * never writing the studio's protected folders. It writes its
- * folder, and a lead the build it leads.
+ * never writing the studio's protected folders. It writes its folder.
  */
 function unattendedSandbox(request: DelegateRequest, protectedPaths: string[]): Record<string, unknown> {
-  const builds = leadBuilds(request);
   return {
     enabled: true,
     autoAllowBashIfSandboxed: true,
     allowUnsandboxedCommands: false,
     filesystem: {
-      ...(builds.length ? { allowWrite: builds } : {}),
       denyWrite: [...protectedPaths],
       denyRead: [...baseDenyRead(), ...(request.denyReads ?? []), ...protectedPaths],
     },
@@ -2750,7 +2720,7 @@ async function shellBox(
 ): Promise<Pick<CommandBox, "cwd" | "writableRoots" | "secretPaths" | "denyWrite">> {
   const seat = request.worker;
   const fence = seat ? await neverTouchFence(seat.neverTouch) : { reads: [], writes: [] };
-  const roots = [...workerWrites(request), ...leadBuilds(request)];
+  const roots = workerWrites(request);
   const home = seat ? workerBox(seat, Boolean(request.readOnly)).home : false;
   const signIns = credentialHomes();
   return {
@@ -2843,9 +2813,10 @@ interface McpKit {
 /**
  * Loads a tool with the prompt. Claude Code (2.1.304 on) defers MCP tools behind its tool search,
  * offering their names but not their schemas, and a session that cannot see a tool its prompt
- * relies on does not reliably look for it: the checkpoint where the game has checkpoint hooks,
- * capture, a chat's interview tools and the studio's shell load from the first turn. Live and
- * connector tools, a large and varied set, stay deferred, and so does a checkpoint with no hooks.
+ * relies on does not reliably look for it: the checkpoint, capture, a chat's interview tools, the
+ * studio's shell and Genex's own live tools the host marks (`LiveToolSpec.alwaysLoad`: its project
+ * and worker tools) load from the first turn. Other live and connector tools, a large and varied
+ * set, stay deferred.
  */
 const LOAD_WITH_PROMPT = { alwaysLoad: true } as const;
 
@@ -2857,9 +2828,9 @@ type ToolAnswer = {
 
 /**
  * `checkpoint`: the session saves the game with a note; the chat shows the note, and the studio's
- * own checkpoint, when the delegation has one (a game with checkpoint hooks), answers what it did
- * and loads the tool with the prompt; with none the tool waits for tool search. A checkpoint that
- * failed reports as failed, never ending the build.
+ * own checkpoint, when the delegation has one (a game with checkpoint hooks), answers what it did.
+ * It loads with the prompt: its description is the only place that says it lights the Reload. A
+ * checkpoint that failed reports as failed, never ending the build.
  */
 function checkpointTool(kit: McpKit, request: Pick<DelegateRequest, "onEvent" | "onCheckpoint">) {
   const { tool, z } = kit;
@@ -2877,7 +2848,7 @@ function checkpointTool(kit: McpKit, request: Pick<DelegateRequest, "onEvent" | 
         return { content: [{ type: "text", text: CHECKPOINT_TOOL.failed(errorMessage(err)) }], isError: true };
       }
     },
-    request.onCheckpoint ? LOAD_WITH_PROMPT : undefined,
+    LOAD_WITH_PROMPT,
   );
 }
 
@@ -2948,13 +2919,14 @@ function liveTool(kit: McpKit, spec: LiveToolSpec, onLiveTool: NonNullable<Deleg
   // the shape the model must be shown. Every other live tool is still flat.
   const shape = spec.inputSchema ? zodShapeFromJsonSchema(spec.inputSchema, kit.z) : flatLiveShape(kit.z, spec);
   const description = spec.inputSchema ? describeWithSchema(spec.description, spec.inputSchema) : spec.description;
-  return kit.tool(spec.name, description, shape, async (args: Record<string, unknown>) => {
+  const answer = async (args: Record<string, unknown>) => {
     try {
       return liveToolAnswer(await onLiveTool(spec.name, args ?? {}));
     } catch (err) {
       return liveToolAnswer({ text: `${spec.name} failed: ${errorMessage(err)}`, isError: true });
     }
-  });
+  };
+  return kit.tool(spec.name, description, shape, answer, spec.alwaysLoad ? LOAD_WITH_PROMPT : undefined);
 }
 
 /** A live tool's result as the MCP answer the contractor reads. */

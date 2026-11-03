@@ -8,7 +8,6 @@ import { describe, it } from "node:test";
 import {
   executionActivity,
   executionStep,
-  recordedRunLoop,
   roundOutcome,
   runExecution,
   runExecutions,
@@ -307,32 +306,5 @@ describe("where a run stands", () => {
     );
     assert.deepEqual([summary.deliveredHead, summary.deliveredSourceHead], [null, null]);
     assert.equal(summary.head, "h1", "the build it goes on from is still the one it stands on");
-  });
-});
-
-describe("the Loop a run was given", () => {
-  it("reads ∞ as until satisfied, whatever its ceiling", () => {
-    assert.deepEqual(recordedRunLoop({ wallClockMs: 86_400_000, untilSatisfied: true }), { hours: null });
-    assert.deepEqual(recordedRunLoop({ untilSatisfied: true }), { hours: null });
-  });
-
-  it("reads a wall-clock budget as its hours", () => {
-    assert.deepEqual(recordedRunLoop({ wallClockMs: 1_800_000 }), { hours: 0.5 });
-    assert.deepEqual(recordedRunLoop({ wallClockMs: 86_400_000 }), { hours: 24 }, "a legacy ∞ run reads as 24 h");
-  });
-
-  it("knows nothing from budgets it cannot read", () => {
-    const unreadable: unknown[] = [
-      {},
-      { wallClockMs: 0 },
-      { wallClockMs: "30" },
-      { wallClockMs: Number.POSITIVE_INFINITY },
-      { untilSatisfied: "yes" },
-      null,
-      undefined,
-      "budgets",
-      [1_800_000],
-    ];
-    for (const budgets of unreadable) assert.equal(recordedRunLoop(budgets), null, JSON.stringify(budgets));
   });
 });

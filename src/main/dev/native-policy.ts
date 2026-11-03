@@ -256,7 +256,6 @@ const FIXTURE_SAFE = [
   "studio:run.feedback",
   "studio:run.summary",
   "studio:run.review",
-  "studio:run.start",
   "studio:run.stop",
   "studio:run.finish",
   "studio:review.play",

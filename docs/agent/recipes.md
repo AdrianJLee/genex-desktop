@@ -223,7 +223,7 @@ renderer or shared), and the seed cannot import the app.
 1. Test first: extend `tests/conformance/seed-contracts.test.ts` with the input both copies must
    answer the same way.
 2. Change the seed's copy in `src/harness-seed/loop/*.ts` and the app's typed copy in
-   `src/shared/` (`coordinator.ts`, `message-queue.ts`, `model-roles.ts`, or a new module beside
+   `src/shared/` (`chat-run.ts`, `message-queue.ts`, `model-roles.ts`, or a new module beside
    them) in the same change.
 3. An existing profile keeps an agent-edited seed file on upgrade, so the app's copy must still
    read records an older seed wrote.
@@ -239,8 +239,7 @@ The conventions are in [AGENTS.md](../../AGENTS.md#readability).
    and `export type EngineStatusCode = (typeof EngineStatusCode)[keyof typeof EngineStatusCode]`.
    To bind it to an existing union, add `satisfies Record<string, Existing>` and the reverse
    `Exclude<Existing, …>` check (`HostMethod`, `UiEvent`, `EventKind` do both). Move every
-   caller in the same change instead of keeping an alias; only a seed export an older seed
-   imports stays (`tests/fixtures/seed-exports-2e-pre.json`, like `CLAUDE_CODE_ENGINE`).
+   caller in the same change instead of keeping an alias: no alias stays.
 3. Put its predicates beside it (`isEngineReady`, `isContextFailure`), not at call sites.
 4. The seed cannot import it: give the seed its own copy (`RunEvent` in `loop/run-events.ts`) and
    hold the two together in `tests/conformance/seed-contracts.test.ts`

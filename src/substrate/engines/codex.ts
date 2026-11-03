@@ -116,6 +116,7 @@ import {
 import { StudioTool, studioToolName } from "./studio-tool-prompts.ts";
 import { limitResetMs } from "./limit-reset.ts";
 import { JUDGE_RULES, dynamicToolsNote, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
+import { textsAsSent } from "./genex-mark-prompts.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
@@ -832,7 +833,7 @@ export class CodexEngine implements Engine {
     });
 
     const stills = await writeDelegateStills(request.images ?? []);
-    const prompt = await this.#delegatePrompt(request, { cwd, scratch, bridge, turn });
+    const texts = await this.#delegateTexts(request, { cwd, scratch, bridge, turn });
     const deadline = request.timeoutMs
       ? setTimeout(() => {
           run.deadlineHit = true;
@@ -846,7 +847,7 @@ export class CodexEngine implements Engine {
       const signal = controller.signal;
       const delivery = toolDelivery(dir);
       const writes = boxRoots(request, runDir, roots);
-      const source = { argv, runDir, writes, prompt, turn, images: stills.paths, delivery };
+      const source = { argv, runDir, writes, texts, turn, images: stills.paths, delivery };
       await this.#readStream(request, run, { ...source, cwd, model, signal });
       await metadata.refresh();
     } catch (err) {
@@ -970,7 +971,13 @@ export class CodexEngine implements Engine {
     const args = await this.#turnServerArgs(request, runDir, ctx.signal, []);
     const server = await this.#appServer(runDir, ctx.signal, { args, onStderr }).catch(() => null);
     if (!server) return null;
-    const policy = { cwd: runDir, model: ctx.model, bypass: runsAsPerson(request), approvals: checksInAuto(request) };
+    const policy = {
+      cwd: runDir,
+      model: ctx.model,
+      bypass: runsAsPerson(request),
+      approvals: checksInAuto(request),
+      developerInstructions: request.system,
+    };
     const opening = await openCodexTurn(server, {
       thread: threadStartParams({ ...policy, tools }),
       tools: new Set(tools.map((tool) => tool.name)),
@@ -998,7 +1005,13 @@ export class CodexEngine implements Engine {
     const args = await this.#turnServerArgs(request, runDir, ctx.signal, bridgeRoots(this.#platform, bridge));
     const server = await this.#appServer(runDir, ctx.signal, { args, onStderr }).catch(() => null);
     if (!server) return null;
-    const policy = { cwd: runDir, model: ctx.model, bypass: false, approvals: true };
+    const policy = {
+      cwd: runDir,
+      model: ctx.model,
+      bypass: false,
+      approvals: true,
+      developerInstructions: request.system,
+    };
     const resume = request.resume;
     const opening = await openCodexTurn(server, {
       thread: resume ? threadResumeParams({ ...policy, threadId: resume }) : threadStartParams(policy),
@@ -1084,8 +1097,14 @@ export class CodexEngine implements Engine {
     });
   }
 
-  /** The brief, plus what Codex can only be told: its tools, its folder, its limits. */
-  async #delegatePrompt(
+  /**
+   * The message's parts: Genex's notices and the prompt as sent (`textsAsSent`), then what Codex can
+   * only be told per turn: its tools, its folder, its limits (plan mode and the bridge's tools change
+   * between turns). Genex's context is an app server thread's developer instructions; `codex exec`
+   * could take it only in argv, which a context with its plugins' guidance overflows on Windows, so a
+   * new exec session reads it on stdin as its first notice, and a resumed one has it in its history.
+   */
+  async #delegateTexts(
     request: DelegateRequest,
     ctx: {
       cwd: string;
@@ -1093,7 +1112,7 @@ export class CodexEngine implements Engine {
       bridge: StudioBridge | null;
       turn: CodexDynamicTurn | null;
     },
-  ): Promise<string> {
+  ): Promise<string[]> {
     // Stills folders the user named, plus the run's own capture output: readable but not writable.
     // Codex's sandbox already grants read of the whole disk, so `extraReads` needs no flag; the
     // sibling games in `denyReads` are what a filesystem-level deny cannot express here, so they
@@ -1111,8 +1130,7 @@ export class CodexEngine implements Engine {
     ];
     // A chat session in Plan is told it plans, not that it tests a build.
     const planScratch = chatMode(request) === PermissionMode.Plan ? ctx.scratch : null;
-    return [
-      request.prompt,
+    const notes = [
       ctx.bridge?.instructions() ?? "",
       ctx.turn?.declaresTools ? dynamicToolsNote(bridgeTools(request).map((tool) => tool.name)) : "",
       planScratch
@@ -1126,6 +1144,9 @@ export class CodexEngine implements Engine {
     ]
       .filter((part) => part?.trim())
       .join("\n\n");
+    const newExecSession = !ctx.turn && !request.resume;
+    const told = newExecSession ? { ...request, notices: [request.system ?? "", ...(request.notices ?? [])] } : request;
+    return [...textsAsSent(told), ...(notes ? [notes] : [])];
   }
 
   /** `codex exec` (or `exec resume`) for this delegation: model, sandbox, effort, stills. */
@@ -1175,7 +1196,7 @@ export class CodexEngine implements Engine {
     if (stream.turn) {
       const approvals = checksInAuto(request);
       const policy = { cwd: stream.runDir, writes: stream.writes, bypass: runsAsPerson(request), approvals };
-      const params = turnStartParams(policy, stream.prompt, stream.images);
+      const params = turnStartParams(policy, stream.texts, stream.images);
       const approver = approvals ? this.#autoApprover(request, run, stream) : undefined;
       return stream.turn.run(params, (name, args) => answerBridgeCall(name, args, request), approver);
     }
@@ -1186,7 +1207,8 @@ export class CodexEngine implements Engine {
       },
       argv: stream.argv,
       cwd: stream.runDir,
-      prompt: stream.prompt,
+      // On stdin the parts are one message, apart by blank lines.
+      prompt: stream.texts.join("\n\n"),
       signal: stream.signal,
       onStderr: (chunk) => keepStderr(run, request, chunk),
     });
@@ -1566,7 +1588,8 @@ interface StreamContext {
   runDir: string;
   /** The folders its box writes (`boxRoots`), restated on the app server's `turn/start`. */
   writes: string[];
-  prompt: string;
+  /** The message's parts in order (`#delegateTexts`): items of their own on the app server. */
+  texts: string[];
   cwd: string;
   model: string | undefined;
   signal: AbortSignal;
@@ -2129,16 +2152,8 @@ function chatMode(request: DelegateRequest): PermissionMode | null {
  * included. The only place it can write is the studio's bridge there.
  */
 function startsElsewhere(request: DelegateRequest): boolean {
-  const readOnly = Boolean(request.readOnly) && !request.coordinator;
+  const readOnly = Boolean(request.readOnly);
   return readOnly || chatMode(request) === PermissionMode.Plan || request.worker?.mode === PermissionMode.Plan;
-}
-
-/**
- * The build a lead leads outside its folder (`leadBuilds`): written as its own folder is, so it
- * edits, runs and commits there. None in Plan, which writes nothing, nor for any other session.
- */
-function leadBuildRoots(request: DelegateRequest): string[] {
-  return request.leadBuilds && !startsElsewhere(request) ? [path.resolve(request.leadBuilds)] : [];
 }
 
 /**
@@ -2192,10 +2207,10 @@ function serverBox(request: DelegateRequest, runDir: string, bridge: string[]): 
   return request.worker ? [...box, ...workerWebSearch(request)] : box;
 }
 
-/** The folders a boxed session writes: a worker's (`workerRoots`); else its folder, the bridge's and the build a lead leads. */
+/** The folders a boxed session writes: a worker's (`workerRoots`); else its folder and the bridge's. */
 function boxRoots(request: DelegateRequest, runDir: string, bridge: string[]): string[] {
   if (request.worker) return workerRoots(request, runDir, bridge);
-  return [runDir, ...bridge, ...leadBuildRoots(request)];
+  return [runDir, ...bridge];
 }
 
 /**

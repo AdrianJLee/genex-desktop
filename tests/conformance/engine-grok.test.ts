@@ -35,6 +35,8 @@ import {
   type GrokInvocation,
 } from "../../src/substrate/engines/grok.ts";
 import { EngineError, type DelegateEvent } from "../../src/substrate/engines/types.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import { ProcessSandbox } from "../../src/substrate/spawn.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -374,6 +376,18 @@ describe("Grok Build's sign-in and models", () => {
 });
 
 describe("Grok Build sessions", () => {
+  it("a prompt Genex wrote reads under the non-user mark; the person's words go in as written", async () => {
+    const { engine, prompts } = await engineWith(async function* () {
+      yield* await events("grok-live-build-1.0.70.jsonl");
+    });
+    const cwd = await game();
+    await engine.delegate({ cwd, prompt: "The build landed. Make the cover.", from: MessageFrom.Genex });
+    await engine.delegate({ cwd, prompt: "stop building", from: MessageFrom.Person });
+    const genex = promptWords(prompts[0]);
+    assert.ok(genex.startsWith(`${GENEX_MARK}\nThe build landed. Make the cover.`), genex);
+    assert.match(promptWords(prompts[1]), /^stop building/);
+  });
+
   it("builds from a prompt file, approving calls only inside the studio's sandbox, and mirrors every event", async () => {
     const { engine, seen, prompts } = await engineWith(async function* () {
       yield* await events("grok-live-build-1.0.70.jsonl");

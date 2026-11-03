@@ -1,7 +1,8 @@
 /**
  * What a game with no cover shows where its cover would be: a still wire floor plate lying toward
  * the horizon, in the theme's quiet ink, its lines fading with depth and its face faintly filled.
- * Recent's small tile draws the plate with fewer lines than a card does.
+ * Recent's small tile draws the plate with fewer lines than a card does; a game page's top, wider
+ * than 16:9, draws a card's plate cut to fill it (`fill`).
  */
 import type { JSX } from "react";
 
@@ -71,13 +72,17 @@ function plate(rows: number, columns: number): { face: string; strokes: Stroke[]
 const CARD_PLATE = plate(7, 9);
 const TILE_PLATE = plate(4, 5);
 
-/** The plate drawn to fill its box (the box is 16:9, so nothing stretches). */
-export function NoCover({ small = false }: { small?: boolean }): JSX.Element {
+/**
+ * The plate drawn to fill its box: a 16:9 box shows it whole, so nothing stretches; `fill` cuts it
+ * to cover a box of any shape, its middle kept.
+ */
+export function NoCover({ small = false, fill = false }: { small?: boolean; fill?: boolean }): JSX.Element {
   const { face, strokes } = small ? TILE_PLATE : CARD_PLATE;
   return (
     <svg
       className="play-no-cover"
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+      preserveAspectRatio={fill ? "xMidYMid slice" : undefined}
       fill="none"
       stroke="currentColor"
       aria-hidden="true"

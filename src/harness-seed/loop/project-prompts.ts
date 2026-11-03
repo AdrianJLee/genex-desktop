@@ -1,15 +1,14 @@
 /**
  * What a session is told about the project it works in, from the folder's facts (`folder-facts.ts`):
- * who runs it (Genex, the folder, what it holds, what a plugin means here), how a folder with no
- * kind yet picks one, and a line for a kind Genex has no rules of its own for. A web game's or a
- * kind-pending folder's words never name an engine: the person's first message decides.
+ * who runs it (Genex, the folder, what it holds, what a plugin means here), and, for the local
+ * engine's own prompt, how a folder with no kind yet picks one. Genex's line when a turn changed
+ * what the project is says that fact alone (`factsReadyNotice`). A web game's or a kind-pending
+ * folder's words never name an engine: the person's first message decides.
  */
 import type { PluginKindOffer } from "../types/host-api.d.ts";
-import { CoreFact, type FactRef, FolderHolds, PLUGIN_FACT_SOURCE_PREFIX, ProjectTool } from "./folder-facts.ts";
+import { CoreFact, type FactRef, FolderHolds, ProjectTool } from "./folder-facts.ts";
 import { toolCall } from "./model-roles.ts";
 import { pluginWebBuilds, WEB_BUILD_WORDS } from "./web-build.ts";
-// A kept older `unreal-prompts.ts` exports only what it did: new names live here, never there.
-import { engineChoiceRule, UNREAL_NEW_GAME_TOOL } from "./unreal-prompts.ts";
 
 /** The root of a game, as a fact's path spells it. */
 const ROOT = ".";
@@ -84,8 +83,9 @@ function holdsWords(facts: readonly FactRef[], holds?: FolderHolds | null): stri
 
 /**
  * Who runs the session, the first thing every brief says: Genex, the desktop app the chat runs in; the
- * project's folder and what it holds (`holds`: what a folder with no facts holds); that Genex shows a
- * web game itself; and that a plugin here is a Genex plugin, never an engine's own plugins or add-ons.
+ * project's folder and what it holds (`holds`: what a folder with no facts holds; `facts` left out, as
+ * in a chat session's system text, which outlives a change of kind: not said); that Genex shows a web
+ * game itself; and that a plugin here is a Genex plugin, never an engine's own plugins or add-ons.
  */
 export function appIdentity({
   folderLabel,
@@ -93,11 +93,12 @@ export function appIdentity({
   holds = null,
 }: {
   folderLabel: string;
-  facts: readonly FactRef[];
+  facts?: readonly FactRef[];
   holds?: FolderHolds | null;
 }): string {
   const folder = folderLabel ? `the folder \`${folderLabel}\`` : "this game's folder";
-  return `You are working inside Genex, the desktop app this chat runs in. This project is ${folder}; it holds ${holdsWords(facts, holds)}. Genex shows a web game in its own Live view beside this chat: never start a server for the person to open. In Genex, a plugin means a Genex plugin (Plugins in the sidebar), which adds tools and know-how; an engine's own plugins and add-ons are files in the project, not Genex plugins.`;
+  const held = facts ? `; it holds ${holdsWords(facts, holds)}` : "";
+  return `You are working inside Genex, the desktop app this chat runs in. This project is ${folder}${held}. Genex shows a web game in its own Live view beside this chat: never start a server for the person to open. In Genex, a plugin means a Genex plugin (Plugins in the sidebar), which adds tools and know-how; an engine's own plugins and add-ons are files in the project, not Genex plugins.`;
 }
 
 /** How a session finds a plugin for what the request names, and never turns one on itself. */
@@ -117,22 +118,17 @@ const offerName = (kind: PluginKindOffer): string =>
   typeof kind.label === "string" && kind.label.trim() ? kind.label.trim() : kind.name;
 
 /**
- * The first rule for a folder with no kind yet (`holds`: nothing, or notes to read first), on every
- * message until it has one. With engine plugins' kinds on offer (`kinds`) and the question card
- * bridged (`asked`): the engine question, whose web answer starts the web starter. Otherwise web is
- * the default through `start_web_game`, each kind on offer is made by its own tool when the request
- * names it, and an engine Genex has no plugin on for goes through `plugins_find`.
+ * The local engine's first rule for a folder with no kind yet (`holds`: nothing, or notes to read
+ * first), on every message until it has one: web is the default through `start_web_game`, each kind
+ * on offer is made by its own tool when the request names it, and an engine Genex has no plugin on
+ * for goes through `plugins_find`.
  */
 export function pendingKindRule(
   engine: string | undefined,
   kinds?: readonly PluginKindOffer[] | null,
-  unreal?: unknown,
   holds?: FolderHolds | null,
-  asked = true,
 ): string[] {
   const offered = kinds ?? [];
-  // The engine question sends another engine to `plugins_find` itself, before it asks.
-  if (asked && offered.length > 0) return [engineChoiceRule(engine, unreal, offered)];
   const start = toolCall(engine, ProjectTool.StartWebGame);
   return [
     `${newProjectWords(holds)} For a game that plays in Genex as a web page, ${start} writes a starter page; it is one option, not a requirement.`,
@@ -157,38 +153,6 @@ export function pluginFirstRule(engine: string | undefined, what: string): strin
 }
 
 /**
- * The rule of a kind Genex has no rules of its own for (a Godot or Unity project, Blender files, an
- * Unreal Engine plugin, a plugin's kind): what it is, and that it is built with its own files and
- * tools, not as a web page.
- */
-export function factLine(fact: FactRef): string {
-  return `This folder holds ${factWords(fact.id)} ${whereWords(fact.path)}: build it with its own files and tools from the shell, never as a web page, and say plainly what you could not run or look at.`;
-}
-
-/** Whether a fact is one of Genex's own kinds (the core table). */
-const isCoreFact = (id: string) => (Object.values(CoreFact) as string[]).includes(id);
-
-/**
- * Whether an enabled plugin's `detect` found the fact, so that plugin is on now. A plugin's kind held
- * only by a scaffold's record outlives the plugin being turned off; a fact whose source isn't said
- * (an older caller) reads as detected.
- */
-const detectedByPlugin = (fact: FactRef & { source?: string }) =>
-  fact.source === undefined || fact.source.startsWith(PLUGIN_FACT_SOURCE_PREFIX);
-
-/**
- * The rules of a kind Genex has no rules of its own for: for one of Genex's own kinds, or a plugin's
- * kind its plugin's `detect` didn't find (held by a scaffold's record), a plugin is looked for first
- * (`pluginFirstRule`); one an enabled plugin detected, or one a plugin that is on makes (`made`: a
- * kind on offer names it, as the bundled Godot plugin does Genex's own Godot project), has that
- * plugin on already.
- */
-export function ownKindRules(engine: string | undefined, fact: FactRef & { source?: string }, made = false): string[] {
-  if (made || (!isCoreFact(fact.id) && detectedByPlugin(fact))) return [factLine(fact)];
-  return [pluginFirstRule(engine, `the fact "${fact.id}"`), factLine(fact)];
-}
-
-/**
  * The rules of a folder with no facts that is no new project (`kindUnknown`): one of its own files of
  * a kind Genex has no rules for is looked through first and never handed a web starter, and a plugin
  * is looked for; one Genex could not read is checked and said.
@@ -205,45 +169,11 @@ export function unknownKindRules(engine: string | undefined, holds: FolderHolds 
 }
 
 /**
- * The Unreal plugin's kind offer as a host that listed no `kinds` once stood for it. Kept for an older
- * copy of a module that imports it: no current module reads it, since every kind on offer, with its
- * readiness, comes from the host's `kinds`.
+ * Genex's line to the chat's own session when its turn changed what the project is (a port, a link,
+ * or project files it wrote), as that session goes on with the tools for the new kind: the kind now
+ * and, when its app isn't ready, why. Facts only: what to do with them is the session's.
  */
-export const UNREAL_KIND: PluginKindOffer = {
-  plugin: "unreal",
-  name: "Unreal Engine",
-  tool: UNREAL_NEW_GAME_TOOL,
-  makes: [CoreFact.UnrealProject],
-};
-
-/**
- * The rules of an Unreal project while the Unreal plugin is off: the plugin is suggested first
- * (`pluginFirstRule`); this session has no Unreal tools, works with the project's files and the shell
- * on the person's word, and Genex cannot save inside the editor before a checkpoint. The person may
- * turn the plugin on; the session never does.
- */
-export function unrealWithoutPlugin(engine: string | undefined): string[] {
-  return [
-    pluginFirstRule(engine, '"Unreal"'),
-    "This is an Unreal Engine project, and Genex's Unreal plugin is off, so this session has no Unreal tools: on the person's word, work with the project's files and the shell (UnrealBuildTool, UnrealEditor-Cmd), never as a web page.",
-    "Genex can't save inside the editor before a checkpoint while the plugin is off: when the editor is open, save there yourself or ask the person to save first, so a checkpoint holds the work.",
-  ];
-}
-
-/**
- * What the chat's own session is told when its turn changed what the project is (a port, or files
- * it wrote): the project's kind now, and to go on with what it said it would build first, with the
- * tools this new turn hands it. With Loop on (`launch`, its launch tool as the session calls it) a
- * build of the game is that tool's, never the session's own, even after its last reply said it
- * would build it: the session decides by its Loop rules again.
- */
-export function factsReadyPrompt(facts: readonly FactRef[], launch?: string, notReady?: string): string {
-  const holds = `The project now holds ${holdsWords(facts)}; your tools fit it now.`;
-  // An app that isn't ready is the agent's to get ready (open, reopen or wait for it), never the person's.
-  const ready = notReady
-    ? `${holds} Its app isn't ready yet: ${notReady} Get it ready with your own tools (open, reopen or wait for it) before you use it.`
-    : holds;
-  if (launch)
-    return `${ready} Loop is on, so decide as your Loop rules say: when the ask is to build the game or change it substantially, start it now with ${launch} (call it last, then recap in one short paragraph); anything smaller, finish it here and tell the user what you did.`;
-  return `${ready} Go on with what you said you would do, then tell the user what you made.`;
+export function factsReadyNotice(facts: readonly FactRef[], notReady?: string): string {
+  const holds = `This project now holds ${holdsWords(facts)}; your tools changed to fit it.`;
+  return notReady ? `${holds} Its app isn't ready yet: ${notReady}` : holds;
 }

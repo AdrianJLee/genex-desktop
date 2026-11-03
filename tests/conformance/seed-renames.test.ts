@@ -94,11 +94,6 @@ describe("the rename in one module's source", () => {
         'import type { LoopRunState } from "../director/loop-run.ts";',
       ],
       [
-        "loop/chat-session.ts",
-        'import { afterNightNote } from "./after-night-prompts.ts";',
-        'import { afterLoopRunNote } from "./after-loop-run-prompts.ts";',
-      ],
-      [
         "loop/main.ts",
         'export { nightRefusal } from "./run-dispatch.ts";',
         'export { loopRunRefusal } from "./run-dispatch.ts";',
@@ -174,8 +169,9 @@ describe("a seed upgrade across the rename", () => {
       edited.journal = await agentEdits(ws, "loop/director/journal.ts");
       edited.night = await agentEdits(ws, "loop/director/night.ts");
       // A tool the agent wrote itself, on the old names.
-      edited.tool = 'import { nightClock } from "../loop/director/journal.ts";\nexport const clock = nightClock;\n';
-      await writeFile(path.join(ws, "tools", "my-clock.ts"), edited.tool);
+      edited.tool =
+        'import { restoreNight } from "../loop/director/journal.ts";\nexport const restore = restoreNight;\n';
+      await writeFile(path.join(ws, "tools", "my-restore.ts"), edited.tool);
     });
 
     assert.ok(report.kept.includes("loop/director/journal.ts"), "the agent's journal is kept");
@@ -183,9 +179,9 @@ describe("a seed upgrade across the rename", () => {
     assert.deepEqual([...(report.renamed ?? [])].sort(), [
       "loop/director/journal.ts",
       "loop/director/loop-run.ts",
-      "tools/my-clock.ts",
+      "tools/my-restore.ts",
     ]);
-    for (const rel of ["loop/director/journal.ts", "loop/director/loop-run.ts", "tools/my-clock.ts"]) {
+    for (const rel of ["loop/director/journal.ts", "loop/director/loop-run.ts", "tools/my-restore.ts"]) {
       const text = await readFile(path.join(ws, rel), "utf8");
       assert.ok(!hasCompoundOldName(text), `${rel} still says an old name`);
     }
@@ -199,7 +195,7 @@ describe("a seed upgrade across the rename", () => {
     }
     assert.equal(await readFile(path.join(backupDir, "loop/director/journal.ts"), "utf8"), edited.journal);
     assert.equal(await readFile(path.join(backupDir, "loop/director/night.ts"), "utf8"), edited.night);
-    assert.equal(await readFile(path.join(backupDir, "tools/my-clock.ts"), "utf8"), edited.tool);
+    assert.equal(await readFile(path.join(backupDir, "tools/my-restore.ts"), "utf8"), edited.tool);
 
     // What the bootstrap does: import the workspace's main.ts. An old name a kept module still
     // exported, and a shipped one no longer imported, would throw here at link time.
@@ -263,7 +259,7 @@ describe("a seed upgrade across the rename", () => {
     await writeFile(outsideFile, outsideText);
     await mkdir(path.join(outside, "dir"));
     const outsideTool = path.join(outside, "dir", "linked.ts");
-    await writeFile(outsideTool, 'import { nightClock } from "../../loop/director/journal.ts";\n');
+    await writeFile(outsideTool, 'import { restoreNight } from "../../loop/director/journal.ts";\n');
     const toolText = await readFile(outsideTool, "utf8");
 
     await upgradedFromBeforeRename(async (ws) => {

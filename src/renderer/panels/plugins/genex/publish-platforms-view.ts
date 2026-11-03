@@ -340,13 +340,12 @@ export const nothingToPublish = (platforms: readonly PublishPlatform[]): boolean
   noWebBuild(platforms) && sendingPlayers(platforms).length === 0;
 
 /**
- * Why a game with nothing to send waits: an app older than the game, a Genex plugin from before
- * apps, apps Studio cannot send yet, or nothing made yet (a web version too, when the agent can make one).
+ * Why a game with nothing to send waits: an app older than the game, apps Studio cannot send yet,
+ * or nothing made yet (a web version too, when the agent can make one).
  */
-function waitingLine(platforms: readonly PublishPlatform[], behind: boolean, webOffer: WebOffer): string {
+function waitingLine(platforms: readonly PublishPlatform[], webOffer: WebOffer): string {
   const stale = platforms.filter((row) => isNative(row) && row.state === PublishPlatformState.Stale);
   if (stale.length > 0) return WORDS.rebuildFirst(WORDS.apps(stale.map((row) => playersOf(row.target))));
-  if (behind) return WORDS.updateGenex;
   const built = platforms.some((row) => isNative(row) && row.state !== PublishPlatformState.Missing);
   if (built) return WORDS.appsSoon;
   return webOffer === WebOffer.Make ? WORDS.makeAnyFirst : WORDS.makeFirst;
@@ -354,17 +353,12 @@ function waitingLine(platforms: readonly PublishPlatform[], behind: boolean, web
 
 /**
  * The line under the rows: the apps Publish sends too, and whose players get the web version; for a
- * game with nothing to send, why. `behind`: the Genex plugin is too old to send its apps; `webOffer`:
- * what the game is offered for a web version.
+ * game with nothing to send, why. `webOffer`: what the game is offered for a web version.
  */
-export function reachLine(
-  platforms: readonly PublishPlatform[],
-  behind = false,
-  webOffer: WebOffer = WebOffer.Quiet,
-): string | null {
+export function reachLine(platforms: readonly PublishPlatform[], webOffer: WebOffer = WebOffer.Quiet): string | null {
   const web = platforms.find((row) => row.target === PublishTarget.Web);
   if (onlyApps(platforms)) return WORDS.onlyPlayers(NATIVE_WORDS.platforms(sendingPlayers(platforms)));
-  if (nothingToPublish(platforms)) return waitingLine(platforms, behind, webOffer);
+  if (nothingToPublish(platforms)) return waitingLine(platforms, webOffer);
   if (web?.state !== PublishPlatformState.Ready) return null;
   const native = platforms.filter(isNative);
   const sending = sendingPlayers(platforms);
@@ -412,16 +406,11 @@ export const makeWebAsk = (title: string): string => WORDS.makeWebAsk(title);
 /** What "Build again" sends through the game's chat for a platform. */
 export const rebuildAsk = (target: PublishTarget, title: string): string => WORDS.rebuildAsk(playersOf(target), title);
 
-/**
- * The rows as the installed Genex plugin can send them: an app goes only through a plugin whose
- * record says it can (`native.supported`), and a plugin from before apps answers no record. `behind`
- * when Studio could send an app that the plugin cannot: updating the plugin is what is missing.
- */
+/** The rows as the Genex plugin can send them: an app goes only while its record says it can (`native.supported`). */
 export function gateByPlugin(
   platforms: readonly PublishPlatform[],
   native: GenexNativeRecord | undefined,
-): { platforms: PublishPlatform[]; behind: boolean } {
-  if (native?.supported === true) return { platforms: [...platforms], behind: false };
-  const behind = platforms.some((row) => isNative(row) && row.uploads);
-  return { platforms: platforms.map((row) => (isNative(row) ? { ...row, uploads: false } : row)), behind };
+): PublishPlatform[] {
+  if (native?.supported === true) return [...platforms];
+  return platforms.map((row) => (isNative(row) ? { ...row, uploads: false } : row));
 }

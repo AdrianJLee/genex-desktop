@@ -12,7 +12,6 @@ import { coreLite } from "../helpers/core-lite.ts";
 
 const METHODS = [
   "_computerToolsFor",
-  "_directorToolsFor",
   "_runOfGame",
   "activeBuilders",
   "activityEvents",
@@ -61,7 +60,6 @@ const METHODS = [
   // A game its first message left Untitled takes the name a later message gives it (conversation.ts).
   "nameFromIdea",
   "newRunId",
-  "offerBuild",
   "offerLive",
   "permissionSettings",
   "playGameSnapshot",

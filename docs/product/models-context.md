@@ -15,11 +15,10 @@ Tabs switch [accounts](../connections-and-context.md#several-accounts-per-subscr
 Unavailable picks block sends; without models, Connect AI model replaces the pill. A
 listing proves no access.
 
-Chats keep model, effort and Loop; fresh games inherit the last picks (Loop starts off).
-One effort, on the
+Each chat keeps its model and effort; fresh games inherit the last picks. One effort, on the
 main agent's levels, serves every role (Workers and Reviewers at most high).
-Workers and Reviewers run only in Loop,
-surviving main-agent changes. Each Ollama job takes its own model; Reviewers must see images and
+The Workers pick also runs the chat's own workers; Reviewers
+run only in a Loop. Both survive a main-agent change. Each Ollama job takes its own model; Reviewers must see images and
 check a Loop's finish.
 
 Local Models (Bonsai/Ollama) downloads and deletes. Metered
@@ -36,8 +35,8 @@ offers Compact now (or `/compact`; Claude Code, Codex and Grok use
 included, compacts automatically. Then plan limits
 ([details](../connections-and-context.md#plan-limits)).
 
-Ollama's context is a loaded model's report, else an unknown estimate. Tools and images
-need reported capability; unsupported requests fail before inference.
+Ollama's context is a loaded model's report, else an estimate that refuses nothing. Tools and
+images need reported capability; unsupported requests fail before inference.
 
 Game files, instructions, reference images and enabled tools contribute through channels
 ([tool setup](assets-plugins.md)). Credentials stay in protected storage, never in messages
@@ -45,13 +44,13 @@ or logs.
 
 ## Permissions
 
-Every chat's pill after Mode picks **Auto** (Recommended; stops dangerous actions),
+Every chat's permissions pill picks **Auto** (Recommended; stops dangerous actions),
 **Manual**, **Accept edits**, **Plan** or **Bypass permissions** (confirmed; Rewind
 restores only the game); modes an engine cannot honour are greyed
 ([by engine](../tool-permissions.md#other-engines)). Chats keep their mode; new ones inherit the
 last Auto, Manual or Accept edits. Chats and leads work anywhere on your Mac with your access,
 workers with the lead's tools in your mode but never in sign-ins, Genex's data or other games; a
-question lapses unanswered after five minutes ([details](../tool-permissions.md)).
+question waits for your answer ([details](../tool-permissions.md)).
 
 Read denials cover sensitive system/account locations; Codex's are advisory, not whole-disk
 isolation.
@@ -60,6 +59,6 @@ isolation.
 
 Start at [ModelsSection](../../src/renderer/panels/ModelsSection.tsx) and
 [PromptBar](../../src/renderer/ui/PromptBar.tsx); see [Local models](../local-models.md),
-[continuation](../conversation-coordinator.md),
+[continuation](../conversation-lifecycle.md),
 [composer design](../agent/design.md#prompt-composer) and
 [judge evaluation](../judge-evaluation.md).

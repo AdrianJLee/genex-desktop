@@ -15,17 +15,9 @@ is product copy, not this glossary.
   sandbox and the RPC it calls (`src/substrate/`; the RPC handlers in `src/main/harness-rpc/`).
 - **Seed / applySeed**: the shipped harness source and the upgrade that copies it into the
   editable workspace while keeping the agent's edits (`src/substrate/seed-upgrade.ts`).
-- **Seed contract**: a rule both the app and the harness apply (coordinator tools, the message
-  queue, model roles, skill edits). The app keeps a typed copy in `src/shared/` and never loads
+- **Seed contract**: a rule both the app and the harness apply (the chat's run readings and build
+  names, the message queue, model roles, skill edits). The app keeps a typed copy in `src/shared/` and never loads
   the seed's; `tests/conformance/seed-contracts.test.ts` holds the two copies together.
-- **Coordinator**: a read-only session of its own that answers a game's chat for a run no lead of
-  the chat's own led (the long turn, the classic pipeline, a kept older seed), or a message on
-  another engine than the lead's, with the run's controls (`loop/coordinator.ts`). With Loop on
-  after a finished build that seated a lead, a coordinator that answers in a session reopens that
-  run through `continue_build` (**Reopen**). The fallback, which the long turn's removal keeps
-  ([harness runtime](../harness-runtime.md)); the queue (`loop/message-queue.ts`) owns the
-  conversation's order
-  ([conversation lifecycle](../conversation-coordinator.md)).
 - **Wedge**: the harness stopped sending heartbeats. The watchdog calls `recover()`, which
   rewinds the harness to its newest healthy snapshot and restarts it
   (`src/substrate/harness-host.ts` `onWedged`, `src/main/core/recovery.ts`).
@@ -78,29 +70,24 @@ is product copy, not this glossary.
   (`loop/director.ts`, its parts under `loop/director/`).
 - **Run**: the Loop's run as one explicit object (`prepareLoopRun` in
   `loop/director/setup.ts`); every function of the run takes it first (`loop/director/loop-run.ts`),
-  and what needs no run is beside it: `rules.ts` (the landing's words, plain card sentences),
-  `args.ts`, `briefs.ts` and `tool-specs.ts`.
-- **Health check**: the one check before a web game's merge settles and before its build lands —
-  the page loads, no uncaught error, a frame that is not blank — the host's `preview.observe` in a
-  window of the Loop's own (`loop/health-check.ts`).
+  and what needs no run is beside it: `rules.ts` (plain card sentences), `args.ts` and
+  `tool-specs.ts`.
+- **Health check**: the one check of a web game's page when its Loop's lead finishes — the page
+  loads, no uncaught error, a frame that is not blank — the host's `preview.observe` in a window of
+  the Loop's own (`loop/health-check.ts`, from `director/open/finish.ts`).
 - **Second opinion**: a model that did none of the work, asked by the lead about pictures and a
   question it chooses (`judge`, `loop/second-opinion.ts`), or a reviewer asked with `finish
   review=yes` (`loop/finish-check.ts`); it decides nothing.
-- **Wake / digest**: how the director's session is driven (`loop/director/wake.ts`). The lead
-  ends its turn after each decision and the harness wakes the same session when something happens
-  (`wake-schedule.ts` decides when, from typed `NoteKind` lines and timers). The digest opens each
-  wake: the user's words verbatim, what happened and where the run stands (`wake-prompts.ts`).
-- **Lead / one session**: a waking web run's director that is its chat's own session, building in
-  the integration worktree with its own hands beside its workers, never read-only
-  (`loop/director/lead-session.ts`). After the close the same
-  session answers the chat with its hands back and the run's controls — `run_status`,
-  `show_build`, `land_build` (`runControls`) and a paused run's recorded `resume_run`
-  (`loop/after-loop-run.ts`).
-- **Reopen**: a finished build whose journal seated a lead, started again as the same run when a
-  Loop message asks for more: the chat's own session records `reopen_run` (workers and judges
-  then take the message's picks), or the run's coordinator `continue_build` (the build's own
-  models); the chat rewrites the journal with the Loop's fresh budget (`loop/reopen-run.ts`,
-  `loop/director/reopen.ts`).
+- **Wake**: how the director's session is driven (`loop/director/wake.ts`). The lead ends its turn
+  when it decides to and the harness wakes the same session when something happens
+  (`wake-schedule.ts` decides when, from typed `NoteKind` lines): with the person's message as they
+  wrote it, or Genex's one-line facts (`director/news.ts`), never a digest. A turn cut short for the
+  person's words resumes with those words alone.
+- **Lead / one session**: a Loop's director that is its chat's own session (one per chat),
+  building in the game folder with its own hands beside its workers, never read-only
+  (`loop/director/lead-session.ts`). After the close the same session answers the chat with its
+  hands back and the run's status, `run_status` (`runControls`), and after a paused Loop that worked
+  in place its recorded `resume_run` (`loop/after-loop-run.ts`).
 - **Run journal**: the durable artifact `autopilot_<runId>` a run resumes from. A director run
   keeps its whole record there (`loop/director/journal.ts`): the time it has worked, so a Resume
   goes on with what the budget has left, the log and the wake loop's state.
@@ -113,15 +100,14 @@ is product copy, not this glossary.
 
 ## The one Loop
 
-Every project's Loop is the director's wake loop, in one of two profiles (`LoopProfile`,
-`loopProfileOf` in `src/shared/project-facts.ts`).
+Every project's Loop is the director's wake loop, in place, a web game's too.
 
-- **Profile**: `web` for a web game at the root beside nothing but `web-game`/`blender-assets`
-  facts (an integration copy, builders, judges, landing); `open` for any other project.
-- **Open Loop / lead in place**: the open profile (`loop/director/open/`): the chat's own session
-  writes in the game folder (`director.inPlace`), in turns of at most 45 minutes, starts workers
-  from the run pool (the plugins' worker types among them) and claims `finish`, which a reviewer
-  checks. Not the web run's **Lead / one session**, which builds in the integration worktree.
+- **Profile**: `autopilot_started.profile` (`LoopProfile` in `src/shared/project-facts.ts`): `open`
+  for every Loop now; `web` only on the records of a web game's Loop an earlier Genex ran in an
+  integration copy, which the app still draws and whose paused journal a Resume refuses.
+- **Open Loop / lead in place**: the Loop (`loop/director/open/`): the chat's own session writes in
+  the game folder (`director.inPlace`), starts workers from the run pool (the plugins' worker types
+  among them) and claims `finish`, on its word or after a reviewer it asks.
 - **Save point**: the open lead's checkpoint (`save_point`): Genex's snapshot of the game folder
   with the project's plugins' steps around it; `rewind` goes back to one and `restart` closes and
   reopens the project's app between turns (`open/save-point.ts`, `open/between.ts`). The harness
@@ -175,21 +161,14 @@ Every project's Loop is the director's wake loop, in one of two profiles (`LoopP
   `finish_check` record (`src/main/core/finish-review.ts`). A yes closes the run as reviewed; a no
   goes back to the lead and decides nothing. Builds draws it as Checking, Not yet, Done or Stopped
   (`FinishCheckState`, `FinishLook` in `src/renderer/run-tree.ts`).
-- **Soft cap**: a timed Loop's hours (`loop/time-cap.ts`): a heads-up 15 minutes before, time's up
-  at the cap (no new workers then), 15 minutes' grace (`GRACE_MS`), then Genex closes it with what
-  is and isn't done ("not checked by a reviewer" when no claim reached one since it last opened);
-  an ∞ Loop's cap is 24 hours. The lead's finish ends it early.
-- **Unreal runner**: the Unreal lead from before the one Loop (`loop/unreal/lead.ts`: milestones,
-  typed sub-agents, the critic, hero-camera captures), reached only through `STUDIO_UNREAL_RUNNER=lead`
-  until a live Unreal Loop passes on the one Loop.
 
 ## Three meanings of "loop"
 
-- **Loop mode**: the composer switch that makes a message start a run (after a finished build that
-  seated a lead, reopen it)
-  (`src/renderer/ui/ComposerModeMenu.tsx`; `src/renderer/ui/PromptBar.tsx` sends it as
-  `autopilot`). UI "Auto" means Loop off. The UI calls the roles Main agent (orchestrator),
-  Workers and Reviewers (judge); run copy says the lead, workers and reviewers.
+- **The Loop's start**: `start_autopilot` (`src/harness-seed/loop/start-autopilot.ts`), handed to
+  every chat turn on the person's words on an engine that keeps a session; the agent decides when a
+  request needs a Loop. The UI calls the roles Main agent (orchestrator), Workers
+  and Reviewers (judge), sent as the message's `roles`; run copy says the lead, workers and
+  reviewers.
 - **The `loop/` folder**: the harness's policy modules (`src/harness-seed/loop/`).
 - **The Loop**: a run, its lead's session and the workers it may start (above).
 

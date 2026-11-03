@@ -28,7 +28,6 @@ export const RunEvent = {
   AutopilotProviderOutage: "autopilot_provider_outage",
   AutopilotResumed: "autopilot_resumed",
   AutopilotStarted: "autopilot_started",
-  DirectorContinued: "director_continued",
   DirectorProgress: "director_progress",
   DirectorShow: "director_show",
   DirectorVerdict: "director_verdict",
@@ -38,7 +37,6 @@ export const RunEvent = {
   IntegrationMerge: "integration_merge",
   RunControl: "run_control",
   RunFinished: "run_finished",
-  RunFollowupRequested: "run_followup_requested",
   RunInteractionEvidence: "run_interaction_evidence",
   RunIteration: "run_iteration",
   RunLearning: "run_learning",
@@ -154,13 +152,6 @@ export const RunState = {
   Superseded: "superseded",
 } as const;
 export type RunState = (typeof RunState)[keyof typeof RunState];
-
-/** Which run an interview commissions: an Autopilot run, or the unattended loop. */
-export const InterviewMode = {
-  Autopilot: "autopilot",
-  Loop: "loop",
-} as const;
-export type InterviewMode = (typeof InterviewMode)[keyof typeof InterviewMode];
 
 /**
  * Who wrote a `run_steering` event other than the user (`source`): the director steering its own

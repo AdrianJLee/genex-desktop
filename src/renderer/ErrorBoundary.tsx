@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     // A crash before the first screen must not stay hidden behind the startup loader.
     dismissAppLoader();
     // The native game view sits above the page; it must not cover this screen.
-    void window.studio?.previewBounds({ x: 0, y: 0, width: 0, height: 0, watching: false }).catch(() => {});
+    void window.studio?.previewBounds({ x: 0, y: 0, width: 0, height: 0 }).catch(() => {});
   }
 
   #copy = async (): Promise<void> => {

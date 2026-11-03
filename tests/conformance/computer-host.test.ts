@@ -490,6 +490,8 @@ describe("the computer tool's host", () => {
     assert.match(text(answers.capture!), /c1_default\.jpg/);
   });
 
+  // Flipped (one Loop): the director's grant alone was lent a window of its own; a lead has the window
+  // its chat's turns have now, from the capture grant its turn carries (director.ts `delegateTurn`).
   it("never lends the director's session the window the user is watching, even with the pool full", async () => {
     const rig = await startRig(
       { replies: [] },
@@ -512,6 +514,7 @@ describe("the computer tool's host", () => {
       project: project.name,
       threadId,
       director: { runId: "run_borrow", threadId, project: project.name, root: project.dir, setup: null, tools: [] },
+      selfCapture: { project: project.name, root: project.dir, label: project.name },
     });
     assert.equal(handles.length, 1, JSON.stringify(handles));
     assert.notEqual(handles[0], "live", "a window of its own, not the user's");

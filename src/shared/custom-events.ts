@@ -25,7 +25,6 @@ import type { Usage } from "./event-log.ts";
 import type { LoopProfile } from "./project-facts.ts";
 import type { BuildObservation, HealthFinding, ReadyResult, ReadyVia } from "./preview-contract.ts";
 import type { EngineLinkedPayload, EngineLinkUndonePayload, EngineStepsPayload } from "./game-engine.ts";
-import type { RunSpec } from "./protocol.ts";
 import type { PluginSuggestedPayload } from "./project-tools.ts";
 import type { AppLookAccessPayload, JobEndedPayload, JobStartedPayload } from "./jobs.ts";
 import type { AgentWentAheadPayload } from "./plugin-hooks.ts";
@@ -86,7 +85,6 @@ export const CustomEvent = {
   AutopilotResumed: "autopilot_resumed",
   AutopilotStarted: "autopilot_started",
   BuildLanded: "build_landed",
-  DirectorContinued: "director_continued",
   DirectorProgress: "director_progress",
   DirectorShow: "director_show",
   DirectorVerdict: "director_verdict",
@@ -98,7 +96,6 @@ export const CustomEvent = {
   RunAutoResumed: "run_auto_resumed",
   RunControl: "run_control",
   RunFinished: "run_finished",
-  RunFollowupRequested: "run_followup_requested",
   RunInteractionEvidence: "run_interaction_evidence",
   RunIteration: "run_iteration",
   RunLearning: "run_learning",
@@ -145,7 +142,6 @@ export const CustomEvent = {
   ContextUsage: "context_usage",
   ContractorHandoff: "contractor_handoff",
   ContractorSession: "contractor_session",
-  ConversationCapabilitiesApplied: "conversation_capabilities_applied",
   ConversationRewindUndone: "conversation_rewind_undone",
   ConversationRewound: "conversation_rewound",
   CoordinatorMessageDelivered: "coordinator_message_delivered",
@@ -234,8 +230,14 @@ export interface RunScope {
   iteration?: number;
 }
 
-/** The part of a run's budgets its start records carry for the app to read back (`recordedRunLoop`). */
-export type RecordedRunBudgets = Partial<Pick<RunSpec["budgets"], "wallClockMs" | "untilSatisfied">>;
+/**
+ * The time a run's start records named before runs had no clock, read back from old records (the eval
+ * lane's report, the sharing facts): no run writes them now.
+ */
+export interface RecordedRunBudgets {
+  wallClockMs?: number;
+  untilSatisfied?: boolean;
+}
 
 export interface InterviewChoice {
   id: string;
@@ -257,6 +259,13 @@ export interface RoundVerdict {
   because?: string | null;
 }
 
+/**
+ * The part a Loop's lead records itself under: its own row (`director_worker` `workerId`) and its
+ * save points (`facet_iteration` `facetId`). The seed's `OPEN_LEAD_PART`, held to it by
+ * `seed-contracts.test.ts`. Persisted: never rename the value.
+ */
+export const LEAD_PART = "lead";
+
 export interface FacetIterationPayload extends RunScope {
   winner?: string;
   satisfied?: boolean;
@@ -268,6 +277,10 @@ export interface FacetIterationPayload extends RunScope {
   move?: { what?: string; delivered?: boolean | null; scale?: string | null } | null;
   /** Saved stills, as paths or `{ path }` records depending on the version that wrote them. */
   shots?: unknown;
+  /** A save point's label, in the lead's words (the lead's part only). */
+  label?: string;
+  /** Genex took the save point between the lead's turns (an autosave), not the lead. */
+  auto?: boolean;
 }
 
 /**
@@ -503,12 +516,11 @@ export interface PlanReviewPayload extends RunScope {
   game?: { kind?: string | null } | null;
 }
 
-/** The chat's contractor session: what its next turn resumes, and the model it was opened on. */
+/** The chat's contractor session: what its next turn resumes, on which engine and game. */
 export interface ContractorSessionPayload {
   project?: string;
   engine?: string;
   sessionId?: string;
-  model?: string | null;
 }
 
 /** What a delegated build reported of itself, as a chat record keeps it (`DelegateResult`). */
@@ -826,9 +838,6 @@ export interface CustomEventMap {
   tool_registry_applied: {
     revision?: number;
     engine?: string;
-    session?: string;
-    plugins?: string[];
-    skills?: string[];
   };
   skillopt_accepted: { skill?: string; title?: string };
   skillopt_pass: { staged?: number; accepted?: number };

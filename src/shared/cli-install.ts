@@ -2,7 +2,9 @@
  * Installing Claude Code or Codex from inside the app: the vendor's own installer, run for the
  * person with nothing to type. First launch, Settings and the chat's sign-in card show the job.
  */
+import { StudioPlatform } from "./boot.ts";
 import type { CodingProvider } from "./coding-cli.ts";
+import { EngineId } from "./providers.ts";
 
 /** Where an in-app CLI install stands. Sent to the renderer: never rename a value. */
 export const CliInstallPhase = {
@@ -22,8 +24,24 @@ export const CliInstallProblem = {
   TimedOut: "timed-out",
   /** The installer finished, but the CLI is still not found or not usable. */
   NotFound: "not-found",
+  /** The vendor publishes no installer Genex can run on this system: the person installs it by its guide. */
+  Unsupported: "unsupported",
 } as const;
 export type CliInstallProblem = (typeof CliInstallProblem)[keyof typeof CliInstallProblem];
+
+/**
+ * The systems a CLI's vendor publishes no installer for that Genex can run: OpenCode installs on
+ * Windows only through a package manager (Chocolatey, Scoop or npm), never a PowerShell script.
+ */
+const NO_IN_APP_INSTALL: Readonly<Record<string, readonly StudioPlatform[]>> = {
+  [EngineId.OpenCode]: [StudioPlatform.Windows],
+} satisfies Partial<Record<CodingProvider, readonly StudioPlatform[]>>;
+
+/** Whether Genex can install `provider` itself on `platform` (`process.platform` spelling); else its guide does. */
+export function installsInApp(provider: string, platform: string): boolean {
+  const without: readonly string[] = Object.hasOwn(NO_IN_APP_INSTALL, provider) ? NO_IN_APP_INSTALL[provider] : [];
+  return !without.includes(platform);
+}
 
 /** Why an install or update was refused before it started: its IPC failure's code. Never rename a value. */
 export const CliInstallRefusal = {

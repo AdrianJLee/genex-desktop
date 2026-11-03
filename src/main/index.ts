@@ -93,7 +93,6 @@ import {
   FIXTURE_UPDATE_RELEASE,
   FixtureName,
   fixtureEngines,
-  installOlderPlugins,
   isChatFixture,
   prepareFixture,
 } from "./dev/fixtures.ts";
@@ -743,6 +742,8 @@ const { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin } = creat
   openExternal: (url) => shell.openExternal(url),
   subscription,
   pushUiEvent,
+  // Each step a sign-in reaches, so a log a person sends says where a sign-in that hung stopped.
+  log: (line) => studioLog.write("main", line),
   onOpenCodeSignedIn: async () => {
     if (core?.engines.has(EngineId.OpenCode)) await core.engines.get(EngineId.OpenCode).refreshModels?.(true);
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenCode } });
@@ -1020,9 +1021,6 @@ async function createCore(userData: string): Promise<StudioCore> {
       harnessLogBatch.push(line, stream);
     },
   });
-  // The plugin-updates fixture's profile holds older plugins before the core reads its plugin store.
-  if (fixtureProviders && dev?.fixture === FixtureName.PluginUpdates)
-    await installOlderPlugins(studio.layout.engineHomes, resources);
   performanceRecorder.mark("core-start");
   await studio.init();
   performanceRecorder.mark("core-ready");
@@ -2167,6 +2165,11 @@ function threadsIpcDeps(studio: StudioCore, engines: EngineBoot): ThreadsIpcDeps
     playWeb: playOrigin.web,
     analytics,
     launchFacts: handLaunchFacts,
+    agentsProblem: () => {
+      const boot = bootGate.state();
+      return boot.phase === BootPhase.Ready ? (boot.failureCode ?? null) : null;
+    },
+    log: (line) => studioLog.write("main", line),
   };
 }
 
@@ -2207,7 +2210,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     previewBoundsSeen,
     fullScreen: { enter: () => gameScreen?.enter(), active: () => gameScreen?.active() ?? false },
   });
-  registerRunsIpc(handle, { core: studio, runSummaryReader, keepAwake, pushUiEvent, appendErrorDurably });
+  registerRunsIpc(handle, { core: studio, runSummaryReader, keepAwake });
   registerLearningIpc(handle, { core: studio });
   registerSettingsIpc(handle, {
     core: studio,

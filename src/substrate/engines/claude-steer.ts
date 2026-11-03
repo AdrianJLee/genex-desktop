@@ -1,9 +1,12 @@
 /**
- * Steer on Claude Code (`DelegateRequest.steer`): the person's messages, pushed into the running
- * session through the SDK's streaming input. The CLI folds a message pushed with priority `next`
- * in at its next tool result, or runs it as a follow-up turn of the same session when it arrives
- * during the final answer. Its `command_lifecycle` `started` frame is the moment the session read
- * it: reported at once (`steer_delivered`), so the host records it in stream order.
+ * Steer on Claude Code (`DelegateRequest.steer`): the person's messages, and Genex's own lines,
+ * pushed into the running session through the SDK's streaming input. The CLI folds a message pushed
+ * with priority `next` in at its next tool result, or runs it as a follow-up turn of the same
+ * session when it arrives during the final answer. Its `command_lifecycle` `started` frame is the
+ * moment the session read it: reported at once (`steer_delivered`), so the host records it in
+ * stream order. Each frame is its sender's (`saidFrame`): the person's words as they sent them,
+ * which CLI 2.1.257 shows as "The user sent a new message while you were working", and Genex's as
+ * `isSynthetic`, shown under "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]".
  *
  * Only a CLI that advertises message lifecycles says whether it read a message; an older one, and
  * an interview (a message folded in at its question's or launch's tool result would be answered
@@ -11,7 +14,15 @@
  */
 import { randomUUID } from "node:crypto";
 import { SECOND_MS } from "../../shared/duration.ts";
-import { DelegateEventType, type DelegateImage, type DelegateRequest, type SteerSend } from "./types.ts";
+import { MessageFrom } from "../../shared/engine-requests.ts";
+import { markedNotices } from "./genex-mark-prompts.ts";
+import {
+  DelegateEventType,
+  type DelegateImage,
+  type DelegateRequest,
+  type SteerMessage,
+  type SteerSend,
+} from "./types.ts";
 
 /**
  * How long a steered message the CLI took may sit unread after a result before the input is
@@ -44,32 +55,75 @@ const DROPPED: ReadonlySet<string> = new Set<LifecycleState>([
 
 /** A pushed message folds in at the next tool-result boundary instead of waiting for the turn. */
 const NEXT_PRIORITY = "next";
-/** Who sent a pushed message. */
+/** The person sent it: the CLI keeps only this origin from local stdin. */
 const HUMAN_ORIGIN = { kind: "human" } as const;
 
-/**
- * A user message's content: the text, and any stills as image blocks the text names (WP3d) — the
- * same shape for the brief and for a message steered into the turn.
- */
-export function userContent(text: string, images: readonly DelegateImage[]) {
-  if (!images.length) return [{ type: "text" as const, text }];
-  const labels = images.map((image) => image.label).join("; ");
-  return [
-    { type: "text" as const, text: `${text}\n\nIMAGES ATTACHED (${images.length}): ${labels}.` },
-    ...images.map((image) => ({
-      type: "image" as const,
-      source: { type: "base64" as const, media_type: image.mimeType || "image/jpeg", data: image.data },
-    })),
-  ];
+/** Stills as the SDK's image blocks. */
+function imageBlocks(images: readonly DelegateImage[]) {
+  return images.map((image) => ({
+    type: "image" as const,
+    source: { type: "base64" as const, media_type: image.mimeType || "image/jpeg", data: image.data },
+  }));
 }
 
-/** A user message frame of the SDK's streaming input. */
-export function userFrame(text: string, images: readonly DelegateImage[]) {
+/** Genex's notices as text blocks of their own, each under the mark, ahead of a message's words. */
+function noticeBlocks(notices: readonly string[]) {
+  return markedNotices(notices).map((text) => ({ type: "text" as const, text }));
+}
+
+/** Notices, words and stills as one message's content blocks: the words only when there are any. */
+function blocks(text: string, images: readonly DelegateImage[], notices: readonly string[] = []) {
+  return [...noticeBlocks(notices), ...(text ? [{ type: "text" as const, text }] : []), ...imageBlocks(images)];
+}
+
+/**
+ * A brief's content: Genex's notices, the text, and any stills as image blocks the text names by
+ * label (WP3d) — a builder that never saw the reference read it nine times in 2,245 turns.
+ */
+export function userContent(text: string, images: readonly DelegateImage[], notices: readonly string[] = []) {
+  if (!images.length) return [...noticeBlocks(notices), { type: "text" as const, text }];
+  const labels = images.map((image) => image.label).join("; ");
+  return blocks(`${text}\n\nIMAGES ATTACHED (${images.length}): ${labels}.`, images, notices);
+}
+
+/** A brief as a user message frame of the SDK's streaming input, Genex's notices ahead of it. */
+export function userFrame(text: string, images: readonly DelegateImage[], notices: readonly string[] = []) {
   return {
     type: "user" as const,
-    message: { role: "user" as const, content: userContent(text, images) },
+    message: { role: "user" as const, content: userContent(text, images, notices) },
     parent_tool_use_id: null,
   };
+}
+
+/**
+ * A message as its sender's frame, its stills those with pixels (the host's steer and `briefFrame`
+ * keep only those). The person's: their words and pictures exactly as sent, from `HUMAN_ORIGIN`
+ * (absent `from` is the person). Genex's: `isSynthetic` and no origin, which CLI 2.1.257 stamps
+ * `unclassified` and shows the model under "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]"
+ * (mid-turn as a system message), never as the user's; it reports it `started` like any other
+ * (`claude-steer-cli.test.ts`). A channel origin cannot say it: from local stdin the CLI drops
+ * every origin but `human`.
+ */
+export function saidFrame(said: Omit<SteerMessage, "id">, notices: readonly string[] = []) {
+  const message = { role: "user" as const, content: blocks(said.text, said.images ?? [], notices) };
+  const sender = said.from === MessageFrom.Genex ? { isSynthetic: true as const } : { origin: HUMAN_ORIGIN };
+  return { type: "user" as const, message, parent_tool_use_id: null, ...sender };
+}
+
+/** The stills of a session's first message that have pixels. */
+export const briefImages = (request: Pick<DelegateRequest, "images">): DelegateImage[] =>
+  (request.images ?? []).filter((image) => image?.data);
+
+/**
+ * A session's first message: a brief (no `from`) as it always was, or a message by its sender; either
+ * way Genex's notices ride it as marked text blocks before the words, never as a frame of their own
+ * (a second frame at the turn's start would reach the session as a message sent while it worked).
+ */
+export function briefFrame(request: Pick<DelegateRequest, "prompt" | "images" | "from" | "notices">) {
+  const images = briefImages(request);
+  const notices = request.notices ?? [];
+  if (!request.from) return userFrame(request.prompt, images, notices);
+  return saidFrame({ text: request.prompt, images, from: request.from }, notices);
 }
 
 /** What a steerable delegation reports back through `delegate`: the host's `ready`, and what was read. */
@@ -213,16 +267,7 @@ export function steerFeed(
   const send: SteerSend = (message) => {
     if (input.ended || signal.aborted) return false;
     const uuid = randomUUID();
-    input.push({
-      ...userFrame(
-        message.text,
-        (message.images ?? []).filter((image) => image?.data),
-      ),
-      priority: NEXT_PRIORITY,
-      uuid,
-      origin: HUMAN_ORIGIN,
-      session_id: sessionId() ?? "",
-    });
+    input.push({ ...saidFrame(message), priority: NEXT_PRIORITY, uuid, session_id: sessionId() ?? "" });
     pending.set(uuid, message.id);
     return true;
   };

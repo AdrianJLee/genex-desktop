@@ -23,7 +23,7 @@ const IDLE_POLL_MS = 10 * SECOND_MS;
 /** The last record read per game (null: it could not be read). */
 const lastRead = new Map<string, GenexPublishState | null>();
 
-/** A publish-status answer worth reading: an object (a plugin older than publishing answers nothing). */
+/** A publish-status answer worth reading: an object. */
 const asState = (value: unknown): GenexPublishState | null =>
   value && typeof value === "object" ? (value as GenexPublishState) : null;
 

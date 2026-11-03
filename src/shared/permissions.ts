@@ -3,8 +3,8 @@
  * offers and the Allow / Deny questions it asks, answered in the chat instead of a terminal. Every
  * engine's chat session follows the chat's mode as far as it can (`permissionModesFor`).
  *
- * Whoever answers the person in a game chat asks: the chat's own session, and a build's lead or the
- * run's coordinator on Claude Code while it answers a message the person sent. Workers of the
+ * Whoever answers the person in a game chat asks: the chat's own session, and a build's lead on
+ * Claude Code while it answers a message the person sent. Workers of the
  * chat's lead follow the chat's mode: Bypass in a box that writes the home folder too, Auto, Accept
  * edits and Manual in a box that writes only their folders, Plan read-only; their questions wait in the chat, naming the
  * worker, until the person answers, and "always" counts for the whole chat. A Codex worker cannot
@@ -170,15 +170,6 @@ export function isPermissionMode(value: unknown): value is PermissionMode {
 export function isSteadyPermissionMode(value: unknown): value is SteadyPermissionMode {
   return isPermissionMode(value) && STEADY_PERMISSION_MODES.has(value);
 }
-
-/** Claude Code's mode names in English, as a session reads them in a notice. */
-export const PERMISSION_MODE_NAMES: Record<PermissionMode, string> = {
-  [PermissionMode.Auto]: "Auto",
-  [PermissionMode.Manual]: "Manual",
-  [PermissionMode.AcceptEdits]: "Accept edits",
-  [PermissionMode.Plan]: "Plan",
-  [PermissionMode.Bypass]: "Bypass permissions",
-};
 
 /**
  * The menu's words: Claude Code's mode names, each described in one line of the menu, in the

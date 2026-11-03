@@ -12,8 +12,9 @@ import {
   linuxInstallCommands,
   type SandboxProblem,
 } from "../../shared/boot.ts";
-import type { CustomEventType } from "../../shared/custom-events.ts";
+import { CustomEvent, type CustomEventType, LEAD_PART } from "../../shared/custom-events.ts";
 import { EventKind, type EventData } from "../../shared/event-log.ts";
+import { RoundWinner } from "../../shared/run-state.ts";
 import { ShotKind, iterationDir } from "../core/run-shots.ts";
 
 export const FIXTURE_VERSION = 1;
@@ -41,8 +42,6 @@ export const FixtureName = {
   Notifications: "notifications",
   BuildGraph: "build-graph",
   LargeBuildGraph: "large-build-graph",
-  /** An Unreal lead's runs on the Builds graph: milestones, save points, sub-agents and the critic's advice. */
-  LeadGraph: "lead-graph",
   SandboxSetup: "sandbox-setup",
   UpdateReady: "update-ready",
   UnrealGame: "unreal-game",
@@ -51,14 +50,14 @@ export const FixtureName = {
   RobloxGame: "roblox-game",
   /**
    * Workers on the Builds graph and in the chat: a chat turn's two, and, written after the start,
-   * a Loop's three with its lead's jobs, build-graph's web Loops and lead-graph's Unreal lead runs
-   * with their workers' records.
+   * a Loop's three with its lead's jobs, and build-graph's web Loops from before the one Loop with
+   * their workers' records.
    */
   ChatWorkers: "chat-workers",
   /**
-   * A Loop still going whose integration head grew through four builds (a sound-only merge, a
-   * repainted sign, a blank one), twelve workers off them, and deliveries only in its build; before
-   * it, a finished Loop of two pictured builds and no save points.
+   * A web game's Loop still going in its folder with four save points (one whose picture is the
+   * last's, a repainted sign, the lead's own), twelve workers off them, and deliveries into the game;
+   * before it, a finished web Loop of an earlier Genex with two pictured builds.
    */
   BuildTimeline: "build-timeline",
   /** The finish check on the Builds graph and in the chat: four Loops, one in each of its looks. */
@@ -71,7 +70,6 @@ export const FixtureName = {
    * editor, a plugin loaded from a folder, and the card that offers the Unreal plugin.
    */
   OpenProjects: "open-projects",
-  PluginUpdates: "plugin-updates",
   /** Signed in with Genex's updated terms to accept: the sidebar's line and Review under a held-up Genex call. */
   GenexTerms: "genex-terms",
   /** A Loop a usage limit paused and resumed: a worker's try Paused, one Added after, one Left out. */
@@ -211,4 +209,49 @@ export function fixtureRun(scope: Record<string, unknown>) {
     event_type: name,
     payload: { ...scope, ...payload },
   });
+}
+
+/** The open Loop's lead's own row (`director_worker`, its state aside), as the seed's `leadRow` writes it. */
+export const LEAD_ROW = { workerId: LEAD_PART, title: "Lead", mode: "single" } as const;
+
+/** The verdict source a round the lead kept itself carries (the seed's `SAVE_POINT_VERDICT_SOURCE`). */
+export const SAVE_POINT_SOURCE = "lead";
+
+/**
+ * A save point as the open Loop writes it (`savePointRound`): a kept round of the lead's row under
+ * its label, and its merge into the game folder under the snapshot `fixture-save-<project>-<round>`.
+ */
+export function leadSavePoint(
+  run: ReturnType<typeof fixtureRun>,
+  project: string,
+  round: number,
+  label: string,
+  summary = "",
+): EventData[] {
+  const snapshot = `fixture-save-${project}-${round}`;
+  return [
+    run(CustomEvent.FacetIteration, {
+      facetId: LEAD_ROW.workerId,
+      facetTitle: LEAD_ROW.title,
+      iteration: round,
+      winner: RoundWinner.Challenger,
+      verdictSource: SAVE_POINT_SOURCE,
+      reason: summary,
+      satisfied: false,
+      summary,
+      label,
+      snapshot,
+      shots: [],
+      auto: false,
+      move: { what: summary ? `${label}: ${summary}` : label, delivered: true },
+    }),
+    run(CustomEvent.IntegrationMerge, {
+      project,
+      facetId: LEAD_ROW.workerId,
+      round,
+      iteration: round,
+      snapshot,
+      conflict: false,
+    }),
+  ];
 }

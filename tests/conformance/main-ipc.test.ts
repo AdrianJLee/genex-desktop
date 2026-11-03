@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { setImmediate as tick } from "node:timers/promises";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { KEEP_AWAKE_FALLBACK_MS, KeepAwake, type FallbackTimers } from "../../src/main/keep-awake.ts";
-import { registerRunsIpc, extFromMime, safeLabel, type RunsIpcDeps } from "../../src/main/ipc/runs.ts";
+import { registerRunsIpc, type RunsIpcDeps } from "../../src/main/ipc/runs.ts";
 import { registerLoginIpc, type LoginIpcDeps } from "../../src/main/ipc/login.ts";
 import { badgeText, registerNotificationsIpc } from "../../src/main/ipc/notifications.ts";
 import { registerModelsIpc, type ModelsIpcDeps } from "../../src/main/ipc/models.ts";
@@ -159,7 +159,6 @@ function runsFixture(
   const calls: string[] = [];
   const { blocker, timers } = blockerAndTimers();
   const keepAwake = new KeepAwake(blocker, timers);
-  const events: UiEvent[] = [];
   const core = {
     host: {
       dispatch: async (action: unknown, timeoutMs?: number) => {
@@ -172,14 +171,6 @@ function runsFixture(
       calls.push(`stopRun ${runId} ${timeoutMs}`);
       await dispatch({ type: "run_stop", runId }, timeoutMs);
     },
-    newRunId: () => "run_1",
-    saveRunArtifact: async (_runId: string, name: string) => {
-      calls.push(`save ${name}`);
-      return `/runs/${name}`;
-    },
-    dispatchRun: async (run: { runId: string; reference: { shots: string[] } }) => {
-      calls.push(`run ${run.runId} ${run.reference.shots.join(",")}`);
-    },
     mainThread: "studio",
     layout: { runs: "/nowhere/runs" },
     runPreviewIdentity: () => null,
@@ -189,10 +180,8 @@ function runsFixture(
     core,
     keepAwake,
     runSummaryReader: { forProject: async () => history },
-    pushUiEvent: (event) => events.push(event),
-    appendErrorDurably: async () => {},
   });
-  return { invoke, keepAwake, timers, calls, events };
+  return { invoke, keepAwake, timers, calls };
 }
 
 describe("the run controls", () => {
@@ -212,36 +201,6 @@ describe("the run controls", () => {
     keepAwake.hold();
     assert.deepEqual(await invoke("studio:run.stop", { runId: "run_1" }), { ok: false, error: "harness gone" });
     assert.equal(timers.armed(), 1);
-  });
-
-  it("starting a run holds the Mac awake and saves the reference frames before dispatching", async () => {
-    const { invoke, keepAwake, calls } = runsFixture(async () => true);
-    const frames = [
-      { data: "aGk=", mimeType: "image/png", label: "Title Screen!" },
-      { data: "aGk=", mimeType: "image/webp" },
-    ];
-    const result = await invoke("studio:run.start", {
-      goal: "g",
-      project: "pong",
-      hours: 1,
-      reference: { name: "ref", kind: "reference", frames },
-    });
-    assert.deepEqual(result, { ok: true, value: { runId: "run_1" } });
-    assert.equal(keepAwake.held, true);
-    assert.deepEqual(calls, [
-      "save reference/01-title-screen.png",
-      "save reference/02-frame-2.webp",
-      "run run_1 /runs/reference/01-title-screen.png,/runs/reference/02-frame-2.webp",
-    ]);
-    assert.deepEqual(
-      await invoke("studio:run.start", {
-        goal: "g",
-        project: "pong",
-        hours: 1,
-        reference: { name: "ref", kind: "reference", frames: frames.slice(0, 1) },
-      }),
-      { ok: false, error: 'A "beat a real game" run needs at least two screenshots of the reference.' },
-    );
   });
 
   it("a live summary sends only the graph events after the ones the renderer holds", async () => {
@@ -267,15 +226,6 @@ describe("the run controls", () => {
     // A cursor that no longer matches, or one the renderer made up, gets everything again.
     for (const cursor of [{ count: 2, lastId: "e9" }, { count: 9, lastId: "e3" }, { count: "2", lastId: "e2" }, "e2"])
       assert.deepEqual(await read(cursor), [0, ["e1", "e2", "e3"]], JSON.stringify(cursor));
-  });
-
-  it("frame names are safe file names", () => {
-    assert.equal(extFromMime("image/png"), "png");
-    assert.equal(extFromMime("image/gif"), "gif");
-    assert.equal(extFromMime("image/jpeg"), "jpg");
-    assert.equal(safeLabel("  ../Boss: Phase 2  "), "boss-phase-2");
-    assert.equal(safeLabel(undefined), "");
-    assert.equal(safeLabel("x".repeat(60)).length, 40);
   });
 });
 

@@ -19,10 +19,8 @@ import { planAwaitsAnswer, planInProgress } from "../../src/renderer/chat/use-pl
 import { localToolModel, signInRequested, subscriptionBlocksSend } from "../../src/renderer/chat/use-sign-in-gate.ts";
 import { MODEL_KEY_SEPARATOR, modelKey, parseModelKey } from "../../src/renderer/model-key.ts";
 import { exportedWords } from "../../src/renderer/words.ts";
-import { leadFrameOf } from "../../src/renderer/state/agent-screens.ts";
 import { compactControl } from "../../src/renderer/chat/compact-control.ts";
 import { ComposerCommand, commandMatches, commandQuery } from "../../src/renderer/chat/composer-commands.ts";
-import type { AgentScreenFrame } from "../../src/shared/agent-screen.ts";
 
 type Code = EngineDescriptor["status"]["code"];
 type Model = EngineDescriptor["models"][number];
@@ -303,34 +301,6 @@ describe("the export notice", () => {
       exportedWords({ files: 1, included: ["index.html"], excluded: [] }),
       "Exported 1 public files. Included: index.html. Excluded from selected roots: 0.",
     );
-  });
-});
-
-describe("the running build's lead screen", () => {
-  const frame = (handle: string, at: number, over: Partial<AgentScreenFrame> = {}): AgentScreenFrame =>
-    ({
-      handle,
-      label: handle,
-      project: "kart",
-      runId: "run_a",
-      facetId: null,
-      role: "director",
-      at,
-      ...over,
-    }) as AgentScreenFrame;
-
-  it("is the newest frame of this game's run whose role is the director", () => {
-    const frames = [
-      frame("old", 1),
-      frame("builder", 9, { role: "builder" }),
-      frame("other-run", 9, { runId: "run_b" }),
-      frame("other-game", 9, { project: "golf" }),
-      frame("new", 5),
-      frame("tie", 5),
-    ];
-    assert.equal(leadFrameOf({ frames, trails: {} }, "kart", "run_a")?.handle, "new");
-    assert.equal(leadFrameOf({ frames, trails: {} }, "kart", "run_c"), undefined);
-    assert.equal(leadFrameOf({ frames, trails: {} }, null, "run_a"), undefined);
   });
 });
 

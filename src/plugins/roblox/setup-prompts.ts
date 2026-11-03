@@ -14,7 +14,6 @@ const DO_IT = agentTool(RobloxTool.DoItForMe);
 const OPEN = agentTool(RobloxTool.OpenStudio);
 const PLACES = agentTool(RobloxTool.Places);
 const USE = agentTool(RobloxTool.UseProject);
-const NEW_GAME = agentTool(RobloxTool.NewGame);
 const SHOW_STEPS = agentTool(RobloxTool.ShowSteps);
 const ADD_LUAU = agentTool(RobloxTool.AddLuauChecks);
 const FINISH = agentTool(RobloxTool.FinishSetup);
@@ -65,7 +64,7 @@ export const SETUP_PROMPTS = {
   AlreadyInstalled: (version: string | undefined) =>
     `Roblox Studio ${version ? `${shortVersion(version)} ` : ""}is already on this computer.`,
   Words: (words: string) => words,
-  PlacesNote: `${NEW_GAME} makes this game a new place, the default. Link one of these with ${USE} (a place open in Studio by its label, or a file by its full path) only when the person named it or asked to use one of theirs; ask them which when several could be. Places in Documents that Studio didn't open lately aren't listed: macOS asks the person before Genex reads that folder.`,
+  PlacesNote: `Link one of these with ${USE} (a place open in Studio by its label, or a file by its full path) only when the person named it or asked to use one of theirs; ask them which when several could be. Places in Documents that Studio didn't open lately aren't listed: macOS asks the person before Genex reads that folder.`,
   LuauAdded: (words: string) => `${words} Run check-scripts again.`,
   ChecksNotAdded: `Luau checks aren't added yet, so nothing was checked. Call ${ADD_LUAU}: it downloads them (the person approves a card); meanwhile read your changes over against the luau skill.`,
   /** The steps card's word once every step is done, so the chat goes on by itself. */

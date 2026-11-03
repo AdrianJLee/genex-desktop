@@ -41,7 +41,7 @@ const MESSAGE = {
  * capabilities are new since the installed version, and what the static scan saw — disclosure, not
  * isolation: the backend runs as trusted native code either way. `note` carries anything the user
  * must weigh besides the package itself, such as an index that has moved to another commit.
- * Genex's own bundled plugins install and update without it (`asksBeforeInstall`).
+ * Genex's own bundled plugins install without it (`asksBeforeInstall`).
  */
 export function confirmPluginInstall(
   core: () => Pick<StudioCore, "plugins" | "mcp">,

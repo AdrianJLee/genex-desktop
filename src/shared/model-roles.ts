@@ -175,15 +175,6 @@ function namedModels(given: Record<string, unknown>, engines: CrossedEngines): R
   return any ? out : null;
 }
 
-/**
- * Does a run on `engine` with these roles send a job to or from a completion-only local engine?
- * Only a harness whose every part serves that may run it (`HarnessCapability.LocalRoles`).
- */
-export function crossesCompletionEngine(engine: string, roles: unknown): boolean {
-  const crossed = Object.values(normalizeRoles(engine, roles)?.engines ?? {});
-  return crossed.some((other) => !hasSessionRoles(engine) || !hasSessionRoles(other));
-}
-
 /** The efforts the composer named per role, as strings; null when it named none. */
 function keptEfforts(given: Record<string, unknown>): Partial<Record<RoleKey, string>> | null {
   const efforts = record(given.efforts);

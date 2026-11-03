@@ -1,5 +1,6 @@
 /** Harness RPC: the event log, threads, artifacts and turns. */
-import { HostMethod, type HarnessHostHandlers } from "../../shared/harness-api.ts";
+import { harnessTurnFailure } from "../../shared/engine-requests.ts";
+import { HostMethod, type HarnessHostHandlers, isHostMethod } from "../../shared/harness-api.ts";
 import { assistGrants, followAssistDeliveries } from "../core/desktop-assist.ts";
 import { inboxOf } from "../core/inbox.ts";
 import { refuseHostRecords } from "../core/harness-events.ts";
@@ -10,6 +11,8 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 const MESSAGE = {
   unknownTurn: (turnId: string) => `unknown turn: ${turnId}`,
   harnessRestarted: "the harness restarted before this turn began",
+  turnFailed: (threadId: string, failure: object) =>
+    `[turn] a chat turn on ${threadId} failed: ${JSON.stringify(failure)}`,
 } as const;
 
 export function eventsRpc(core: StudioCore, x: CoreInternals) {
@@ -79,7 +82,14 @@ export function eventsRpc(core: StudioCore, x: CoreInternals) {
       if (!turn) return null;
       // How the chat's engine failed reaches the record from main: the harness knows only the words.
       const failed = core.turns.takeFailure(turn.threadId);
-      const metadata = { ...(p.outcome ? { outcome: p.outcome } : {}), ...failed };
+      // Why a turn the harness ran threw, in the harness's typed words, each field checked here.
+      const harnessFailure = harnessTurnFailure(p.failure, isHostMethod);
+      if (harnessFailure) core.options.onLog?.(MESSAGE.turnFailed(turn.threadId, harnessFailure), "stderr");
+      const metadata = {
+        ...(p.outcome ? { outcome: p.outcome } : {}),
+        ...failed,
+        ...(harnessFailure ? { harnessFailure } : {}),
+      };
       const head = await turn.end(p.status ?? "ok", Object.keys(metadata).length ? metadata : undefined);
       x.openTurns.delete(p.turnId);
       return head;

@@ -17,7 +17,6 @@ import { errorMessage } from "../../shared/errors.ts";
 import type { EventEnvelope } from "../../shared/event-log.ts";
 import {
   clipReason,
-  FINISH_TIME_LEFT_MS,
   type FinishCheckPayload,
   FinishCheckStep,
   type FinishRecord,
@@ -32,14 +31,14 @@ import { executionStep, isExecutionEvent, type RunExecution } from "../../shared
 /** How long the lead's claim reads in its round's record. */
 const CLAIM_CHARS = 2_000;
 /** The fields a settle takes: any other (a step, a verdict) is refused. */
-const SETTLE_FIELDS: ReadonlySet<string> = new Set(["project", "runId", "round", "unanswered", "timeLeftMs"]);
+const SETTLE_FIELDS: ReadonlySet<string> = new Set(["project", "runId", "round", "unanswered"]);
 
 /** Why a review or a settle is refused, and why a review got no answer (persisted in `why`). */
 const MESSAGE = {
   notRunning: "That run is not a running run of this game",
   held: "A reviewer is already checking a claim of this run",
   notHeld: "That round of the run is not waiting to be settled",
-  badSettle: "A settle names its project, run, round and, at most, why the answer is none and the time left",
+  badSettle: "A settle names its project, run, round and, at most, why the answer is none",
   failed: (why: string) => `the reviewer's session failed: ${why}`,
   notSettled: "the harness never settled this round before the run's next claim",
   noAnswer: "no answer",
@@ -132,15 +131,8 @@ function placed(payloads: ReadonlyArray<Record<string, unknown>>, runId: string)
 function wellFormedSettle(p: SettleParams): boolean {
   const unanswered = p.unanswered;
   const why = unanswered === undefined || unanswered === null || (typeof unanswered === "string" && unanswered !== "");
-  const left = p.timeLeftMs === undefined || p.timeLeftMs === null || isTimeLeft(p.timeLeftMs);
-  return Object.keys(p).every((key) => SETTLE_FIELDS.has(key)) && why && left && Number.isSafeInteger(p.round);
+  return Object.keys(p).every((key) => SETTLE_FIELDS.has(key)) && why && Number.isSafeInteger(p.round);
 }
-
-/** A working time left: whole milliseconds, zero or more. */
-const isTimeLeft = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
-
-/** Whether a settle names more of a timed Loop's working time left than the no's in a row may stop. */
-const goesOnFor = (timeLeftMs: unknown): boolean => isTimeLeft(timeLeftMs) && timeLeftMs > FINISH_TIME_LEFT_MS;
 
 /** The finish checks of every running Loop: one per core. */
 export class FinishReviews {
@@ -209,22 +201,13 @@ export class FinishReviews {
       typeof p.unanswered === "string"
         ? { step: FinishCheckStep.Unanswered, why: clipReason(p.unanswered) }
         : held.verdict;
-    const goesOn = goesOnFor(p.timeLeftMs);
-    const { rejections, stopped, timeLeft } = await this.#outcome(threadId, p.runId, held, verdict, notDropped, goesOn);
-    return {
-      round: held.round,
-      step: verdict.step,
-      ...answerFields(verdict),
-      rejections,
-      stopped,
-      ...(timeLeft ? { timeLeft } : {}),
-    };
+    const { rejections, stopped } = await this.#outcome(threadId, p.runId, held, verdict, notDropped);
+    return { round: held.round, step: verdict.step, ...answerFields(verdict), rejections, stopped };
   }
 
   /**
    * Record a held round's outcome and the row of no's it leaves; `stillOurs` throws once the run's
-   * round was dropped. No outcome stops the Loop (`stopped` stays false); a no the Loop had time
-   * left at (`goesOn`) says so.
+   * round was dropped. No outcome stops the Loop (`stopped` stays false).
    */
   async #outcome(
     threadId: string,
@@ -232,23 +215,14 @@ export class FinishReviews {
     held: Held,
     verdict: ReviewerVerdict,
     stillOurs: () => void,
-    goesOn = false,
-  ): Promise<{ rejections: number; stopped: boolean; timeLeft: boolean }> {
+  ): Promise<{ rejections: number; stopped: boolean }> {
     const { sinceOpened } = await this.#ports.history(threadId, runId);
     stillOurs();
     const outcome = { runId, round: held.round, step: verdict.step, ...answerFields(verdict) };
     const rejections = rejectionsInRow(placed([...sinceOpened, outcome], runId), runId);
-    const rejected = verdict.step === FinishCheckStep.Rejected;
-    const timeLeft = rejected && goesOn;
     const stopped = false;
-    await this.#record(threadId, {
-      ...outcome,
-      ...(timeLeft ? { timeLeft: true } : {}),
-      rejections,
-      observers: held.observers,
-      reviewer: held.reviewer,
-    });
-    return { rejections, stopped, timeLeft };
+    await this.#record(threadId, { ...outcome, rejections, observers: held.observers, reviewer: held.reviewer });
+    return { rejections, stopped };
   }
 
   /** A run started, paused or closed: its held round is dropped, and nothing more is recorded for it. */

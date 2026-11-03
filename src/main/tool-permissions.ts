@@ -1,11 +1,10 @@
 /**
  * Tool permission ledger: the wait between a game chat's Claude session asking to use a tool and
- * the person's answer in the chat. Modelled on the plugin consent ledger, with one difference:
- * the chat's own session has no timeout. Claude Code waits for the person, so this does too; the
- * delegation's own deadline and Stop still end the wait through the signal and `cancel()`. Only a
- * build's lead or the run's coordinator asks with a `timeoutMs`: nobody may be looking at its
- * card, and a run must not wait on it (a run's worker asks as it does). Its card also outlives the chat's turns (`outlivesTurn`):
- * the lead is not the chat's turn, so another message's turn ending is not its end. Settles each
+ * the person's answer in the chat. Modelled on the plugin consent ledger, with one difference: it
+ * has no timeout. Claude Code waits for the person, so this does too; a Stop still ends the wait
+ * through the signal and `cancel()`. A build's lead's card (and a run worker's) outlives the chat's
+ * turns (`outlivesTurn`): the lead is not the chat's turn, so another message's turn ending is not
+ * its end. Settles each
  * request exactly once and never touches disk or the event log: the permission service records
  * the question and its answer around it.
  */
@@ -30,11 +29,9 @@ export interface ToolPermissionRequest {
   plan?: boolean;
   /** The delegation's abort: an aborted session withdraws its request (`by: 'stop'`). */
   signal?: AbortSignal;
-  /** Withdraw the request after this long (`by: 'timeout'`); none waits for the person. */
-  timeoutMs?: number;
   /**
-   * A build's lead's or the run's coordinator's card: no turn of the chat's ending withdraws it
-   * (`cancel` with `by: 'turn'`); its own session's end, a Stop, the answer or `timeoutMs` do.
+   * A build's lead's card: no turn of the chat's ending withdraws it
+   * (`cancel` with `by: 'turn'`); its own session's end, a Stop or the answer do.
    */
   outlivesTurn?: boolean;
   /**
@@ -73,21 +70,10 @@ function fits(answer: ToolPermissionAnswer, plan: boolean): boolean {
   return (answer.decision === PermissionDecision.ApprovePlan) === plan;
 }
 
-/** A request's own deadline, which never keeps the app alive; none without `timeoutMs`. */
-function timeoutOf(timeoutMs: number | undefined, withdraw: () => void): NodeJS.Timeout | null {
-  if (timeoutMs === undefined) return null;
-  const timer = setTimeout(withdraw, timeoutMs);
-  timer.unref();
-  return timer;
-}
-
 export class ToolPermissions {
   #waiting = new Map<string, Waiting>();
 
-  /**
-   * Ask, and wait for whichever comes first: the person's answer, the session's abort, a Stop, or
-   * the request's own `timeoutMs`.
-   */
+  /** Ask, and wait for whichever comes first: the person's answer, the session's abort, or a Stop. */
   request(request: ToolPermissionRequest): Promise<ToolPermissionResult> {
     if (this.#waiting.has(request.requestId)) return Promise.reject(new Error(MESSAGE.alreadyPending));
     if (request.signal?.aborted) return Promise.resolve({ answer: null, by: ToolPermissionBy.Stop });
@@ -99,12 +85,10 @@ export class ToolPermissions {
         plan: request.plan === true,
       };
       const onAbort = (): void => settle({ answer: null, by: ToolPermissionBy.Stop });
-      const timer = timeoutOf(request.timeoutMs, () => settle({ answer: null, by: ToolPermissionBy.Timeout }));
       const settle = (result: ToolPermissionResult): void => {
         if (this.#waiting.get(request.requestId)?.entry !== entry) return;
         this.#waiting.delete(request.requestId);
         request.signal?.removeEventListener("abort", onAbort);
-        if (timer) clearTimeout(timer);
         resolve(result);
       };
       request.signal?.addEventListener("abort", onAbort, { once: true });

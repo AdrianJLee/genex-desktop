@@ -13,7 +13,7 @@ Its composer offers text, images, model, effort and Send/Stop; no roles, Loop or
 Activity orders pending suggestions, **Recent runs**, then **What Harness has learned**.
 Restores, restarts and app updates are omitted. A failed harness update is restored; failed
 recovery offers **Reset harness to shipped version** or Quit. Run rows show the game,
-request and outcome; expanding shows captures, Play build and Open game chat. Empty Activity offers **Start building** or **New game**; runs start from a game's Mode menu.
+request and outcome; expanding shows captures, Play build and Open game chat. Empty Activity offers **Start building** or **New game**; runs start from a game's chat.
 
 ## Learning and instructions
 

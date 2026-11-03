@@ -40,9 +40,9 @@ or a sidebar game returns without a reload. Skills has these sections, in order
   `studio:plugins.skill`; a plugin’s page shows what its last update added, changed or removed.
 
 A plugin’s switch, here and in the composer’s Add menu (hint “All games”), turns it on or off for
-every game. When a plugin or skill a resumed builder session was given has been withdrawn since,
-that session’s next brief opens with a notice to ignore its earlier instructions and not to call
-its tools. Discovery does not execute skills, import hooks/MCP servers or prove use in a
+every game. A session's plugins are its tool list on each launch and its system text as it started:
+a resumed Claude Code or Codex session keeps the plugin guidance it started with, and no notice
+says one was turned on or off since it last ran. Discovery does not execute skills, import hooks/MCP servers or prove use in a
 conversation. Refresh skills rechecks the inventory; errors are distinct from an empty list.
 Studio archives remain excluded; Claude shared-skill links are confined to known skill roots.
 
@@ -116,8 +116,11 @@ Install (Update for a CLI too old) in Settings → Model Providers and the chat'
 Set up in first launch, installs Claude Code or Codex with its vendor's own installer, in the background:
 `install.sh` on macOS and Linux, `install.ps1` on Windows, from `claude.ai` and
 `chatgpt.com/codex`. Settings installs OpenCode the same way from `opencode.ai/install` (macOS and
-Linux only; it publishes no Windows script) into `~/.opencode/bin`, and updates it with
-`opencode upgrade`; Grok Build from `x.ai/cli/install.sh` (`install.ps1` on Windows) into
+Linux only) into `~/.opencode/bin`, and updates it with `opencode upgrade`. OpenCode publishes no
+Windows script (it installs there with Chocolatey, Scoop or npm), so on Windows its row and its
+first-launch screen offer its install guide and Check again instead of Install
+(`installsInApp` in [cli-install.ts](../src/shared/cli-install.ts)), and an install asked for anyway
+fails as `unsupported`, never as a download; Grok Build from `x.ai/cli/install.sh` (`install.ps1` on Windows) into
 `~/.grok/bin`, updated with `grok update`; and Cursor from `cursor.com/install` (`?win32=true` on
 Windows) into `~/.local/bin` (`%LOCALAPPDATA%\cursor-agent` on Windows), updated with
 `cursor-agent update`. Cursor's installer also links `~/.local/bin/agent`, a name Grok Build's
@@ -495,9 +498,8 @@ Genex's ledger/admission/recovery remains authoritative. Its optional hosted Ble
 requires a configured remote URL and account; it does not replace the independent Local Blender
 plugin. That local plugin uses the public API 3 managed-runtime/job services and needs no account.
 
-Bundled plugin changes carry a new package version. The user sees an explicit Update action;
-active sessions retain their pinned code until release. The persistent removed preference still
-wins over a bundled seed. No remove/reinstall workaround is required for a normal seed upgrade.
+Bundled plugin changes carry a new package version, and bundled plugins update with Studio at
+launch ([plugins](plugins.md#removal-and-reinstall-by-recorded-origin)).
 
 ## Model setup and activity
 
@@ -532,6 +534,16 @@ missing `--ignore-user-config`. A handshake refusal falls back to exec and the b
 turn and the engine's lifetime; resumed sessions, older CLIs and the default keep exec. The
 session's `system/init` event records `tool_delivery` (`dynamic_tools` or `file_bridge`).
 
+Genex's context for a Codex session (`DelegateRequest.system`) is an app server thread's developer
+instructions (`developerInstructions` on `thread/start` and `thread/resume`). `codex exec` could take
+it only in argv, which a context with its plugins' guidance overflows on Windows, so a new exec
+session reads it on stdin as its first notice, under Genex's mark, and a resumed one, which keeps
+its first instructions anyway, has it in its history. The message's parts follow in order
+(`#delegateTexts`): Genex's notices under its
+mark (`genex-mark-prompts.ts`), the prompt as its sender wrote it, then Codex's own per-turn notes
+(the bridge's tools, plan or read-only, the off-limits paths), each its own text item on the app
+server and apart by blank lines on exec's stdin.
+
 A read-only follow-up that leaves the game's content unchanged does not reload the preview or
 warn about an untouched empty scaffold. The bounded content stamp includes Git-ignored runtime
 assets/build output as well as tracked files. Tool bookkeeping is excluded. An unknown stamp or
@@ -550,7 +562,7 @@ provider reports running.
 Studio's app-wide conversation has no tool, role or context menu. It uses the resolved single
 model's completion API, recorded user/assistant messages, current images and a host snapshot of
 recent activity/settings/proposals. The conversation is windowed automatically for each request;
-the full history remains saved. It does not resume a native game coordinator or expose project tools.
+the full history remains saved. It does not resume a game chat's native session or expose project tools.
 The session checkpoint controls below describe game conversations and delegated build sessions.
 
 Auto-compaction policy is host-owned, by model or by chat-and-model; the composer states only that
@@ -575,7 +587,14 @@ Resetting policy also refreshes the displayed threshold to its effective inherit
   complete tool-round boundaries before exceeding the selected policy. Completed operations
   are not replayed to recover from overflow. An irreducible task that cannot fit fails honestly.
 - **Completion-only Ollama:** the local harness performs its own context checkpoint. Explicit
-  policy does not run alongside a second silent history-window truncation.
+  policy does not run alongside a second silent history-window truncation. Before the model is
+  asked, the tool loop checks that the instructions and tools fit 70% of the window
+  (`promptThatFits`, `loop/tool-loop.ts`). It checks only a window the engine measured: a model
+  Ollama has not loaded reports none (`contextEstimated` on the engine's model), so the turn goes
+  to Ollama, which answers with its real context. A measured window too small for the instructions
+  and tools alone (Ollama's 4,096-token default) fails at once with a `context_too_small`
+  failure. It compacts nothing, and its message names a context length that fits and where Ollama
+  sets it.
 
 ### Compact now
 
@@ -621,14 +640,14 @@ model switched back to after another one answered starts a fresh session, since 
 those turns, and Compact now works on that latest session only. A session the engine cannot
 resume — it throws, or answers that it has no such conversation (another account's, one never
 saved) — is replaced by a fresh one in the same turn (`loop/chat-steer.ts`), so the chat never
-stays stuck on it. A fresh session mid-conversation
-is briefed with the original request, the latest instruction, the last messages verbatim
-(`loop/brief-window.ts`: 20 messages, at most 18,000 characters) and the latest written summary
-(`compactedSummary`, which reads past a Codex compaction's sealed one). When that brief cannot
-carry everything since the last written summary, the log is first summarised on the new model
-(`briefSummary`, `loop/compact.ts`), which ends the earlier sessions as any written summary does;
-a short chat costs nothing extra. The new model gets the conversation, not the previous model's
-own context (files it read, commands it ran): it reads the game's folder as it needs.
+stays stuck on it. The person's words always go alone, as they wrote them; a fresh session
+mid-conversation is also told the chat so far as one Genex notice (`historyNotice`): the latest
+written summary (`compactedSummary`, which reads past a Codex compaction's sealed one), then the
+last messages verbatim (`loop/brief-window.ts`: 20 messages, at most 18,000 characters). No extra
+model call summarises the chat first. The new model gets the conversation, not the previous
+model's own context (files it read, commands it ran): it reads the game's folder as it needs. A
+switch of model or effort mid-turn is the next leg's option alone; another engine starts a new
+session told the chat so far.
 
 A Bonsai response stopped by its output limit cannot dispatch partial tool arguments. The session
 retains usage and existing work, asks for a smaller edit at most twice, then reports a recoverable
@@ -800,12 +819,13 @@ preview stays single-player. Fixture profiles refuse the CLI and package tools.
 
 The game's Genex cover is the 16:9 picture genex.games shows on its gallery card, its page and
 every shared link, unrelated to Studio's own sidebar cover; a clip of play can run over it on the
-cards. Once a run lands its build in a web game while Genex is on, Studio asks the chat's agent for
+cards. Once a run lands its build in a game while Genex is on, Studio asks the chat's agent for
 it as a step of its own, in a hidden message sent with the person's engine and model but not their
-Loop (`core/cover-step.ts`). The plugin's `cover` skill states the requirement and the API: the
-agent makes a picture of the real game by any means, saves it in the game folder and hands its path
-to `genex__cover {"image": …, "clip"?: …}` (a PNG or JPEG of at least 1280×720 within 8 MB; a WebM
-or MP4 of at least 5.3 s, since Genex keeps five seconds after trimming up to 300 ms). The plugin
+Loop (`core/cover-step.ts`). The ask names only the goal: make the game's Genex cover, change nothing
+else, say so in one line. How is the plugin's own, in `genex__cover`'s description and its `cover`
+skill: the agent makes a picture of the real game by any means, saves it in the game folder and
+hands its path to `genex__cover {"image": …, "clip"?: …}` (a PNG or JPEG of at least 1280×720 within
+8 MB; a WebM or MP4 of at least 5.3 s, since Genex keeps five seconds after trimming up to 300 ms). The plugin
 reads each by its bytes, through no link out of the folder, measures the picture's light as Genex's
 gate does, copies both into its own storage and answers what it kept, the last send and the cover
 Genex holds with who chose it; a refused file keeps nothing. A publish, and a draft until the game is
@@ -906,8 +926,8 @@ that need a value, malformed input warning rather than throwing, and no node imp
 
 `mcp-plumbing.test.ts` is the end-to-end proof on the rig: a saved fixture connector's tools arrive
 in the `claude-code` and `codex` delegations with their `inputSchema` intact and route back through
-`onLiveTool`; a read-only and a candidate session get none, a Loop chat gets them (and a build's
-lead, whose `readOnly` only marks its seat: `lead-sessions-host.test.ts`); the local harness's
+`onLiveTool`; a read-only and a candidate session get none, the chat's session gets them (and a
+build's lead, whose `readOnly` only marks its seat: `lead-sessions-host.test.ts`); the local harness's
 `createToolRegistry()` carries the full schema and executes through `mcp.invoke`; a disabled
 connector's tool is rejected; a `connector_tool` event lands in the thread log; and `core.api()`
 exposes no connector mutation method. `engine-delegated.test.ts` keeps its pinned literals and adds
@@ -987,7 +1007,7 @@ build is not packaged acceptance. Preserve the normal profile and harness edits.
 
 Smoke windows allow dimensions larger than the active macOS display so the requested 900px
 viewport is actually exercised; normal windows keep their platform behavior. The exact viewport
-assertions remain required. Coordinator milestone waits race the run's terminal result so a
+assertions remain required. Milestone waits race the run's terminal result so a
 pre-worker failure (including `spawn git EAGAIN`) fails with its recorded reason instead of
 hanging indefinitely. A later isolated pass does not erase the original infrastructure failure.
 

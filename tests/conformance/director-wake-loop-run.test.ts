@@ -114,7 +114,7 @@ async function loopRun(name: string, extra: Record<string, unknown> = {}) {
 }
 
 describe("the lead is woken, not kept in one long turn", () => {
-  it("R1. a lead that ends its turn is woken in the same session by its worker's end, with the news on top", {
+  it("R1. a lead that ends its turn is woken in the same session by its worker's end: that one line, Genex's", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("wake-by-worker");
@@ -149,32 +149,30 @@ describe("the lead is woken, not kept in one long turn", () => {
     assert.equal(lead.length, 2, lead.map((t) => t.prompt.slice(0, 60)).join(" | "));
     assert.equal(lead[1]!.resume, "lead-1", "the same session is woken");
     const woken = lead[1]!.prompt;
-    assert.match(woken, /WHAT HAPPENED/);
-    // Flipped (Loop phase 5): the worker is named by its pool id and title, and the digest has no build card.
-    assert.match(woken, /worker w1: Dusk sky done/);
-    const at = ["WHAT HAPPENED", "WHERE THE RUN STANDS"].map((mark) => woken.indexOf(mark));
-    assert.ok(at[0]! >= 0 && at[0]! < at[1]!, `in order: ${JSON.stringify(at)}\n${woken}`);
-    assert.ok(!woken.includes(path.join("autopilot", runId)), "no worktree path in the digest");
+    // Flipped: a digest (WHAT HAPPENED, WHERE THE RUN STANDS, "… says what it found"); the worker's own line.
+    assert.equal(woken, 'worker w1 "Dusk sky" ended: done.');
+    assert.equal(lead[1]!.from, "genex", "Genex's, never the person's");
     // Flipped (Loop phase 5): a lead's tools are the one worker model's, worker_wait among them.
     assert.ok(
       (lead[0]!.liveTools ?? []).some((t) => t.name === "worker_start"),
       "it has its run tools",
     );
-    const continued = customEvents(events, "director_continued").filter((e) => e.runId === runId);
-    assert.equal(continued.length, 1, JSON.stringify(continued));
-    assert.ok((continued[0]!.reasons as string[]).includes("worker_ended"), JSON.stringify(continued[0]));
+    // Flipped: the wake was recorded as `director_continued` "worker_ended"; what woke the lead is what it read.
+    assert.deepEqual(customEvents(events, "director_continued"), []);
     const finishedEvent = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
-    // Flipped (Loop phase 5): the close names the lead.
-    assert.equal(finishedEvent.stoppedBecause, "the lead finished the run");
+    // Flipped (Loop phase 5): the close names the lead. Flipped again (one Loop): a web game's Loop
+    // closes in place on the lead's word, as every Loop does ("the lead finished the run" was its landing's).
+    assert.equal(finishedEvent.stoppedBecause, "the lead says the goal is reached");
     assert.match(results.integrated, /^Merged w1's work into your folder/, results.integrated);
 
     const threadId = await rig.core.threadForGame(project.name);
     const journal = (await rig.core.store.readArtifact(threadId, `autopilot_${runId}`)) as Record<string, any>;
-    // The run's own clock is the run's record, not the wake loop's (journal.ts; it moved from `wake.clock`).
-    assert.match(String(journal.director.clock.finalDeadline), /^\d{4}-\d\d-\d\dT/);
+    // Flipped (no clock): the record held the run's clock (`director.clock.finalDeadline`); a Loop has none.
+    assert.equal(journal.director.clock, undefined, "the record keeps no clock");
+    assert.ok(journal.director.wake, "it keeps the wake state");
   });
 
-  it("R2. a user's message wakes a sleeping lead within seconds, word for word, at the top", {
+  it("R2. a note the person leaves about the build wakes a sleeping lead within seconds, word for word", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("wake-by-user");
@@ -206,12 +204,9 @@ describe("the lead is woken, not kept in one long turn", () => {
 
     assert.equal(lead.length, 2);
     assert.ok(lead[1]!.at - sentAt < 10_000, `woken ${lead[1]!.at - sentAt} ms after the user spoke`);
-    const woken = lead[1]!.request.prompt;
-    const says = woken.indexOf("THE USER SAYS");
-    const words = woken.indexOf("make the sky red");
-    // Flipped (Loop phase 5): a wake with nothing else to tell has no WHAT HAPPENED section; the
-    // person's words come before where the run stands.
-    assert.ok(says >= 0 && says < words && words < woken.indexOf("WHERE THE RUN STANDS"), woken);
+    // Flipped: under THE USER SAYS, before WHERE THE RUN STANDS; the note alone, as the chat keeps it.
+    assert.equal(lead[1]!.request.prompt, "[USER FEEDBACK] make the sky red");
+    assert.equal(lead[1]!.request.from, "person");
     assert.equal(lead[1]!.request.resume, "lead-1");
   });
 
@@ -245,7 +240,9 @@ describe("the lead is woken, not kept in one long turn", () => {
     await until(() => aborted > 0, "the worker to be stopped", 30_000);
   });
 
-  it("R8. a job that ends while the lead rests is in its next digest", { timeout: RIG_TIMEOUT_MS }, async () => {
+  it("R8. a job that ends while the lead rests wakes it with the job's one line", {
+    timeout: RIG_TIMEOUT_MS,
+  }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("wake-by-job");
     const lead: DelegateRequest[] = [];
     let rested = false;
@@ -282,18 +279,20 @@ describe("the lead is woken, not kept in one long turn", () => {
 
     assert.equal(lead.length, 2, lead.map((t) => t.prompt.slice(0, 60)).join(" | "));
     assert.equal(lead[1]!.resume, "lead-1", "the same session is woken");
-    const woken = lead[1]!.prompt;
-    assert.match(woken, /Light bake \(`echo baking; exit 3`, started by you\) failed \(exit 3\)/, woken);
-    assert.match(woken, new RegExp(`read it with job_tail ${job.id}`));
-    const continued = customEvents(events, "director_continued").filter((e) => e.runId === runId);
-    assert.ok(((continued[0]?.reasons ?? []) as string[]).includes("job_ended"), JSON.stringify(continued));
+    // Flipped: inside a digest, with "read it with job_tail <id>" after it; the job's own line, a fact.
+    assert.match(
+      lead[1]!.prompt,
+      new RegExp(`^job ${job.id} "Light bake" \\(\`echo baking; exit 3\`, started by you\\) failed \\(exit 3\\)`),
+    );
+    assert.doesNotMatch(lead[1]!.prompt, /job_tail/);
+    assert.deepEqual(customEvents(events, "director_continued"), []);
   });
 });
 
 describe("live chat during a build", () => {
-  /** The session answering the chat once the run is over: a coordinator, or the chat's own with the run's controls. */
+  /** The session answering the chat once the run is over: the chat's own, with the run's controls. */
   const answersChat = (request: DelegateRequest): boolean =>
-    !request.director && Boolean(request.coordinator || request.liveTools?.some((t) => t.name === "run_status"));
+    !request.director && Boolean(request.liveTools?.some((t) => t.name === "run_status"));
   /** A message to the game's chat, as the composer sends it, with the bubble id it is queued under. */
   async function say(rig: Rig, project: string, text: string, over: Record<string, unknown> = {}) {
     const thread = await rig.core.threadForGame(project);
@@ -326,15 +325,10 @@ describe("live chat during a build", () => {
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("live-answer");
     const lead: Array<{ request: DelegateRequest; at: number }> = [];
-    const coordinators: DelegateRequest[] = [];
     const seen: Record<string, unknown> = {};
     let workersAborted = 0;
     let rested = false;
     fakeEngine(rig, async (request) => {
-      if (request.coordinator) {
-        coordinators.push(request);
-        return turnResult("coordinator", "answered by the chat");
-      }
       if (!request.director) return hangUntilStopped(request, () => workersAborted++);
       lead.push({ request, at: Date.now() });
       const call = (name: string, args: Record<string, unknown>) => request.onLiveTool!(name, args);
@@ -366,10 +360,10 @@ describe("live chat during a build", () => {
     const woken = lead[1]!;
     assert.ok(woken.at - sentAt < 10_000, `woken ${woken.at - sentAt} ms after the user spoke`);
     assert.equal(woken.request.resume, "lead-1", "the same session answers");
-    assert.match(woken.request.prompt, /THE USER SAYS[\s\S]*is the sky dusk yet\?/);
+    // Flipped: under THE USER SAYS; the person's words alone, as they wrote them.
+    assert.equal(woken.request.prompt, "is the sky dusk yet?");
     assert.equal(seen.runOpen, true, "the run was still running when the lead answered");
     assert.equal(seen.workersAborted, 0, "a question stops no worker");
-    assert.equal(coordinators.length, 0, "the lead answered, not a coordinator after the build");
     const log = await rig.core.store.listEvents(thread);
     const started = customEvents(log, "autopilot_started").find((e) => e.runId === runId);
     assert.equal(started?.liveChat, true, "the build says its lead takes the chat, so the composer can say so");
@@ -431,14 +425,11 @@ describe("live chat during a build", () => {
 
     const resumed = lead[2]!;
     assert.equal(resumed.resume, "lead-1", "the same session, resumed");
-    assert.match(resumed.prompt, /THE USER SAYS[\s\S]*make the sky red instead/);
+    // Flipped: resumed with the person's words alone, as they wrote them.
+    assert.match(resumed.prompt, /(^|\n\n)make the sky red instead(\n\n|$)/);
+    assert.doesNotMatch(resumed.prompt, /THE USER SAYS|cut short/i);
     assert.doesNotMatch(resumed.prompt, /Your last turn failed/, "an interrupted turn is not a failed one");
     assert.doesNotMatch(resumed.prompt, /starts the wrap-up now/, "nor the start of a wrap-up");
-    const continued = customEvents(events, "director_continued").filter((e) => e.runId === runId);
-    assert.ok(
-      continued.every((e) => (e.reasons as string[]).includes("user_message")),
-      JSON.stringify(continued),
-    );
     const finishedEvent = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
     assert.equal(finishedEvent.stoppedBecause, "stopped by the user", "it ran until the user stopped it");
   });
@@ -447,7 +438,7 @@ describe("live chat during a build", () => {
    * The golf game's lead: Codex continuing the chat's own session, whose first turn ran on while
    * "stop" sat unread for its whole 45 minutes. Its very first turn is cut for the words now.
    */
-  it("L10. a lead continuing the chat's own session is cut short in its first turn for a stop, and told a stop is wrap_up", {
+  it("L10. a lead continuing the chat's own session is cut short in its first turn for a stop, and resumed with the words alone", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("live-first-cut");
@@ -488,9 +479,8 @@ describe("live chat during a build", () => {
     assert.equal(lead[0]?.resume, "chat-1", "the first turn continues the chat's own session");
     const resumed = lead[1];
     assert.equal(resumed?.resume, "chat-1", "the same session, resumed");
-    assert.match(String(resumed?.prompt), /cut short/i, "it is told it was cut");
-    assert.match(String(resumed?.prompt), /stop or finish[^\n]*wrap_up/i, "and that a stop is wrap_up");
-    assert.match(String(resumed?.prompt), /THE USER SAYS[\s\S]*stop the build/);
+    // Flipped: the person's words alone; that a stop is wrap_up is said once, in wrap_up's own description.
+    assert.match(String(resumed?.prompt), /(^|\n\n)stop the build(\n\n|$)/);
   });
 
   it("L3. an engine that reads input mid-turn takes the message in the running turn, and it is not said again", {
@@ -550,11 +540,11 @@ describe("live chat during a build", () => {
     await running;
 
     assert.equal(lead.length, 2, "read in the running turn: no interrupt, no second wake");
-    assert.match(handed[0]!, /THE USER SAYS[\s\S]*add some fog/);
+    assert.equal(handed[0], "add some fog", "flipped: the person's words as they wrote them");
     assert.doesNotMatch(handed[0]!, /how is it going/, "what the lead was woken with is not said again");
   });
 
-  it("L4. Stop mid-build still hands over to the oldest queued message: a picture waits for the chat", {
+  it("L4. Stop mid-build still hands over to the oldest queued message: a slash command waits for the chat", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("live-stop");
@@ -564,7 +554,7 @@ describe("live chat during a build", () => {
     fakeEngine(rig, async (request) => {
       if (answersChat(request)) {
         chats.push(request);
-        return turnResult(request.resume ?? "chat", "I see the picture.");
+        return turnResult(request.resume ?? "chat", "Reviewed.");
       }
       if (!request.director) return hangUntilStopped(request, () => {});
       lead.push(request);
@@ -575,9 +565,9 @@ describe("live chat during a build", () => {
     });
     const running = dispatch();
     await until(() => rested, "the lead's first turn to end");
-    const picture = { label: "ref", mimeType: "image/png", data: "iVBORw0KGgo=" };
-    const { thread, messageId } = await say(rig, project.name, "does it look like this?", { frames: [picture] });
-    assert.equal((await stateOf(rig, thread, messageId))?.state, "queued", "a picture waits for the chat");
+    // Flipped: a picture reaches the lead now, alone too (LM1, LM4); a slash command waits for the chat.
+    const { thread, messageId } = await say(rig, project.name, "/review");
+    assert.equal((await stateOf(rig, thread, messageId))?.state, "queued", "a command waits for the chat");
     await rig.core.stopThread(thread);
     const events = await finished();
     await running;
@@ -592,10 +582,9 @@ describe("live chat during a build", () => {
     assert.equal(finishedEvent.stoppedBecause, "stopped by the user");
     assert.equal(lead.length, 1, "no turn of the lead after Stop");
     assert.equal(chats.length, 1, "the chat answers the message that waited");
-    assert.equal(chats[0]!.coordinator, undefined, "in its own session, not a coordinator's");
     assert.equal(chats[0]!.resume, "lead-1", "the session that led the run");
-    assert.match(chats[0]!.prompt, /does it look like this\?/);
-    assert.equal(chats[0]!.images?.[0]?.data, "iVBORw0KGgo=", "with the picture");
+    // Flipped: the command opened a brief; it goes alone, as the person sent it.
+    assert.equal(chats[0]!.prompt, "/review", "the command the person sent");
   });
 
   it("L7. a run that crashes gives back what its lead never heard before the run closes: the chat keeps it Queued, and answers it", {
@@ -650,7 +639,6 @@ describe("live chat during a build", () => {
       "Queued in the paged chat, not settled with the run",
     );
     assert.equal(chats.length, 1, "the chat answered it");
-    assert.equal(chats[0]!.coordinator, undefined, "in its own session, not a coordinator's");
     assert.match(chats[0]!.prompt, /is the sky dusk yet\?/);
   });
 

@@ -22,7 +22,7 @@ import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import type { ToolOffered } from "../../src/substrate/plugins/tool-allow.ts";
 import { coreLite } from "../helpers/core-lite.ts";
-import { copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
+import { capabilityFactsOf, copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 // biome-ignore lint/suspicious/noExplicitAny: a hostile manifest is any shape a writer may send.
@@ -85,6 +85,21 @@ test("a tool scoped to a fact reaches only games with it; an unscoped tool reach
       "a fact anywhere in the folder reaches",
     );
     assert.deepEqual(registry.tools(), registry.snapshot(PENDING).tools, "tools() is a game with no kind yet");
+  } finally {
+    registry.cancel();
+  }
+});
+
+test("a Unity or Godot game's web export reaches no tool for web games, as it reaches no skill for them", async () => {
+  const registry = await registryWith([tool("greet"), tool("draw", { facts: [CoreFact.WebGame] })]);
+  try {
+    for (const engine of [CoreFact.UnityProject, CoreFact.GodotProject])
+      assert.deepEqual(
+        names(registry, [at(engine, "project"), at(CoreFact.WebGame, "web")]),
+        ["example__greet"],
+        engine,
+      );
+    assert.deepEqual(names(registry, WEB), ["example__greet", "example__draw"], "a web game gets it");
   } finally {
     registry.cancel();
   }
@@ -164,7 +179,9 @@ test("a skill for one part of the folder names that part", async () => {
   }
 });
 
-test("the snapshot lists the kinds its tools make, and an agent never sees facts or makes", async () => {
+// Flipped back: the kinds were read as for a game with no kind yet while the seed read them as which
+// plugins are on. Nothing reads them so now: a snapshot's kinds are the kind tools that reach its game.
+test("the snapshot lists the kinds its tools make for its game, and an agent never sees facts or makes", async () => {
   const registry = await registryWith([
     tool("greet"),
     tool("new-toy", { makes: [TOY] }),
@@ -372,8 +389,7 @@ test("whether a connector reaches a game is the one rule its listing, capability
   const kite = await core.games.scaffold(web);
   await writeFile(path.join(harbor.dir, "Harbor.uproject"), "{}");
   const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
-  const describe = async (project: string) =>
-    String(await api["capabilities.describe"]?.({ project, threadId: await core.createGameThread(project) }));
+  const describe = (project: string) => capabilityFactsOf(core, project);
   assert.doesNotMatch(await describe(web), /Unreal · editor/, "a web game's capability facts");
   assert.match(await describe(harbor.name), /Unreal · editor/, "a game holding an Unreal project's");
 

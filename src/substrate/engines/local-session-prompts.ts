@@ -3,7 +3,7 @@
  * descriptions, and the notes the studio puts in front of it when a round goes wrong.
  */
 import { MINUTE_MS } from "../../shared/duration.ts";
-import { PERMISSION_MODE_NAMES, PermissionMode } from "../../shared/permissions.ts";
+import { PermissionMode } from "../../shared/permissions.ts";
 
 /** The most of the workspace's own instructions (CLAUDE.md) the system prompt carries. */
 const INSTRUCTIONS_CHARS = 24_000;
@@ -39,11 +39,6 @@ const MODE_NOTE: Record<PermissionMode, string> = {
     "PLAN MODE: the user wants a plan before any change. Inspect what you need with read_file and list_files, change nothing, then reply with your plan in Markdown: what you will change, where and how. The user approves it before you carry it out.",
   [PermissionMode.Bypass]: "Edits and commands run without asking the user.",
 };
-
-/** The note a session reads at its next round when the user switched the chat's mode while it ran. */
-export function modeChangedNote(mode: PermissionMode): string {
-  return `Studio notice: the user switched this chat's permission mode to ${PERMISSION_MODE_NAMES[mode]}. ${MODE_NOTE[mode]}`;
-}
 
 /** What the model reads when the user denied a call with words of their own. */
 export function deniedWithWords(words: string): string {
@@ -105,11 +100,7 @@ export function checkpointRequest(summary: string, chunk: string): string {
 /** What stands in for the middle of a message too long for one summarizer chunk. */
 export const OMITTED_MIDDLE = "\n[Middle omitted here; original retained in the session checkpoint archive.]\n";
 
-/**
- * A nudge after `rounds` tool rounds that changed nothing. A Loop chat (`launchTools` names its
- * launch tools) is told which of its tools starts the build, as a fact, with no hurry to use it.
- */
-export function progressCheckNote(rounds: number, launchTools: readonly string[] = []): string {
-  const nudge = `Progress check: ${rounds} tool rounds with no file changes: go on, or reply with what you found or what you need.`;
-  return launchTools.length ? `${nudge} ${launchTools.join(" or ")} starts the build.` : nudge;
+/** A nudge after `rounds` tool rounds that changed nothing: go on, or say what was found. */
+export function progressCheckNote(rounds: number): string {
+  return `Progress check: ${rounds} tool rounds with no file changes: go on, or reply with what you found or what you need.`;
 }

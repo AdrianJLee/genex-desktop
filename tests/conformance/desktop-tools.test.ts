@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
-import { DesktopQuestion, desktopTools } from "../../src/main/core/desktop-tools.ts";
+import { DesktopAnswer, DesktopQuestion, desktopTools } from "../../src/main/core/desktop-tools.ts";
 import type { DesktopApp, DesktopDriver } from "../../src/substrate/desktop-driver.ts";
 import type { LiveToolResult } from "../../src/substrate/engines/types.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -63,7 +63,8 @@ async function toolsWith(
     },
     ask: async (question, app) => {
       asked.push(question === DesktopQuestion.Session ? "session" : `app:${app?.name}`);
-      return question === DesktopQuestion.Session ? answers.session : (answers.apps?.[app?.name ?? ""] ?? false);
+      const yes = question === DesktopQuestion.Session ? answers.session : (answers.apps?.[app?.name ?? ""] ?? false);
+      return yes ? DesktopAnswer.Yes : DesktopAnswer.No;
     },
     ownApp: () => false,
     frameDir: await tmpDir("desktop-tools-"),
@@ -106,6 +107,24 @@ describe("the desktop tool", () => {
     await declined.tools.onLiveTool("desktop", { action: "type", text: "hi" });
     assert.deepEqual(declined.fake.calls, []);
     assert.deepEqual(declined.asked, ["session", "app:Notes"], "a declined app is not asked again");
+  });
+
+  it("an app's card nobody answers keeps nothing: nothing moves, and the next action in it asks again", async () => {
+    const fake = driverWith(NOTES);
+    const asked: string[] = [];
+    const tools = desktopTools({
+      connect: async () => fake.driver,
+      ask: async (question) => {
+        asked.push(question);
+        return question === DesktopQuestion.Session ? DesktopAnswer.Yes : DesktopAnswer.Unanswered;
+      },
+      ownApp: () => false,
+      frameDir: await tmpDir("desktop-tools-"),
+    });
+    await tools.onLiveTool("desktop", { action: "left_click", coordinate: "10,10" });
+    await tools.onLiveTool("desktop", { action: "left_click", coordinate: "10,10" });
+    assert.deepEqual(fake.calls, []);
+    assert.deepEqual(asked, [DesktopQuestion.Session, DesktopQuestion.App, DesktopQuestion.App]);
   });
 
   it("in a VM, the session's yes covers every app inside it", async () => {
@@ -168,7 +187,7 @@ describe("the desktop tool", () => {
       },
       ask: async () => {
         on = false;
-        return true;
+        return DesktopAnswer.Yes;
       },
       ownApp: () => false,
       enabled: () => on,
@@ -213,7 +232,7 @@ describe("a stop while the driver starts", () => {
     const held = heldConnect(fake.driver);
     const tools = desktopTools({
       connect: held.connect,
-      ask: async () => true,
+      ask: async () => DesktopAnswer.Yes,
       ownApp: () => false,
       frameDir: await tmpDir("desktop-tools-"),
     });
@@ -227,7 +246,7 @@ describe("a stop while the driver starts", () => {
 
   it("a stop while the session's card waits connects nothing, and the next call asks again", async () => {
     const fake = driverWith(NOTES);
-    let answer: (yes: boolean) => void = () => {};
+    let answer: (said: DesktopAnswer) => void = () => {};
     const asked: string[] = [];
     let connects = 0;
     const tools = desktopTools({
@@ -238,10 +257,10 @@ describe("a stop while the driver starts", () => {
       ask: (question) => {
         asked.push(question);
         return question === DesktopQuestion.Session
-          ? new Promise<boolean>((resolve) => {
+          ? new Promise<DesktopAnswer>((resolve) => {
               answer = resolve;
             })
-          : Promise.resolve(true);
+          : Promise.resolve(DesktopAnswer.Yes);
       },
       ownApp: () => false,
       frameDir: await tmpDir("desktop-tools-"),
@@ -249,13 +268,13 @@ describe("a stop while the driver starts", () => {
     const waiting = tools.onLiveTool("desktop", { action: "left_click", coordinate: "10,10" });
     await new Promise((resolve) => setImmediate(resolve));
     await tools.release();
-    answer(true);
+    answer(DesktopAnswer.Yes);
     assert.match(text(await waiting), /the person stopped computer control/);
     assert.equal(connects, 0, "the yes that came after the stop started nothing");
     const next = tools.onLiveTool("desktop", { action: "screenshot" });
     await new Promise((resolve) => setImmediate(resolve));
     assert.deepEqual(asked, ["session", "session"], "the stop ended that yes: the next call asks again");
-    answer(false);
+    answer(DesktopAnswer.No);
     await next;
   });
 });
@@ -284,7 +303,7 @@ describe("the computer-control registry", () => {
         };
       },
     });
-    const tools = desktop.toolsFor({ ask: async () => true, frameDir: await tmpDir("desktop-control-") });
+    const tools = desktop.toolsFor({ ask: async () => DesktopAnswer.Yes, frameDir: await tmpDir("desktop-control-") });
     return { desktop, tools, fake, held, active, shutdowns, timers };
   }
 
@@ -312,7 +331,7 @@ describe("the computer-control registry", () => {
     await tools.release();
     assert.equal(timers.length, 1, "the daemon's stop waits a short while");
     assert.deepEqual(shutdowns, [], "not at once: a quick next session reuses it");
-    const again = desktop.toolsFor({ ask: async () => true, frameDir: await tmpDir("desktop-control-") });
+    const again = desktop.toolsFor({ ask: async () => DesktopAnswer.Yes, frameDir: await tmpDir("desktop-control-") });
     const second = again.onLiveTool("desktop", { action: "screenshot" });
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(timers[0]?.cancelled, true, "a session that starts in the meantime keeps the daemon");

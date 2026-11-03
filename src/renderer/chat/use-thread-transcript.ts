@@ -7,7 +7,6 @@ import type { EventEnvelope } from "../../shared/event-log.ts";
 import { type QueuedMessage, QueueState, type QueueView } from "../../shared/message-queue.ts";
 import { EntryKind } from "../chat-entries.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
-import { toldToLead } from "./delivery-order.ts";
 import {
   chatReportEntryIds,
   isPendingConsent,
@@ -30,14 +29,8 @@ const queuedEntryId = (message: QueuedMessage): string => `${message.eventId}-0:
  * (`holdsInPlace`), unless the queue is paused; a steered one is never held: it reads where that
  * turn reads it.
  */
-function waitsBelow(
-  message: QueuedMessage,
-  queue: QueueView & { told?: ReadonlySet<string> },
-  holdsInPlace: (messageId: string) => boolean,
-): boolean {
+function waitsBelow(message: QueuedMessage, queue: QueueView, holdsInPlace: (messageId: string) => boolean): boolean {
   if (message.state === QueueState.Steering) return true;
-  // Told to a build's lead in its wrap-up: it reads where the lead heard it (`toldToLead`), never below.
-  if (queue.told?.has(message.messageId)) return false;
   return message.state === QueueState.Queued && (queue.paused || !holdsInPlace(message.messageId));
 }
 
@@ -76,15 +69,14 @@ export function useThreadTranscript(input: {
   studio: boolean;
 }): ThreadTranscript {
   const { events, stateEvents, threadEvents, queue, holdsInPlace, activeRunId, studio } = input;
-  const told = useMemo(() => toldToLead(threadEvents, queue.messages), [threadEvents, queue]);
   const queuedByEvent = useMemo(
     () =>
       new Map(
         [...queue.messages.values()]
-          .filter((m) => waitsBelow(m, { ...queue, told }, holdsInPlace))
+          .filter((m) => waitsBelow(m, queue, holdsInPlace))
           .map((m) => [queuedEntryId(m), m] as const),
       ),
-    [queue, told, holdsInPlace],
+    [queue, holdsInPlace],
   );
   // Pictures sent with a message were saved beside it for the agent; the bubble shows them too.
   const imagesByEntry = useMemo(() => sentImages(queue.messages.values()), [queue]);

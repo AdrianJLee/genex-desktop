@@ -1,7 +1,7 @@
 /**
  * Plugin updates as the renderer holds them (src/renderer/state/plugins.ts): which installed
- * plugins have a newer version waiting, the call that installs each, Update plugins (which installs
- * them all, one after another) and how the studio keeps the plugin index current. Driven through a
+ * plugins have a newer version waiting, Update plugins (which installs them all, one after another)
+ * and how the studio keeps the plugin index current. Driven through a
  * fake `StudioApi` in Node, no window.
  */
 import assert from "node:assert/strict";
@@ -16,9 +16,7 @@ import {
 import {
   chosenUpdates,
   createPluginsStore,
-  installPluginUpdate,
   PLUGIN_INDEX_POLL_MS,
-  PluginUpdateSource,
   pluginUpdates,
   updateKey,
 } from "../../src/renderer/state/plugins.ts";
@@ -48,9 +46,9 @@ const index = (...releases: Array<[id: string, version: string]>): PluginIndexVi
   updates: releases.map(([id, version]) => ({ id, installedVersion: "1.0.0", version, sha: "a".repeat(40) })),
 });
 
-/** What a list of updates offers, as `id version source` lines. */
+/** What a list of updates offers, as `id version` lines. */
 const offered = (list: PluginInfo[], view: PluginIndexView | null): string[] =>
-  pluginUpdates(list, view).map((update) => `${update.plugin.manifest.id} ${update.version} ${update.source}`);
+  pluginUpdates(list, view).map((update) => `${update.plugin.manifest.id} ${update.version}`);
 
 /** Intervals a test fires by hand. */
 function manualIntervals(): StudioTimers & { fire(ms: number): void } {
@@ -70,17 +68,10 @@ function manualIntervals(): StudioTimers & { fire(ms: number): void } {
 }
 
 describe("which installed plugins have an update waiting", () => {
-  it("offers a bundled plugin's newer seed and the index's newer release, in the installed order", () => {
-    const list = [
-      plugin("blender", { source: PluginSourceKind.Index }),
-      plugin("genex", { availableVersion: "1.5.0" }),
-      plugin("current"),
-    ];
-    assert.deepEqual(offered(list, index(["blender", "2.0.0"])), [
-      `blender 2.0.0 ${PluginUpdateSource.Index}`,
-      `genex 1.5.0 ${PluginUpdateSource.Seed}`,
-    ]);
-    assert.deepEqual(offered(list, null), [`genex 1.5.0 ${PluginUpdateSource.Seed}`], "a seed's update needs no index");
+  it("offers the index's newer releases, in the installed order", () => {
+    const list = [plugin("genex"), plugin("blender", { source: PluginSourceKind.Index }), plugin("current")];
+    assert.deepEqual(offered(list, index(["blender", "2.0.0"], ["genex", "1.5.0"])), ["genex 1.5.0", "blender 2.0.0"]);
+    assert.deepEqual(offered(list, null), [], "nothing is offered before the index answers");
     assert.deepEqual(offered([plugin("current")], index()), []);
   });
 
@@ -88,7 +79,6 @@ describe("which installed plugins have an update waiting", () => {
     const view = index(["waiting", "2.0.0"], ["gone", "2.0.0"], ["found", "2.0.0"], ["absent", "2.0.0"]);
     const list = [
       plugin("waiting", { pendingVersion: "2.0.0" }),
-      plugin("waiting-seed", { availableVersion: "2.0.0", pendingVersion: "2.0.0" }),
       plugin("gone", { removed: true }),
       plugin("found", { unlisted: true }),
     ];
@@ -98,8 +88,8 @@ describe("which installed plugins have an update waiting", () => {
 
 describe("choosing which updates to take", () => {
   it("keeps every update but the unticked ones, and offers a newer release of an unticked plugin again", () => {
-    const list = [plugin("blender"), plugin("genex", { availableVersion: "1.5.0" })];
-    const [blender, genex] = pluginUpdates(list, index(["blender", "2.0.0"]));
+    const list = [plugin("blender"), plugin("genex")];
+    const [blender, genex] = pluginUpdates(list, index(["blender", "2.0.0"], ["genex", "1.5.0"]));
     assert.ok(blender && genex);
     const skipped = new Set([updateKey(blender)]);
     assert.deepEqual(
@@ -112,32 +102,12 @@ describe("choosing which updates to take", () => {
   });
 });
 
-describe("installing a plugin's update", () => {
-  it("takes a seed through install's review, and an index release through update", async () => {
-    const fake = fakeStudioApi();
-    const [seed, release] = pluginUpdates(
-      [plugin("genex", { availableVersion: "1.5.0" }), plugin("blender")],
-      index(["blender", "2.0.0"]),
-    );
-    assert.ok(seed && release);
-    await installPluginUpdate(fake.api, seed);
-    await installPluginUpdate(fake.api, release);
-    assert.deepEqual(
-      fake.calls.map((call) => [call.method, ...call.args]),
-      [
-        ["pluginInstall", "genex"],
-        ["pluginUpdate", "blender"],
-      ],
-    );
-  });
-});
-
 describe("Update plugins: every waiting update, one after another", () => {
   /** A store that has read two plugins with an update each. */
   async function withUpdates(overrides: Parameters<typeof fakeStudioApi>[0] = {}) {
     const fake = fakeStudioApi({
-      pluginsList: async () => [plugin("genex", { availableVersion: "1.5.0" }), plugin("blender")],
-      pluginsIndex: async () => index(["blender", "2.0.0"]),
+      pluginsList: async () => [plugin("genex"), plugin("blender")],
+      pluginsIndex: async () => index(["genex", "1.5.0"], ["blender", "2.0.0"]),
       ...overrides,
     });
     const store = createPluginsStore(fake.api);
@@ -151,36 +121,39 @@ describe("Update plugins: every waiting update, one after another", () => {
     const first = new Promise<void>((resolve) => {
       finishFirst = resolve;
     });
-    const { fake, store } = await withUpdates({ pluginInstall: () => first });
+    const { fake, store } = await withUpdates({
+      pluginUpdate: (id: string) => (id === "genex" ? first : Promise.resolve()),
+    });
     assert.equal(store.getState().updating, false);
     const done = store.updateAll();
     assert.equal(store.getState().updating, true);
     await tick();
-    assert.deepEqual(fake.callsOf("pluginUpdate"), [], "the second waits for the first's answer");
+    assert.deepEqual(fake.callsOf("pluginUpdate"), [["genex"]], "the second waits for the first's answer");
     finishFirst();
     assert.deepEqual(await done, [], "nothing failed");
     assert.deepEqual(
       fake.calls.map((call) => call.method),
-      ["pluginInstall", "pluginUpdate", "pluginsList", "pluginsIndex"],
+      ["pluginUpdate", "pluginUpdate", "pluginsList", "pluginsIndex"],
     );
     assert.equal(store.getState().updating, false);
   });
 
   it("keeps going past an update that fails, and answers with the failure", async () => {
     const refused = new Error("No compatible newer release is available for this installed plugin");
-    const { fake, store } = await withUpdates({ pluginInstall: () => Promise.reject(refused) });
+    const { fake, store } = await withUpdates({
+      pluginUpdate: (id: string) => (id === "genex" ? Promise.reject(refused) : Promise.resolve()),
+    });
     assert.deepEqual(await store.updateAll(), [refused]);
-    assert.deepEqual(fake.callsOf("pluginUpdate"), [["blender"]], "the next plugin is still updated");
+    assert.deepEqual(fake.callsOf("pluginUpdate"), [["genex"], ["blender"]], "the next plugin is still updated");
     assert.equal(store.getState().updating, false);
   });
 
   it("leaves out the updates the person unticked", async () => {
     const { fake, store } = await withUpdates();
-    const [seed] = pluginUpdates(store.getState().list, store.getState().index);
-    assert.ok(seed);
-    assert.deepEqual(await store.updateAll(new Set([updateKey(seed)])), []);
-    assert.deepEqual(fake.callsOf("pluginInstall"), [], "genex was unticked");
-    assert.deepEqual(fake.callsOf("pluginUpdate"), [["blender"]]);
+    const [genex] = pluginUpdates(store.getState().list, store.getState().index);
+    assert.ok(genex);
+    assert.deepEqual(await store.updateAll(new Set([updateKey(genex)])), []);
+    assert.deepEqual(fake.callsOf("pluginUpdate"), [["blender"]], "genex was unticked");
   });
 
   it("is one run at a time", async () => {
@@ -188,8 +161,7 @@ describe("Update plugins: every waiting update, one after another", () => {
     const running = store.updateAll();
     assert.deepEqual(await store.updateAll(), [], "a second press while it runs starts nothing");
     await running;
-    assert.equal(fake.callsOf("pluginInstall").length, 1);
-    assert.equal(fake.callsOf("pluginUpdate").length, 1);
+    assert.equal(fake.callsOf("pluginUpdate").length, 2);
   });
 });
 

@@ -31,12 +31,9 @@ import {
   StepState,
   statusLine,
 } from "../run-steps.ts";
-import type { AgentScreenFrame } from "../../shared/agent-screen.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { t } from "../../shared/i18n.ts";
 import type { HistoryEntry } from "../build-progress.ts";
-import { leadFrameOf } from "../state/agent-screens.ts";
-import { useAgentScreens } from "../state/hooks.ts";
 import { GraphSelection, isPartSelection, partOf, partSelection } from "./inspector/selection.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { keyTakenElsewhere } from "./keyboard.ts";
@@ -313,8 +310,6 @@ export const RunGraph = memo(function RunGraph({
   const { graph, rows } = model;
   const references = useReferenceFrames(project, graph.runId);
   const stills = useRunStills(model);
-  // The lead's own newest view of the game: the picture on its node while it has the run.
-  const leadFrame = useAgentScreens((s) => leadFrameOf(s, project, graph.runId)) ?? null;
   const overlays = useOverlays(model.selectable);
   const { selected } = overlays;
   const camera = useGraphCamera({
@@ -358,7 +353,6 @@ export const RunGraph = memo(function RunGraph({
               camera={camera}
               project={project}
               stills={stills}
-              leadFrame={leadFrame}
               selected={selected}
               tip={overlays.tip}
               onSelect={actions.select}
@@ -384,7 +378,6 @@ export const RunGraph = memo(function RunGraph({
               project={project}
               references={references}
               stills={stills}
-              leadFrame={leadFrame}
               onStep={step}
               onOpenJob={openJob}
               onReply={onReply}
@@ -409,7 +402,6 @@ function SelectedPanel({
   project,
   references,
   stills,
-  leadFrame,
   onStep,
   onOpenJob,
   onReply,
@@ -423,7 +415,6 @@ function SelectedPanel({
   project: string | null;
   references: ReferenceFrame[];
   stills: Stills;
-  leadFrame: AgentScreenFrame | null;
   onStep: (dir: number) => void;
   onOpenJob: (job: AssetInfo) => void;
   onReply: Props["onReply"];
@@ -449,7 +440,6 @@ function SelectedPanel({
       resultBorrowed={stills.borrowed}
       resultPairsWithBase={stills.pairsWithBase}
       timeline={model.timeline}
-      leadFrame={leadFrame}
       onClose={() => overlays.setSelectedId(null)}
       onSelect={(id) => overlays.setSelectedId(id)}
       onPrev={() => onStep(-1)}
@@ -508,7 +498,6 @@ function GraphCanvas({
   camera,
   project,
   stills,
-  leadFrame,
   selected,
   tip,
   onSelect,
@@ -520,7 +509,6 @@ function GraphCanvas({
   camera: ReturnType<typeof useGraphCamera>;
   project: string | null;
   stills: Stills;
-  leadFrame: AgentScreenFrame | null;
   selected: string | null;
   tip: GatePoint | null;
   onSelect: (id: string) => void;
@@ -577,14 +565,7 @@ function GraphCanvas({
         </svg>
 
         <RowLabels model={model} selected={selected} onSelect={onSelect} />
-        <GraphNodes
-          model={model}
-          project={project}
-          stills={stills}
-          leadFrame={leadFrame}
-          selected={selected}
-          onSelect={onSelect}
-        />
+        <GraphNodes model={model} project={project} stills={stills} selected={selected} onSelect={onSelect} />
 
         {layout.gates.map((gate) => (
           <GateButton
@@ -649,14 +630,12 @@ const GraphNodes = memo(function GraphNodes({
   model,
   project,
   stills,
-  leadFrame,
   selected,
   onSelect,
 }: {
   model: BuildsModel;
   project: string | null;
   stills: Stills;
-  leadFrame: AgentScreenFrame | null;
   selected: string | null;
   onSelect: (id: string) => void;
 }): JSX.Element {
@@ -719,7 +698,6 @@ const GraphNodes = memo(function GraphNodes({
       {layout.rects.lead ? (
         <LeadNode
           rect={layout.rects.lead}
-          frame={leadFrame}
           face={model.face ?? undefined}
           rest={rest}
           selected={selected === GraphSelection.Lead}

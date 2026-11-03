@@ -221,6 +221,9 @@ const sentCover: GenexCoverRecord = {
   },
   last: { kind: GenexCoverOutcome.Applied, at: AT, sha256: KEPT_SHA },
   sending: false,
+  candidates: [],
+  clip: null,
+  agentTook: {},
 };
 const published: GenexPublishState = { ...idle, cover: sentCover };
 

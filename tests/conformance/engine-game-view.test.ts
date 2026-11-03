@@ -7,20 +7,14 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { factsOfGame, loopProfileOf, servedAsWeb } from "../../src/harness-seed/loop/folder-facts.ts";
+import { factsOfGame, servedAsWeb } from "../../src/harness-seed/loop/folder-facts.ts";
 import { engineOfGame as seedEngineOfGame } from "../../src/harness-seed/loop/game-engine.ts";
 import { holdsWebGame } from "../../src/harness-seed/loop/web-game.ts";
 import { EntryAction, EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
-import { engineLoopGate, engineRewindNote, linkedEngineOf } from "../../src/renderer/engine-game.ts";
+import { engineRewindNote, linkedEngineOf } from "../../src/renderer/engine-game.ts";
 import { liveViewFor } from "../../src/renderer/live-views.ts";
-import { loopAvailableFor } from "../../src/renderer/loop-setting.ts";
-import {
-  unrealLoopGate,
-  unrealProjectInFolder,
-  unrealProjectOf,
-  unrealRewindNote,
-} from "../../src/renderer/unreal-game.ts";
-import { ENGINE_GAME_WORDS, UNREAL_WORDS } from "../../src/renderer/words.ts";
+import { unrealProjectInFolder, unrealProjectOf, unrealRewindNote } from "../../src/renderer/unreal-game.ts";
+import { ENGINE_GAME_WORDS } from "../../src/renderer/words.ts";
 import { type EngineBinding, engineOf, isEngineGame, type LinkedEngine } from "../../src/shared/game-engine.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import { ObserverLive } from "../../src/shared/observers.ts";
@@ -52,11 +46,10 @@ const strictToy = { ...toyOutside, linkedEngine: { ...described(TOY_ENGINE), pro
 describe("a game linked to an engine other than Unreal", () => {
   it("is an engine game, and every web-only and Unreal-only rule says no", () => {
     assert.equal(isEngineGame(engineOf(toyOutside.engine)), true);
-    // Web only: the app's served facts, the harness's served facts, its web page check and its Loop.
+    // Web only: the app's served facts, the harness's served facts and its web page check.
     assert.equal(servedAsWebGame({ facts: TOY_FACTS }), false, "the app serves it as no web game");
     assert.equal(servedAsWeb(toyOutside), false, "the harness serves it as no web game");
     assert.equal(holdsWebGame(toyOutside), false, "no web page: no preview check at a turn's end");
-    assert.equal(loopProfileOf(toyOutside), "open", "the one Loop in place, not the web Loop");
     assert.equal(liveViewFor(toyOutside, []).live, ObserverLive.Stills, "Live shows pictures, never a web preview");
     // Unreal only: the card, the editor's project and Unreal's own words.
     assert.equal(unrealProjectOf(toyOutside), null);
@@ -69,7 +62,6 @@ describe("a game linked to an engine other than Unreal", () => {
     assert.equal(seedEngineOfGame(older), TOY_ENGINE.id);
     assert.equal(servedAsWeb(older), false);
     assert.equal(holdsWebGame(older), false);
-    assert.equal(loopProfileOf(older), "open");
     assert.ok(!factsOfGame(older).some((fact) => fact.id === CoreFact.WebGame), "no web game at its root");
   });
 
@@ -88,15 +80,8 @@ describe("a game linked to an engine other than Unreal", () => {
   });
 });
 
-describe("the Loop and Rewind for an engine game", () => {
-  it("runs the Loop when the engine keeps its project anywhere, and waits only for one that needs it in the folder", () => {
-    assert.equal(loopAvailableFor(toyOutside), true, "the toy engine's project may live outside the folder");
-    assert.equal(loopAvailableFor(toyInside), true);
-    assert.equal(loopAvailableFor(strictToy), false, "an engine that needs its project in the folder waits");
-    assert.equal(loopAvailableFor({ ...strictToy, engine: toyInside.engine }), true);
-  });
-
-  it("keeps an Unreal game's Loop and Rewind as they were, described or not", () => {
+describe("Rewind for an engine game", () => {
+  it("keeps an Unreal game's Rewind as it was, described or not", () => {
     const unrealOutside = {
       dir: GAME_DIR,
       engine: unrealLink("/Users/me/Documents/Unreal Projects/Valley/Valley.uproject"),
@@ -105,24 +90,13 @@ describe("the Loop and Rewind for an engine game", () => {
     for (const linkedEngine of [undefined, described(UNREAL_ENGINE)]) {
       const outside = { ...unrealOutside, ...(linkedEngine ? { linkedEngine } : {}) };
       const inside = { ...unrealInside, ...(linkedEngine ? { linkedEngine } : {}) };
-      assert.equal(loopAvailableFor(outside), false);
-      assert.equal(loopAvailableFor(inside), true);
       assert.equal(
         engineRewindNote(outside),
         "Rewind doesn’t undo changes made in Unreal: Valley is outside the game folder.",
       );
       assert.equal(engineRewindNote(outside), unrealRewindNote(outside));
       assert.equal(engineRewindNote(inside), null);
-      assert.equal(
-        engineLoopGate(outside),
-        "Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; Valley is in Documents › Unreal Projects. Make a new one from the Unreal button, or move Valley into this game’s folder and choose it there. Until then, it does what you ask, then stops.",
-      );
-      assert.equal(engineLoopGate(outside), unrealLoopGate(outside));
     }
-    assert.equal(
-      UNREAL_WORDS.loopUnavailable(null, ""),
-      "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Until then, it does what you ask, then stops.",
-    );
   });
 
   it("names the engine by its label, and its project by its own file kind", () => {
@@ -130,10 +104,7 @@ describe("the Loop and Rewind for an engine game", () => {
     assert.equal(linkedEngineOf({ dir: GAME_DIR }), null, "a web game has none");
     assert.equal(engineRewindNote(toyOutside), null, "its save points don't need the project: nothing to warn of");
     assert.equal(engineRewindNote(strictToy), ENGINE_GAME_WORDS.rewindNote("Toy", "Garden"));
-    assert.match(engineLoopGate(strictToy), /^Loops need the Toy project inside this game’s folder/);
-    assert.match(engineLoopGate(strictToy), /Garden is in Documents › Toys\./);
-    for (const words of [engineRewindNote(strictToy) ?? "", engineLoopGate(strictToy)])
-      assert.doesNotMatch(words, /Unreal|overnight|night|morning|tonight/i);
+    assert.doesNotMatch(engineRewindNote(strictToy) ?? "", /Unreal|overnight|night|morning|tonight/i);
   });
 });
 

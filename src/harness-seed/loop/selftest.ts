@@ -1,18 +1,15 @@
 /**
  * The loop's self-test: the pure logic of the Loop against fixed inputs — when its lead is woken,
- * what the end of a turn means, the health check's line, which runner a run goes to, the run's clock, the
- * plain sentence a card falls back on, what a landing claims, the wrap-up's reserve and a reviewer's no. No engine, no preview, no network: seconds, deterministic.
+ * what the end of a turn means, the health check's line, which runner a run goes to, the plain
+ * sentence a card falls back on and a reviewer's no. No engine, no preview, no
+ * network: seconds, deterministic.
  */
-import { afterTurn, nextWake, TurnEnd, WakeCause } from "./director/wake-schedule.ts";
-import { landingWords, plainly } from "./director/rules.ts";
-import { wrapReserveMs } from "./director/journal.ts";
+import { afterTurn, nextWake, TurnEnd } from "./director/wake-schedule.ts";
+import { plainly } from "./director/rules.ts";
 import { secondOpinionNo } from "./director/second-opinion-prompts.ts";
 import { healthLine } from "./health-check.ts";
 import { chooseRunner } from "./run-dispatch.ts";
 import { RunnerKind } from "./studio-state.ts";
-import { LoopProfile } from "./folder-facts.ts";
-import { capClock } from "./time-cap.ts";
-import { HOUR_MS, MINUTE_MS } from "./time.ts";
 import type { Run } from "../types/harness.d.ts";
 
 function check(name: string, condition: unknown): void {
@@ -23,36 +20,24 @@ function check(name: string, condition: unknown): void {
 type SelftestStep = readonly [name: string, run: () => void];
 
 /** A view of a resting lead with nothing going on, at `now`. */
-const quietView = (now: number) => ({
-  now,
-  unread: [],
-  asleepFromSeq: 0,
-  asleepSince: now,
-  userWaiting: false,
-  finishNew: false,
-  softDeadline: now + HOUR_MS,
-  wrapping: false,
-  wakesAt: [],
-});
+const quietView = (now: number) => ({ now, untold: [], asleepSince: now, personWaiting: false });
 
 /** The self-test, step by step, in the order it runs. */
 const SELFTEST_STEPS: readonly SelftestStep[] = [
   [
-    "wake: the user wakes the lead at once; a quiet run waits for the wrap-up",
+    "wake: the user wakes the lead at once; nothing wakes a quiet run",
     () => {
       const now = 1_000_000;
-      const spoke = nextWake({ ...quietView(now), userWaiting: true });
-      check("user wakes now", spoke?.at === now && spoke.reasons.includes(WakeCause.UserMessage));
-      const quiet = nextWake(quietView(now));
-      check("a quiet run waits for the wrap-up", quiet?.at === now + HOUR_MS && quiet.reasons[0] === WakeCause.WrapUp);
+      check("user wakes now", nextWake({ ...quietView(now), personWaiting: true }) === now);
+      check("a quiet run is never woken", nextWake(quietView(now)) === null);
     },
   ],
   [
-    "turn end: the lead rests, never wrapped up for being quiet; out of time wraps up",
+    "turn end: the lead rests, never wrapped up for being quiet; the person's Finish wraps up",
     () => {
-      const base = { ok: true, closed: false, workingTimeLeft: true, finishRequested: false };
+      const base = { ok: true, closed: false, finishRequested: false };
       check("a turn end rests", afterTurn(base).next === TurnEnd.Sleep);
-      check("out of time wraps up", afterTurn({ ...base, workingTimeLeft: false }).next === TurnEnd.WrapUp);
+      check("the person's Finish wraps up", afterTurn({ ...base, finishRequested: true }).next === TurnEnd.WrapUp);
     },
   ],
   [
@@ -72,16 +57,8 @@ const SELFTEST_STEPS: readonly SelftestStep[] = [
       const run = { runId: "r", goal: "g", project: "p", engine: "claude" } as unknown as Run;
       const seated = [{ id: "claude", kind: "delegated" }] as never[];
       const plain = [{ id: "claude", kind: "direct", supportsSessions: false }] as never[];
-      check("session leads", chooseRunner(run, seated, LoopProfile.Web) === RunnerKind.Director);
-      check("no session refused", chooseRunner(run, plain, LoopProfile.Web) === RunnerKind.NeedsSession);
-    },
-  ],
-  [
-    "clock: a resumed Loop goes on with the time it had left",
-    () => {
-      const now = 10 * HOUR_MS;
-      const clock = capClock({ saved: { workedMs: 30 * MINUTE_MS }, now, totalMs: HOUR_MS });
-      check("cap is half an hour away", clock.softDeadline - now === 30 * MINUTE_MS);
+      check("session leads", chooseRunner(run, seated) === RunnerKind.Director);
+      check("no session refused", chooseRunner(run, plain) === RunnerKind.NeedsSession);
     },
   ],
   [
@@ -89,23 +66,6 @@ const SELFTEST_STEPS: readonly SelftestStep[] = [
     () => {
       const plain = plainly("merged w1 at 0123456789abcdef into /Users/me/game");
       check("no sha or path", !plain.includes("0123456789") && !plain.includes("/Users"));
-    },
-  ],
-  [
-    "landing: a build is said to load only when it passed its health check",
-    () => {
-      check("passed says so", landingWords({ healthPassed: true }).line.includes("it loads"));
-      check("unchecked says so", !landingWords({ healthPassed: false }).line.includes("it loads"));
-      check("never a verdict", !landingWords({ healthPassed: true }).verified);
-    },
-  ],
-  [
-    "wrap-up: its reserve is a share of the run, bounded on both sides",
-    () => {
-      const hour = wrapReserveMs(HOUR_MS);
-      check("inside the run", hour > 0 && hour < HOUR_MS);
-      check("grows with the run, within its bounds", wrapReserveMs(24 * HOUR_MS) >= hour);
-      check("never above a short run", wrapReserveMs(10 * MINUTE_MS) <= wrapReserveMs(HOUR_MS));
     },
   ],
   [

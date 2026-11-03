@@ -10,7 +10,6 @@ import { t } from "../../../shared/i18n.ts";
  * work is its agent's screen: the window's newest frame, the agent's cursor, what it is doing.
  */
 import type { CSSProperties, JSX, ReactNode } from "react";
-import type { AgentScreenFrame } from "../../../shared/agent-screen.ts";
 import { JobState } from "../../../shared/jobs.ts";
 import type {
   AssetInfo,
@@ -764,29 +763,23 @@ const LEAD_LOOK: Record<LeadFace, { variant: Variant; fill: Fill; glyph: StepSta
  */
 export function LeadNode({
   rect,
-  frame,
   face = LeadFace.Working,
   rest = null,
   selected,
   onSelect,
 }: {
   rect: Rect;
-  frame: AgentScreenFrame | null;
   face?: LeadFace;
   /** What the lead wears once it is done or paused (`leadRest`). */
   rest?: LeadRest | null;
   selected: boolean;
   onSelect: () => void;
 }): JSX.Element {
-  // Only the lead at work shows its screen; waiting, it is the workers' screens that move.
-  const shown = face === LeadFace.Working ? frame : null;
   const save = rest && "save" in rest ? rest.save : null;
   const saved = useSavePointShot(save?.shown ?? null, save?.earlier);
   const restPath = rest && "build" in rest ? rest.build : (saved?.path ?? null);
   const settled = restPath ? { run: restPath, maxPx: LEAD_PICTURE_PX } : null;
-  const screen = useFrameSrc(shown);
-  const savedSrc = useStill(settled);
-  const src = screen ?? savedSrc;
+  const src = useStill(settled);
   const look = LEAD_LOOK[face];
   const word = LEAD_WORDS.face[face];
   return (
@@ -796,15 +789,13 @@ export function LeadNode({
       variant={look.variant}
       selected={selected}
       label={LEAD_WORDS.heard[face]}
-      screen={shown?.handle ?? null}
       onSelect={onSelect}
     >
       <NodeFace
         src={src}
         fill={look.fill}
-        over={shown ? <NodeCursor frame={shown} box={rect} /> : null}
         name={LEAD_WORDS.name}
-        word={shown ? <ScreenWords frame={shown} /> : word}
+        word={word}
         tone={STATE_TONE[look.glyph]}
         glyph={<StateGlyph state={look.glyph} />}
       />

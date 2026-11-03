@@ -13,6 +13,8 @@ import type {
   HarnessHostMethod,
   MessageImage,
   ModelPreferences,
+  ReferenceFrame,
+  RunRoles,
   RunSpec,
 } from "./host-api.d.ts";
 import type { RunInbox } from "../loop/run-inbox.ts";
@@ -117,7 +119,7 @@ export interface Run extends RunSpec {
 
 /**
  * The ctx a tool runs with: the turn's ctx plus the turn's own options — the game the chat is
- * pinned to, the commission an interview carries.
+ * pinned to, and the engine, model, roles and pictures of the message.
  */
 export interface ToolCtx extends HarnessCtx {
   project?: string | null;
@@ -125,8 +127,10 @@ export interface ToolCtx extends HarnessCtx {
   engine?: string;
   model?: string;
   effort?: string;
-  loop?: AnyRecord | null;
-  autopilot?: AnyRecord | null;
+  /** The composer's roles panel the message carries: a Loop the turn starts takes them (loop/start-autopilot.ts). */
+  roles?: RunRoles;
+  /** The pictures the message carries: a Loop the turn starts hands them to its lead. */
+  stills?: ReferenceFrame[];
   [option: string]: unknown;
 }
 

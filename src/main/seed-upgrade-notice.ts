@@ -34,14 +34,9 @@ export const SEED_MOVE_MEMORY_PREFIX = "app update moved code out of ";
 /** The memory policy's limit on one value (harness-seed/memory/policy.ts `MAX_VALUE_CHARS`). */
 const MAX_NOTE_CHARS = 300;
 
-/** Memory keys the boot owns: one per kept file that still calls the host the older way (SEED_CALL_CHANGES). */
-export const SEED_CALL_MEMORY_PREFIX = "app update changed host calls in ";
-
 /** The note the agent reads about a kept file, and the error for a note about nothing. */
 const MESSAGE = {
   noMoves: "seedMoveNote needs at least one move",
-  callNote: (file: string) =>
-    `Your edited ${file} was kept, but it calls the host the older way. Compare its host calls with the shipped copy and carry the new ones over.`,
   moveNote: (from: string, where: readonly string[]) =>
     `Your edited ${from} was kept, but other harness files now import some of its code from a new home, so your edits to that code run only inside it. Carry them over to reach the rest. Moved: ${where.join("; ")}.`,
 } as const;
@@ -77,17 +72,6 @@ export function seedMoveMemory(
   const byFile = new Map<string, SeedMoveNotice[]>();
   for (const move of moved) byFile.set(move.from, [...(byFile.get(move.from) ?? []), move]);
   for (const [from, moves] of byFile) next[`${SEED_MOVE_MEMORY_PREFIX}${from}`] = seedMoveNote(moves);
-  return next;
-}
-
-/**
- * The agent's memory with the boot's notes brought in step with `outdated`: a note per kept file
- * that still calls the host the older way, and none for a file that no longer does. Every other
- * entry is returned as it was.
- */
-export function seedCallMemory(memory: Record<string, unknown>, outdated: readonly string[]): Record<string, unknown> {
-  const next = Object.fromEntries(Object.entries(memory).filter(([key]) => !key.startsWith(SEED_CALL_MEMORY_PREFIX)));
-  for (const file of outdated) next[`${SEED_CALL_MEMORY_PREFIX}${file}`] = MESSAGE.callNote(file);
   return next;
 }
 

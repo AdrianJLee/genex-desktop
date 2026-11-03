@@ -15,10 +15,11 @@ import { describe, it } from "node:test";
 import { ClaudeCodeEngine, claudeJudgeContent, compactSdkMessage } from "../../src/substrate/engines/claude-code.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
 import { STEER_STALL_MS, steerFeed, steerSession, userFrame } from "../../src/substrate/engines/claude-steer.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
 import { credentialHomes } from "../../src/substrate/credential-homes.ts";
 import { absoluteRule } from "../../src/substrate/engines/claude-permissions.ts";
-import { EngineError, type Engine } from "../../src/substrate/engines/types.ts";
-import { StopReason } from "../../src/shared/engine-requests.ts";
+import { EngineError, type DelegateRequest, type Engine } from "../../src/substrate/engines/types.ts";
+import { MessageFrom, StopReason } from "../../src/shared/engine-requests.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { registeredSchema, scriptedClaude, wokenSession } from "../helpers/scripted-claude.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -104,6 +105,7 @@ type Send =
       id: string;
       text: string;
       images?: Array<{ label: string; mimeType: string; data: string }>;
+      from?: MessageFrom;
     }) => boolean)
   | null;
 
@@ -1349,13 +1351,15 @@ describe("steering a running Claude Code turn", () => {
     assert.match(frame.uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     assert.equal(frame.session_id, "ses_steer");
     assert.equal(frame.parent_tool_use_id, null);
+    // Flipped: the person's words as they wrote them, their picture an image block beside them.
     assert.deepEqual(frame.message, {
       role: "user",
       content: [
-        { type: "text", text: "please also do X\n\nIMAGES ATTACHED (1): sketch." },
+        { type: "text", text: "please also do X" },
         { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } },
       ],
     });
+    assert.equal("isSynthetic" in frame, false, "the person's own words");
 
     // Recorded in stream order: after the tool result it was folded into, before the reply to it.
     assert.deepEqual(story(events), ["assistant", "user", "steer_delivered", "assistant", "result"]);
@@ -1607,7 +1611,7 @@ describe("steering a running Claude Code turn", () => {
     assert.deepEqual(result.steered, []);
   });
 
-  it("an Auto chat handed only its Loop start still takes input mid-turn: that tool makes no interview", {
+  it("a chat handed its Loop start still takes input mid-turn: only the question card makes an interview", {
     timeout,
   }, async () => {
     const { fn } = steerableQuery(async function* ({ read }) {
@@ -1625,9 +1629,8 @@ describe("steering a running Claude Code turn", () => {
       interviewTools: [
         {
           name: "start_autopilot",
-          description: "Start a Loop, only when asked.",
+          description: "Start a Loop.",
           parameters: { type: "object", properties: { goal: { type: "string" } }, required: ["goal"] },
-          onlyWhenAsked: true,
         },
       ],
       steer: {
@@ -1851,6 +1854,120 @@ describe("steering a running Claude Code turn", () => {
         parent_tool_use_id: null,
       },
     ]);
+  });
+
+  it("a prompt Genex wrote goes in as not the person's (isSynthetic); the person's words as theirs, raw", async () => {
+    const framesOf = async (request: Partial<DelegateRequest>) => {
+      const fake = fakeQuery(successRun);
+      await (await engineWithLogin(fake.fn)).delegate({ prompt: "", cwd: "/tmp/x", ...request } as DelegateRequest);
+      const frames: Array<Record<string, any>> = [];
+      for await (const frame of fake.seen[0]!.prompt as unknown as AsyncIterable<Record<string, any>>)
+        frames.push(frame);
+      return frames;
+    };
+    // CLI 2.1.257 shows an isSynthetic message under "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]".
+    assert.deepEqual(await framesOf({ prompt: "The build landed. Make the cover.", from: MessageFrom.Genex }), [
+      {
+        type: "user",
+        message: { role: "user", content: [{ type: "text", text: "The build landed. Make the cover." }] },
+        parent_tool_use_id: null,
+        isSynthetic: true,
+      },
+    ]);
+    const sketch = { label: "sketch", mimeType: "image/png", data: "iVBOR" };
+    assert.deepEqual(await framesOf({ prompt: "stop building", from: MessageFrom.Person, images: [sketch] }), [
+      {
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            { type: "text", text: "stop building" },
+            { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } },
+          ],
+        },
+        parent_tool_use_id: null,
+        origin: { kind: "human" },
+      },
+    ]);
+  });
+
+  it("Genex's notices ride the person's frame as marked text blocks before the words, one frame, no empty words block", async () => {
+    const framesOf = async (request: Partial<DelegateRequest>) => {
+      const fake = fakeQuery(successRun);
+      await (await engineWithLogin(fake.fn)).delegate({ prompt: "", cwd: "/tmp/x", ...request } as DelegateRequest);
+      const prompt = fake.seen[0]!.prompt;
+      if (typeof prompt === "string") return prompt;
+      const frames: Array<Record<string, any>> = [];
+      for await (const frame of prompt as unknown as AsyncIterable<Record<string, any>>) frames.push(frame);
+      return frames;
+    };
+    const sketch = { label: "sketch.png", mimeType: "image/png", data: "iVBOR" };
+    const marked = `${GENEX_MARK}\nGenex cut a call off.`;
+    assert.deepEqual(
+      await framesOf({
+        prompt: "add a moat",
+        from: MessageFrom.Person,
+        notices: ["Genex cut a call off."],
+        images: [sketch],
+      }),
+      [
+        {
+          type: "user",
+          message: {
+            role: "user",
+            content: [
+              { type: "text", text: marked },
+              { type: "text", text: "add a moat" },
+              { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } },
+            ],
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      ],
+      "one frame, the person's, with no IMAGES ATTACHED line",
+    );
+    const [alone] = (await framesOf({
+      prompt: "",
+      from: MessageFrom.Person,
+      notices: ["Genex cut a call off."],
+    })) as Array<Record<string, any>>;
+    assert.deepEqual(alone?.message.content, [{ type: "text", text: marked }], "no empty words block");
+    assert.equal(
+      await framesOf({ prompt: "add a moat", from: MessageFrom.Person }),
+      "add a moat",
+      "no notices: the words as a string",
+    );
+  });
+
+  it("a Genex line steered into the turn goes in as isSynthetic with no origin; the person's as origin human", async () => {
+    const readies: Send[] = [];
+    const feed = steerFeed(
+      steerSession((send) => readies.push(send)),
+      userFrame("Run the command", []),
+      new AbortController().signal,
+      () => "ses_steer",
+    );
+    const input = feed.prompt[Symbol.asyncIterator]();
+    const next = async () => (await input.next()).value as Record<string, any>;
+    await next();
+    feed.initialized(steerInit(), false);
+    assert.equal(readies[0]!({ id: "n1", text: 'worker sky "Sky": done.', from: MessageFrom.Genex }), true);
+    const { uuid: _genexUuid, ...genex } = await next();
+    assert.deepEqual(genex, {
+      type: "user",
+      message: { role: "user", content: [{ type: "text", text: 'worker sky "Sky": done.' }] },
+      parent_tool_use_id: null,
+      isSynthetic: true,
+      priority: "next",
+      session_id: "ses_steer",
+    });
+    assert.equal(readies[0]!({ id: "m1", text: "and X", from: MessageFrom.Person }), true);
+    const person = await next();
+    assert.deepEqual(person.origin, { kind: "human" });
+    assert.equal("isSynthetic" in person, false);
+    assert.deepEqual(person.message.content, [{ type: "text", text: "and X" }]);
+    feed.dispose();
   });
 });
 

@@ -10,7 +10,6 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { withWorkerRoom } from "../../src/harness-seed/loop/workers/room.ts";
 import { GIT_TIMEOUT_MS } from "../../src/harness-seed/loop/config.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
@@ -493,50 +492,6 @@ describe("the worker pool", { timeout: TEST_TIMEOUT_MS }, () => {
     assert.ok(copy, "the copy was made");
     assert.equal(existsSync(copy), false, "and removed");
     assert.equal(host.sessions.length, 0, "no session started in it");
-  });
-
-  it("a builder the chat has no room for yet waits for room and tries again, until its deadline", async () => {
-    let now = 0;
-    const waits: number[] = [];
-    const clock = {
-      now: () => now,
-      wait: async (ms: number) => {
-        waits.push(ms);
-        now += ms;
-      },
-      stopped: () => false,
-    };
-    const full = () => Object.assign(new Error("This chat already runs 2 workers"), { code: "too_many_workers" });
-    let tries = 0;
-    const ran = await withWorkerRoom(
-      async () => {
-        tries += 1;
-        if (tries < 3) throw full();
-        return "built";
-      },
-      60_000,
-      clock,
-    );
-    assert.equal(ran, "built", "a full chat is a wait, never a broken build");
-    assert.equal(waits.length, 2);
-    now = 0;
-    await assert.rejects(
-      withWorkerRoom(async () => Promise.reject(full()), 15_000, clock),
-      { code: "too_many_workers" },
-      "past its deadline the refusal stands",
-    );
-    await assert.rejects(
-      withWorkerRoom(async () => Promise.reject(new Error("the build broke")), 60_000, clock),
-      /the build broke/,
-      "any other failure is the build's",
-    );
-    const stopping = { ...clock, stopped: () => true };
-    await assert.rejects(
-      withWorkerRoom(async () => Promise.reject(full()), 60_000, stopping),
-      {
-        code: "too_many_workers",
-      },
-    );
   });
 
   it("a copy too large to make is answered by its code, pointing at in-place work", async () => {

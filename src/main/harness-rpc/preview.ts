@@ -66,10 +66,6 @@ export function previewRpc(core: StudioCore, x: CoreInternals) {
       const budgetMs = p?.timeoutMs ?? (shown ? await x.previews.bootMsFor(shown.project) : bootBudget(undefined));
       return awaitReady(x.previews.preview(p?.handle), { timeoutMs: budgetMs, gesture: p?.gesture !== false });
     }),
-    // What the person's own window is showing right now: their game folder, or a build they
-    // chose to play. `status()` carries the project but not the root, and the root is the whole
-    // difference between "your game folder" and "that build".
-    [HostMethod.PreviewShowing]: async () => x.servedRoots.get(LIVE_HANDLE) ?? null,
     [HostMethod.PreviewObserve]: routed(async (p: HarnessParams<typeof HostMethod.PreviewObserve>) =>
       observeBuild(x.previews.preview(p?.handle)),
     ),

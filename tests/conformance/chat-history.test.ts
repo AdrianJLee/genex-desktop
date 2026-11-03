@@ -255,11 +255,6 @@ test("delegated background work never becomes the main reply, while a direct cha
     runId: undefined,
     facetId: undefined,
   });
-  assert.deepEqual(delegationActivityScope({ coordinator: { runId: "run" }, readOnly: true }), {
-    role: "planner",
-    runId: "run",
-    facetId: undefined,
-  });
 });
 
 test("late terminal records from another build do not replace the current build outcome", () => {
@@ -468,7 +463,7 @@ test("a run's earlier result card is superseded by its later close, so only the 
   );
 });
 
-test("a coordinator turn ending does not end worker tools; stopping their run does", () => {
+test("a chat turn ending does not end worker tools; stopping their run does", () => {
   const pending = [
     custom(1, "delegated.codex", {
       runId: "build",
@@ -548,7 +543,7 @@ test("cancelled plans stay at their recorded position when a later conversation 
 
 test("queue identity, edits and removals survive paged history and checkpoint batches", async () => {
   const { messageQueueState } = await import("../../src/shared/message-queue.ts");
-  const { conversationThrough } = await import("../../src/shared/coordinator.ts");
+  const { conversationThrough } = await import("../../src/shared/chat-run.ts");
   const user = event(1, { type: "messages", messages: [{ role: "user", content: "Original request" }] });
   const queued = custom(2, "coordinator_message_queued", { messageId: "a", action: { text: "Original request" } });
   let state = chatContext(chatContext([], [user]), [queued]);
@@ -965,8 +960,8 @@ test("a message steered in by interrupting the session stops the tools that leg 
       runId: "build",
       facetId: "river",
     }),
-    // A run's coordinator answers for that run: its rows carry the runId, but it is the chat's session.
-    // (Its run controls are the host's own rows, recorded when the host answers them: a read here.)
+    // An older log's session that answered for a run: its rows carry the runId, but it was the chat's.
+    // (Run controls are the host's own rows, recorded when the host answers them: a read here.)
     said(7, "coordinator", [{ type: "tool_use", id: "status", name: "Read", input: { file_path: "NOTES.md" } }], {
       runId: "build",
     }),
@@ -981,7 +976,7 @@ test("a message steered in by interrupting the session stops the tools that leg 
   assert.deepEqual(
     states("interrupt"),
     ["running", "stopped", "running", "stopped", "running"],
-    "only the interrupted chat legs (a coordinator's too); not the turn's own call, a build worker or the resumed session",
+    "only the interrupted chat legs (an older log's run-scoped one too); not the turn's own call, a build worker or the resumed session",
   );
   assert.deepEqual(
     states("native"),
@@ -1122,52 +1117,4 @@ test("a finished compaction stays in the chat as its own row, never folded into 
   assert.equal(compactedWords(42), "Compacted 42 messages");
   assert.equal(compactedWords(1), "Compacted 1 message");
   assert.equal(compactedWords(undefined), "Compacted the conversation");
-});
-
-test("a message a build's lead heard in its wrap-up reads where the lead heard it, and stays there once the chat answers it", async () => {
-  const { deliveryOrder, toldToLead } = await import("../../src/renderer/chat/delivery-order.ts");
-  const { messageQueueState } = await import("../../src/shared/message-queue.ts");
-  const user = (id: number, content: string) => event(id, { type: "messages", messages: [{ role: "user", content }] });
-  const lead = (id: number, text: string) => custom(id, "director_note", { runId: "run_1", text });
-  const told = [
-    lead(1, "Wrapping up: merging the boss fight."),
-    user(2, "also add rain"),
-    custom(3, "coordinator_message_queued", { messageId: "rain", action: { text: "also add rain" } }),
-    custom(4, "run_steering", {
-      runId: "run_1",
-      text: "also add rain",
-      sourceMessageId: "rain",
-      how: "lead",
-      kept: true,
-    }),
-    lead(5, "Noted: rain comes right after this build closes."),
-  ];
-  assert.deepEqual([...toldToLead(told, messageQueueState(told).messages)], ["rain"]);
-  assert.deepEqual(
-    deliveryOrder(told).map((e) => Number(e.id)),
-    [1, 3, 2, 4, 5],
-    "where the lead heard it, not below the work",
-  );
-  // The build closes and the chat answers it: the bubble stays where the lead heard it.
-  const answered = [
-    ...told,
-    custom(6, "run_finished", { runId: "run_1" }),
-    custom(7, "coordinator_message_processing", { messageId: "rain" }),
-    custom(8, "coordinator_message_handled", { messageId: "rain" }),
-  ];
-  assert.deepEqual(
-    deliveryOrder(answered).map((e) => Number(e.id)),
-    [1, 3, 2, 4, 5, 6, 7, 8],
-  );
-  // A message the lead took as usual is its delivery's, not a told one.
-  const delivered = [
-    user(1, "more lava"),
-    custom(2, "coordinator_message_queued", { messageId: "lava", action: { text: "more lava" } }),
-    custom(3, "coordinator_message_delivered", { messageId: "lava", into: "run_1", how: "lead" }),
-    custom(4, "run_steering", { runId: "run_1", text: "more lava", sourceMessageId: "lava", how: "lead" }),
-  ];
-  assert.deepEqual([...toldToLead(delivered, messageQueueState(delivered).messages)], []);
-  // Delivered to the lead, never heard, and given back as its run ended: it waits below like any other.
-  const givenBack = [...delivered, custom(5, "coordinator_message_requeued", { messageId: "lava" })];
-  assert.deepEqual([...toldToLead(givenBack, messageQueueState(givenBack).messages)], []);
 });

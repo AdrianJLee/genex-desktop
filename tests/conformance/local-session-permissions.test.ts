@@ -11,7 +11,7 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { BONSAI_MODELS } from "../../src/substrate/bonsai/manifest.ts";
 import { LocalSessions } from "../../src/substrate/engines/local-session.ts";
-import { deniedWithWords, LOCAL_NOTE, modeChangedNote } from "../../src/substrate/engines/local-session-prompts.ts";
+import { deniedWithWords, LOCAL_NOTE, localSystemPrompt } from "../../src/substrate/engines/local-session-prompts.ts";
 import { AUTO_APPROVER_SYSTEM, AUTO_REFUSED } from "../../src/substrate/engines/auto-approver-prompts.ts";
 import type { PermissionMode } from "../../src/shared/permissions.ts";
 import {
@@ -245,8 +245,12 @@ describe("a Bonsai chat session in the chat's mode", () => {
       ["Edit"],
       "the write before the switch ran unasked",
     );
-    const told = run.requests[2]!.messages.some((message) => message.content === modeChangedNote("default"));
-    assert.ok(told, "the model reads of the switch at its next round");
+    // Flipped: the switch was a "Studio notice" message at the next round. The session's own system
+    // prompt says the mode it runs in, from the next round on, and no message says it again.
+    const next = run.requests[2]!;
+    const inDefault = localSystemPrompt({ readonly: false, instructions: "", mode: "default" as never });
+    assert.ok(String(next.systemPrompt).startsWith(inDefault.trimEnd()), "the system prompt says the new mode");
+    assert.ok(!next.messages.some((message) => /permission mode/.test(String(message.content))), "no message says it");
     assert.equal(run.controls.at(-1), null, "the picker's reach ends with the session");
     // Bypass is no mode Bonsai has: a switch to it runs as Auto.
     const bypass = await session("default", [WRITE, EDIT], [{ decision: "allow" }], (round, control) => {

@@ -48,13 +48,6 @@ export const EngineId = {
 } as const;
 export type EngineId = (typeof EngineId)[keyof typeof EngineId];
 
-// The older seed's names for the same ids. A harness file the agent kept from that vintage may
-// still import them (tests/fixtures/seed-exports-2e-pre.json), so they stay exported; new code
-// writes `EngineId.ClaudeCode`.
-export const CLAUDE_CODE_ENGINE = EngineId.ClaudeCode;
-export const CODEX_ENGINE = EngineId.Codex;
-export const BONSAI_ENGINE = EngineId.Bonsai;
-
 export function supportsSessions(
   descriptor: { supportsSessions?: boolean; kind?: string } | null | undefined,
 ): boolean {
@@ -75,13 +68,6 @@ const SESSION_ENGINES: readonly string[] = [
 export function hasSessionRoles(engine: string | null | undefined): boolean {
   return isDelegated(engine) || SESSION_ENGINES.includes(engine as string);
 }
-
-/**
- * This copy crosses a game run's jobs to and from a completion-only local engine (`crossesTo`).
- * main.ts claims the local-roles capability only when it does (local-roles-served.ts): a kept
- * older copy drops such a cross but keeps the slot's model on the run's own engine.
- */
-export const SERVES_LOCAL_ROLES = true;
 
 /** The completion-only local engines whose jobs run on their own models in the classic loop. */
 const COMPLETION_ROLE_ENGINES = new Set<string>([EngineId.Ollama]);

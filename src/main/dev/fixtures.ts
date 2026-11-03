@@ -1,8 +1,7 @@
 /**
  * Named developer fixtures: what a `studio:dev` fixture profile holds before its window opens
  * ({@link prepareFixture}) and what it adds once the window is up ({@link activateChatFixture}).
- * Each fixture's seed lives in its own `fixture-*.ts` module; this one picks them. The one seed
- * the core must find already there, the plugin-updates fixture's older plugins, is re-exported.
+ * Each fixture's seed lives in its own `fixture-*.ts` module; this one picks them.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -12,7 +11,6 @@ import { EventKind, SnapshotScope } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { seedLargeBuildGraph } from "./fixture-large-graph.ts";
-import { seedLeadGraph } from "./fixture-lead-graph.ts";
 import { seedBuildGraph } from "./fixture-build-graph.ts";
 import { seedChatWorkers, seedChatWorkersLoop } from "./fixture-chat-workers.ts";
 import { seedBuildTimeline } from "./fixture-build-timeline.ts";
@@ -47,7 +45,6 @@ const MESSAGE = {
 } as const;
 
 export { FIRST_LAUNCH_STATUS, fixtureEngines } from "./fixture-engines.ts";
-export { installOlderPlugins } from "./fixture-plugin-updates.ts";
 export {
   DevProviders,
   FIXTURE_GAME,
@@ -143,7 +140,6 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   const { core, id, existing, threadId } = game;
   if (id === FixtureName.BuildGraph) return seedGraphOnce(game);
   if (id === FixtureName.LargeBuildGraph) return seedLargeBuildGraph(core, game.project.name, threadId);
-  if (id === FixtureName.LeadGraph) return seedLeadGraph(core, game.project.name, threadId);
   if (id === FixtureName.ChatWorkers) return seedChatWorkers(core, game.project.name, threadId);
   if (id === FixtureName.Sidebar) return seedSidebar(core, game.project.name);
   // The rest seed a fresh profile only; a reused one keeps what it has.

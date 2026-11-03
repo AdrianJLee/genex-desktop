@@ -17,19 +17,16 @@ import { resolveContextWindow } from "./turn-loop.ts";
 import { EngineId, supportsSessions } from "./model-roles.ts";
 import { compactThread } from "./compact.ts";
 import { compactSession } from "./session-compact.ts";
-import { directorTool } from "./director.ts";
+import { directorTool } from "./director/tool-specs.ts";
 import { chatWorkerTool } from "./workers/chat-workers.ts";
 import { loadSkills } from "./skills.ts";
 import { runSelftest } from "./selftest.ts";
 import { MessageQueue } from "./message-queue.ts";
-import * as queueParts from "./message-queue.ts";
 import { HostMethod } from "./host-methods.ts";
-import { handleUserMessage, rewindAttachedPictures } from "./chat-dispatch.ts";
+import { handleUserMessage } from "./chat-dispatch.ts";
 import { handleRunStart, resumeRun } from "./run-dispatch.ts";
 import { handleBootNotice } from "./boot-notice.ts";
 import { buildHolds, chatWaitsFor, leadDoor, stopRun, stopRunsOf } from "./live-chat.ts";
-import { serveLiveChat } from "./live-chat-served.ts";
-import { LOCAL_ROLES_CAPABILITY, servesLocalRoles } from "./local-roles-served.ts";
 import { heldRuns, StatusLane, type Studio } from "./studio-state.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, Host, HostCall } from "../types/harness.d.ts";
 import type { DispatchAction } from "../types/host-api.d.ts";
@@ -40,23 +37,19 @@ export { loopRunRefusal } from "./run-dispatch.ts";
 const IDLE_STATUS = "idle";
 
 /**
- * What this self can dispatch, reported in the bootstrap's ready message. A stale copy of this
- * file simply lacks the property — that absence is how the host knows not to hand an unattended
- * commission to a loop that predates the feature. Keep this list honest when editing dispatch
- * below.
+ * What this self can dispatch, reported in the bootstrap's ready message: the host asks a loop only
+ * for what it lists (a Resume, the message queue, workers). Keep this list honest when editing
+ * dispatch below.
  */
 const CAPABILITIES = [
-  "loop",
   "autopilot",
   "run.start",
   "run.stop",
   "compact",
   "selftest",
   "scoreboard",
-  "coordinator",
   "director",
   "message-queue",
-  "rewind",
   "steer",
   "workers",
 ];
@@ -78,7 +71,6 @@ export async function createStudio(host: Host) {
     host,
     cancels: new Set(),
     stoppedMessages: new Set(),
-    attachedPictures: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -101,8 +93,6 @@ export async function createStudio(host: Host) {
     (threadId, action) => !buildHolds(studio, threadId, action.project),
     (threadId, action) => leadDoor(studio, threadId, action),
   );
-  // A waking run's start says its lead takes the chat only when this queue hands messages to it.
-  serveLiveChat(queueParts);
 
   function scoped(threadId: string, lane: StatusLane = StatusLane.Run): HarnessCtx {
     return {
@@ -126,8 +116,7 @@ export async function createStudio(host: Host) {
 
   return {
     status: () => status.summarize(),
-    // A build whose jobs cross to or from a local engine only when every part it needs serves it.
-    capabilities: [...CAPABILITIES, ...(servesLocalRoles() ? [LOCAL_ROLES_CAPABILITY] : [])],
+    capabilities: CAPABILITIES,
 
     async healthcheck() {
       // Prove the loaded self can talk to the substrate and read its own state.
@@ -167,8 +156,6 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
       return messages.change(action.threadId, action.messageId, action.operation, action.text);
     case "queue_resume":
       return messages.resume(action.threadId);
-    case "rewind":
-      return rewindAttachedPictures(studio.attachedPictures, action);
     case "run_start":
       return handleRunStart(studio, action);
     case "autopilot_resume":
@@ -235,8 +222,7 @@ async function dispatch({ studio, messages, compactions, busyThreads }: Loop, ac
  */
 function stopCurrentMessage(studio: Studio, messages: Pick<MessageQueue, "current">, threadId: string): void {
   if (heldRuns(studio).some((active) => active.threadId === threadId && !active.done)) return;
-  // A kept message-queue.ts from before this has no `current`: its Stop is the old one.
-  const current = messages.current?.(threadId);
+  const current = messages.current(threadId);
   if (current) studio.stoppedMessages?.add(current);
 }
 

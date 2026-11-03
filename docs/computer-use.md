@@ -80,9 +80,9 @@ restart, so none overwrites another's): one row per action with
 
 ## Who holds it
 
-Workers (a capture grant, unless `computer: false`) and the director hold `computer` on a pooled
-window of their own, never Live; the chat's own session holds it on a game played in its engine's
-editor. A judge is a second opinion the lead asks for with `judge`: it reads the pictures it is
+Workers (a capture grant, unless `computer: false`) and the chat's own session hold `computer` on a
+pooled window of their own, never Live, the session in its turns as a Loop's lead too (one window,
+role `builder`); the chat's own session holds it on a game played in its engine's editor. A judge is a second opinion the lead asks for with `judge`: it reads the pictures it is
 given and holds no computer.
 
 A chat's earlier `chat_judge_result` rows (from before Genex dropped the chat's `judge_play`) still
@@ -324,6 +324,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   session's yes covers every app. The turn answering an assist the person pressed (or approved on its
   card) asks neither: that press was their yes, and the grant keeps the turn to the plugin's apps. A yes stands while the driver fails to connect (missing grants, no
   driver): the next call retries without a new card. A stop ends it, and the next call asks again.
+  A card nobody answers before it expires is no answer (`DesktopAnswer.Unanswered`): the model reads
+  that nobody answered and nothing moved, never that the person said no, and the next call asks again.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; on Windows the same by
   executable (`NEVER_DRIVEN_WINDOWS_APPS`), every packaged app's frame (`ApplicationFrameHost.exe`,

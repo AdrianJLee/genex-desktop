@@ -100,8 +100,8 @@ no file fails the zero-files guard. A failure is a typed `harnessFailure`.
 ### Genex lanes (A, D)
 
 The runner builds the SHA under test once into `$GENEX_EVALS_HOME/builds/<sha>` (`git archive`,
-`npm ci`, `node scripts/build.mjs`), reads the commission and permission mode from that build's
-own `loop-setting.ts` and `permissions.ts`, writes `lane-spec.json` in the lane root and launches
+`npm ci`, `node scripts/build.mjs`), reads the permission mode from that build's own
+`permissions.ts`, writes `lane-spec.json` in the lane root and launches
 `electron <build> --studio-smoke --userdata=<lane root>/userdata --studio-eval-lane=<spec>`
 (`--studio-eval-fixture` selects the scripted fixture engines). A live spec pins `executables` to
 the CLIs the raw lanes resolve; a fixture spec pins none.
@@ -264,7 +264,7 @@ The Genex lanes read these from the eval profile's event log (`genex-events.ts`,
   (`ready.pageMs` is a field row's first boot); the delegated turn's reply (`messages`) carries
   the same usage, marked `usage_source: delegation`, and is the one counted;
   `preview_ready` marks a project's first ready preview after a chat build
-  ([conversation lifecycle](conversation-coordinator.md)).
+  ([conversation lifecycle](conversation-lifecycle.md)).
 - Blind verdicts carry `judged` provenance and the `judgeCall` audit, an eval profile may pin its
   judge, and autopilot closes carry a `stopCode` ([harness runtime](harness-runtime.md)).
 

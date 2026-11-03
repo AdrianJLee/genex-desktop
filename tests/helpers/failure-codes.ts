@@ -6,6 +6,8 @@
 import assert from "node:assert/strict";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { createStudioBridge } from "../../src/preload/studio-bridge.ts";
+import { crossableCalls } from "../../src/preload/main-world.ts";
+import { installedInMainWorld } from "./context-bridge.ts";
 import { EngineId } from "../../src/shared/providers.ts";
 import type { EventProperties } from "../../src/renderer/analytics/properties.ts";
 
@@ -59,7 +61,10 @@ export const HOSTILE_THROWS: ReadonlyArray<[string, unknown]> = [
   ["a retired spelling as code", Object.assign(new Error("gone"), { code: "not-found" })],
 ];
 
-/** What the renderer catches when main's handler throws `thrown`: through `ipc-handle` and the preload, as in the app. */
+/**
+ * What the renderer catches when main's handler throws `thrown`: through `ipc-handle`, the preload
+ * and the context bridge into the page, as in the app.
+ */
 export async function crossed(thrown: unknown): Promise<unknown> {
   const listeners = new Map<string, (event: IpcSender, payload: unknown) => Promise<IpcResult>>();
   const handle = createIpcHandle(
@@ -77,7 +82,8 @@ export async function crossed(thrown: unknown): Promise<unknown> {
     on: () => undefined,
     off: () => undefined,
   });
-  return bridge.cliInstall(EngineId.Codex).then(
+  const page = installedInMainWorld(crossableCalls(bridge));
+  return page.cliInstall(EngineId.Codex).then(
     () => assert.fail("the handler threw"),
     (err: unknown) => err,
   );

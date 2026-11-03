@@ -3,13 +3,11 @@
  * plan's inbox, plan review, or the chat's queue with a bubble that shows at once.
  */
 import { PlanReviewState } from "../../shared/composer.ts";
+import { keepsOwnPlan } from "../../shared/run-state.ts";
 import { EntryAction, EntryKind } from "../chat-entries.ts";
-import { loopCommissions } from "../loop-setting.ts";
-import { autoChoice } from "../model-choices.ts";
 import { noteSentWords, type ReplyAbout } from "../reply-about.ts";
-import { type Notify, ToastTone } from "../state/toasts.ts";
-import type { AutopilotSend, ComposerExtras } from "../ui/PromptBar.tsx";
-import { problemWords } from "../words.ts";
+import { type Notify, ToastTone, notifyProblem } from "../state/toasts.ts";
+import type { ComposerExtras } from "../ui/PromptBar.tsx";
 import type { ConversationEntry } from "./conversation-entries.ts";
 import { SendRoute } from "../analytics/chat-vocabulary.ts";
 import {
@@ -23,10 +21,8 @@ import {
 import { finishingRun } from "./transcript.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import type { ChatWorkView } from "./use-chat-work.ts";
-import type { ComposerModel } from "./use-composer-model.ts";
 import type { FollowScroll } from "./use-follow-scroll.ts";
 import type { ReplyingAbout } from "./use-reply-about.ts";
-import { errorCode } from "../../shared/errors.ts";
 
 /** A legacy in-run plan that holds the worker until it is answered. */
 export const isHeldPlan = (entry: ConversationEntry, runId: string | null, now: number): boolean =>
@@ -43,13 +39,6 @@ const REVIEW_TAKES_MESSAGE: ReadonlySet<string> = new Set([
   PlanReviewState.Failed,
 ]);
 
-/** The model a send goes with: the pick, or for a timed build with no pick, the first usable one. */
-export function sendKey(model: ComposerModel, extras: ComposerExtras | undefined): string | null {
-  if (model.selected !== null) return model.selected;
-  if (!extras?.autopilot) return null;
-  return autoChoice(model.choices)?.key ?? null;
-}
-
 /**
  * A reply about the build is a note to it (the steering inbox), not a chat turn: it needs no
  * model and never waits behind the build. A failure keeps the words in the composer.
@@ -58,23 +47,20 @@ async function sendNote(about: ReplyAbout, text: string, onNotice: Notify): Prom
   await window.studio
     .runFeedback({ threadId: about.threadId, runId: about.runId, ...about.target, text, label: about.label })
     .catch((err: unknown) => {
-      onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+      notifyProblem(onNotice)(err);
       throw err;
     });
   onNotice(noteSentWords(about), ToastTone.Ok);
 }
 
-/** Where a send goes besides the chat's queue: plan review takes it as the plan's request. */
-function sendRoute(chat: ChatThread, work: ChatWorkView, extras?: ComposerExtras) {
-  // The one commission rule, applied again here for senders that bypass the composer's Mode.
-  const commissions = loopCommissions(chat.run);
-  const autopilot = commissions ? extras?.autopilot : undefined;
-  const runOpen = !commissions;
+/**
+ * Whether plan review takes a send as the plan's request: one that asks for it, or the next message
+ * after a plan, while no build of the chat is running or paused (that build keeps its own plan).
+ */
+function toPlanReview(chat: ChatThread, work: ChatWorkView, extras?: ComposerExtras): boolean {
   const review = work.plan.review;
   const reviewTakes = Boolean(review && REVIEW_TAKES_MESSAGE.has(review.state));
-  const toPlanReview =
-    !chat.isStudioThread && !runOpen && Boolean(extras?.reviewPlan || autopilot?.reviewPlan || reviewTakes);
-  return { autopilot, toPlanReview };
+  return !chat.isStudioThread && !keepsOwnPlan(chat.run) && Boolean(extras?.reviewPlan || reviewTakes);
 }
 
 /** What a send waits behind: the chat's own work, or its running build unless that build's lead takes it now. */
@@ -94,9 +80,9 @@ function pendingSend(
   send: { clientId: string; threadId: string; text: string },
   chat: ChatThread,
   work: ChatWorkView,
-  frames: { extras?: ComposerExtras; autopilot?: AutopilotSend },
+  extras: ComposerExtras | undefined,
 ): PendingSend {
-  const attached = frames.extras?.frames?.length ? frames.extras.frames : frames.autopilot?.frames;
+  const attached = extras?.frames;
   return {
     ...send,
     after: chat.rawStateEvents.at(-1)?.id ?? null,
@@ -137,7 +123,7 @@ export function sendDestination(
 ): { route: SendRoute; placement?: SendPlacement } {
   const { chat, work } = parts;
   if (heldRun) return { route: SendRoute.HeldPlan };
-  if (sendRoute(chat, work, extras).toPlanReview) return { route: SendRoute.PlanReview };
+  if (toPlanReview(chat, work, extras)) return { route: SendRoute.PlanReview };
   return { route: SendRoute.Chat, placement: sendPlacement(waitsBehindWork(sendWork(text, chat, work)), chat.queue) };
 }
 
@@ -153,9 +139,8 @@ export function showSend(
 ): string | undefined {
   const { chat, work } = parts;
   const { threadId } = chat;
-  const { autopilot, toPlanReview } = sendRoute(chat, work, extras);
-  if (!threadId || heldRun || toPlanReview) return undefined;
+  if (!threadId || heldRun || toPlanReview(chat, work, extras)) return undefined;
   const clientId = newClientId();
-  chat.sends.add(pendingSend({ clientId, threadId, text }, chat, work, { extras, autopilot }));
+  chat.sends.add(pendingSend({ clientId, threadId, text }, chat, work, extras));
   return clientId;
 }

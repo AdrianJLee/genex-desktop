@@ -12,8 +12,8 @@
  * whatever free text the judge that wrote it handed in.
  */
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import type { DelegateRequest, DelegateResult } from "../../src/substrate/engines/types.ts";
@@ -236,37 +236,6 @@ describe("one record, whatever judged the build", () => {
 
 // ── the report the run leaves behind ────────────────────────────────────────────────────
 
-/** A seed loop module and every module under its folder, joined, so a count covers the split. */
-function loopTree(module: string, folder: string): string {
-  const loop = new URL("../../src/harness-seed/loop/", import.meta.url);
-  const nested = readdirSync(new URL(`${folder}/`, loop), { recursive: true })
-    .map(String)
-    .filter((file) => file.endsWith(".ts"))
-    .sort()
-    .map((file) => `${folder}/${file}`);
-  return [module, ...nested].map((file) => readFileSync(new URL(file, loop), "utf8")).join("\n");
-}
-
-describe("one producer, and every path that judges a build calls it", () => {
-  it("keeps the two emitters where they are, so a third judge cannot answer in its own shape", () => {
-    // Flipped (Loop phase 5): the facet loop, the gauntlet, the fork gate and the lead's judge are
-    // gone (a judge is a second opinion and decides nothing). The lead's two passes, the health
-    // check and the close, go through the one helper that also puts them on the log. The director
-    // is director.ts and every module under director/.
-    const director = loopTree("director.ts", "director");
-    assert.equal(
-      (director.match(/await loopRun\.recordVerdict\(\{/g) ?? []).length,
-      2,
-      "the health check and the close",
-    );
-    assert.match(
-      director,
-      /appendRun\(RunEvent\.DirectorVerdict, record\)/,
-      "and each reaches the app on the event path",
-    );
-  });
-});
-
 // ── what the drawer shows ─────────────────────────────────────────────────────────────────
 
 let seq = 0;
@@ -473,18 +442,19 @@ describe("the build box shows the last look at the build, not a line about the r
 // ── the run itself ──────────────────────────────────────────────────────────────────────
 
 /**
- * One short run through the real core and the real harness child: a worker is started, its copy is
- * merged (the health check looks), the lead asks a second opinion (which decides nothing), and the
- * run is closed (the health check again, and the landing). Every pass reaches the log as
- * `director_verdict`, in the one shape, each with a sentence the app can print as it stands.
+ * One short Loop on a web game through the real core and the real harness child: a worker is
+ * started, its copy is merged into the game folder, the lead asks a second opinion (which decides
+ * nothing) and finishes. Flipped (one Loop): the web Loop's lead wrote a health check after each
+ * merge and at the finish, and a close with its landing, as `director_verdict`; the one Loop builds
+ * in the game folder and lands nothing, so the lead writes no pass of its own.
  */
-describe("every pass of a real run writes one", () => {
+describe("a web game's Loop through the real core", () => {
   const rigs: Rig[] = [];
   after(async () => {
     await Promise.all(rigs.map((rig) => rig.stop().catch(() => {})));
   });
 
-  it("emits a health check after the merge and at the finish, and a close — same shape, plain sentences; a second opinion writes none", async () => {
+  it("merges a worker's copy into the game folder and closes on finish; neither the lead nor a second opinion writes a pass", async () => {
     const rig = await startRig(
       { replies: [] },
       { previewPoolMax: 2, createHeadlessPreview: async () => makeFakePreview() },
@@ -516,7 +486,7 @@ describe("every pass of a real run writes one", () => {
           await call("worker_wait", { id: "w1", seconds: "120" });
           await call("worker_mark", { id: "w1", verdict: "used" });
           await call("judge", { question: "is the plaza red?" });
-          await call("finish", { summary: "the plaza is red", land: "yes", victory: "no" });
+          await call("finish", { summary: "the plaza is red" });
           return { ok: true, engine: "codex", turns: 6, usage: {}, sessionId: "director-1", summary: "run done" };
         }
         await mkdir(path.join(request.cwd, "src"), { recursive: true });
@@ -540,7 +510,7 @@ describe("every pass of a real run writes one", () => {
       mode: "autopilot",
       engine: "codex",
       reference: { name: "plaza", shots: [] },
-      budgets: { wallClockMs: 15 * 60_000 },
+      budgets: {},
     });
     const events = await waitForLog(
       rig.core,
@@ -549,40 +519,15 @@ describe("every pass of a real run writes one", () => {
       "the run to close",
     );
 
-    const verdicts = customEvents(events, "director_verdict").filter((e) => e.runId === runId);
-    // Flipped (Loop phase 5): no fork gate and no judge pass: the health check after the merge and
-    // at the finish, then the close.
+    const tools = `tool trace: ${JSON.stringify(trace)}`;
     assert.deepEqual(
-      verdicts.map((verdict) => verdict.pass),
-      ["health", "health", "close"],
-      `the passes, in the order they looked: ${JSON.stringify(verdicts.map((v) => [v.pass, (v as { decision: { rule: string } }).decision?.rule]))}; tool trace: ${JSON.stringify(trace)}`,
+      await readFile(path.join(project.dir, "src", "plaza.js"), "utf8"),
+      "export const plaza = 'red';\n",
+      tools,
     );
-    for (const verdict of verdicts) assertShape(verdict as Record<string, any>, `${verdict.pass} of the run`);
-    const byPass = Object.fromEntries(
-      verdicts.map((verdict) => [String(verdict.pass), verdict as Record<string, any>]),
-    );
-    assert.equal(byPass.health.decision.kept, true, JSON.stringify(byPass.health));
-    assert.equal(byPass.health.decision.rule, "starts");
-    const landedHead = (
-      customEvents(events, "run_finished").find((e) => e.runId === runId) as { integrationHead: string }
-    ).integrationHead;
-    assert.equal(byPass.close.decision.rule, "landed");
-    assert.equal(byPass.close.build.head, landedHead);
-
-    // The same records survive into the report, and the run's own graph can show the newest.
-    const report = customEvents(events, "run_finished").find((e) => e.runId === runId) as {
-      verdicts: Array<Record<string, any>>;
-    };
-    assert.equal(report.verdicts.length, verdicts.length);
-    const graph = buildRunGraph(
-      await rig.core
-        .listAllEvents()
-        .then((log) =>
-          log.filter((e) => e.data.type === "custom" && (e.data.payload as { runId?: string })?.runId === runId),
-        ),
-    )!;
-    assert.equal(graph.verdicts.length, 3);
-    assert.equal(headVerdict(graph)!.pass, "close", "the last word on the build that landed");
-    assertPlain(buildVerdictLine(graph)!, "the build box of a finished run");
+    const verdicts = customEvents(events, "director_verdict").filter((e) => e.runId === runId);
+    assert.deepEqual(verdicts, [], tools);
+    const report = customEvents(events, "run_finished").find((e) => e.runId === runId) as { verdicts?: unknown[] };
+    assert.deepEqual(report.verdicts ?? [], [], "the report carries no pass either");
   });
 });

@@ -10,8 +10,6 @@ export default {
   "(named {count, plural, one {# time} other {# times}} now)":
     "(названо уже {count, plural, one {# раз} few {# раза} many {# раз} other {# раза}})",
   "**Build to start:** {ask}": "**Запустится сборка:** {ask}",
-  "15 minutes less": "На 15 минут меньше",
-  "15 minutes more": "На 15 минут больше",
   "1 credit ≈ 1¢": "1 кредит ≈ 1¢",
   "2 to 20 characters.": "От 2 до 20 символов.",
   "3D": "3D",
@@ -24,8 +22,6 @@ export default {
   "64-bit PCs": "64-битные ПК",
   "<added>+{count}</added> this month": "<added>+{count}</added> в этом месяце",
   "<name>{title}</name> <live>is live!</live>": "<name>{title}</name> <live>уже в сети!</live>",
-  'A "beat a real game" run needs at least two screenshots of the reference.':
-    "Для сборки «Превзойти настоящую игру» нужно хотя бы два скриншота референса.",
   "A ChatGPT connection change is already in progress.": "Подключение ChatGPT уже меняется.",
   "A GLB for the game plus reference renders to check it.": "GLB для игры и референсные рендеры, чтобы его проверить.",
   "A Loop in {game} is using Unreal.": "Loop в игре «{game}» использует Unreal.",
@@ -214,10 +210,6 @@ export default {
   "A stealth game where a cat steals socks from a sleeping house": "Стелс-игра, где кот крадёт носки в спящем доме",
   "A survival game on a raft that grows from things you fish out of the sea":
     "Выживание на плоту, который растёт из всего, что ты выловишь в море",
-  "A team of AIs builds and tests your idea for up to {limit}.":
-    "Команда ИИ собирает и тестирует твою идею. Лимит — {limit}.",
-  "A team of AIs builds and tests your idea until it’s done.":
-    "Команда ИИ собирает и тестирует твою идею, пока всё не будет готово.",
   "A tide pool explorer collecting shells before the waves return":
     "Исследуй приливные лужи и собирай ракушки, пока не вернулись волны",
   "A tiny planet you walk around, planting trees until it turns green":
@@ -1128,14 +1120,11 @@ export default {
   "Credential save failed. {reason} Sign-in is stopped.":
     "Не удалось сохранить учётные данные. {reason} Вход остановлен.",
   Credits: "Кредиты",
-  "Critic's advice": "Совет критика",
   "Curated release": "Проверенный релиз",
   "Current build failed; no stale output was exported":
     "Текущая сборка не удалась; устаревший результат не экспортирован",
   "Current cover": "Текущая обложка",
-  Custom: "Другое",
   "Custom theme": "Своя тема",
-  "Custom time limit": "Свой лимит времени",
   "Customize theme": "Настроить тему",
   Cut: "Вырезать",
   "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.":
@@ -1209,7 +1198,6 @@ export default {
   "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
     "«Сделать за меня» откроет лаунчер, а чат установит Unreal там, управляя компьютером. Около 45 ГБ. Войти в Epic, когда попросят, можешь только ты.",
   "Does it feel alive? {score} of {max}": "Чувствуется жизнь? {score} из {max}",
-  "Does what you ask, then stops.": "Делает, что просишь, и останавливается.",
   "Don't allow": "Не разрешать",
   "Don't ask again for this action in {source}.": "Больше не спрашивать об этом действии в {source}.",
   "Don't use Godot": "Не использовать Godot",
@@ -1756,10 +1744,6 @@ export default {
   "Home background": "Фон главного экрана",
   "Hooks can run commands with your access.": "Хуки могут запускать команды с твоими правами.",
   Horns: "Рога",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. It builds until about {end}. Keep the app open.":
-    "Часы — помощники собирают, пока тебя нет, а проверяющий оставляет только то, что делает игру лучше. Сборка идёт примерно до {end}. Не закрывай приложение.",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. No cap: it runs until what you asked for is checked working, and stops by about {end} whatever happens. Keep the app open.":
-    "Часы — помощники собирают, пока тебя нет, а проверяющий оставляет только то, что делает игру лучше. Без лимита: работает, пока проверка не подтвердит, что твоя задача готова, и в любом случае остановится примерно к {end}. Не закрывай приложение.",
   Hover: "Наведение",
   "How Harness works": "Как работает Harness",
   "How does Harness build a game?": "Как Harness собирает игру?",
@@ -2129,19 +2113,9 @@ export default {
   "Looking through the assets": "Просматривает ассеты",
   "Looking up Blueprint nodes": "Ищет ноды Blueprint",
   "Looking…": "Поиск…",
-  "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling (harness-seed/loop) into its own loop code and restart itself — or restore the seed copies so the next launch upgrades them. Your brief is saved above; send it again once the loop code is current.":
-    "Loop не может запуститься: код цикла Studio старше функции Loop в поле ввода, поэтому он не умеет запускать сборку по времени. Чтобы это исправить, попроси Studio в чате влить обработку Loop из эталона (harness-seed/loop) в свой код цикла и перезапуститься — или восстанови эталонные копии, чтобы следующий запуск их обновил. Твоё задание сохранено выше; отправь его снова, когда код цикла обновится.",
-  "Loop can’t run in this game yet, so Keep building can’t start it.":
-    "В этой игре Loop пока не работает, поэтому «Собирать дальше» не может его запустить.",
   "Loop finished · Changes kept in your project": "Loop завершён · изменения сохранены в проекте",
   "Loop from {day}": "Loop, {day}",
-  "Loop mode": "Режим Loop",
   "Loop not started": "Loop не запущен",
-  "Loop time limit": "Лимит времени Loop",
-  "Loops need the {engine} project inside this game’s folder, so Rewind can undo each step; {project} is in {place}. Make a new one from the {engine} button, or move {project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.":
-    "Для Loop проект {engine} должен лежать в папке этой игры, чтобы откат мог отменить каждый шаг; {project} лежит в {place}. Создай новый кнопкой {engine} или перенеси {project} в папку этой игры и выбери его там. А пока — делает, что просишь, и останавливается.",
-  "Loops need this game’s {engine} project inside its folder, so Rewind can undo each step. A new {engine} project made from the {engine} button goes there. Until then, it does what you ask, then stops.":
-    "Для Loop проект {engine} этой игры должен лежать в её папке, чтобы откат мог отменить каждый шаг. Новый проект {engine}, созданный кнопкой {engine}, попадёт туда. А пока — делает, что просишь, и останавливается.",
   "Luau checks are added: scripts are checked at each worker's end and before a build finishes.":
     "Проверки Luau добавлены: скрипты проверяются в конце работы каждого помощника и перед завершением сборки.",
   "Luau checks are already on this computer.": "Проверки Luau уже есть на этом компьютере.",
@@ -2153,7 +2127,6 @@ export default {
   "Made Blueprint {blueprint}": "Создан Blueprint {blueprint}",
   "Made by {name}": "Создаёт {name}",
   "Made material {material}": "Создан материал {material}",
-  "Made with {engine}": "Сделано на {engine}",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "Плейс {name} создан в папке этой игры и привязан, но Roblox Studio не открылся: {why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -2231,7 +2204,6 @@ export default {
   "Mobile support for {title}": "Поддержка телефонов: {title}",
   "Mobile support saved": "Поддержка телефонов сохранена",
   Mode: "Режим",
-  "Mode options": "Настройки режима",
   "Model Providers": "Провайдеры моделей",
   "Model discovery disconnected.": "Поиск моделей прервался: связь потеряна.",
   "Model discovery timed out. Try again.": "Поиск моделей занял слишком много времени. Попробуй снова.",
@@ -2376,7 +2348,6 @@ export default {
   "No such account: {account}": "Нет такого аккаунта: {account}",
   "No supported UI colors found. Choose a Genex token file or a VS Code color theme.":
     "Подходящих цветов интерфейса не найдено. Выбери файл токенов Genex или цветовую тему VS Code.",
-  "No time limit": "Без лимита времени",
   "No unlocked system keyring is available. Start GNOME Keyring or KWallet and unlock it, then restart Genex.":
     "Нет разблокированной системной связки ключей. Запусти GNOME Keyring или KWallet, разблокируй хранилище и перезапусти Genex.",
   "Nobody answered": "Никто не ответил",
@@ -2474,8 +2445,6 @@ export default {
   "OS encryption is unavailable; secret storage remains locked.":
     "Шифрование ОС недоступно; хранилище секретов остаётся заблокированным.",
   Off: "Выкл.",
-  "Off — one build pass in this chat, shown as it goes. Set hours for a reviewed build that runs on its own: ∞ until what you asked for is checked working, or a number of hours.":
-    "Выкл. — один проход сборки в этом чате, всё видно по ходу. Задай часы, и сборка пойдёт сама, с проверкой: ∞ — пока проверка не подтвердит, что твоя задача работает, или заданное число часов.",
   "Off. Your agent can't use Genex tools.": "Выключен. Агент не может пользоваться инструментами Genex.",
   "Off: friends see your name only.": "Выкл.: друзья видят только твоё имя.",
   Offline: "Офлайн",
@@ -2507,7 +2476,6 @@ export default {
     "После включения он срабатывает в определённые моменты работы Genex: {steps}; в эти моменты он тебя не спрашивает.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Один аккаунт — сотни моделей. Платишь OpenRouter за то, что используешь.",
-  "One bold move": "Одна смелая идея",
   "One key for hundreds of models. Pay as you go.": "Один ключ — сотни моделей. Платишь только за то, что используешь.",
   "One step before the agent can build in Godot.": "Ещё один шаг — и агент сможет собирать в Godot.",
   "Online rooms": "Онлайн-комнаты",
@@ -2881,7 +2849,6 @@ export default {
   "Publishing this game ({phase})": "Игра публикуется ({phase})",
   "Publishing…": "Публикуем…",
   "Pull a recommended model from the Models tab.": "Скачай рекомендуемую модель на вкладке «Модели».",
-  "Put it together and check": "Собрать всё и проверить",
   "Put question aside": "Отложить вопрос",
   "Put the game files back as they were before this rewind; the chat stays rewound":
     "Вернуть файлы игры к состоянию до отката; чат останется откаченным",
@@ -3834,7 +3801,6 @@ export default {
   "The lead stopped {count}.": "Главный агент остановил {count} из них.",
   "The lead wants to run {job} in the background": "Главный агент хочет запустить {job} в фоне",
   "The lead's summary": "Итог главного агента",
-  "The lead's view of the game": "Игра глазами главного агента",
   "The lead: done": "Главный агент: готово",
   "The lead: paused": "Главный агент: на паузе",
   "The lead: stopped": "Главный агент: остановлен",
@@ -3925,8 +3891,6 @@ export default {
     "Помощник попытался сделать что-то за рамками правил своего рабочего пространства.",
   "The {app} is older than your last change: build it again, then publish.":
     "{app} старше твоего последнего изменения: собери заново, потом опубликуй.",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "Плагин {plugin} {version} готов. Нажми, чтобы обновить его в «Плагинах».",
   Theme: "Тема",
   "Theme JSON": "JSON темы",
   "Theme copied.": "Тема скопирована.",
@@ -3997,12 +3961,8 @@ export default {
   "This build of Genex has build metrics sharing removed.": "В этой сборке Genex отправка метрик сборок убрана.",
   "This build of the studio can't pick a build back up yet — its own loop code predates timed builds.":
     "Эта версия Studio пока не умеет продолжать сборку — её код цикла старше сборок по времени.",
-  "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's harness-seed/loop needs to be merged into it, or the seed copies restored so the next launch upgrades them.)":
-    "Эта версия Studio пока не умеет запускать сборку по времени — твоё задание сохранено выше: отправь его снова, когда Studio обновится, и сборка начнётся. (Её код цикла старше сборок по времени: нужно влить в него harness-seed/loop из эталона или восстановить эталонные копии, чтобы следующий запуск их обновил.)",
   "This build turned out not to run — reload to go back to your game":
     "Эта сборка не запускается — перезагрузи, чтобы вернуться к своей игре",
-  "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.":
-    "Помощники или проверяющие этой сборки работают на локальной модели, а код цикла Studio пока это не поддерживает — твоё задание сохранено выше. Выбери для всех задач один вид движка и отправь снова или попроси Studio влить harness-seed/loop из эталона в свой код цикла (или восстановить эталонные копии), чтобы следующий запуск их обновил.",
   "This change no longer differs from what Harness has now.":
     "Это изменение уже ничем не отличается от того, что сейчас есть у Harness.",
   "This change was already undone.": "Это изменение уже отменено.",
@@ -4171,6 +4131,8 @@ export default {
   "Toggle Developer Tools": "Инструменты разработчика",
   "Toggle Full Screen": "Полноэкранный режим",
   "Toggle terminal": "Показать или скрыть терминал",
+  "Told a worker: {said}": "Сказал помощнику: {said}",
+  "Told “{task}”: {said}": "Сказал «{task}»: {said}",
   "Too large to run locally": "Слишком большая для локального запуска",
   "Too large to save, so it stays as it is: {names}.":
     "Файл слишком большой для сохранения и останется как есть: {names}.",
@@ -4356,8 +4318,6 @@ export default {
   "Update and play": "Обновить и играть",
   "Update needed": "Нужно обновление",
   "Update ready — restart": "Обновление готово — перезапусти",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "Чтобы публиковать приложения, обнови плагин Genex в «Плагинах».",
   "Update to {version}": "Обновить до {version}",
   "Update {count}": "Обновить {count}",
   "Update {name}": "Обновить {name}",
@@ -4762,7 +4722,6 @@ export default {
   attempts: "попытки",
   back: "сзади",
   "badge\u0004Set up": "Нужна настройка",
-  "badge\u0004Update": "Обновление",
   "balance couldn’t be read": "баланс не удалось получить",
   "base commit": "базовый коммит",
   "before a Loop starts": "перед запуском Loop",
@@ -5203,11 +5162,8 @@ export default {
   unknown: "неизвестно",
   "unknown error": "неизвестная ошибка",
   "unknown project {name}": "неизвестный проект {name}",
-  "until about {end}": "примерно до {end}",
-  "until satisfied · by ~{end}": "до результата · к ~{end}",
   "up to {count, plural, one {# worker} other {# workers}} at once":
     "до {count, plural, one {# помощника} few {# помощников} many {# помощников} other {# помощника}} одновременно",
-  "up to {time}": "до {time}",
   "up {percent}%": "рост на {percent}%",
   "use your {publisher} account": "использовать твой аккаунт {publisher}",
   "used a tool": "использовал инструмент",
@@ -5253,8 +5209,6 @@ export default {
   "{action} {name}": "{action} {name}",
   "{action}: done": "{action}: готово",
   "{added} of {total} added": "добавлено {added} из {total}",
-  "{added} of {total} parts added": "Добавлено частей: {added} из {total}",
-  "{added} of {total} parts added · {working} working": "Добавлено частей: {added} из {total} · в работе: {working}",
   "{amount} Nex": "{amount} Nex",
   "{amount} more needed": "Не хватает: {amount}",
   "{app} settings": "Настройки {app}",
@@ -5486,7 +5440,6 @@ export default {
   "{count} files didn’t go in":
     "{count, plural, one {# файл не поместился} few {# файла не поместились} many {# файлов не поместилось} other {# файла не поместилось}}",
   "{count} finished": "готово: {count}",
-  "{count} likes": "Лайки: {count}",
   "{count} more": "ещё {count}",
   "{count} more waiting": "Ещё {count} в очереди",
   "{count} newly passing": "теперь проходят: {count}",
@@ -5505,11 +5458,11 @@ export default {
   "{does}, asks you each time": "{does}, каждый раз спрашивает тебя",
   "{doing} in {where}": "{doing} в {where}",
   "{done} MB": "{done} МБ",
+  "{done} done": "Готово: {done}",
+  "{done} done · {working} working": "Готово: {done} · в работе: {working}",
   "{done} of {size} GB": "{done} из {size} ГБ",
   "{done} of {total}": "{done} из {total}",
   "{done} of {total} MB": "{done} из {total} МБ",
-  "{elapsed} of {budget}": "{elapsed} из {budget}",
-  "{elapsed} of {budget} min": "{elapsed} из {budget} мин",
   "{engine} always uses its sandbox": "{engine} всегда работает в своей песочнице",
   "{engine} can’t stop to ask yet": "{engine} пока не может спрашивать",
   "{engine} default": "По умолчанию в {engine}",
@@ -5559,17 +5512,12 @@ export default {
   "{game} · started {time}": "{game} · запуск {time}",
   "{health} · {count, plural, one {# tool} other {# tools}}":
     "{health} · {count, plural, one {# инструмент} few {# инструмента} many {# инструментов} other {# инструмента}}",
-  "{hours, plural, one {# hour} other {# hours}}":
-    "{hours, plural, one {# час} few {# часа} many {# часов} other {# часа}}",
-  "{hours, plural, one {# hour} other {# hours}} {minutes, plural, one {# minute} other {# minutes}}":
-    "{hours, plural, one {# час} few {# часа} many {# часов} other {# часа}} {minutes, plural, one {# минута} few {# минуты} many {# минут} other {# минуты}}",
   "{hours} h": "{hours} ч",
   "{hours} h {minutes} m": "{hours} ч {minutes} мин",
   "{hours} h {minutes} min": "{hours} ч {minutes} мин",
   "{hours}+ h": "{hours}+ ч",
   "{hours}h": "{hours} ч",
   "{hours}h {minutes}m": "{hours} ч {minutes} мин",
-  "{hours}h{minutes}": "{hours}ч{minutes}",
   "{hours}h {minutes}m": "{hours} ч {minutes} мин",
   "{input} in / {output} out per M tokens": "{input} ввод / {output} вывод за 1 млн токенов",
   "{kept} · {count} finished.": "{kept} · готово: {count}.",
@@ -5598,8 +5546,6 @@ export default {
   "{max} pictures at most":
     "{max, plural, one {Максимум # картинка} few {Максимум # картинки} many {Максимум # картинок} other {Максимум # картинки}}",
   "{millions}M": "{millions} млн",
-  "{minutes, plural, one {# minute} other {# minutes}}":
-    "{minutes, plural, one {# минута} few {# минуты} many {# минут} other {# минуты}}",
   "{minutes} m": "{minutes} мин",
   "{minutes} min": "{minutes} мин",
   "{minutes} min left": "осталось {minutes} мин",
@@ -5964,6 +5910,8 @@ export default {
   "Drag to turn": "Потяни, чтобы повернуть",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex ещё не подтвердил оплату. Предмет появится в «Мои предметы», как только это случится. Дважды не спишем.",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.":
+    "Агенты Genex не запустились, поэтому сообщение никуда не ушло. Нажмите «Попробовать снова» рядом с «Агенты не запустились» и отправьте его ещё раз.",
   "Genex’s protected space needs an update": "Защищённому пространству Genex нужно обновление",
   Get: "Получить",
   "Get in {game}": "Получить в {game}",
@@ -6229,4 +6177,17 @@ export default {
     "TypeSafe не принял этот ключ. Проверь его и вставь снова.",
   "TypeSafe key": "Ключ TypeSafe",
   "Unreal play-tests pick their moves with Jev": "Плей-тесты в Unreal выбирают ходы с Jev",
+  "Made with": "Движок",
+  "Runs on": "Работает на",
+  Shots: "Скриншоты",
+  "{n, plural, one {{count} play} other {{count} plays}}":
+    "{n, plural, one {{count} запуск} few {{count} запуска} many {{count} запусков} other {{count} запуска}}",
+  "{n, plural, one {{count} like} other {{count} likes}}":
+    "{n, plural, one {{count} лайк} few {{count} лайка} many {{count} лайков} other {{count} лайка}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex не может установить {name} на этот компьютер. Установи его по инструкции и нажми «Проверить снова».",
+  "Install {name} with its guide, then check again.": "Установи {name} по инструкции и нажми «Проверить снова».",
+  "Open install guide": "Открыть инструкцию",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "На Windows OpenCode ставится по инструкции через Chocolatey, Scoop или npm. Потом нажми «Проверить снова».",
 } satisfies LocaleCatalog;

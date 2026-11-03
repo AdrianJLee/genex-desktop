@@ -5,7 +5,7 @@ export async function createStudio(host) {
     status: () => status,
     // Declared so the host's capability handshake can be tested; a harness without the
     // property must read as [], never as "everything".
-    capabilities: ["loop"],
+    capabilities: ["autopilot"],
     async healthcheck() {
       // A real turn round-trip against the substrate, not just "process is alive".
       const head = await host.call("events.head", { threadId: host.threadId ?? "probe" });

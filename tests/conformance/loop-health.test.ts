@@ -1,17 +1,14 @@
 /**
  * The Loop's one health check (loop/health-check.ts): the page loads, it throws no uncaught error and
  * its frame is not blank. Genex serves the build in a window of its own and asks the host's own check
- * (`preview.observe`) — before a worker's work is merged in and before the build lands.
+ * (`preview.observe`) — once, as a web game's Loop's lead finishes (open/finish.ts; its rows are in
+ * one-loop.test.ts).
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { checkHealth, HEALTH_WORDS, healthLine } from "../../src/harness-seed/loop/health-check.ts";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
-import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
-import { appended, fakeHost, fakeLoopRun } from "../helpers/director-run.ts";
 
-/** The integration head the rows' git answers. */
-const HEAD = "1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a";
 /** The screenshot the check keeps. */
 const SHOT = { stats: { contrast: 42 }, path: "/runs/run_j/health.png" };
 /** The host's reasons, in its own words: a page that threw, and one whose frame is blank. */
@@ -63,13 +60,6 @@ function heldClock() {
       slept.push(ms);
     },
   };
-}
-
-/** The git the run's integration worktree answers: nothing uncommitted, the head at HEAD. */
-function gitAnswers(params: Record<string, any>) {
-  const command = String(params.command ?? "");
-  if (command.startsWith("git rev-parse HEAD")) return { code: 0, stdout: `${HEAD}\n` };
-  return { code: 0, stdout: "" };
 }
 
 describe("the Loop's health check", () => {
@@ -127,52 +117,5 @@ describe("the Loop's health check", () => {
     const check = await checkHealth(ctx, { project: "plaza", label: "finish" }, heldClock());
     assert.equal(check.unchecked, HEALTH_WORDS.failed("the serve layer stopped"));
     assert.equal(methods().at(-1), HostMethod.PreviewRelease);
-  });
-});
-
-describe("the health check in a web game's Loop", () => {
-  it("a worker's merge is answered with the merged build's health check, on the run's record", async () => {
-    const host = fakeHost();
-    const observed = { ok: false, reasons: [UNCAUGHT] };
-    const loopRun = fakeLoopRun(host, {}, { ...previewAnswers({ observed }), [HostMethod.RunExec]: gitAnswers });
-    const line = await loopRun.afterMerge({ id: "w1" });
-    assert.equal(line, `Health check failed: ${UNCAUGHT}.`);
-    assert.equal(loopRun.state.integrationHealthy, false);
-    assert.equal(loopRun.state.healthByHead.get(HEAD)?.ok, false);
-    const [health] = appended(host).filter((event) => event.type === RunEvent.IntegrationHealth);
-    assert.equal(health?.payload.head, HEAD);
-    assert.equal(health?.payload.ok, false);
-    const served = host.calls.find((call) => call.method === HostMethod.PreviewLoad);
-    assert.equal(served?.params.root, loopRun.integrationWorktree, "the integration worktree's build is checked");
-  });
-
-  it("finish does not make live a build that fails its health check, and tells the lead why", async () => {
-    const host = fakeHost();
-    const observed = { ok: false, reasons: [BLANK] };
-    const loopRun = fakeLoopRun(host, {}, { ...previewAnswers({ observed }), [HostMethod.RunExec]: gitAnswers });
-    const answer = await loopRun.finish({ summary: "The plaza is built." });
-    assert.match(String(answer), /^Not finished: the build fails its health check/);
-    assert.ok(String(answer).includes(BLANK));
-    assert.equal(loopRun.state.finish, null, "the run is not closed");
-    assert.ok(!appended(host).some((event) => event.type === RunEvent.RunFinished), "nothing landed");
-  });
-
-  it("a head that still holds the user's own repository as a pointer fails it: no edit there could land", async () => {
-    const host = fakeHost();
-    const exec = (params: Record<string, any>) =>
-      String(params.command).startsWith("git ls-tree HEAD -- ")
-        ? { code: 0, stdout: `160000 commit ${HEAD}\tvendor/engine\n` }
-        : gitAnswers(params);
-    const loopRun = fakeLoopRun(
-      host,
-      { nestedRepos: ["vendor/engine"] },
-      { ...previewAnswers(), [HostMethod.RunExec]: exec },
-    );
-    const line = await loopRun.afterMerge({ id: "w1" });
-    assert.match(
-      line,
-      /^Health check failed: vendor\/engine\/ is the user's own repository and this build carries nothing from inside it/,
-    );
-    assert.equal(loopRun.state.integrationHealthy, false);
   });
 });

@@ -9,8 +9,6 @@ export default {
   "(done)": "(완료)",
   "(named {count, plural, one {# time} other {# times}} now)": "(지금까지 {count, plural, other {#번}} 지적됨)",
   "**Build to start:** {ask}": "**시작할 빌드:** {ask}",
-  "15 minutes less": "15분 줄이기",
-  "15 minutes more": "15분 늘리기",
   "1 credit ≈ 1¢": "1크레딧 ≈ 1¢",
   "2 to 20 characters.": "2~20자.",
   "3D": "3D",
@@ -23,8 +21,6 @@ export default {
   "64-bit PCs": "64비트 PC",
   "<added>+{count}</added> this month": "이번 달 <added>+{count}</added>",
   "<name>{title}</name> <live>is live!</live>": "<name>{title}</name> <live>게시 완료!</live>",
-  'A "beat a real game" run needs at least two screenshots of the reference.':
-    "“실제 게임 이기기” 빌드에는 참고 게임 스크린샷이 2장 이상 필요해요.",
   "A ChatGPT connection change is already in progress.": "ChatGPT 연결을 이미 바꾸는 중이에요.",
   "A GLB for the game plus reference renders to check it.": "게임용 GLB와 확인용 참고 렌더.",
   "A Loop in {game} is using Unreal.": "{game}의 Loop가 Unreal을 쓰고 있어요.",
@@ -192,9 +188,6 @@ export default {
   "A stealth game where a cat steals socks from a sleeping house": "고양이가 잠든 집에서 양말을 훔치는 잠입 게임",
   "A survival game on a raft that grows from things you fish out of the sea":
     "바다에서 건진 물건으로 커지는 뗏목 위의 생존 게임",
-  "A team of AIs builds and tests your idea for up to {limit}.":
-    "AI 팀이 최대 {limit} 동안 아이디어를 만들고 테스트해요.",
-  "A team of AIs builds and tests your idea until it’s done.": "AI 팀이 아이디어가 완성될 때까지 만들고 테스트해요.",
   "A tide pool explorer collecting shells before the waves return":
     "파도가 돌아오기 전에 조개껍데기를 모으는 갯벌 웅덩이 탐험",
   "A tiny planet you walk around, planting trees until it turns green":
@@ -1090,13 +1083,10 @@ export default {
   "Credential save failed. {reason} Sign-in is stopped.":
     "자격 증명을 저장하지 못했어요. {reason} 로그인이 중지됐어요.",
   Credits: "크레딧",
-  "Critic's advice": "비평가의 조언",
   "Curated release": "엄선된 릴리스",
   "Current build failed; no stale output was exported": "현재 빌드가 실패했어요. 오래된 결과물은 내보내지 않았어요",
   "Current cover": "현재 커버",
-  Custom: "직접 설정",
   "Custom theme": "사용자 지정 테마",
-  "Custom time limit": "시간 제한 직접 설정",
   "Customize theme": "테마 맞춤 설정",
   Cut: "잘라내기",
   "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.":
@@ -1168,7 +1158,6 @@ export default {
   "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
     "'대신 해 주기'를 누르면 런처가 열리고, 이 채팅이 컴퓨터를 조작해 Unreal을 설치해요. 약 45GB예요. Epic 로그인을 요청하면 본인이 직접 로그인하세요.",
   "Does it feel alive? {score} of {max}": "살아 있는 느낌이 나나요? {score}/{max}",
-  "Does what you ask, then stops.": "요청한 일을 하고 멈춰요.",
   "Don't allow": "허용 안 함",
   "Don't ask again for this action in {source}.": "{source}에서 이 작업은 다시 묻지 않아요.",
   "Don't use Godot": "Godot 사용 안 함",
@@ -1705,10 +1694,6 @@ export default {
   "Home background": "홈 배경",
   "Hooks can run commands with your access.": "훅은 내 권한으로 명령어를 실행할 수 있어요.",
   Horns: "뿔",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. It builds until about {end}. Keep the app open.":
-    "시간 — 자리를 비운 동안 작업자들이 만들고, 리뷰어는 게임을 더 좋게 만드는 것만 남겨요. {end}쯤까지 만들어요. 앱은 열어 두세요.",
-  "Hours — workers build while you're away, and a reviewer keeps only what improves the game. No cap: it runs until what you asked for is checked working, and stops by about {end} whatever happens. Keep the app open.":
-    "시간 — 자리를 비운 동안 작업자들이 만들고, 리뷰어는 게임을 더 좋게 만드는 것만 남겨요. 제한 없음: 요청한 내용이 작동하는 게 확인될 때까지 계속하고, 무슨 일이 있어도 {end}쯤에는 멈춰요. 앱은 열어 두세요.",
   Hover: "마우스 오버",
   "How Harness works": "Harness 작동 방식",
   "How does Harness build a game?": "Harness는 게임을 어떻게 만들어요?",
@@ -2074,19 +2059,9 @@ export default {
   "Looking through the assets": "에셋을 훑어보는 중",
   "Looking up Blueprint nodes": "블루프린트 노드를 찾아보는 중",
   "Looking…": "찾는 중…",
-  "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling (harness-seed/loop) into its own loop code and restart itself — or restore the seed copies so the next launch upgrades them. Your brief is saved above; send it again once the loop code is current.":
-    "Loop를 시작할 수 없어요: Studio의 자체 루프 코드가 입력창의 Loop 기능보다 오래돼서 시간 제한 빌드를 실행하는 방법을 몰라요. 고치려면 채팅에서 Studio에 기본 파일의 Loop 처리(harness-seed/loop)를 자체 루프 코드에 병합하고 다시 시작해 달라고 요청하세요 — 또는 기본 파일 사본을 복원해 다음 실행 때 업데이트되게 하세요. 지시는 위에 저장돼 있어요. 루프 코드가 최신이 되면 다시 보내세요.",
-  "Loop can’t run in this game yet, so Keep building can’t start it.":
-    "이 게임에서는 아직 Loop를 실행할 수 없어서 ‘계속 만들기’로 시작할 수 없어요.",
   "Loop finished · Changes kept in your project": "Loop 끝남 · 변경 사항은 프로젝트에 남아 있어요",
   "Loop from {day}": "{day} Loop",
-  "Loop mode": "Loop 모드",
   "Loop not started": "Loop가 시작되지 않음",
-  "Loop time limit": "Loop 시간 제한",
-  "Loops need the {engine} project inside this game’s folder, so Rewind can undo each step; {project} is in {place}. Make a new one from the {engine} button, or move {project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.":
-    "Loop가 되감기로 각 단계를 되돌리려면 {engine} 프로젝트가 이 게임 폴더 안에 있어야 해요. {project} 프로젝트는 {place}에 있어요. {engine} 버튼으로 새로 만들거나, {project} 프로젝트를 이 게임 폴더로 옮긴 뒤 거기서 선택하세요. 그전까지는 요청한 일을 하고 멈춰요.",
-  "Loops need this game’s {engine} project inside its folder, so Rewind can undo each step. A new {engine} project made from the {engine} button goes there. Until then, it does what you ask, then stops.":
-    "Loop가 되감기로 각 단계를 되돌리려면 이 게임의 {engine} 프로젝트가 게임 폴더 안에 있어야 해요. {engine} 버튼으로 만든 새 {engine} 프로젝트는 거기에 들어가요. 그전까지는 요청한 일을 하고 멈춰요.",
   "Luau checks are added: scripts are checked at each worker's end and before a build finishes.":
     "Luau 검사가 추가됐어요. 각 작업자가 끝날 때와 빌드가 끝나기 전에 스크립트를 검사해요.",
   "Luau checks are already on this computer.": "Luau 검사가 이미 이 컴퓨터에 있어요.",
@@ -2097,7 +2072,6 @@ export default {
   "Made Blueprint {blueprint}": "블루프린트 {blueprint} 만들었어요",
   "Made by {name}": "제작: {name}",
   "Made material {material}": "머티리얼 {material} 만들었어요",
-  "Made with {engine}": "{engine}로 제작",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "이 게임 폴더에 {name} 플레이스를 만들고 연결했지만 Roblox Studio가 열리지 않았어요: {why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -2175,7 +2149,6 @@ export default {
   "Mobile support for {title}": "{title} 모바일 지원",
   "Mobile support saved": "모바일 지원 저장됨",
   Mode: "모드",
-  "Mode options": "모드 옵션",
   "Model Providers": "모델 제공자",
   "Model discovery disconnected.": "모델 검색 연결이 끊겼어요.",
   "Model discovery timed out. Try again.": "모델 검색 시간이 초과됐어요. 다시 시도해 주세요.",
@@ -2322,7 +2295,6 @@ export default {
   "No such account: {account}": "그런 계정이 없어요: {account}",
   "No supported UI colors found. Choose a Genex token file or a VS Code color theme.":
     "지원되는 UI 색상을 찾지 못했어요. Genex 토큰 파일이나 VS Code 색상 테마를 고르세요.",
-  "No time limit": "시간 제한 없음",
   "No unlocked system keyring is available. Start GNOME Keyring or KWallet and unlock it, then restart Genex.":
     "잠금 해제된 시스템 키링이 없어요. GNOME Keyring이나 KWallet을 실행해 잠금을 풀고 Genex를 다시 시작하세요.",
   "Nobody answered": "응답 없음",
@@ -2420,8 +2392,6 @@ export default {
   "OS encryption is unavailable; secret storage remains locked.":
     "OS 암호화를 쓸 수 없어서 비밀 저장소가 잠긴 상태로 남아 있어요.",
   Off: "꺼짐",
-  "Off — one build pass in this chat, shown as it goes. Set hours for a reviewed build that runs on its own: ∞ until what you asked for is checked working, or a number of hours.":
-    "꺼짐 — 이 채팅에서 빌드를 한 번 진행하고, 과정을 바로 보여줘요. 시간을 정하면 리뷰를 거치는 빌드가 알아서 진행돼요. ∞는 요청한 내용이 작동하는 게 확인될 때까지, 아니면 정한 시간만큼 진행해요.",
   "Off. Your agent can't use Genex tools.": "꺼짐. 에이전트가 Genex 도구를 쓸 수 없어요.",
   "Off: friends see your name only.": "끔: 친구에게 이름만 보여요.",
   Offline: "오프라인",
@@ -2453,7 +2423,6 @@ export default {
     "켜면 Genex의 다음 시점에 실행돼요: {steps}. 이 단계들은 미리 확인을 요청하지 않아요.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "계정 하나로 수백 개 모델을 써요. 쓴 만큼만 OpenRouter에 내요.",
-  "One bold move": "과감한 한 수",
   "One key for hundreds of models. Pay as you go.": "키 하나로 수백 개 모델을 써요. 쓴 만큼만 내요.",
   "One step before the agent can build in Godot.": "한 단계만 더 하면 에이전트가 Godot에서 만들 수 있어요.",
   "Online rooms": "온라인 방",
@@ -2824,7 +2793,6 @@ export default {
   "Publishing this game ({phase})": "이 게임을 게시하는 중 ({phase})",
   "Publishing…": "게시하는 중…",
   "Pull a recommended model from the Models tab.": "‘모델’ 탭에서 추천 모델을 받아 주세요.",
-  "Put it together and check": "모두 합치고 확인하기",
   "Put question aside": "질문 미뤄 두기",
   "Put the game files back as they were before this rewind; the chat stays rewound":
     "게임 파일을 되감기 전 상태로 되돌려요. 채팅은 되감긴 상태로 남아요",
@@ -3762,7 +3730,6 @@ export default {
   "The lead stopped {count}.": "메인 에이전트가 시도 {count}개를 중지했어요.",
   "The lead wants to run {job} in the background": "메인 에이전트가 백그라운드에서 {job} 실행을 요청해요",
   "The lead's summary": "메인 에이전트 요약",
-  "The lead's view of the game": "메인 에이전트가 보는 게임",
   "The lead: done": "메인 에이전트: 완료",
   "The lead: paused": "메인 에이전트: 일시 정지됨",
   "The lead: stopped": "메인 에이전트: 중지됨",
@@ -3849,8 +3816,6 @@ export default {
     "작업자가 작업 공간 규칙을 벗어난 일을 하려고 했어요.",
   "The {app} is older than your last change: build it again, then publish.":
     "{app}은 마지막 변경 전에 빌드됐어요. 다시 빌드한 다음 게시하세요.",
-  "The {plugin} plugin {version} is ready. Press to update it in Plugins.":
-    "{plugin} 플러그인 {version} 준비 완료. 누르면 ‘플러그인’에서 업데이트해요.",
   Theme: "테마",
   "Theme JSON": "테마 JSON",
   "Theme copied.": "테마를 복사했어요.",
@@ -3920,12 +3885,8 @@ export default {
   "This build of Genex has build metrics sharing removed.": "이 Genex 빌드에서는 빌드 지표 공유 기능이 빠져 있어요.",
   "This build of the studio can't pick a build back up yet — its own loop code predates timed builds.":
     "이 버전의 Studio는 아직 빌드를 이어서 할 수 없어요 — 자체 루프 코드가 시간 제한 빌드보다 오래됐어요.",
-  "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's harness-seed/loop needs to be merged into it, or the seed copies restored so the next launch upgrades them.)":
-    "이 버전의 Studio는 아직 시간 제한 빌드를 실행할 수 없어요 — 지시는 위에 저장돼 있으니, Studio가 스스로 업데이트한 뒤 다시 보내면 빌드가 시작돼요. (자체 루프 코드가 시간 제한 빌드보다 오래됐어요. 기본 파일의 harness-seed/loop를 여기에 병합하거나, 기본 파일 사본을 복원해 다음 실행 때 업데이트되게 해야 해요.)",
   "This build turned out not to run — reload to go back to your game":
     "이 빌드는 실행되지 않아요 — 새로 고침해서 게임으로 돌아가세요",
-  "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.":
-    "이 빌드의 작업자나 리뷰어가 로컬 모델에서 실행되는데, Studio의 자체 루프 코드는 아직 이를 지원하지 않아요 — 지시는 위에 저장돼 있어요. 모든 작업을 같은 종류의 엔진으로 골라 다시 보내거나, Studio에 기본 파일의 harness-seed/loop를 자체 루프 코드에 병합해 달라고(또는 기본 파일 사본을 복원해 달라고) 요청해 다음 실행 때 업데이트되게 하세요.",
   "This change no longer differs from what Harness has now.":
     "이 변경은 지금 Harness에 있는 내용과 더 이상 다르지 않아요.",
   "This change was already undone.": "이 변경은 이미 되돌렸어요.",
@@ -4092,6 +4053,8 @@ export default {
   "Toggle Developer Tools": "개발자 도구",
   "Toggle Full Screen": "전체 화면",
   "Toggle terminal": "터미널 열기/닫기",
+  "Told a worker: {said}": "작업자에게 전달: {said}",
+  "Told “{task}”: {said}": "“{task}”에 전달: {said}",
   "Too large to run locally": "로컬에서 실행하기엔 너무 커요",
   "Too large to save, so it stays as it is: {names}.": "저장하기에 너무 커서 그대로 둬요: {names}.",
   "Too large to save, so they stay as they are: {names}.": "저장하기에 너무 커서 그대로 둬요: {names}.",
@@ -4276,8 +4239,6 @@ export default {
   "Update and play": "업데이트하고 플레이",
   "Update needed": "업데이트 필요",
   "Update ready — restart": "업데이트 준비 완료 — 다시 시작",
-  "Update the Genex plugin in Plugins to publish apps.":
-    "앱을 게시하려면 ‘플러그인’에서 Genex 플러그인을 업데이트하세요.",
   "Update to {version}": "{version} 버전으로 업데이트",
   "Update {count}": "{count}개 업데이트",
   "Update {name}": "{name} 업데이트",
@@ -4676,7 +4637,6 @@ export default {
   attempts: "시도",
   back: "후면",
   "badge\u0004Set up": "설정 필요",
-  "badge\u0004Update": "업데이트",
   "balance couldn’t be read": "잔액을 불러올 수 없음",
   "base commit": "기준 커밋",
   "before a Loop starts": "Loop 시작 전",
@@ -5109,11 +5069,8 @@ export default {
   unknown: "알 수 없음",
   "unknown error": "알 수 없는 오류",
   "unknown project {name}": "알 수 없는 프로젝트 {name}",
-  "until about {end}": "{end}쯤까지",
-  "until satisfied · by ~{end}": "만족할 때까지 · {end}쯤까지",
   "up to {count, plural, one {# worker} other {# workers}} at once":
     "작업자 최대 {count, plural, other {#명}} 동시 작업",
-  "up to {time}": "최대 {time}",
   "up {percent}%": "{percent}% 증가",
   "use your {publisher} account": "{publisher} 계정 사용",
   "used a tool": "도구를 사용했어요",
@@ -5158,8 +5115,6 @@ export default {
   "{action} {name}": "{name} {action}",
   "{action}: done": "{action}: 완료",
   "{added} of {total} added": "{total}개 중 {added}개 추가됨",
-  "{added} of {total} parts added": "파트 {total}개 중 {added}개 추가됨",
-  "{added} of {total} parts added · {working} working": "파트 {total}개 중 {added}개 추가됨 · {working}개 작업 중",
   "{amount} Nex": "{amount} Nex",
   "{amount} more needed": "{amount} 더 필요해요",
   "{app} settings": "{app} 설정",
@@ -5324,7 +5279,6 @@ export default {
   "{count} files couldn’t be added": "파일 {count}개를 추가하지 못했어요",
   "{count} files didn’t go in": "파일 {count}개가 들어가지 않았어요",
   "{count} finished": "{count}개 완료",
-  "{count} likes": "좋아요 {count}개",
   "{count} more": "{count}개 더",
   "{count} more waiting": "{count}개 더 대기 중",
   "{count} newly passing": "새로 통과 {count}개",
@@ -5343,11 +5297,11 @@ export default {
   "{does}, asks you each time": "{does}(매번 확인)",
   "{doing} in {where}": "{where}에서 {doing}",
   "{done} MB": "{done}MB",
+  "{done} done": "{done}개 완료",
+  "{done} done · {working} working": "{done}개 완료 · {working}개 작업 중",
   "{done} of {size} GB": "{done} / {size}GB",
   "{done} of {total}": "{done} / {total}",
   "{done} of {total} MB": "{done} / {total}MB",
-  "{elapsed} of {budget}": "{elapsed}/{budget}",
-  "{elapsed} of {budget} min": "{elapsed}/{budget}분",
   "{engine} always uses its sandbox": "{engine}에서는 항상 자체 샌드박스를 사용해요",
   "{engine} can’t stop to ask yet": "{engine}에서는 아직 중간에 물어볼 수 없어요",
   "{engine} default": "{engine} 기본값",
@@ -5395,16 +5349,12 @@ export default {
   "{game} {number}": "{game} {number}",
   "{game} · started {time}": "{game} · {time} 시작",
   "{health} · {count, plural, one {# tool} other {# tools}}": "{health} · {count, plural, other {도구 #개}}",
-  "{hours, plural, one {# hour} other {# hours}}": "{hours, plural, other {#시간}}",
-  "{hours, plural, one {# hour} other {# hours}} {minutes, plural, one {# minute} other {# minutes}}":
-    "{hours, plural, other {#시간}} {minutes, plural, other {#분}}",
   "{hours} h": "{hours}시간",
   "{hours} h {minutes} m": "{hours}시간 {minutes}분",
   "{hours} h {minutes} min": "{hours}시간 {minutes}분",
   "{hours}+ h": "{hours}시간+",
   "{hours}h": "{hours}시간",
   "{hours}h {minutes}m": "{hours}시간 {minutes}분",
-  "{hours}h{minutes}": "{hours}시간 {minutes}분",
   "{hours}h {minutes}m": "{hours}시간 {minutes}분",
   "{input} in / {output} out per M tokens": "100만 토큰당 입력 {input} / 출력 {output}",
   "{kept} · {count} finished.": "{kept} · {count}개 완료.",
@@ -5431,7 +5381,6 @@ export default {
   "{max} files at most": "파일은 최대 {max}개",
   "{max} pictures at most": "이미지는 최대 {max}개",
   "{millions}M": "{millions}백만",
-  "{minutes, plural, one {# minute} other {# minutes}}": "{minutes, plural, other {#분}}",
   "{minutes} m": "{minutes}분",
   "{minutes} min": "{minutes}분",
   "{minutes} min left": "{minutes}분 남음",
@@ -5790,6 +5739,8 @@ export default {
   "Drag to turn": "드래그해서 돌리기",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex가 아직 확인하지 않았어요. 확인되면 내 아이템에 나타나요. 두 번 청구되지 않아요.",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.":
+    "Genex 에이전트가 시작되지 않아 이 메시지는 전달되지 않았어요. ‘에이전트가 시작되지 않았어요’ 옆의 ‘다시 시도’를 누른 뒤 다시 보내 주세요.",
   "Genex’s protected space needs an update": "Genex 보호 공간을 업데이트해야 해요",
   Get: "받기",
   "Get in {game}": "{game}에서 받기",
@@ -6046,4 +5997,15 @@ export default {
     "TypeSafe가 그 키를 받지 않았어요. 확인하고 다시 붙여 넣어 줘.",
   "TypeSafe key": "TypeSafe 키",
   "Unreal play-tests pick their moves with Jev": "Unreal 플레이 테스트가 Jev로 행동을 골라요",
+  "Made with": "엔진",
+  "Runs on": "지원 OS",
+  Shots: "스크린샷",
+  "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, other {플레이 {count}회}}",
+  "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, other {좋아요 {count}개}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex는 이 컴퓨터에 {name}을(를) 설치할 수 없어요. 가이드대로 설치한 다음 다시 확인해 주세요.",
+  "Install {name} with its guide, then check again.": "가이드대로 {name}을(를) 설치한 다음 다시 확인해 주세요.",
+  "Open install guide": "설치 가이드 열기",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "Windows에서는 가이드대로 Chocolatey, Scoop 또는 npm으로 OpenCode를 설치해요. 그다음 다시 확인해 주세요.",
 } satisfies LocaleCatalog;

@@ -34,6 +34,7 @@ import type {
   LiveToolSpec,
   PermissionAsk,
 } from "../../src/substrate/engines/types.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
 import { fixtureCodingCli } from "../helpers/external-cli.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -477,11 +478,12 @@ describe("codex turns on the app server", () => {
     });
     const input = record.turn?.params?.input as Array<{ type: string; text?: string }>;
     assert.match(String(input[0]?.text), /Play the build/);
-    assert.doesNotMatch(String(input[0]?.text), /run these as ordinary shell commands/, "no bridge instructions");
+    const told = input.map((item) => item.text ?? "").join("\n\n");
+    assert.doesNotMatch(told, /run these as ordinary shell commands/, "no bridge instructions");
     assert.match(
-      String(input[0]?.text),
+      String(input[1]?.text),
       /checkpoint, computer are your own function tools/,
-      "a brief written in the bridge's syntax is told the tools are native",
+      "a brief written in the bridge's syntax is told the tools are native, in an item after it",
     );
 
     // The picture arrives as itself, in the answer to the call.
@@ -511,6 +513,28 @@ describe("codex turns on the app server", () => {
     assert.equal(await pathExists(path.join(root, BRIDGE_DIR)), false, "no file bridge was opened");
     assert.equal(server.closes(), 1, "the app server is closed when the turn ends");
     assert.ok(server.launches[0]?.argv.includes("--disable"), "Codex's own computer use stays off");
+  });
+
+  it("Genex's context starts the thread as its developer instructions; its notices, the words and Codex's own notes are items of their own", async () => {
+    const record: { start?: Message; turn?: Message; answer?: Message } = {};
+    const server = scriptedAppServer(computerTurnScript(record));
+    const exec = recordingExec();
+    const { engine, root } = await engineWith({ appServerFn: server.fn, execFn: exec.fn, dynamicTools: true });
+    const { request } = computerRequest(root, { system: "GENEX CONTEXT", notices: ["Genex cut a call off."] });
+    const result = await engine.delegate(request);
+    assert.equal(result.ok, true);
+    assert.equal(record.start?.params?.developerInstructions, "GENEX CONTEXT");
+    const input = record.turn?.params?.input as Array<{ type: string; text?: string }>;
+    assert.deepEqual(
+      input.map((item) => item.text),
+      [
+        `${GENEX_MARK}\nGenex cut a call off.`,
+        "Play the build and say whether the ball bounces.",
+        String(input[2]?.text),
+      ],
+    );
+    assert.match(String(input[2]?.text), /are your own function tools/, "Codex's own notes, after the words");
+    assert.ok(!input.some((item) => item.text?.includes("GENEX CONTEXT")), "the context is no message");
   });
 
   it("starts the app server with Codex's own Windows sandbox on Windows (#304)", async () => {

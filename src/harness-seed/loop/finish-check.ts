@@ -14,7 +14,7 @@
  * no `finish_check` record itself: Genex refuses one.
  *
  * Everything happens inside the lead's one `finish` call (`LEAD_CALL_MS`): a claim with too little
- * of that call (or of the lead's turn) left for a review is no claim, and nothing is recorded. The
+ * of that call left for a review is no claim, and nothing is recorded. The
  * observers get what the call can spare beside a full review; the reviewer what is left. A claim on a
  * run already closing opens no round, and neither does one no engine here can review: nothing is
  * asked, nothing recorded. A check whose run closes under it settles nothing (Genex drops the round),
@@ -69,10 +69,6 @@ export const REVIEW_MAX_TURNS = 30;
 export const REVIEW_IMAGES_MAX = 12;
 /** How long the lead's claim reads in the brief and the record. */
 export const CLAIM_CHARS = 2_000;
-/** How long before its turn's end a lead's claim must come for a full review: the observers, the reviewer and the answer's trip. */
-export const CLAIM_BEFORE_END_MS = FINISH_OBSERVE_MS + FINISH_REVIEW_MS + CALL_MARGIN_MS;
-/** `CLAIM_BEFORE_END_MS` in whole minutes, as a lead is told it. */
-export const CLAIM_BEFORE_END_MINUTES = Math.ceil(CLAIM_BEFORE_END_MS / MINUTE_MS);
 
 /** How often a reviewer at work is looked in on: one whose check was abandoned is stopped. */
 const REVIEW_WATCH_MS = 2 * SECOND_MS;
@@ -99,8 +95,6 @@ const MESSAGE = {
   unread: (why: string) => `whether the reviewer's answer still stands could not be read: ${why}`,
   noTime:
     "There was no time left in this call for a reviewer to check your claim, so it is not counted. Call finish again, with nothing else in the same turn.",
-  noTimeInTurn:
-    "Your turn ends too soon for a reviewer to check your claim, so it is not counted. Call finish early in your next turn, with nothing else in the same turn.",
   proofLabel: "The lead's proof",
   hookLabel: "The game's plugins at the finish",
   proofArtifacts: (round: number) => `finish/proof/r${round}`,
@@ -116,8 +110,6 @@ export const FINISH_REPORT = {
   /** What isn't done, for the report's summary the person reads, after the lead's own. */
   summaryNotDone: (reasons: readonly string[]) => `Still to fix: ${reasons.join(" ")}`,
   noReviewer: "no engine here can hold a reviewer to check the finish",
-  /** The lead claimed in its last turn with no time left for a review. */
-  tooLate: "the time ran out before a reviewer could check the lead's claim",
   /** The build the close landed is not the one the reviewer said yes to. */
   movedAfterYes: "the build moved after the reviewer's yes, so the build that landed is not the one it checked",
 } as const;
@@ -135,27 +127,25 @@ export function notDoneOf(
 
 /**
  * What a Loop that closes without its yes leaves for its result card (`run_finished.stillToFix`):
- * the last no's lists, why it stopped, and its hours (`loopHoursOf`).
+ * the last no's lists, and why it stopped.
  */
 export interface StillToFix {
   done: string[];
   notDone: string[];
   why: StopWhy;
-  hours: number | null;
 }
 
 /**
  * The result card's list for a close without a yes or a pause, from the reviewer's last no
- * (`notDoneOf`). With no no that names anything, only a time-out has a card (its hours ran out,
- * Keep building on); any other end says its own words.
+ * (`notDoneOf`). With no no that names anything there is no card: the end says its own words.
  */
 export function stillToFixOf(
   tally: Pick<FinishTally, "reasons" | "notDone" | "done"> | null | undefined,
-  end: { why: StopWhy; hours: number | null },
+  why: StopWhy,
 ): StillToFix | null {
   const notDone = notDoneOf(tally);
-  if (!notDone.length && end.why !== StopWhy.Time) return null;
-  return { done: notDone.length ? [...(tally?.done ?? [])] : [], notDone, why: end.why, hours: end.hours };
+  if (!notDone.length) return null;
+  return { done: [...(tally?.done ?? [])], notDone, why };
 }
 
 /** Where a Loop's finish checks stand: kept in the run's journal by the caller. */
@@ -226,8 +216,6 @@ export interface FinishScope {
   callStarted: number;
   /** What a yes still needs of the call after the check: the close's own time. */
   closeMs: number;
-  /** When the lead's own turn ends (`now()` time), if before its call does: the review ends before it. */
-  endsBy?: number;
   /** The person's own messages to the Loop, word for word, oldest first. */
   said: readonly string[];
   /** The other messages to the Loop (relayed by the chat's agent, in its words), oldest first. */
@@ -242,8 +230,6 @@ export interface FinishScope {
   abandoned?: () => boolean;
   /** Why a yes no longer speaks for the claim (the build moved while the reviewer read), or null: such a yes counts as no answer. */
   lapsed?: () => Promise<string | null>;
-  /** A timed Loop's working time left now (`time-cap.ts` `timeLeftOf`); null or absent for an ∞ Loop. */
-  timeLeft?: () => number | null;
   /**
    * What marks the lead's work in its folder now (its newest save point, its head), or null when it
    * can't say: after a row of no's the Loop went on past, a claim needs it to have moved.
@@ -267,14 +253,13 @@ export interface FinishClaim {
 
 /** A reviewer's yes. */
 type Accepted = { step: typeof FinishCheckStep.Accepted; reasons: string[] };
-/** A reviewer's no: its reasons, what isn't done, the no's in a row now, and whether the Loop had time left. */
+/** A reviewer's no: its reasons, what isn't done, and the no's in a row now. */
 type Rejected = {
   step: typeof FinishCheckStep.Rejected;
   reasons: string[];
   notDone: string[];
   done: string[];
   rejections: number;
-  timeLeft: boolean;
 };
 /**
  * A check that got no answer, and why; `seatless` when no engine here can hold a reviewer at all,
@@ -286,8 +271,8 @@ type Unanswered = {
   seatless?: true;
   lapsed?: true;
 };
-/** No time for a check (nothing recorded); `turnEnds` when the lead's turn, not its call, left none. */
-export type NoTime = { noTime: true; turnEnds?: true };
+/** No time left in the lead's call for a check (nothing recorded). */
+export type NoTime = { noTime: true };
 /** What a check came to; `noTime` when the claim had no time for one. */
 export type FinishOutcome = Accepted | Rejected | Unanswered | NoTime;
 
@@ -344,16 +329,13 @@ const ENGINE_KIND_DELEGATED = "delegated";
 
 /** When the lead's call must be done with the check, after the margin and the close. */
 const callEnds = (scope: FinishScope): number => scope.callStarted + LEAD_CALL_MS - CALL_MARGIN_MS - scope.closeMs;
-/** When the lead's turn ends, less the margin (never, without one). */
-const turnEnds = (scope: FinishScope): number => (scope.endsBy ?? Number.POSITIVE_INFINITY) - CALL_MARGIN_MS;
 
-/** What the lead's call (or its turn, when that ends first) has left after the margin and the close, by the scope's clock. */
-const callLeft = (scope: FinishScope): number => Math.min(callEnds(scope), turnEnds(scope)) - scope.now();
+/** What the lead's call has left after the margin and the close, by the scope's clock. */
+const callLeft = (scope: FinishScope): number => callEnds(scope) - scope.now();
 
-/** No time for a review after the observers: why, or null when there is time. */
+/** No time in the lead's call for a review after the observers, or null when there is time. */
 function noTimeFor(scope: FinishScope): NoTime | null {
-  if (callLeft(scope) - FINISH_OBSERVE_MS >= FINISH_REVIEW_MIN_MS) return null;
-  return turnEnds(scope) < callEnds(scope) ? { noTime: true, turnEnds: true } : { noTime: true };
+  return callLeft(scope) - FINISH_OBSERVE_MS >= FINISH_REVIEW_MIN_MS ? null : { noTime: true };
 }
 
 /**
@@ -624,7 +606,7 @@ async function notStanding(scope: FinishScope, held: HostAnswer): Promise<{ why:
 /** The settled round as the lead's outcome, counted into the tally as the host counted it (a no `at` a work `mark`). */
 function outcomeOf(
   tally: FinishTally,
-  settled: HostAnswer & { rejections: number; stopped: boolean; timeLeft?: boolean },
+  settled: HostAnswer & { rejections: number; stopped: boolean },
   lapsed: boolean,
   no: { at: number; mark: string | null },
 ): Accepted | Rejected | Unanswered {
@@ -646,8 +628,7 @@ function outcomeOf(
     else delete tally.done;
     if (no.mark === null) delete tally.noMark;
     else tally.noMark = no.mark;
-    const timeLeft = settled.timeLeft === true;
-    return { step: FinishCheckStep.Rejected, reasons, notDone, done, rejections: settled.rejections, timeLeft };
+    return { step: FinishCheckStep.Rejected, reasons, notDone, done, rejections: settled.rejections };
   }
   const answer = unanswered(settled.why ?? MESSAGE.ended);
   return lapsed ? { ...answer, lapsed: true } : answer;
@@ -669,24 +650,16 @@ async function settleRound(
   }));
   // A run that ended under the check is closed: Genex dropped its round, and nothing more is recorded.
   if (scope.ended?.()) return unanswered(MESSAGE.ended);
-  const left = timeLeftMsOf(scope);
   const settled = await ctx
     .call(HostMethod.FinishSettle, {
       project: run.project,
       runId: run.runId,
       round: held.round,
       ...(fallen ? { unanswered: clipMarked(fallen.why, FINISH_REASON_CHARS) } : {}),
-      ...(left === null ? {} : { timeLeftMs: left }),
     })
     .catch(() => null);
   if (!settled) return unanswered(MESSAGE.ended);
   return outcomeOf(tally, settled, fallen?.lapsed === true, { at: scope.now(), mark });
-}
-
-/** A timed Loop's working time left, in whole milliseconds for the host; null for an ∞ Loop or one that names none. */
-function timeLeftMsOf(scope: FinishScope): number | null {
-  const left = scope.timeLeft?.();
-  return typeof left === "number" && Number.isFinite(left) ? Math.max(0, Math.floor(left)) : null;
 }
 
 /** The lead's work mark now, or null when the caller names none or it can't be read. */
@@ -697,7 +670,7 @@ async function workMarkOf(scope: Pick<FinishScope, "workMark">): Promise<string 
 /**
  * Check the lead's claim (see the module's header): a check already under way answers that it is;
  * a claim on a run already closing, or from a turn already over, opens no round; a claim with less
- * than `FINISH_REVIEW_MIN_MS` of the call (or the turn) left for a review after the observers is
+ * than `FINISH_REVIEW_MIN_MS` of the call left for a review after the observers is
  * `noTime`, and nothing is recorded. Otherwise one round, asked of Genex and settled.
  */
 export async function checkFinish(scope: FinishScope, claim: FinishClaim): Promise<FinishOutcome> {
@@ -724,7 +697,7 @@ export async function checkFinish(scope: FinishScope, claim: FinishClaim): Promi
 
 /** What the lead is answered after a check. */
 export function finishAnswer(outcome: FinishOutcome): string {
-  if ("noTime" in outcome) return outcome.turnEnds ? MESSAGE.noTimeInTurn : MESSAGE.noTime;
+  if ("noTime" in outcome) return MESSAGE.noTime;
   if (outcome.step === FinishCheckStep.Accepted) return FINISH_ANSWER.accepted(outcome.reasons);
   if (outcome.step === FinishCheckStep.Unanswered) return FINISH_ANSWER.unanswered(outcome.why);
   return secondOpinionNo(outcome.reasons, outcome.notDone);

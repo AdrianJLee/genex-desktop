@@ -26,8 +26,10 @@ import { listSetUpProjects } from "../../src/plugins/unreal/editor-port.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { type Engine, HelperState, inspectProject, type SetupEnv } from "../../src/plugins/unreal/setup.ts";
 import { type XcodeStatus, XcodeState } from "../../src/plugins/unreal/xcode.ts";
-import { UNREAL_NEW_GAME_TOOL } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+
+/** The Unreal plugin's tool that makes a game's Unreal project, as the host serves it. */
+const UNREAL_NEW_GAME_TOOL = "unreal__new-game";
 
 const GIB = 1024 ** 3;
 /** A Mac whose Xcode is ready; making a game doesn't depend on it. */

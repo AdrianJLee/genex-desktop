@@ -17,7 +17,7 @@ import type { LiveBehindEvent } from "./live-behind.ts";
 import type { McpChange } from "./mcp.ts";
 import type { CliInstallJob } from "./cli-install.ts";
 import type { ModelInstallJob, ModelInstallProblem, ModelPullProblem } from "./model-install.ts";
-import type { SendFailure, SendRefusal } from "./composer.ts";
+import type { SendFailure } from "./composer.ts";
 import type { ProviderUsageReport } from "./provider-usage.ts";
 import type { ToolPermissionState } from "./permissions.ts";
 import type { PlayViewerEvent, RemixProgress } from "./play.ts";
@@ -59,8 +59,8 @@ export interface ChatDelta {
 export interface UiEventMap {
   // — chat and threads —
   "chat.message": { threadId?: string; role?: string; content?: string };
-  /** A message that did not reach its chat (`failure`), or reached it and was refused there (`refusal`). */
-  "chat.error": { threadId?: string; message?: string; failure?: SendFailure; refusal?: SendRefusal };
+  /** An error in the chat; a message that did not reach it says why (`failure`). */
+  "chat.error": { threadId?: string; message?: string; failure?: SendFailure };
   "chat.delta": ChatDelta;
   "chat.stream.started": { threadId: string; streamId: string; afterEventId: string | null };
   "chat.stream.ended": { threadId: string; streamId: string; failed?: boolean };
@@ -134,8 +134,6 @@ export interface UiEventMap {
   "asset.delivered": AssetDeliveredPayload;
   /** A call making an asset started or ended: the game's waiting jobs changed (`ProjectAssets.jobs`). */
   "asset.jobs": { project: string };
-  /** A coordinator tool put a build on screen: the chat of that game brings Live forward. */
-  "stage.show": { project: string; view: "live" };
 
   // — runs —
   "run.keepawake": { runId?: string };
@@ -273,7 +271,6 @@ export const UiEvent = {
   DelegatedEvent: "delegated.event",
   AssetDelivered: "asset.delivered",
   AssetJobs: "asset.jobs",
-  StageShow: "stage.show",
   RunKeepawake: "run.keepawake",
   RunStopping: "run.stopping",
   RunFinished: "run.finished",

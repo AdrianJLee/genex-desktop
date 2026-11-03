@@ -611,17 +611,14 @@ describe("the finish check", () => {
     );
   });
 
-  it("the lead's turn ending before its call bounds the review", async () => {
+  // Flipped (no clock): the lead's turn had an end that bounded the review (`endsBy`); only the
+  // lead's call bounds it now.
+  it("only the lead's call bounds the review", async () => {
     const folder = await leadFolder();
     const { r } = host([verdict("yes")]);
-    await checkFinish(scopeOf(r, folder, { closeMs: 0, endsBy: START + 3 * 60_000 }), claimOf());
+    await checkFinish(scopeOf(r, folder, { closeMs: 0 }), claimOf());
     const [asked] = reviewersOf(r);
-    assert.ok(Number(asked?.timeoutMs) <= 3 * 60_000 - CALL_MARGIN_MS, `${asked?.timeoutMs}`);
-    const late = host([verdict("yes")]);
-    const outcome = await checkFinish(scopeOf(late.r, folder, { closeMs: 0, endsBy: START + 60_000 }), claimOf());
-    assert.deepEqual(outcome, { noTime: true, turnEnds: true }, "the turn, not the call, left no time");
-    assert.match(finishAnswer(outcome), /Your turn ends too soon/);
-    assert.match(finishAnswer(outcome), /early in your next turn/);
+    assert.equal(Number(asked?.timeoutMs), FINISH_REVIEW_MS, "a full review: no turn's end comes first");
     assert.match(finishAnswer({ noTime: true }), /no time left in this call/);
   });
 

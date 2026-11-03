@@ -768,21 +768,14 @@ export interface StudioApi {
   /** Merge a build into the live game folder and show it. */
   landBuild(project: string, commit: string): Promise<{ commit: string; how: "merged" | "already" }>;
   /**
-   * Where the native game view sits (zero while anything covers it), and whether the person is
-   * watching a game in Live under whatever briefly covers it (`stage.ts` `watchingLive`).
+   * Where the native game view sits (zero while anything covers it), and the window size it was
+   * measured in (main carries it through resizes).
    */
-  /** The stage slot's rectangle, and the window size it was measured in (main carries it through resizes). */
   previewBounds(bounds: {
     x: number;
     y: number;
     width: number;
     height: number;
-    watching: boolean;
-    /**
-     * The game open on the stage (absent under home, Play or Studio): a show the person asks for in
-     * its chat may load it even while Live holds another game out of sight.
-     */
-    project?: string | null;
     viewport?: { width: number; height: number };
   }): Promise<boolean>;
   /** The Live game's sound switch; main decides when Live is actually heard. */
@@ -823,22 +816,6 @@ export interface StudioApi {
    * `scripts`: the person trusts a remix's setup scripts, which then run (and from then on).
    */
   installPackages(project: string, options?: { scripts?: boolean }): Promise<InstallResult>;
-  startRun(spec: {
-    project: string;
-    goal: string;
-    reference: {
-      name: string;
-      shots: string[];
-      notes?: string;
-      kind?: "reference" | "direction";
-      frames?: Array<{ label: string; mimeType: string; data: string }>;
-    };
-    hours: number;
-    engine?: string;
-    model?: string;
-    judgeEngine?: string;
-    judgeModel?: string;
-  }): Promise<{ runId: string }>;
   stopRun(runId: string): Promise<boolean>;
   /** Wrap up: the builders finish what they are on, then the run integrates, checks and shows. */
   finishRun(runId: string, threadId: string): Promise<boolean>;

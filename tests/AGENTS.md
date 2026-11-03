@@ -60,9 +60,7 @@ through the JS API imports `@typescript/typescript6`.
   answer (`startFakeAnswer`, an Auto check's verdict). `fake-xai-responses.ts`: the same for the real Grok Build CLI over
   xAI's (Grok's session service stood in for, signed in with a made-up token in a test's own home).
 - `snapshot-fixtures.ts`: dirty, untracked and nested user repositories.
-- `unreal-lead-host.ts`: a fake host for the Unreal runner's lead (its scripted turns calling the
-  run tools, the editor's answers, the clock), whose moments run on `unreal-moment-bus.ts`, a fake
-  of Genex's hook bus that plans each moment from a plugin manifest;
+- `unreal-moment-bus.ts`: a fake of Genex's hook bus that plans each moment from a plugin manifest;
   `unreal-editor-stand-in.ts`: the editor the Unreal plugin's queue talks to;
   `unreal-fake-engine.ts`: a small fake Unreal (the Blank template and Epic's three plugin
   templates) and the Unreal plugin's backend on it in an open game, launches and host calls recorded,
@@ -80,14 +78,13 @@ through the JS API imports `@typescript/typescript6`.
   plugin's backend on all of those in a game folder (`backendOn`: its tools by `call`, its panel's
   actions by `act`), with launches recorded and an opened editor started as a process with its
   descriptor.
-- `loop-host.ts`: a fake host for the one Loop (`runDirector` on a project of any kind): a real git
-  repository as the game folder, the moments a plugin manifest hooks on `unreal-moment-bus.ts`, and
+- `loop-host.ts`: a fake host for the one Loop (`runDirector` on a project of any kind, a web
+  game's too): a real git repository as the game folder, the moments a plugin manifest hooks on `unreal-moment-bus.ts`, and
   the lead's scripted turns, the pool's workers and the reviewer as three kinds of delegation, on
   the test's clock; `dispatch()` starts the run through the run's start instead, on the wall clock.
 - `observe-windows.ts`: fake preview windows for a plugin's `observe` with a `still` or a `clip`
   (Live and the pooled windows, each logging what it was asked, over a page the test scripts), a
   real core over them (`observeHost`) and budgets on a clock the test holds (`heldClock`).
-- `director-run.ts`: a director's run without a rig (`fakeLoopRun`, `fakeClock`, `lead`).
 - `play-viewer-rig.ts`: Play's viewer over recording fakes (the game's view, the bar's layer, the
   gallery, comments, the coin client, the sign-in, the browser) on a clock the test moves, every call
   in `log`; `sheet()` is the purchase sheet as last drawn.
@@ -143,8 +140,7 @@ through the JS API imports `@typescript/typescript6`.
 Characterization so far: the `api()` keys and `StudioCore` surface (`core-surface`, `rpc-surface`),
 the seed contracts the app keeps its own copy of (`seed-contracts`), spike snapshot/worktree
 sequences (`loop-sequences`), snapshots of a user's own repository (`snapshots`), which loop runs a
-run, the tools each lead is offered and the one Loop's and the Unreal runner's calls, events, graph
-and journal (`loop-survival`), the one Loop on a project that isn't a web game (`one-loop`), which
+run and the one Loop's calls, events, graph and journal on an Unreal game (`loop-survival`), the one Loop on a project of any kind (`one-loop`), which
 Loop a run gets (`one-loop-dispatch`), a whole Loop through the real studio on a plugin's project
 and on a folder with no plugin (`one-loop-projects`, L3), and the ten use cases of any project
 (`project-use-cases`; a test marked `todo` names the phase that turns it green, and a marked test
@@ -186,7 +182,7 @@ Tests that read local projects or open the network are skipped unless opted in:
 local Ollama probes (on Windows also Local Blender's and Godot's real downloads and sandboxed
 jobs, `blender-windows-live.test.ts` and `godot-windows-live.test.ts`), `STUDIO_GODOT_LIVE=1` for the Godot plugin against this Mac's own Godot
 (`godot-live.test.ts`), `STUDIO_CLAUDE_CLI_TESTS=1` for the real Claude Code CLI against
-`fake-anthropic.ts` (`claude-studio-shell-cli.test.ts`, `claude-tool-loading.test.ts`),
+`fake-anthropic.ts` (`claude-studio-shell-cli.test.ts`, `claude-tool-loading.test.ts`, `claude-steer-cli.test.ts`),
 `STUDIO_CODEX_CLI_TESTS=1` for the real Codex CLI against `fake-openai-responses.ts`
 (`codex-sandbox-cli.test.ts`), `STUDIO_GROK_CLI_TESTS=1` for the real Grok Build CLI in the real
 sandbox against `fake-xai-responses.ts` (`grok-cli-live.test.ts`; `STUDIO_GROK_BIN` names one, which

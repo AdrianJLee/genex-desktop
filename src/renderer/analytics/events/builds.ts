@@ -40,7 +40,6 @@ import {
   RUN_START_EVENTS,
   RoundOutcome,
   type RunExecution,
-  recordedRunLoop,
   roundOutcome,
   VerdictPass,
   VerdictRule,
@@ -101,12 +100,24 @@ export type BuildSurface = (typeof BuildSurface)[keyof typeof BuildSurface];
 /** How Live's wait for a page ended: shown, or given up and why. */
 export const LiveOutcome = {
   Shown: "shown",
+  /** This game's page came but did not settle in time, or main never answered the load. */
   TimedOut: "timed_out",
+  /** No probe in the whole wait saw this game's page: there was none to show (a new game with no build yet). */
+  NoPage: "no_page",
   LoadFailed: "load_failed",
   Crashed: "crashed",
   BuildBroken: "build_broken",
 } as const;
 export type LiveOutcome = (typeof LiveOutcome)[keyof typeof LiveOutcome];
+
+/** What Live's probe saw last while it waited: no page, another game's, this one navigating, or this one's. */
+export const LiveWaitSaw = {
+  Nothing: "nothing",
+  OtherGame: "other_game",
+  Navigating: "navigating",
+  ThisGame: "this_game",
+} as const;
+export type LiveWaitSaw = (typeof LiveWaitSaw)[keyof typeof LiveWaitSaw];
 
 /** What started a load Live waits on. */
 export const LiveTrigger = {
@@ -223,6 +234,7 @@ export const BuildsEvent = {
   BuildMadeLive: "build_made_live",
   BuildsNodeOpened: "builds_node_opened",
   BuildsHistoryOpened: "builds_history_opened",
+  BuildsGraphSlow: "builds_graph_slow",
   FirstPreviewReady: "first_preview_ready",
   GameFirstBuildMade: "game_first_build_made",
   LiveGameShown: "live_game_shown",
@@ -257,12 +269,15 @@ export const BuildsEvent = {
 } as const;
 export type BuildsEvent = (typeof BuildsEvent)[keyof typeof BuildsEvent];
 
+/**
+ * One slow projection of the stage's graph from the conversation's log: how long it took, how
+ * many records it read and how many parts it drew, and whether Builds was shown (workers read).
+ */
+export type BuildsGraphSlowProperties = { ms: number; events: number; parts: number; builds_shown: boolean };
+
 /** A run's start as `run_started` carries it; also a chat turn's first worker (mode chat_turn). */
 export type RunStartedProperties = {
   mode: BuildMode;
-  /** A timed Loop's hours; null for an ∞ Loop, a goal Loop or a chat turn. */
-  loop_hours: number | null;
-  until_satisfied: boolean;
   completion_policy: CompletionPolicy | null;
   director: boolean;
   facets: number;
@@ -291,7 +306,6 @@ export type RunFinishedProperties = {
   duration_ms: number | null;
   /** The time it worked, pauses left out; null when it started before this launch. */
   worked_ms: number | null;
-  loop_hours: number | null;
   rounds_accepted: number;
   rounds_rejected: number;
   profile: LoopProfile | null;
@@ -304,6 +318,12 @@ export type RunFinishedProperties = {
 export type LiveGameShownProperties = {
   outcome: LiveOutcome;
   load_ms: number;
+  /** Since the wait began, when a probe first saw this game's page; null when none did (or main refused the load). */
+  page_seen_ms: number | null;
+  /** What the wait's last probe saw; null for a load main refused before any probe. */
+  wait_saw: LiveWaitSaw | null;
+  /** Whether main had answered the load when the wait ended (false: still loading); null for a refused load. */
+  main_answered: boolean | null;
   /** What started the load; null when its starter did not say. */
   trigger: LiveTrigger | null;
   /** The first time this launch showed this game in Live. */
@@ -357,7 +377,6 @@ export type BuildsEventProperties = {
     step: FinishCheckStep;
     rejections: number | null;
     stopped: boolean;
-    time_left: boolean;
     done_count: number;
     not_done_count: number;
     reviewer_engine: EngineId | null;
@@ -372,6 +391,7 @@ export type BuildsEventProperties = {
   [BuildsEvent.BuildPlayed]: { surface: BuildSurface; run_active: boolean; ok: boolean };
   [BuildsEvent.BuildMadeLive]: { ok: boolean };
   [BuildsEvent.BuildsNodeOpened]: { node_kind: GraphSelection | NodeKind; via: NodeVia; run_active: boolean };
+  [BuildsEvent.BuildsGraphSlow]: BuildsGraphSlowProperties;
   [BuildsEvent.BuildsHistoryOpened]: { via: HistoryVia; index_from_newest: number; running: boolean };
   [BuildsEvent.FirstPreviewReady]: {
     ms_build_to_ready: number | null;
@@ -515,8 +535,6 @@ const lengthOf = (value: unknown): number => (Array.isArray(value) ? value.lengt
 export const amountOf = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 const flagOf = (value: unknown): boolean | null => (typeof value === "boolean" ? value : null);
-const hoursOf = (value: unknown): number | null =>
-  typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 
 /** A vocabulary's word, or `other` for a string it does not know; null for none. */
 function wordOrOther<V extends string>(vocabulary: Readonly<Record<string, V>>, value: unknown): V | Unlisted | null {
@@ -646,13 +664,10 @@ const runStarted: Reader = (payload, at, memory) => {
   const start = memory.starts.get(runId) ?? {};
   memory.starts.delete(runId);
   const budgets = start.budgets ?? payload.budgets;
-  const loop = recordedRunLoop(budgets);
   return {
     event: BuildsEvent.RunStarted,
     properties: {
       mode: BuildMode.Loop,
-      loop_hours: loop?.hours ?? null,
-      until_satisfied: loop?.hours === null,
       completion_policy: completionPolicyOf(budgets),
       director: payload.director === true,
       facets: lengthOf(payload.facets),
@@ -686,8 +701,6 @@ const workerStarted: Reader = (payload, at, memory) => {
     event: BuildsEvent.RunStarted,
     properties: {
       mode: BuildMode.ChatTurn,
-      loop_hours: null,
-      until_satisfied: false,
       completion_policy: null,
       director: false,
       facets: 0,
@@ -835,7 +848,6 @@ const finishCheck: Reader = (payload, at, memory) => {
       step,
       rejections: amountOf(payload.rejections),
       stopped: payload.stopped === true,
-      time_left: payload.timeLeft === true,
       done_count: lengthOf(payload.done),
       not_done_count: lengthOf(payload.notDone),
       reviewer_engine: oneOf(EngineId, fieldsOf(payload.reviewer).engine),
@@ -897,7 +909,6 @@ const runFinished: Reader = (payload, at, memory) => {
       victory: payload.victory === true,
       duration_ms: amountOf(payload.durationMs),
       worked_ms: before && closed ? workedMs(closed.worked, at.at) : null,
-      loop_hours: hoursOf(fieldsOf(payload.stillToFix).hours),
       rounds_accepted: rounds.accepted,
       rounds_rejected: rounds.rejected,
       profile: oneOf(LoopProfile, payload.profile),

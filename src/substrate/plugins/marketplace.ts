@@ -266,7 +266,8 @@ export function versionGte(version: string, minimum: string): boolean {
 }
 
 /** Strictly newer: at least `current` and not equal to it. */
-const isNewerVersion = (next: string, current: string) => versionGte(next, current) && !versionGte(current, next);
+export const isNewerVersion = (next: string, current: string): boolean =>
+  versionGte(next, current) && !versionGte(current, next);
 /** An install whose origin the index can update or reacquire: a pinned GitHub commit or an index entry. */
 const isCatalogedOrigin = (origin: PluginSource) =>
   origin.kind === PluginSourceKind.Index || origin.kind === PluginSourceKind.Github;

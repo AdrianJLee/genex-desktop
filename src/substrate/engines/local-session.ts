@@ -17,16 +17,11 @@ import type { Message, ToolCall, Usage } from "../types.ts";
 import { type SteerSession, steerSession } from "./claude-steer.ts";
 import { DEFAULT_COMPACTION_PERCENT, interruption } from "./common.ts";
 import { checkpointCut, type LocalCheckpoint, summarizeLocalCheckpoint } from "./local-checkpoint.ts";
-import {
-  LOCAL_NOTE,
-  localBudgetNote,
-  localSystemPrompt,
-  modeChangedNote,
-  progressCheckNote,
-} from "./local-session-prompts.ts";
+import { LOCAL_NOTE, localBudgetNote, localSystemPrompt, progressCheckNote } from "./local-session-prompts.ts";
 import { type AutoCheck, changesSomething, permitCall, seatAsks, sessionMode } from "./local-session-permissions.ts";
 import { autoApprove } from "./auto-approver.ts";
 import { type LocalInbox, localInbox, steerUserMessage, takesSteer } from "./local-session-steer.ts";
+import { textsAsSent } from "./genex-mark-prompts.ts";
 import {
   executeLocalTool,
   INSPECTION_TOOLS,
@@ -36,8 +31,7 @@ import {
 } from "./local-session-tools.ts";
 import { neverTouchFence } from "./claude-permissions.ts";
 import { neverTouchWhole } from "./never-touch.ts";
-import { type CommandSandbox, commandSandbox, leadBuildWrites } from "./session-commands.ts";
-import { StudioTool } from "./studio-tool-prompts.ts";
+import { type CommandSandbox, commandSandbox, withGitMetadata } from "./session-commands.ts";
 import {
   type CompleteRequest,
   type CompleteResponse,
@@ -145,8 +139,6 @@ interface LocalRun {
   mode: PermissionMode | null;
   /** Auto's check of a command, by the session's own model in a call of its own (auto-approver.ts). */
   autoCheck: AutoCheck;
-  /** What the model reads at its next round about a mode the user switched to while it ran. */
-  modeNote: string;
   /** The person's messages sent while it runs, read at the top of the next round (`local-session-steer.ts`). */
   inbox: LocalInbox;
   /** The host's steer, when it asked to steer this session: told once, and what was read. */
@@ -258,18 +250,15 @@ export class LocalSessions {
       .resolveFile("CLAUDE.md")
       .then((p) => readFile(p, "utf8"))
       .catch(() => "");
-    run.system = localSystemPrompt({
-      readonly: run.readonly,
-      instructions,
-      mode: run.mode,
-    });
+    const system = () => localSystemPrompt({ readonly: run.readonly, instructions, mode: run.mode });
+    run.system = system();
     request.onEvent?.({ type: DelegateEventType.System, payload: { subtype: "init", session_id: id, model } });
     // The composer's picker reaches the running session: the next call is decided in the new mode,
-    // and the model reads of it at its next round.
+    // which its system prompt says from the next round on.
     request.permissions?.onControl?.({
       setMode: async (mode) => {
         run.mode = sessionMode(run.engine, mode);
-        run.modeNote = modeChangedNote(run.mode);
+        run.system = system();
       },
     });
     try {
@@ -381,7 +370,6 @@ export class LocalSessions {
       workspaceStamp: "",
       mode: seatAsks(this.engine, request).mode,
       autoCheck: (ask, asked) => autoApprove({ complete: counted, model, cwd, ask, signal: asked }),
-      modeNote: "",
       inbox: localInbox(signal),
       steer,
     };
@@ -389,14 +377,13 @@ export class LocalSessions {
 
   /**
    * The folders the session may read and write besides its own, the paths it may never touch, and
-   * the ones it may not write. A lead writes the build it leads (`leadBuilds`), and a worker its
-   * seat's write roots, by their real paths; a worker never reaches its never-touch list's roots
+   * the ones it may not write. A worker writes its seat's write roots, by their real paths; a worker never reaches its never-touch list's roots
    * (whole ones here, the rest by `FileScope.neverTouch`), as on every engine.
    */
   async #fileBounds(request: DelegateRequest, cwd: string): Promise<FileBounds> {
     const real = (p: string) => realpath(p).catch(() => path.resolve(p));
     const seat = request.worker;
-    const writes = [...(request.leadBuilds ? [request.leadBuilds] : []), ...(seat ? seat.writeRoots : [])];
+    const writes = seat ? seat.writeRoots : [];
     const writeRoots = [...new Set(await Promise.all(writes.map(real)))].filter((dir) => dir !== cwd);
     const readRoots = [cwd, ...writeRoots, ...(await Promise.all((request.extraReads ?? []).map(real)))];
     // The coding CLIs' sign-in homes, from the one shared list the sandbox and contractors use (SEC-3).
@@ -425,8 +412,8 @@ export class LocalSessions {
   }
 
   /**
-   * The command sandbox: the workspace, a linked worktree's Git metadata and the build a lead leads
-   * (with its own Git metadata) are its only writable places.
+   * The command sandbox: the workspace, a linked worktree's Git metadata and a worker's write roots
+   * (with their own Git metadata) are its only writable places.
    */
   async #sandbox(
     cwd: string,
@@ -434,10 +421,10 @@ export class LocalSessions {
     bounds: Pick<FileBounds, "forbidden" | "deniedWrites" | "writeRoots">,
   ): Promise<CommandSandbox> {
     const scratchRoot = this.options.scratchRoot ?? path.join(os.tmpdir(), `studio-${this.engine}`);
-    const builds = (await Promise.all(bounds.writeRoots.map(leadBuildWrites))).flat();
+    const roots = (await Promise.all(bounds.writeRoots.map(withGitMetadata))).flat();
     return commandSandbox({
       cwd,
-      ...(builds.length ? { writableRoots: builds } : {}),
+      ...(roots.length ? { writableRoots: roots } : {}),
       scratchDir: path.join(scratchRoot, id),
       secretPaths: bounds.forbidden,
       denyWrite: bounds.deniedWrites,
@@ -448,10 +435,6 @@ export class LocalSessions {
   /** One model turn and the tool calls it asked for; the session's ending when this round ends it. */
   async #round(run: LocalRun): Promise<DelegateResult | null> {
     run.signal.throwIfAborted();
-    if (run.modeNote) {
-      run.messages.push({ role: "user", content: run.modeNote });
-      run.modeNote = "";
-    }
     await readSteers(run);
     const answer = await this.#completeWithCompaction(run);
     if ("ending" in answer) return answer.ending;
@@ -626,18 +609,11 @@ function turnLimit(request: DelegateRequest): number {
 }
 
 /**
- * A session that may not edit: a read-only pass (a reviewer, a reader) or a coordinator. A chat that
- * may launch a build is still a full contractor and keeps its write tools.
+ * A session that may not edit: a read-only pass (a reviewer, a reader). A chat that may launch a
+ * build is still a full contractor and keeps its write tools.
  */
 function isReadOnlySession(request: DelegateRequest): boolean {
-  return Boolean(request.readOnly || request.coordinator);
-}
-
-/** The launch tools a Loop chat was bridged, by name (its question tool is not one). */
-function launchToolNames(request: DelegateRequest): string[] {
-  return (request.interviewTools ?? [])
-    .filter((t) => t.name !== StudioTool.AskUser && t.onlyWhenAsked !== true)
-    .map((t) => t.name);
+  return Boolean(request.readOnly);
 }
 
 /**
@@ -650,7 +626,9 @@ function continueHistory(saved: SavedSession, messages: Message[], request: Dele
   // briefs need not be concatenated at every continuation. Oversized fixed requirements
   // fail explicitly below instead of silently deleting the user's original request.
   const requirements = saved.requirements ?? [...(saved.task ? [saved.task] : [])];
-  if (requirements.at(-1) !== request.prompt) requirements.push(request.prompt);
+  // Genex's own message reads under its mark (genex-mark-prompts.ts), here and in a compaction.
+  const prompt = textsAsSent(request).join("\n\n");
+  if (requirements.at(-1) !== prompt) requirements.push(prompt);
   saved.requirements = requirements;
   delete saved.task;
   // Interrupted tool calls are never replayed: their side effects may already exist.
@@ -661,7 +639,7 @@ function continueHistory(saved: SavedSession, messages: Message[], request: Dele
         messages.push({ role: "tool", tool_call_id: call.id, content: LOCAL_NOTE.interrupted });
   messages.push({
     role: "user",
-    content: `${request.prompt}\n\n${budget}`,
+    content: `${prompt}\n\n${budget}`,
     ...(request.images?.length ? { images: request.images } : {}),
   });
   return requirements;
@@ -736,9 +714,10 @@ async function readSteers(run: LocalRun): Promise<void> {
   const messages = run.inbox.take();
   if (!messages.length) return;
   for (const message of messages) {
-    run.messages.push(steerUserMessage(message));
-    // The person's words are instructions: a compaction keeps them in order with the rest.
-    if (message.text) run.requirements.push(message.text);
+    const said = steerUserMessage(message);
+    run.messages.push(said);
+    // A compaction keeps every message in order with the rest, Genex's still under its mark.
+    if (message.text) run.requirements.push(String(said.content));
   }
   await run.save();
   for (const { id } of messages) {
@@ -792,7 +771,7 @@ async function checkProgress(run: LocalRun, calls: ToolCall[]): Promise<Delegate
   run.idleRounds = inspecting && nextStamp === run.workspaceStamp ? run.idleRounds + 1 : 0;
   run.workspaceStamp = nextStamp;
   if (LOCAL_SESSION_LIMITS.idleNudgeRounds.includes(run.idleRounds)) {
-    run.progressNote = progressCheckNote(run.idleRounds, launchToolNames(run.request));
+    run.progressNote = progressCheckNote(run.idleRounds);
     run.messages.push({ role: "user", content: run.progressNote });
     run.request.onEvent?.({ type: DelegateEventType.Status, payload: { message: run.progressNote } });
   }

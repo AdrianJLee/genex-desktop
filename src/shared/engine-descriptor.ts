@@ -94,6 +94,8 @@ export interface EngineDescriptor {
     /** The model the provider's catalog names as its default; the picker lists it for "default". */
     providerDefault?: boolean;
     contextWindow: number;
+    /** The window is the engine's guess, not a figure the provider reported (an Ollama model not loaded yet). */
+    contextEstimated?: boolean;
     supportsFast?: boolean;
     supportsTools: boolean;
     supportsVision: boolean;

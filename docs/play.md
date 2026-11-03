@@ -228,6 +228,18 @@ is.
   needed. A card not installed shows its systems' marks on one plate. A game with no web
   build and no build for this computer is left out of the tabs and search; its maker's profile
   still lists it.
+- A native game's page (`play/GamePage.tsx`, its top `play/GameHero.tsx`, the rules in
+  `play/game-hero.ts`) opens on its art under the window's top edge, with the title, maker,
+  counts, the primary block and Like · Comments · Share over it: the cover clip over the cover
+  (it plays by the clip rules above, with the page bar's pause), the cover alone (it settles in
+  once and has no pause), or, with nothing, the no-cover floor on a shorter top in the theme's
+  colours. Two pictures or more (the cover, then the world item's `shots`) run as a slideshow
+  with thumbnails and a Shots section; Reduce Motion or the pause holds it. A picture that fails to
+  load leaves the run, so a broken cover falls back to the floor. Below: Runs on, Size (of the
+  build for this computer), Players and Made with, About when there is a description, and the
+  Store. Share copies the page's link and turns into a check; a ⋯ after it holds the card's menu (Show in Finder and Remove from this Mac for an installed game, the owner's items). On Windows in a dark theme the
+  window buttons have no box over the art (`setPictureUnderControls`); a light theme there and
+  Linux keep the bar in its own colour above it.
 - Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as
   `UiEvent.PlayInstalls`): one install at a time, the rest queued; a free-space check (download,
   unpacked game and 1 GiB); the archive streamed to `installed-games/.downloads/` (resumed by
@@ -321,7 +333,9 @@ is.
   `native-games` fixture builds their Mac apps on this Mac (Xcode, `dev/fixture-native-app.ts`),
   serves the archives from the profile at a few MB a second, and starts with Frigate installed,
   Puck Rush one version behind, and a Mac build in the library game's `Builds/Mac`, so its Publish
-  dialog lists platforms ([Genex publish](plugins.md#first-party-privileges)).
+  dialog lists platforms ([Genex publish](plugins.md#first-party-privileges)). Their pages show
+  each top: Dust Runners and Frigate a slideshow, Puck Rush its cover alone (as genex.games sends
+  every page today: no shots), Iron Tide nothing at all (no cover, shots or description).
 - `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
   description, screenshots and when it changed.
 

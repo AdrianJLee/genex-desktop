@@ -56,6 +56,7 @@ import {
   type AgentScreenFrame,
   type ScreenAct,
   ScreenDeed,
+  ScreenRole,
 } from "../../shared/agent-screen.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { DEFAULT_SHOT_QUALITY, DEFAULT_STILL_QUALITY, captureSurface, tookPage } from "./capture.ts";
@@ -210,18 +211,14 @@ async function benchEntry(root: string, page: string): Promise<{ entry: string }
 }
 
 /** Whose screen a capture's frames land on: the session's window, labelled for the worker. */
-function captureScreen(
-  sc: NonNullable<DelegateRequest["selfCapture"]>,
-  session: SessionPort,
-  role: AgentScreen["role"],
-): AgentScreen {
+function captureScreen(sc: NonNullable<DelegateRequest["selfCapture"]>, session: SessionPort): AgentScreen {
   return {
     handle: session.handle() ?? LIVE_HANDLE,
     label: sc.label ?? sc.facetId ?? sc.project,
     project: sc.project,
     runId: sc.runId ?? null,
     facetId: sc.facetId ?? null,
-    role,
+    role: ScreenRole.Builder,
   };
 }
 
@@ -378,10 +375,6 @@ export class PreviewService {
   #standInIdle: NodeJS.Timeout | null = null;
   readonly #frames = new Map<string, PendingFrame>();
   #stageVisible = true;
-  /** The person watches a game in Live, whatever briefly covers it (the renderer's `watchingLive`). */
-  #liveWatched = true;
-  /** The game open on the person's stage, which Live may not hold: opening a game starts nothing. */
-  #stageGame: string | null = null;
   /** Sessions looking through Live itself: only where this build opens no hidden windows. */
   #liveObservers = 0;
   /** What the Live game's sound depends on, bar the stage and the agents that `#applySound` reads. */
@@ -402,29 +395,10 @@ export class PreviewService {
     });
   }
 
-  /** Apply stage visibility, and the game open on the stage, without suspending an agent's observation. */
-  async setStageVisible(visible: boolean, watching = visible, stageGame: string | null = null): Promise<void> {
+  /** Apply stage visibility without suspending an agent's observation. */
+  async setStageVisible(visible: boolean): Promise<void> {
     this.#stageVisible = visible;
-    this.#liveWatched = watching;
-    this.#stageGame = stageGame;
     this.#updateVisibility();
-  }
-
-  /**
-   * Whether a show or landing the person asked for may load Live itself: Live is out of their
-   * sight, and holds this game (or none yet), or another game while this one is open on their
-   * stage, where the ask is their Play. While they watch Live, a dialog or a popover over it
-   * included, only Reload changes it (`live-gate.ts`).
-   */
-  liveOutOfSight(project: string): boolean {
-    if (this.#liveWatched) return false;
-    return !this.liveHoldsAnother(project) || this.#stageGame === project;
-  }
-
-  /** Live holds a game other than this one: nothing of this one is shown or offered there. */
-  liveHoldsAnother(project: string): boolean {
-    const holds = this.#x.servedRoots.get(LIVE_HANDLE)?.project;
-    return holds !== undefined && holds !== project;
   }
 
   /** Re-evaluate observation after a run starts or settles. */
@@ -685,16 +659,12 @@ export class PreviewService {
     root: string,
     outBase: string,
     session: SessionPort,
-    /** The director's capture follows its window: whatever build `look` last pointed it at. */
-    currentRoot: () => string = () => root,
-    /** Whose screen the frames land on (the card's role must not flip to "builder" on a capture). */
-    role: AgentScreen["role"] = "builder",
   ): NonNullable<DelegateRequest["onCapture"]> {
     let sequence = 0;
     let sequenceSeeded = false;
     return async ({ page } = {}) => {
       // A bench page is checked before anything is touched: a refused one loads nothing.
-      const bench = page === undefined ? null : await this.#benchFor(sc.project, currentRoot(), String(page));
+      const bench = page === undefined ? null : await this.#benchFor(sc.project, root, String(page));
       if (bench && "refusal" in bench) return bench.refusal;
       const outDir = iterationDir(outBase, sc.iteration);
       await ensureDir(outDir);
@@ -706,9 +676,9 @@ export class PreviewService {
       }
       const call = ++sequence;
       const port = await session.get();
-      const loaded = await this.#loadForCapture(port, sc, session, { target: currentRoot(), bench });
+      const loaded = await this.#loadForCapture(port, sc, session, { target: root, bench });
       if ("problem" in loaded) return MESSAGE.loadFailed(loaded.problem);
-      const screen = captureScreen(sc, session, role);
+      const screen = captureScreen(sc, session);
       this.openScreen(screen);
       const lines = [await this.#captureShot(port, screen, { outDir, call })];
       const errors = port.consoleEntries(0).filter((entry) => entry.level === "error");
@@ -1293,25 +1263,15 @@ export class PreviewService {
    * Make a build live: merge it into the game folder (the branch the user plays from) and load
    * it. Refuses a dirty game folder and a merge that conflicts — the user's edits are never
    * overwritten from here, and since M2.7 nowhere else either: the run's own landing refuses
-   * the same way and leaves the build on its ref for this button to land. A landing nobody on the
-   * stage asked for (`offerLive`: a harness's `land_build` with no message of the person's waiting
-   * on it) lands the same, and only offers the landed folder to Live's Reload.
+   * the same way and leaves the build on its ref for this button to land.
    */
-  async landBuild(
-    project: string,
-    commit: string,
-    { asker, offerLive = false }: { asker?: AbortController; offerLive?: boolean } = {},
-  ): Promise<{ commit: string; how: "merged" | "already" }> {
+  async landBuild(project: string, commit: string): Promise<{ commit: string; how: "merged" | "already" }> {
     if (!COMMIT_HASH.test(String(commit ?? ""))) throw new Error(MESSAGE.notCommitHash(commit));
     const projectDir = this.#core.games.dirFor(project);
     await this.#core.assertProjectAllowed(projectDir);
     this.#core.snapshots.register({ name: project, dir: projectDir });
-    // The chat's own session asking to land (a run control) holds the folder while it waits for
-    // this answer: it is not a contractor building there. Anyone else in the folder is.
-    const building = delegationsIn(this.#x.activeDelegations, projectDir).some(
-      (delegation) => delegation.abort !== asker,
-    );
-    if (building) throw new Error(MESSAGE.contractorBuilding(project));
+    if (delegationsIn(this.#x.activeDelegations, projectDir).length > 0)
+      throw new Error(MESSAGE.contractorBuilding(project));
     const resolved = (await git(projectDir, ["rev-parse", "--verify", `${commit}^{commit}`]).catch(() => "")).trim();
     if (!resolved) throw new Error(MESSAGE.notInHistory(commit, project));
     // A build never brings Claude Code's project settings or hooks: the person's own session in
@@ -1356,8 +1316,7 @@ export class PreviewService {
         );
       }
     }
-    if (offerLive) await this.offerLive({ project, root: null });
-    else await this.loadPreview({ project });
+    await this.loadPreview({ project });
     await this.#core.games.touch(project).catch(() => {});
     return { commit: resolved, how: already ? "already" : "merged" };
   }
@@ -1518,21 +1477,6 @@ export class PreviewService {
     if (!game || !folder || !build) return { ...none, folder };
     const kinds = game.facts.map((fact) => fact.id);
     return { project, folder, print: build.print, finished: buildFinished(build, kinds, Date.now()) };
-  }
-
-  /**
-   * A build to show that nobody on the stage asked for (a harness's `show_build` with no message of
-   * the person's waiting on it): checked as `showBuild` checks it, then offered to Live's Reload,
-   * which plays it. Answers the commit it resolved to.
-   */
-  async offerBuild(project: string, commit: string): Promise<string> {
-    if (!COMMIT_HASH.test(String(commit ?? ""))) throw new Error(MESSAGE.notCommitHash(commit));
-    const projectDir = this.#core.games.dirFor(project);
-    await this.#core.assertProjectAllowed(projectDir);
-    const resolved = (await git(projectDir, ["rev-parse", "--verify", `${commit}^{commit}`]).catch(() => "")).trim();
-    if (!resolved) throw new Error(MESSAGE.notInHistory(commit, project));
-    await this.#live.offer({ project, root: null, commit: resolved });
-    return resolved;
   }
 
   /** What waits for Live's Reload for this game, and the build Live shows: what the stage reads on mount. */

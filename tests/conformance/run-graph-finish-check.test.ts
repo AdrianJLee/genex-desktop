@@ -10,7 +10,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { seedBuildGraph } from "../../src/main/dev/fixture-build-graph.ts";
-import { seedLeadGraph } from "../../src/main/dev/fixture-lead-graph.ts";
 import {
   buildRunGraph,
   type FinishCheckNode,
@@ -349,10 +348,8 @@ describe("the finish check on the Builds graph", () => {
     assert.ok(node);
     assert.equal(node.state, FinishCheckState.NotYet, "a no with time left never reads as not finished");
     const round = node.rounds[0] as FinishRound;
-    assert.deepEqual(
-      [round.reasons, round.done, round.notDone, round.timeLeft],
-      [[met], ["Laps run"], [NO_TIMER], true],
-    );
+    // Flipped (no clock): an older record's `timeLeft` is read no more.
+    assert.deepEqual([round.reasons, round.done, round.notDone], [[met], ["Laps run"], [NO_TIMER]]);
     assert.deepEqual(leftOf(round), [NO_TIMER], "what is left, never what the reviewer checked");
     assert.deepEqual(roundNoteOf(round, node), { text: FINISH_CHECK_WORDS.keepsWorking, quiet: true });
     assert.equal(finishCheckFace(node).word, FINISH_CHECK_WORDS.leftWord(1));
@@ -393,22 +390,23 @@ describe("the finish check on the Builds graph", () => {
 
   it("a run that is no tree draws its finish check after its result", async () => {
     seq = 0;
-    const lead = await seeded(seedLeadGraph);
-    const done = lead.filter((event) => runIdOf(event) === "fixture-lead-done");
-    const before = buildRunGraph(done, "fixture-lead-done");
-    assert.equal(before?.tree, false, "the Unreal lead's run is no tree from its own records");
+    // Flipped (the lead-graph fixture went with the Unreal runner): the build-graph fixture's finished run is the one with no tree.
+    const lead = await seeded(seedBuildGraph);
+    const done = lead.filter((event) => runIdOf(event) === "fixture-graph-run");
+    const before = buildRunGraph(done, "fixture-graph-run");
+    assert.equal(before?.tree, false, "a run from before workers' records is no tree");
     assert.equal(finishCheckOf(before), undefined);
     const claimed = [
       ...done,
-      custom(CustomEvent.FinishCheck, { runId: "fixture-lead-done", round: 1, step: FinishCheckStep.Checking }),
+      custom(CustomEvent.FinishCheck, { runId: "fixture-graph-run", round: 1, step: FinishCheckStep.Checking }),
       custom(CustomEvent.FinishCheck, {
-        runId: "fixture-lead-done",
+        runId: "fixture-graph-run",
         round: 1,
         step: FinishCheckStep.Accepted,
         reasons: ["The katana swings."],
       }),
     ];
-    const graph = buildRunGraph(claimed, "fixture-lead-done");
+    const graph = buildRunGraph(claimed, "fixture-graph-run");
     assert.ok(graph);
     assert.equal(finishCheckOf(graph)?.state, FinishCheckState.Done);
     assert.equal(graph.nodes.at(-1)?.kind, GraphNodeKind.FinishCheck);
@@ -459,12 +457,9 @@ describe("the finish check on the Builds graph", () => {
   it("an old run with no finish check draws exactly as before", async () => {
     seq = 0;
     const web = await seeded(seedBuildGraph);
-    const lead = await seeded(seedLeadGraph);
     const shapes = [
       ["fixture-graph-run", web],
       ["fixture-graph-live", web],
-      ["fixture-lead-done", lead],
-      ["fixture-lead-live", lead],
     ] as const;
     for (const [runId, events] of shapes) {
       const graph = buildRunGraph(events, runId);
@@ -481,16 +476,7 @@ describe("the finish check on the Builds graph", () => {
 });
 
 const PARTS_WEB = ["run", "base", "facet", "facet"];
-const LEAD_HEAD = ["run", "base", "facet", "iteration", "facet", "iteration", "facet", "facet", "facet", "facet"];
-const LEAD_DONE_ROWS = [
-  ["lead", 1],
-  ["lead-atmosphere", 1],
-  ["agent-blender_model-1", 1],
-  ["agent-texture-1", 1],
-  ["agent-genex_cast-1", 1],
-  ["lead-combat", 1],
-];
-/** The build-graph and lead-graph fixtures' runs as they drew before the finish check existed: node kinds, then rows. */
+/** The build-graph fixture's runs as they drew before the finish check existed: node kinds, then rows. */
 const OLD_SHAPES: Record<string, unknown> = {
   "fixture-graph-run": [
     [...PARTS_WEB, ...Array(12).fill("iteration"), "facet", "iteration", "integration", "final"],
@@ -507,11 +493,6 @@ const OLD_SHAPES: Record<string, unknown> = {
       ["land", 4],
       ["sky", 1],
     ],
-  ],
-  "fixture-lead-done": [[...LEAD_HEAD, "iteration", "integration", "final", "assets"], LEAD_DONE_ROWS],
-  "fixture-lead-live": [
-    [...LEAD_HEAD, "facet", "integration", "final", "assets"],
-    [...LEAD_DONE_ROWS, ["agent-sound-1", 1]],
   ],
 };
 

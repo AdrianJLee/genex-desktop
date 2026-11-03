@@ -20,7 +20,6 @@ import { graphKeyOf, type RunGraphEvent, turnOfGraphKey, workerKeyOf } from "../
  */
 import { CustomEvent } from "../shared/custom-events.ts";
 import { finishRecordOf } from "../shared/finish-check.ts";
-import { HOUR_MS } from "../shared/duration.ts";
 import { t } from "../shared/i18n.ts";
 import { type EventEnvelope, EventKind } from "../shared/event-log.ts";
 import type { MakingPhase } from "../shared/asset-making.ts";
@@ -32,7 +31,6 @@ import {
   RoundOutcome,
   type RunExecution,
   RunState,
-  recordedRunLoop,
   roundOutcome,
 } from "../shared/run-state.ts";
 import type { RunSummary } from "../shared/run-summary.ts";
@@ -62,7 +60,6 @@ import {
   parseMerge,
   parseMove,
   parseScoreboard,
-  parseAdvice,
   parseShot,
   parseShots,
   parseVerdict,
@@ -273,19 +270,6 @@ export interface Shot {
   path: string;
 }
 
-/**
- * A critic's fresh look at a round the lead saved (`director_verdict` with `advice: true`): what it
- * saw wrong with the fix for each, one bold move, and its answers to the lead's gates. It is
- * advice: it decided nothing, so it is never a verdict.
- */
-export interface AdviceInfo {
-  at: string;
-  defects: Array<{ defect: string; fix: string }>;
-  boldMove: string;
-  gates: string[];
-  shots: string[];
-}
-
 export interface DiffInfo {
   camera: string;
   diffFraction: number | null;
@@ -321,7 +305,6 @@ export interface RunNode {
   project: string | null;
   goal: string;
   reference: { name: string; kind: string | null } | null;
-  durationMs?: number;
   startedAt: string | null;
   finishedAt: string | null;
   active: boolean;
@@ -435,8 +418,6 @@ export interface IterationNode {
   notes: NoteInfo[];
   /** The round's own verdict record — null on a run from before the round wrote one. */
   verdict: VerdictRecord | null;
-  /** The critic's advice on this round, when the lead asked for it: never a verdict. */
-  advice: AdviceInfo | null;
   /** Why a stopped round stopped, in the app's code: the run's own close, or the lead. */
   stopCode: WorkerStopCode | null;
 }
@@ -1062,7 +1043,6 @@ function iteration(graph: GraphDraft, facetId: string, n: number, title?: string
     judgedSeq: null,
     notes: [],
     verdict: null,
-    advice: null,
     stopCode: null,
   };
   owner.iterations.set(n, node);
@@ -1282,9 +1262,6 @@ function onRunStarted(graph: GraphDraft, entry: RunEntry): void {
   // Its first start record is the message it answers; a resume or a later steer is not.
   if (run.startedAt === null) run.asked = graph.answering;
   run.startedAt = entry.event.created_at;
-  // Absent budgets leave the earlier value; an ∞ build has only a safety ceiling, never a duration.
-  const loop = recordedRunLoop(payload.budgets);
-  if (loop) run.durationMs = loop.hours === null ? undefined : loop.hours * HOUR_MS;
   const reference = record(payload.reference);
   run.reference = reference ? { name: str(reference.name, "reference"), kind: strOrNull(reference.kind) } : null;
   run.referenceFrames = reference ? strings(reference.frames) : [];
@@ -1576,26 +1553,11 @@ function onMerge(graph: GraphDraft, entry: RunEntry): void {
 
 /**
  * The lead's own passes — the fork gate, its judge, a health pass, the close. Each one is a
- * build somebody looked at, with the sentence that look produced. A critic's advice comes the
- * same way and is no verdict: it goes on the round it looked at, and nothing else reads it.
+ * build somebody looked at, with the sentence that look produced.
  */
 function onDirectorVerdict(graph: GraphDraft, entry: RunEntry): void {
-  if (entry.payload.advice === true) {
-    onAdvice(graph, entry);
-    return;
-  }
   const verdict = parseVerdict(entry.payload);
   if (verdict) graph.verdicts.push(verdict);
-}
-
-/** A critic's advice, on the round it names, else its part's latest round; dropped when its part has none. */
-function onAdvice(graph: GraphDraft, entry: RunEntry): void {
-  const advice = parseAdvice(entry.payload, entry.event.created_at);
-  const draft = entry.facetId ? graph.facets.get(entry.facetId) : undefined;
-  if (!advice || !draft) return;
-  const latest = Math.max(0, ...draft.iterations.keys());
-  const round = draft.iterations.get(entry.round ?? latest) ?? draft.iterations.get(latest);
-  if (round) round.advice = advice;
 }
 
 /**

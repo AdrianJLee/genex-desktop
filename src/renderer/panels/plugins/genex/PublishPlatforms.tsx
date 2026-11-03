@@ -182,7 +182,6 @@ function askText(target: PublishTarget, end: PlatformEnd, title: string): string
 export function PublishPlatforms({
   project,
   platforms,
-  behind = false,
   shown,
   native,
   onGenex = false,
@@ -190,8 +189,6 @@ export function PublishPlatforms({
   project: string;
   /** The game folder's platforms as the Genex plugin can send them (`gateByPlugin`), null until read. */
   platforms: PublishPlatform[] | null;
-  /** The installed Genex plugin is from before apps: the line says to update it. */
-  behind?: boolean;
   shown: boolean;
   /** How the last Publish's apps went, from the publish record. */
   native?: GenexNativeRecord | undefined;
@@ -208,7 +205,7 @@ export function PublishPlatforms({
   const [refused, setRefused] = useState<string | null>(null);
   if (!shown || !platforms || !listsPlatforms(platforms, engineGame)) return null;
   const webOffer = webOfferFor(facts ?? []);
-  const reach = reachLine(platforms, behind, webOffer);
+  const reach = reachLine(platforms, webOffer);
   const listing = listingLine(platforms, native);
   const rows = platformRows(
     platforms,

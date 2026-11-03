@@ -27,7 +27,6 @@ import { chatWorkerTool, closeChatWorkers, openChatWorkers } from "../../src/har
 import { WORKER_TOOLS } from "../../src/harness-seed/loop/workers/specs.ts";
 import { DispatchActionType, HarnessCapability } from "../../src/shared/protocol.ts";
 import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
-import { UNREAL_NEW_GAME_TOOL } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
 import { SnapshotScope } from "../../src/shared/event-log.ts";
@@ -42,11 +41,8 @@ import { FolderHolds } from "../../src/shared/project-facts.ts";
 import { FindNext, PluginOffer } from "../../src/shared/project-tools.ts";
 import { inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
-import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
-import { runUnrealLead } from "../../src/harness-seed/loop/unreal/lead.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { FinishCheckStep } from "../../src/harness-seed/loop/finish-contract.ts";
-import { GRACE_MS } from "../../src/harness-seed/loop/time-cap.ts";
 import type { Run } from "../../src/harness-seed/types/harness.d.ts";
 import { PERMISSION_MODES, PermissionMode, type ToolPermissionEvent } from "../../src/shared/permissions.ts";
 import { APP_LOOK_TOOL_NAME, JobTool } from "../../src/shared/jobs.ts";
@@ -69,7 +65,6 @@ import { copyOfExample, PLUGIN_SDK_BACKEND, personAllowsLocalTools } from "../he
 import { writeSkillExample } from "../helpers/plugin-author.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { Changes, until } from "../helpers/worker-chat.ts";
-import { buildsOnly, leadHost, RUN, textOf, type Turn } from "../helpers/unreal-lead-host.ts";
 import {
   CHAT_SESSION,
   gameRepo,
@@ -392,6 +387,7 @@ async function siteAndEditorSkills(): Promise<PluginRegistry> {
 /** A tool the host serves, by name, as `plugins.tools` answers it. */
 const servedTool = (name: string, description: string) => ({ name, description, parameters: {} });
 /** The Unreal plugin's tool that makes a game's Unreal project: served only while the plugin is on. */
+const UNREAL_NEW_GAME_TOOL = "unreal__new-game";
 const NEW_GAME_TOOL = servedTool(UNREAL_NEW_GAME_TOOL, "Make the game's Unreal project.");
 /** The Unreal plugin's kind, as the host lists it while the plugin is on. */
 const UNREAL_KIND = { plugin: "unreal", name: "Unreal Editor", tool: UNREAL_NEW_GAME_TOOL, makes: ["unreal-project"] };
@@ -885,7 +881,7 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
     assert.deepEqual(kept, [], "every generated folder is ignored");
   });
 
-  it("the lead on an Unreal game starts Blender-model and texture workers in copies, with worker types from whichever plugin declares them; these succeed the Unreal lead's blender_model, blender_prep, genex_cast, sound and texture agents", async () => {
+  it("an Unreal game's worker types come from whichever plugin declares them: Blender models, textures, sounds, casts and C++", async () => {
     await lite.core.plugins.setEnabled(GENEX_PLUGIN, true);
     const types = await withUnrealOn(async () => {
       const { game } = await adopted(Project.UnrealGame);
@@ -897,31 +893,6 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
     assert.equal(declaredBy.texture, "genex", "Genex declares the texture worker");
     for (const kind of ["blender_prep", "genex_cast", "sound", "cpp"])
       assert.ok(declaredBy[kind], `${kind} is declared`);
-    const answers: string[] = [];
-    const startsWorkers: Turn = async ({ tool }) => {
-      answers.push(textOf(await tool(WORKER_START, { type: "blender_model", title: "Katana", task: "A katana." })));
-      answers.push(
-        textOf(await tool(WORKER_START, { type: "texture", title: "Moss", task: "A mossy stone texture." })),
-      );
-      return undefined;
-    };
-    const host = leadHost({ turns: [startsWorkers, buildsOnly, buildsOnly, buildsOnly], workerTypes: types });
-    await runUnrealLead(host.rec.ctx as never, {
-      threadId: "t1",
-      run: { ...RUN, budgets: { ...RUN.budgets, wallClockMs: 20 * 60_000 } } as never,
-      resume: false,
-      now: host.now,
-      sleep: host.sleep,
-    });
-    assert.match(answers[0] ?? "", /^Started worker blender_model-1/, answers.join("\n"));
-    assert.match(answers[1] ?? "", /^Started worker texture-1/, answers.join("\n"));
-    const copies = host.rec.paramsOf("engine.delegate").filter((p) => p.worker);
-    // A worker that has not delivered yet is woken again in the same copy.
-    assert.deepEqual(
-      [...new Set(copies.map((p) => String(p.cwd).split("/").at(-1)))],
-      ["agent-blender_model-1", "agent-texture-1"],
-      "each works in its own copy",
-    );
   });
   it(
     "a Loop on it is led by the chat's own session, under the editor lock, with workers in copies",
@@ -931,7 +902,9 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
       const host = await unrealLoopHost([
         async ({ tool }) => {
           await tool("save_point", { label: "One", summary: "the first room" });
-          answers.push(textOf(await tool(WORKER_START, { type: "cpp", title: "Door", task: "A door that opens." })));
+          answers.push(
+            answerText(await tool(WORKER_START, { type: "cpp", title: "Door", task: "A door that opens." })),
+          );
           await tool("finish", {
             review: "yes",
             summary: "The level is built and the door opens.",
@@ -943,7 +916,8 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
       await host.dispatch();
       const [first] = host.leadCalls();
       assert.equal(first?.resume, CHAT_SESSION, "the chat's own session leads");
-      assert.equal((first?.director as { inPlace?: unknown } | undefined)?.inPlace, true, "in the game folder");
+      // Flipped: "in the game folder" was the grant's `inPlace: true`; its root, the game folder, says it now.
+      assert.equal((first?.director as { root?: unknown } | undefined)?.root, host.dir, "in the game folder");
       const trail = host.trail();
       const probe = trail.indexOf("tool:unreal__editor-activity");
       const save = trail.indexOf("tool:unreal__save-all");
@@ -980,7 +954,10 @@ describe("Unreal asked for with the plugin off: find the plugin, or go on with g
     }
   });
 
-  it("plugins_find shows the turn-it-on card; on the person's word only, the lead goes on with generic tools and is told it cannot save inside the editor before checkpoints", async (t) => {
+  // Flipped: on the person's word the lead was also told the Unreal plugin is off and that Genex
+  // can't save inside the editor before a checkpoint; Genex infers no plugin from the facts, and the
+  // session reads the person's words with an Unreal project's context.
+  it("plugins_find shows the turn-it-on card; on the person's word only, the lead goes on with generic tools", async (t) => {
     const game = await lite.core.createGame("Unreal Card");
     // The session looks for the plugin, then suggests what it found.
     const found = (answers: unknown[]) =>
@@ -999,8 +976,7 @@ describe("Unreal asked for with the plugin off: find the plugin, or go on with g
 
     // On the person's word to go on without it, an Unreal project's turn is delegated, never refused.
     const { prompt } = await chatTurnOn(Project.UnrealGame, "Config/DefaultEngine.ini");
-    assert.match(prompt, /Unreal plugin is off/);
-    assert.match(prompt, /can't save inside the editor before a checkpoint/);
+    assert.doesNotMatch(prompt, /Unreal plugin is off|can't save inside the editor/);
   });
   it("without the plugin the lead builds with UnrealBuildTool and UnrealEditor-Cmd as jobs and looks with app_look", {
     skip: process.platform === "win32" && "jobs' process groups are POSIX",
@@ -1395,7 +1371,7 @@ describe("an Unreal game with a web site: two facts, two views", () => {
     assert.deepEqual(factsAt(descriptor, "web-game"), ["site"]);
   });
 
-  it("skills and rules scope by path: the web skill applies under site/, the Unreal skill at the root", async () => {
+  it("skills scope by path: the web skill applies under site/, the Unreal skill at the root; the context names both", async () => {
     const descriptor = await withUnrealOn(async () => listed((await adopted(Project.UnrealAndSite)).game.name));
     const facts = factsOfListed(descriptor);
     const registry = await siteAndEditorSkills();
@@ -1406,11 +1382,8 @@ describe("an Unreal game with a web site: two facts, two views", () => {
     } finally {
       registry.cancel();
     }
-    const lines = buildContractorBrief({ ask: ASK, engine: CLAUDE, facts }).split("\n");
-    const web = lines.filter((line) => line.includes("serves its index.html"));
-    assert.ok(web.length > 0 && web.every((line) => line.startsWith("For the web game in `site/`: ")));
-    const unreal = lines.filter((line) => line.includes("the Unreal editor connector's tools"));
-    assert.ok(unreal.length > 0 && unreal.every((line) => !line.startsWith("For the ")));
+    // Flipped: each kind got rules of its own, named by path, then the context named what is where.
+    // The plugins' guidance (above) is scoped by path, and the context never says what the folder holds.
   });
   it("two observers; Live shows the Unreal card, picked by the facts", async () => {
     const { descriptor, observers, plugins } = await withUnrealOn(async () => {
@@ -1763,8 +1736,11 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
     const snapshot = trail.indexOf("snapshot.create");
     assert.ok(snapshot >= 0 && snapshot < trail.indexOf("engine.delegate"), trail.join(", "));
   });
+  // Flipped (no clock): an unlimited Loop was capped at 24 hours with a grace after them, and an idle
+  // lead's Loop closed when that time ran out; a Loop has no clock, and a turn that ends with nothing
+  // at work closes it.
   it(
-    "an unlimited Loop runs until the finish check passes, capped at 24 hours; the credit cap lives in the run record",
+    "a Loop runs with no time limit until its lead finishes it; the credit cap lives in the run record",
     LOOP_TIMEOUT,
     async () => {
       const unlimited = { wallClockMs: 2 * HOUR, untilSatisfied: true, completionPolicy: "goal" };
@@ -1780,15 +1756,15 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
         { budgets: unlimited },
       );
       host.reviews.push(reviewerAnswer("no", ["the door does not open"]));
-      await host.start();
+      const done = host.start();
+      // The lead rests on its worker after the no, however long; the worker's end wakes it.
+      assert.ok(await host.until(() => host.workers.length === 1 && host.reviewed().length === 1));
+      host.pass(48 * HOUR);
+      await host.workers[0]?.end({ summary: "the door opens" });
+      await done;
       const id = `autopilot_${host.run.runId}`;
-      const journal = host.artifacts.get(id) as { run: Run; director: { clock: Record<string, string> } };
-      const { started, finalDeadline } = journal.director.clock;
-      assert.equal(
-        Date.parse(finalDeadline) - Date.parse(started),
-        24 * HOUR + GRACE_MS,
-        "24 hours at most, then the grace to wrap up",
-      );
+      const journal = host.artifacts.get(id) as { run: Run; director: { clock?: unknown } };
+      assert.equal(journal.director.clock, undefined, "the journal keeps no clock");
       const steps = host.appended("finish_check").map((check) => check.step);
       assert.deepEqual(
         steps.filter((step) => step !== FinishCheckStep.Checking),
@@ -1820,7 +1796,9 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
         { budgets: unlimited },
       );
       const report = await idle.start();
-      assert.equal(report.stoppedBecause, "the Loop's time ran out; here is where it stands");
+      assert.equal(idle.leadCalls().length, 1, "its turn ended with nothing at work: the Loop closed");
+      assert.doesNotMatch(String(report.stoppedBecause), /time ran out/);
+      assert.equal(report.stoppedBecause, "the lead's turn ended with nothing at work");
       assert.equal(idle.reviewed().length, 0, "no reviewer was asked");
     },
   );

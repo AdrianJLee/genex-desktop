@@ -292,7 +292,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:preview.cover-still": "previewCoverStill",
   "studio:build.problem": "buildProblem",
   "studio:packages.install": "installPackages",
-  "studio:run.start": "startRun",
   "studio:run.stop": "stopRun",
   "studio:run.finish": "finishRun",
   "studio:autopilot.resume": "resumeAutopilot",
@@ -317,6 +316,20 @@ export const STUDIO_INVOKE_CHANNELS = {
 } as const satisfies Record<`studio:${string}`, keyof StudioApi>;
 
 export type StudioInvokeChannel = keyof typeof STUDIO_INVOKE_CHANNELS;
+
+/** Is `value` one of the app's invoke channels? */
+export const isInvokeChannel = (value: unknown): value is StudioInvokeChannel =>
+  typeof value === "string" && Object.hasOwn(STUDIO_INVOKE_CHANNELS, value);
+
+/**
+ * The invoke channel a failed call was on, as the preload stamps it on the error it throws; null for
+ * any other thrown value or for a `channel` that is not one of the app's.
+ */
+export function failedChannel(error: unknown): StudioInvokeChannel | null {
+  if (error === null || typeof error !== "object") return null;
+  const channel: unknown = Reflect.get(error, "channel");
+  return isInvokeChannel(channel) ? channel : null;
+}
 
 /** What the preload sends on each invoke channel; `undefined` when it sends nothing. */
 export interface StudioInvokePayloads {
@@ -586,7 +599,6 @@ export interface StudioInvokePayloads {
   "studio:preview.cover-still": undefined;
   "studio:build.problem": { project: string };
   "studio:packages.install": { project: string; scripts?: boolean };
-  "studio:run.start": Arg<"startRun", 0>;
   "studio:run.stop": { runId: string };
   "studio:run.finish": { runId: string; threadId: string };
   "studio:autopilot.resume": { runId: string };

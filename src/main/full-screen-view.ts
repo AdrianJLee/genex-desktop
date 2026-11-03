@@ -68,11 +68,11 @@ export function wireGameFullScreen({
       },
     },
     stage: {
-      cover: () => void studio.previewStageVisible(true, true),
+      cover: () => void studio.previewStageVisible(true),
       restore: () => {
         const last = boundsSeen.last;
         if (!last) return;
-        void studio.previewStageVisible(last.width > 0 && last.height > 0, true);
+        void studio.previewStageVisible(last.width > 0 && last.height > 0);
         view.setBounds({
           x: Math.round(last.x),
           y: Math.round(last.y),

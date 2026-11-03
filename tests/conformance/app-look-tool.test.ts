@@ -100,22 +100,10 @@ const imagesOf = (answer: LiveToolResult | undefined) => (typeof answer === "str
 /** The chat's own session answering a message the person sent now. */
 const ownTurn = async (chat: Chat) => ({ chatTurn: { messageId: await chat.personSays() } });
 
-/** A lead of the chat's run that sits in the game folder and leads a build of its own (a web lead). */
-async function webLead(chat: Chat) {
-  const root = await chat.copyOf(RUN_ID, `integration-${Math.random().toString(16).slice(2)}`);
-  return {
-    readOnly: true,
-    director: {
-      runId: RUN_ID,
-      threadId: chat.threadId,
-      project: chat.game,
-      root,
-      setup: null,
-      tools: [],
-      chatSession: true,
-    },
-  };
-}
+/** The chat's run's lead, in the game folder as every project's lead is. */
+const lead = (chat: Chat) => ({
+  director: { runId: RUN_ID, threadId: chat.threadId, project: chat.game, root: chat.gameDir, setup: null, tools: [] },
+});
 
 /** The chat's access rows. */
 async function accessRows(chat: Chat): Promise<AppLookAccessPayload[]> {
@@ -134,7 +122,8 @@ describe("app_look", () => {
       await chat.core.setPermissionMode(chat.threadId, mode);
       const seats: Array<[string, Record<string, unknown>]> = [
         ["the chat's own session", await ownTurn(chat)],
-        ["a lead", await webLead(chat)],
+        // Flipped (one Loop): the lead sat in a copy of the folder (the web Loop's); it sits in the game folder.
+        ["a lead", lead(chat)],
         ["a writing worker", chat.runWorker()],
         ["a reader worker", chat.runWorker("r1", chat.worktree, { readOnly: true })],
       ];
@@ -146,10 +135,7 @@ describe("app_look", () => {
     await chat.core.setPermissionMode(chat.threadId, PermissionMode.Auto);
     const reader = await looksIn(chat, chat.runWorker("r1", chat.worktree, { readOnly: true }), []);
     assert.deepEqual(toolsOf(reader.request), [APP_LOOK_TOOL_NAME], "a reader gets no other host tool");
-    const none: Array<[string, Record<string, unknown>, string?]> = [
-      ["an unseated builder", { cwd: chat.worktree }],
-      ["the coordinator", { coordinator: { runId: RUN_ID }, readOnly: true }],
-    ];
+    const none: Array<[string, Record<string, unknown>, string?]> = [["an unseated builder", { cwd: chat.worktree }]];
     for (const [label, brief, engine] of none) {
       const { request } = await looksIn(chat, brief, [], engine);
       assert.ok(!toolsOf(request).includes(APP_LOOK_TOOL_NAME), label);

@@ -1,7 +1,7 @@
 /**
  * Tool permission ledger — every way a request can be settled, that each settles it once, and
- * that nothing settles it on a clock unless it asks for one: Claude Code waits for the person, and
- * so does the chat; only a build's lead's card is withdrawn when nobody answers.
+ * that nothing settles it on a clock: Claude Code waits for the person, and so do the chat and a
+ * build's lead.
  */
 import assert from "node:assert/strict";
 import { mock, test } from "node:test";
@@ -15,7 +15,6 @@ const ask = (
     threadId?: string;
     signal?: AbortSignal;
     plan?: boolean;
-    timeoutMs?: number;
     outlivesTurn?: boolean;
   } = {},
 ) =>
@@ -25,7 +24,6 @@ const ask = (
     threadId: extra.threadId ?? "t1",
     ...(extra.plan ? { plan: true } : {}),
     ...(extra.signal ? { signal: extra.signal } : {}),
-    ...(extra.timeoutMs !== undefined ? { timeoutMs: extra.timeoutMs } : {}),
     ...(extra.outlivesTurn ? { outlivesTurn: true } : {}),
   });
 
@@ -64,24 +62,20 @@ test("a request waits with no timeout of its own", async () => {
   assert.equal((await answer).by, "user");
 });
 
-test("a lead's card nobody answers is withdrawn once, by timeout; an answer first clears its clock", async (t) => {
+// Flipped (no clock): a lead's card nobody answered was withdrawn after its `timeoutMs`
+// (`by: "timeout"`, LEAD_ASK_TIMEOUT_MS five minutes); no card has a clock now.
+test("a lead's card waits a day unanswered: only an answer or a Stop settles it", async (t) => {
   mock.timers.enable({ apis: ["setTimeout"] });
   t.after(() => mock.timers.reset());
   const ledger = new ToolPermissions();
-  const unanswered = ask(ledger, "p1", { timeoutMs: 1_000 });
-  mock.timers.tick(999);
-  assert.equal(ledger.pending().length, 1, "still waiting a moment before");
-  mock.timers.tick(1);
-  assert.deepEqual(await unanswered, { answer: null, by: "timeout" });
-  assert.equal(ledger.resolve("p1", { decision: "allow" }), false, "a late click changes nothing");
-
-  const answered = ask(ledger, "p2", { timeoutMs: 1_000 });
-  assert.equal(ledger.resolve("p2", { decision: "allow" }), true);
-  mock.timers.tick(5_000);
+  const answered = ask(ledger, "p1", { outlivesTurn: true });
+  mock.timers.tick(24 * 60 * 60_000);
+  assert.equal(ledger.pending().length, 1, "still waiting a day later");
+  assert.equal(ledger.resolve("p1", { decision: "allow" }), true);
   assert.deepEqual(await answered, { answer: { decision: "allow" }, by: "user" });
-  const stopped = ask(ledger, "p3", { timeoutMs: 1_000 });
+  const stopped = ask(ledger, "p2", { outlivesTurn: true });
+  mock.timers.tick(24 * 60 * 60_000);
   ledger.cancel({}, "stop");
-  mock.timers.tick(5_000);
   assert.deepEqual(await stopped, { answer: null, by: "stop" });
   assert.deepEqual(ledger.pending(), []);
 });
@@ -129,10 +123,10 @@ test("a turn's end and a game's Stop withdraw only the requests in their scope",
   assert.equal(ledger.resolve("p3", { decision: "allow" }), false);
 });
 
-test("a lead's card outlives the chat's turns: only a Stop, its session, an answer or its clock end it", async () => {
+test("a lead's card outlives the chat's turns: only a Stop, its session or an answer end it", async () => {
   const ledger = new ToolPermissions();
   const chats = ask(ledger, "p1");
-  const leads = ask(ledger, "p2", { timeoutMs: 60_000, outlivesTurn: true });
+  const leads = ask(ledger, "p2", { outlivesTurn: true });
   assert.equal(ledger.cancel({ threadId: "t1" }, "turn"), 1, "another turn ended: the chat's own card goes");
   assert.deepEqual(await chats, { answer: null, by: "turn" });
   assert.deepEqual(

@@ -22,6 +22,9 @@ import {
   setupPluginOf,
   setupStepChanges,
   setupStepId,
+  SLOW_GRAPH_MS,
+  SLOW_GRAPH_REPEAT_MS,
+  slowGraphProperties,
   type StepStates,
   stepStateOf,
 } from "../../src/renderer/analytics/builds-stage.ts";
@@ -40,6 +43,7 @@ import {
   type JobPhases,
   jobPhaseChanges,
   LiveOutcome,
+  LiveWaitSaw,
   LiveTrigger,
   NodeKind,
   PartTrouble,
@@ -112,7 +116,9 @@ const only = (found: readonly BuildsTracked[]): BuildsTracked => {
 };
 
 describe("runs from the log", () => {
-  it("sends a Loop's start once its autopilot_started says how it works, with its run_started's budgets", () => {
+  // Intentionally flipped: the start carried the Loop's hours and until-satisfied flag, the person's
+  // Mode pick; with no Loop control a start sends neither, only its completion policy.
+  it("sends a Loop's start once its autopilot_started says how it works, with its run_started's completion policy", () => {
     const memory = memoryWith();
     const found = read(memory, [
       record(
@@ -130,8 +136,6 @@ describe("runs from the log", () => {
       event: BuildsEvent.RunStarted,
       properties: {
         mode: BuildMode.Loop,
-        loop_hours: 2,
-        until_satisfied: false,
         completion_policy: null,
         director: true,
         facets: 0,
@@ -220,7 +224,7 @@ describe("runs from the log", () => {
       victory: false,
       duration_ms: 80 * MINUTE_MS,
       worked_ms: 20 * MINUTE_MS,
-      loop_hours: 1.5,
+      // Flipped (no clock): `loop_hours: 1.5` was the close's hours; a Loop has none to tell.
       rounds_accepted: 2,
       rounds_rejected: 1,
       profile: LoopProfile.Web,
@@ -339,7 +343,7 @@ describe("runs from the log", () => {
       step: FinishCheckStep.Rejected,
       rejections: 2,
       stopped: false,
-      time_left: true,
+      // Flipped (no clock): `time_left: true` was the record's working time left; a settle names none.
       done_count: 1,
       not_done_count: 2,
       reviewer_engine: EngineId.ClaudeCode,
@@ -598,10 +602,14 @@ describe("the stage", () => {
       firstMessageAt: T0 - 9 * MINUTE_MS,
       state: { drawCalls: 12, flow: { phase: "menu", playing: false } },
       gameRef: REF,
+      probes: { pageSeenAt: T0 + SECOND_MS, saw: LiveWaitSaw.ThisGame, mainAnswered: true },
     });
     assert.deepEqual(properties, {
       outcome: LiveOutcome.Shown,
       load_ms: 4 * SECOND_MS,
+      page_seen_ms: SECOND_MS,
+      wait_saw: LiveWaitSaw.ThisGame,
+      main_answered: true,
       trigger: LiveTrigger.FirstBuildAuto,
       first_in_launch: true,
       game_age_ms: 10 * MINUTE_MS + 4 * SECOND_MS,
@@ -613,6 +621,17 @@ describe("the stage", () => {
       crash_reason: null,
     });
     assert.equal(liveShownProperties({ ...inputWithout(), load: { since: T0 } }).trigger, null);
+    const unseen = liveShownProperties({
+      ...inputWithout(),
+      probes: { pageSeenAt: null, saw: LiveWaitSaw.Nothing, mainAnswered: false },
+    });
+    assert.deepEqual(
+      [unseen.page_seen_ms, unseen.wait_saw, unseen.main_answered],
+      [null, LiveWaitSaw.Nothing, false],
+      "a wait that never saw the page says so",
+    );
+    const refused = liveShownProperties(inputWithout());
+    assert.deepEqual([refused.page_seen_ms, refused.wait_saw, refused.main_answered], [null, null, null]);
   });
 
   it("suspects a blank game only after it showed and drew nothing for a while", () => {
@@ -662,6 +681,19 @@ describe("the stage", () => {
     assert.equal(nodeKindOf("part:facet-7"), NodeKind.Part);
     assert.equal(nodeKindOf("step-abc"), NodeKind.Step);
     assert.equal(nodeKindOf("build:3"), NodeKind.Build, "a build of a Loop's line");
+  });
+
+  it("sends a slow projection of the Builds graph with its size, at most once in a while", () => {
+    const slow = { ms: SLOW_GRAPH_MS + 0.4, events: 90_000, parts: 40, buildsShown: true };
+    assert.deepEqual(slowGraphProperties(slow, T0, null), {
+      ms: SLOW_GRAPH_MS,
+      events: 90_000,
+      parts: 40,
+      builds_shown: true,
+    });
+    assert.equal(slowGraphProperties({ ...slow, ms: SLOW_GRAPH_MS - 1 }, T0, null), null, "a quick one is not sent");
+    assert.equal(slowGraphProperties(slow, T0 + SLOW_GRAPH_REPEAT_MS - 1, T0), null, "nor one soon after another");
+    assert.notEqual(slowGraphProperties(slow, T0 + SLOW_GRAPH_REPEAT_MS, T0), null);
   });
 
   it("tells a press the person declined from one that failed", () => {

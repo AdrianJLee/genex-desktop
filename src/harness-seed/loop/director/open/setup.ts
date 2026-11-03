@@ -1,17 +1,14 @@
 /**
  * The open Loop's first steps, which the director's setup (`../setup.ts` `prepareLoopRun`) takes in
  * place of the web method's: the game as Genex lists it (its folder, its facts, the moments its
- * plugins hook), the run's time and credit cap on its own record, Genex's snapshot of the folder
+ * plugins hook), the run's credit cap on its own record, Genex's snapshot of the folder
  * before the Loop, the Loop's own record on the run, and the run's worker pool. No scaffold, no
  * contract, no preview, no copy of the game for the lead: it works in the game folder itself.
  */
 import type { AnyRecord, HarnessCtx, Run } from "../../../types/harness.d.ts";
-import { DEFAULT_WALL_CLOCK_MS, MAX_RUN_HOURS } from "../../config.ts";
-import { type FactRef, factsOfGame, type FolderHolds } from "../../folder-facts.ts";
+import { type FactRef, factsOfGame, type FolderHolds, seenInWindow } from "../../folder-facts.ts";
 import { HostMethod } from "../../host-methods.ts";
 import { modelOn, RoleKey, roleEffort, roleEngine } from "../../model-roles.ts";
-import { HOUR_MS } from "../../time.ts";
-import { UNTIL_DONE_CAP_MS } from "../../time-cap.ts";
 import { folderLabelOf } from "../../workers/identity.ts";
 import { RUN_POOL_WORDS } from "../../workers/prompts.ts";
 import { type RunPoolSeat, runPool } from "../../workers/run-pool.ts";
@@ -37,6 +34,8 @@ export interface OpenedGame {
   facts: FactRef[];
   holds: FolderHolds | null;
   hookEvents: string[];
+  /** Genex's eyes reach the game (`seenInWindow`): the lead's turns get the window its chat's turns have. */
+  seen: boolean;
 }
 
 /** The game as `game.list` lists it; a game with no folder throws, as a web run's does. */
@@ -50,39 +49,25 @@ export async function openGame(ctx: HarnessCtx, run: Run): Promise<OpenedGame> {
     facts: factsOfGame(game),
     holds: typeof game?.holds === "string" ? (game.holds as FolderHolds) : null,
     hookEvents: Array.isArray(game?.hookEvents) ? game.hookEvents.map(String) : [],
+    seen: seenInWindow(game),
   };
 }
 
-/** An open Loop's hours: its record's, held to the most a Loop runs; ∞ runs until its finish, `UNTIL_DONE_CAP_MS` at most. */
-export function openRunMs(run: Run): number {
-  if (run.budgets?.untilSatisfied === true) return UNTIL_DONE_CAP_MS;
-  const asked = run.budgets?.wallClockMs;
-  const total = typeof asked === "number" && asked > 0 ? asked : DEFAULT_WALL_CLOCK_MS;
-  return Math.min(total, MAX_RUN_HOURS * HOUR_MS);
+/** The run's credit cap on its own record: its own whole number, or the default where it names none (or none Genex can read). */
+export function recordCreditCap(run: Run): void {
+  run.budgets = { ...run.budgets, creditCap: creditCapOf(run) ?? DEFAULT_CREDIT_CAP };
 }
 
 /**
- * The run's credit cap on its own record: its own whole number, or the default where it names none
- * (or none Genex can read), less what an earlier runner's jobs already spent (`spentBefore`, once:
- * the lowered cap is the record's from then on).
+ * A resumed open Loop's asks settled across its pause: a rewind or a restart its last turn's end
+ * never ran (a Stop came first) is not run now over the next turn's work, and a line of the run's
+ * log tells the lead so with its first message.
  */
-export function recordCreditCap(run: Run, spentBefore = 0): void {
-  const cap = creditCapOf(run) ?? DEFAULT_CREDIT_CAP;
-  run.budgets = { ...run.budgets, creditCap: Math.max(0, cap - spentBefore) };
-}
-
-/**
- * A resumed open Loop's journal with what its lead asked for before the pause settled: a rewind or a
- * restart its last turn's end never ran (a Stop came first) is not run now over the next turn's
- * work, and the lead hears so in its first message.
- */
-export function settledAcrossPause(journal: OpenJournal): OpenJournal {
-  const { rewind, restart } = journal.between;
-  const carried = [
-    ...(rewind ? [OPEN_NEWS.rewindDropped(rewind.label)] : []),
-    ...(restart ? [OPEN_NEWS.restartDropped] : []),
-  ];
-  return { ...journal, between: { rewind: null, restart: false }, carried: [...journal.carried, ...carried] };
+export function settledAcrossPause(loopRun: LoopRun, open: OpenLoop): void {
+  const { rewind, restart } = open.journal.between;
+  if (rewind) loopRun.note(OPEN_NEWS.rewindDropped(rewind.label), NoteKind.Folder);
+  if (restart) loopRun.note(OPEN_NEWS.restartDropped, NoteKind.Folder);
+  open.journal.between = { rewind: null, restart: false };
 }
 
 /**
@@ -110,34 +95,16 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     facts: game.facts,
     holds: game.holds,
     hookEvents: game.hookEvents,
+    seen: game.seen,
     journal,
     halted: null,
-    refused: null,
-    refusalPauses: false,
     turnSavedFrom: journal.savePoints.length,
-    turnWorked: false,
-    turnMark: null,
-    turnMarkAt: null,
-    turnStart: null,
-    unclearStreak: 0,
-    folderOnlyStreak: 0,
-    sessionActed: false,
     sessionWorked: false,
-    treeUnread: false,
     betweenTurns: false,
-    askPending: false,
-    claimTurnedDown: false,
     gitWrite: gitQueue(),
     clock,
     pool: null,
-    jobsRunning: 0,
-    jobsReadAt: null,
-    writerJobsRunning: 0,
-    writerJobEndSeq: 0,
-    leftoverJobs: [],
     since: clock.now(),
-    heard: new Set(),
-    asked: new Set(),
     healthAt: clock.now(),
     inTurn: false,
     recovering: null,
@@ -152,7 +119,7 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
 /** Why a worker's merge into the game folder is refused now (the Loop paused, closing, closed or stopped), or null. */
 function mergeRefusedNow(loopRun: LoopRun): string | null {
   const { ctx, open, state } = loopRun;
-  if (open?.halted) return OPEN_WORDS.paused;
+  if (open.halted) return OPEN_WORDS.paused;
   const over = state.finished || Boolean(state.finish) || closeUnderWay(state) || ctx.cancelled === true;
   return over ? OPEN_WORDS.ending : null;
 }
@@ -175,7 +142,6 @@ function poolSeat(loopRun: LoopRun, open: OpenLoop): RunPoolSeat {
     ...(cap === null ? {} : { creditCap: cap }),
     gameDir: projectDir,
     game: { hookEvents: open.hookEvents },
-    leadFolder: { project: run.project },
     identity: { folderLabel: folderLabelOf(projectDir, run.project), facts: open.facts, holds: open.holds },
     clock: open.clock,
     // The pool's copies and merges take the game's one git index, as the lead's saves and restores do.

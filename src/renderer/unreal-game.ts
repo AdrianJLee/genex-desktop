@@ -4,12 +4,11 @@
  * outside the game folder, and the bundled plugin that opens the editor. Pure, so each rule is
  * tested without a DOM.
  */
-import { engineLoopGate, engineProjectInFolder, engineRewindNote } from "./engine-game.ts";
+import { engineProjectInFolder, engineRewindNote } from "./engine-game.ts";
 import { GameEngine, engineOf } from "../shared/game-engine.ts";
 import type { GameProject } from "../shared/game-project.ts";
 import { UNREAL_PLUGIN_ID } from "../shared/observers.ts";
 import type { PluginInfo } from "../shared/plugins.ts";
-import { UNREAL_WORDS } from "./words.ts";
 
 /** The bundled Unreal plugin's id, re-exported for the renderer's readers (`shared/observers.ts`). */
 export { UNREAL_PLUGIN_ID };
@@ -111,15 +110,6 @@ export function unrealProjectOf(game: LinkedGame | null | undefined): string | n
  */
 export function unrealRewindNote(game: LinkedGame | null | undefined): string | null {
   return unrealProjectOf(game) ? engineRewindNote(game) : null;
-}
-
-/**
- * Why Mode has no Loop for an Unreal game whose project lies outside its folder (`engineLoopGate`
- * for Unreal): Rewind can't undo what a Loop changes there, where the project is, and the two ways
- * to a Loop.
- */
-export function unrealLoopGate(game: LinkedGame | null | undefined): string {
-  return unrealProjectOf(game) ? engineLoopGate(game) : UNREAL_WORDS.loopUnavailable(null, "");
 }
 
 /** Whether an Unreal game's project lies inside its own folder (New game puts it in `unreal/`). */

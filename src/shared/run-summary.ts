@@ -25,6 +25,10 @@ export interface RunAttempt {
   state: string;
   evaluation: "accepted" | "rejected" | null;
   reason: string | null;
+  /** A save point's label, in the lead's words (its round's `label`). */
+  label?: string;
+  /** Genex took that save point between the lead's turns (an autosave), not the lead. */
+  auto?: boolean;
 }
 export interface RunTask {
   id: string;
@@ -366,6 +370,9 @@ const readRound: RecordReader = (run, { event_type, payload, workerId }) => {
   attempt.evaluation = judged ? outcome : null;
   attempt.state = outcome === RoundOutcome.Stopped ? "stopped" : "done";
   attempt.reason = string(payload.reason);
+  const label = string(payload.label);
+  if (label) attempt.label = label;
+  if (payload.auto === true) attempt.auto = true;
 };
 
 /** Does this merge move the integrated head somewhere new (and not back onto the base)? */

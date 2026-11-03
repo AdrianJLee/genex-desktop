@@ -125,15 +125,18 @@ const GIT_REF = /\brefs\/[^\s)]+/gi;
  * "run_fixture123456" learns nothing — so they are removed here rather than trusted not to appear.
  */
 export function withoutIds(text: string): string {
-  return text
-    .replace(GIT_REF, "")
-    .replace(RUN_ID, "")
-    .replace(COMMIT_SHA, "")
-    .replace(/\(\s*\)/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\s*·\s*(?=·|$)/g, "")
-    .replace(/^\s*[·—-]\s*/, "")
-    .trim();
+  return (
+    text
+      .replace(GIT_REF, "")
+      .replace(RUN_ID, "")
+      .replace(COMMIT_SHA, "")
+      // The brackets a stripped id leaves, with the space before them: "in git (refs/…): ask" reads "in git: ask".
+      .replace(/\s*\(\s*\)/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*·\s*(?=·|$)/g, "")
+      .replace(/^\s*[·—-]\s*/, "")
+      .trim()
+  );
 }
 
 function clip(text: string, max: number): string {
@@ -423,12 +426,12 @@ export function wasStopped(source: string | null | undefined): boolean {
 /** The harness's verdict source for a round kept because nothing regressed (its `VerdictSource.NoRegression`). */
 const KEPT_UNHARMED = "no-regression";
 
-/** The harness's verdict source for a save point the Unreal lead made itself (its `VerdictSource.Lead`). */
+/** The harness's verdict source for a save point the lead made itself (its `VerdictSource.Lead`). */
 const LEAD_SAVE = "lead";
 
 /**
- * A round the Unreal lead kept by saving it, after looking at its own captures: no reviewer judged
- * it and nothing compared it side by side, so it is never worded as a reviewer's verdict.
+ * A round the lead kept by saving it itself: no reviewer judged it and nothing compared it side by
+ * side, so it is never worded as a reviewer's verdict.
  */
 export function savedByLead(source: string | null | undefined): boolean {
   return source === LEAD_SAVE;
@@ -903,7 +906,8 @@ function pausedLoopRunWords(rounds: number, stopped: boolean, why: string): Loop
     };
   return {
     headline: t("{rounds, plural, =0 {Paused} one {Paused after # round} other {Paused after # rounds}}", { rounds }),
-    because: t("{why}. Everything built so far is kept.", { why: capitalise(why) }),
+    // A reason may end a sentence of its own: the card's full stop is the one it ends with.
+    because: t("{why}. Everything built so far is kept.", { why: capitalise(why).replace(/[.!?…]+$/, "") }),
   };
 }
 
@@ -2089,8 +2093,6 @@ export const STILL_TO_FIX_WORDS = {
     notDone.length
       ? [t("Keep building: fix what’s left."), ...notDone.map((item) => `- ${item}`)].join("\n")
       : t("Keep building where you left off."),
-  /** Keep building in a game whose Loop can't run here: nothing was sent. */
-  noLoop: t("Loop can’t run in this game yet, so Keep building can’t start it."),
 } as const;
 
 /**
@@ -2353,27 +2355,23 @@ export const WORKER_LINE_WORDS = {
       ? `${t("{task}: didn't finish.", { task: title })} ${asSentence(WORKER_STOP_WORDS[because])}`
       : t("{task}: didn't finish.", { task: title }),
   stopped: (title: string) => t("{task}: stopped.", { task: title }),
+  /** The lead redirected a worker (`worker_steer`): the worker's task, when known, and what it was told. */
+  told: (title: string | null, said: string) =>
+    title ? t("Told “{task}”: {said}", { task: title, said }) : t("Told a worker: {said}", { said }),
 } as const;
 
 /**
- * The Building card's checklist (`chat/build-checklist.ts`): each part's status on its row, the
- * lead's last step, and the card's one line, counted from the parts.
+ * The Building card's checklist (`chat/build-checklist.ts`): each step's status on its row, and the
+ * card's one line, counted from the steps.
  */
 export const BUILD_CHECKLIST_WORDS = {
   added: t("Added"),
   working: t("Working"),
   workingFor: (minutes: number) => t("Working · ~{minutes} min", { minutes }),
   workingRound: (round: number) => t("Working · round {round}", { round }),
-  waiting: t("Waiting to start"),
   notAdded: t("Not added"),
-  notStarted: t("Not started"),
-  next: t("Next"),
-  /** The lead's own last step, after the parts. */
-  together: t("Put it together and check"),
-  caption: (added: number, total: number, working: number) =>
-    working
-      ? t("{added} of {total} parts added · {working} working", { added, total, working })
-      : t("{added} of {total} parts added", { added, total }),
+  caption: (done: number, working: number) =>
+    working ? t("{done} done · {working} working", { done, working }) : t("{done} done", { done }),
   finishing: (working: number) => (working ? t("Finishing up · {working} working", { working }) : t("Finishing up")),
   open: t("Open in Builds"),
   /** The card's toggle, as a screen reader names it. */
@@ -2750,6 +2748,9 @@ export const METERED_PROVIDER_WORDS = {
   couldNotCheck: t("Couldn't check"),
   checkAgain: t("Check again"),
   tryAgain: t("Try again"),
+  installGuide: t("Install guide"),
+  /** A CLI Genex can't install on this computer (`installsInApp`): the person follows its guide. */
+  installByGuideLine: (name: string) => t("Install {name} with its guide, then check again.", { name }),
   account: t("Account"),
   checkConnection: t("Check connection"),
   checkConnectionLine: t("Also refreshes the model list"),
@@ -3877,8 +3878,6 @@ export const PUBLISH_PLATFORM_WORDS = {
   rebuildAsk: (players: string, title: string) =>
     t("Build the {players} app of {title} again so I can publish it.", { players, title }),
   rebuildFirst: (app: string) => t("The {app} is older than your last change: build it again, then publish.", { app }),
-  /** The installed Genex plugin is from before apps: its update sends them. */
-  updateGenex: t("Update the Genex plugin in Plugins to publish apps."),
   notListed: t("The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it."),
 } as const;
 
@@ -5922,14 +5921,16 @@ export const NATIVE_WORDS = {
   /** A profile's card for a game this computer has no build of. */
   onlyOn: (platform: string) => t("Only on {platform}", { platform }),
   // The game page.
-  stats: (plays: string, likes: string, updated: string | null) =>
+  /** "4 plays · 1 like · Updated 33 minutes ago": each count as `formatCount` wrote it, its plural by the number. */
+  stats: (plays: { n: number; shown: string }, likes: { n: number; shown: string }, updated: string | null) =>
     [
-      t("{count} plays", { count: plays }),
-      t("{count} likes", { count: likes }),
+      t("{n, plural, one {{count} play} other {{count} plays}}", { n: plays.n, count: plays.shown }),
+      t("{n, plural, one {{count} like} other {{count} likes}}", { n: likes.n, count: likes.shown }),
       updated ? t("Updated {when}", { when: updated }) : null,
     ]
       .filter(Boolean)
       .join(" · "),
+  shots: t("Shots"),
   about: tc("game page", "About"),
   install: t("Install"),
   installLabel: (title: string, size: string) => t("Install {title}, {size}", { title, size }),
@@ -5961,11 +5962,10 @@ export const NATIVE_WORDS = {
   launchFailed: LAUNCH_FAILED,
   singlePlayer: t("Single player"),
   multiplayer: t("Multiplayer"),
-  madeWith: (engine: string) => t("Made with {engine}", { engine }),
   /** Engine ids as people say them; another id is shown as it is spelled. */
   engine: { unity: "Unity", godot: "Godot", unreal: "Unreal" } as Readonly<Record<string, string>>,
-  /** The game page's systems tile; its marks say which, and its hover names them. */
-  platformsTile: t("Platforms"),
+  /** The game page's facts, each a small label over its value. */
+  facts: { runsOn: t("Runs on"), size: t("Size"), players: t("Players"), madeWith: t("Made with") },
   appleSiliconOnly: t("Apple silicon only"),
   failedToLoad: t("Couldn’t load this game."),
   // The card menu's local items.
@@ -6054,37 +6054,17 @@ export const CHECK_WORDS = {
   showLess: t("Show less"),
 } as const;
 
-/** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
-export const PLUGIN_TOOLBAR_WORDS = {
-  update: {
-    badge: tc("badge", "Update"),
-    title: (plugin: string, version: string) =>
-      t("The {plugin} plugin {version} is ready. Press to update it in Plugins.", { plugin, version }),
-  },
-} as const;
-
 /**
- * A game linked to an engine whose Loop needs its project inside the game folder, named by the
- * engine's label: Rewind's note when the project lives elsewhere, and why Mode has no Loop yet.
+ * A game linked to an engine whose save points need its project inside the game folder, named by
+ * the engine's label: Rewind's note when the project lives elsewhere.
  */
 export const ENGINE_GAME_WORDS = {
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
   rewindNote: (engine: string, project: string) =>
     t("Rewind doesn’t undo changes made in {engine}: {project} is outside the game folder.", { engine, project }),
-  /** Mode's caption for a game whose project lies outside its folder: where it is, and the two ways to a Loop. */
-  loopUnavailable: (engine: string, project: string | null, place: string) =>
-    project
-      ? t(
-          "Loops need the {engine} project inside this game’s folder, so Rewind can undo each step; {project} is in {place}. Make a new one from the {engine} button, or move {project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.",
-          { engine, project, place },
-        )
-      : t(
-          "Loops need this game’s {engine} project inside its folder, so Rewind can undo each step. A new {engine} project made from the {engine} button goes there. Until then, it does what you ask, then stops.",
-          { engine },
-        ),
 } as const;
 
-/** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */
+/** A game linked to an Unreal project: the Live tab's card and Rewind's note. */
 export const UNREAL_WORDS = {
   /** The Live tab's line under the project's name, in place of the web page. */
   stageStatus: t("Plays in the Unreal editor."),
@@ -6141,9 +6121,6 @@ export const UNREAL_WORDS = {
   playShot: (project: string) => t("{game} in play", { game: project }),
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
   rewindNote: (project: string) => ENGINE_GAME_WORDS.rewindNote(GAME_ENGINE_WORDS.unreal, project),
-  /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
-  loopUnavailable: (project: string | null, place: string) =>
-    ENGINE_GAME_WORDS.loopUnavailable(GAME_ENGINE_WORDS.unreal, project, place),
 } as const;
 
 /** The Unity plugin's words in Studio's own UI. */

@@ -895,26 +895,15 @@ describe("the studio: one subscription, the bootstrap and the commands that span
     const { fake, app } = started();
     await tick();
     app.selectThread("rift-chat");
-    const heard: Array<[string, string]> = [];
-    const stop = app.onUiEvent((event) => heard.push([event.type, app.layout.getState().stageView]));
+    const heard: Array<[string, string | null | undefined]> = [];
+    const stop = app.onUiEvent((event) => heard.push([event.type, app.update.getState().ready?.version]));
     assert.equal(fake.listeners("onEvent"), 1, "no IPC listener of its own");
-    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
-    assert.deepEqual(heard, [["stage.show", "live"]], "the stores took it first");
+    // Flipped (one Loop): heard through stage.show, which nothing sends any more; an update's news now.
+    fake.emit({ type: "update.ready", payload: { version: "0.2.0", action: UpdateAction.Restart } });
+    assert.deepEqual(heard, [["update.ready", "0.2.0"]], "the stores took it first");
     stop();
-    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
+    fake.emit({ type: "update.ready", payload: { version: "0.2.1", action: UpdateAction.Restart } });
     assert.equal(heard.length, 1, "a stopped listener hears nothing more");
-  });
-
-  it("a build the chat put on screen for the game on the stage shows Live", async () => {
-    const storage = memoryStorage({ "studio.previewView": "builds" });
-    const { fake, app } = started({}, storage);
-    await tick();
-    app.selectThread("rift-chat");
-    assert.equal(app.layout.getState().stageView, "builds");
-    fake.emit({ type: "stage.show", payload: { project: "pond", view: "live" } });
-    assert.equal(app.layout.getState().stageView, "builds", "another game's build leaves this stage alone");
-    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
-    assert.equal(app.layout.getState().stageView, "live");
   });
 
   it("makes the copy of the game the bar's Remix closed the viewer on, as a card's Remix does", async () => {

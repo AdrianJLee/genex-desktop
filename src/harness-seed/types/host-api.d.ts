@@ -201,6 +201,9 @@ export interface HarnessCompleteParams {
 }
 // ↑ src/shared/harness-api.ts
 
+export type MessageFrom = 'person' | 'genex';
+// ↑ src/shared/engine-requests.ts
+
 /** A studio tool in the flat shape a delegated engine exposes: string-typed properties only. */
 export interface StudioToolSpec {
   name: string;
@@ -210,11 +213,6 @@ export interface StudioToolSpec {
     properties: Record<string, { type: string; description?: string }>;
     required?: string[];
   };
-  /**
-   * Called only when the person asks for it in words (an Auto chat's Loop start): it doesn't make the
-   * session an interview, so messages still join it mid-turn, and no nudge names it.
-   */
-  onlyWhenAsked?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -303,28 +301,21 @@ export interface DelegateImage {
 // ↑ src/shared/engine-requests.ts
 
 /**
- * The director's session: the run's integration worktree it orchestrates from (`root`). A waking
- * run's lead sits in the game folder instead and leads `root`, leaving the game's changes to its
- * workers: the host honours its grant only with `readOnly`, for this game's own run, and hands the
- * engine `root`'s checked real path (delegation.ts `#leadRoot`).
+ * A Loop's lead: the chat's own session, in the game folder (`root`), with the run's tools. The host
+ * honours its grant only for a `root` that is the game folder itself, for this game's own run started
+ * in this chat, and hands the engine `root`'s checked real path (delegation.ts `#inPlaceRoot`).
  */
 export interface DelegateDirectorGrant {
   runId: string;
   threadId: string;
   project: string;
   root: string;
-  setup?: PreviewSetup | null;
   /**
    * The lead IS its chat's own session (one session): the session it answers with becomes the
    * chat's bookmark (`contractor`), so the chat goes on in it after the run. Honoured only for a
    * lead in its game's folder.
    */
   chatSession?: boolean;
-  /**
-   * A Loop's lead that works in the game folder itself (an open Loop); honoured only for a run of
-   * this game started in this chat.
-   */
-  inPlace?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -337,6 +328,8 @@ export interface LiveToolSpec extends StudioToolSpec {
    * tools and plugin tools are flat and never set it.
    */
   inputSchema?: Record<string, unknown>;
+  /** Genex's own tool, which an engine that defers tools loads with the prompt (Claude Code's `alwaysLoad`). */
+  alwaysLoad?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -359,17 +352,12 @@ export interface WorkerGrant {
 
 /** What `engine.delegate` takes: a delegation's serializable half plus the routing fields. */
 export interface HarnessDelegateParams {
-  coordinator?: { runId: string; messageId?: string };
   /**
-   * The chat's own session after a run it led: the run's controls it keeps (`run_status`,
-   * `show_build`, `land_build`, shared/coordinator.ts `RunControl`), answered by the host for this
-   * run and message as the coordinator's tools are. Honoured only for the chat's own session.
+   * The chat's own session after a closed Loop run: the run's controls it keeps (`run_status`,
+   * shared/chat-run.ts `RunControl`), answered by the host for this run and message
+   * (`run.control`). Honoured only for the chat's own session.
    */
-  /**
-   * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
-   * its controls are only the status, never a build to show or land.
-   */
-  runControls?: { runId: string; messageId?: string; inPlace?: boolean };
+  runControls?: { runId: string; messageId?: string };
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
@@ -378,6 +366,18 @@ export interface HarnessDelegateParams {
   chatTurn?: { messageId?: string };
   engine?: string;
   prompt: string;
+  /**
+   * Who wrote `prompt`: the person's words alone, or Genex's own message (a command's result, the
+   * cover step), which the engine shows as not the person's. Absent: a brief.
+   */
+  from?: MessageFrom;
+  /**
+   * What the session should know for its whole life, put first in its system text (the chat's
+   * `chatContext`): the same text on every turn while the game is the same, never in the prompt.
+   */
+  system?: string;
+  /** Genex's own lines for this message (the chat so far, for a new session): never the person's words. */
+  notices?: string[];
   project: string;
   /** Build here instead of the live game folder — a facet worktree under scratch. */
   cwd?: string;
@@ -611,19 +611,13 @@ export interface PluginTool {
 /**
  * A tool a plugin offers that makes a kind of project (its manifest's `makes`), as a session's
  * snapshot lists it: the plugin's id and name, the tool's agent name `<plugin>__<tool>`, and the
- * facts. `asksReady` says the tool declares a `ready` harness tool (a plugin's new-game tool, the
- * one its engine card offers). For a game with no kind yet, the host fills `ready` and `note` from
- * that tool (whether one can be made here now, and the words the engine card offers it with); both
- * are absent when it declares none or its answer didn't come.
+ * facts.
  */
 export interface PluginKindOffer {
   plugin: string;
   name: string;
   tool: string;
   makes: string[];
-  asksReady?: boolean;
-  ready?: boolean;
-  note?: string;
   /** The scaffold this offer is (`PluginScaffold.id`), when the plugin declares scaffolds. */
   scaffold?: string;
   /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */
@@ -923,6 +917,8 @@ export interface EngineDescriptor {
     /** The model the provider's catalog names as its default; the picker lists it for "default". */
     providerDefault?: boolean;
     contextWindow: number;
+    /** The window is the engine's guess, not a figure the provider reported (an Ollama model not loaded yet). */
+    contextEstimated?: boolean;
     supportsFast?: boolean;
     supportsTools: boolean;
     supportsVision: boolean;
@@ -1084,12 +1080,14 @@ export interface DelegateResult {
 }
 // ↑ src/shared/engine-requests.ts
 
-/** A message the person sent while the chat's turn works, handed into that turn (steer). */
+/** A message handed into the chat's turn while it works (steer): the person's, or Genex's own line. */
 export interface SteerMessage {
   /** The queue's message id: what the delivery is recorded under. */
   id: string;
   text: string;
   images?: DelegateImage[];
+  /** Who wrote it; absent means the person. */
+  from?: MessageFrom;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -1632,7 +1630,7 @@ export type JobRole = 'lead' | 'chat' | 'worker';
 export type JobState = 'failed' | 'running' | 'succeeded' | 'stopped' | 'timed_out' | 'interrupted';
 // ↑ src/shared/jobs.ts
 
-export type JobStopper = 'agent' | 'person' | 'scope_ended' | 'quit';
+export type JobStopper = 'person' | 'agent' | 'scope_ended' | 'quit';
 // ↑ src/shared/jobs.ts
 
 /**
@@ -1684,9 +1682,17 @@ export interface HarnessHostApi {
     result: { turnId: string; sessionId: string; head: string };
   };
   "turn.append": { params: { turnId: string; batch: EventData[] }; result: string };
-  /** End a turn; `outcome` is how the loop ended it (a TurnStop code), kept on its `turn_ended`. */
+  /**
+   * End a turn; `outcome` is how the loop ended it (a TurnStop code), and `failure` why a turn that
+   * threw failed (a `TurnFailureCode`, the host call and the error's type), both kept on its `turn_ended`.
+   */
   "turn.end": {
-    params: { turnId: string; status?: "ok" | "error" | "cancelled"; outcome?: string };
+    params: {
+      turnId: string;
+      status?: "ok" | "error" | "cancelled";
+      outcome?: string;
+      failure?: { code: string; method?: string; name?: string };
+    };
     result: string | null;
   };
 
@@ -1748,8 +1754,6 @@ export interface HarnessHostApi {
     params: { project: string; threadId: string; plugin: string; reason?: string };
     result: PluginsSuggestAnswer;
   };
-  /** What this game's builders can use, for a conversation that cannot call it (the local coordinator). */
-  "capabilities.describe": { params: { threadId: string; project?: string }; result: string };
   "plugins.invoke": {
     params: {
       project: string;
@@ -1907,12 +1911,10 @@ export interface HarnessHostApi {
    * End the held round of a run: the host records its outcome and counts the no's in a row from its
    * own records (`stopped` once they reach the cap). `unanswered` turns the held answer into no
    * answer, with why (a yes that lapsed, a turn that ended); nothing turns a no or no answer into a yes.
-   * `timeLeftMs`, a timed Loop's working time left: with more than `FINISH_TIME_LEFT_MS` no row of
-   * no's stops it (`timeLeft`); an ∞ Loop names none.
    */
   "finish.settle": {
-    params: { project: string; runId: string; round: number; unanswered?: string | null; timeLeftMs?: number | null };
-    result: FinishRoundAnswer & { rejections: number; stopped: boolean; timeLeft?: boolean };
+    params: { project: string; runId: string; round: number; unanswered?: string | null };
+    result: FinishRoundAnswer & { rejections: number; stopped: boolean };
   };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
@@ -1926,7 +1928,11 @@ export interface HarnessHostApi {
     params: { threadId: string; into: string; messages: SteerMessage[]; interrupt?: boolean; native?: boolean };
     result: { how: SteerDelivery | null; accepted: string[] };
   };
-  "coordinator.tool": {
+  /**
+   * One of the run's controls, or the resume a chat's own session recorded, for this run and the
+   * message asking (shared/chat-run.ts `HostRunTool`): recorded in the chat, answered with words.
+   */
+  "run.control": {
     params: { threadId: string; runId: string; messageId?: string; name: string; args?: Record<string, unknown> };
     result: string;
   };
@@ -2032,11 +2038,6 @@ export interface HarnessHostApi {
   "preview.status": { params: { handle?: string }; result: PreviewPortStatus };
   /** Readiness is a fact the page reports, not a sleep. */
   "preview.ready": { params: { handle?: string; timeoutMs?: number; gesture?: boolean }; result: ReadyResult };
-  /** What the user's own window is showing right now: their game folder, or a build they chose to play. */
-  "preview.showing": {
-    params: void;
-    result: { project: string; root: string | null; entry: string | undefined; loaded: string | null } | null;
-  };
   "preview.observe": { params: { handle?: string }; result: BuildObservation };
   "preview.acquire": { params: { label?: string }; result: { handle: string } };
   "preview.release": { params: { handle: string }; result: boolean };
@@ -2103,13 +2104,6 @@ export type HarnessResult<K extends HarnessHostMethod> = HarnessHostApi[K]["resu
 export type HostRefusal = 'UnknownMethod' | 'InvalidParams';
 // ↑ src/shared/harness-api.ts
 
-/** Composer Loop on a chat turn — hours from the stepper, stills the user dropped. */
-export interface LoopCommission {
-  hours: number;
-  frames?: ReferenceFrame[];
-}
-// ↑ src/shared/protocol.ts
-
 /** Who plans, builds and judges — one model id per job; `undefined`/"default" is the engine's own default. */
 export interface RunRoles {
   /** Explicit reasoning per role; absent means that role model's own default. */
@@ -2122,21 +2116,6 @@ export interface RunRoles {
    * in that slot is then one of that engine's. Never the orchestrator, which is the run's engine.
    */
   engines?: { builder?: string; judge?: string };
-}
-// ↑ src/shared/protocol.ts
-
-export interface AutopilotCommission {
-  hours?: number;
-  frames?: ReferenceFrame[];
-  /** The composer's roles panel: explicit orchestrator / workers / judges picks (harness-seed/loop/model-roles.ts). */
-  roles?: RunRoles;
-  /** Request host-owned explicit approval before execution (default off). */
-  reviewPlan?: boolean;
-  /**
-   * The person's Keep building tap after a Loop ended with something still to fix: the finished
-   * build reopens, or the next Loop starts, with no turn deciding whether it is a contained change.
-   */
-  keepBuilding?: boolean;
 }
 // ↑ src/shared/protocol.ts
 
@@ -2161,17 +2140,12 @@ export interface RunSpec {
   project: string;
   /** "autopilot": the wire name of a Loop's run, kept for the records it is in. */
   mode?: "autopilot";
-  /** What the run aims at: a named game's stills, or a direction in words. Completion is controlled by budgets. */
+  /** What the run aims at: a named game's stills, or a direction in words. */
   reference: RunReference;
   /** observationDelays: backoff (ms) before re-trying a blind camera — a test/ops knob. */
   budgets: {
-    wallClockMs: number;
-    /** The composer's ∞: run until what was asked is verified and nothing blocks it; `wallClockMs` is then only the safety ceiling. */
-    untilSatisfied?: boolean;
     /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
     creditCap?: number;
-    /** Explicit intent; absent records retain legacy untilSatisfied semantics. */
-    completionPolicy?: "goal" | "duration";
     maxIterations?: number;
     observationDelays?: number[];
     /** v2 loop knobs: the pre-evidence code review (default on) and its model half (default on for delegated engines). */
@@ -2242,24 +2216,17 @@ export type DispatchAction =
       pickedImages?: number;
       /** Reference files this message saved in the game (relative paths); a rewind with files removes them. */
       references?: string[];
-      /** Every file its attached pictures are saved as in the game (relative), already there or not: a run's lead reads them. */
-      pictureFiles?: string[];
-      /** Composer Loop: the chat may start an unattended build when the ask needs one. */
-      loop?: LoopCommission;
-      /** Composer Autopilot: the chat may launch a build that decomposes into facets and runs until satisfied. */
-      autopilot?: AutopilotCommission;
+      /** The composer's roles panel: the workers' and judges' picks, for the turn's workers and a Loop it starts. */
+      roles?: RunRoles;
       /** Words the chat wrote itself (a command's result); the queue keeps it and the transcript hides it. */
       origin?: MessageOrigin;
+      /** Genex wrote these words (any `origin`, a plugin's ask): the agent reads them as not the person's. */
+      from?: MessageFrom;
     }
   | { type: "compact"; threadId: string; engine?: string; model?: string }
   | { type: "cancel"; threadId?: string }
   | { type: "queue_message"; threadId: string; messageId: string; operation: "hold" | "edit" | "remove"; text?: string }
   | { type: "queue_resume"; threadId: string }
-  /**
-   * The chat was rewound (capability "rewind"). `frames`, when present, is the Loop mood board
-   * the interview still has after it (null: none); absent, the board is untouched.
-   */
-  | { type: "rewind"; threadId: string; frames?: ReferenceFrame[] | null }
   | { type: "healthcheck" }
   /** Run the loop's deterministic self-test (the architect's bar); rejects with the first failure. */
   | { type: "selftest" }

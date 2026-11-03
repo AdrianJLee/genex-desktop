@@ -114,14 +114,7 @@ async function callsIn(chat: Chat, extra: Record<string, unknown>, calls: Call[]
 /** The chat's own session answering a message the person sent now. */
 const ownTurn = async (chat: Chat) => ({ chatTurn: { messageId: await chat.personSays() } });
 
-/** A lead of the chat's run that sits in the game folder and leads a build of its own (a web lead). */
-async function webLead(chat: Chat) {
-  const root = await chat.copyOf(RUN_ID, "integration");
-  const director = { runId: RUN_ID, threadId: chat.threadId, project: chat.game, root, setup: null, tools: [] };
-  return { brief: { readOnly: true, director: { ...director, chatSession: true } }, root: await realpath(root) };
-}
-
-/** A lead of the chat's run that works in the game folder in place, as the Unreal lead does. */
+/** The chat's run's lead, in the game folder as every project's lead is. */
 const inPlaceLead = (chat: Chat) => ({
   director: { runId: RUN_ID, threadId: chat.threadId, project: chat.game, root: chat.gameDir, setup: null, tools: [] },
 });
@@ -155,19 +148,18 @@ async function untilEndRecorded(chat: Chat, id: string) {
 }
 
 describe("job tools", () => {
-  it("the chat's own session, a lead and a writing worker are offered the job tools; a reader, an unseated builder, the coordinator and a local model are not", {
+  it("the chat's own session, a lead and a writing worker are offered the job tools; a reader, an unseated builder and a local model are not", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await jobChat();
     const own = await callsIn(chat, await ownTurn(chat), []);
     assert.deepEqual(jobToolsOf(own.request), JOB_TOOLS, "the chat's own session");
-    const lead = await webLead(chat);
-    assert.deepEqual(jobToolsOf((await callsIn(chat, lead.brief, [])).request), JOB_TOOLS, "a lead");
+    // Flipped (one Loop): the lead sat in a copy of the folder (the web Loop's); it sits in the game folder.
+    assert.deepEqual(jobToolsOf((await callsIn(chat, inPlaceLead(chat), [])).request), JOB_TOOLS, "a lead");
     assert.deepEqual(jobToolsOf((await callsIn(chat, chat.runWorker(), [])).request), JOB_TOOLS, "a writing worker");
     const none: Array<[string, Record<string, unknown>, string?]> = [
       ["a reader worker", chat.runWorker("r1", chat.worktree, { readOnly: true })],
       ["an unseated builder", { cwd: chat.worktree }],
-      ["the coordinator", { coordinator: { runId: RUN_ID }, readOnly: true }],
     ];
     for (const [label, brief, engine] of none)
       assert.deepEqual(jobToolsOf((await callsIn(chat, brief, [], engine)).request), [], label);
@@ -394,30 +386,27 @@ describe("job tools", () => {
     assert.deepEqual(await chat.core.jobs.list(chat.game), [], "no record");
   });
 
-  it("a web lead's job runs in the worktree it leads and never writes the game folder; the Unreal lead's runs in the game folder", {
+  it("a lead's job runs in the game folder; a lead brief rooted anywhere else seats no lead and starts nothing", {
     ...POSIX,
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await jobChat();
     await chat.core.setPermissionMode(chat.threadId, PermissionMode.Auto);
-    const web = await webLead(chat);
-    const led = await callsIn(chat, web.brief, [[JobTool.Start, { title: "Build", command: LONG }]]);
+    const led = await callsIn(chat, inPlaceLead(chat), [[JobTool.Start, { title: "Build", command: LONG }]]);
     startedId(led.answers[0] ?? "");
-    const webJob = chat.spawned.at(-1);
-    assert.equal(webJob?.cwd, web.root, "in the worktree it leads");
-    assert.deepEqual(webJob?.policy.allowWrite, [web.root], "writing only that worktree");
-    assert.ok(webJob?.policy.denyWrite?.includes(chat.gameDir), "never the game folder it sits in");
-
-    const inPlace = await callsIn(chat, inPlaceLead(chat), [[JobTool.Start, { title: "Build", command: LONG }]]);
-    startedId(inPlace.answers[0] ?? "");
-    const placeJob = chat.spawned.at(-1);
-    assert.equal(placeJob?.cwd, chat.gameDir, "in the game folder");
-    assert.deepEqual(placeJob?.policy.allowWrite, [chat.gameDir], "writing it in place");
-    const owners = (await chat.core.jobs.list(chat.game)).map((job) => [job.owner.role, job.owner.scope]);
-    assert.deepEqual(owners, [
-      [JobRole.Lead, { kind: JobScopeKind.Run, runId: RUN_ID }],
-      [JobRole.Lead, { kind: JobScopeKind.Run, runId: RUN_ID }],
-    ]);
+    const job = chat.spawned.at(-1);
+    assert.equal(job?.cwd, chat.gameDir, "in the game folder");
+    assert.deepEqual(job?.policy.allowWrite, [chat.gameDir], "writing it in place");
+    // Flipped (one Loop): a lead in a copy of the folder (the web Loop's integration worktree) ran its
+    // jobs there; no Loop leads from a copy now, so such a brief seats no lead.
+    const elsewhere = await chat.copyOf(RUN_ID, "integration");
+    const copied = inPlaceLead(chat);
+    const stray = { ...copied, director: { ...copied.director, root: elsewhere } };
+    const refused = await callsIn(chat, stray, []);
+    assert.deepEqual(jobToolsOf(refused.request), [], "no job tools for a lead outside the game folder");
+    assert.equal(chat.spawned.length, 1, "nothing more spawned");
+    const owners = (await chat.core.jobs.list(chat.game)).map((row) => [row.owner.role, row.owner.scope]);
+    assert.deepEqual(owners, [[JobRole.Lead, { kind: JobScopeKind.Run, runId: RUN_ID }]]);
   });
 
   it("a session sees and stops only its chat's jobs, and a worker only its own", {
@@ -575,9 +564,11 @@ describe("job tools", () => {
     assert.equal(ended?.stoppedBy, JobStopper.Person, "its end row says the person stopped it");
     assert.equal(ended?.worker, undefined, "the chat's own job names no worker");
     const next = await callsIn(chat, await ownTurn(chat), [[JobTool.Status, { id }]]);
+    // Flipped: a Studio notice in the prompt also said to read it with job_tail and not to start it
+    // again. Genex's notice beside the words says the fact alone.
     assert.match(
-      next.request?.prompt ?? "",
-      /Jobs since your last turn: Server \(`[^`]+`\) was stopped by the person after \d+ min: read it with job_tail [^;.]+, and do not start it again unless the person asks/,
+      (next.request?.notices ?? []).join("\n"),
+      /Your jobs that ended: Server \([^,]+, `[^`]+`\) was stopped by the person after \d+ min\./,
       "the chat's agent is told the person stopped it",
     );
     assert.match(
@@ -645,14 +636,15 @@ describe("job tools", () => {
     const server = startedId(first.answers[1] ?? "");
     await untilEndRecorded(chat, built);
     const next = await callsIn(chat, await ownTurn(chat), []);
+    const notices = (request: { notices?: readonly string[] } | undefined) => (request?.notices ?? []).join("\n");
     assert.match(
-      next.request?.prompt ?? "",
-      /Jobs since your last turn: Build \(`echo built; exit 0`\) finished \(exit 0\)/,
+      notices(next.request),
+      new RegExp(`Your jobs that ended: Build \\(${built}, \`echo built; exit 0\`\\) finished \\(exit 0\\)`),
     );
-    assert.match(next.request?.prompt ?? "", new RegExp(`Still running: Server \\(${server}\\)`));
+    // Flipped: the jobs still running were named on every turn; job_list says them.
+    assert.doesNotMatch(notices(next.request), new RegExp(server), "a running job is job_list's to say");
     const again = await callsIn(chat, await ownTurn(chat), []);
-    assert.doesNotMatch(again.request?.prompt ?? "", /Jobs since your last turn/, "told once");
-    assert.match(again.request?.prompt ?? "", /Still running: Server/);
+    assert.doesNotMatch(notices(again.request), /Your jobs that ended/, "told once");
   });
 
   it("a run's jobs stop when the harness reports the run settled, and a crash does not stop them", {

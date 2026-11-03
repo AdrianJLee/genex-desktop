@@ -3,7 +3,8 @@
  * made in an engine lists the web, Mac, Windows and Linux, each with what its build runs on, when it was
  * built and its size; a built app says "Coming soon" and a missing one offers "Make with agent",
  * which sends the ask to the game's chat and keeps the dialog open. A web game with no app shows no
- * rows.
+ * rows. An Unreal game whose web version is still on Genex says so on its web row, with Remove; a
+ * Unity game whose web build would take the place of its apps' page says so above the press.
  */
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -38,7 +39,7 @@ async function settle(frames = 10) {
 }
 
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
-type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "appsReview" | "appsRejected" | "unityNoApp" | "unitySoon" | "unreal";
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "appsReview" | "appsRejected" | "unityNoApp" | "unitySoon" | "unreal" | "unrealWebOnGenex" | "unityReplacesApps";
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -89,13 +90,18 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   unityNoApp: () => [web(false), mac(PublishPlatformState.Missing), windows, linux()],
   unitySoon: () => [web(false), mac(PublishPlatformState.Ready), windows, linux()],
   unreal: () => [web(false), mac(PublishPlatformState.Missing), windows, linux()],
+  unrealWebOnGenex: () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()],
+  unityReplacesApps: () => [web(true), mac(PublishPlatformState.Ready, true), windows, linux()],
 };
+
+/** Whether Genex's page plays a web version in each scene (`hostedWeb`); unknown in the rest. */
+const HOSTED_WEB: Partial<Record<Scene, boolean>> = { unrealWebOnGenex: true, unityReplacesApps: false };
 
 /** The publish record's apps in each scene: none sent yet, going now, on Genex, or refused. */
 function appsOf(of: Scene): GenexNativeRecord {
   const record: GenexNativeRecord = { supported: true, sending: of === "appsSending", sent: [], failed: [] };
   const at = new Date().toISOString();
-  if (of === "appsSent") {
+  if (of === "appsSent" || of === "unrealWebOnGenex" || of === "unityReplacesApps") {
     record.sent.push({ platform: "mac", arch: "universal", version: "1.0+3f2a9c1d0e4b", sizeBytes: 1, publishedAt: at });
     record.sent.push({ platform: "linux", arch: "x64", version: "1.0+9b1e44c2d0a7", sizeBytes: 1, publishedAt: at });
   }
@@ -130,16 +136,28 @@ const state = (): GenexPublishState => ({
   slug: GAME,
   status: "draft",
   native: appsOf(scene),
+  ...(HOSTED_WEB[scene] === undefined ? {} : { hostedWeb: HOSTED_WEB[scene] }),
 });
+/** The Genex actions the dialog ran, besides reading the publish state. */
+const actions: string[] = [];
 const fake = fakeStudioApi();
-fake.stub("pluginAction", async (_id, name) => (name === GenexAction.PublishStatus ? state() : {}));
+// A confirmed action is reviewed first: main's native dialog stands behind this ticket.
+fake.stub("pluginReview", async (_id, name) => {
+  actions.push(`review:${name}`);
+  return { ticket: "fixture-ticket" };
+});
+fake.stub("pluginAction", async (_id, name) => {
+  if (name === GenexAction.PublishStatus) return state();
+  actions.push(name);
+  return {};
+});
 fake.stub("genexPublishPlatforms", async () => SCENES[scene]());
-const published: Array<{ via: string; title?: string }> = [];
+const published: Array<{ via: string; title?: string; replaceNativePage?: boolean }> = [];
 fake.stub("genexPublishApps", async (_project, title) => {
   published.push({ via: "apps", ...(title ? { title } : {}) });
 });
-fake.stub("genexPublish", async () => {
-  published.push({ via: "web" });
+fake.stub("genexPublish", async (_project, _review, _title, _remix, replaceNativePage) => {
+  published.push({ via: "web", ...(replaceNativePage ? { replaceNativePage } : {}) });
 });
 fake.stub("genexPublishReview", async () => ({ included: ["index.html"], excluded: [] }));
 // The row that shares a game's assets on Play reads them too: this game has none.
@@ -177,6 +195,8 @@ function sample() {
     listed: Boolean(list),
     rows,
     reach: list?.querySelector(".genex-publish-reach")?.textContent ?? null,
+    replaces: list?.querySelector("[data-publish-replaces-apps]")?.textContent ?? null,
+    actions: [...actions],
     primary: document.querySelector<HTMLElement>(".genex-publish-primary")?.textContent ?? null,
     primaryDisabled: document.querySelector<HTMLButtonElement>(".genex-publish-primary")?.disabled ?? null,
     hint: content?.querySelector(":scope > .genex-publish-hint")?.textContent ?? null,
@@ -206,8 +226,10 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   closed = 0;
   composed.length = 0;
   published.length = 0;
+  actions.length = 0;
   studio().people.setState((people) => ({ ...people, account: GenexAccountStatus.SignedIn }), true);
-  const engine = scene === "web" ? {} : engineOf(scene === "unreal" ? CoreFact.UnrealProject : CoreFact.UnityProject);
+  const unreal = scene === "unreal" || scene === "unrealWebOnGenex";
+  const engine = scene === "web" ? {} : engineOf(unreal ? CoreFact.UnrealProject : CoreFact.UnityProject);
   const game = { name: GAME, title: "Dust Runners", createdAt: AT, ...engine } as unknown as GameProject;
   studio().library.setState((library) => ({ ...library, games: [game] }), true);
   flushSync(() => root.render(null));
@@ -244,4 +266,12 @@ async function make(target: PublishTarget) {
   return sample();
 }
 
-Object.assign(window, { platformsRig: { open, make, press, sample } });
+/** Press the web row's Remove. */
+async function removeWeb() {
+  document.querySelector<HTMLButtonElement>("[data-publish-platform-remove-web]")?.click();
+  for (let i = 0; i < 100 && actions.length === 0; i++) await frame();
+  await settle();
+  return sample();
+}
+
+Object.assign(window, { platformsRig: { open, make, press, sample, removeWeb } });

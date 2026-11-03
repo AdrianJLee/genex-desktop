@@ -301,6 +301,25 @@ describe("where a project's assets live", () => {
       ["a Godot game's web export", [fact(CoreFact.GodotProject, "godot"), fact(CoreFact.WebGame, "web")], "web"],
       ["a Godot game with none", [fact(CoreFact.GodotProject, "godot")], null],
       ["a folder it cannot name safely", [fact(CoreFact.WebGame, "../web")], null],
+      ["a web game kept in a folder of its own", [fact(CoreFact.WebGame, "client")], "client"],
+      // An engine's game plays as its engine builds it: a page an agent or a plugin left in it is no web game.
+      [
+        "an Unreal game's design mockups",
+        [fact(CoreFact.UnrealProject, ROOT), fact(CoreFact.WebGame, "ui_design")],
+        null,
+      ],
+      ["an Unreal game's page even in web/", [fact(CoreFact.UnrealProject, ROOT), fact(CoreFact.WebGame, "web")], null],
+      [
+        "a Unity game's mockups beside no export",
+        [fact(CoreFact.UnityProject, ROOT), fact(CoreFact.WebGame, "mockups")],
+        null,
+      ],
+      [
+        "a Godot game's export, not its docs",
+        [fact(CoreFact.GodotProject, "godot"), fact(CoreFact.WebGame, "docs"), fact(CoreFact.WebGame, "web")],
+        "web",
+      ],
+      ["a Roblox place's page", [fact(CoreFact.RobloxProject, ROOT), fact(CoreFact.WebGame, "site")], null],
     ];
     for (const [name, facts, folder] of rows) {
       assert.equal(webFolderOf({ facts }), folder, name);

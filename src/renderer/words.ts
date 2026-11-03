@@ -3833,6 +3833,13 @@ export const PUBLISH_PLATFORM_WORDS = {
     t("Build the {players} app of {title} again so I can publish it.", { players, title }),
   rebuildFirst: (app: string) => t("The {app} is older than your last change: build it again, then publish.", { app }),
   notListed: t("The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it."),
+  /** A web version on Genex the game folder no longer holds: Genex's page plays it instead of the apps. */
+  webOnGenex: t("A web version is on Genex"),
+  removeWeb: t("Remove"),
+  removeWebLabel: t("Remove the web version from Genex"),
+  webOnPage: t("The game’s page plays its web version until you remove it, so players don’t see the apps."),
+  /** A web build Publish would put on a page that shows only the game's apps. */
+  replacesApps: t("Publish makes this web version the game’s page, in place of its apps."),
 } as const;
 
 /** Each kind of space freeing deletes: its name and what it is. */

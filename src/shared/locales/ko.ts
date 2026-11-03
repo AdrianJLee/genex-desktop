@@ -5973,4 +5973,16 @@ export default {
   "Open install guide": "설치 가이드 열기",
   "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
     "Windows에서는 가이드대로 Chocolatey, Scoop 또는 npm으로 OpenCode를 설치해요. 그다음 다시 확인해 주세요.",
+  "A web version is on Genex": "Genex에 웹 버전이 있어요",
+  "Genex keeps this web version: the game has no app on Genex yet, so players would have nothing to play.":
+    "이 웹 버전은 Genex에 남겨요. 아직 Genex에 게임 앱이 없어서, 지우면 플레이어가 할 게 없어져요.",
+  "Remove the web version from Genex": "Genex에서 웹 버전 지우기",
+  "The game’s page plays its web version until you remove it, so players don’t see the apps.":
+    "웹 버전을 지우기 전까지 게임 페이지는 웹 버전을 보여 줘서, 플레이어는 앱을 볼 수 없어요.",
+  "Publish makes this web version the game’s page, in place of its apps.":
+    "게시하면 앱 대신 이 웹 버전이 게임 페이지가 돼요.",
+  "This game was taken down, so Genex keeps its web version for now.":
+    "이 게임은 내려진 상태라서, Genex가 웹 버전을 당분간 남겨 둬요.",
+  "Genex couldn’t finish removing the web version. Press Remove again.":
+    "Genex가 웹 버전을 끝까지 지우지 못했어요. 삭제를 다시 눌러 주세요.",
 } satisfies LocaleCatalog;

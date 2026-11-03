@@ -21,6 +21,8 @@ import { linuxBuildOf } from "../../shared/publish-platforms.ts";
 
 /** The first Genex CLI with `genex native`: an older pin sends no app. */
 const NATIVE_CLI = [1, 36, 11] as const;
+/** The first Genex CLI whose promotion and listing take `--replace-native-page`. */
+const REPLACE_NATIVE_PAGE_CLI = [1, 36, 20] as const;
 /** The most apps one publish sends: a Mac app, a Windows program and a Linux one, each at most twice over. */
 const NATIVE_UPLOADS_MAX = 6;
 /** What a failure keeps of the CLI's words. */
@@ -36,22 +38,31 @@ const SHA256_HEX = /^[0-9a-f]{64}$/i;
 const MESSAGE = { NotABuild: "Genex answered without the build it published" } as const;
 
 /**
- * Whether CLI `version` has `genex native`. A prerelease comes before its release (`1.36.11-dev.4`
- * may predate the command), so only a later release's prerelease counts.
+ * Whether CLI `version` is release `first` or later. A prerelease comes before its release
+ * (`1.36.11-dev.4` may predate what 1.36.11 brings), so only a later release's prerelease counts.
  */
-export function hasNativeCommand(version: string): boolean {
+function isAtLeast(version: string, first: readonly [number, number, number]): boolean {
   const match = /^(\d+)\.(\d+)\.(\d+)(-.+)?$/.exec(version);
   if (!match) return false;
   const parts = match.slice(1, 4).map(Number);
-  for (const [at, wanted] of NATIVE_CLI.entries()) {
+  for (const [at, wanted] of first.entries()) {
     const part = parts[at] ?? 0;
     if (part !== wanted) return part > wanted;
   }
   return match[4] === undefined;
 }
 
+/** Whether CLI `version` has `genex native`. */
+export const hasNativeCommand = (version: string): boolean => isAtLeast(version, NATIVE_CLI);
+
+/** Whether CLI `version` takes `--replace-native-page`. */
+export const takesReplaceNativePage = (version: string): boolean => isAtLeast(version, REPLACE_NATIVE_PAGE_CLI);
+
 /** Whether the CLI Studio ships, the version this build pins, can send apps. */
 export const pinnedCliSendsApps = (): boolean => hasNativeCommand(cliPackage.version);
+
+/** Whether the CLI Studio ships may let a web build replace a page that shows only the game's apps. */
+export const pinnedCliReplacesNativePage = (): boolean => takesReplaceNativePage(cliPackage.version);
 
 /**
  * One app to send: what the CLI is handed (a `.app`, or a Windows or Linux program's folder), its

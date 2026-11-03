@@ -3286,6 +3286,21 @@ Genex:
   characters of a sent app's archive sha256 (`appClipCommit`, from `native.json`), which Genex
   matches as a prefix where a web game's names its staging commit; a stand that refuses it leaves a
   `failed` clip record, sent again by the next publish, and the picture stands. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
+- Genex's page for a game plays its web version whenever Genex holds one, apps or not, so a web
+  version outlives the files it came from. Publish asks Genex at most once a minute (the owner read
+  `projects/by-slug/<slug>`'s `commitSha`, `#hostedWebOf`) and answers `GenexPublishState.hostedWeb`;
+  unknown (signed out, not on Genex, unreachable) is absent, never false. A game whose folder holds no
+  web build while Genex plays one gets "A web version is on Genex" with Remove on its Web row and a
+  line saying players don't see the apps until it is removed: Remove runs the plugin's
+  `publish-remove-web` (confirmed in the native dialog), which sends `DELETE /api/games/<id>/web`;
+  Genex takes the web build off and keeps the apps, so the page shows them again, and refuses with
+  `no_native_build` while the web version is all the game has. The other way round, a web build
+  never takes a page of apps by surprise: Genex refuses a promotion over a page that shows only
+  approved apps (`native_page_would_be_replaced`) unless it carries `--replace-native-page`. The
+  dialog says "Publish makes this web version the game's page, in place of its apps." when that is
+  what its press does (`replacesAppsPage`: a web build ready, `hostedWeb` false, an app that reaches
+  players), and the press then sends `replaceNativePage`, which the plugin passes on the promotion and
+  the listing only while the pinned CLI takes it (`pinnedCliReplacesNativePage`, 1.36.20).
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose
@@ -3648,8 +3663,11 @@ whenever the project changed since the last build (its `.pck` older than the pro
 nothing (it never fetches one), and a failure is a note. The plugin's `detect` names the folder `godot-web-export` (a folder
 with `index.pck`); a plugin's web build is no new kind (the seed's `web-build.ts` `kindKey`), so a
 turn that only exported never continues as one for a new kind, and the session's end tells the app's
-game list its facts changed (`delegation.ts` `#announceKindTaken`). A game with no web game at its root plays and publishes its first web game in a
-folder (`webFolderOf`, `shared/project-workspace.ts`): Live's preview serves that folder's
+game list its facts changed (`delegation.ts` `#announceKindTaken`). A game with no web game at its root plays and publishes its web game in a
+folder (`webFolderOf`, `shared/project-workspace.ts`): for a game holding an engine's project, only
+its engine's web export (a Unity or Godot game's `web/`, `engineWebFolderOf`), never a page anyone
+else left in it (an agent's design mockups, a plugin's help), and none for an Unreal game; for a
+game of no engine, its first web game in a folder. Live's preview serves that folder's
 `index.html`, and Publish uploads the folder in the root's place; Multiplayer stays off for it, as
 the chat never edits a build, except for a Godot game, whose project takes it (below). Godot writes the exported settings through its own temporary name
 (`tmpproject.binary-*`) in macOS's per-user temporary folder, the one place outside the project an

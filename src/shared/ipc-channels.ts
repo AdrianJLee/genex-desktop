@@ -417,7 +417,13 @@ export interface StudioInvokePayloads {
   "studio:plugins.choose-file": { id: string; request: Arg<"pluginChooseFile", 1> };
   "studio:plugins.genex-publish-review": { project: string };
   "studio:plugins.genex-publish-platforms": { project: string };
-  "studio:plugins.genex-publish": { project: string; review: ExportReview; title?: string; remix?: boolean };
+  "studio:plugins.genex-publish": {
+    project: string;
+    review: ExportReview;
+    title?: string;
+    remix?: boolean;
+    replaceNativePage?: boolean;
+  };
   "studio:plugins.genex-publish-apps": { project: string; title?: string; remix?: boolean };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };

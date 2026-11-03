@@ -20,15 +20,7 @@ import { changesSettings } from "./steer-switch.ts";
 import { type DescribedEngine, endsTurnFor, switchedSettings, type TurnSettings } from "./turn-switch.ts";
 import { WorkersEnd } from "./workers/carry.ts";
 import { holdsWebGame } from "./web-game.ts";
-import {
-  factsOfGame,
-  kindPending,
-  LoopProfile,
-  loopProfileOf,
-  playsThroughBridge,
-  servedAsWeb,
-  servedFactsOf,
-} from "./folder-facts.ts";
+import { factsOfGame, kindPending, seenInWindow, servedAsWeb, servedFactsOf } from "./folder-facts.ts";
 import { kindKey } from "./web-build.ts";
 import { factsReadyNotice } from "./project-prompts.ts";
 import { effortCap } from "./effort-cap.ts";
@@ -170,29 +162,22 @@ export async function runDelegatedTurn(ctx: HarnessCtx, options: DelegatedOption
   const held = await turnStart(ctx, options, handoff);
   if (held) return held;
   // The chat's own session may run workers for this turn: they stop when it ends, however it ends —
-  // unless it launched a Loop, which takes them over or lets them finish first (workers/carry.ts).
-  // The game as the turn ends: a turn that changed what the project is ends on its new kind.
-  const ended = { handoff };
+  // unless it launched a Loop, which takes them over (workers/carry.ts).
   try {
     return await withChatWorkers(
       ctx,
       chatWorkersSeat(options, handoff),
-      () => handOver(ctx, options, handoff, ended),
-      (outcome) => workersEndOf(outcome, ended.handoff),
+      () => handOver(ctx, options, handoff),
+      workersEndOf,
     );
   } finally {
     await turnMoment(ctx, options, handoff, HookEvent.TurnEnd);
   }
 }
 
-/**
- * What becomes of the turn's workers as it ends: a launched Loop in the game folder takes them over,
- * a Loop on a copy lets them finish first, and any other end stops them.
- */
-function workersEndOf(outcome: TurnOutcome, handoff: Handoff): WorkersEnd {
-  if (outcome.stopped !== TurnStop.LaunchRun) return WorkersEnd.Stop;
-  const inPlace = loopProfileOf(handoff.descriptor ?? {}) === LoopProfile.Open;
-  return inPlace ? WorkersEnd.Carry : WorkersEnd.Land;
+/** What becomes of the turn's workers as it ends: the Loop it launched takes them over; any other end stops them. */
+function workersEndOf(outcome: TurnOutcome): WorkersEnd {
+  return outcome.stopped === TurnStop.LaunchRun ? WorkersEnd.Carry : WorkersEnd.Stop;
 }
 
 /** A chat turn's moment for the game as the turn found it: its chat, and the message it answers. Never a run's turn. */
@@ -237,16 +222,8 @@ function chatWorkersSeat(options: DelegatedOptions, handoff: Handoff): ChatWorke
   };
 }
 
-/**
- * The turn's ask, handed to its contractor in the folder chosen for it, and what it did reported.
- * `ended` holds the handoff the turn ends on (a switch or a new kind moves it on).
- */
-async function handOver(
-  ctx: HarnessCtx,
-  options: DelegatedOptions,
-  handoff: Handoff,
-  ended: { handoff: Handoff },
-): Promise<TurnOutcome> {
+/** The turn's ask, handed to its contractor in the folder chosen for it, and what it did reported. */
+async function handOver(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<TurnOutcome> {
   // Genex's context, the session's system text on every leg: the folder and the app's language, which
   // no turn changes (chat-session.ts `chatContext`).
   const context = chatContext({ folderLabel: handoff.folderLabel, appLanguage: await appLanguage(ctx) });
@@ -256,18 +233,14 @@ async function handOver(
   const before = options.runId ? UNKNOWN_STAMPS : await contentStamps(ctx, handoff.project);
   // How the turn runs: a message the person sends while it works may change it (steer-switch.ts).
   const seat = await seatOf(ctx, options, handoff, context);
+  let result: DelegateResult;
   try {
-    let result: DelegateResult;
-    try {
-      // A Stop while the turn prepared: no builder runs yet for it to abort, so none starts.
-      result = ctx.cancelled ? stoppedBeforeWork(options.engine) : await delegateResuming(ctx, seat);
-    } catch (err: any) {
-      return switchedOutcome(seat, await handleDelegateFailure(ctx, seat.options, handoff.project, callId, err));
-    }
-    return switchedOutcome(seat, await afterDelegation(ctx, seat, { callId, before, result }));
-  } finally {
-    ended.handoff = seat.handoff;
+    // A Stop while the turn prepared: no builder runs yet for it to abort, so none starts.
+    result = ctx.cancelled ? stoppedBeforeWork(options.engine) : await delegateResuming(ctx, seat);
+  } catch (err: any) {
+    return switchedOutcome(seat, await handleDelegateFailure(ctx, seat.options, handoff.project, callId, err));
   }
+  return switchedOutcome(seat, await afterDelegation(ctx, seat, { callId, before, result }));
 }
 
 /** What the turn's delegation left: its call, the folder before it, and the session's result. */
@@ -857,17 +830,13 @@ async function recordDelegateRequest(ctx: HarnessCtx, options: DelegatedOptions,
 }
 
 /**
- * Hands and eyes for every build: the capture tool and the computer
- * tool over a pooled window of this folder — a run's single builder and a chat build alike,
- * Loop or not.
+ * Hands and eyes for the chat's own session on a game Genex sees (`seenInWindow`): the capture tool
+ * and the computer tool over a pooled window of this folder. Its turns as a Loop's lead get the same
+ * window (director.ts `delegateTurn`).
  */
 function senses(options: DelegatedOptions, handoff: Handoff): AnyRecord {
   const { project, projectDir } = handoff;
-  // A web game (or a folder with no kind yet, served as one) is a page to capture and drive, and a
-  // game that plays through the Play Protocol (a Godot game Genex set up) is a process to start and
-  // drive the same way; an Unreal game is seen in its editor, and any other kind in its own app.
-  const playable = servedAsWeb(handoff.descriptor) || playsThroughBridge(handoff.descriptor);
-  if (!projectDir || !playable) return {};
+  if (!projectDir || !seenInWindow(handoff.descriptor)) return {};
   return {
     selfCapture: {
       project,

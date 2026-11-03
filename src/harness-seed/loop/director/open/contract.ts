@@ -1,8 +1,7 @@
 /**
- * The open Loop's own names: a Loop on a project that isn't a web game, led in place by the chat's
- * own session. Its tools, its clock and caps, its journal (`journal.director.open`) and what the
- * run object carries for it (`LoopRun.open`). A module new to the seed, so the shipped parts that
- * read it (director.ts, setup.ts, wake.ts) need no new name from a module an agent may have kept.
+ * The Loop's own names, on a project of any kind, led in place by the chat's own session: its tools,
+ * its clock and caps, its journal (`journal.director.open`) and what the run object carries for it
+ * (`LoopRun.open`).
  */
 import { setTimeout as idle } from "node:timers/promises";
 import type { AnyRecord, Run } from "../../../types/harness.d.ts";
@@ -131,6 +130,8 @@ export interface OpenLoop {
   holds: FolderHolds | null;
   /** The moments the game's plugins hook, as `game.list` listed them. */
   hookEvents: readonly string[];
+  /** Genex's eyes reach the game (`seenInWindow`): the lead's turns get the window its chat's turns have. */
+  seen: boolean;
   journal: OpenJournal;
   /** Why the Loop pauses (the app could not be brought back), once it must; null while it runs. */
   halted: string | null;

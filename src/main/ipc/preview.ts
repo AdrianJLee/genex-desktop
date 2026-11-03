@@ -70,9 +70,7 @@ export function registerPreviewIpc(
     // In full screen the game covers the window whatever the page under it measures; the slot is
     // placed again when full screen ends.
     if (fullScreen?.active()) return true;
-    // Anything but a plain `false` counts as watching: Live then only offers a chat's show.
-    const stageGame = typeof payload.project === "string" ? payload.project : null;
-    await core.previewStageVisible(payload.width > 0 && payload.height > 0, payload.watching !== false, stageGame);
+    await core.previewStageVisible(payload.width > 0 && payload.height > 0);
     preview()?.setBounds(
       {
         x: Math.round(payload.x),

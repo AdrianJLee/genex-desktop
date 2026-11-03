@@ -121,7 +121,8 @@ it("in Plan mode a plugin action answers the agent that it waits for the plan, a
   }
 });
 
-it("in Plan mode the chat's run controls cannot land or resume a build", async () => {
+// Flipped (one Loop): `land_build` was held too; no run control lands a build now.
+it("in Plan mode the chat's run controls cannot resume a build", async () => {
   const lite = await coreLite();
   try {
     const project = "planning-run";
@@ -145,10 +146,8 @@ it("in Plan mode the chat's run controls cannot land or resume a build", async (
       );
     const before = (await lite.core.listAllEvents()).length;
     await lite.core.setPermissionMode(threadId, PermissionMode.Plan);
-    for (const name of ["land_build", "resume_run"]) {
-      const answer = await tool(name);
-      assert.match(answer, /Plan mode, so this did not run/, `${name}: ${answer}`);
-    }
+    const answer = await tool("resume_run");
+    assert.match(answer, /Plan mode, so this did not run/, answer);
     assert.equal(dispatched, 0, "nothing was sent to the harness");
     const runEvents = (await lite.core.listAllEvents())
       .slice(before)
@@ -156,7 +155,7 @@ it("in Plan mode the chat's run controls cannot land or resume a build", async (
     assert.deepEqual(runEvents, [], "no run record was written");
     assert.match(await tool("run_status"), /run_a/, "reading the run still works");
     await lite.core.setPermissionMode(threadId, PermissionMode.Auto);
-    assert.doesNotMatch(await tool("land_build"), /Plan mode/, "leaving Plan lifts it");
+    assert.doesNotMatch(await tool("resume_run"), /Plan mode/, "leaving Plan lifts it");
   } finally {
     await lite.close();
   }

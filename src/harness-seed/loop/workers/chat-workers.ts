@@ -67,7 +67,6 @@ export async function openChatWorkers(
     ...(seat.effort ? { effort: seat.effort } : {}),
     gameDir,
     ...(seat.game ? { game: seat.game } : {}),
-    leadFolder: { project },
     identity: { folderLabel, facts, holds: holds ?? null },
     clock,
   });

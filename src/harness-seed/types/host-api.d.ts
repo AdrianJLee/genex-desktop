@@ -301,28 +301,21 @@ export interface DelegateImage {
 // ↑ src/shared/engine-requests.ts
 
 /**
- * The director's session: the run's integration worktree it orchestrates from (`root`). A waking
- * run's lead sits in the game folder instead and leads `root`, leaving the game's changes to its
- * workers: the host honours its grant only with `readOnly`, for this game's own run, and hands the
- * engine `root`'s checked real path (delegation.ts `#leadRoot`).
+ * A Loop's lead: the chat's own session, in the game folder (`root`), with the run's tools. The host
+ * honours its grant only for a `root` that is the game folder itself, for this game's own run started
+ * in this chat, and hands the engine `root`'s checked real path (delegation.ts `#inPlaceRoot`).
  */
 export interface DelegateDirectorGrant {
   runId: string;
   threadId: string;
   project: string;
   root: string;
-  setup?: PreviewSetup | null;
   /**
    * The lead IS its chat's own session (one session): the session it answers with becomes the
    * chat's bookmark (`contractor`), so the chat goes on in it after the run. Honoured only for a
    * lead in its game's folder.
    */
   chatSession?: boolean;
-  /**
-   * A Loop's lead that works in the game folder itself (an open Loop); honoured only for a run of
-   * this game started in this chat.
-   */
-  inPlace?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -361,14 +354,10 @@ export interface WorkerGrant {
 export interface HarnessDelegateParams {
   /**
    * The chat's own session after a closed Loop run: the run's controls it keeps (`run_status`,
-   * `show_build`, `land_build`, shared/chat-run.ts `RunControl`), answered by the host for this
-   * run and message (`run.control`). Honoured only for the chat's own session.
+   * shared/chat-run.ts `RunControl`), answered by the host for this run and message
+   * (`run.control`). Honoured only for the chat's own session.
    */
-  /**
-   * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
-   * its controls are only the status, never a build to show or land.
-   */
-  runControls?: { runId: string; messageId?: string; inPlace?: boolean };
+  runControls?: { runId: string; messageId?: string };
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
@@ -2039,11 +2028,6 @@ export interface HarnessHostApi {
   "preview.status": { params: { handle?: string }; result: PreviewPortStatus };
   /** Readiness is a fact the page reports, not a sleep. */
   "preview.ready": { params: { handle?: string; timeoutMs?: number; gesture?: boolean }; result: ReadyResult };
-  /** What the user's own window is showing right now: their game folder, or a build they chose to play. */
-  "preview.showing": {
-    params: void;
-    result: { project: string; root: string | null; entry: string | undefined; loaded: string | null } | null;
-  };
   "preview.observe": { params: { handle?: string }; result: BuildObservation };
   "preview.acquire": { params: { label?: string }; result: { handle: string } };
   "preview.release": { params: { handle: string }; result: boolean };

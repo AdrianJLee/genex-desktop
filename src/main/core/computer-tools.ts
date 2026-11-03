@@ -41,7 +41,6 @@ import type { SessionPort } from "./session-port.ts";
 /** The tool's own wording for each screen role. */
 const TOOL_ROLE: Record<AgentScreenRole, ComputerToolRole> = {
   builder: "builder",
-  director: "director",
   operator: "operator",
 };
 
@@ -63,9 +62,6 @@ export interface ComputerTools {
   onLiveTool: NonNullable<DelegateRequest["onLiveTool"]>;
   ensureLoaded: (force?: boolean) => Promise<ComputerLoad>;
   screen: () => AgentScreen;
-  /** The build the window shows; the director's `look` moves it. */
-  root: () => string;
-  retarget: (root: string) => void;
   /** What the session's trace adds up to so far. */
   trace: () => ComputerTraceSummary;
   /** How the game runs: the browser window, or its own Play Protocol process. */
@@ -144,8 +140,6 @@ function toolsOver<T extends ComputerTarget>(
       return { port: parts.portOf(loaded.target), problem: loaded.problem, note: loaded.note };
     },
     screen: parts.screen,
-    root: () => session.root(),
-    retarget: (next: string) => session.retarget(next),
     trace: () => session.trace(),
     runtime: parts.caps.runtime,
     release: parts.release,

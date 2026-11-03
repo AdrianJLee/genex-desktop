@@ -21,7 +21,6 @@ import { runDirector } from "../../src/harness-seed/loop/director.ts";
 import { handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { directorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
 import { leadLineOf } from "../../src/harness-seed/loop/director/lead-line.ts";
-import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { type HookEvent, type HookContext, type HookedPlugin, hookEventsOf } from "../../src/shared/plugin-hooks.ts";
 import type { GameKind } from "../../src/shared/project-facts.ts";
 import type { WorkerType } from "../../src/shared/workers.ts";
@@ -128,7 +127,7 @@ export type LoopHost = {
   reviewed: () => Array<Record<string, unknown>>;
   /** Waits, in real time, until `done` holds; whether it did. */
   until: (done: () => boolean) => Promise<boolean>;
-  /** Runs the Loop: the open profile unless the test names another; resolves with its report. */
+  /** Runs the Loop on the test's clock; resolves with its report. */
   start: (options?: { resume?: boolean }) => Promise<Record<string, unknown>>;
   /**
    * Starts the run through the run's start (`handleRunStart`), as Resume or the chat's launch does:
@@ -554,7 +553,6 @@ export function loopHost(options: {
       threadId: host.threadId,
       run: structuredClone(host.run) as never,
       resume,
-      profile: LoopProfile.Open,
       clock: { now: host.now, sleep: host.sleep },
     });
   host.dispatch = (options) => dispatchThrough(host, options);

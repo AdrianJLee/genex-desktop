@@ -74,28 +74,21 @@ export interface DelegateCaptureGrant {
 }
 
 /**
- * The director's session: the run's integration worktree it orchestrates from (`root`). A waking
- * run's lead sits in the game folder instead and leads `root`, leaving the game's changes to its
- * workers: the host honours its grant only with `readOnly`, for this game's own run, and hands the
- * engine `root`'s checked real path (delegation.ts `#leadRoot`).
+ * A Loop's lead: the chat's own session, in the game folder (`root`), with the run's tools. The host
+ * honours its grant only for a `root` that is the game folder itself, for this game's own run started
+ * in this chat, and hands the engine `root`'s checked real path (delegation.ts `#inPlaceRoot`).
  */
 export interface DelegateDirectorGrant {
   runId: string;
   threadId: string;
   project: string;
   root: string;
-  setup?: PreviewSetup | null;
   /**
    * The lead IS its chat's own session (one session): the session it answers with becomes the
    * chat's bookmark (`contractor`), so the chat goes on in it after the run. Honoured only for a
    * lead in its game's folder.
    */
   chatSession?: boolean;
-  /**
-   * A Loop's lead that works in the game folder itself (an open Loop); honoured only for a run of
-   * this game started in this chat.
-   */
-  inPlace?: boolean;
 }
 
 /** A still that goes into the builder's prompt as an image block. */

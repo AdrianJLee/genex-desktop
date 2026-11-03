@@ -31,7 +31,7 @@ import {
 } from "./local-session-tools.ts";
 import { neverTouchFence } from "./claude-permissions.ts";
 import { neverTouchWhole } from "./never-touch.ts";
-import { type CommandSandbox, commandSandbox, leadBuildWrites } from "./session-commands.ts";
+import { type CommandSandbox, commandSandbox, withGitMetadata } from "./session-commands.ts";
 import {
   type CompleteRequest,
   type CompleteResponse,
@@ -377,14 +377,13 @@ export class LocalSessions {
 
   /**
    * The folders the session may read and write besides its own, the paths it may never touch, and
-   * the ones it may not write. A lead writes the build it leads (`leadBuilds`), and a worker its
-   * seat's write roots, by their real paths; a worker never reaches its never-touch list's roots
+   * the ones it may not write. A worker writes its seat's write roots, by their real paths; a worker never reaches its never-touch list's roots
    * (whole ones here, the rest by `FileScope.neverTouch`), as on every engine.
    */
   async #fileBounds(request: DelegateRequest, cwd: string): Promise<FileBounds> {
     const real = (p: string) => realpath(p).catch(() => path.resolve(p));
     const seat = request.worker;
-    const writes = [...(request.leadBuilds ? [request.leadBuilds] : []), ...(seat ? seat.writeRoots : [])];
+    const writes = seat ? seat.writeRoots : [];
     const writeRoots = [...new Set(await Promise.all(writes.map(real)))].filter((dir) => dir !== cwd);
     const readRoots = [cwd, ...writeRoots, ...(await Promise.all((request.extraReads ?? []).map(real)))];
     // The coding CLIs' sign-in homes, from the one shared list the sandbox and contractors use (SEC-3).
@@ -413,8 +412,8 @@ export class LocalSessions {
   }
 
   /**
-   * The command sandbox: the workspace, a linked worktree's Git metadata and the build a lead leads
-   * (with its own Git metadata) are its only writable places.
+   * The command sandbox: the workspace, a linked worktree's Git metadata and a worker's write roots
+   * (with their own Git metadata) are its only writable places.
    */
   async #sandbox(
     cwd: string,
@@ -422,10 +421,10 @@ export class LocalSessions {
     bounds: Pick<FileBounds, "forbidden" | "deniedWrites" | "writeRoots">,
   ): Promise<CommandSandbox> {
     const scratchRoot = this.options.scratchRoot ?? path.join(os.tmpdir(), `studio-${this.engine}`);
-    const builds = (await Promise.all(bounds.writeRoots.map(leadBuildWrites))).flat();
+    const roots = (await Promise.all(bounds.writeRoots.map(withGitMetadata))).flat();
     return commandSandbox({
       cwd,
-      ...(builds.length ? { writableRoots: builds } : {}),
+      ...(roots.length ? { writableRoots: roots } : {}),
       scratchDir: path.join(scratchRoot, id),
       secretPaths: bounds.forbidden,
       denyWrite: bounds.deniedWrites,

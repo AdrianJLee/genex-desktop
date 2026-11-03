@@ -1,6 +1,6 @@
 /**
- * What a Loop's lead has at work while it rests: its pool's running workers and the run's running
- * jobs, and for an open Loop a recovery of the project's app under way. A lead with nothing at work
+ * What a Loop's lead has at work while it rests: its pool's running workers, the run's running jobs,
+ * and a recovery of the project's app under way. A lead with nothing at work
  * and nothing to be woken for is done: its Loop closes, as a bare agent's turn ends (wake.ts). The
  * run's jobs are read from the host at most every `JOB_POLL_MS`; a read the host could not answer
  * says nothing, so only one that says no job runs lets the Loop close.
@@ -10,13 +10,7 @@ import type { JobView } from "../../../types/host-api.d.ts";
 import { HostMethod } from "../../host-methods.ts";
 import { JobState } from "../../jobs/contract.ts";
 import { JOB_POLL_MS } from "../../jobs/watch.ts";
-import { LoopProfile } from "../../folder-facts.ts";
-import { runningRecords } from "../../workers/records.ts";
 import type { LoopRun } from "../loop-run.ts";
-
-/** Whether the run leads an open Loop. */
-export const leadsOpenLoop = (loopRun: Pick<LoopRun, "profile" | "open">): boolean =>
-  loopRun.profile === LoopProfile.Open && Boolean(loopRun.open);
 
 /** The run's jobs as the host lists them now; null when it could not say. */
 async function jobsNow(ctx: HarnessCtx, project: string, runId: string): Promise<JobView[] | null> {
@@ -34,10 +28,8 @@ async function jobsNow(ctx: HarnessCtx, project: string, runId: string): Promise
  * app back, and the recovery's outcome wakes it, never the question of what next.
  */
 export function workAtHand(loopRun: LoopRun): number {
-  const open = loopRun.open;
-  const pooled = open?.pool ? runningRecords(open.pool.state).length : 0;
-  const recovering = open?.recovering ? 1 : 0;
-  return loopRun.runningWorkers().length + pooled + (loopRun.jobsRunning ?? 0) + recovering;
+  const recovering = loopRun.open.recovering ? 1 : 0;
+  return loopRun.runningWorkers().length + (loopRun.jobsRunning ?? 0) + recovering;
 }
 
 /** What the lead has at work now, the run's jobs read again when the last read is `JOB_POLL_MS` old or forgotten. */
@@ -60,6 +52,5 @@ const runningJobs = (jobs: readonly JobView[]): number => jobs.filter((job) => j
  * last read found them, a read that could not say among them.
  */
 export function hasWorkAtHand(loopRun: LoopRun): boolean {
-  const pool = loopRun.pool ?? loopRun.open?.pool ?? null;
-  return Boolean(pool?.state.runs.size) || loopRun.jobsRunning !== 0 || workAtHand(loopRun) > 0;
+  return Boolean(loopRun.open.pool?.state.runs.size) || loopRun.jobsRunning !== 0 || workAtHand(loopRun) > 0;
 }

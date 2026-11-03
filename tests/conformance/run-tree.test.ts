@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { seedBuildGraph } from "../../src/main/dev/fixture-build-graph.ts";
-import { seedLeadGraph } from "../../src/main/dev/fixture-lead-graph.ts";
 import { buildRunGraph, GraphNodeKind, rectsOverlap, type RunGraph } from "../../src/renderer/run-graph.ts";
 import type { JobInfo } from "../../src/renderer/run-graph-workers.ts";
 import {
@@ -198,31 +197,6 @@ describe("a graph without workers or jobs keeps today's layout", () => {
         }),
         runId,
       );
-    }
-  });
-});
-
-describe("a graph with its assets or its optimisation keeps today's layout and order", () => {
-  it("the Unreal lead's dev fixture: the assets card under the start, stepped right after it", async () => {
-    seq = 0;
-    const events = await seeded(seedLeadGraph);
-    const shared = ["start", "assets", "step:lead:1", "step:lead-atmosphere:1"];
-    const agents = ["session:agent-blender_model-1", "session:agent-texture-1", "session:agent-genex_cast-1"];
-    const expected: Record<string, string[]> = {
-      "fixture-lead-done": [...shared, ...agents, "step:lead-combat:1", "final"],
-      "fixture-lead-live": [...shared, ...agents, "session:lead-combat", "session:agent-sound-1", "final"],
-    };
-    for (const [runId, steps] of Object.entries(expected)) {
-      const { graph, summary, rows } = fold(events, runId);
-      assert.equal(graph.tree, false, runId);
-      assert.deepEqual(readingOrder(rows, readingNodes(graph, rows, summary)), steps, runId);
-      const layout = buildsLayout(graph, rows, summary);
-      const lead = leadWorking(graph, summary, rows);
-      const today = layoutSteps(rows, { assets: true, resultGate: resultGate(graph), lead });
-      assert.deepEqual(layout, today, runId);
-      assert.ok(layout.rects.assets && layout.rects.start, runId);
-      assert.equal(layout.rects.assets.x, layout.rects.start.x, "the assets card stands under the start");
-      assert.ok(layout.rects.assets.y > layout.rects.start.y);
     }
   });
 });

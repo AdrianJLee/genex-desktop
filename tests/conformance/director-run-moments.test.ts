@@ -105,7 +105,9 @@ describe("a director's run at Genex's moments", () => {
     const ended = await finished();
     await running;
     assert.equal(leadTurns.length, 0, "no session opened");
-    assert.match(String(ended.stoppedBecause), /a plugin of this game held it back: The stage is being swept\./);
+    // Flipped (one Loop): a web game's start closed in the web Loop's words ("a plugin of this game");
+    // every Loop's held start closes in the Loop's own, as a Godot game's did.
+    assert.match(String(ended.stoppedBecause), /a plugin of this project held it back: The stage is being swept\./);
     assert.equal(await count(stage, "run.end:farewell"), 1, "the run's end is announced once");
   });
 

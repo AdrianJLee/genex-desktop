@@ -54,7 +54,7 @@ export const runOver = (loopRun: LoopRun): boolean =>
   Boolean(loopRun.report.failure) ||
   Boolean(loopRun.state.finish) ||
   closeUnderWay(loopRun.state) ||
-  Boolean(loopRun.open?.halted);
+  Boolean(loopRun.open.halted);
 
 /** Genex's lines of the run's log the lead has not been told, oldest first. */
 export function untold(loopRun: Pick<LoopRun, "notesSince" | "waitSeq">): GenexLine[] {

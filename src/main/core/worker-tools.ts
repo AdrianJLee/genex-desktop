@@ -71,29 +71,8 @@ function isolationOf(args: Record<string, unknown>, types: readonly WorkerType[]
 }
 
 /**
- * The run tools of a director that write beyond the worker tools: its merge of a worker's work, and
- * its finish, which lands the run's build in the game. The seed's names (`DirectorTool`), held to
- * them by `seed-contracts.test.ts`.
- */
-export const RunWriteTool = {
-  Integrate: "integrate",
-  Finish: "finish",
-} as const;
-
-/** What a yes/no field says is yes, as the seed reads one (`director/args.ts` `yes`). */
-const YES = /^(y|yes|true|1)$/i;
-
-/** Whether a `finish` lands the build: unless its `land` says no; an empty one lands, as the seed's `yes(land, true)` reads it. */
-export function finishLands(args: Record<string, unknown>): boolean {
-  const land = args.land;
-  if (land === undefined || land === null || String(land).trim() === "") return true;
-  return YES.test(String(land).trim());
-}
-
-/**
  * What Plan holds of a worker tool call, or null: a start of a worker that would write (or might:
- * one that does not say), a verdict that merges a worker's work into the lead's folder, a director's
- * merge, or a finish that lands the run's build in the game.
+ * one that does not say), or a verdict that merges a worker's work into the lead's folder.
  */
 export function heldInPlan(
   name: string,
@@ -102,8 +81,6 @@ export function heldInPlan(
 ): string | null {
   if (name === WorkerTool.Mark)
     return args.verdict === WorkerVerdict.Used ? WORKER_TOOL_ANSWER.mergesWaitForPlan : null;
-  if (name === RunWriteTool.Integrate) return WORKER_TOOL_ANSWER.mergesWaitForPlan;
-  if (name === RunWriteTool.Finish) return finishLands(args) ? WORKER_TOOL_ANSWER.landingWaitsForPlan : null;
   if (name !== WorkerTool.Start || isolationOf(args, types()) === WorkerIsolation.Read) return null;
   return WORKER_TOOL_ANSWER.writersWaitForPlan;
 }

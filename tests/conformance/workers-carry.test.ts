@@ -60,7 +60,6 @@ function runSeat(host: ReturnType<typeof poolHost>, repo: string, runId: string)
     runId,
     engine: CLAUDE,
     gameDir: repo,
-    leadFolder: { project: PROJECT },
     identity: { folderLabel: "AI Games/garden", facts: [{ id: "unity-project", path: "." }] },
     clock: fastClock(),
   };

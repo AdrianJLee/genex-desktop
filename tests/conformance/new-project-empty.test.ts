@@ -455,7 +455,9 @@ describe("new projects start empty", () => {
       };
       await handleRunStart(studioOf(run.ctx) as never, { type: "run_start", threadId: "t-2", run: run2 } as never);
       const started = run.sequence((method) => method === HostMethod.GameStart || method === HostMethod.GameScaffold);
-      assert.deepEqual(started, starts ? [HostMethod.GameStart, HostMethod.GameScaffold] : [HostMethod.GameScaffold]);
+      // Flipped (one Loop): the web Loop scaffolded its game again before building in a copy; the one
+      // Loop builds in the game folder the start wrote, so nothing is scaffolded.
+      assert.deepEqual(started, starts ? [HostMethod.GameStart] : []);
       if (starts) assert.deepEqual(run.paramsOf(HostMethod.GameStart)[0], { project: "moth", starter: "web" });
     }
   });

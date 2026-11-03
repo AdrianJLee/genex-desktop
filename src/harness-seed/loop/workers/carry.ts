@@ -1,11 +1,10 @@
 /**
- * A chat turn's workers when the turn launches a Loop. A Loop that works in the game folder itself
- * takes them over: its run's pool is this same pool, re-scoped to the run, so they keep going and
- * its lead — the chat's own session — hears and marks them as its own (`carryPool`, then
- * run-pool.ts `runPool`). A Loop on a copy (a web game's build), or a turn with a writer in the game
- * folder (it holds the chat's lock for its life), does not take them over: a writer in the game
- * folder still at work is waited for, so the build starts from the folder as it leaves it
- * (`landWorkers`). Anything else still at work stops, as a turn's workers always did; a copy's work
+ * A chat turn's workers when the turn launches a Loop. The Loop, which works in the game folder
+ * itself, takes them over: its run's pool is this same pool, re-scoped to the run, so they keep going
+ * and its lead — the chat's own session — hears and marks them as its own (`carryPool`, then
+ * run-pool.ts `runPool`). A turn with a writer in the game folder (it holds the chat's lock for its
+ * life) does not hand them over: that writer still at work is waited for, so the build starts from
+ * the folder as it leaves it (`landWorkers`). Anything else still at work stops, as a turn's workers always did; a copy's work
  * stays on its ref.
  *
  * A module of its own: the chat's workers (chat-workers.ts) and the run's pool (run-pool.ts) read it,

@@ -20,7 +20,7 @@ import { SECOND_MS, sleep } from "../../time.ts";
 import { closeRunPool } from "../../workers/run-pool.ts";
 import { latchClose } from "../close-latch.ts";
 import type { LoopRun } from "../loop-run.ts";
-import { asksPending, newOpenJournal, type OpenJournal } from "./contract.ts";
+import { asksPending } from "./contract.ts";
 import { FOLDER_GIT } from "./folder-git.ts";
 import { leadRowAtClose, openCloseOf } from "./graph.ts";
 
@@ -61,8 +61,7 @@ const MESSAGE = {
   askDropped: "The rewind or restart the lead asked for last didn't run: the Loop closed first.",
 } as const;
 
-/** The open Loop's own journal, or a new one on a run a kept older setup made. */
-const journalOf = (loopRun: LoopRun): OpenJournal => loopRun.open?.journal ?? newOpenJournal();
+/** The Loop's own journal. */
 
 /**
  * The save point a recovery took the folder back to while the lead has not heard so (no message
@@ -70,7 +69,7 @@ const journalOf = (loopRun: LoopRun): OpenJournal => loopRun.open?.journal ?? ne
  */
 function wentBackUnheard(loopRun: Pick<LoopRun, "open" | "waitSeq">): string | null {
   const open = loopRun.open;
-  if (!open?.wentBack) return null;
+  if (!open.wentBack) return null;
   const seq = open.wentBackSeq;
   return seq !== null && loopRun.waitSeq >= seq ? null : open.wentBack;
 }
@@ -102,7 +101,7 @@ async function keepLastWork(loopRun: LoopRun): Promise<string | null> {
   if (changed === false && !appSaved) return null;
   const take = () =>
     takeCheckpoint(ctx, { ...runScope(loopRun), label: MESSAGE.loopEnd, onlyIfUnsaved: changed === false });
-  const answer = await (loopRun.open ? loopRun.open.gitWrite(take) : take());
+  const answer = await loopRun.open.gitWrite(take);
   if ("snapshot" in answer) return answer.snapshot.snapshot_id;
   if ("skipped" in answer && answer.skipped === CheckpointSkip.NothingUnsaved) return null;
   const why = "blocked" in answer ? answer.blocked : answer.reason;
@@ -139,7 +138,7 @@ function finishReport(
 ): void {
   const { report, state } = loopRun;
   const { kept, paused, wentBack } = closed;
-  const journal = journalOf(loopRun);
+  const journal = loopRun.open.journal;
   const opened = openCloseOf(journal, kept !== null, paused);
   // A paused Loop says a dropped ask on Resume (`settledAcrossPause`); a closed one says it here, and forgets it.
   const dropped = !paused && asksPending(journal);
@@ -230,7 +229,7 @@ async function closeNow(loopRun: LoopRun, end: OpenEnd): Promise<void> {
   state.finished = true;
   journal.phase = paused ? JournalPhase.Paused : JournalPhase.Done;
   await loopRun.saveJournal();
-  await leadRowAtClose(loopRun, journalOf(loopRun), paused);
+  await leadRowAtClose(loopRun, loopRun.open.journal, paused);
   await announce(loopRun, paused);
 }
 

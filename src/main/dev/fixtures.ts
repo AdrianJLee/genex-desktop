@@ -11,7 +11,6 @@ import { EventKind, SnapshotScope } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { seedLargeBuildGraph } from "./fixture-large-graph.ts";
-import { seedLeadGraph } from "./fixture-lead-graph.ts";
 import { seedBuildGraph } from "./fixture-build-graph.ts";
 import { seedChatWorkers, seedChatWorkersLoop } from "./fixture-chat-workers.ts";
 import { seedBuildTimeline } from "./fixture-build-timeline.ts";
@@ -141,7 +140,6 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   const { core, id, existing, threadId } = game;
   if (id === FixtureName.BuildGraph) return seedGraphOnce(game);
   if (id === FixtureName.LargeBuildGraph) return seedLargeBuildGraph(core, game.project.name, threadId);
-  if (id === FixtureName.LeadGraph) return seedLeadGraph(core, game.project.name, threadId);
   if (id === FixtureName.ChatWorkers) return seedChatWorkers(core, game.project.name, threadId);
   if (id === FixtureName.Sidebar) return seedSidebar(core, game.project.name);
   // The rest seed a fresh profile only; a reused one keeps what it has.

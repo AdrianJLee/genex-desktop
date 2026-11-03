@@ -1,7 +1,6 @@
 import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { gitFile } from "../helpers/git.ts";
 /**
  * Incident tests for the loop. One `it` per incident from the
  * morrowind-2 and shooter postmortems, named after it, on the real rig (a real StudioCore,
@@ -28,7 +27,6 @@ import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../s
 import { createRunInbox, type RunInbox } from "../../src/harness-seed/loop/run-inbox.ts";
 import { runWakeLoop, type DirectorTalk } from "../../src/harness-seed/loop/director/wake.ts";
 import { LOOP_WORDS } from "../../src/harness-seed/loop/director/wake-prompts.ts";
-import { landIntegration } from "../../src/harness-seed/loop/director/integrate.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { chatWaitsFor, leadDoor, stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
 import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
@@ -789,7 +787,9 @@ describe("a paused build from an earlier version (old-pause)", () => {
     const closed = host.appended("run_finished").at(-1);
     assert.match(String(closed?.stoppedBecause), /earlier version of Genex/);
     assert.equal(closed?.executionStatus, "completed", "closed, not paused again");
-    assert.equal(closed?.integrationHead, "head-1", "what it built is kept");
+    // Flipped (one Loop): the close kept the old build's `integrationHead` to show or land; its work
+    // stays on its git ref, and the close names no build of its own.
+    assert.equal(closed?.integrationHead, undefined);
     assert.equal(host.appended("autopilot_paused").length, 0);
   });
 });
@@ -804,12 +804,14 @@ describe("a change after a paused build (stale-pause)", () => {
   // and the resume is its tool's to say: the session is handed it while the build is paused.
   it("stale-pause words. after a paused build, only going on with that build resumes it: the resume tool says so", async () => {
     const { afterLoopRunGrant } = await import("../../src/harness-seed/loop/after-loop-run.ts");
+    // Flipped (one Loop): the paused run named no `inPlace`; only a Loop that worked in place resumes now.
     const paused = {
       runId: "run_paused",
       state: "paused",
       engine: "claude-code",
       onLeadEngine: true,
       model: null,
+      inPlace: true,
     };
     const resume = afterLoopRunGrant(paused).interviewTools?.find((tool) => tool.name === "resume_run");
     const words = String(resume?.description);
@@ -879,7 +881,12 @@ function ownSessionChat({
   ];
   for (const data of since) log.push({ id: `e${log.length + 1}`, data });
   const store: Json = {
-    journal: { phase: "done", run: ownRun, director: { lead: { chatSession }, sessionId: "lead-own", plan: {} } },
+    // Flipped (one Loop): the journal had no `open`, as an earlier Genex's web Loop's, and still resumed.
+    journal: {
+      phase: "done",
+      run: ownRun,
+      director: { lead: { chatSession }, sessionId: "lead-own", plan: {}, open: { version: 1, savePoints: [] } },
+    },
     turnOver: false,
   };
   const asked = { sessions: [] as Json[], said: [] as string[] };
@@ -1042,7 +1049,7 @@ describe("one session answers the chat (no-coordinator)", () => {
     const [answer] = finished.asked.sessions;
     assert.equal("coordinator" in (answer ?? {}), false, "never a coordinator");
     assert.notEqual(answer?.readOnly, true, "with its hands");
-    assert.deepEqual(answer?.runControls, { runId: OWN_RUN, messageId: "m9" }, "run_status, show_build and land_build");
+    assert.deepEqual(answer?.runControls, { runId: OWN_RUN, messageId: "m9" }, "run_status");
 
     const paused = ownSessionChat({ paused: true, recorded: [{ name: "resume_run", args: { text: "add enemies" } }] });
     await handleUserMessage(paused.studio as never, { ...ownMessage } as never);
@@ -1558,7 +1565,8 @@ describe("the lead's later turns (wake loop)", () => {
     assert.equal(turns.length, 3, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
     assert.equal(turns[2]!.resume, "lead-1", "the same session carries on");
     assert.equal(turns[2]!.prompt, turns[1]!.prompt, "the turn's own message is asked again");
-    assert.equal(finished.stoppedBecause, "the lead finished the run", "the run was not wrapped up for it");
+    // Flipped (one Loop): "the lead finished the run" was a web Loop's landing; it closes in place on the lead's word.
+    assert.equal(finished.stoppedBecause, "the lead says the goal is reached", "the run was not wrapped up for it");
   });
 
   // Flipped: the fresh session's prompt was "YOUR EARLIER SESSION WAS LOST … Your notes and the run so far
@@ -1589,18 +1597,20 @@ describe("the lead's later turns (wake loop)", () => {
       /Your earlier session was lost \(the session could not be resumed\); this session is new\.\nThe Loop started\. Its goal: /,
     );
     assert.doesNotMatch(told, /YOUR NOTES|THE RUN SO FAR|WHAT HAPPENED/);
-    assert.equal(finished.stoppedBecause, "the lead finished the run");
+    // Flipped (one Loop): it closed by landing ("the lead finished the run"); it closes in place on its word.
+    assert.equal(finished.stoppedBecause, "the lead says the goal is reached");
   });
 
   // Flipped: the ordinary end was worded as a session that stopped short ("the lead's session ended
-  // (on its own) before it called finish").
+  // (on its own) before it called finish"). Flipped again (one Loop): a web game's close added what
+  // its landing did ("; nothing was landed …"); it closes in place, in the words every Loop's does.
   it("no-clock. a web lead's turn that ends with nothing at work closes the Loop in its ordinary end's words", async () => {
     const { turns, finished } = await lateTurnLoopRun("idle-end", async () => ({
       sessionId: "lead-1",
       summary: "the sky is blue",
     }));
     assert.equal(turns.length, 1, "no wake and no wrap-up turn after it");
-    assert.match(String(finished.stoppedBecause), /^the lead's turn ended with nothing at work; /);
+    assert.equal(finished.stoppedBecause, "the lead's turn ended with nothing at work");
   });
 
   it("D11. the lead's account disabled on a wake pauses the run: workers stopped, nothing landed, no wrap-up, the user told what to fix", async () => {
@@ -1617,11 +1627,12 @@ describe("the lead's later turns (wake loop)", () => {
     assert.equal(turns.length, 2, turns.map((t) => t.prompt.slice(0, 80)).join(" | "));
     assert.equal(finished.executionStatus, "paused", String(finished.stoppedBecause));
     assert.equal(finished.landed, false);
-    assert.equal((finished.landingResult as { why?: string }).why, "paused");
+    // Flipped (one Loop): a web Loop's pause named its landing (`landingResult.why` paused, "nothing
+    // was landed"); every Loop pauses in place, its folder as the lead left it.
+    assert.equal(finished.landingResult, undefined);
     assert.equal((finished.limit as { kind?: string }).kind, "auth");
     assert.match(String(finished.stoppedBecause), /lost its sign-in/);
     assert.match(String(finished.stoppedBecause), /disabled Claude subscription access/);
-    assert.match(String(finished.stoppedBecause), /nothing was landed/);
   });
 });
 
@@ -1689,6 +1700,8 @@ function clockNight(inbox: Record<string, unknown> = {}) {
     decision: async () => {},
     saveJournal: async () => {},
     ledgerLines: () => [],
+    // The Loop's own record, which every run carries (`LoopRunData.open`): nothing has halted it.
+    open: { halted: null },
   };
   const note = (text: string, kind?: string) => {
     loopRun.logSeq += 1;
@@ -1935,6 +1948,8 @@ function liveChat() {
       decision: async () => {},
       saveJournal: async () => {},
       ledgerLines: () => [],
+      // The Loop's own record, which every run carries (`LoopRunData.open`): nothing has halted it.
+      open: { halted: null },
     };
     // As director.ts opens it: live while the run goes on, recording on the run's own log.
     const line = openLeadLine(RUN, THREAD, () => !state.finished && !ctx.cancelled && !n.report.failure, ctx as never);
@@ -2948,26 +2963,6 @@ describe("messages without a queue", () => {
  * permission mode, what its own commands leave in the game folder at the landing.
  */
 describe("one session, reviewed", () => {
-  /** A ctx whose `run.exec` runs the command here, in the folder it names — real git, no host. */
-  const localCtx = () => ({
-    workspace: "/nonexistent",
-    cancelled: false,
-    notify() {},
-    call: async (method: string, p: { command: string; cwd: string }) => {
-      if (method !== HostMethod.RunExec) return null;
-      try {
-        const { stdout, stderr } = await promisify(execFile)("sh", ["-c", p.command], {
-          cwd: p.cwd,
-          maxBuffer: 10_000_000,
-        });
-        return { code: 0, stdout, stderr };
-      } catch (err) {
-        const e = err as { stdout?: string; stderr?: string; code?: number };
-        return { code: e.code ?? 1, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
-      }
-    },
-  });
-
   it("OS3. a first turn the host refused because the lead's lock was held is asked again after a wait, and the run goes on", async () => {
     const w = clockNight();
     const busy = () => Object.assign(new Error('a contractor is already building in "sky"'), { code: "folder_busy" });
@@ -2994,239 +2989,6 @@ describe("one session, reviewed", () => {
     assert.equal(calls.length, 12, "asked again after each wait until the Stop");
     assert.equal(outcome.failed, null, "no wrap-up for a failed turn");
     assert.equal(outcome.wrapCause, null);
-  });
-
-  /**
-   * A lead run on the real rig: the lead plans and starts one builder that paints the sky, and on
-   * its next turn integrates it, runs `beforeFinish` (its own commands, in either folder) and
-   * finishes.
-   */
-  async function leadClose(name: string, beforeFinish: (request: DelegateRequest) => Promise<void>) {
-    const rig = await startRig(
-      { replies: [] },
-      {
-        previewPoolMax: 2,
-        createHeadlessPreview: async () => makeFakePreview(),
-      },
-    );
-    rigs.push(rig);
-    const project = await rig.core.games.scaffold(name, { title: name });
-    const results: Record<string, any> = {};
-    let turns = 0;
-    registerFakeEngine(rig, {
-      complete: () => null,
-      delegate: async (request: DelegateRequest) => {
-        if (request.director) {
-          const call = (tool: string, args: Record<string, unknown>) => request.onLiveTool!(tool, args);
-          if (++turns === 1) {
-            results.started = await call("worker_start", {
-              title: "Sky",
-              task: "paint the sky blue",
-              isolation: "copy",
-            });
-            return { sessionId: "lead-1" };
-          }
-          if (results.finished) return { sessionId: "lead-1" };
-          // The worker's id, as its start named it; its copy merges into the integration worktree.
-          const id = /\bw\d+\b/.exec(String(results.started))?.[0] ?? "w1";
-          results.integrated = await call("worker_mark", { id, verdict: "used" });
-          await beforeFinish(request);
-          results.finished = await call("finish", { summary: "the sky is blue", land: "yes" });
-          return { sessionId: "lead-1" };
-        }
-        // Anything else the run delegates is its worker, in its copy of the game.
-        await mkdir(path.join(request.cwd, "src"), { recursive: true });
-        await writeFile(path.join(request.cwd, "src", "sky.js"), "export const sky = 'blue';\n");
-        return { sessionId: "worker-1", summary: "painted the sky" };
-      },
-    });
-    const runId = rig.core.newRunId();
-    await rig.core.dispatchRun({
-      runId,
-      goal: "a blue sky",
-      project: project.name,
-      mode: "autopilot",
-      engine: "fake-delegate",
-      reference: { name: "sky", shots: [] },
-      budgets: { wallClockMs: 15 * 60_000 },
-    } as never);
-    const events = await waitForLog(
-      rig.core,
-      (log) => customEvents(log, "run_finished").some((e) => e.runId === runId),
-      180_000,
-      `${name} run_finished`,
-    );
-    const finished = customEvents(events, "run_finished").find((e) => e.runId === runId)!;
-    return { project, runId, results, finished };
-  }
-  const gitIn = async (cwd: string, args: string[]) => (await gitFile(args, { cwd })).stdout.trim();
-
-  it("OS5. the lead's own file in the game folder stops the landing: the close names it and blames nobody, never 'changes of your own'", async () => {
-    const { project, runId, results, finished } = await leadClose("os5-lead-in-game", async (request) => {
-      // The lead, whose cwd is the game folder, wrote the file its builder also adds.
-      await writeFile(path.join(request.cwd, "src", "sky.js"), "export const sky = 'what the lead tried';\n");
-    });
-    assert.equal(finished.landed, false, String(finished.stoppedBecause));
-    assert.equal((finished.landingResult as { why: string }).why, "uncommitted-changes");
-    assert.doesNotMatch(results.finished, /of your own/, results.finished);
-    assert.match(
-      results.finished,
-      /git would not land this build over what is uncommitted in the game folder — src\/sky\.js\./,
-    );
-    assert.match(results.finished, /leave it as it is/i, "never an invitation to clear the folder");
-    const close = (finished.verdicts as Array<{ pass: string; because: string }>).find((v) => v.pass === "close")!;
-    assert.doesNotMatch(close.because, /of (?:your|its) own/, close.because);
-    // The sentence is kept in the game's lessons and read by the next run's lead: no order in it.
-    assert.match(close.because, /left beside it, waiting for Make it live\.$/);
-    // Nothing forced: the file as the lead left it, and the build on its ref for Make it live.
-    assert.equal(await gitIn(project.dir, ["status", "--porcelain"]), "?? src/sky.js");
-    assert.equal(
-      await readFile(path.join(project.dir, "src", "sky.js"), "utf8"),
-      "export const sky = 'what the lead tried';\n",
-    );
-    assert.equal(
-      await gitIn(project.dir, ["rev-parse", `refs/studio/runs/${runId}/integration`]),
-      finished.integrationHead,
-    );
-
-    // What the lead's own test run leaves beside the build does not stop it, and the lead is told.
-    const beside = await leadClose("os5-lead-beside", async (request) => {
-      await mkdir(path.join(request.cwd, "test-results"), { recursive: true });
-      await writeFile(path.join(request.cwd, "test-results", ".last-run.json"), '{"status":"passed"}\n');
-    });
-    assert.equal(beside.finished.landed, true, beside.results.finished);
-    assert.match(
-      beside.results.finished,
-      /is live in the game folder \([^)]*\) — the game folder still has uncommitted changes the landing left as they were — test-results\/; they are not part of this build — tell the user, and leave them as they are/,
-    );
-    assert.equal(await gitIn(beside.project.dir, ["status", "--porcelain"]), "?? test-results/");
-  });
-
-  /**
-   * A game folder at `base` and a build that adds src/sky.js, and the landing (`landIntegration`)
-   * over a run of real git in them: the close's own look and head are not the question here.
-   */
-  async function landingOver(prepare: (git: (...a: string[]) => Promise<string>, dir: string) => Promise<void>) {
-    const { tmpDir } = await import("../helpers/tmp.ts");
-    const dir = await tmpDir("one-session-landing-");
-    const git = async (...args: string[]) => (await gitFile(args, { cwd: dir })).stdout.trim();
-    await git("init", "-q", "-b", "main");
-    await git("config", "user.email", "t@t");
-    await git("config", "user.name", "t");
-    await mkdir(path.join(dir, "src"), { recursive: true });
-    await writeFile(path.join(dir, "README.md"), "a game\n");
-    await writeFile(path.join(dir, "src", "sign.js"), "export const sign = 'none';\n");
-    await git("add", "-A");
-    await git("commit", "-qm", "base");
-    const base = await git("rev-parse", "HEAD");
-    await git("checkout", "-qb", "run");
-    await writeFile(path.join(dir, "src", "sky.js"), "export const sky = 'blue';\n");
-    await git("add", "-A");
-    await git("commit", "-qm", "the run's build");
-    const head = await git("rev-parse", "HEAD");
-    await git("checkout", "-q", "main");
-    const worktree = await tmpDir("one-session-landing-wt-");
-    await git("worktree", "add", "-q", "--detach", worktree, head);
-    await prepare(git, dir);
-    const notes: string[] = [];
-    const report: Record<string, unknown> = {};
-    const exec = localCtx();
-    const loopRun = {
-      ctx: {
-        ...exec,
-        call: (method: string, p: Record<string, any>) => exec.call(method, { ...p, cwd: p.cwd ?? dir } as never),
-      },
-      run: { runId: "run_os6", project: "landing" },
-      lead: { folder: dir },
-      baseCommit: base,
-      projectDir: dir,
-      integrationWorktree: worktree,
-      integrationRef: "refs/studio/runs/run_os6/integration",
-      state: { integrationHead: head, healthByHead: new Map() },
-      report,
-      note: (text: string) => notes.push(text),
-      syncHead: async () => head,
-      nestedGit: async () => "",
-      reloadLive: async () => {},
-      landingClaim: () => ({ verified: false, how: "fresh-health-pass", line: "made live, not judged better" }),
-    };
-    const landed = await landIntegration(loopRun as never, true);
-    return { landed, git, dir, head, notes, report };
-  }
-
-  it("OS6. the landing tells uncommitted changes in the game folder from commits that conflict or a hook that refuses, and never undoes a merge of the user's own under way", async () => {
-    // Only a stray the build does not touch: it lands, and the stray is named, left as it was.
-    const clean = await landingOver(async (_git, dir) => {
-      await writeFile(path.join(dir, "notes.txt"), "mine\n");
-    });
-    assert.equal(clean.landed.ok, true, clean.landed.reason);
-    assert.deepEqual(clean.landed.leftInGame, ["notes.txt"]);
-    assert.equal(await clean.git("status", "--porcelain"), "?? notes.txt");
-    // Flipped: the landing also wrote it as a line of the run's log, which no message carried; finish's
-    // answer names the stray (`leftInGame`, integrate.ts FINISH_WORDS.closed).
-    assert.deepEqual(clean.notes, []);
-
-    // A hook of the user's that refuses the merge, beside an unrelated stray: git's words, not the stray's blame.
-    const hooked = await landingOver(async (git, dir) => {
-      await git("config", "core.hooksPath", ".git/hooks");
-      await writeFile(
-        path.join(dir, ".git", "hooks", "pre-merge-commit"),
-        "#!/bin/sh\necho 'no merges today' >&2\nexit 1\n",
-        {
-          mode: 0o755,
-        },
-      );
-      await writeFile(path.join(dir, "notes.txt"), "mine\n");
-    });
-    assert.equal(hooked.landed.why, "could-not-land", hooked.landed.reason);
-    assert.match(hooked.landed.reason, /no merges today/);
-    assert.equal(await hooked.git("status", "--porcelain"), "?? notes.txt");
-
-    // A commit in the folder that conflicts, beside an unrelated stray: a conflict, not the stray's doing.
-    const conflict = await landingOver(async (git, dir) => {
-      await writeFile(path.join(dir, "src", "sky.js"), "export const sky = 'red';\n");
-      await git("add", "-A");
-      await git("commit", "-qm", "mine: a red sky");
-      await writeFile(path.join(dir, "notes.txt"), "mine\n");
-    });
-    assert.equal(conflict.landed.why, "could-not-land", conflict.landed.reason);
-    assert.equal(await conflict.git("status", "--porcelain"), "?? notes.txt", "the merge was aborted, the stray kept");
-
-    // A merge of the user's own under way, its conflict resolved and staged: never merged into, never aborted.
-    const underWay = await landingOver(async (git, dir) => {
-      await git("checkout", "-qb", "theirs");
-      await writeFile(path.join(dir, "README.md"), "a game, theirs\n");
-      await git("commit", "-qam", "theirs");
-      await git("checkout", "-q", "main");
-      await writeFile(path.join(dir, "README.md"), "a game, mine\n");
-      await git("commit", "-qam", "mine");
-      await git("merge", "-q", "theirs").catch(() => {});
-      await writeFile(path.join(dir, "README.md"), "a game, ours\n");
-      await git("add", "README.md");
-    });
-    assert.equal(underWay.landed.why, "uncommitted-changes", underWay.landed.reason);
-    assert.match(underWay.landed.reason, /README\.md/);
-    assert.doesNotMatch(underWay.landed.reason, /of your own/);
-    assert.ok(await underWay.git("rev-parse", "-q", "--verify", "MERGE_HEAD"), "their merge is still under way");
-    assert.equal(await underWay.git("diff", "--cached", "--name-only"), "README.md", "its resolution still staged");
-    assert.equal(await readFile(path.join(underWay.dir, "README.md"), "utf8"), "a game, ours\n");
-
-    // The same merge resolved to their own side: nothing for git status to show, and still under way.
-    const ours = await landingOver(async (git, dir) => {
-      await git("checkout", "-qb", "theirs");
-      await writeFile(path.join(dir, "README.md"), "a game, theirs\n");
-      await git("commit", "-qam", "theirs");
-      await git("checkout", "-q", "main");
-      await writeFile(path.join(dir, "README.md"), "a game, mine\n");
-      await git("commit", "-qam", "mine");
-      await git("merge", "-q", "theirs").catch(() => {});
-      await git("checkout", "--ours", "README.md");
-      await git("add", "README.md");
-    });
-    assert.equal(await ours.git("status", "--porcelain"), "", "nothing to show");
-    assert.equal(ours.landed.why, "uncommitted-changes", ours.landed.reason);
-    assert.match(ours.landed.reason, /a merge under way/);
-    assert.ok(await ours.git("rev-parse", "-q", "--verify", "MERGE_HEAD"), "their merge is still under way");
   });
 });
 
@@ -3964,22 +3726,34 @@ describe("Stop on a one-facet Autopilot run", () => {
 });
 
 describe("a run's close the log refuses once", () => {
+  // Flipped (one Loop): this drove the web Loop's own close (integrate.ts `appendClose`); every Loop
+  // closes in place now, and its close (open/close.ts) is checked through a Loop's run.
   it("is written on a second try instead of being dropped", async () => {
-    const { appendClose } = await import("../../src/harness-seed/loop/director/integrate.ts");
-    let refusals = 1;
-    const appended: unknown[] = [];
-    const { ctx } = ctxRecorder({
-      handlers: {
-        "events.append": (params) => {
-          if (refusals-- > 0) throw new Error("EBUSY: the log is being rotated");
-          appended.push(...((params.batch as unknown[]) ?? []));
-          return { latestEventId: "e1" };
+    const { loopHost, gameRepo } = await import("../helpers/loop-host.ts");
+    const { copyProject, Project } = await import("../helpers/project-fixtures.ts");
+    const dir = await gameRepo(await copyProject(Project.GodotGame, await tmpDir("close-retry-")));
+    const host = loopHost({
+      dir,
+      facts: [{ id: "godot-project", path: "." }],
+      run: { runId: "run-close-retry" },
+      turns: [
+        async ({ tool }) => {
+          await tool("finish", { summary: "The level is built." });
+          return undefined;
         },
-      },
+      ],
     });
-    const close = { type: "custom", event_type: "run_finished", payload: { runId: "r1" } };
-    await appendClose(ctx as never, "t1", [close] as never);
-    assert.deepEqual(appended, [close], "the run is closed, not left running");
+    let refusals = 1;
+    const closes: unknown[] = [];
+    host.rec.handle("events.append", (params) => {
+      const batch = (params.batch as Array<{ event_type?: string }> | undefined) ?? [];
+      const closing = batch.some((data) => data.event_type === "run_finished");
+      if (closing && refusals-- > 0) throw new Error("EBUSY: the log is being rotated");
+      if (closing) closes.push(...batch.filter((data) => data.event_type === "run_finished"));
+      return { ids: batch.map((_, i) => `e${i}`) };
+    });
+    await host.start();
+    assert.equal(closes.length, 1, "the run is closed, not left running");
   });
 });
 
@@ -4184,8 +3958,8 @@ describe("what the lead is told about its workers", () => {
   // Flipped: the web lead's brief said it ("WORKERS (optional, up to 8 at once)"); the brief is gone, and
   // the count is the tool's own description, as an open Loop's lead reads it.
   it("GGR-11. the brief said '8 of 8 worker windows free' of a pool whose workers could use six: worker_start says how many workers may run at once", async () => {
-    const { directorTools } = await import("../../src/harness-seed/loop/director/tool-specs.ts");
-    const start = directorTools([], 6).find((tool) => tool.name === "worker_start");
+    const { openTools } = await import("../../src/harness-seed/loop/director/open/tool-specs.ts");
+    const start = openTools([], { workers: 6 }).find((tool) => tool.name === "worker_start");
     assert.match(String(start?.description), /Up to 6 at once/);
     assert.doesNotMatch(String(start?.description), /worker windows free/);
   });
@@ -5023,6 +4797,40 @@ describe("the user's ask to finish a running build (director/wrap-up.ts)", () =>
     }
   });
 
+  it("FA7. wrap_up told a lead to stop at once with `finish user_asked`, a parameter the one Loop's finish never had: the one rule names the finish it has, and that finish stops the Loop at once", async () => {
+    const { loopHost, gameRepo } = await import("../helpers/loop-host.ts");
+    const { copyProject, Project } = await import("../helpers/project-fixtures.ts");
+    const { MESSAGE: OPEN_END } = await import("../../src/harness-seed/loop/director/open/finish.ts");
+    const words = "Stop the build now, please.";
+    const answers: string[] = [];
+    const dir = await gameRepo(await copyProject(Project.GodotGame, await tmpDir("stop-at-once-")));
+    const host = loopHost({
+      dir,
+      facts: [{ id: "godot-project", path: "." }],
+      run: { runId: "run-stop-at-once" },
+      turns: [
+        async ({ tool, host }) => {
+          answers.push(String(await tool("wrap_up", { user_asked: words })));
+          // The ask is the app's own run_control record: the run's inbox reads it as finishing.
+          host.inbox.finishing = true;
+          answers.push(String(await tool("finish", { summary: "Stopped as asked." })));
+          return undefined;
+        },
+      ],
+    });
+    host.inbox.said.push(words);
+    await host.start();
+    const tools = (host.leadCalls()[0]?.director as { tools?: Array<Record<string, any>> } | undefined)?.tools ?? [];
+    const finish = tools.find((tool) => tool.name === "finish");
+    const wrapUp = tools.find((tool) => tool.name === "wrap_up");
+    assert.ok(finish && wrapUp, "both are the lead's");
+    assert.ok(!("user_asked" in (finish.parameters?.properties ?? {})), "finish takes no user_asked");
+    assert.doesNotMatch(String(wrapUp.description), /finish user_asked/, "the rule names no parameter finish lacks");
+    assert.equal(host.leadCalls().length, 1, "no wrap-up turn after a finish that stopped it");
+    assert.equal(host.appended("run_finished").at(-1)?.stoppedBecause, OPEN_END.personFinished);
+    assert.match(String(answers[1]), /asked the Loop to finish: it is closed/);
+  });
+
   it("FA6. an open Loop starts no worker once anybody asked it to finish — the app's own Finish too, not only the lead's wrap_up", async () => {
     const { openHandler } = await import("../../src/harness-seed/loop/director/open/tools.ts");
     const { WRAP_UP_WORDS } = await import("../../src/harness-seed/loop/director/wrap-up-prompts.ts");
@@ -5034,14 +4842,15 @@ describe("the user's ask to finish a running build (director/wrap-up.ts)", () =>
       inbox: { finishing: async () => true },
     };
     const answer = await openHandler(loopRun as never)("worker_start", { title: "Lights", task: "Add street lights" });
-    assert.equal(answer, WRAP_UP_WORDS.openNoWorkers);
+    assert.equal(answer, WRAP_UP_WORDS.noWorkers);
   });
 });
 
-describe("a worker asked for after the lead's finish (director/tools.ts)", () => {
+// Flipped (one Loop): this drove the web lead's handler (director/tools.ts); every Loop's lead has the one handler now.
+describe("a worker asked for after the lead's finish (director/open/tools.ts)", () => {
   it("FW1. worker_start after the lead's finish answered 'Started w2' though no session ran: it refuses with the run's own reason and starts nothing", async () => {
-    const { fakeHost, fakeLoopRun } = await import("../helpers/director-run.ts");
-    const { RUN_OVER_NO_WORKERS } = await import("../../src/harness-seed/loop/director/wrap-up-prompts.ts");
+    const { openHandler } = await import("../../src/harness-seed/loop/director/open/tools.ts");
+    const { OPEN_WORDS } = await import("../../src/harness-seed/loop/director/open/prompts.ts");
     const { latchClose } = await import("../../src/harness-seed/loop/director/close-latch.ts");
     const asked: string[] = [];
     const pool = {
@@ -5051,18 +4860,29 @@ describe("a worker asked for after the lead's finish (director/tools.ts)", () =>
         return "Started w2 (copy).";
       },
     };
+    const loopRunOf = () => ({
+      ctx: { cancelled: false },
+      toolCalls: 0,
+      open: { halted: null, pool },
+      state: { finished: false, finish: null as unknown, finishAsk: null },
+      inbox: { finishing: async () => false },
+    });
     const start = { title: "Lights", task: "Add street lights", isolation: "copy" };
-    const open = fakeLoopRun(fakeHost(), { pool });
-    assert.equal(await open.handler("worker_start", start), "Started w2 (copy).", "a running run still starts workers");
+    const open = loopRunOf();
+    assert.equal(
+      await openHandler(open as never)("worker_start", start),
+      "Started w2 (copy).",
+      "a running run still starts workers",
+    );
 
-    const closing = fakeLoopRun(fakeHost(), { pool });
-    closing.state.finish = { summary: "The plaza is lit.", land: true, victory: false, at: 0 };
-    void latchClose(closing.state, () => new Promise(() => {}));
-    assert.equal(await closing.handler("worker_start", start), RUN_OVER_NO_WORKERS, "its close under way");
+    const closing = loopRunOf();
+    closing.state.finish = { summary: "The plaza is lit.", at: 0 };
+    void latchClose(closing.state as never, () => new Promise(() => {}));
+    assert.equal(await openHandler(closing as never)("worker_start", start), OPEN_WORDS.ending, "its close under way");
 
-    const closed = fakeLoopRun(fakeHost(), { pool });
+    const closed = loopRunOf();
     closed.state.finished = true;
-    assert.equal(await closed.handler("worker_start", start), RUN_OVER_NO_WORKERS, "the run closed");
+    assert.equal(await openHandler(closed as never)("worker_start", start), OPEN_WORDS.ending, "the run closed");
     assert.deepEqual(asked, ["worker_start"], "the pool was asked for the running run's worker alone");
   });
 });
@@ -5376,65 +5196,35 @@ describe("the Loop's stop and nudge rules, audited after phase 5", () => {
   });
 });
 
+// Flipped (one Loop): GP1 checked the web Loop's merge and finish records (`integration_health`)
+// naming their picture and worker; no Loop checks a merge now, and a web game's finish keeps no
+// record of its one check. GP2 drove that check through the web lead; it is the health check's own.
 describe("pictures of a Loop's builds (Loop phase 5)", () => {
-  it("GP1. a merge's health check kept a screenshot but its record named neither it nor the worker: Builds drew the worker's card and the latest build blank", async () => {
-    const { appended, fakeHost, fakeLoopRun } = await import("../helpers/director-run.ts");
-    const { RunEvent } = await import("../../src/harness-seed/loop/run-events.ts");
-    const head = "4".repeat(40);
-    const shot = "/runs/run_j/director/merge_w4_4444444444.jpg";
-    const answers = {
-      [HostMethod.PreviewAcquire]: { handle: "pool:1" },
-      [HostMethod.PreviewLoad]: { ok: true },
-      [HostMethod.PreviewReady]: { ready: true },
-      [HostMethod.PreviewObserve]: { ok: true, reasons: [] },
-      [HostMethod.PreviewScreenshot]: { path: shot },
-      [HostMethod.RunExec]: (params: Record<string, unknown>) =>
-        String(params.command ?? "").startsWith("git rev-parse HEAD")
-          ? { code: 0, stdout: `${head}\n` }
-          : { code: 0, stdout: "" },
-    };
-    const host = fakeHost();
-    const loopRun = fakeLoopRun(host, {}, answers);
-    await loopRun.afterMerge({ id: "w4" });
-    await loopRun.finish({ summary: "The rival car is in.", land: false });
-    const checks = appended(host)
-      .filter((event) => event.type === RunEvent.IntegrationHealth)
-      .map((event) => [event.payload.head, event.payload.picture, event.payload.worker]);
-    assert.deepEqual(checks, [[head, shot, "pool.w4"]], "the merge's check names its picture and its worker");
-
-    const finishing = fakeHost();
-    await fakeLoopRun(finishing, {}, answers).finish({ summary: "The rival car is in." });
-    const [atFinish] = appended(finishing).filter((event) => event.type === RunEvent.IntegrationHealth);
-    assert.equal(atFinish?.payload.picture, shot, "the finish's check names its picture");
-    assert.equal(atFinish?.payload.worker, undefined, "and no worker: no merge came before it");
-  });
-
   it("GP2. a build's health check said only in words what it found and loaded the page as Live does: Builds could not tell a blank build from a broken one, and a game could not know which load is the build's picture", async () => {
-    const { appended, fakeHost, fakeLoopRun } = await import("../helpers/director-run.ts");
-    const { RunEvent } = await import("../../src/harness-seed/loop/run-events.ts");
+    const { checkHealth } = await import("../../src/harness-seed/loop/health-check.ts");
     const blank = "the page's frame is blank: one flat colour, nothing drawn";
-    const answers = {
-      [HostMethod.PreviewAcquire]: { handle: "pool:1" },
-      [HostMethod.PreviewLoad]: { ok: true },
-      [HostMethod.PreviewReady]: { ready: true },
-      [HostMethod.PreviewObserve]: { ok: false, reasons: [blank], findings: ["blank"] },
-      [HostMethod.PreviewScreenshot]: { path: "/runs/run_j/director/merge_w5_5555555555.jpg" },
-      [HostMethod.RunExec]: (params: Record<string, unknown>) =>
-        String(params.command ?? "").startsWith("git rev-parse HEAD")
-          ? { code: 0, stdout: `${"5".repeat(40)}\n` }
-          : { code: 0, stdout: "" },
-    };
-    const host = fakeHost();
-    await fakeLoopRun(host, {}, answers).afterMerge({ id: "w5" });
-    const [check] = appended(host).filter((event) => event.type === RunEvent.IntegrationHealth);
-    assert.deepEqual(check?.payload.problems, [blank]);
-    assert.deepEqual(check?.payload.findings, ["blank"], "the host's codes ride beside its words");
-    const loads = host.calls.filter((call) => call.method === HostMethod.PreviewLoad);
+    const rec = ctxRecorder({
+      handlers: {
+        [HostMethod.PreviewAcquire]: () => ({ handle: "pool:1" }),
+        [HostMethod.PreviewLoad]: () => ({ ok: true }),
+        [HostMethod.PreviewReady]: () => ({ ready: true }),
+        [HostMethod.PreviewObserve]: () => ({ ok: false, reasons: [blank], findings: ["blank"] }),
+        [HostMethod.PreviewScreenshot]: () => ({ path: "/runs/run_j/director/finish.jpg" }),
+        [HostMethod.PreviewRelease]: () => true,
+      },
+    });
+    const check = await checkHealth(
+      rec.ctx as never,
+      { project: "plaza", runId: "run_j", label: "director/finish" },
+      { sleep: async () => {} },
+    );
+    assert.deepEqual(check.problems, [blank]);
+    assert.deepEqual(check.findings, ["blank"], "the host's codes ride beside its words");
+    const loads = rec.paramsOf(HostMethod.PreviewLoad);
     assert.equal(loads.length, 1, "one load, no second pass");
-    assert.equal(loads[0]?.params.shot, true, "the load whose screenshot is the build's picture says so");
+    assert.equal(loads[0]?.shot, true, "the load whose screenshot is the build's picture says so");
   });
 });
-
 describe("an engine app the chat finds not ready", () => {
   // Flipped: the agent was also told to get the app ready with its own tools before it used it.
   // Genex's line now says only the fact; what the agent does with it is its own.

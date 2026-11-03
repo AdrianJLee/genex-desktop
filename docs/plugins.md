@@ -1757,8 +1757,8 @@ the set-up with the link. The host — never the plugin, never the agent — ask
   and was started in the chat the delegation names, and the connector belongs to the `game-engine`
   plugin holding the game's current link (`delegation.ts` `#runConsents`). Another game's run, a
   finished run, another connector, a web game, the chat's own session and a delegation naming no
-  chat or another chat of the game still ask; that chat's Plan mode refuses before any of it. That session has
-  no window: it gets only the run tools the harness forwards, never the computer, `look` or capture.
+  chat or another chat of the game still ask; that chat's Plan mode refuses before any of it. A
+  lead gets the run tools the harness forwards beside the window and tools its chat's turns have.
 
 ## Backend SDK
 
@@ -1919,8 +1919,8 @@ while main answers `Unfinished`), so a game opened before its export existed sho
 stopped game or a build the person chose to view. New game
 now makes an empty folder. Either way the game lists no facts and has no kind until its first
 message picks one (`start_web_game`, or `game.start` from the harness, writes the web starter).
-A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by the chat's own
-session, and the plugins whose facts reach the folder shape it with no code in Genex: their hooks
+Every Loop is led in place by the chat's own session, and the plugins whose facts reach the folder
+shape it with no code in Genex: their hooks
 run at its moments, their observers feed its finish check and their worker types are its lead's
 ([the open Loop](harness-runtime.md)).
 `web` is `web-game` at the root. A game New game made lists `awaitingFirstBuild` until an answer
@@ -2074,13 +2074,14 @@ note?, pending?, images?}` (`hookAnswerOf`: reasons up to 300 characters, notes 
 handler never rewrites arguments and never gives instructions, and git stays Genex's: no handler
 takes or restores a snapshot. The moments that write (`run.prepare`, `checkpoint.*`, `restore.*`,
 `crash`) wait while the chat plans, except the person's own Rewind.
-In a Loop on a project that isn't a web game, Genex asks `health` every 15 s while the Loop runs
-(only when a plugin hooks it), fires `crash` on a block, and fires `restore.*` around the lead's
+In every Loop Genex asks `health` every 15 s while the Loop runs (only when a plugin hooks it), fires `crash` on a block, and fires `restore.*` around the lead's
 rewind and alone for its `restart` (offered only when a plugin hooks a restore moment), whatever the
 plugin's engine ([the open Loop's turns](harness-runtime.md)).
 Genex's own gates run beside the plugins' hooks at the same moments (`loop/builtin-hooks.ts`):
-`web.ready` at `run.prepare`, only where a web game is served at the root, refuses a Loop whose page
-lacks the files it needs; a plugin's project is never refused for a missing `index.html`.
+`web.ready` at `run.prepare`, chosen by the folder's facts alone, refuses a Loop whose page lacks the
+files it needs wherever a web game is served at the root, whatever else the folder holds (a Godot
+project over a web game too); a folder with no web game at its root is never refused for a missing
+`index.html`.
 
 Genex runs them in `main/core/plugin-hooks.ts` (`HookService`), each step as a harness step through
 the registry, under the union of the steps' locks held for the whole moment (a checkpoint's before
@@ -3737,8 +3738,8 @@ drives the host on a lite core (who asks, forged threads and rows, withdrawal, m
 (`by: 'timeout'`), a turn's end and a game's Stop settling only the questions in their scope, an
 unknown or already-settled id resolving to `false`, and the turn's abort signal withdrawing a
 question as a stop; and the run's own consent, with a hostile table of sessions that still ask
-with no call. `delegation-unreal-live.test.ts` pins the lead's tools (no window) and its
-unattended seat; `plugin-game-snapshot.test.ts` pins `game.snapshot` and its refusals. `genex-plumbing.test.ts` pins the runtime across every agent path
+with no call. `delegation-in-place-lead.test.ts` pins the lead's tools and its seat;
+`plugin-game-snapshot.test.ts` pins `game.snapshot` and its refusals. `genex-plumbing.test.ts` pins the runtime across every agent path
 (claude-code, codex and the local harness registry): a pending `plugin_consent` card appears, the
 declaration handed to the engine carries `confirmation`, a decline reaches the agent as
 `{consent: 'declined', by: 'user'}`, an approval reaches the backend, `genex__publish-status`

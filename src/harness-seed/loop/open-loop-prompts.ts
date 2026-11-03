@@ -1,14 +1,17 @@
-/** Why a run on a project that isn't a web game did not start, as its close and the chat say it. */
+/** Why a Loop did not start, or a paused one did not go on, as its close and the chat say it. */
 export const OPEN_LOOP_REFUSAL = {
-  /** `found`: what Genex found that makes the project's Loop work in place (`openLoopBecause`). */
-  needsSession: (engine: string, found?: string) =>
-    `A Loop${found ? ` on this project (Genex finds ${found})` : ""} needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); ${engine} doesn't, so nothing was built. The chat still answers here.`,
-  /** A paused web Loop, resumed on a folder that reads as no web game now; `found`: what Genex finds there. */
-  webElsewhere: (found: string) =>
-    `This Loop was paused as a web game's Loop, and the folder doesn't read as a web game now (Genex finds ${found}), so it can't go on now. It stays paused: once the folder reads as a web game again (move those files out of it, say), Resume picks it up.`,
+  needsSession: (engine: string) =>
+    `A Loop needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); ${engine} doesn't, so nothing was built. The chat still answers here.`,
+  /**
+   * A web game's Loop an earlier Genex paused, which built in a copy of the game folder; `ref`: where
+   * git keeps its work, which the chat's session reads in `run_status` (the card drops it, as it
+   * drops every ref).
+   */
+  webLoopBefore: (ref: string) =>
+    `This Loop was paused by an earlier version of Genex, which built web games in a copy of the game folder, so it can't go on in this one. Its work is kept in git (${ref}): ask here to bring it into the game.`,
   /** The list of projects could not be read, so nothing tells which Loop the project needs. */
   gamesUnreadable:
-    "Genex couldn't read the list of projects, so it can't tell which kind of Loop this project needs; nothing was built or changed. Try again in a moment.",
+    "Genex couldn't read the list of projects, so it can't tell how this project's Loop goes; nothing was built or changed. Try again in a moment.",
   /** A paused Loop's journal could not be read, so nothing tells how it goes on. */
   journalUnreadable:
     "Genex couldn't read this Loop's journal, so it can't tell how the Loop goes on; nothing was built. It stays paused: Resume tries again.",

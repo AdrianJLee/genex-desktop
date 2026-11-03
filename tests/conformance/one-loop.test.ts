@@ -1,6 +1,6 @@
 /**
- * The one Loop on a project that isn't a web game: the chat's own session leads in place, workers
- * come from the shared pool, and the Loop ends on its lead's finish, a stop, a pause or a turn that
+ * The one Loop, on a project of any kind (a web game's too): the chat's own session leads in place,
+ * workers come from the shared pool, and the Loop ends on its lead's finish, a stop, a pause or a turn that
  * ends with nothing at work — never by landing a copy, and never on a clock.
  */
 import assert from "node:assert/strict";
@@ -9,10 +9,12 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { OPEN_CLOSE_MS } from "../../src/harness-seed/loop/director/open/contract.ts";
+import { directorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
 import { folderChanged } from "../../src/harness-seed/loop/director/open/close.ts";
 import { MESSAGE as OPEN_END } from "../../src/harness-seed/loop/director/open/finish.ts";
 import { BUSY_RETRY_MS } from "../../src/harness-seed/loop/director/wake.ts";
-import { OPEN_NEWS, OPEN_WORDS, openStartHeld } from "../../src/harness-seed/loop/director/open/prompts.ts";
+import { OPEN_NEWS, OPEN_WORDS } from "../../src/harness-seed/loop/director/open/prompts.ts";
+import { openStartHeld } from "../../src/harness-seed/loop/director/held-words.ts";
 import {
   CALL_MARGIN_MS,
   FINISH_OBSERVE_MS,
@@ -169,7 +171,8 @@ describe("the one Loop's start", () => {
     assert.ok(first, "the lead had a turn");
     assert.equal(first.resume, CHAT_SESSION);
     const director = first.director as Record<string, unknown>;
-    assert.equal(director.inPlace, true);
+    // Flipped: the grant also said `inPlace: true`; its root alone, the game folder, places it now.
+    assert.equal("inPlace" in director, false);
     assert.equal(director.root, host.dir);
     assert.equal(first.cwd, undefined);
     assert.equal(first.readOnly, undefined);
@@ -1281,6 +1284,16 @@ describe("the one Loop's claim whose turn ended", () => {
   );
 });
 
+describe("the lead's tools", () => {
+  it("answers a tool call for a run without a lead with a sentence, never a throw", async () => {
+    // Flipped (Loop phase 5): the sentence names a lead session, no director.
+    assert.match(
+      String(await directorTool({ runId: "run_nobody", name: "run_status", args: {} })),
+      /no lead session for run run_nobody/,
+    );
+  });
+});
+
 describe("the one Loop's status, notes and fresh look", () => {
   // Flipped (no clock): run_status answered the Loop's time (elapsed, minutes left); it names none.
   it("run_status answers its save points, workers, jobs, facts and crashes", TEST_TIMEOUT, async () => {
@@ -1358,7 +1371,8 @@ describe("the one Loop's skills and its record", () => {
       const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
       await host.start();
       const journal = host.artifacts.get(`autopilot_${host.run.runId}`) as Record<string, any>;
-      assert.equal(journal.director.integrationHead, null);
+      // Flipped (one Loop): it kept `integrationHead: null`; no Loop has an integration head now.
+      assert.ok(!("integrationHead" in journal.director));
       assert.equal(typeof journal.director.baseCommit, "string", "its starting point is kept");
     },
   );
@@ -2918,4 +2932,111 @@ describe("a Loop the earlier seed paused, resumed on this one", () => {
       assert.equal(report.executionStatus, "completed");
     },
   );
+});
+
+const WEB = [{ id: "web-game", path: "." }];
+
+/** The lead's tools on any game whose app no plugin restarts: one list, each name once. */
+const ONE_LOOP_TOOLS = OPEN_TOOLS.filter((name) => name !== "restart");
+
+/** The page a web game's health check reads, as the host's windows answer: healthy, or throwing `threw`. */
+function pageAnswers(host: LoopHost, page: { threw: string | null }): void {
+  host.rec.handle("preview.load", () => true);
+  host.rec.handle("preview.ready", () => ({ ready: true }));
+  host.rec.handle("preview.observe", () =>
+    page.threw ? { ok: false, reasons: [page.threw] } : { ok: true, reasons: [] },
+  );
+  host.rec.handle("preview.screenshot", () => ({ path: "/shots/page.png" }));
+}
+
+// Flipped (one Loop): a web game's Loop forked an integration worktree, its lead built there, `show`
+// offered it to Live and `finish` landed it. It works in the game folder, as every project's.
+describe("a web game's Loop", () => {
+  it("works in the game's own folder, as every project's, and a copy worker merges there", TEST_TIMEOUT, async () => {
+    const host = await hostOn(Project.WebFolder, {
+      facts: WEB,
+      turns: [
+        async ({ tool }) => {
+          await tool("worker_start", { title: "Menu", task: "Add a menu", isolation: "copy" });
+          return undefined;
+        },
+        async ({ tool }) => {
+          await tool("worker_mark", { id: "w1", verdict: "used" });
+          await tool("finish", { summary: "The menu is in." });
+          return undefined;
+        },
+      ],
+    });
+    pageAnswers(host, { threw: null });
+    const done = host.dispatch();
+    assert.ok(await host.until(() => host.workers.length === 1), "the worker started");
+    await host.workers[0]?.end({ files: { "menu.js": "export const menu = true;\n" } });
+    await done;
+    const [first] = host.leadCalls();
+    const director = first?.director as Record<string, unknown> | undefined;
+    // Flipped: "led in place" was the grant's `inPlace: true`; its root, the game folder, says it now.
+    assert.equal(director?.root, host.dir, "led in place: its root is the game folder");
+    // A web game: the lead's turn carries its chat's eyes on it, the window its chat's turns have.
+    assert.equal((first?.selfCapture as { root?: string } | undefined)?.root, host.dir);
+    assert.equal(host.appended("autopilot_started")[0]?.profile, "open");
+    const copies = host.rec.paramsOf("snapshot.worktree").map((params) => String(params.name));
+    assert.ok(!copies.includes("integration"), `no integration worktree (${copies.join(", ")})`);
+    const removed = host.rec.paramsOf("snapshot.removeWorktree").map((params) => String(params.path));
+    assert.ok(
+      removed.every((dir) => /-worker-w\d+$/.test(dir)),
+      `only the workers' copies are removed: ${removed.join(", ")}`,
+    );
+    assert.equal(await readFile(path.join(host.dir, "menu.js"), "utf8"), "export const menu = true;\n");
+    assert.equal(host.appended("run_finished").at(-1)?.victory, true);
+  });
+
+  it(
+    "its finish checks the game's page once, in the game folder: a failing page keeps the Loop going",
+    TEST_TIMEOUT,
+    async () => {
+      const page: { threw: string | null } = { threw: "the page threw: boom" };
+      const answers: string[] = [];
+      let closesAfterFirst = -1;
+      const host = await hostOn(Project.WebFolder, {
+        facts: WEB,
+        turns: [
+          async ({ tool, host }) => {
+            answers.push(String(await tool("finish", { summary: "The menu is in." })));
+            closesAfterFirst = host.appended("run_finished").length;
+            page.threw = null;
+            answers.push(String(await tool("finish", { summary: "The menu is in, and it no longer throws." })));
+            return undefined;
+          },
+        ],
+      });
+      pageAnswers(host, page);
+      await host.dispatch();
+      assert.match(String(answers[0]), /boom/, "the failing check's problem comes back to the lead");
+      assert.equal(closesAfterFirst, 0, "the Loop stayed open");
+      const loads = host.rec.paramsOf("preview.load");
+      assert.equal(loads.length, 2, "one check per finish");
+      for (const load of loads) {
+        assert.equal(load.project, host.game.name);
+        assert.equal(load.root, undefined, "the game's own folder, never a copy");
+      }
+      assert.equal(host.appended("run_finished").length, 1);
+      assert.equal(host.appended("run_finished")[0]?.victory, true, "a passing check closes it in place");
+    },
+  );
+
+  it("every game's lead gets one tool list, each name once", TEST_TIMEOUT, async () => {
+    for (const [project, facts] of [
+      [Project.WebFolder, WEB],
+      [Project.GodotGame, GODOT],
+    ] as const) {
+      const host = await hostOn(project, { facts, turns: [finishes] });
+      pageAnswers(host, { threw: null });
+      await host.dispatch();
+      const names = toolNamesOf(host);
+      assert.equal(new Set(names).size, names.length, `${project}: no name twice (${names.join(", ")})`);
+      assert.deepEqual(names, ONE_LOOP_TOOLS, project);
+      if (project === Project.GodotGame)
+        assert.deepEqual(host.rec.paramsOf("preview.load"), [], "a project that is no web game loads no page");
+    }
+  });
 });

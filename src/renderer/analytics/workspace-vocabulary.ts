@@ -203,8 +203,6 @@ export const StageSwitchVia = {
   Tab: "tab",
   /** A run started and Builds opened by itself. */
   AutoRunStarted: "auto_run_started",
-  /** The chat put a build on screen (`stage.show`). */
-  ChatStageShow: "chat_stage_show",
   /** A link or button in the chat (Show Live, Assets, Builds). */
   ChatLink: "chat_link",
   /** A build opened from Builds. */

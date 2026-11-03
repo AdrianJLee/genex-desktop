@@ -35,7 +35,7 @@ import type { LoopRun } from "../loop-run.ts";
 import { closeUnderWay, finishUnderWay } from "../close-latch.ts";
 import { NoteKind } from "../wake-schedule.ts";
 import { HEALTH_POLL_MS, MAX_REOPENS, OPEN_CLOSE_MS, type OpenLoop, type OpenSavePoint } from "./contract.ts";
-import { appLostWords, backHeldWords, crashHeldWords } from "./hold-words.ts";
+import { appLostWords, backHeldWords, crashHeldWords } from "../held-words.ts";
 import { OPEN_NEWS } from "./prompts.ts";
 import { stopWritersInPlace } from "./writers.ts";
 
@@ -57,7 +57,7 @@ const over = (loopRun: LoopRun): boolean =>
   closeUnderWay(loopRun.state) ||
   finishUnderWay(loopRun.state) ||
   loopRun.ctx.cancelled === true ||
-  Boolean(loopRun.open?.betweenTurns);
+  Boolean(loopRun.open.betweenTurns);
 
 /** How long the Loop's teardown waits for a recovery under way to stop, before its run ends anyway. */
 const RECOVERY_SETTLE_MS = OPEN_CLOSE_MS / 2;
@@ -222,8 +222,8 @@ export function recoverApp(loopRun: LoopRun, open: OpenLoop, reason: string): Pr
  */
 export async function settleRecovery(loopRun: LoopRun): Promise<void> {
   const open = loopRun.open;
-  const under = [open?.healthLook, open?.recovering].filter((one): one is Promise<void> => Boolean(one));
-  if (!open || !under.length) return;
+  const under = [open.healthLook, open.recovering].filter((one): one is Promise<void> => Boolean(one));
+  if (!under.length) return;
   await Promise.race([Promise.all(under), open.clock.sleep(RECOVERY_SETTLE_MS)]);
 }
 

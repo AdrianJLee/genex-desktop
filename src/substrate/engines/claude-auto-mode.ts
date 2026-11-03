@@ -34,7 +34,7 @@ export interface AutoModeSeat {
   /**
    * True for the game chat's own session in its game folder, which the studio checkpoints before
    * each message it answers (`main/chat-checkpoints.ts`) and the chat's Rewind restores. False for
-   * a build's lead, whose edits are not checkpointed that way.
+   * a build's lead in the same folder, which Genex checkpoints at its save points instead.
    */
   gameFolder: boolean;
   /** A worker of the chat's lead: boxed, prompted by the lead, its work merged by the lead. */
@@ -56,7 +56,7 @@ function sessionFacts(seat: AutoModeSeat, platform: NodeJS.Platform = process.pl
     ];
   return [
     `**AI Game Studio**: A game chat on the person's own ${computer}, no sandbox. The person chose Auto and expects ordinary game-development work done without asking; while a build runs they may be away, and this session's prompts come from the studio's build loop, not from them.`,
-    "**Build session**: This session leads or answers for a build of the person's game. A lead edits and commits in the run's integration worktree, the build's workers change the game in worktrees of their own, and the studio lands the work in the game folder; its own edits there are not checkpointed.",
+    `**Build session**: This session leads a build of the person's game in its game folder, ${seat.cwd}, the working directory and trusted repo, and edits and commits there. Genex checkpoints it under refs/studio/ at each save point (not .env*, nested repos or files over 50 MB); rewind restores one. Workers change the game in copies the lead merges.`,
   ];
 }
 
@@ -73,7 +73,9 @@ export function autoModeRules(
     ],
     allow: [
       BUILT_IN,
-      ...(seat.gameFolder
+      // Every session in the game folder but a worker's: the chat's own, checkpointed before each
+      // message, and a build's lead, checkpointed at its save points.
+      ...(seat.gameFolder || !seat.worker
         ? [
             "Game Folder Work: Deleting, overwriting, moving or regenerating checkpointed files in the game folder, and its build output, caches or node_modules, is recoverable: not Irreversible Local Destruction. Not: other ignored files, git clean -x, .git, refs/studio, .git.studio-backup, .studio, .env*, nested repos, files over 50 MB, paths or symlinks leading outside.",
           ]

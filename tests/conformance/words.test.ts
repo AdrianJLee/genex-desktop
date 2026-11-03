@@ -8,6 +8,7 @@
  * translation of its own. That is what stops the vocabulary drifting back into the panels.
  */
 import assert from "node:assert/strict";
+import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -390,6 +391,21 @@ describe("how a run reads when it is over", () => {
       assert.doesNotMatch(words.because, /\.\.$/);
     }
     assert.match(loopRunWords({ rounds: 0, landed: null, stoppedBecause: "Is it done?" }).because, /done\?$/);
+  });
+
+  it("a paused Loop refused on Resume reads as whole sentences, its ref left to the chat's session", () => {
+    const ref = "refs/studio/runs/run_abc123/integration";
+    const cases: Array<[string, RegExp]> = [
+      [OPEN_LOOP_REFUSAL.webLoopBefore(ref), /Its work is kept in git: ask here to bring it into the game\. Every/],
+      [OPEN_LOOP_REFUSAL.journalUnreadable, /Resume tries again\. Every/],
+    ];
+    for (const [stoppedBecause, reads] of cases) {
+      const { because } = loopRunWords({ rounds: 3, landed: false, paused: true, stoppedBecause });
+      assert.match(because, reads, because);
+      assert.doesNotMatch(because, /\.\.|\s[:.]|refs\/|run_abc123/, because);
+    }
+    // The words the run's status hands the chat's session still name where the work is.
+    assert.ok(OPEN_LOOP_REFUSAL.webLoopBefore(ref).includes(ref));
   });
 
   it("promises a playable build only when there is one", () => {
@@ -1051,7 +1067,7 @@ describe("tools", () => {
 
   it("names the lead's and the chat's run tools, never 'used …'", () => {
     const names = [
-      ...Object.values(DirectorTool).filter((name) => name !== DirectorTool.ResolveRoot),
+      ...Object.values(DirectorTool),
       // Every lead's and the chat's worker tools, the same six everywhere.
       ...Object.values(WorkerTool),
       // The background-work tools and the look-only app tool the chat, leads and workers share.

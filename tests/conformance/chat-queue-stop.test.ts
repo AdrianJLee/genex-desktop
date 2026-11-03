@@ -75,14 +75,14 @@ it("replays a durable unanswered message once on boot without opening intake", a
   assert.equal(customEvents(es, "run_started").length, 1);
 });
 
-it("offers the user a way to see and land a build after the run, in flat string tools both bridges carry", () => {
-  const tool = (name: string) => runControlTools.find((t) => t.name === name);
-  for (const name of [RunControl.ShowBuild, RunControl.LandBuild]) {
-    assert.ok(tool(name), `${name} exists`);
-    assert.equal(tool(name)?.parameters.properties.build?.type, "string");
-    assert.match(String(tool(name)?.description), /integration/);
-  }
-  assert.match(String(tool(RunControl.ShowBuild)?.description), /finished or paused/);
+// Flipped (one Loop): the chat was also offered `show_build` and `land_build` after a run, in flat
+// string tools both bridges carry; every Loop works in the game folder, so there is no build to show
+// or land, and the run's status is its one control.
+it("offers the chat the run's status after the run, and no build to show or land", () => {
+  assert.deepEqual(
+    runControlTools.map((t) => t.name),
+    [RunControl.RunStatus],
+  );
 });
 
 it("run_status includes the current Optimization stage without mixing runs", () => {

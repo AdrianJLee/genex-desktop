@@ -1,10 +1,9 @@
 /**
- * The open lead's tools as its engine sees them: the director's `note` and `wrap_up` (read from its
- * list by name, so their words stay one), a `run_status` of its own under the director's name (what `openStatus`
- * answers, none of the web method's branch or boards), Genex's six worker tools with the kinds of worker the
- * project's plugins declare, its save points (`save_point`, `rewind`, and `restart` where a plugin
- * restarts the project's app), a `pause` for what only the person can do, and a `finish` of its own:
- * a claim a reviewer checks, with no landing.
+ * The one tool list of every Loop's lead, as its engine sees it: `note` and `wrap_up`, `run_status`
+ * (what `openStatus` answers), Genex's six worker tools with the kinds of worker the project's plugins
+ * declare, its save points (`save_point`, `rewind`, and `restart` where a plugin restarts the
+ * project's app), a second opinion (`judge`), a `pause` for what only the person can do, and `finish`:
+ * a claim, on the lead's word or after a review it asks for.
  */
 import type { LiveToolSpec, WorkerType } from "../../../types/host-api.d.ts";
 import { secondOpinionSpec } from "../../second-opinion.ts";
@@ -15,7 +14,7 @@ import { MAX_SAVE_POINT_LABEL, OpenTool } from "./contract.ts";
 /** One string property of a tool's schema. */
 const text = (description: string) => ({ type: "string", description });
 
-/** The open lead's `finish`: a claim on its word, or after a review it asks for; it closes the Loop in place. */
+/** The lead's `finish`: a claim on its word, or after a review it asks for; it closes the Loop in place. */
 const OPEN_FINISH: LiveToolSpec = {
   name: DirectorTool.Finish,
   description:
@@ -91,7 +90,7 @@ const PAUSE: LiveToolSpec = {
   },
 };
 
-/** The open lead's `run_status`: what `openStatus` answers, under the director's wire name. */
+/** The lead's `run_status`: what `openStatus` answers. */
 const OPEN_STATUS: LiveToolSpec = {
   name: DirectorTool.RunStatus,
   description:
@@ -99,7 +98,7 @@ const OPEN_STATUS: LiveToolSpec = {
   parameters: { type: "object", properties: {} },
 };
 
-/** What the project makes of the open lead's save points: whether a plugin saves its app first, restarts it, and rebuilds its C++. */
+/** What the project makes of the lead's save points: whether a plugin saves its app first, restarts it, and rebuilds its C++. */
 interface OpenProject {
   restart?: boolean;
   workers?: number;
@@ -116,7 +115,7 @@ const saying = (tool: LiveToolSpec, more: string): LiveToolSpec => ({
 });
 
 /**
- * The open lead's tools, with `worker_start` naming the kinds of worker on offer and how many may run
+ * The lead's tools on every project, with `worker_start` naming the kinds of worker on offer and how many may run
  * at once (`workers`, when the pool knows it), `save_point` saying it keeps only the files where no
  * plugin saves the app, `restart` only when `restart` (saying it rebuilds C++ where it does), and the
  * second opinion (`judge`) on pictures the lead names.

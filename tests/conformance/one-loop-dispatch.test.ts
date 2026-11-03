@@ -1,9 +1,9 @@
 /**
- * Which Loop a run gets, through the run's start as the chat and Resume reach it: a project that
- * isn't a web game runs the one Loop on an engine that keeps a session and is told, before anything
- * is promised, that it needs one otherwise; classic and the gauntlet stay a web game's; a paused
- * Loop on an Unreal game goes on in the one Loop; and the Loop's start describes the one Loop
- * truthfully.
+ * Which Loop a run gets, through the run's start as the chat and Resume reach it: a project of any
+ * kind runs the one Loop in its folder on an engine that keeps a session and is told, before
+ * anything is promised, that it needs one otherwise; a paused Loop that worked in place goes on in
+ * it; a paused web Loop from before is refused, naming where its work is; a paused classic or Unreal
+ * runner build is closed as it stood; and the Loop's start describes the one Loop truthfully.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -14,7 +14,7 @@ import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts
 import { startAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
-import { runControlsFor } from "../../src/shared/chat-run.ts";
+import { runControlTools } from "../../src/shared/chat-run.ts";
 import * as runDispatchParts from "../../src/harness-seed/loop/run-dispatch.ts";
 import { chooseRunner, handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { RunnerKind } from "../../src/harness-seed/loop/studio-state.ts";
@@ -35,11 +35,13 @@ const DIRECT = { id: "ollama", label: "Ollama", kind: "direct" };
 /** An engine Genex drives itself that keeps sessions (Bonsai's shape), as `engine.describe` lists it. */
 const DIRECT_WITH_SESSIONS = { id: "bonsai", label: "Bonsai", kind: "direct", supportsSessions: true };
 
-/** What Genex finds in a Godot project's folder that makes its Loop work in place, as the refusals name it. */
-const GODOT_FOUND = "godot-project at the folder's root";
-/** The words a refused Loop on a direct engine closes with (flipped in phase 5: any Loop needs a session, and the chat goes on). */
+/**
+ * The words a refused Loop on a direct engine closes with (flipped in phase 5: any Loop needs a
+ * session, and the chat goes on; flipped again with the one Loop: they named what Genex found that
+ * made the project's Loop work in place, and every Loop does).
+ */
 const NEEDS_SESSION =
-  "A Loop on this project (Genex finds godot-project at the folder's root) needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); Ollama doesn't, so nothing was built. The chat still answers here.";
+  "A Loop needs an engine that keeps a session of its own (Claude Code, Codex, OpenCode, Grok Build or a local model's session); Ollama doesn't, so nothing was built. The chat still answers here.";
 
 let runs = 0;
 
@@ -59,9 +61,12 @@ const finishes: LoopTurn = async ({ tool }) => {
   return undefined;
 };
 
-/** The lead delegations that worked in place, as the one Loop's do. */
+/**
+ * The lead delegations that worked in place, as the one Loop's do. Flipped: read from the grant's
+ * `inPlace` flag, which is gone; a lead's grant is in place by its root, the game folder itself.
+ */
 const inPlaceLeads = (host: LoopHost) =>
-  host.leadCalls().filter((call) => (call.director as { inPlace?: unknown } | undefined)?.inPlace === true);
+  host.leadCalls().filter((call) => (call.director as { root?: unknown } | undefined)?.root === host.game.dir);
 
 describe("which Loop a run gets", () => {
   it("a Loop on a project that isn't a web game runs the one Loop", TEST_TIMEOUT, async () => {
@@ -70,6 +75,7 @@ describe("which Loop a run gets", () => {
     const [first] = inPlaceLeads(host);
     assert.ok(first, "the lead worked in place");
     assert.equal(first.resume, CHAT_SESSION, "the chat's own session leads");
+    assert.equal(first.selfCapture, undefined, "a Godot folder Genex does not see: no window, as its chat's turns");
     for (const method of ["game.scaffold", "preview.load"]) assert.ok(!host.trail().includes(method), `no ${method}`);
     assert.equal(host.appended("run_finished").length, 1);
   });
@@ -110,7 +116,7 @@ describe("which Loop a run gets", () => {
     async () => {
       const host = await hostOn(Project.GodotGame, { facts: GODOT, run: { engine: "bonsai" }, turns: [finishes] });
       host.rec.handle("engine.describe", () => [DIRECT_WITH_SESSIONS]);
-      const words = OPEN_LOOP_REFUSAL.needsSession("Bonsai", GODOT_FOUND);
+      const words = OPEN_LOOP_REFUSAL.needsSession("Bonsai");
       await host.dispatch();
       const [first] = inPlaceLeads(host);
       assert.ok(first, "the lead worked in place");
@@ -147,10 +153,25 @@ describe("kept older parts, finished Loops and the chat's words", () => {
     const host = { call: async () => structuredClone(journal) };
     const run = { runId: "run-done", state: "finished", project: "lantern", goal: "a level", engine: "claude-code" };
     const inPlace = await afterLeadLoopRun(host as never, { threadId: "t1" }, run);
-    assert.equal(inPlace?.inPlace, true, "worked in place: no build to show or land");
+    assert.equal(inPlace?.inPlace, true, "worked in place");
     const web = { call: async () => ({ director: { lead: { chatSession: true } } }) };
     const webRun = await afterLeadLoopRun(web as never, { threadId: "t1" }, run);
     assert.equal(webRun?.inPlace, undefined);
+  });
+
+  it("after a paused web Loop from before the chat answers as after a finished one: no resume_run", async () => {
+    const paused = { runId: "run-paused", state: "paused", project: "lantern", goal: "a level", engine: "claude-code" };
+    const open = { call: async () => ({ director: { lead: { chatSession: true }, open: { version: 1 } } }) };
+    const web = { call: async () => ({ director: { lead: { chatSession: true } } }) };
+    const offered = async (host: unknown) => {
+      const after = await afterLeadLoopRun(host as never, { threadId: "t1" }, paused);
+      assert.ok(after, "the chat's own session answers after it");
+      const grant = afterLoopRunGrant(after);
+      return { controls: grant.runControls.runId, tools: (grant.interviewTools ?? []).map((tool) => tool.name) };
+    };
+    assert.deepEqual(await offered(open), { controls: "run-paused", tools: ["resume_run"] });
+    // Run dispatch refuses its resume (`OPEN_LOOP_REFUSAL.webLoopBefore`): no resume is offered for it.
+    assert.deepEqual(await offered(web), { controls: "run-paused", tools: [] });
   });
 });
 
@@ -183,40 +204,55 @@ describe("the chat's launch tool", () => {
 });
 
 describe("a paused Loop's journal, read at its start", () => {
+  // Flipped (one Loop): a paused web Loop resumed in its integration worktree on a web folder, and on
+  // a folder that read otherwise it stayed paused with `webElsewhere`'s words. No web Loop works in a
+  // copy now: it is refused on any folder, and its card names the ref that holds its work.
   it(
-    "a paused web Loop resumed while its folder reads otherwise stays paused, its journal and report untouched",
+    "a paused web Loop from before is refused on any folder, stays paused, and names the ref its work is on",
     TEST_TIMEOUT,
     async () => {
-      const host = await hostOn(Project.GodotGame, { facts: GODOT, turns: [finishes] });
-      const journal = {
-        runId: host.run.runId,
-        run: host.run,
-        director: { baseCommit: "abc", integrationHead: "def", workers: {}, notes: [] },
-      };
-      host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
-      await host.dispatch({ resume: true });
-      const [closed] = host.appended("run_finished");
-      // A refusal keeps the run's record as it came: no credit cap of a Loop it never ran.
-      assert.deepEqual(
-        {
-          words: closed?.stoppedBecause,
-          status: closed?.executionStatus,
-          paused: host.appended("autopilot_paused").length,
-          journalKept: JSON.stringify(host.artifacts.get(`autopilot_${host.run.runId}`)) === JSON.stringify(journal),
-          report: host.rec.paramsOf("run.artifact").some((params) => params.name === "report.json"),
-          leads: host.leadCalls().length,
-          cap: (host.appended("run_started")[0]?.budgets as Record<string, unknown> | undefined)?.creditCap,
-        },
-        {
-          words: OPEN_LOOP_REFUSAL.webElsewhere(GODOT_FOUND),
-          status: "paused",
-          paused: 1,
-          journalKept: true,
-          report: false,
-          leads: 0,
-          cap: undefined,
-        },
-      );
+      for (const [project, facts] of [
+        [Project.WebFolder, WEB],
+        [Project.GodotGame, GODOT],
+      ] as const) {
+        const host = await hostOn(project, { facts, turns: [finishes] });
+        const journal = {
+          runId: host.run.runId,
+          run: host.run,
+          director: { baseCommit: "abc", integrationHead: "def", workers: {}, notes: [] },
+        };
+        host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
+        const head = await host.git("rev-parse", "HEAD");
+        await host.dispatch({ resume: true });
+        const [closed] = host.appended("run_finished");
+        // A refusal keeps the run's record as it came: no credit cap of a Loop it never ran.
+        assert.deepEqual(
+          {
+            status: closed?.executionStatus,
+            paused: host.appended("autopilot_paused").length,
+            journalKept: JSON.stringify(host.artifacts.get(`autopilot_${host.run.runId}`)) === JSON.stringify(journal),
+            report: host.rec.paramsOf("run.artifact").some((params) => params.name === "report.json"),
+            leads: host.leadCalls().length,
+            cap: (host.appended("run_started")[0]?.budgets as Record<string, unknown> | undefined)?.creditCap,
+            head: await host.git("rev-parse", "HEAD"),
+            status_: await host.git("status", "--porcelain"),
+          },
+          {
+            status: "paused",
+            paused: 1,
+            journalKept: true,
+            report: false,
+            leads: 0,
+            cap: undefined,
+            head,
+            status_: "",
+          },
+          project,
+        );
+        const words = String(closed?.stoppedBecause);
+        assert.ok(words.includes(`refs/studio/runs/${host.run.runId}/integration`), `${project}: ${words}`);
+        assert.doesNotMatch(words, /reads as a web game|Resume picks it up/, `${project}: never webElsewhere's words`);
+      }
     },
   );
 
@@ -233,7 +269,13 @@ describe("a paused Loop's journal, read at its start", () => {
       });
       await web.dispatch({ resume: true });
       const [lead] = web.leadCalls();
-      assert.equal((lead?.director as { inPlace?: boolean } | undefined)?.inPlace, true, "led in place");
+      assert.equal((lead?.director as { root?: string } | undefined)?.root, web.game.dir, "led in place");
+      // A folder that reads as a web game now: the lead's turn carries its chat's eyes on it.
+      assert.deepEqual(
+        lead?.selfCapture,
+        { project: web.game.name, root: web.game.dir, label: web.game.name },
+        "the window its chat's turns have",
+      );
       assert.equal(web.appended("run_finished").at(-1)?.victory, true);
     },
   );
@@ -267,7 +309,9 @@ describe("a paused Loop's journal, read at its start", () => {
     const closed = host.appended("run_finished").at(-1);
     assert.equal(closed?.stoppedBecause, NEEDS_SESSION);
     assert.equal(closed?.executionStatus, "paused");
-    assert.equal(closed?.integrationHead, "head-1", "the paused build is still offered");
+    // Flipped (one Loop): the earlier close's `integrationHead` was kept, the paused build still
+    // offered to show or land; no run leaves a build of its own now, and none is kept.
+    assert.equal(closed?.integrationHead, undefined);
     assert.equal(closed?.baseCommit, "base-1");
     assert.deepEqual(closed?.workers, earlier.workers);
     assert.deepEqual(closed?.notes, earlier.notes);
@@ -328,10 +372,12 @@ describe("after a Loop in place", () => {
     };
     const after = await afterLeadLoopRun(host.rec.ctx as never, { threadId: host.threadId }, run);
     assert.equal(after?.inPlace, true);
+    // Flipped: the grant carried `inPlace` and the host chose the status alone by it; every Loop's
+    // chat is handed the one control now, `run_status`.
     const grant = afterLoopRunGrant(after as never);
-    assert.equal(grant.runControls.inPlace, true);
+    assert.deepEqual(grant.runControls, { runId: host.run.runId });
     assert.deepEqual(
-      runControlsFor(grant.runControls).map((tool) => tool.name),
+      runControlTools.map((tool) => tool.name),
       ["run_status"],
     );
   });
@@ -366,30 +412,31 @@ describe("after a Loop in place", () => {
   );
 });
 
-describe("a web Loop on a folder that reads otherwise now", () => {
+describe("a build an earlier Genex paused, of a kind no Loop is now", () => {
+  // Flipped (one Loop): on a folder that read as no web game, a classic run and a run the Unreal
+  // runner paused stayed paused with `webElsewhere`'s words ("paused as a web game's Loop"), which
+  // named neither. Both are a build from before now, on any folder: closed as they stood.
   it(
-    "a paused classic Autopilot run is a web Loop's: on a folder that reads otherwise it stays paused, its cap unrecorded",
+    "a paused classic run or one the Unreal runner paused is closed as it stood, in words for a build from before",
     TEST_TIMEOUT,
     async () => {
-      const host = await hostOn(Project.GodotGame, { facts: GODOT, run: { engine: "ollama" } });
-      host.rec.handle("engine.describe", () => [DIRECT]);
-      const journal = { runId: host.run.runId, run: host.run, plan: { facets: [] }, phase: "facets", facets: {} };
-      host.artifacts.set(`autopilot_${host.run.runId}`, structuredClone(journal));
-      await host.dispatch({ resume: true });
-      const [closed] = host.appended("run_finished");
-      assert.equal(closed?.stoppedBecause, OPEN_LOOP_REFUSAL.webElsewhere(GODOT_FOUND));
-      assert.equal(closed?.executionStatus, "paused");
-
-      const classic = await hostOn(Project.GodotGame, { facts: GODOT, run: { classic: true } });
-      classic.artifacts.set(`autopilot_${classic.run.runId}`, {
-        ...journal,
-        runId: classic.run.runId,
-        run: classic.run,
-      });
-      await classic.dispatch({ resume: true });
-      assert.equal(classic.appended("run_finished")[0]?.stoppedBecause, OPEN_LOOP_REFUSAL.webElsewhere(GODOT_FOUND));
-      const budgets = classic.appended("run_started")[0]?.budgets as Record<string, unknown> | undefined;
-      assert.equal(budgets?.creditCap, undefined, "no credit cap of the open Loop's on a web run's refusal");
+      const classic = (host: LoopHost) => ({ plan: { facets: [] }, phase: "facets", facets: {}, run: host.run });
+      const runner = (host: LoopHost) => ({ kind: "unreal-lead", phase: "paused", run: host.run });
+      for (const [project, facts, journalOf] of [
+        [Project.GodotGame, GODOT, classic],
+        [Project.WebFolder, WEB, classic],
+        [Project.UnrealGame, UNREAL, runner],
+      ] as const) {
+        const host = await hostOn(project, { facts, turns: [finishes] });
+        host.artifacts.set(`autopilot_${host.run.runId}`, { runId: host.run.runId, ...journalOf(host) });
+        await host.dispatch({ resume: true });
+        const [closed] = host.appended("run_finished");
+        assert.match(String(closed?.stoppedBecause), /paused by an earlier version of Genex/, project);
+        assert.equal(closed?.executionStatus, "completed", `${project}: closed as it stood`);
+        assert.equal(host.leadCalls().length, 0, `${project}: no turn`);
+        const budgets = host.appended("run_started")[0]?.budgets as Record<string, unknown> | undefined;
+        assert.equal(budgets?.creditCap, undefined, `${project}: no credit cap of a Loop it never ran`);
+      }
     },
   );
 });
@@ -687,22 +734,6 @@ describe("a run's route when its journal, its folder or the game list can't be r
       assert.equal(closed?.stoppedBecause, OPEN_LOOP_REFUSAL.gamesUnreadable);
       for (const method of ["game.scaffold", "game.start", "preview.load", "engine.delegate"])
         assert.equal(host.rec.paramsOf(method).length, 0, `no ${method}`);
-    },
-  );
-
-  it(
-    "a web game holding an engine's sample project is told which files make its Loop work in place",
-    TEST_TIMEOUT,
-    async () => {
-      const facts = [
-        { id: "web-game", path: "." },
-        { id: "godot-project", path: "assets/pack" },
-      ];
-      const host = await hostOn(Project.GodotGame, { facts, run: { engine: "ollama" } });
-      host.rec.handle("engine.describe", () => [DIRECT]);
-      await host.dispatch();
-      const [closed] = host.appended("run_finished");
-      assert.equal(closed?.stoppedBecause, OPEN_LOOP_REFUSAL.needsSession("Ollama", "godot-project in assets/pack"));
     },
   );
 });

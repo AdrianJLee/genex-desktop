@@ -34,8 +34,8 @@ import { recordLoopRun, restoredWake, resumedFromJournal, wakeRecord } from "./j
 import { folderBusy } from "./lead-session.ts";
 import { LEAD_FRESH_START, SESSION_LOST_WHY } from "./lead-session-prompts.ts";
 import { noteTurnEnds, noteTurnOver } from "./turn-ends.ts";
-import { activeWork, hasWorkAtHand, leadsOpenLoop } from "./open/active-work.ts";
-import { OPEN_WALL_CLOCK } from "./open/contract.ts";
+import { activeWork, hasWorkAtHand } from "./open/active-work.ts";
+import { OPEN_WALL_CLOCK, type OpenClock } from "./open/contract.ts";
 import { healthWatch } from "./open/health.ts";
 import {
   askOf,
@@ -77,19 +77,6 @@ export interface DirectorTalk {
   keep: (result: Partial<DelegateResult> | null | undefined) => Promise<void>;
 }
 
-/** The loop's clock: the real one, or one a test moves. */
-export interface WakeClock {
-  now: () => number;
-  sleep: (ms: number) => Promise<void>;
-}
-/** The wall clock. */
-export const SYSTEM_CLOCK: WakeClock = { now: () => Date.now(), sleep: (ms) => OPEN_WALL_CLOCK.sleep(ms) };
-
-/** Why a run the waking lead left open ended, when the wrap-up had a cause of its own (the report's sentence). */
-export const WAKE_ENDING = {
-  [WrapCause.Finish]: "the user asked to finish and the lead did not call finish in its wrap-up",
-} as const satisfies Partial<Record<WrapCause, string>>;
-
 /** What the loop keeps between the lead's turns. */
 export interface WakeState {
   turns: number;
@@ -121,7 +108,7 @@ export interface WakeOutcome {
 interface TurnKit {
   talk: DirectorTalk;
   start: readonly string[];
-  clock: WakeClock;
+  clock: OpenClock;
   line: LeadLine | null;
 }
 
@@ -182,11 +169,11 @@ async function watchJobs(loopRun: LoopRun, wake: WakeState, now: number): Promis
   for (const end of read.ends) loopRun.note(jobEndLine(end), NoteKind.JobEnded);
 }
 
-/** What the loop reads of the run each round, resting or working: the run's job ends, the person's notes, and an open Loop's app. */
+/** What the loop reads of the run each round, resting or working: the run's job ends, the person's notes, and the project's app. */
 async function tick(loopRun: LoopRun, wake: WakeState, line: LeadLine | null, now: number): Promise<void> {
   await watchJobs(loopRun, wake, now);
   await handNotes(loopRun, line);
-  if (leadsOpenLoop(loopRun)) healthWatch(loopRun);
+  healthWatch(loopRun);
 }
 
 /** When the lead is woken next, read from the run (wake-schedule.ts `nextWake`). */
@@ -321,7 +308,7 @@ function lostSessionWhy(talk: DirectorTalk, err: any): string | null {
  * is told, in Genex's words, that the earlier session was lost and how the Loop began.
  */
 function openFresh(loopRun: LoopRun, kit: TurnKit, ask: TurnAsk, why: string): Promise<Partial<DelegateResult>> {
-  // An open Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session.
+  // A Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session.
   const refused = openSessionRefused(loopRun);
   if (refused) return Promise.resolve(refused);
   const lost = [LEAD_FRESH_START(why), ...kit.start].join("\n");
@@ -362,7 +349,7 @@ async function freshSession(
  * may begin.
  */
 async function waitsForFolder(loopRun: LoopRun, kit: TurnKit): Promise<boolean> {
-  const stopped = () => loopRun.ctx.cancelled === true || Boolean(loopRun.open?.halted);
+  const stopped = () => loopRun.ctx.cancelled === true || Boolean(loopRun.open.halted);
   if (stopped()) return false;
   await kit.clock.sleep(BUSY_RETRY_MS);
   // A Stop or a pause during the wait: the run's Stop freed the folder, and the next ask would be seated.
@@ -374,7 +361,7 @@ async function waitsForFolder(loopRun: LoopRun, kit: TurnKit): Promise<boolean> 
 /** The lead's session asked this turn's message; a turn that came back failed on an outage is thrown as one. */
 async function askSession(loopRun: LoopRun, kit: TurnKit, ask: TurnAsk): Promise<Partial<DelegateResult>> {
   const { talk } = kit;
-  // An open Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session: a retry included.
+  // A Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session: a retry included.
   const refused = openSessionRefused(loopRun);
   if (refused) return refused;
   const result = await talk.session(ask.prompt, talk.sessionId, ask.said);
@@ -383,14 +370,11 @@ async function askSession(loopRun: LoopRun, kit: TurnKit, ask: TurnAsk): Promise
 }
 
 /**
- * The run's ctx as the outage ladder reads it: an open Loop's wait also ends once Genex pauses the
- * Loop (`open.halted`, its app couldn't be brought back), never after the rest of that wait. A web
- * Loop's ladder reads the run's ctx as it always did.
+ * The run's ctx as the outage ladder reads it: its wait also ends once Genex pauses the Loop
+ * (`open.halted`, its app couldn't be brought back), never after the rest of that wait.
  */
 function patienceCtx(loopRun: LoopRun): HarnessCtx {
-  const open = loopRun.open;
-  if (!open || !leadsOpenLoop(loopRun)) return loopRun.ctx;
-  const ctx = loopRun.ctx;
+  const { ctx, open } = loopRun;
   return Object.create(ctx, {
     cancelled: { get: () => ctx.cancelled === true || Boolean(open.halted) },
   }) as HarnessCtx;
@@ -457,7 +441,7 @@ async function sessionOrFresh(
   return freshSession(loopRun, wake, kit, ask, SESSION_LOST_WHY.contextOverflowed).catch(failed);
 }
 
-/** A turn Genex ended because the open Loop paused: it never opened a session. */
+/** A turn Genex ended because the Loop paused: it never opened a session. */
 const haltedTurn = (why: string): Partial<DelegateResult> => ({
   ok: false,
   stopReason: StopReason.Stopped,
@@ -468,13 +452,13 @@ const haltedTurn = (why: string): Partial<DelegateResult> => ({
 const STOPPED_BY_THE_USER = "stopped by the user";
 
 /**
- * The turn an open Loop's lead gets in place of a new session: Genex paused the Loop (its app couldn't
- * be brought back), or the person pressed Stop (a session in the folder has Edit and Bash and would work
- * on under it); null while it may open one. A web Loop's sessions are left as they always were.
+ * The turn the lead gets in place of a new session: Genex paused the Loop (its app couldn't be
+ * brought back), or the person pressed Stop (a session in the folder has Edit and Bash and would
+ * work on under it); null while it may open one.
  */
 function openSessionRefused(loopRun: LoopRun): Partial<DelegateResult> | null {
-  if (loopRun.open?.halted) return haltedTurn(loopRun.open.halted);
-  if (leadsOpenLoop(loopRun) && loopRun.ctx.cancelled === true) return haltedTurn(STOPPED_BY_THE_USER);
+  if (loopRun.open.halted) return haltedTurn(loopRun.open.halted);
+  if (loopRun.ctx.cancelled === true) return haltedTurn(STOPPED_BY_THE_USER);
   return null;
 }
 
@@ -631,7 +615,7 @@ async function restUntilDue(loopRun: LoopRun, wake: WakeState, kit: TurnKit): Pr
   return sleepUntilDue(loopRun, wake, kit);
 }
 
-/** One turn of the lead's, then what waits for its end before the next (an open Loop's `afterTurn`). */
+/** One turn of the lead's, then what waits for its end before the next (`afterTurn`). */
 async function turnThenBetween(
   loopRun: LoopRun,
   wake: WakeState,
@@ -654,7 +638,7 @@ export async function runWakeLoop(
   loopRun: LoopRun,
   talk: DirectorTalk,
   start: readonly string[],
-  clock: WakeClock = SYSTEM_CLOCK,
+  clock: OpenClock = OPEN_WALL_CLOCK,
   line: LeadLine | null = null,
 ): Promise<WakeOutcome> {
   // The run's tools read the time on this clock (`wrap_up` stamps the person's ask with it).

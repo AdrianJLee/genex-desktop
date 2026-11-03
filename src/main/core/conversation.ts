@@ -10,7 +10,6 @@ import {
   finishRequested,
   isHostRunTool,
   latestRun,
-  RunControl,
   RunControlAction,
   runSnapshot,
 } from "../../shared/chat-run.ts";
@@ -68,18 +67,6 @@ const OFFLINE_SOURCES: MentionSources = {
   addFromLibrary: () => Promise.reject(new Error("offline")),
 };
 
-/** Which build `show_build` and `land_build` mean when the session names none: the run's own. */
-const INTEGRATION_BUILD = "integration";
-/** A show while Live holds another game: nothing was shown, and nothing waits for its Reload. */
-const OTHER_GAME_IN_LIVE =
-  "Another game is open in Live, so it was left as it is and nothing was shown. Opening a game does not start it: tell the user to open this game and press Play on its stage, then ask again.";
-
-/** The build `show_build` means by the game folder as it is. */
-const LIVE_BUILD = "live";
-/** A commit hash, full or abbreviated, as a build name. */
-const COMMIT_HASH = /^[0-9a-f]{7,40}$/i;
-/** Characters of a commit hash quoted back to the model. */
-const SHORT_COMMIT = 10;
 /** Stop must reach providers even when the editable harness cannot acknowledge the queue hold. */
 const STOP_DISPATCH_TIMEOUT_MS = 5 * SECOND_MS;
 /**
@@ -95,8 +82,6 @@ const OPEN_PLAN_REVIEW: readonly string[] = [
   PlanReviewState.Failed,
 ];
 
-/** The run tools that go on with or land a build: while the chat is in Plan none runs. Reading and showing still work. */
-const BUILD_CHANGES: ReadonlySet<string> = new Set<string>([BuildLaunch.ResumeRun, RunControl.LandBuild]);
 /** Titles a thread has before its first message names it. */
 const PLACEHOLDER_TITLES: readonly string[] = [NEW_GAME_TITLE, NEW_CHAT_TITLE];
 /** Characters of a first message kept as the thread's title. */
@@ -112,15 +97,9 @@ const MESSAGE = {
   tagRetried: (handle: string) => `@${handle} did not arrive with my last message; it is attached now.`,
   unknownTool: (name: string) => `unknown run control: ${name}`,
   inPlan:
-    "The chat is in Plan mode, so this did not run: resuming or landing a build waits until the plan is approved. Put it in your plan instead.",
+    "The chat is in Plan mode, so this did not run: resuming a build waits until the plan is approved. Put it in your plan instead.",
   runChanged: "The run changed. This message cannot control another run; read the current state.",
   onlyPausedResumes: "Only a paused run from this conversation can be resumed. No new run was started.",
-  noProjectFolder: "This run has no project folder to show.",
-  noIntegrationToShow: "This run has no integration branch to show yet.",
-  unknownBuild: (build: string) => `"${build}" is neither live, integration nor a commit hash.`,
-  stillRunning: "The run is still running; it lands its work when it finishes.",
-  noIntegrationToLand: "This run has no integration branch to land.",
-  notCommitHash: (build: string) => `"${build}" is not a commit hash.`,
   nothingToFinish: (known: boolean) =>
     `That build is ${known ? "no longer running" : "not in this conversation"}; nothing was asked to finish.`,
 } as const;
@@ -201,12 +180,6 @@ function choiceChanged(metadata: ContractorMeta, options: ComposerSendOptions): 
 function hasPlaceholderTitle(record: ConversationRecord, meta: ThreadMeta): boolean {
   if (!record.title || PLACEHOLDER_TITLES.includes(record.title)) return true;
   return meta?.project != null && record.title === meta.project;
-}
-
-/** The commit a build name means: the run's integration head, or a commit named by hash. */
-function commitFor(build: string, integrationHead: string | null): string | null {
-  if (build === INTEGRATION_BUILD) return integrationHead;
-  return COMMIT_HASH.test(build) ? build : null;
 }
 
 /**
@@ -567,7 +540,7 @@ export class ConversationService {
 
   /**
    * One of the run's host controls (`run.control`): the run's controls the chat's own session keeps
-   * after a closed Loop run (status, show and land), answered live, and the resume it recorded, for
+   * after a closed Loop run (its status), answered live, and the resume it recorded, for
    * the session asking (`asker`). Recorded in the chat as a tool call and its result.
    */
   async runControl(
@@ -608,24 +581,15 @@ export class ConversationService {
     asker?: AbortController,
   ): Promise<string> {
     if (!isHostRunTool(name)) throw new Error(MESSAGE.unknownTool(name));
-    if (BUILD_CHANGES.has(name) && (await this.#x.planning(threadId))) return MESSAGE.inPlan;
+    // Going on with a build waits while the chat is in Plan; reading its status does not.
+    const resumes = name === BuildLaunch.ResumeRun;
+    if (resumes && (await this.#x.planning(threadId))) return MESSAGE.inPlan;
     // The chat as its routing reads it (`events.list`): a build a rewind withdrew is not its run.
     const events = await this.#x.rewind.harnessView(threadId, await this.#core.store.listEvents(threadId));
     const run = latestRun(events);
     if (!run || run.runId !== runId) throw new Error(MESSAGE.runChanged);
     const call: RunCall = { threadId, runId, args, messageId, events, run, ...(asker ? { asker } : {}) };
-    switch (name) {
-      case RunControl.RunStatus:
-        return this.#runStatus(call);
-      case BuildLaunch.ResumeRun:
-        return this.#resumeRun(call);
-      // Seeing and landing a build are for any run — finished, paused or running. A user who
-      // asks "run the project" after a run must get the game, not "the run is finished".
-      case RunControl.ShowBuild:
-        return this.#showBuild(call);
-      case RunControl.LandBuild:
-        return this.#landBuild(call);
-    }
+    return resumes ? this.#resumeRun(call) : this.#runStatus(call);
   }
 
   #runStatus({ runId, events, run, asker }: RunCall): string {
@@ -666,96 +630,6 @@ export class ConversationService {
         this.#core.append([{ type: EventKind.Error, message: `Could not resume ${runId}: ${String(err)}` }], threadId),
       );
     return "Resume requested for the same run. Its saved plan and completed work will be retained.";
-  }
-
-  /** The build a show or land names, the game it is in, and the commit it means (none for live or an unknown name). */
-  async #namedBuild({
-    threadId,
-    runId,
-    args,
-    run,
-  }: RunCall): Promise<{ build: string; project: string; commit: string | null }> {
-    const build = textArg(args.build ?? INTEGRATION_BUILD) || INTEGRATION_BUILD;
-    const project = String(run.project ?? "");
-    if (!project) throw new Error(MESSAGE.noProjectFolder);
-    const integrationHead =
-      typeof run.integrationHead === "string" ? run.integrationHead : await this.#journalHead(threadId, runId);
-    return { build, project, commit: commitFor(build, integrationHead) };
-  }
-
-  /** The integration head the run's journal recorded, when its close did not carry one. */
-  async #journalHead(threadId: string, runId: string): Promise<string | null> {
-    const journal = (await this.#core.store.readArtifact(threadId, `autopilot_${runId}`).catch(() => null)) as {
-      director?: { integrationHead?: string };
-    } | null;
-    return journal?.director?.integrationHead ?? null;
-  }
-
-  /**
-   * Whether this show or land may load Live itself: it answers a message the person sent on this
-   * thread that is still unanswered, by the host's own note (`awaitsAnswer`), whatever message id
-   * the harness named, and Live is out of their sight. Such a message cannot tell "show me" from
-   * "change the title", so while they watch Live it only offers the change; Reload brings it in.
-   */
-  #loadsLive({ threadId, messageId }: RunCall, project: string): boolean {
-    const asked = messageId !== undefined && this.#x.permissions.awaitsAnswer(threadId, messageId);
-    return asked && this.#x.previews.liveOutOfSight(project);
-  }
-
-  async #showBuild(call: RunCall): Promise<string> {
-    const { build, project, commit } = await this.#namedBuild(call);
-    const loads = this.#loadsLive(call, project);
-    // The person's ask from the game open on their stage may take Live from another game out of sight.
-    const elsewhere = !loads && this.#x.previews.liveHoldsAnother(project);
-    if (build === LIVE_BUILD) {
-      if (elsewhere) return OTHER_GAME_IN_LIVE;
-      if (!loads) {
-        await this.#core.offerLive({ project, root: null });
-        return "Live was left as the person has it; if the game folder changed since it loaded, the Reload button on the stage now offers it.";
-      }
-      await this.#x.previews.loadPreview({ project });
-      this.#core.emit(UiEvent.StageShow, { project, view: "live" });
-      return "Live, on the right of the chat, now shows the game folder as it is.";
-    }
-    if (!commit) {
-      if (build === INTEGRATION_BUILD) throw new Error(MESSAGE.noIntegrationToShow);
-      throw new Error(MESSAGE.unknownBuild(build));
-    }
-    if (elsewhere) return OTHER_GAME_IN_LIVE;
-    if (!loads) {
-      const offered = await this.#core.offerBuild(project, commit);
-      return `Live was left as the person has it: the Reload button on the stage now offers this build (${offered.slice(0, SHORT_COMMIT)}) and plays it when they press it. The game folder is unchanged. Tell the user it is ready to play with Reload.`;
-    }
-    const shown = await this.#core.showBuild(project, commit);
-    this.#core.emit(UiEvent.StageShow, { project, view: "live" });
-    const what = build === INTEGRATION_BUILD ? "the run's build" : `commit ${commit.slice(0, SHORT_COMMIT)}`;
-    const notLanded =
-      (call.run as { landed?: boolean }).landed === false
-        ? "; this build is not in it yet, and land_build puts it there"
-        : "";
-    return `Live, on the right of the chat, now shows ${what} (${shown.commit.slice(0, SHORT_COMMIT)}). The game folder is unchanged${notLanded}. Tell the user it is open in Live.`;
-  }
-
-  async #landBuild(call: RunCall): Promise<string> {
-    const { build, project, commit } = await this.#namedBuild(call);
-    if (this.#x.activeRunIds.has(call.runId) && call.run.state === RunState.Running)
-      throw new Error(MESSAGE.stillRunning);
-    if (!commit) {
-      if (build === INTEGRATION_BUILD) throw new Error(MESSAGE.noIntegrationToLand);
-      throw new Error(MESSAGE.notCommitHash(build));
-    }
-    const loads = this.#loadsLive(call, project);
-    const landed = await this.#core.landBuild(project, commit, {
-      ...(call.asker ? { asker: call.asker } : {}),
-      offerLive: !loads,
-    });
-    const landing = `Landed ${commit.slice(0, SHORT_COMMIT)} in the game folder (${landed.how})`;
-    if (this.#x.previews.liveHoldsAnother(project))
-      return `${landing}; another game is open in Live, so this one shows it when the user opens it and presses Play.`;
-    if (!loads)
-      return `${landing}; Live was left as the person has it, and the Reload button on the stage now offers it.`;
-    this.#core.emit(UiEvent.StageShow, { project, view: "live" });
-    return `${landing}; Live now shows it.`;
   }
 
   /**

@@ -1,9 +1,10 @@
 /**
- * The open lead's tool calls, answered: its notes (decision cards on the run's feed), its status
- * (save points, workers, the run's jobs, what the folder holds), Genex's worker tools through
- * the run's own pool (its copies merged into the game folder on the git-write queue the lead's saves
- * share), its save points, rewinds and restarts (save-point.ts), its pause for the person, and its `finish` (finish.ts). A call is counted while it runs, so the chat never cuts the
- * lead's turn short inside one (wake.ts).
+ * The lead's tool calls, answered: its notes (decision cards on the run's feed), its status (save
+ * points, workers, the run's jobs, what the folder holds), Genex's worker tools through the run's own
+ * pool (its copies merged into the game folder on the git-write queue the lead's saves share), its
+ * save points, rewinds and restarts (save-point.ts), its pause for the person, and its `finish`
+ * (finish.ts). A call is counted while it runs, so the chat never cuts the lead's turn short inside
+ * one (wake.ts).
  */
 import type { AnyRecord } from "../../../types/harness.d.ts";
 import { HostMethod } from "../../host-methods.ts";
@@ -45,12 +46,12 @@ const LOOP_ACTS: ReadonlySet<string> = new Set<string>([
 /** Why the lead's act is refused now (the Loop paused or closing; a worker once anybody asked to finish), or null. */
 async function refusedAct(loopRun: LoopRun, name: string): Promise<string | null> {
   if (!LOOP_ACTS.has(name)) return null;
-  if (loopRun.open?.halted) return OPEN_WORDS.paused;
+  if (loopRun.open.halted) return OPEN_WORDS.paused;
   const { state } = loopRun;
   const closing = state.finished || Boolean(state.finish) || closeUnderWay(state);
   if (closing) return OPEN_WORDS.ending;
   if (name !== WorkerTool.Start) return null;
-  return (await finishAsked(loopRun)) ? WRAP_UP_WORDS.openNoWorkers : null;
+  return (await finishAsked(loopRun)) ? WRAP_UP_WORDS.noWorkers : null;
 }
 
 /** A decision card on the run's feed, kept in the journal too. */
@@ -74,7 +75,7 @@ async function noteTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
  */
 async function pauseTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
   const why = String(args.why ?? "").trim();
-  if (!why || !loopRun.open) return OPEN_WORDS.needsWhy;
+  if (!why) return OPEN_WORDS.needsWhy;
   loopRun.open.halted = why.slice(0, PAUSE_CHARS);
   await loopRun.saveJournal();
   return OPEN_WORDS.pausing;
@@ -90,20 +91,20 @@ async function jobsOf(loopRun: LoopRun): Promise<unknown> {
 /** `run_status`: the Loop's save points, its workers and jobs, and what the folder holds. */
 export async function openStatus(loopRun: LoopRun): Promise<AnyRecord> {
   const { gameFacts, open } = loopRun;
-  const pool = open?.pool;
+  const pool = open.pool;
   return {
-    savePoints: (open?.journal.savePoints ?? []).map(({ label, summary, auto }) => ({ label, summary, auto })),
+    savePoints: open.journal.savePoints.map(({ label, summary, auto }) => ({ label, summary, auto })),
     atWork: workAtHand(loopRun),
     workers: pool?.state.records.length ? await pool.call(WorkerTool.Status, {}) : "none started",
     jobs: await jobsOf(loopRun),
     facts: gameFacts ?? [],
-    crashes: open?.journal.crashes ?? 0,
+    crashes: open.journal.crashes,
   };
 }
 
 /** A worker tool's answer from the run's pool. */
 async function workerAnswer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<unknown> {
-  const pool = loopRun.open?.pool;
+  const pool = loopRun.open.pool;
   return pool ? pool.call(name, args) : OPEN_WORDS.unknownTool(name);
 }
 
@@ -137,15 +138,13 @@ async function answer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<
   if (name === DirectorTool.RunStatus) return JSON.stringify(await openStatus(loopRun));
   if (name === DirectorTool.Finish) return openFinish(loopRun, args);
   if (name === SECOND_OPINION_TOOL) return judgeTool(loopRun, args);
-  // The studio asking where the lead's build lives: the game folder itself.
-  if (name === DirectorTool.ResolveRoot) return loopRun.projectDir;
   return OPEN_WORDS.unknownTool(name);
 }
 
-/** The value the run's tool dispatch takes for an open Loop (`directors.set`): each call counted while it runs. */
+/** The value the run's tool dispatch takes (`directors.set`): each call counted while it runs. */
 export function openHandler(loopRun: LoopRun): (name: string, args: AnyRecord) => Promise<unknown> {
   return async (name, args) => {
-    if (loopRun.ctx.cancelled && name !== DirectorTool.ResolveRoot) return OPEN_WORDS.stopped;
+    if (loopRun.ctx.cancelled) return OPEN_WORDS.stopped;
     loopRun.toolCalls++;
     loopRun.toolsInFlight = (loopRun.toolsInFlight ?? 0) + 1;
     try {

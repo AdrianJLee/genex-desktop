@@ -27,15 +27,24 @@ after(async () => {
 
 const text = (result: LiveToolResult): string => (typeof result === "string" ? result : result.text);
 
-/** A worker in its own copy of the integration branch: its title and its task. */
+/** A worker in its own copy of the game folder: its title and its task. */
 const copyWorker = (title: string, task: string) => ({ title, task, isolation: "copy" });
 
+/** A one-pixel PNG: the picture of the plaza the lead names for its second opinion. */
+const PLAZA_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 /**
- * A lead's turn on a web Loop: one worker in a copy, waited for and merged, a second opinion on the
- * merged build, and the finish. `before` reads the judge calls before the finish.
+ * A lead's turn on a web game's Loop, in its folder: one worker in a copy, waited for and merged, a
+ * second opinion on a picture of the plaza the lead names, and the finish. `before` reads the judge
+ * calls before the finish. Flipped (one Loop): the second opinion took a screenshot of the
+ * integration build when the lead named none; every lead names the pictures it asks about.
  */
 async function leadOneWorker(
   call: (name: string, args: Record<string, unknown>) => Promise<string>,
+  root: string,
   results: Record<string, any>,
   before: () => void,
 ): Promise<void> {
@@ -43,7 +52,8 @@ async function leadOneWorker(
   results.started = await call("worker_start", copyWorker("Plaza", "paint the plaza red"));
   results.waited = await call("worker_wait", { id: "w1", seconds: "120" });
   results.integrated = await call("worker_mark", { id: "w1", verdict: "used" });
-  results.judged = await call("judge", { question: "is the plaza red?" });
+  await writeFile(path.join(root, "plaza.png"), PLAZA_PNG);
+  results.judged = await call("judge", { question: "is the plaza red?", pictures: "plaza.png" });
   before();
   results.finished = await call("finish", { summary: "the plaza is red", land: "yes", victory: "yes" });
 }
@@ -99,7 +109,7 @@ describe("a run on two subscriptions", () => {
     completes = twoEngines(rig, async (engine, request) => {
       seen.push({ engine, request });
       if (request.director) {
-        await leadOneWorker(liveCall(request), results, () => {
+        await leadOneWorker(liveCall(request), String(request.director.root), results, () => {
           results.judgeCalls = {
             claude: completes["claude-code"]!.length,
             codex: completes.codex!.length,
@@ -222,11 +232,9 @@ describe("a run on two subscriptions", () => {
 
     assert.match(results.started, /^Started w1 \(copy\)/, results.started);
     // Flipped (Loop phase 5): run_status no longer carries a workers' engine limit of its own; the
-    // worker's end says the engine's words, and the run goes on.
-    assert.deepEqual(
-      results.status1.workers.map((worker: { id: string; state: string }) => [worker.id, worker.state]),
-      [["w1", "failed"]],
-    );
+    // worker's end says the engine's words, and the run goes on. Flipped (one Loop): it listed the web
+    // run's workers as records; every Loop's `run_status` says them as the pool's status lines.
+    assert.match(String(results.status1.workers), /^w1 · Sign · copy · failed/m, String(results.status1.workers));
     assert.match(results.waited, /w1 · Sign · copy · failed[\s\S]*usage limit/, results.waited);
 
     // Not the director's limit: the run finished on its own word, and was never paused.
@@ -252,7 +260,7 @@ describe("a run on two subscriptions", () => {
     const completes = twoEngines(rig, async (engine, request) => {
       seen.push({ engine, request });
       if (request.director) {
-        await leadOneWorker(liveCall(request), results, () => {
+        await leadOneWorker(liveCall(request), String(request.director.root), results, () => {
           results.judgeCalls = { claude: completes["claude-code"]!.length, local: local.map((r) => r.model) };
         });
         return { ok: true, engine, turns: 7, usage: {}, sessionId: "director-local", summary: "run done" };

@@ -14,7 +14,7 @@ const WEB = [{ id: "web-game", path: "." }];
 const GODOT = [{ id: "godot-project", path: "." }];
 const UNREAL = [{ id: "unreal-project", path: "." }];
 const TOY = [{ id: "toy-project", path: "." }];
-/** A web game that became a Godot project: a web game still served at the root, but a Loop in place. */
+/** A web game that became a Godot project: a web game still served at the root. */
 const GODOT_OVER_WEB = [
   { id: "godot-project", path: "." },
   { id: "web-game", path: "." },
@@ -102,13 +102,20 @@ describe("Genex's own web gate", () => {
       assert.deepEqual(gatesOn(on, { facts: WEB }), [], `${on}: no gate of Genex's own`);
   });
 
+  // Flipped (one Loop): a Godot project still serving a web game at its root was never checked, its
+  // Loop being in place; every Loop is in place now, and the gate reaches a game by its facts alone.
+  it("a folder that serves a web game at its root is checked whatever else it holds", () => {
+    const refused = loopRunRefusal({ name: "moth", facts: GODOT_OVER_WEB }, ["index.html is missing"], ["index.html"]);
+    assert.match(refused ?? "", /^moth is not ready for a run: index\.html is missing/);
+    assert.deepEqual(gatesOn(HookEvent.RunPrepare, { facts: GODOT_OVER_WEB }), [BuiltinGate.WebReady]);
+  });
+
   it("a Godot, Unreal or toy folder is never refused for a missing web page", async () => {
     for (const [kind, facts] of [
       ["Godot", GODOT],
       ["Unreal", UNREAL],
       ["toy", TOY],
       ["Unreal with a site", UNREAL_WITH_SITE],
-      ["Godot over a web game", GODOT_OVER_WEB],
     ] as const) {
       const { recorder, launched } = launchOn(facts, {
         problems: ["index.html is missing"],

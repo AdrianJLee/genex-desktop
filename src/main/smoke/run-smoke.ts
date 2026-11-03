@@ -3185,9 +3185,9 @@ function checkWebGpuWorker({ check }: ComputerSmoke, gpu: Seen): void {
 
 /**
  * The Loop: a run on this Electron — the real harness child, real offscreen windows, the dispatch
- * that answers — with a scripted lead that looks, starts one worker in a copy of its own, merges its
- * work (one health check of the merged build), shows it and finishes (the health check again before
- * the landing); its screen is the lead's node in Builds meanwhile.
+ * that answers — with a scripted lead in the web game's own folder that starts one worker in a copy
+ * of its own, merges its work into the folder and finishes (one health check of the game's page,
+ * then the close in place).
  */
 async function checkScriptedDirector(computerSmoke: ComputerSmoke): Promise<void> {
   const { wc, waitFor, reports } = computerSmoke;
@@ -3201,7 +3201,7 @@ async function checkScriptedDirector(computerSmoke: ComputerSmoke): Promise<void
   core.engines.register(
     scriptedCodex(
       async (request) => {
-        if (request.director) return directLoopRun(computerSmoke, request, dir);
+        if (request.director) return directLoopRun(request, dir);
         // A worker of the run's pool, in its own copy of the game: Genex commits what it leaves.
         dir.workerCwd = request.cwd;
         dir.workerTools = (request.liveTools ?? []).map((tool) => tool.name);
@@ -3227,27 +3227,17 @@ async function checkScriptedDirector(computerSmoke: ComputerSmoke): Promise<void
     .map((e) => (e.data as { payload: Record<string, unknown> }).payload)
     .find((p) => p.runId === dirRunId);
   checkDirectorLoopRun(computerSmoke, dir, dirProject.dir);
-  checkDirectorLanding(computerSmoke, dir, dirFinished, dirProject.dir);
+  checkDirectorClose(computerSmoke, dir, dirFinished, dirProject.dir);
 }
 
-/** The scripted lead's run: look, one worker in a copy, its work merged, show, finish. */
-async function directLoopRun(
-  { wc, waitFor }: ComputerSmoke,
-  request: DelegateRequest,
-  dir: DirectorSeen,
-): Promise<DelegateResult> {
+/** The scripted lead's run: one worker in a copy, its work merged into the game folder, finish. */
+async function directLoopRun(request: DelegateRequest, dir: DirectorSeen): Promise<DelegateResult> {
   // A lead woken after its finish has nothing left to do.
   if (dir.finished !== undefined)
     return { ok: true, engine: EngineId.Codex, turns: 1, usage: {}, sessionId: "director", summary: "run done" };
   const call = (name: string, args: Record<string, unknown>) =>
     required(request.onLiveTool, "a live tool bridge")(name, args);
-  dir.look = await call("look", { target: "integration" });
-  dir.chatFrame = await waitFor(`!!document.querySelector('[data-build-status] img')?.naturalWidth`);
-  if (dir.chatFrame !== true) dir.chatFrameReport = await agentScreenReport(wc);
-  // No worker works yet, so the lead has the run: its node in Builds is its own screen.
-  await pressStageView(wc, "builds");
-  dir.uiCard = await waitFor(`!!document.querySelector('[data-graph-node="lead"][data-agent-screen] img')`);
-  if (dir.uiCard !== true) dir.uiCardReport = await agentScreenReport(wc);
+  dir.leadTools = (request.liveTools ?? []).map((tool) => tool.name);
   dir.started = asText(
     await call("worker_start", { title: "Sign", task: "add a sign to the street", isolation: "copy" }),
   );
@@ -3257,25 +3247,19 @@ async function directLoopRun(
     dir.waited = asText(await call("worker_wait", { id, seconds: "3" }));
     if (!/ · running · /.test(dir.waited)) break;
   }
-  dir.lookWorker = await call("look", { target: id });
   dir.marked = asText(await call("worker_mark", { id, verdict: "used", note: "the sign is in" }));
-  dir.shown = asText(await call("show", { target: "integration" }));
-  dir.finished = asText(await call("finish", { summary: "a sign on the street", land: "yes", victory: "yes" }));
-  return { ok: true, engine: EngineId.Codex, turns: 8, usage: {}, sessionId: "director", summary: "run done" };
+  dir.finished = asText(await call("finish", { summary: "a sign on the street" }));
+  return { ok: true, engine: EngineId.Codex, turns: 6, usage: {}, sessionId: "director", summary: "run done" };
 }
 
 /** What the lead saw and did during the run. */
 function checkDirectorLoopRun({ check }: ComputerSmoke, dir: DirectorSeen, dirProjectDir: string): void {
+  // Flipped (one Loop): the lead had no window of its own, no look and no computer. It is the chat's
+  // own session and has the window its chat's turns have; no `look` was ever brought back.
   check(
-    "the lead's window shows the integration worktree with the game running in it",
-    /the window now shows integration/.test(asText(dir.look)) && images(dir.look) === 1,
-    asText(dir.look).slice(0, 160),
-  );
-  check("the lead's screen is its node in Builds while it works", dir.uiCard === true, dir.uiCardReport ?? "");
-  check(
-    "the lead's current view is the build row's picture in chat",
-    dir.chatFrame === true,
-    dir.chatFrameReport ?? "",
+    "the lead has its chat's window: the computer, and no look",
+    Array.isArray(dir.leadTools) && !dir.leadTools.includes("look") && dir.leadTools.includes("computer"),
+    JSON.stringify(dir.leadTools ?? null).slice(0, 300),
   );
   check(
     "the worker built in a copy of its own and finished",
@@ -3288,39 +3272,29 @@ function checkDirectorLoopRun({ check }: ComputerSmoke, dir: DirectorSeen, dirPr
     ),
   );
   check(
-    "look points the lead's window at the worker's copy",
-    new RegExp(`the window now shows ${dir.workerId}\\b`).test(asText(dir.lookWorker)),
-    asText(dir.lookWorker).slice(0, 120),
-  );
-  check(
-    "worker_mark used merged the worker, and the merged build passed its health check",
-    /Merged \S+ work into your folder/.test(dir.marked ?? "") && /Health check: the page loads/.test(dir.marked ?? ""),
+    "worker_mark used merged the worker's work into the game folder",
+    /Merged \S+ work into your folder/.test(dir.marked ?? "") && existsSync(path.join(dirProjectDir, "src", "sign.js")),
     String(dir.marked).slice(0, 300),
-  );
-  check(
-    "show offered the integrated build on Live's Reload",
-    /Live's Reload now offers integration/.test(dir.shown ?? ""),
-    String(dir.shown),
   );
 }
 
-/** How the run ended: landed in the live folder, closed on the lead's word, every window gone. */
-function checkDirectorLanding(
+/** How the run ended: closed in the game folder on the lead's word, after its page's health check; every window gone. */
+function checkDirectorClose(
   { check, ctx }: ComputerSmoke,
   dir: DirectorSeen,
   dirFinished: Record<string, unknown> | undefined,
   dirProjectDir: string,
 ): void {
   check(
-    "finish checked the integration branch's health and landed it in the live folder",
-    dirFinished?.landed === true &&
+    "finish checked the game's page and closed the Loop in the game folder",
+    dirFinished?.profile === "open" &&
       existsSync(path.join(dirProjectDir, "src", "sign.js")) &&
-      /is live in the game folder/.test(dir.finished ?? ""),
-    `${JSON.stringify({ landed: dirFinished?.landed, stoppedBecause: dirFinished?.stoppedBecause })} | ${String(dir.finished).slice(0, 160)}`,
+      /closed on your word/.test(dir.finished ?? ""),
+    `${JSON.stringify({ profile: dirFinished?.profile, stoppedBecause: dirFinished?.stoppedBecause })} | ${String(dir.finished).slice(0, 160)}`,
   );
   check(
     "the run closed on the lead's word, mode director",
-    dirFinished?.mode === "director" && dirFinished?.stoppedBecause === "the lead finished the run",
+    dirFinished?.mode === "director" && dirFinished?.stoppedBecause === "the lead says the goal is reached",
     JSON.stringify(dirFinished ?? null)?.slice(0, 200),
   );
   check("every window closed with the run", ctx.core.agentScreens().length === 0);

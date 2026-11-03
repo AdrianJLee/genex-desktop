@@ -63,12 +63,10 @@ import {
   kindPending,
   kindUnknown,
   LoopProfile,
-  loopProfileOf,
   ProjectStarter,
   pluginFactSource,
   servedAsWebGame,
   servedFacts,
-  WEB_LOOP_FACTS,
 } from "../../src/shared/project-facts.ts";
 import { ProjectTool } from "../../src/shared/project-tools.ts";
 import { MAX_WORKERS_AT_ONCE } from "../../src/shared/workers.ts";
@@ -608,44 +606,13 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
       );
   });
 
-  it("picks a Loop's profile from the folder's facts as the app does", () => {
-    assert.deepEqual(seedFolderFacts.LoopProfile, LoopProfile);
-    assert.deepEqual([...seedFolderFacts.WEB_LOOP_FACTS].sort(), [...WEB_LOOP_FACTS].sort());
-    const at = (id: string, where: string) => ({ id, path: where });
-    const { Web, Open } = LoopProfile;
-    const table: Array<[string, { facts: FactRef[]; holds?: FolderHolds }, LoopProfile]> = [
-      ["no kind yet", { facts: [] }, Web],
-      ["its own files of a kind no rule knows", { facts: [], holds: FolderHolds.OwnFiles }, Open],
-      ["a web game", { facts: [at(CoreFact.WebGame, ".")] }, Web],
-      ["a web game with a second site", { facts: [at(CoreFact.WebGame, "."), at(CoreFact.WebGame, "site")] }, Web],
-      [
-        "a web game holding Blender files",
-        { facts: [at(CoreFact.WebGame, "."), at(CoreFact.BlenderAssets, "assets")] },
-        Web,
-      ],
-      ["a site in a subfolder only", { facts: [at(CoreFact.WebGame, "site")] }, Open],
-      ["an Unreal project", { facts: [at(CoreFact.UnrealProject, ".")] }, Open],
-      [
-        "a web game with an Unreal project linked in",
-        { facts: [at(CoreFact.WebGame, "."), at(CoreFact.UnrealProject, "unreal")] },
-        Open,
-      ],
-      [
-        "an Unreal project with a site",
-        { facts: [at(CoreFact.UnrealProject, "."), at(CoreFact.WebGame, "site")] },
-        Open,
-      ],
-      ["a Godot project", { facts: [at(CoreFact.GodotProject, ".")] }, Open],
-      ["a plugin's kind", { facts: [at("toy-project", ".")] }, Open],
-      ["Blender files alone", { facts: [at(CoreFact.BlenderAssets, ".")] }, Open],
-      ["an Unreal plugin", { facts: [at(CoreFact.UnrealPlugin, ".")] }, Open],
-    ];
-    for (const [name, game, profile] of table) {
-      assert.equal(loopProfileOf(game), profile, `${name}: the app's profile`);
-      assert.equal(seedFolderFacts.loopProfileOf(game), profile, `${name}: the seed's profile`);
-    }
+  // Flipped (one Loop): it also held the seed's profile choice (`loopProfileOf`, `WEB_LOOP_FACTS`) to
+  // the app's; every Loop works in place now, and only the persisted vocabulary is shared. Flipped:
+  // the seed's vocabulary equalled the app's; it keeps only the value it writes, which the app names
+  // alike (the app alone keeps `web`, an earlier Genex's, for history).
+  it("names a Loop's profile as the app does", () => {
+    assert.deepEqual(seedFolderFacts.LoopProfile, { Open: LoopProfile.Open });
   });
-
   it("the seed's starters and project tool names are the app's", () => {
     assert.deepEqual(seedFolderFacts.ProjectStarter, ProjectStarter);
     assert.deepEqual(seedFolderFacts.ProjectTool, ProjectTool);

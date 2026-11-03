@@ -2,15 +2,7 @@
  * Starting a run: the refusals a run meets before it is registered, the loop that conducts it, and
  * the record a run that died still owes its chat.
  */
-import {
-  type FactsOfDescriptor,
-  kindPending,
-  kindUnknown,
-  LoopProfile,
-  loopProfileOf,
-  openLoopBecause,
-  startWebIfPending,
-} from "./folder-facts.ts";
+import { type FactsOfDescriptor, kindPending, kindUnknown, servedAsWeb, startWebIfPending } from "./folder-facts.ts";
 import { BuiltinGate, fireGates } from "./builtin-hooks.ts";
 import { leadsInPlace } from "./engine-seat.ts";
 import { OPEN_LOOP_REFUSAL } from "./open-loop-prompts.ts";
@@ -20,6 +12,7 @@ import { runDirector } from "./director.ts";
 import { createRunInbox } from "./run-inbox.ts";
 import { HostMethod } from "./host-methods.ts";
 import { journalId, readJournal } from "./run-journal.ts";
+import { runRef } from "./repo.ts";
 import { EventKind, ExecutionStatus, RunEvent, writeRunArtifact } from "./run-events.ts";
 import { type ActiveRun, RunnerKind, type RunStart, type Studio, heldRuns } from "./studio-state.ts";
 import { resumeStopped } from "./after-loop-run.ts";
@@ -56,16 +49,13 @@ const MESSAGE = {
     "This build was paused by an earlier version of Genex and can't go on in this one, so it is closed as it stood: what it built is kept. Ask here for what you want next.",
 } as const;
 
-/** How a runner is called: the thread the run tells its story in, the run, whether it resumes, and the folder's profile. */
+/** The ref an earlier web game's Loop kept its integration branch on (repo.ts `runRef`). */
+const WEB_LOOP_BRANCH = "integration";
+
+/** How a runner is called: the thread the run tells its story in, the run, whether it resumes, and the engines. */
 type Runner = (
   ctx: HarnessCtx,
-  options: {
-    threadId: string;
-    run: Run;
-    resume: boolean;
-    profile: LoopProfile;
-    described: readonly EngineDescriptor[];
-  },
+  options: { threadId: string; run: Run; resume: boolean; described: readonly EngineDescriptor[] },
 ) => Promise<AnyRecord>;
 
 /**
@@ -79,7 +69,7 @@ export const LoopRefusal = {
 export type LoopRefusal = (typeof LoopRefusal)[keyof typeof LoopRefusal];
 
 const RUNNERS: Record<RunnerKind, Runner> = {
-  // A web game's Loop by the web method, or a Loop on any other project led in place.
+  // The one Loop, led in the game folder by the chat's own session, on a project of any kind.
   [RunnerKind.Director]: (ctx, options) => runDirector(ctx, options),
   [RunnerKind.NeedsSession]: (ctx, options) =>
     refusedRun(ctx, options, OPEN_LOOP_REFUSAL.needsSession(engineName(options.run, options.described)), {
@@ -93,12 +83,9 @@ function engineName(run: Run, described: readonly EngineDescriptor[]): string {
   return described.find((listed) => listed.id === engine)?.label ?? engine;
 }
 
-/** The runners that refuse a run with words: it closes at once. */
-const REFUSING_RUNNERS: ReadonlySet<RunnerKind> = new Set([RunnerKind.NeedsSession]);
-
 /**
- * Which loop conducts `run`. Every Loop is its lead's session, on a project of any kind: a web game's
- * by the web method, any other project's in place. An engine that keeps no session of its own
+ * Which loop conducts `run`. Every Loop is its lead's session, in place, on a project of any kind.
+ * An engine that keeps no session of its own
  * (Ollama's tool loop) leads none: its run is refused with a typed reason (`LoopRefusal.NeedsSession`)
  * and its chat stays plain chat.
  */
@@ -108,17 +95,14 @@ export function chooseRunner(run: Run, described: readonly EngineDescriptor[]): 
 }
 
 /**
- * What a refusal's close keeps of the run's earlier close: what was built and where it stands (its
- * build, its landing, its workers, rounds and notes). How that session stopped (a provider's limit,
- * its stop code, its failure, where its worked time ended) is never kept: the refusal is the stop
- * now, read in its own words.
+ * What a refusal's close keeps of the run's earlier close: what was built and where it stands (in
+ * the game folder or not, its workers, rounds, save points and notes). How that session stopped (a
+ * provider's limit, its stop code, its failure, where its worked time ended) is never kept: the
+ * refusal is the stop now, read in its own words.
  */
 const KEPT_ON_REFUSAL = [
   "landed",
-  "integrationHead",
   "baseCommit",
-  "deliveredHead",
-  "landingResult",
   "profile",
   "workers",
   "iterations",
@@ -396,7 +380,7 @@ async function startReservedRun(
   const { threadId } = action;
   // Whatever asked for this run — an interview, the run IPC, a resume — a folder the studio
   // can never build on refuses here as well, before a run is registered. What is merely missing is
-  // the launch path's question: asked again here for a web Loop a chat launched, so the gate holds
+  // the launch path's question: asked again here for a web game's Loop a chat launched, so the gate holds
   // whichever copy of the launch an agent kept.
   const games = await host.call(HostMethod.GameList, {}).catch(() => []);
   const listed = games.find((g) => g.name === action.run.project) ?? null;
@@ -453,7 +437,7 @@ async function startReservedRun(
  * project, nor for a game with no kind yet: its run's start gives it the web starter first.
  */
 async function missingFiles(host: Host, game: GameProject | null): Promise<unknown> {
-  if (!game || kindPending(game) || loopProfileOf(game) !== LoopProfile.Web) return undefined;
+  if (!game || kindPending(game) || !servedAsWeb(game)) return undefined;
   const readiness = await host.call(HostMethod.GameValidate, { project: game.name }).catch(() => null);
   return readiness?.missing;
 }
@@ -478,62 +462,25 @@ async function conductRun(host: Host, ctx: HarnessCtx, run: Run, resume: boolean
   const described = await host.call(HostMethod.EngineDescribe, {}).catch(() => []);
   // A run (a Resume included) starts trusting its providers again: a loss was the last stretch's.
   forgetProviderLosses(run.runId);
-  const route = await routeOf(host, run, { threadId, resume });
-  const { games, profile } = route;
-  const ask = {
-    described,
-    games,
-    profile,
-    webElsewhere: route.webElsewhere,
-    ...(route.classicResume ? { classicResume: route.classicResume } : {}),
-  };
-  const chosen = route.refusal ? refusing(route.refusal) : runnerFor(run, ask);
-  const report = await chosen.runner(ctx, { threadId, run, resume, profile, described });
+  const runner = runnerFor(run, described, await routeOf(host, run, { threadId, resume }));
+  const report = await runner(ctx, { threadId, run, resume, described });
   closed();
   host.notify("run.finished", report);
 }
 
-/** The Loop profile of the run's game, from the list the run already read (a game not listed is a web game's). */
-function profileOf(games: readonly GameProject[], project: string): LoopProfile {
-  const game = games.find((listed) => listed.name === project);
-  return game ? loopProfileOf(game) : LoopProfile.Web;
-}
-
 /**
- * The profile a resumed run goes on in: its own journal's, never the folder's now. A Loop that worked
- * in place (`director.open`) goes on in place whatever the folder reads as; any other journal (the
- * director's, classic Autopilot's) is a web Loop's. Null with no
- * journal: the folder decides. A journal the host can't read throws, as the runner's own read does:
- * read as none, the folder would decide, and the run would resume from a journal of the other kind.
+ * The journal a resumed run goes on from, or null. A journal the host can't read throws: read as
+ * none, the run would start over from its goal.
  */
 async function resumedJournal(host: Host, threadId: string, runId: string): Promise<AnyRecord | null> {
   return (await host.call(HostMethod.ArtifactRead, { threadId, artifactId: journalId(runId) })) ?? null;
 }
 
-/** The profile a resumed journal goes on in (`resumedJournal`); null with no journal. */
-function resumedProfile(journal: AnyRecord | null): LoopProfile | null {
-  if (!journal) return null;
-  return journal.director?.open ? LoopProfile.Open : LoopProfile.Web;
-}
-
-/**
- * A journal the classic pipeline wrote (a plan and facets, no director): a session engine's run goes
- * to the director now, which can't pick it up — it would start the whole build again from its goal.
- */
-function classicJournal(journal: AnyRecord | null): boolean {
-  if (!journal || journal.director) return false;
-  return Boolean(journal.plan || journal.facets);
-}
-
-/** How a run is routed: its game list, its profile, a paused web Loop's folder read otherwise, or why it is refused. */
+/** How a run is routed: why it is refused, or whether it is a paused build of a kind no Loop picks up. */
 interface Route {
-  games: readonly GameProject[];
-  profile: LoopProfile;
-  /** A paused web Loop resumed while its folder reads as no web game: the words that say what Genex finds there. */
-  webElsewhere: string | null;
   refusal: string | null;
-  /** A paused build resumed from the classic pipeline's journal (`classicJournal`). */
-  classicResume?: true;
+  /** A paused build no Loop is now: the classic pipeline's, or the Unreal runner's (no `director`). */
+  olderBuild?: true;
 }
 
 /** The game list as the run reads it (an answer that holds none is an empty list), or null when the host refused it. */
@@ -546,99 +493,57 @@ async function listedGames(host: Host): Promise<readonly GameProject[] | null> {
   }
 }
 
-/** A route that refuses the run with these words. */
-const refusedRoute = (refusal: string): Route => ({ games: [], profile: LoopProfile.Web, webElsewhere: null, refusal });
+/**
+ * How a paused run's journal goes on: in place (`director.open`, the one Loop's), refused with its
+ * branch named (a web game's Loop that built in a copy: `director`, and no `open`), or closed as it
+ * stood (any other: the classic pipeline's, the Unreal runner's). A fresh run has none.
+ */
+function resumedRoute(journal: AnyRecord | null, runId: string): Route | null {
+  if (!journal || journal.director?.open) return null;
+  if (journal.director) return { refusal: OPEN_LOOP_REFUSAL.webLoopBefore(runRef(runId, WEB_LOOP_BRANCH)) };
+  return { refusal: null, olderBuild: true };
+}
 
 /**
- * The run's route (`Route`): a resumed run by its own journal, a fresh one by its folder. A journal
- * the host can't read, or a game list it can't give, refuses the run with words (a resume stays
- * paused) rather than taking the web Loop for one. A game with no kind yet takes the web starter
- * before the runner is chosen, but never under a paused Loop that worked in place, nor a resumed one
- * on a folder of a kind Genex can't name (that one is refused below, and stays paused).
+ * The run's route (`Route`): a resumed run by its own journal (`resumedRoute`). A journal the host
+ * can't read, or a game list it can't give, refuses the run with words (a resume stays paused). A
+ * game with no kind yet takes the web starter before the Loop starts, but never under a paused Loop,
+ * nor a resumed one on a folder of a kind Genex can't name.
  */
 async function routeOf(host: Host, run: Run, { threadId, resume }: { threadId: string; resume: boolean }) {
   let journal: AnyRecord | null = null;
   try {
     journal = resume ? await resumedJournal(host, threadId, run.runId) : null;
   } catch {
-    return refusedRoute(OPEN_LOOP_REFUSAL.journalUnreadable);
+    return { refusal: OPEN_LOOP_REFUSAL.journalUnreadable };
   }
-  const resumedIn = resumedProfile(journal);
+  const resumed = resumedRoute(journal, run.runId);
+  if (resumed) return resumed;
   const games = await listedGames(host);
-  if (!games) return refusedRoute(OPEN_LOOP_REFUSAL.gamesUnreadable);
+  if (!games) return { refusal: OPEN_LOOP_REFUSAL.gamesUnreadable };
   const game = games.find((listed) => listed.name === run.project);
   const unknownOnResume = resume && game !== undefined && kindUnknown(game);
-  if (resumedIn !== LoopProfile.Open && !unknownOnResume) await startWebIfPending(host, run.project, games);
-  const folder = profileOf(games, run.project);
-  const elsewhere = resumedIn === LoopProfile.Web && folder !== LoopProfile.Web && game !== undefined;
-  const webElsewhere = elsewhere ? OPEN_LOOP_REFUSAL.webElsewhere(openLoopBecause(game)) : null;
-  const route: Route = {
-    games,
-    profile: resumedIn ?? folder,
-    webElsewhere,
-    refusal: null,
-    ...(classicJournal(journal) ? { classicResume: true as const } : {}),
-  };
-  return route;
-}
-
-/** The runner a run goes to, and whether it only refuses the run with words. */
-interface ChosenRunner {
-  runner: Runner;
-  refuses: boolean;
-}
-
-/** What the runner is chosen from: the run's engines, its game and its game's profile. */
-interface RunnerAsk {
-  described: readonly EngineDescriptor[];
-  games: readonly GameProject[];
-  profile: LoopProfile;
-  /** A paused web Loop resumed while its folder reads as no web game: the words that refuse it there. */
-  webElsewhere: string | null;
-  /** A paused build resumed from the classic pipeline's journal (`Route.classicResume`). */
-  classicResume?: true;
+  if (!journal && !unknownOnResume) await startWebIfPending(host, run.project, games);
+  return { refusal: null };
 }
 
 /** A runner that closes a paused build no Resume can pick up as it stood, its work kept, and says why. */
-const closingOlderBuild = (): ChosenRunner => ({
-  runner: (ctx, options) => refusedRun(ctx, options, MESSAGE.olderBuild, { closes: true }),
-  refuses: true,
-});
+const closingOlderBuild: Runner = (ctx, options) => refusedRun(ctx, options, MESSAGE.olderBuild, { closes: true });
 
-/**
- * A runner that only refuses the run with `words` (paused for a Resume when it resumes one), and its
- * typed reason when it has one.
- */
-const refusing = (words: string, refusal: LoopRefusal | null = null): ChosenRunner => ({
-  runner: (ctx, options) => refusedRun(ctx, options, words, { refusal }),
-  refuses: true,
-});
+/** A runner that only refuses the run with `words` (paused for a Resume when it resumes one). */
+const refusing =
+  (words: string): Runner =>
+  (ctx, options) =>
+    refusedRun(ctx, options, words);
 
-/**
- * Which runner conducts the run: by its engine and its game's profile. A paused web Loop whose
- * folder reads as no web game now is refused with the words that say so: it stays paused, its
- * journal untouched, for a Resume once the folder reads as it did.
- */
-function runnerFor(run: Run, ask: RunnerAsk): ChosenRunner {
-  const { described, games, profile } = ask;
-  const byKind = (kind: RunnerKind): ChosenRunner => ({ runner: RUNNERS[kind], refuses: REFUSING_RUNNERS.has(kind) });
-  if (ask.webElsewhere) return refusing(ask.webElsewhere);
+/** Which runner conducts the run: its route's refusal, a paused build of a kind no Loop is now, or its engine's. */
+function runnerFor(run: Run, described: readonly EngineDescriptor[], route: Route): Runner {
+  if (route.refusal) return refusing(route.refusal);
   const kind = chooseRunner(run, described);
-  if (profile !== LoopProfile.Open) {
-    // The director can't pick up a classic build: it would start it again from its goal, on a fresh clock.
-    if (ask.classicResume && kind === RunnerKind.Director) return closingOlderBuild();
-    return byKind(kind);
-  }
-  const game = games.find((listed) => listed.name === run.project);
-  // The refusal names what Genex found that makes this project's Loop work in place.
-  if (kind === RunnerKind.NeedsSession && game)
-    return refusing(
-      OPEN_LOOP_REFUSAL.needsSession(engineName(run, described), openLoopBecause(game)),
-      LoopRefusal.NeedsSession,
-    );
-  return byKind(kind);
+  // The one Loop can't pick up such a build: it would start it again from its goal.
+  if (route.olderBuild && kind === RunnerKind.Director) return closingOlderBuild;
+  return RUNNERS[kind];
 }
-
 /** A run that threw: its closing record (unless it wrote its own) and the error, then the push. */
 async function closeFailedRun(host: Host, ctx: HarnessCtx, run: Run, err: any): Promise<void> {
   const { threadId } = ctx;

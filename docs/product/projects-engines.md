@@ -22,9 +22,9 @@ Genex's moments never ask.
 
 ## Loops in place
 
-Except for web games at the folder's root (Blender files allowed), the chat leads the Loop in
-place (Claude Code, Codex or OpenCode). It keeps save points, starts workers, pauses if blocked,
-finishes on its word (a reviewer reads it only if asked). Plugins add steps, reviewer
+The chat leads every Loop in place, a web game's too (Claude Code, Codex or OpenCode). It keeps
+save points, starts workers, pauses if blocked, finishes on its word (a reviewer reads it only if
+asked; a web game's page is checked first). Plugins add steps, reviewer
 pictures and editor locks: while you use an editor, agents wait. A linked engine game is no web
 game; an Unreal or Godot project outside it is not held by save points or Rewind.
 

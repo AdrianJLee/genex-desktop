@@ -409,10 +409,7 @@ it("rewound past a later build, the next message's run tools reach the build fro
       // Once: the resumed build's own lead is answered plainly.
       useTools = false;
       const tried: Record<string, string> = {};
-      const calls: [string, Record<string, unknown>][] = [
-        ["run_status", {}],
-        ["show_build", {}],
-      ];
+      const calls: [string, Record<string, unknown>][] = [["run_status", {}]];
       for (const [name, args] of calls) {
         tried[name] = await request.onLiveTool!(name, args).then(String, (err: Error) => `refused: ${err.message}`);
       }
@@ -428,11 +425,13 @@ it("rewound past a later build, the next message's run tools reach the build fro
     if (action.type === DispatchActionType.AutopilotResume) resumes.push(action.runId);
     return dispatch.call(host, action, timeoutMs);
   };
-  // Build A, a Loop that seated a lead, paused before the message; the chat's own session answered it.
+  // Build A, a Loop that seated a lead in the game folder, paused before the message; the chat's own
+  // session answered it. Flipped (one Loop): its journal had no `open`, as an earlier Genex's web
+  // Loop, which is refused on Resume now and gets no `resume_run`; and `show_build` was tried too.
   await rig.core.store.writeArtifact(thread, "autopilot_run-a", {
     phase: "paused",
     run: { runId: "run-a", project, engine: "claude-code", goal: "A forest", mode: "autopilot" },
-    director: { lead: { chatSession: false } },
+    director: { lead: { chatSession: false }, open: { version: 1, savePoints: [] } },
   });
   await rig.core.append(
     [
@@ -471,7 +470,6 @@ it("rewound past a later build, the next message's run tools reach the build fro
   // plugin skill's summary does), so the whole answer is not searched for the word.
   for (const [name, answer] of Object.entries(tried ?? {})) assert.doesNotMatch(answer, /^refused: /, name);
   assert.equal(JSON.parse(tried!.run_status!).run.runId, "run-a");
-  assert.match(tried!.show_build!, /Live/);
   assert.ok(recordable[0]?.includes("resume_run"), "build A is paused: the session may resume it");
   // The resume it recorded, done once its reply ended, reaches build A through the rewound view.
   const log = await rig.core.store.listEvents(thread);

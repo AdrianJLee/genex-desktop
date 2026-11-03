@@ -8,9 +8,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
-import { handler as directorTool } from "../../src/harness-seed/loop/director/tools.ts";
 import { HELD_TURN_WAIT_MS, whileTurnHeld } from "../../src/harness-seed/loop/director/turn-hold.ts";
-import { runHeldWords, turnsHeldWords as directorTurnsHeld } from "../../src/harness-seed/loop/director/held-words.ts";
+import { openStartHeld, turnsHeldWords as directorTurnsHeld } from "../../src/harness-seed/loop/director/held-words.ts";
 import {
   endOfTurnCheckpoint,
   fireHooks,
@@ -96,29 +95,6 @@ async function chatTurn(hookEvents: string[] | undefined, blockOn: string | null
     .filter((n) => n.type === "chat.message")
     .map((n) => String((n.payload as { content?: unknown }).content));
   return { recorder, said };
-}
-
-/** A director's run as its tool handler reads it, on a game whose descriptor lists `hookEvents`. */
-function directorRun(hookEvents: string[] | undefined, blockOn: string | null = null) {
-  const recorder = ctxRecorder({ unknown: { value: null }, handlers: { "hooks.fire": fired(blockOn) } });
-  const finishes: unknown[] = [];
-  const loopRun = {
-    ctx: recorder.ctx,
-    run: { project: NAME, runId: "run_harbor" },
-    threadId: TURN.threadId,
-    game: hookEvents ? { hookEvents } : { hookEvents: undefined },
-    state: { integrationHead: null, finished: false, workers: new Map() },
-    journal: { director: {} },
-    toolCalls: 0,
-    keepMemory: async () => {},
-    syncHead: async () => {},
-    saveJournal: async () => {},
-    finish: async (args: unknown) => {
-      finishes.push(args);
-      return "Finished: the build is landed.";
-    },
-  };
-  return { recorder, loopRun, finishes };
 }
 
 describe("Genex's moments, as the seed fires them", { timeout: TEST_TIMEOUT_MS }, () => {
@@ -303,19 +279,8 @@ describe("Genex's moments, as the seed fires them", { timeout: TEST_TIMEOUT_MS }
     for (const id of ids) await finish(host, pool, String(id), { ok: true, sessionId: `s-${id}`, summary: "Read." });
   });
 
-  it("a finish block keeps the director's run going, and the lead hears why", async () => {
-    const held = directorRun([HookEvent.Finish], HookEvent.Finish);
-    const answer = await directorTool(held.loopRun as never, "finish", { summary: "Done." });
-    assert.match(String(answer), /crane is being serviced/);
-    assert.deepEqual(held.finishes, [], "the run is not finished");
-    const free = directorRun([HookEvent.Finish]);
-    assert.equal(
-      await directorTool(free.loopRun as never, "finish", { summary: "Done." }),
-      "Finished: the build is landed.",
-    );
-    assert.equal(free.finishes.length, 1);
-  });
-
+  // Flipped (one Loop): "a finish block keeps the director's run going" drove the web lead's handler;
+  // every Loop's finish moment is the one Loop's (one-loop.test.ts, the toy plugin's finish step).
   it("a checkpoint's label and a moment's turn and label reach the host on one line within its cap", async () => {
     const taken = { snapshot: { snapshot_id: "snap_1", scope: "game", reason: "checkpoint" }, notes: [], images: [] };
     const recorder = ctxRecorder({
@@ -342,15 +307,12 @@ describe("Genex's moments, as the seed fires them", { timeout: TEST_TIMEOUT_MS }
     assert.ok(isHookLabel(fire?.turn) && isHookLabel(fire?.label), JSON.stringify(fire));
   });
 
-  it("a web game's chat turn, director run and pool make no hooks.fire call", async () => {
+  // Flipped (one Loop): it also drove the web lead's finish; a Loop on a project no plugin hooks is
+  // one-loop.test.ts's ("a project no plugin hooks makes no hooks.fire call but the run's own moments").
+  it("a web game's chat turn and pool make no hooks.fire call", async () => {
     const { recorder } = await chatTurn(undefined);
     assert.equal(recorder.paramsOf("engine.delegate").length, 1, "the turn ran");
     assert.deepEqual(recorder.paramsOf("hooks.fire"), [], "a chat turn");
-
-    const director = directorRun(undefined);
-    await directorTool(director.loopRun as never, "finish", { summary: "Done." });
-    assert.equal(director.finishes.length, 1, "the run finished");
-    assert.deepEqual(director.recorder.paramsOf("hooks.fire"), [], "a director's finish");
 
     const repo = await gameRepo();
     const host = poolHost(repo);
@@ -428,7 +390,7 @@ describe("Genex's own holds, in the person's words on every surface", () => {
         return endOfTurnCheckpoint(recorder.ctx as never, { project: NAME, threadId: "t1" }, game);
       },
     ],
-    ["a director run's start", (hold) => runHeldWords(held(hold))],
+    ["a Loop's start", (hold) => openStartHeld(held(hold))],
     ["a director run's lead turns held", (hold) => directorTurnsHeld(held(hold))],
     ["a chat's wait for the game's apps", (hold) => pendingLine(held(hold))],
     [
@@ -456,7 +418,7 @@ describe("Genex's own holds, in the person's words on every surface", () => {
   it("a step's own block keeps its reason: no surface words it as Genex's hold", () => {
     // A step's block: its reason, and no hold of Genex's.
     const step = { reason: "The crane is being serviced.", hold: undefined };
-    assert.match(runHeldWords(step), /a plugin of this game held it back: The crane is being serviced\./);
+    assert.match(openStartHeld(step), /a plugin of this project held it back: The crane is being serviced\./);
     assert.match(directorTurnsHeld(step), /The crane is being serviced\./);
     assert.match(turnHeldLine(step), /The crane is being serviced\./);
     assert.equal(pendingLine(step), "The crane is being serviced.");

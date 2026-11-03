@@ -181,14 +181,10 @@ export interface HarnessCompleteParams {
 export interface HarnessDelegateParams {
   /**
    * The chat's own session after a closed Loop run: the run's controls it keeps (`run_status`,
-   * `show_build`, `land_build`, shared/chat-run.ts `RunControl`), answered by the host for this
-   * run and message (`run.control`). Honoured only for the chat's own session.
+   * shared/chat-run.ts `RunControl`), answered by the host for this run and message
+   * (`run.control`). Honoured only for the chat's own session.
    */
-  /**
-   * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
-   * its controls are only the status, never a build to show or land.
-   */
-  runControls?: { runId: string; messageId?: string; inPlace?: boolean };
+  runControls?: { runId: string; messageId?: string };
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
@@ -649,11 +645,6 @@ export interface HarnessHostApi {
   "preview.status": { params: { handle?: string }; result: PreviewPortStatus };
   /** Readiness is a fact the page reports, not a sleep. */
   "preview.ready": { params: { handle?: string; timeoutMs?: number; gesture?: boolean }; result: ReadyResult };
-  /** What the user's own window is showing right now: their game folder, or a build they chose to play. */
-  "preview.showing": {
-    params: void;
-    result: { project: string; root: string | null; entry: string | undefined; loaded: string | null } | null;
-  };
   "preview.observe": { params: { handle?: string }; result: BuildObservation };
   "preview.acquire": { params: { label?: string }; result: { handle: string } };
   "preview.release": { params: { handle: string }; result: boolean };
@@ -799,7 +790,6 @@ export const HostMethod = {
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",
   PreviewReady: "preview.ready",
-  PreviewShowing: "preview.showing",
   PreviewObserve: "preview.observe",
   PreviewAcquire: "preview.acquire",
   PreviewRelease: "preview.release",
@@ -906,7 +896,7 @@ export const HARNESS_PARAM_SCHEMAS = {
     cwd: optionalText,
     extraReads: z.array(text).nullish(),
     selfCapture: z.object({ project, root: text, runId: optionalText, facetId: optionalText }).nullish(),
-    director: z.object({ project, root: text, runId: text, inPlace: z.boolean().nullish() }).nullish(),
+    director: z.object({ project, root: text, runId: text }).nullish(),
     worker: z
       .object({ id: text, title: text, runId: optionalText, turn: optionalText, research: z.boolean().nullish() })
       .nullish(),

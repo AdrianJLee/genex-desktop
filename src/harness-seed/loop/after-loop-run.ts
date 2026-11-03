@@ -1,11 +1,11 @@
 /**
  * The same agent after the build: once a Loop run whose journal seated a lead has closed — finished
  * or paused — the chat's own session answers the chat's next message, in the game folder, with its
- * hands. It answers, and does the work it is asked for itself; it keeps the run's controls as tools:
- * `run_status`, `show_build` and `land_build` answered live by the host (`runControls`). On the
- * build's own engine, after a paused run it may record `resume_run`, bridged in, which the studio
- * does once the reply ends — the resumed run's lead may be this same session, so it may not run
- * while the session still answers. A turn on another engine moves the chat's bookmark there, so a
+ * hands. It answers, and does the work it is asked for itself; it keeps the run's status as a tool,
+ * `run_status`, answered live by the host (`runControls`). On the build's own engine, after a paused
+ * Loop that worked in the game folder it may record `resume_run`, bridged in, which the studio does
+ * once the reply ends — the resumed run's lead may be this same session, so it may not run while the
+ * session still answers. A turn on another engine moves the chat's bookmark there, so a
  * lead the build seats later starts afresh.
  */
 import { readJournal } from "./run-journal.ts";
@@ -68,8 +68,9 @@ export interface AfterLoopRun {
   /** The chat's message the session answers: the run's controls act for it (a resume records it). */
   messageId?: string;
   /**
-   * The run was a Loop that worked in the game folder itself (`journal.director.open`): it has no
-   * build to show or land.
+   * The run was a Loop that worked in the game folder itself (`journal.director.open`): only such a
+   * paused run goes on. A web game's Loop an earlier Genex paused is refused on Resume, so the chat
+   * answers after it as after a finished run.
    */
   inPlace?: boolean;
 }
@@ -113,9 +114,9 @@ export async function afterLeadLoopRun(
   };
 }
 
-/** May this turn resume its run: a paused one, on its lead's engine? */
+/** May this turn resume its run: a paused Loop that worked in place, on its lead's engine? */
 function resumes(loopRun: AfterLoopRun): boolean {
-  return loopRun.state === RunState.Paused && loopRun.onLeadEngine;
+  return loopRun.state === RunState.Paused && loopRun.onLeadEngine && loopRun.inPlace === true;
 }
 
 /**
@@ -123,13 +124,12 @@ function resumes(loopRun: AfterLoopRun): boolean {
  * answers for this run and message, and the resume, bridged in and recorded, when it may resume.
  */
 export function afterLoopRunGrant(loopRun: AfterLoopRun): {
-  runControls: { runId: string; messageId?: string; inPlace?: boolean };
+  runControls: { runId: string; messageId?: string };
   interviewTools?: StudioToolSpec[];
 } {
   const { runId, messageId } = loopRun;
   return {
-    // A Loop that worked in place keeps its status alone: the host offers no build to show or land.
-    runControls: { runId, ...(messageId ? { messageId } : {}), ...(loopRun.inPlace ? { inPlace: true } : {}) },
+    runControls: { runId, ...(messageId ? { messageId } : {}) },
     ...(resumes(loopRun) ? { interviewTools: [RESUME_RUN_TOOL] } : {}),
   };
 }

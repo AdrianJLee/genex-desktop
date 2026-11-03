@@ -1162,7 +1162,6 @@ export default {
   "Credential save failed. {reason} Sign-in is stopped.":
     "Falha ao salvar as credenciais. {reason} O login foi interrompido.",
   Credits: "Créditos",
-  "Critic's advice": "Conselho do crítico",
   "Curated release": "Versão selecionada",
   "Current build failed; no stale output was exported": "O build atual falhou; nenhum resultado antigo foi exportado",
   "Current cover": "Capa atual",
@@ -2532,7 +2531,6 @@ export default {
     "Depois de ativado, ele roda em momentos do Genex: {steps}; esses passos não perguntam a você antes.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Uma conta para centenas de modelos. Você paga ao OpenRouter só pelo que usar.",
-  "One bold move": "Uma jogada ousada",
   "One key for hundreds of models. Pay as you go.": "Uma chave para centenas de modelos. Pague só pelo que usar.",
   "One step before the agent can build in Godot.": "Falta um passo para o agente poder criar no Godot.",
   "Online rooms": "Salas online",
@@ -3874,7 +3872,6 @@ export default {
   "The lead stopped {count}.": "O agente principal parou {count} delas.",
   "The lead wants to run {job} in the background": "O agente principal quer executar {job} em segundo plano",
   "The lead's summary": "Resumo do agente principal",
-  "The lead's view of the game": "O jogo visto pelo agente principal",
   "The lead: done": "Agente principal: concluído",
   "The lead: paused": "Agente principal: pausado",
   "The lead: stopped": "Agente principal: parado",

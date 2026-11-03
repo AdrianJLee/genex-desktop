@@ -3,11 +3,10 @@
 ## From a request to a game
 
 There is no mode to set: the chat's agent answers, edits directly or starts a Loop, as the
-request needs. In a Loop the chat leads and builds beside workers. Judges answer only when the lead
-asks. Other projects' Loops run [in place](projects-engines.md#loops-in-place). A Loop goes on
-until its lead finishes it (in place, after the lead's named gaps), within a day's ceiling.
-Acceptance survives workers and restarts. External blockers pause the run at its
-checkpoint. Asked to finish, the lead lets rounds end, then lands
+request needs. In a Loop the chat leads and builds beside workers
+[in the game's folder](projects-engines.md#loops-in-place). Judges answer only when the lead asks. A Loop goes on, with no clock, until its lead finishes it or a turn ends with nothing at
+work. Acceptance survives workers and restarts; external blockers pause it at its checkpoint.
+Asked to finish, the lead's last turn ends it
 ([details](../harness-runtime.md#goal-completion-and-worker-approvals)). A local model's chat
 (Ollama) answers and edits; it starts no Loop.
 
@@ -22,9 +21,8 @@ game has content, Full screen (hold Esc), plugin actions, Multiplayer, Publish. 
 Play/Reload. An empty scaffold shows “Ready for your first idea”, or
 “Building your game” with Watch progress, then Play latest; the first healthy build shows itself.
 Opening a game starts nothing: Live keeps its game. Otherwise only the user changes Live (Play,
-Reload, Make live, a chat request while hidden) or a finished Unity/Godot `web/` build. A newer
-healthy build, a changed game folder, a chat's show or landing, or a broken shown build lights Reload; hidden and not stopped, all but a new build go
-in at once. The
+Reload, Make live) or a finished Unity/Godot `web/` build. A changed game folder or a broken shown
+build lights Reload; hidden and not stopped, they go in at once. The
 preview's network is open, as a web page's. Other folders' views:
 [projects](projects-engines.md#lives-views).
 
@@ -34,22 +32,22 @@ hangs below. Tries a pause cut off show Paused until added. An eye opens the rev
 working node shows its agent's screen; a selected one opens as a card. **Follow up in chat** notes
 the next message to its build. Tabs (one per build; past three, one picker, newest first) and chat
 cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs below),
-then, when asked, a finish check: Checking, Not yet, Done or Stopped. A web Loop's line is its
-builds (each health check's screenshot and outcome); workers hang off the build they merged into or
-started from; past three finished per build fold into “+N workers”. In place, workers hang off save
-points: solid under the one taking their work, else ghosts. Compares pair only one frame
-(consecutive builds, asset versions) whose pixels differ; else the card says nothing visibly changed.
+then, when asked, a finish check: Checking, Not yet, Done or Stopped. A Loop's line is its save points
+(an earlier Genex's web Loop: its builds); workers hang off them, solid under the one taking their
+work, else ghosts; past three finished per point fold into “+N workers”. Compares pair only one frame (consecutive points or builds, asset versions) whose pixels
+differ; else the card says nothing visibly changed.
 
-Agents test hidden (Godot too), never Live. A finished worker, integration and Live's
-revision are distinct facts; chat shows a delivery's capture, failures too. Before integrating or
-landing, one health check loads the page once, with `?genex-shot=1` a game may read: it loads,
-throws nothing uncaught, is not blank.
+Agents test hidden (Godot too), never Live. A finished worker, its merge and Live's revision
+differ; chat shows a delivery's capture, failures too. A web game's finish first loads its page
+once (`?genex-shot=1` a game may read); unless it loads, throws nothing uncaught and is not blank,
+the Loop goes on.
 
 ## Continuation and interruption
 
 After a chat-led build, its session takes follow-ups: edits, resuming a paused run, or a
 new Loop for more work than a reply holds. **Stop** interrupts at once, keeping finished
-work: a stopped Loop shows one Stopped line with Resume, and Builds or chat makes it live. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
+work: a stopped Loop shows one Stopped line with Resume. Resume refuses an earlier Genex's
+paused web Loop; its card says the work is kept in git, and its words name the ref for the chat to bring in. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
 pauses wait. A crash or restart settles abandoned activity from saved state.
 
 ## Where to work

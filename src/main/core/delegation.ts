@@ -29,7 +29,7 @@ import { UiEvent } from "../../shared/ui-events.ts";
 import type { McpLiveTool } from "../../substrate/mcp/registry.ts";
 import os from "node:os";
 import path from "node:path";
-import { isGrantedRunControl, isRunControl, runControlsFor } from "../../shared/chat-run.ts";
+import { isRunControl, runControlTools } from "../../shared/chat-run.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { lstat, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { ensureDir, realpathNearest } from "../../substrate/fsx.ts";
@@ -60,7 +60,7 @@ import { appLookFor, type LookCaller, type LookSave, runAppLook } from "./app-lo
 import { type JobOwner, JobRole, JobScopeKind, JobStopper } from "../../shared/jobs.ts";
 import { WORKER_TOOL_ANSWER } from "./worker-tools-prompts.ts";
 import { DispatchActionType, HarnessCapability, type ReferenceFrame } from "../../shared/protocol.ts";
-import { COMPUTER_TOOL_NAME, DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
+import { DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
 import { WorkClass, workClassOf } from "../../substrate/budget.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { chatTurnOf, openDoor, recordSteerDelivered, settleDoor, type SteerDoor } from "./chat-steer.ts";
@@ -148,16 +148,6 @@ const MESSAGE = {
     "a reviewer is seated only read-only, for a run of this game, reading the game's folder or the run's own copy of it",
 } as const;
 
-/** The director's own tool names beside the computer; the harness's run tools may not reuse them. */
-const DirectorTool = {
-  Look: "look",
-  Capture: "capture",
-  ResolveRoot: "resolve_root",
-} as const;
-const DIRECTOR_RESERVED_TOOLS = new Set<string>([COMPUTER_TOOL_NAME, ...Object.values(DirectorTool)]);
-/** The build a director's window shows unless it points it elsewhere: its own worktree. */
-const INTEGRATION_TARGET = "integration";
-
 type DelegateParams = HarnessParams<typeof HostMethod.EngineDelegate>;
 type LiveTool = NonNullable<DelegateRequest["liveTools"]>[number];
 type OnLiveTool = NonNullable<DelegateRequest["onLiveTool"]>;
@@ -196,33 +186,19 @@ interface WorkerFinding {
   inPlace: boolean;
 }
 
-const DIRECTOR_LOOK: LiveTool = {
-  name: DirectorTool.Look,
-  description:
-    'Point your window (the computer tool and capture) at a build of this run: "integration" (your worktree, the default), a worker id (its worktree, edits included), or "live" (the game folder the user sees). Reloads the build through its served entry and returns a screenshot. Everything you then click, press and capture happens in that build.',
-  parameters: {
-    type: "object",
-    properties: { target: { type: "string", description: "integration | live | <worker id>" } },
-    required: ["target"],
-  },
-};
-
 /**
  * Stop what a session's tools started and give back its windows: the computers' games, the
  * desktop driver, the pooled windows. One that fails to stop never keeps the rest from stopping.
  */
 async function releaseSessionTools(tools: SessionTools, windows: SessionWindows): Promise<void> {
-  const held = [tools.builder, tools.director, tools.desktop, windows.self, windows.director];
+  const held = [tools.builder, tools.desktop, windows.self];
   for (const one of held) await one?.release().catch(() => {});
 }
 
+/** A lead's run tools, each answered by the harness (`runToolsOnly`). */
 interface DirectorTools {
   liveTools: NonNullable<DelegateRequest["liveTools"]>;
   onLiveTool: OnLiveTool;
-  /** Capture of what its window shows; none without a window (an Unreal game's director). */
-  onCapture?: NonNullable<DelegateRequest["onCapture"]>;
-  /** Stop what the director's computer started (a Play Protocol game); its window is released apart. */
-  release: () => Promise<void>;
 }
 
 /** Where a delegation runs, with what, and under which budget class. */
@@ -243,8 +219,7 @@ interface DelegationGrants {
   selfCapture: SelfCaptureGrant | null;
   selfShotsDir: string | null;
   director: DirectorGrant | null;
-  directorShotsDir: string | null;
-  /** The folders the host itself derived for it (its game, its frames, a director's run folders). */
+  /** The folders the host itself derived for it (its game, its frames, a lead's run folder). */
   hostReads: string[];
   /** Those, and the folders the brief names. */
   extraReads: string[];
@@ -281,16 +256,12 @@ interface DelegationSession {
   /** A lead that is its chat's own session, in the game folder: its session is the chat's bookmark. */
   chatLead: boolean;
   /**
-   * A lead in its game's folder: the worktree it leads, as its seat checked it (`seat.leads`), or the
-   * game folder itself for a lead in place. Its plugins act there (the binding's directory), as a
-   * director's in its worktree, so what they deliver reaches the game when the run lands; and, the
-   * lead not being the chat's turn, neither another turn's end nor its own withdraws its plugin
-   * cards: only the person, the timeout or a Stop settles them. Its connector calls end with its own
-   * session (`ended`). Null otherwise.
+   * A Loop's lead: the game folder it leads in, as its seat checked it (`seat.leads`). Its plugins act
+   * there (the binding's directory); and, the lead not being the chat's turn, neither another turn's
+   * end nor its own withdraws its plugin cards: only the person, the timeout or a Stop settles them.
+   * Its connector calls end with its own session (`ended`). Null otherwise.
    */
   leads: string | null;
-  /** A Loop's lead in the game folder itself (`seat.leadsInPlace`): its plugins act where it sits. */
-  leadsInPlace: boolean;
   abort: AbortController;
   /** Aborted once the delegation returns: a lead's connector calls end with it besides `abort`. */
   ended: AbortController;
@@ -307,7 +278,7 @@ interface DelegationSession {
   runControls?: RunControlGrant;
   /**
    * The run whose own consent covers its game's engine connector, asked at each call
-   * (`#runConsents`): a Loop's lead's in the game folder (`liveRunOf`). Null for every other session.
+   * (`#runConsents`): a Loop's lead's in the game folder. Null for every other session.
    */
   liveRun: string | null;
   /** What its game's folder holds (`seat.facts`): its plugin tools, skills and connectors are those that reach it. */
@@ -329,10 +300,9 @@ interface DelegationSession {
 /** The run and message a chat's own session keeps the run's controls for. */
 type RunControlGrant = NonNullable<DelegateParams["runControls"]>;
 
-/** The session-long windows: the builder's own, and the director's. */
+/** The session-long window: the builder's own. */
 interface SessionWindows {
   self: SessionPort | null;
-  director: SessionPort | null;
 }
 
 /** The tools prepared for a session under its lock; each one is released by the delegation's finally. */
@@ -372,9 +342,9 @@ interface SessionTools {
  * The one condition that decides whether this session gets host tools at all. Judges and
  * critics never reach here (they `complete()`); a read-only session has a narrower job than "build
  * this game", and a connector is exactly the kind of reach it should not have. A chat that may launch
- * a build is a full contractor and gets what the Auto chat gets, and so does a build's lead: the
- * `readOnly` (or `inPlace`) of its brief marks its seat in the game folder (`#leadRoot`), the host's
- * own finding decides, and its plugins act on the build it leads (`DelegationSession.leads`).
+ * a build is a full contractor and gets what the Auto chat gets, and so does a build's lead: its
+ * seat in the game folder is the host's own finding (`#inPlaceRoot`), and its plugins act in the
+ * folder it leads (`DelegationSession.leads`).
  */
 function hostToolsEligible(p: DelegateParams, seat: DelegationSeat): boolean {
   return !(p.readOnly && !seat.leads);
@@ -469,14 +439,8 @@ function honouredRunControls(p: DelegateParams): RunControlGrant | null {
 
 /** Where a delegation sits and how its director grant reads there (`#seatOf`). */
 interface DelegationSeat {
-  /**
-   * A lead in its game's folder: the integration worktree of this game's run it leads, as the real
-   * path that was checked (`#leadRoot`), or the game folder itself for a lead in place — its grant's
-   * root, its reads and its lock. Null otherwise.
-   */
+  /** A Loop's lead in its game's folder, as `#inPlaceRoot` checked it: its grant's root, its reads and its lock. Null otherwise. */
   leads: string | null;
-  /** A Loop's lead in the game folder itself (`#leadRoot`'s in-place branch): it writes there. */
-  leadsInPlace: boolean;
   /** It sits in its game's own folder: no build worktree. */
   gameFolder: boolean;
   /** The engine its game's record links it to: whether a chat's checkpoint without a hook is a snapshot. */
@@ -492,46 +456,21 @@ interface DelegationSeat {
 }
 
 /**
- * The director: honoured only for the worktree the session runs in — its own
- * integration worktree, under scratch — or, for a waking run's lead, for its game's folder while
- * it leads that worktree (`#seatOf`), which the grant then names by its checked real path. An
- * in-place grant the host refused to seat is dropped whole: its root is always the game folder, and
- * honoured as a director it would hand an unattended session the run's tools and window there.
+ * The director: honoured only for a Loop's lead the host seated in its game's folder (`#seatOf`),
+ * which the grant then names by its checked real path. A grant the host refused to seat is dropped
+ * whole: honoured, it would hand an unattended session the run's tools there.
  */
-function honouredDirector(p: DelegateParams, cwd: string, seat: DelegationSeat): DirectorGrant | null {
+function honouredDirector(p: DelegateParams, seat: DelegationSeat): DirectorGrant | null {
   const director = p.director;
-  if (!director) return null;
-  if (seat.leads) return { ...director, root: seat.leads };
-  if (director.inPlace === true) return null;
-  return path.resolve(director.root) === cwd ? director : null;
+  return director && seat.leads ? { ...director, root: seat.leads } : null;
 }
 
-/**
- * A director works through a browser window only in a web Loop: never a Loop's lead in place (the
- * seat its grant earned, which the run's start fixed), nor a lead of a game its engine record binds
- * to any engine (Unreal's runner, or an engine another plugin declares). Never read from the
- * folder's facts now: a read failure or the run's own work may change those mid-run.
- */
 /** A game's facts as one comparable key: each `id@path`, sorted. */
 const factsKey = (facts: readonly { id: string; path: string }[]): string =>
   facts
     .map((fact) => `${fact.id}@${fact.path}`)
     .sort()
     .join("\n");
-
-const directorWindowed = (seat: DelegationSeat): boolean => !seat.leadsInPlace && !isEngineGame(seat.engine);
-
-/**
- * The run whose own consent may cover this session's calls to its game's engine connector: an
- * honoured director grant for this very game, seated in the game's own folder (a Loop's lead in
- * place). Never a worktree run's lead (it acts on the worktree it leads), a worker or the chat's own
- * session. Whether the run still covers a call is asked at the call.
- */
-function liveRunOf(p: DelegateParams, director: DirectorGrant | null, seat: DelegationSeat): string | null {
-  const leadsWorktree = seat.leads !== null && !seat.leadsInPlace;
-  if (!director || leadsWorktree || !seat.gameFolder) return null;
-  return director.project === p.project ? director.runId : null;
-}
 
 /** The game a thread is bound to (`metadata.project`), if any. */
 function threadGame(thread: ConversationRecord): string | undefined {
@@ -707,45 +646,14 @@ export class DelegationService {
   }
 
   /**
-   * The director's tools: the computer on a window of its own, `look` to point that
-   * window at any build of the run, capture of whatever it is looking at, and the harness's
-   * run tools — workers, a second opinion, show, note, finish — which
-   * live in the harness process (it owns the loops and the merge) and are reached through a
-   * dispatch that answers. Tool names come from the harness so the studio stays generic. `root` is
-   * the build its window opens on: its integration worktree, wherever its session sits. A director
-   * with no window (`session` null: an Unreal game's) gets the run tools alone (`runToolsOnly`).
+   * A Loop lead's run tools — workers, a second opinion, save points, note, finish — which live in
+   * the harness process (it owns the loop and the merges) and are reached through a dispatch that
+   * answers (`runToolsOnly`). Tool names come from the harness so the studio stays generic.
    */
-  async _directorToolsFor(
+  #directorTools(
     d: NonNullable<DelegateRequest["director"]> & { tools?: DelegateRequest["liveTools"] },
-    root: string,
-    outDir: string,
-    session: SessionPort | null,
-  ): Promise<DirectorTools> {
-    const forwarded = (d.tools ?? []).filter((t) => !DIRECTOR_RESERVED_TOOLS.has(t.name));
-    const forward = (name: string, args: Record<string, unknown>) => this.#forwardDirectorTool(d, name, args);
-    if (!session) return runToolsOnly(forwarded, forward);
-    const grant = {
-      project: d.project,
-      root,
-      runId: d.runId,
-      facetId: "director",
-      iteration: 0,
-      setup: d.setup ?? null,
-      label: "director",
-    };
-    const computer = await this.#core._computerToolsFor({ ...grant, role: "director" }, root, outDir, session);
-    const onCapture = this.#x.previews.captureFor(grant, root, outDir, session, () => computer.root(), "director");
-    const onLiveTool: OnLiveTool = async (name, args) => {
-      if (name === COMPUTER_TOOL_NAME) return computer.onLiveTool(name, args);
-      if (name === DirectorTool.Look) return this.#directorLook(d, computer, forward, args);
-      return forward(name, args);
-    };
-    return {
-      liveTools: [...computer.liveTools, DIRECTOR_LOOK, ...forwarded],
-      onLiveTool,
-      onCapture,
-      release: () => computer.release(),
-    };
+  ): DirectorTools {
+    return runToolsOnly(d.tools ?? [], (name, args) => this.#forwardDirectorTool(d, name, args));
   }
 
   /**
@@ -957,32 +865,6 @@ export class DelegationService {
     return false;
   }
 
-  /** `look`: point the director's window at a build of this run — never anywhere else — and screenshot it. */
-  async #directorLook(
-    d: NonNullable<DelegateRequest["director"]>,
-    computer: ComputerTools,
-    forward: (name: string, args: Record<string, unknown>) => Promise<LiveToolResult>,
-    args: Record<string, unknown>,
-  ): Promise<LiveToolResult> {
-    const target = String(args.target ?? INTEGRATION_TARGET).trim() || INTEGRATION_TARGET;
-    const resolved = await forward(DirectorTool.ResolveRoot, { target });
-    const text = typeof resolved === "string" ? resolved : resolved.text;
-    if (!path.isAbsolute(text)) return text;
-    const root = path.resolve(text);
-    const allowed = [
-      path.resolve(this.#core.games.dirFor(d.project)),
-      path.join(path.resolve(this.#core.layout.scratch), "autopilot", d.runId),
-    ];
-    if (!allowed.some((a) => isInside(a, root))) return `look: ${root} is not a build of this run`;
-    computer.retarget(root);
-    const loaded = await computer.ensureLoaded(true);
-    if (loaded.problem)
-      return `${loaded.problem} — the window is pointed at ${target} (${root}) but shows nothing usable`;
-    const shot = await computer.onLiveTool(COMPUTER_TOOL_NAME, { action: "screenshot" });
-    const prefix = `the window now shows ${target} (${root})${loaded.note ? ` — ${loaded.note}` : ""}\n`;
-    return typeof shot === "string" ? prefix + shot : { ...shot, text: prefix + shot.text };
-  }
-
   /**
    * Where a delegation may build: the project's live folder (the default) or a worktree under
    * scratch. Anything else is refused — the harness is agent-editable, and "point a contractor
@@ -1183,7 +1065,7 @@ export class DelegationService {
     this.#x.activeDelegations.set(lock, delegation);
     this.#core.budget.beginWork(workClass);
     this.#core.emit(UiEvent.DelegationStarted, this.#activeIn(p.project, engineId));
-    const windows = this.#sessionWindows(grants, seat);
+    const windows = this.#sessionWindows(grants);
     const announced = this.#x.gameChanges.get(p.project) ?? 0;
     /** The session that asks, whose end the picker must hear of: the chat's own, or a lead's. */
     let asking: PersonSession | LeadSession | null = null;
@@ -1669,7 +1551,7 @@ export class DelegationService {
 
   /**
    * The folder a reviewer reads, by real path: the game's own (as registered), or a worktree of the
-   * game's own repository inside the run's folder under scratch (as `#leadRoot` checks a lead's).
+   * game's own repository inside the run's folder under scratch (as `#inPlaceRoot` checks a lead's).
    * Null for anything else: another game, a link that leads elsewhere, another repository, nothing.
    */
   async #reviewerReads(project: string, runId: string, asked: string): Promise<string | null> {
@@ -1691,20 +1573,18 @@ export class DelegationService {
   /**
    * Whether this delegation sits in its game's own folder, and whether its director grant is a
    * lead's there (one session): the lead of a waking run is its chat's own session, so it sits
-   * in the game folder and either reads the run's integration worktree it leads (`root`) without
-   * writing (a web Loop), or works in the game folder itself (`inPlace`, any other Loop).
+   * and works in the game folder itself.
    */
   async #seatOf(p: DelegateParams, target: DelegationTarget): Promise<DelegationSeat> {
     const live = path.resolve(this.#core.games.dirFor(p.project));
     // The game's own folder: no build worktree.
     const gameFolder = target.cwd === live;
-    const leads = gameFolder ? await this.#leadRoot(p, live) : null;
+    const leads = gameFolder ? await this.#inPlaceRoot(p, live) : null;
     const { facts, holds } = await this.#core.games
       .kindOf(p.project)
       .catch(() => ({ facts: [], holds: FolderHolds.Unreadable }));
     return {
       leads,
-      leadsInPlace: leads !== null && leads === live,
       gameFolder,
       engine: await this.#gameEngine(p.project),
       facts,
@@ -1713,35 +1593,17 @@ export class DelegationService {
   }
 
   /**
-   * The folder a lead in its game's folder leads — or null, and the grant is dropped. In place
-   * (`#inPlaceRoot`), the game folder itself. Otherwise the worktree it leads and builds in, as its
-   * checked real path: honoured only for a lead of this game, for a worktree of this game's own
-   * repository inside its run's own folder under scratch, of a run the host's records say is this
-   * game's (`#runOfGame`). Its brief's `readOnly` (a kept older seed still sends one) seats it no
-   * differently: no lead is read-only.
-   */
-  async #leadRoot(p: DelegateParams, live: string): Promise<string | null> {
-    const d = p.director;
-    if (!d) return null;
-    if (d.inPlace === true) return this.#inPlaceRoot(p, d, live);
-    const asked = d.project === p.project && path.resolve(d.root) !== live;
-    if (!asked) return null;
-    const runFolder = await this.#runFolder(d.runId);
-    const root = await realpath(d.root).catch(() => null);
-    if (!runFolder || !root || !isBelow(runFolder, root)) return null;
-    if (!(await sameRepository(live, root))) return null;
-    return (await this.#runOfGame(p.project, d.runId)) ? root : null;
-  }
-
-  /**
-   * A Loop's lead in place: the game folder as registered (`live`), or null. Honoured only for a
-   * lead that may write (never `readOnly`), of this game, whose root is the game folder by name and
-   * by real path (never a link to it, nor a folder inside it), in this game's own chat, open (never
+   * A Loop's lead in place: the game folder as registered (`live`), or null, and the grant is
+   * dropped. Honoured only for a lead that may write (never `readOnly`), of this game, whose root is
+   * the game folder by name and by real path (never a link to it, nor a folder inside it), in this
+   * game's own chat, open (never
    * an archived one, nor one whose record can't be read: nobody would answer its questions), for a
    * run the host's records say is this game's, was started in the chat the delegation and its grant
    * both name (`#runOfChat`) and is going now (`#runRunning`): never a run that finished or paused.
    */
-  async #inPlaceRoot(p: DelegateParams, d: DirectorGrant, live: string): Promise<string | null> {
+  async #inPlaceRoot(p: DelegateParams, live: string): Promise<string | null> {
+    const d = p.director;
+    if (!d) return null;
     const asked = p.readOnly !== true && d.project === p.project && path.resolve(d.root) === live;
     const sameChat = typeof p.threadId === "string" && d.threadId === p.threadId;
     if (!asked || !sameChat) return null;
@@ -1890,7 +1752,7 @@ export class DelegationService {
       return;
     }
     if (lock !== live) return;
-    const ownRun = seat.leadsInPlace ? p.director?.runId : undefined;
+    const ownRun = seat.leads ? p.director?.runId : undefined;
     const worker = [...this.#x.activeDelegations.values()].find(
       (delegation) =>
         delegation.project === p.project && delegation.besideLeadOf !== undefined && delegation.besideLeadOf !== ownRun,
@@ -2026,25 +1888,20 @@ export class DelegationService {
     // Builder eyes: honoured only for the workspace this delegation actually builds in —
     // a capture grant pointing anywhere else is dropped by construction.
     const selfCapture = p.selfCapture && path.resolve(p.selfCapture.root) === cwd ? p.selfCapture : null;
-    const director = honouredDirector(p, cwd, seat);
+    const director = honouredDirector(p, seat);
     const selfShotsDir = selfCapture ? runShotsDir(runs, selfCapture.runId, selfCapture.facetId, ShotKind.Self) : null;
-    const directorShotsDir = director ? runShotsDir(runs, director.runId, "director", ShotKind.Self) : null;
     // The capture output rides along as a read root, so the contractor can Read its own frames.
     const hostReads = [
       ...(selfShotsDir ? [selfShotsDir] : []),
-      ...(director ? this.#directorReads(p.project, director, seat) : []),
+      ...(director ? this.#directorReads(p.project, director) : []),
     ];
     const extraReads = [...(p.extraReads ?? []), ...hostReads];
-    return { selfCapture, selfShotsDir, director, directorShotsDir, hostReads, extraReads };
+    return { selfCapture, selfShotsDir, director, hostReads, extraReads };
   }
 
-  /**
-   * What a director may read: its run's artifacts, its game's folder, and under scratch its run's
-   * whole folder — or, for a lead, only the worktree it leads, by the real path its seat checked.
-   */
-  #directorReads(project: string, director: DirectorGrant, seat: DelegationSeat): string[] {
-    const runFolder = path.join(this.#core.layout.scratch, "autopilot", director.runId);
-    return [runDir(this.#core.layout.runs, director.runId), seat.leads ?? runFolder, this.#core.games.dirFor(project)];
+  /** What a lead may read beyond its folder: its run's artifacts, and its game's folder. */
+  #directorReads(project: string, director: DirectorGrant): string[] {
+    return [runDir(this.#core.layout.runs, director.runId), this.#core.games.dirFor(project)];
   }
 
   #session(
@@ -2068,7 +1925,9 @@ export class DelegationService {
     return {
       ...(chatTurn ? { chatTurn } : {}),
       ...(runControls ? { runControls } : {}),
-      liveRun: liveRunOf(p, director, seat),
+      // The run whose own consent may cover its calls to its game's engine connector: an honoured
+      // director grant's, seated in this game's own folder (a Loop's lead). Asked again at each call.
+      liveRun: director?.runId ?? null,
       ...(chatTurn && target.steersMidTurn ? { door: openDoor() } : {}),
       ...(chatTurn ? { tools: toolsInFlight(target.engineId), personWrote: personWroteWatch() } : {}),
       threadId,
@@ -2083,7 +1942,6 @@ export class DelegationService {
       leadTurn: Boolean(director),
       chatLead: Boolean(director?.chatSession === true && seat.leads),
       leads: seat.leads,
-      leadsInPlace: seat.leadsInPlace,
       facts: seat.facts,
       ...(seat.holds ? { holds: seat.holds } : {}),
       abort: new AbortController(),
@@ -2101,10 +1959,8 @@ export class DelegationService {
     };
   }
 
-  #sessionWindows(grants: DelegationGrants, seat: DelegationSeat): SessionWindows {
+  #sessionWindows(grants: DelegationGrants): SessionWindows {
     const { selfCapture } = grants;
-    // Only a web Loop's director has a window: any other works in its project's own editor.
-    const director = directorWindowed(seat) ? grants.director : null;
     return {
       // The builder's window for the whole session: capture reloads it, the computer tool
       // keeps playing in it, the agent-screen card in the UI watches it.
@@ -2114,9 +1970,6 @@ export class DelegationService {
             label: `build:${selfCapture.facetId ?? selfCapture.project}`,
           })
         : null,
-      // The pool label keeps the run id — that is what the window strip shows, and two
-      // concurrent runs have to stay apart there.
-      director: director ? this.#x.previews.sessionPortFor({ label: `director:${director.runId}` }) : null,
     };
   }
 
@@ -2247,7 +2100,7 @@ export class DelegationService {
       throw new Error(MESSAGE.toolCollision(COVER_TOOL.name));
   }
 
-  /** The builder's computer and the director's tools, each on its own window. */
+  /** The session's computer on its own window (a lead's too: it is the chat's own session), and a lead's run tools. */
   async #prepareWindowTools(
     p: DelegateParams,
     cwd: string,
@@ -2255,8 +2108,8 @@ export class DelegationService {
     windows: SessionWindows,
     tools: SessionTools,
   ): Promise<void> {
-    const { selfCapture, selfShotsDir, director, directorShotsDir } = grants;
-    const { self: selfWindow, director: directorWindow } = windows;
+    const { selfCapture, selfShotsDir, director } = grants;
+    const { self: selfWindow } = windows;
     const builderLooks = selfCapture && selfShotsDir && selfWindow && p.computer !== false;
     if (builderLooks) {
       tools.builder = await this.#core._computerToolsFor(
@@ -2266,13 +2119,7 @@ export class DelegationService {
         selfWindow,
       );
     }
-    if (director && directorShotsDir) {
-      if (directorWindow) await ensureDir(directorShotsDir);
-      // Its window, its capture and its computer are on the build it leads, wherever it sits — a
-      // lead's by the real path its seat checked (`honouredDirector`), never the name it was sent.
-      const root = path.resolve(director.root);
-      tools.director = await this.#core._directorToolsFor(director, root, directorShotsDir, directorWindow);
-    }
+    if (director) tools.director = this.#directorTools(director);
   }
 
   /**
@@ -2430,8 +2277,8 @@ export class DelegationService {
   }
 
   /**
-   * The session's live tools and grants. Later fields win: the builder's computer, then the
-   * director's tools, then the host tools over all of them.
+   * The session's live tools and grants. Later fields win: the builder's computer, then the host
+   * tools over it (a lead's run tools among them).
    */
   #toolFields(
     p: DelegateParams,
@@ -2442,7 +2289,7 @@ export class DelegationService {
     tools: SessionTools,
   ): Partial<DelegateRequest> {
     const { selfCapture, selfShotsDir, director } = grants;
-    const { builder, director: directorTools } = tools;
+    const { builder } = tools;
     return {
       ...(selfCapture && selfShotsDir && windows.self
         ? {
@@ -2451,23 +2298,17 @@ export class DelegationService {
           }
         : {}),
       ...(builder ? { liveTools: builder.liveTools, onLiveTool: builder.onLiveTool } : {}),
-      ...(directorTools && director
-        ? {
-            director,
-            liveTools: directorTools.liveTools,
-            onLiveTool: directorTools.onLiveTool,
-            ...(directorTools.onCapture ? { onCapture: directorTools.onCapture } : {}),
-          }
-        : {}),
+      // A lead always gets host tools, which carry its run tools beside its window's.
+      ...(director ? { director } : {}),
       ...readOnlyField(p, session),
-      ...leadBuildsField(session),
       ...(session.hostTools ? this.#hostToolFields(p, target, grants, session, tools) : this.#lookFields(tools)),
     };
   }
 
   /**
-   * Host tools: the window's own tools first, then the cover, Genex's project tools, the run's
-   * controls (the chat's own session after a run it led), the plugins and the connectors.
+   * Host tools: the window's own tools and a lead's run tools first, then the cover, Genex's project
+   * tools, the run's controls (the chat's own session after a run it led), the plugins and the
+   * connectors.
    */
   #hostToolFields(
     p: DelegateParams,
@@ -2476,12 +2317,12 @@ export class DelegationService {
     session: DelegationSession,
     tools: SessionTools,
   ): Partial<DelegateRequest> {
-    const windowTools = tools.director ?? tools.builder;
-    const controls = session.runControls ? runControlsFor(session.runControls) : [];
+    const controls = session.runControls ? runControlTools : [];
     const desktop = tools.desktop?.liveTools ?? [];
     return {
       liveTools: [
-        ...(windowTools?.liveTools ?? []),
+        ...(tools.builder?.liveTools ?? []),
+        ...(tools.director?.liveTools ?? []),
         ...desktop,
         ...tools.cover,
         // Genex's own project and worker tools load with the prompt: no brief line restates them.
@@ -2505,7 +2346,7 @@ export class DelegationService {
   #lookFields(tools: SessionTools): Partial<DelegateRequest> {
     const caller = tools.lookCaller;
     if (!caller || !tools.look.length) return {};
-    const windowTools = tools.director ?? tools.builder;
+    const windowTools = tools.builder;
     return {
       liveTools: [...(windowTools?.liveTools ?? []), ...tools.look],
       onLiveTool: async (name: string, args: Record<string, unknown>) => {
@@ -2536,7 +2377,7 @@ export class DelegationService {
       });
     if (tools.cover.some((tool) => tool.name === name))
       return this.#x.setGameCover(p.project, args, p.threadId, signal);
-    if (session.runControls && isGrantedRunControl(name, session.runControls))
+    if (session.runControls && isRunControl(name))
       return this.#x.conversation.runControl(
         session.threadId,
         session.runControls.runId,
@@ -2571,9 +2412,9 @@ export class DelegationService {
       });
     }
     if (!tools.plugins.some((tool) => tool.name === name)) {
-      const handler = tools.director?.onLiveTool ?? tools.builder?.onLiveTool;
-      if (!handler) throw new Error(MESSAGE.unknownTool(name));
-      return handler(name, args);
+      const owner = windowOrRunTools(tools, name);
+      if (!owner) throw new Error(MESSAGE.unknownTool(name));
+      return owner.onLiveTool(name, args);
     }
     const result = await this.#x.pluginTools.invokePluginTool(name, args, binding, signal, {
       engine: target.engineId,
@@ -2844,7 +2685,7 @@ function activeDelegation(
     ...(session.personWrote ? { personWrote: session.personWrote } : {}),
     ...(worker ? { worker: { id: worker.id, chatThreadId: worker.chatThreadId } } : {}),
     ...(session.reviewer ? { reviewer: session.reviewer } : {}),
-    ...(session.leadsInPlace && session.liveRun ? { leadsInPlace: session.liveRun } : {}),
+    ...(session.liveRun ? { leadsInPlace: session.liveRun } : {}),
     ...(typeof askedWorker === "string" && askedWorker ? { askedWorker } : {}),
     ...holderField(session),
   };
@@ -2924,10 +2765,14 @@ function assertRunControlsFree(tools: SessionTools): void {
   if (taken) throw new Error(MESSAGE.toolCollision(taken.name));
 }
 
+/** Who answers a tool that is no host tool: a lead's run tools one of theirs, any other the session's window, which refuses one it lacks. */
+function windowOrRunTools(tools: Pick<SessionTools, "builder" | "director">, name: string) {
+  return tools.director?.liveTools.some((tool) => tool.name === name) ? tools.director : tools.builder;
+}
+
 /**
- * A director without a window — an Unreal game's, the Unreal Loop's lead, which works in the
- * visible Unreal editor through its game's engine connector: only the run tools it was handed, each
- * answered by the harness. No computer, `look` or capture; any other name is refused, never forwarded.
+ * A lead's run tools: only the ones it was handed, each answered by the harness; any other name is
+ * refused, never forwarded. A lead looks at its game with the window and tools its chat's turns have.
  */
 function runToolsOnly(
   forwarded: LiveTool[],
@@ -2938,8 +2783,7 @@ function runToolsOnly(
     if (!names.has(name)) throw new Error(MESSAGE.unknownTool(name));
     return forward(name, args);
   };
-  // No computer was started for it, so there is nothing of its own to stop.
-  return { liveTools: forwarded, onLiveTool, release: async () => {} };
+  return { liveTools: forwarded, onLiveTool };
 }
 
 /**
@@ -2997,13 +2841,4 @@ function steerField(session: DelegationSession): Partial<DelegateRequest> {
  */
 function readOnlyField(p: DelegateParams, session: Pick<DelegationSession, "leads">): Partial<DelegateRequest> {
   return p.readOnly && session.leads === null ? { readOnly: true } : {};
-}
-
-/**
- * The build a lead leads outside the folder it sits in (a web Loop's integration worktree, by the
- * real path its seat checked): it edits, runs and commits there, so its engine's box writes it.
- * None for a lead in place, whose folder is its own, nor for any other session.
- */
-function leadBuildsField(session: Pick<DelegationSession, "leads" | "leadsInPlace">): Partial<DelegateRequest> {
-  return session.leads !== null && !session.leadsInPlace ? { leadBuilds: session.leads } : {};
 }

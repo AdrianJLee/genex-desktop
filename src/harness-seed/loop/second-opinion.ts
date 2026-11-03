@@ -48,8 +48,8 @@ export const SECOND_OPINION_WORDS = {
   answer: (text: string) => `Second opinion: ${text}`,
 } as const;
 
-/** `judge` as a lead's engine sees it; `pictures` optional when the caller takes one itself (a web game's build). */
-export function secondOpinionSpec({ picturesOptional = false }: { picturesOptional?: boolean } = {}): LiveToolSpec {
+/** `judge` as a lead's engine sees it. */
+export function secondOpinionSpec(): LiveToolSpec {
   return {
     name: SECOND_OPINION_TOOL,
     description: SECOND_OPINION_WORDS.description,
@@ -57,12 +57,7 @@ export function secondOpinionSpec({ picturesOptional = false }: { picturesOption
       type: "object",
       properties: {
         question: { type: "string", description: SECOND_OPINION_WORDS.question },
-        pictures: {
-          type: "string",
-          description: picturesOptional
-            ? `${SECOND_OPINION_WORDS.pictures} Without any, Genex takes a screenshot of the build.`
-            : SECOND_OPINION_WORDS.pictures,
-        },
+        pictures: { type: "string", description: SECOND_OPINION_WORDS.pictures },
       },
       required: ["question"],
     },

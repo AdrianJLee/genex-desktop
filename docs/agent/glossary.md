@@ -70,11 +70,11 @@ is product copy, not this glossary.
   (`loop/director.ts`, its parts under `loop/director/`).
 - **Run**: the Loop's run as one explicit object (`prepareLoopRun` in
   `loop/director/setup.ts`); every function of the run takes it first (`loop/director/loop-run.ts`),
-  and what needs no run is beside it: `rules.ts` (the landing's words, plain card sentences),
-  `args.ts` and `tool-specs.ts`.
-- **Health check**: the one check before a web game's merge settles and before its build lands —
-  the page loads, no uncaught error, a frame that is not blank — the host's `preview.observe` in a
-  window of the Loop's own (`loop/health-check.ts`).
+  and what needs no run is beside it: `rules.ts` (plain card sentences), `args.ts` and
+  `tool-specs.ts`.
+- **Health check**: the one check of a web game's page when its Loop's lead finishes — the page
+  loads, no uncaught error, a frame that is not blank — the host's `preview.observe` in a window of
+  the Loop's own (`loop/health-check.ts`, from `director/open/finish.ts`).
 - **Second opinion**: a model that did none of the work, asked by the lead about pictures and a
   question it chooses (`judge`, `loop/second-opinion.ts`), or a reviewer asked with `finish
   review=yes` (`loop/finish-check.ts`); it decides nothing.
@@ -83,12 +83,11 @@ is product copy, not this glossary.
   (`wake-schedule.ts` decides when, from typed `NoteKind` lines): with the person's message as they
   wrote it, or Genex's one-line facts (`director/news.ts`), never a digest. A turn cut short for the
   person's words resumes with those words alone.
-- **Lead / one session**: a waking web run's director that is its chat's own session (one per chat), building in
-  the integration worktree with its own hands beside its workers, never read-only
-  (`loop/director/lead-session.ts`). After the close the same
-  session answers the chat with its hands back and the run's controls — `run_status`,
-  `show_build`, `land_build` (`runControls`) and a paused run's recorded `resume_run`
-  (`loop/after-loop-run.ts`).
+- **Lead / one session**: a Loop's director that is its chat's own session (one per chat),
+  building in the game folder with its own hands beside its workers, never read-only
+  (`loop/director/lead-session.ts`). After the close the same session answers the chat with its
+  hands back and the run's status, `run_status` (`runControls`), and after a paused Loop that worked
+  in place its recorded `resume_run` (`loop/after-loop-run.ts`).
 - **Run journal**: the durable artifact `autopilot_<runId>` a run resumes from. A director run
   keeps its whole record there (`loop/director/journal.ts`): the time it has worked, so a Resume
   goes on with what the budget has left, the log and the wake loop's state.
@@ -101,15 +100,14 @@ is product copy, not this glossary.
 
 ## The one Loop
 
-Every project's Loop is the director's wake loop, in one of two profiles (`LoopProfile`,
-`loopProfileOf` in `src/shared/project-facts.ts`).
+Every project's Loop is the director's wake loop, in place, a web game's too.
 
-- **Profile**: `web` for a web game at the root beside nothing but `web-game`/`blender-assets`
-  facts (an integration copy, builders, judges, landing); `open` for any other project.
-- **Open Loop / lead in place**: the open profile (`loop/director/open/`): the chat's own session
-  writes in the game folder (`director.inPlace`), starts workers
-  from the run pool (the plugins' worker types among them) and claims `finish`, which a reviewer
-  checks. Not the web run's **Lead / one session**, which builds in the integration worktree.
+- **Profile**: `autopilot_started.profile` (`LoopProfile` in `src/shared/project-facts.ts`): `open`
+  for every Loop now; `web` only on the records of a web game's Loop an earlier Genex ran in an
+  integration copy, which the app still draws and whose paused journal a Resume refuses.
+- **Open Loop / lead in place**: the Loop (`loop/director/open/`): the chat's own session writes in
+  the game folder (`director.inPlace`), starts workers from the run pool (the plugins' worker types
+  among them) and claims `finish`, on its word or after a reviewer it asks.
 - **Save point**: the open lead's checkpoint (`save_point`): Genex's snapshot of the game folder
   with the project's plugins' steps around it; `rewind` goes back to one and `restart` closes and
   reopens the project's app between turns (`open/save-point.ts`, `open/between.ts`). The harness

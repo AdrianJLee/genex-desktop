@@ -469,15 +469,6 @@ export class ChatPermissionService {
     if (!known.size) this.#personMessages.delete(threadId);
   }
 
-  /**
-   * Whether this is a message the person sent on this thread that is still unanswered (noted from
-   * the composer's send, not yet handled, removed or stopped): what the host asks before it lets a
-   * harness's show or land change Live.
-   */
-  awaitsAnswer(threadId: string, messageId: string): boolean {
-    return this.#personMessages.get(threadId)?.has(messageId) === true;
-  }
-
   #markNote(threadId: string, messageId: string, note: PersonNote): void {
     const known = this.#personMessages.get(threadId);
     if (known?.has(messageId)) known.set(messageId, note);

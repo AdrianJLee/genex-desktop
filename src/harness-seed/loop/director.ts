@@ -1,30 +1,25 @@
 /**
  * The Loop: the lead's session, and optional workers it starts. The lead IS its chat's own session
- * (director/lead-session.ts): it decides how to work — plans or not, starts workers or not — and
- * builds with its own hands. A web game's lead builds in the run's integration worktree; a worker
- * gets a brief and the lead's tools and works in a copy of it, and `worker_mark used` merges its
- * work in, followed by one health check (the page loads, no uncaught errors, the screenshot is not
- * blank). `finish` runs the same check and lands the branch in the game folder. A second opinion is
- * the lead's to ask for (`judge`). A Loop on any other project works the same way in the project's
- * own folder (director/open/), and closes there.
+ * (director/lead-session.ts), in the project's own folder, whatever the project is: it decides how to
+ * work — plans or not, starts workers or not — and builds with its own hands. A worker gets a brief
+ * and the lead's tools and works in a copy of the folder or in it, and `worker_mark used` merges a
+ * copy's work in. A second opinion is the lead's to ask for (`judge`). The Loop closes in the folder
+ * (director/open/).
  *
  * The session is driven by the wake loop (director/wake.ts): the lead ends its turn when it decides
  * to, and the studio wakes the same session with a message when something happens.
  */
-import path from "node:path";
 import { plannerModel, roleEffort, RoleKey } from "./model-roles.ts";
-import { closeSettled, closeUnderWay, latchClose } from "./director/close-latch.ts";
+import { closeSettled, closeUnderWay } from "./director/close-latch.ts";
 import { fireHooks, HookEvent, holdOf, hooksOn, notesText, runScope } from "./hooks.ts";
-import { type HeldBack, heldTurnEnding, runHeldWords } from "./director/held-words.ts";
-import { CoreFact, LoopProfile } from "./folder-facts.ts";
+import { type HeldBack, heldTurnEnding, openStartHeld } from "./director/held-words.ts";
+import { CoreFact } from "./folder-facts.ts";
 import { closeRunPool } from "./workers/run-pool.ts";
-import { leadsOpenLoop } from "./director/open/active-work.ts";
 import { closeInPlace } from "./director/open/close.ts";
 import { MESSAGE as END_WORDS, openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
-import { creditCapOf, OPEN_WALL_CLOCK, restartsApp } from "./director/open/contract.ts";
+import { creditCapOf, OPEN_WALL_CLOCK, type OpenClock, restartsApp } from "./director/open/contract.ts";
 import { settleRecovery } from "./director/open/health.ts";
-import { openStartHeld } from "./director/open/prompts.ts";
 import { openTools } from "./director/open/tool-specs.ts";
 import { openHandler } from "./director/open/tools.ts";
 import { HostMethod } from "./host-methods.ts";
@@ -34,15 +29,12 @@ import { folderLabelOf } from "./workers/identity.ts";
 import { EngineFailure, engineLimitOf } from "./outage.ts";
 import { isProviderLoss, noteProviderLoss, pauseDecision, pauseEnding } from "./provider-loss.ts";
 import { CLIP_QUOTE } from "./text.ts";
-import { NotLandedReason } from "./verdict.ts";
 import * as loopRunFunctions from "./director/loop-run.ts";
-import * as toolFunctions from "./director/tools.ts";
-import * as integrateFunctions from "./director/integrate.ts";
 import { prepareLoopRun } from "./director/setup.ts";
-import { directors, directorTools } from "./director/tool-specs.ts";
+import { directors } from "./director/tool-specs.ts";
 import { resumedFromJournal } from "./director/journal.ts";
 import { LOOP_WORDS } from "./director/wake-prompts.ts";
-import { runWakeLoop, SYSTEM_CLOCK, WAKE_ENDING } from "./director/wake.ts";
+import { runWakeLoop } from "./director/wake.ts";
 import { WrapCause } from "./director/wake-schedule.ts";
 import { openLeadLine, type LeadLine } from "./director/lead-line.ts";
 import { bookmarkLead, freshChat, leadSeat } from "./director/lead-session.ts";
@@ -50,7 +42,7 @@ import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
 import type { LoopRun } from "./director/loop-run.ts";
 import type { TurnSaid } from "./director/news.ts";
-import type { DirectorTalk, WakeClock } from "./director/wake.ts";
+import type { DirectorTalk } from "./director/wake.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
 import type {
   DelegateImage,
@@ -63,10 +55,8 @@ import type {
 /** One message to the lead's session: its prompt, who wrote it, and Genex's lines beside it. */
 type LeadAsk = Pick<HarnessDelegateParams, "prompt" | "from" | "notices">;
 
-export { directorTool } from "./director/tool-specs.ts";
-
 /** The run's modules, whose functions `bindLoopRun` puts on the run. */
-const LOOP_RUN_MODULES = [loopRunFunctions, toolFunctions, integrateFunctions];
+const LOOP_RUN_MODULES = [loopRunFunctions];
 
 /** How many reference stills the lead's first turn carries. */
 const MAX_REFERENCE_IMAGES = 8;
@@ -89,9 +79,8 @@ function referenceImages(run: Run): DelegateImage[] {
 
 /**
  * One turn of the lead's session, on its own engine and model. The lead is its chat's own session: it
- * sits in the game folder (no `cwd`); its grant names the folder it builds in (`root`: a web game's
- * integration worktree, or the game folder itself for a Loop in place), and its paid jobs are held to
- * the credit cap its run record names.
+ * sits in the game folder (no `cwd`) and builds there (`root`), with the eyes its chat's turns have,
+ * and its paid jobs are held to the credit cap its run record names.
  */
 function delegateTurn(
   loopRun: LoopRun,
@@ -100,7 +89,7 @@ function delegateTurn(
   { prompt, from, notices }: LeadAsk,
   sessionId: string | null | undefined,
 ): Promise<DelegateResult> {
-  const { ctx, integrationWorktree, lead, run, threadId } = loopRun;
+  const { ctx, lead, projectDir, run, threadId } = loopRun;
   const creditCap = creditCapOf(run);
   return ctx.call(HostMethod.EngineDelegate, {
     engine: run.engine,
@@ -118,14 +107,15 @@ function delegateTurn(
     ...(creditCap === null ? {} : { creditCap }),
     // The lead answers the chat while its build runs: what the person sends reaches its turn under way.
     ...(loopRun.waking ? { chatTurn: { messageId: run.runId } } : {}),
+    // The eyes its chat's turns have (delegated-turn.ts `senses`): the same window of the game folder.
+    ...(loopRun.open.seen ? { selfCapture: { project: run.project, root: projectDir, label: run.project } } : {}),
     director: {
       runId: run.runId,
       threadId,
       project: run.project,
-      root: integrationWorktree,
+      root: projectDir,
       tools,
       ...(lead ? { chatSession: true } : {}),
-      ...(leadsOpenLoop(loopRun) ? { inPlace: true } : {}),
     },
     ...(images.length ? { images } : {}),
   });
@@ -193,7 +183,6 @@ export function directorTalk(loopRun: LoopRun, images: DelegateImage[], tools: L
 
 /** What the run stands on as its lead's first turn opens: why a plugin held the start back, and what the plugins said. */
 interface StartOfRun {
-  held?: string;
   blocked?: HeldBack;
   notes: string[];
 }
@@ -204,7 +193,7 @@ async function prepareTheStart(loopRun: LoopRun): Promise<StartOfRun> {
   if (ctx.cancelled) return { notes: [] };
   const prepared = await fireHooks(ctx, loopRun.game, HookEvent.RunPrepare, runScope(loopRun));
   if (prepared.blocked && ctx.cancelled) return { notes: [] };
-  if (prepared.blocked) return { held: runHeldWords(prepared.blocked), blocked: prepared.blocked, notes: [] };
+  if (prepared.blocked) return { blocked: prepared.blocked, notes: [] };
   return { notes: notesText(prepared) };
 }
 
@@ -218,97 +207,54 @@ function startLines(loopRun: LoopRun, start: StartOfRun): string[] {
   return [line, ...start.notes];
 }
 
-/** Why the session ended, in the sentence the report keeps. */
-function sessionEndWords(loopRun: LoopRun, result: Partial<DelegateResult>, wrapCause: WrapCause | null): string {
+/** Why the session ended, in the sentence the report keeps, when the Loop's own words name none (`openEndWords`). */
+function sessionEndWords(loopRun: LoopRun, result: Partial<DelegateResult>): string {
   const { ctx, state } = loopRun;
   if (ctx.cancelled) return "stopped by the user";
   if (state.limit) return pauseEnding(state.limit.kind, String(state.limit.message).slice(0, CLIP_QUOTE));
-  const held = heldTurnEnding(result);
-  if (held) return held;
-  if (wrapCause === WrapCause.Finish) return WAKE_ENDING[wrapCause];
-  if (result?.ok) return END_WORDS.nothingAtWork;
-  return `the lead's session ended (${result?.stopReason ?? "failed"}) before it called finish`;
+  return heldTurnEnding(result) ?? END_WORDS.nothingAtWork;
 }
 
 /**
  * The run the lead left open — its turn ended with nothing at work, its wrap-up ended, or a lost
- * provider paused it: the harness closes it the way `finish` does — a web game's branch lands when it
- * passes its health check; a Loop in place closes there. A run a lost provider paused lands nothing:
- * Resume carries it on.
+ * provider paused it: the harness closes it in place, as `finish` does. A run a lost provider or a
+ * Stop paused keeps what it did for a Resume.
  */
 export async function closeLeftOpen(
   loopRun: LoopRun,
   result: Partial<DelegateResult>,
   wrapCause: WrapCause | null = null,
 ): Promise<void> {
-  const { ctx, state } = loopRun;
-  const why = sessionEndWords(loopRun, result, wrapCause);
-  const halted = loopRun.open?.halted;
+  const halted = loopRun.open.halted;
   if (halted) return closeInPlace(loopRun, { victory: false, because: halted, paused: true });
-  if (leadsOpenLoop(loopRun)) {
-    const because = openEndWords(loopRun, result, wrapCause) ?? why;
-    return closeInPlace(loopRun, { victory: false, because, notDone: [] });
-  }
-  const paused = Boolean(state.limit);
-  await loopRun.closeTheLoopRun({
-    land: !paused,
-    paused,
-    because: (landed: AnyRecord) =>
-      ctx.cancelled
-        ? why
-        : `${why}; ${landed.ok ? "the integration branch was landed" : `nothing was landed (${landed.reason})`}`,
-  });
+  const because = openEndWords(loopRun, result, wrapCause) ?? sessionEndWords(loopRun, result);
+  return closeInPlace(loopRun, { victory: false, because, notDone: [] });
 }
 
-/** A run that threw, in its report: the failure unless the user stopped it, and why it stopped. Answers whether it was a stop. */
-function crashReport(loopRun: LoopRun, err: { kind?: unknown; message?: unknown } | null | undefined): boolean {
+/** A run that threw, in its report: the failure unless the user stopped it, and why it stopped. */
+function crashReport(loopRun: LoopRun, err: { kind?: unknown; message?: unknown } | null | undefined): void {
   const { ctx, report } = loopRun;
   const aborted = err?.kind === EngineFailure.Aborted || ctx.cancelled;
   if (!aborted) report.failure = { message: String(err?.message ?? err).slice(0, FAILURE_CHARS) };
   report.stoppedBecause = aborted ? "stopped by the user" : "the build hit a problem and stopped early";
-  return aborted;
 }
 
-/** A run that threw before it closed: a sentence on the card, the message in the report; nothing landed. */
+/** A run that threw before it closed: a sentence on the card, the message in the report. */
 async function closeAfterCrash(loopRun: LoopRun, err: any): Promise<void> {
   if (loopRun.state.finished) return;
-  if (leadsOpenLoop(loopRun)) {
-    const halted = loopRun.open?.halted;
-    if (halted) return closeInPlace(loopRun, { victory: false, because: halted, paused: true });
-    if (!closeUnderWay(loopRun.state)) crashReport(loopRun, err);
-    return closeInPlace(loopRun, { victory: false, because: String(loopRun.report.stoppedBecause) });
-  }
-  await latchClose(loopRun.state, async () => {
-    const aborted = crashReport(loopRun, err);
-    await closeRunPool(loopRun.run.runId);
-    const why = aborted ? NotLandedReason.Stopped : NotLandedReason.Crashed;
-    await loopRun.closeRun({ ok: false, reason: loopRun.report.stoppedBecause, why });
-    return {};
-  });
+  const halted = loopRun.open.halted;
+  if (halted) return closeInPlace(loopRun, { victory: false, because: halted, paused: true });
+  if (!closeUnderWay(loopRun.state)) crashReport(loopRun, err);
+  return closeInPlace(loopRun, { victory: false, because: String(loopRun.report.stoppedBecause) });
 }
 
-/** The user's window must not be left pointing into a worktree that is about to go: it is brought home first. */
-async function bringTheWindowHome(loopRun: LoopRun): Promise<void> {
-  const { ctx, integrationWorktree, run } = loopRun;
-  const showing = await ctx.call(HostMethod.PreviewShowing, {}).catch(() => null);
-  const inside =
-    showing?.root === integrationWorktree || String(showing?.root).startsWith(`${integrationWorktree}${path.sep}`);
-  if (showing?.root && inside) await ctx.call(HostMethod.PreviewLoad, { project: run.project }).catch(() => {});
-}
-
-/** The run is over: its pool settles, a web run's worktree goes (its head is on the run's ref), and the plugins hear it. */
+/** The run is over: its pool settles, a recovery of the project's app under way ends, and the plugins hear it. */
 async function tearDown(loopRun: LoopRun): Promise<void> {
   const { ctx, run } = loopRun;
   directors.delete(run.runId);
   await closeSettled(loopRun.state);
   await closeRunPool(run.runId);
-  if (leadsOpenLoop(loopRun)) await settleRecovery(loopRun);
-  else {
-    await bringTheWindowHome(loopRun);
-    await ctx
-      .call(HostMethod.SnapshotRemoveWorktree, { project: run.project, path: loopRun.integrationWorktree })
-      .catch(() => {});
-  }
+  await settleRecovery(loopRun);
   await fireHooks(ctx, loopRun.game, HookEvent.RunEnd, runScope(loopRun));
   ctx.setStatus("idle");
 }
@@ -325,7 +271,7 @@ async function wakeLoopRun(
   talk: DirectorTalk,
   start: readonly string[],
   line: LeadLine,
-  clock: WakeClock,
+  clock: OpenClock,
 ) {
   const outcome = await runWakeLoop(loopRun, talk, start, clock, line);
   await line.release();
@@ -334,9 +280,9 @@ async function wakeLoopRun(
   await closeLeftOpen(loopRun, outcome.failed ?? outcome.result, outcome.wrapCause);
 }
 
-/** An open Loop the person stopped before any session of its lead's read its message this time. */
+/** A Loop the person stopped before any session of its lead's read its message this time. */
 const stoppedBeforeAnyTurn = (loopRun: LoopRun): boolean =>
-  leadsOpenLoop(loopRun) && loopRun.ctx.cancelled === true && !loopRun.open?.halted && !loopRun.open?.sessionWorked;
+  loopRun.ctx.cancelled === true && !loopRun.open.halted && !loopRun.open.sessionWorked;
 
 /**
  * Seat the run's lead (director/lead-session.ts): the chat's own session, continued when it can be,
@@ -369,49 +315,40 @@ function keepTimings(loopRun: LoopRun, timings: HostTimings): void {
   loopRun.report.hostTimings = timings;
 }
 
-/** The lead's tools and the dispatch of them: a web Loop's, or an open Loop's own. */
+/** The lead's tools, and the dispatch of them. */
 function seatTools(loopRun: LoopRun): LiveToolSpec[] {
-  const open = loopRun.open;
-  if (open) {
-    const types = open.pool?.state.types ?? [];
-    loopRun.afterTurn = () => openBetweenTurns(loopRun);
-    directors.set(loopRun.run.runId, openHandler(loopRun));
-    return openTools(types, {
-      restart: restartsApp(loopRun.game),
-      workers: open.pool?.state.allowed,
-      appSaved: hooksOn(loopRun.game, HookEvent.CheckpointBefore),
-      cppRestart: (loopRun.gameFacts ?? []).some((fact) => fact.id === CoreFact.UnrealProject),
-    });
-  }
-  directors.set(loopRun.run.runId, (name, args) => loopRun.handler(name, args));
-  return directorTools(loopRun.pool?.state.types ?? [], loopRun.pool?.state.allowed);
+  const types = loopRun.open.pool?.state.types ?? [];
+  loopRun.afterTurn = () => openBetweenTurns(loopRun);
+  directors.set(loopRun.run.runId, openHandler(loopRun));
+  return openTools(types, {
+    restart: restartsApp(loopRun.game),
+    workers: loopRun.open.pool?.state.allowed,
+    appSaved: hooksOn(loopRun.game, HookEvent.CheckpointBefore),
+    cppRestart: (loopRun.gameFacts ?? []).some((fact) => fact.id === CoreFact.UnrealProject),
+  });
 }
 
 /** A start a plugin held back closes before any turn, saying why. */
-async function closeHeldStart(loopRun: LoopRun, start: StartOfRun): Promise<void> {
-  if (leadsOpenLoop(loopRun) && start.blocked) {
-    const because = openStartHeld(start.blocked, loopRun.resume);
-    const startHeld = !loopRun.resume && !holdOf(start.blocked);
-    const end = { victory: false, because, keepNothing: true, unworked: true, paused: loopRun.resume, startHeld };
-    return closeInPlace(loopRun, end);
-  }
-  await loopRun.closeTheLoopRun({ land: false, because: start.held ?? null });
+async function closeHeldStart(loopRun: LoopRun, blocked: HeldBack): Promise<void> {
+  const because = openStartHeld(blocked, loopRun.resume);
+  const startHeld = !loopRun.resume && !holdOf(blocked);
+  const end = { victory: false, because, keepNothing: true, unworked: true, paused: loopRun.resume, startHeld };
+  return closeInPlace(loopRun, end);
 }
 
 /** A run the person stopped before its first turn closes as their stop. */
 async function closeStoppedStart(loopRun: LoopRun): Promise<void> {
-  if (!leadsOpenLoop(loopRun)) return closeLeftOpen(loopRun, {});
-  const because = sessionEndWords(loopRun, {}, null);
+  const because = sessionEndWords(loopRun, {});
   return closeInPlace(loopRun, { victory: false, because, keepNothing: true, unworked: true });
 }
 
 /** The run under its lead: its start, the lead's turns, the close of whatever it left open, and the teardown. */
-async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, clock: WakeClock): Promise<void> {
+async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, clock: OpenClock): Promise<void> {
   try {
     const start = await prepareTheStart(loopRun);
-    if (start.held) {
+    if (start.blocked) {
       await line.release();
-      await closeHeldStart(loopRun, start);
+      await closeHeldStart(loopRun, start.blocked);
       return;
     }
     if (loopRun.ctx.cancelled) {
@@ -429,34 +366,19 @@ async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, 
   }
 }
 
-/**
- * Run a Loop under its lead. Returns the report (also written as run_finished). A Loop on a project
- * that isn't a web game (`profile` Open) is led in place by the chat's own session and closes there.
- */
+/** Run a Loop under its lead, in the project's own folder. Returns the report (also written as run_finished). */
 export async function runDirector(
   ctx: HarnessCtx,
   {
     threadId,
     run,
     resume = false,
-    profile = LoopProfile.Web,
-    clock: ownClock,
-  }: { threadId: string; run: Run; resume?: boolean; profile?: LoopProfile; clock?: WakeClock },
+    clock = OPEN_WALL_CLOCK,
+  }: { threadId: string; run: Run; resume?: boolean; clock?: OpenClock },
 ): Promise<AnyRecord> {
-  const open = profile === LoopProfile.Open;
-  const clock = ownClock ?? (open ? OPEN_WALL_CLOCK : SYSTEM_CLOCK);
   const timings: HostTimings = {};
-  let tracing: LoopRun | undefined;
-  const measured = tracedContext(ctx, run, (span) =>
-    retainSpan(timings, { ...span, goal: null, head: tracing?.state.integrationHead ?? null }),
-  );
-  const loopRun = await prepareLoopRun(
-    measured,
-    { threadId, run, resume, ...(open ? { profile, clock } : {}) },
-    LOOP_RUN_MODULES,
-  );
-  tracing = loopRun;
-  loopRun.sleep = clock.sleep;
+  const measured = tracedContext(ctx, run, (span) => retainSpan(timings, { ...span, goal: null }));
+  const loopRun = await prepareLoopRun(measured, { threadId, run, resume, clock }, LOOP_RUN_MODULES);
   keepTimings(loopRun, timings);
   await seatTheLead(loopRun);
   const talk = directorTalk(loopRun, referenceImages(run), seatTools(loopRun));

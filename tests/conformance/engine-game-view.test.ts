@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { factsOfGame, loopProfileOf, servedAsWeb } from "../../src/harness-seed/loop/folder-facts.ts";
+import { factsOfGame, servedAsWeb } from "../../src/harness-seed/loop/folder-facts.ts";
 import { engineOfGame as seedEngineOfGame } from "../../src/harness-seed/loop/game-engine.ts";
 import { holdsWebGame } from "../../src/harness-seed/loop/web-game.ts";
 import { EntryAction, EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
@@ -46,11 +46,10 @@ const strictToy = { ...toyOutside, linkedEngine: { ...described(TOY_ENGINE), pro
 describe("a game linked to an engine other than Unreal", () => {
   it("is an engine game, and every web-only and Unreal-only rule says no", () => {
     assert.equal(isEngineGame(engineOf(toyOutside.engine)), true);
-    // Web only: the app's served facts, the harness's served facts, its web page check and its Loop.
+    // Web only: the app's served facts, the harness's served facts and its web page check.
     assert.equal(servedAsWebGame({ facts: TOY_FACTS }), false, "the app serves it as no web game");
     assert.equal(servedAsWeb(toyOutside), false, "the harness serves it as no web game");
     assert.equal(holdsWebGame(toyOutside), false, "no web page: no preview check at a turn's end");
-    assert.equal(loopProfileOf(toyOutside), "open", "the one Loop in place, not the web Loop");
     assert.equal(liveViewFor(toyOutside, []).live, ObserverLive.Stills, "Live shows pictures, never a web preview");
     // Unreal only: the card, the editor's project and Unreal's own words.
     assert.equal(unrealProjectOf(toyOutside), null);
@@ -63,7 +62,6 @@ describe("a game linked to an engine other than Unreal", () => {
     assert.equal(seedEngineOfGame(older), TOY_ENGINE.id);
     assert.equal(servedAsWeb(older), false);
     assert.equal(holdsWebGame(older), false);
-    assert.equal(loopProfileOf(older), "open");
     assert.ok(!factsOfGame(older).some((fact) => fact.id === CoreFact.WebGame), "no web game at its root");
   });
 

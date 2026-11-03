@@ -4,23 +4,9 @@
  * descriptions). Engine neutral: a project's own words come from its facts, its plugins and its
  * skills, never from here. Model-facing: the lead reads them as written.
  */
-import { type HookHeldBy, HookHold, holdOf } from "../../hooks.ts";
-import { resumeHeldWords, runHeldWords } from "../held-words.ts";
+import { clause } from "../held-words.ts";
 import { WorkerTool } from "../../workers/contract.ts";
 import { OpenTool } from "./contract.ts";
-
-/**
- * Why an open Loop didn't start, for the person: Genex's own hold in their words (which say to start
- * it again, or for a resumed Loop, which stays paused, to press Resume), a plugin's block with its
- * reason and what to do next.
- */
-export function openStartHeld(blocked: { reason: string } & HookHeldBy, resumed = false): string {
-  const genexHold = resumed ? resumeHeldWords(blocked) : null;
-  if (genexHold) return genexHold;
-  if (holdOf(blocked)) return runHeldWords(blocked);
-  const then = resumed ? "Then press Resume: the Loop stays paused." : "Then start the Loop again.";
-  return `The Loop didn't start: a plugin of this project held it back: ${blocked.reason} ${then}`;
-}
 
 /** What the open Loop's tools answer, and the words of its close. */
 export const OPEN_WORDS = {
@@ -43,6 +29,8 @@ export const OPEN_WORDS = {
   askFirst:
     "Your rewind or restart runs when this turn ends, so there is nothing to check yet: end your turn, then claim the goal in the next.",
   needsSummary: "finish needs a summary of what the project holds now.",
+  /** A web game's page failed its health check at the finish (`line`: health-check.ts `healthLine`): the Loop goes on. */
+  unhealthy: (line: string) => `Not finished. ${line}`,
   accepted: "Accepted: the Loop is closed. End your turn with a one-paragraph summary for the person.",
   /** A yes whose close outlasts the lead's call: it goes on, and the lead changes nothing more. */
   acceptedClosing:
@@ -71,25 +59,6 @@ export const OPEN_WORDS = {
       : `There is no save point "${label}": none was kept yet.`,
   restartLater: "Genex restarts the project's app when this turn ends; no file changes.",
 } as const;
-
-/** Words without the full stop they may end with, to go on in a sentence. */
-function clause(words: string): string {
-  return words.trim().replace(/[.]+$/, "");
-}
-
-/** What Genex itself held a save point, a restore or a restart back for, as the lead reads it, by its hold. */
-const HELD_FOR_LEAD = {
-  [HookHold.PersonFirst]: (app: string) => `the person is using ${app}; try again later`,
-  [HookHold.CantTell]: (app: string) => `Genex couldn't tell whether the person was using ${app}; try again later`,
-  [HookHold.Busy]: (app: string) => `something else was working in ${app}; try again later`,
-  [HookHold.Plan]: () => "the chat is in Plan mode, so nothing changes until the plan is approved",
-} as const satisfies Record<HookHold, (app: string) => string>;
-
-/** Why something was held back, for the lead: Genex's own hold in its words, a step's block with its reason. */
-export function heldForLead(held: { reason: string } & HookHeldBy): string {
-  const hold = holdOf(held);
-  return hold ? HELD_FOR_LEAD[hold.hold](hold.label ?? "the project's app") : held.reason;
-}
 
 /** What Genex did between the lead's turns and while it worked: one line of the run's log each (`NoteKind`). */
 export const OPEN_NEWS = {

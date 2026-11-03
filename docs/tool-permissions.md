@@ -42,8 +42,7 @@ never `permissions`, when:
 - the engine asks about every call (`permissionPrompts`), and the seat is the host's finding: this
   game's lead of a run (`#seatOf`) that
   was started in this chat (`#runOfChat`), answering the chat (`chatTurn` is its run id). A
-  Loop's lead is read-only in a web Loop, leading the run's integration worktree, and in place in
-  any other (`director.inPlace`: it writes in the game folder itself, honoured only when its root
+  Loop's lead works in place, a web game's too (`director.inPlace`: it writes in the game folder itself, honoured only when its root
   is the game folder by name and real path, it is not `readOnly`, its chat is this game's and open,
   and its run is this game's, started in the chat its delegation and grant name, `#inPlaceRoot`); it asks in the chat's mode
   either way, and a seat the host cannot place runs unattended; a run that finished or paused seats
@@ -171,24 +170,16 @@ recorded under the run with the agent id as `facetId`, so its asset cards land o
 its words never stream as the chat's reply.
 
 A lead also has the chat's own session's plugins, connectors and cover, whether or not it asks
-(`hostToolsEligible`): its director grant (`root`, or `inPlace`) marks its seat in the game folder
-(`#leadRoot`), and the host's own finding of that seat (`seat.leads`) decides, never the brief; a
-read-only session that leads nothing gets none. No lead is
-read-only: a `readOnly` a kept older seed's brief still sends seats it no differently and never
-reaches its engine (`readOnlyField`), and a lead of the integration worktree is handed that build
-(`DelegateRequest.leadBuilds`), which every engine's box writes beside its own folder — Codex's,
-OpenCode's, Grok Build's and Cursor's writable roots, Claude Code's unattended sandbox and its
-folders, a local session's files and commands (`leadBuildWrites`). On an engine that does not ask
-about each call it runs in the chat's mode (`#placedLeadSession`): Bypass unboxed, Plan read-only. Its plugin calls
-act on the worktree it leads (`DelegationSession.leads` as the binding's directory), as a
-director's in its worktree, so a delivery is recorded as the build's and reaches the game when the
-run lands; its system text is its chat's own, and its brief never names the build's path. A lead in
-place acts on the game folder it sits in, and its run's own consent covers
-its engine connector's calls (`liveRunOf`, `#runConsents`). An in-place grant the host refuses to seat is dropped whole (`honouredDirector`): the session
-runs unattended, with no director, run tools or window. Only a web Loop's lead is lent the preview window (`directorWindowed`: never a lead in place,
-nor one whose engine record binds another engine; read from the seat, never the folder's facts at the
-turn, which a read failure or the run's own work may change); a connector that shares the project root works on
-the game folder, as for every session (`resolveProject`). They are auto-allowed studio tools, as for
+(`hostToolsEligible`): its director grant's root marks its seat in the game folder
+(`#inPlaceRoot`), and the host's own finding of that seat (`seat.leads`) decides, never the brief; a
+read-only session that leads nothing gets none. No lead is read-only. On an engine that does not ask
+about each call it runs in the chat's mode (`#placedLeadSession`): Bypass unboxed, Plan read-only.
+Its plugin calls act on the game folder it sits in (`DelegationSession.leads` as the binding's
+directory), its system text is its chat's own, and its run's own consent covers its engine
+connector's calls (`liveRun`, `#runConsents`). A grant the host refuses to seat is dropped whole
+(`honouredDirector`): the session runs unattended, with no director or run tools. On a game Genex
+sees, a lead has the window its chat's turns have (its capture grant); a connector that shares the project root
+works on the game folder, as for every session (`resolveProject`). They are auto-allowed studio tools, as for
 the chat's own session: a plugin tool that declares `confirmation` waits on its consent card
 (`plugin_consent`, nine minutes; one nobody answers settles as "Nobody answered", and the agent
 reads that the person may be away, that it is not a no, and to carry on and ask again later; for
@@ -341,8 +332,7 @@ offered no worker tools.
 
 Plan holds writers on the host (`heldInPlan`): a copy or in-place writer's start and
 `worker_mark used` wait for the plan's approval, from the chat's own session and from a run's lead,
-and so do a director's `integrate` and a `finish` that lands the build (`finish land=no` goes on),
-so no snapshot, copy or merge is made; a reader starts. A start that names a worker type stands as
+so no snapshot, copy or merge is made; a reader starts, and a lead's `finish` closes in place. A start that names a worker type stands as
 that type declares, whatever isolation it asks for (a type the host does not know writes). A run's lead is judged by the chats the
 host's own records say the run was started in, and the grant's chat if it names one of this game's:
 any of them planning holds it, and a run whose chat the host cannot find holds it with that reason.
@@ -594,8 +584,8 @@ the turn's end (`ChatPermissionService.planning`, so a plan approved mid-turn le
 behind the same card, which shows the reply and what the build would build. Approved, it starts as
 recorded; sent back with words, it is dropped and the session plans again; any other ending, a
 question beside it or a failed turn drops it. The harness starts a recorded build once the reply
-ends, so the host is what holds it. While the chat is in Plan the run controls `resume_run` and
-`land_build` answer that they did not run (`conversation.ts` `BUILD_CHANGES`).
+ends, so the host is what holds it. While the chat is in Plan the `resume_run` run control answers
+that it did not run (`conversation.ts` `#applyRunControl`).
 
 ## Auto's classifier
 
@@ -655,9 +645,9 @@ Unattended sessions get `Read()` rules for that fence and for the workspace deny
 leaves the delegation's own game readable (a worktree's `node_modules` link and git point there)
 and scans a folder's neighbours only under the games root or scratch. A person's session also gets
 `Edit()` rules for every studio file in userData (`#hostFiles` walks it; the games, the chat's
-folder, secrets and engine homes excepted) and the permission store. A build's lead is also spared
-the integration worktree it leads (its seat's checked real path, `LeadSessionAsk.leads`), where it
-builds with its own hands; its run's other worktrees, other runs and `runs/` stay fenced.
+folder, secrets and engine homes excepted) and the permission store. A build's lead builds with
+its own hands in its game folder (its seat's checked real path, `LeadSessionAsk.leads`); its run's
+worktrees, other runs and `runs/` stay fenced.
 
 ## Questions and answers
 
@@ -683,7 +673,7 @@ allow rules and hooks load into the person's own session there, which has no san
 never writes it: `game.write` refuses a path through a `.claude` folder at any depth, in any case
 and as Windows reads a name, checked as named and as it really lands (a link inside the game
 included), for a game and an optimization candidate. Landing a build (`landBuild`, the person's
-button and the `land_build` run control) and promoting a candidate refuse a commit that changes one.
+button) and promoting a candidate refuse a commit that changes one.
 The sandbox denies every agent process (the harness, `run.exec`, builds) writing a game's
 `.claude` folder (`claudeFolderDenyWrites`).
 
@@ -713,34 +703,23 @@ Loop run must confirm the two known changes: builders can no longer read sibling
   each question (its workers and jobs go on); Auto or Bypass keep it going.
 - A lead has no sandbox: whatever its chat's mode allows runs with the person's
   access, as in the chat's own session, edits and commands in the game folder included, so it can
-  change the live game under the run. Its prompt has it build in the integration worktree and
-  leave the game folder alone. A landing that git refuses over uncommitted changes there, or into a
-  folder with something staged or a merge under way, lands nothing and names them without blaming
-  anyone (`uncommitted-changes`); Make it live refuses while the folder shows uncommitted changes.
-  Changes the landing does not touch stay uncommitted after it; a lead that closes with `finish` is
-  told to leave them, and every landing names them (`landingResult.leftInGame`).
+  change the live game under the run: that folder is where it builds. Genex's checkpoints (its save
+  points, the close's last work) and Rewind are what take it back.
 - A lead whose session will not switch (the CLI refuses, or Auto is unavailable for
   its model) stays in the mode it runs in: in Manual it keeps carding in an Auto or Accept edits
   chat, and in another mode it asks first for each call while the chat is elsewhere (except Accept
   edits in an Auto chat), until a later pick switches it or its next session starts. A call screened
   while a switch is on its way asks first too.
-- A lead's plugins act on the build it leads: what they deliver is committed before each worker's
-  merge, and what is left at the close is committed with its final edits and lands with the run.
-  A run with nothing beyond its starting point (no worker's merge, no commit of the lead's) lands
-  nothing (`nothing-new`), deliveries included. What else a plugin writes there (a package install)
-  is committed with the lead's own uncommitted edits before the next merge or worker fork
-  (`commitLeadEdits`), or lands with the final edits after the last one.
+- A lead's plugins act in the game folder: what they deliver is there at once, and the close's
+  checkpoint keeps it with the rest of the last work.
 - A plugin's consent card holds a lead's call for up to nine minutes, the plugins' own timeout.
-  A lead nobody answers through (another engine, a turn that is not the chat's) has its plugins and connectors too, acting on its build as a director's in its
-  worktree: read-only for its engine, not writing nothing.
+  A lead nobody answers through (another engine, a turn that is not the chat's) has its plugins and
+  connectors too, acting in the game folder.
 - A director with its own hands, a builder and the other run sessions carry the chat's thread in
   their plugin bindings: another turn of the chat ending still withdraws their consent cards and
   aborts their connector calls. Only a lead's outlive the chat's turns.
 - A lead's seat rests on run records the harness writes: an edited harness can start a lead for a
   run started in this chat, acting in the chat's mode with nobody there.
-- A run's close commits what is uncommitted in the integration worktree as its final edits, which
-  can include what a lead left there. A lead's commit made after its last run tool and before a
-  Stop is not on the run's integration ref (`syncHead` runs before each tool and at the landing).
 
 - The never-touch hook reads a command's words, relative paths from the folder the session's shell
   stands in (the hook's `cwd`, which Claude Code moves with each `cd`). A here-document a program

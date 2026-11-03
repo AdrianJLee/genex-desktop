@@ -1,11 +1,11 @@
 /**
  * The loop's self-test: the pure logic of the Loop against fixed inputs — when its lead is woken,
  * what the end of a turn means, the health check's line, which runner a run goes to, the plain
- * sentence a card falls back on, what a landing claims and a reviewer's no. No engine, no preview, no
+ * sentence a card falls back on and a reviewer's no. No engine, no preview, no
  * network: seconds, deterministic.
  */
 import { afterTurn, nextWake, TurnEnd } from "./director/wake-schedule.ts";
-import { landingWords, plainly } from "./director/rules.ts";
+import { plainly } from "./director/rules.ts";
 import { secondOpinionNo } from "./director/second-opinion-prompts.ts";
 import { healthLine } from "./health-check.ts";
 import { chooseRunner } from "./run-dispatch.ts";
@@ -66,14 +66,6 @@ const SELFTEST_STEPS: readonly SelftestStep[] = [
     () => {
       const plain = plainly("merged w1 at 0123456789abcdef into /Users/me/game");
       check("no sha or path", !plain.includes("0123456789") && !plain.includes("/Users"));
-    },
-  ],
-  [
-    "landing: a build is said to load only when it passed its health check",
-    () => {
-      check("passed says so", landingWords({ healthPassed: true }).line.includes("it loads"));
-      check("unchecked says so", !landingWords({ healthPassed: false }).line.includes("it loads"));
-      check("never a verdict", !landingWords({ healthPassed: true }).verified);
     },
   ],
   [

@@ -267,7 +267,8 @@ self-improving conformance tests protect product behavior. Native login/picker/d
 verification requires separate explicit prerequisites; fixtures do not certify it.
 `npm run test:computer:e2e` runs the real Electron with a fixture game: the computer tool over an
 offscreen window (WebGL and WebGPU), the requested-state setup, agent screens on their Builds nodes, and a
-scripted director's run end to end (worker, look, integrate, show, finish, landing).
+scripted lead's Loop end to end in the game folder (the lead's own computer, a worker in a copy, its
+merge, finish).
 It also checks secure contexts in Live and worker views. Register `game` and `studio-plugin`
 privileges in one call before Electron is ready; a second registration loses the game's secure
 context and disables WebGPU, while Three.js can silently render through its WebGL fallback.
@@ -287,23 +288,10 @@ passed, and nothing installs a package — the one fixture that builds links the
 `node_modules` and builds with esbuild. `--only <id>` and `--engine fixture|codex|claude` keep the
 inner loop under ten seconds; the full regression gate runs the whole set.
 
-`tests/conformance/director.test.ts` runs a whole run on the plain-Node rig, once per shape a
-run can take — every `it` in its own describe block, so the list is read there rather than
-counted here. They cover the finish and its landing; a game from scratch getting its base stage,
-and a starting point that could not be built; the fork gate refusing a base that does not run and
-exempting the run's own starting points; a game that cannot be judged until the contract is
-installed, and a wiring session whose page still does not answer; a worker the lead stops
-mid-round; a steer that interrupts a loop worker, a user steer addressed to one, and a steered
-single session; the director's own commit becoming the head it lands; a landing that conflicts
-with the user's own commits and changes nothing; a merge that carries nothing from a repository
-inside the game, and a consented one whose landing is left to the user; a run whose director
-dies of the engine's session limit; a run killed outright and then resumed; a reviewed plan
-held for the user's go, and one the user answers in their own words; a worker's commit outliving
-its worktree; the restored `.studio/DIRECTOR.md`; and a close that looks through the studio's
-stand-in because the pool has none free, leaving the user's window alone. The head must be on
-the run's ref, the close must look again and land on the judge's word, `landingResult` must say
-what the landing may claim, the run must pause where it can be picked up, and `showBuild` /
-`landBuild` must work on the head afterwards.
+`tests/conformance/one-loop-projects.test.ts` runs a whole Loop on the plain-Node rig, on a
+plugin's project and on a folder with no plugin, and `director-wake-loop-run.test.ts` runs a web
+game's Loop there for the wake loop and live chat: every Loop works in its game folder, closes
+there, and pauses where Resume picks it up.
 `tests/conformance/engine-limits.test.ts` covers limit classification, reset-time parsing and the
 inherited-console rule.
 
@@ -349,9 +337,8 @@ session and actual tool result; a clean preview alone does not prove the request
 Milestones 2 and 3: the pure half (shapes read from evidence, adoption, sheet words, build memos,
 the scoreboard, move ladder, ledger and verdict record) runs in `npm test` through the
 `project-shape`, `game-build`, `snapshots`, `scoreboard`, `facet-loop-v2`, `learning`, `verdict`
-and `words` suites. `director.test.ts`'s rig drives the real core and harness with scripted engines
-for the nested-repository policy, plan review, interrupting steer and landing refusals; the build
-smoke and `npm run test:computer:e2e` need a real window. No live account, real `npm install` or
+and `words` suites. `one-loop-projects.test.ts`'s and `director-wake-loop-run.test.ts`'s rigs drive
+the real core and harness with scripted engines; the build smoke and `npm run test:computer:e2e` need a real window. No live account, real `npm install` or
 vendor sign-in verifies M2/M3; those stay separate prerequisites.
 
 Developer commands and acceptance coverage are described below; consult the AG-933
@@ -375,17 +362,16 @@ transport credentials from reports. No permanent monitor or performance threshol
 `npm run studio:dev -- start --profile ag-933 --fixture app-basics` builds current inputs
 into `.studio-dev/builds/<build-id>`, creates fresh owned fixture state and returns actual
 readiness/identity JSON. `npm run studio:dev -- fixtures` lists the named fixtures. Among them:
-build-graph (two sword-in-ice runs: folded tries, an undone step, a lead-merged unjudged round),
-lead-graph (two Unreal lead runs: milestone columns, save points, sub-agents with their cards, the
-critic's advice on a round),
-chat-workers (a chat message's two workers on Builds and as chat lines, after an earlier Loop; three
+build-graph (two sword-in-ice runs as an earlier Genex recorded web Loops: folded tries, an undone
+step, a lead-merged unjudged round),
+chat-workers (a chat message's two workers on Builds and as chat lines, after an earlier Loop; two
 more games, written after the start so their Loops read as going: Fixture Loop with three workers,
 the lead's background work and the finish check not run yet; Fixture web Loop with build-graph's
-runs and Fixture Unreal Loop with lead-graph's, each with its workers' records, drawn as trees),
-build-timeline (a Loop written after the start: four builds on its line, one a sound-only merge and
-one blank, twelve workers off them with a fold, a re-delivered sign, and deliveries only in its
-integration worktree for the Assets tab; before it in Build history a finished Loop of two pictured
-builds, whose done lead wears its newest build's picture),
+runs and their workers' records, drawn as trees),
+build-timeline (a web game's Loop written after the start, going in its folder: four save points on
+its line, one whose picture is the last's, twelve workers off them with a fold, a re-delivered sign,
+and deliveries into the game for the Assets tab; before it in Build history a finished web Loop of
+an earlier Genex with two pictured builds),
 finish-check (four Loops written after the start, one per finish check look: Done and Stopped in
 the Builds history, Not yet after one no, and the newest Checking),
 paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try

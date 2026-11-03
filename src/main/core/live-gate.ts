@@ -1,7 +1,6 @@
 /**
  * Live stays still while the person watches it. Only the person's own action loads the live view:
- * opening a game, Reload, Play or Make live, a build they asked the chat to show while Live is out of
- * their sight (`PreviewService.liveOutOfSight`), and one more: a Unity or Godot game's web build that
+ * opening a game, Reload, Play or Make live, and one more: a Unity or Godot game's web build that
  * appeared or was built again since Live loaded the game, which is the engine's own output, never
  * edited (`PreviewService.offerLive`). Anything else
  * that used to change it — the harness loading the game or a run's build, a builder's checkpoint,

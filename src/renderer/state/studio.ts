@@ -45,7 +45,6 @@ import {
 import { parseModelKey } from "../model-key.ts";
 import { rememberChatEffort, rememberChatModel } from "../stored-model.ts";
 import type { ComposerExtras } from "../ui/PromptBar.tsx";
-import { problemWords } from "../words.ts";
 import {
   createAgentScreensStore,
   frameReceived,
@@ -120,7 +119,6 @@ import { createToastsStore, type Notify, notifyProblem, ToastTone, type ToastsSt
 import { uiEventReads } from "./ui-event-routes.ts";
 import { createUpdateStore, updateDownloaded, type UpdateStore } from "./update.ts";
 import { agentsFailed, agentsStarted, type AgentsStartStore, createAgentsStartStore } from "./agents-start.ts";
-import { errorCode } from "../../shared/errors.ts";
 
 /** The log is the source of truth; this poll is the safety net for anything the stream missed. */
 export const EVENT_POLL_MS = 3 * SECOND_MS;
@@ -547,7 +545,7 @@ async function enterProject(
   try {
     record = await api.threadForGame(name);
   } catch (error) {
-    notify(problemWords(error), ToastTone.Error, errorCode(error));
+    notifyProblem(notify)(error);
     return null;
   }
   stores.threads.setState((state) => threadAdded(state, record), true);
@@ -668,7 +666,7 @@ async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void>
     }
     launch.setState((state) => launchOpened(state, id, { project: game.name, threadId: record.id }), true);
   } catch (error) {
-    notify(problemWords(error), ToastTone.Error, errorCode(error));
+    notifyProblem(notify)(error);
     launch.setState((state) => launchFailed(state, id), true);
     // A game made and then lost on the way to its chat failed opening; otherwise main refused making it.
     if (made) stopped(LaunchStage.Opening, LaunchFailReason.OpenRefused, error);
@@ -746,7 +744,8 @@ export function createStudio(
   const visibility = options.visibility ?? browserVisibility;
   const stores = createStores(api, storage, timers, visibility);
   const { session, threads, library } = stores;
-  const notify: Notify = (text, tone = ToastTone.Info, code = null) => stores.toasts.notify(text, tone, code);
+  const notify: Notify = (text, tone = ToastTone.Info, code = null, channel = null) =>
+    stores.toasts.notify(text, tone, code, channel);
   const selectThread = (threadId: string): void => {
     threads.setState((state) => threadSelected(state, threadId), true);
     writeText(STORAGE_KEYS.activeThread, threadId, storage);

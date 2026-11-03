@@ -6,7 +6,10 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { systemLanguagesFromArgs } from "../shared/locale.ts";
 import { PLAY_BAR_CALLS } from "../shared/play-bar.ts";
+import { crossableCalls, installInMainWorld } from "./main-world.ts";
 import { createStudioBridge } from "./studio-bridge.ts";
 
 const bridge = createStudioBridge(ipcRenderer, undefined, systemLanguagesFromArgs(process.argv));
-contextBridge.exposeInMainWorld("studio", Object.fromEntries(PLAY_BAR_CALLS.map((name) => [name, bridge[name]])));
+const calls = Object.fromEntries(PLAY_BAR_CALLS.map((name) => [name, bridge[name]]));
+// Installed in the page's own world, so a failure keeps its code and channel (`main-world.ts`).
+contextBridge.executeInMainWorld({ func: installInMainWorld, args: ["studio", crossableCalls(calls)] });

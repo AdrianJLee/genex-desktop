@@ -297,9 +297,17 @@ export interface HarnessHostApi {
     result: { turnId: string; sessionId: string; head: string };
   };
   "turn.append": { params: { turnId: string; batch: EventData[] }; result: string };
-  /** End a turn; `outcome` is how the loop ended it (a TurnStop code), kept on its `turn_ended`. */
+  /**
+   * End a turn; `outcome` is how the loop ended it (a TurnStop code), and `failure` why a turn that
+   * threw failed (a `TurnFailureCode`, the host call and the error's type), both kept on its `turn_ended`.
+   */
   "turn.end": {
-    params: { turnId: string; status?: "ok" | "error" | "cancelled"; outcome?: string };
+    params: {
+      turnId: string;
+      status?: "ok" | "error" | "cancelled";
+      outcome?: string;
+      failure?: { code: string; method?: string; name?: string };
+    };
     result: string | null;
   };
 
@@ -800,6 +808,11 @@ export const HostMethod = {
   GuardianWriteSelf: "guardian.write_self",
   UiNotify: "ui.notify",
 } as const satisfies Record<string, HarnessHostMethod>;
+
+const HOST_METHODS: ReadonlySet<string> = new Set(Object.values(HostMethod));
+
+/** Is `value` one of the host's methods, by its wire name? */
+export const isHostMethod = (value: string): boolean => HOST_METHODS.has(value);
 export type HostMethod = (typeof HostMethod)[keyof typeof HostMethod];
 
 // Every method of the contract has a member: a method added without one fails here.

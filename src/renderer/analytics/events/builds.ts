@@ -100,12 +100,24 @@ export type BuildSurface = (typeof BuildSurface)[keyof typeof BuildSurface];
 /** How Live's wait for a page ended: shown, or given up and why. */
 export const LiveOutcome = {
   Shown: "shown",
+  /** This game's page came but did not settle in time, or main never answered the load. */
   TimedOut: "timed_out",
+  /** No probe in the whole wait saw this game's page: there was none to show (a new game with no build yet). */
+  NoPage: "no_page",
   LoadFailed: "load_failed",
   Crashed: "crashed",
   BuildBroken: "build_broken",
 } as const;
 export type LiveOutcome = (typeof LiveOutcome)[keyof typeof LiveOutcome];
+
+/** What Live's probe saw last while it waited: no page, another game's, this one navigating, or this one's. */
+export const LiveWaitSaw = {
+  Nothing: "nothing",
+  OtherGame: "other_game",
+  Navigating: "navigating",
+  ThisGame: "this_game",
+} as const;
+export type LiveWaitSaw = (typeof LiveWaitSaw)[keyof typeof LiveWaitSaw];
 
 /** What started a load Live waits on. */
 export const LiveTrigger = {
@@ -306,6 +318,12 @@ export type RunFinishedProperties = {
 export type LiveGameShownProperties = {
   outcome: LiveOutcome;
   load_ms: number;
+  /** Since the wait began, when a probe first saw this game's page; null when none did (or main refused the load). */
+  page_seen_ms: number | null;
+  /** What the wait's last probe saw; null for a load main refused before any probe. */
+  wait_saw: LiveWaitSaw | null;
+  /** Whether main had answered the load when the wait ended (false: still loading); null for a refused load. */
+  main_answered: boolean | null;
   /** What started the load; null when its starter did not say. */
   trigger: LiveTrigger | null;
   /** The first time this launch showed this game in Live. */

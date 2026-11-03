@@ -7,9 +7,8 @@ import { StageSwitchVia } from "../analytics/workspace-vocabulary.ts";
 import { StageView } from "../stage.ts";
 import { stageViewChosen } from "../state/layout.ts";
 import type { Studio } from "../state/studio.ts";
-import { ToastTone } from "../state/toasts.ts";
-import { chatFileWords, problemWords } from "../words.ts";
-import { errorCode } from "../../shared/errors.ts";
+import { notifyProblem } from "../state/toasts.ts";
+import { chatFileWords } from "../words.ts";
 
 type Beside = { threadId: string; target: BesideTarget; returnTo: StageView };
 
@@ -62,7 +61,7 @@ function useOpenChatFiles(app: Studio): void {
           if (result.problem) app.notify(chatFileWords(hostPlatform()).noApp(request.label));
         },
         (error: unknown) => {
-          app.notify(problemWords(error), ToastTone.Error, errorCode(error));
+          notifyProblem(app.notify)(error);
           recheckChatFiles(request.threadId, [request.ref]);
         },
       );

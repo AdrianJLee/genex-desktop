@@ -30,6 +30,7 @@ async function fixture(
   const opened: string[] = [];
   const children: ChildProcess[] = [];
   const invocations: { binary: string; args: string[]; options: SpawnOptions }[] = [];
+  const logged: string[] = [];
   let verified = 0;
   const controller = new CodexLoginController({
     findBinary: async () => binary,
@@ -52,8 +53,9 @@ async function fixture(
     onConnected: async () => {},
     timeoutMs: options.timeoutMs,
     platform: options.platform,
+    log: (line) => logged.push(line),
   });
-  return { controller, home, states, opened, children, invocations, verified: () => verified };
+  return { controller, home, states, opened, children, invocations, logged, verified: () => verified };
 }
 
 describe("native Codex login", () => {
@@ -188,6 +190,29 @@ describe("native Codex login", () => {
       await until(() => f.controller.snapshot().phase === "failed");
       assert.match(f.controller.snapshot().error!, /timed out/);
       assert.ok(wasStopped(f.children[0]!), "the CLI was stopped");
+    } finally {
+      await f.controller.dismiss();
+    }
+  });
+
+  // Sign-ins that hung for the full 10 minutes said nothing of where they stopped: the log now
+  // says each step, and by the time out whether the CLI printed anything, and a link, at all.
+  it("logs each step of a sign-in that timed out, with what the CLI did by then and none of its words", async () => {
+    const f = await fixture(
+      "console.log('Open https://auth.openai.com/oauth/authorize?state=SECRET to sign in'); setInterval(() => {}, 1000)",
+      { timeoutMs: 300 },
+    );
+    try {
+      await f.controller.start(f.home);
+      await until(() => f.controller.snapshot().phase === "failed");
+      assert.deepEqual(
+        f.logged.map((line) => line.match(/^codex sign-in: (\w+)/)?.[1]),
+        ["starting", "waiting", "cancelled", "failed"],
+      );
+      const last = f.logged.at(-1) ?? "";
+      assert.match(last, /^codex sign-in: failed \(timed_out\) after \d+ ms, browser; /);
+      assert.match(last, /printed 1 lines, a sign-in link, and is not running$/);
+      assert.ok(!f.logged.some((line) => /SECRET|openai|https/.test(line)), "no output or link in the log");
     } finally {
       await f.controller.dismiss();
     }

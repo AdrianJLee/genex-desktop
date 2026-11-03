@@ -16,8 +16,7 @@ import type { RunSummary } from "../../shared/run-summary.ts";
 import { useRunSummary } from "../use-run-summary.ts";
 import { RunOutcome } from "./RunOutcome.tsx";
 import { MorningAction, morningWords } from "../morning-words.ts";
-import { type Notify, ToastTone } from "../state/toasts.ts";
-import { problemWords } from "../words.ts";
+import { type Notify, ToastTone, notifyProblem } from "../state/toasts.ts";
 import { ResultButton as Button } from "../ui/ResultButton.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
 import { FileText } from "../ui/FileText.tsx";
@@ -32,7 +31,6 @@ import { StillToFixCard } from "../chat/StillToFixCard.tsx";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import { BuildSurface } from "../analytics/events/builds.ts";
-import { errorCode } from "../../shared/errors.ts";
 
 /** A build played from the card, and whether it played. */
 const playedHere = (ok: boolean): void =>
@@ -185,7 +183,7 @@ export function MorningCard({
 }: MorningCardProps): JSX.Element {
   const outcome = useRunSummary(project, runId);
   const waiting = useResultWait(outcome !== null);
-  const noticeFailure = (err: unknown): void => onNotice?.(problemWords(err), ToastTone.Error, errorCode(err));
+  const noticeFailure = onNotice ? notifyProblem(onNotice) : () => undefined;
   const words = morningWords({
     rounds,
     kept,

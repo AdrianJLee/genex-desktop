@@ -316,6 +316,20 @@ export const STUDIO_INVOKE_CHANNELS = {
 
 export type StudioInvokeChannel = keyof typeof STUDIO_INVOKE_CHANNELS;
 
+/** Is `value` one of the app's invoke channels? */
+export const isInvokeChannel = (value: unknown): value is StudioInvokeChannel =>
+  typeof value === "string" && Object.hasOwn(STUDIO_INVOKE_CHANNELS, value);
+
+/**
+ * The invoke channel a failed call was on, as the preload stamps it on the error it throws; null for
+ * any other thrown value or for a `channel` that is not one of the app's.
+ */
+export function failedChannel(error: unknown): StudioInvokeChannel | null {
+  if (error === null || typeof error !== "object") return null;
+  const channel: unknown = Reflect.get(error, "channel");
+  return isInvokeChannel(channel) ? channel : null;
+}
+
 /** What the preload sends on each invoke channel; `undefined` when it sends nothing. */
 export interface StudioInvokePayloads {
   "studio:performance.mark": Arg<"performanceMark", 0>;

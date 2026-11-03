@@ -1,15 +1,13 @@
 import { useMemo, useState } from "react";
 import { measuredContext } from "../../shared/context.ts";
 import { parseModelKey } from "../model-key.ts";
-import { type Notify, ToastTone } from "../state/toasts.ts";
-import { problemWords } from "../words.ts";
+import { type Notify, notifyProblem } from "../state/toasts.ts";
 import type { ChatPanelProps } from "./chat-panel-props.ts";
 import { useComposerModel } from "./use-composer-model.ts";
 import { usePermissionMode } from "./use-permission-mode.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import { useSignInGate } from "./use-sign-in-gate.ts";
 import { useThreadDrafts } from "./use-thread-drafts.ts";
-import { errorCode } from "../../shared/errors.ts";
 
 /** Compact the chat's context on the model it runs on; a failure is toasted. */
 function useCompact(threadId: string | undefined, selected: string | null, onNotice: Notify) {
@@ -21,7 +19,7 @@ function useCompact(threadId: string | undefined, selected: string | null, onNot
     try {
       await window.studio.compactThread(threadId, { ...(engine ? { engine } : {}), ...(model ? { model } : {}) });
     } catch (err) {
-      onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+      notifyProblem(onNotice)(err);
     } finally {
       setCompacting(false);
     }

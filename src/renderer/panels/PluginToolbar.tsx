@@ -43,14 +43,14 @@ import {
 import { composeInChat } from "../compose-in-chat.ts";
 import { type PluginReviewRequest, runPluginAction } from "../plugin-actions.ts";
 import { PLUGIN_SETUP_EVENT } from "../plugin-setup.ts";
-import { type Notify, ToastTone } from "../state/toasts.ts";
+import { type Notify, ToastTone, notifyProblem } from "../state/toasts.ts";
 import { createRefresher } from "../state/refresher.ts";
 import { Button } from "../ui/Button.tsx";
 import { cn } from "../ui/cn.ts";
 import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
-import { GENEX_WORDS, problemWords } from "../words.ts";
+import { GENEX_WORDS } from "../words.ts";
 import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plugins/genex/GenexPublish.tsx";
 import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, publishesWeb, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
@@ -63,7 +63,7 @@ import { useCoverAfterTurns } from "./plugins/genex/use-cover-after-turns.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PluginPanelDialog } from "./PluginPanelDialog.tsx";
 import { HEADER_BUTTON, useEngineSlot } from "./engine-slot.ts";
-import { errorCode, isUserCancelled } from "../../shared/errors.ts";
+import { isUserCancelled } from "../../shared/errors.ts";
 
 /** Status refreshes coalesce: a burst of change events wakes each plugin's process once. */
 const STATUS_DEBOUNCE_MS = SECOND_MS;
@@ -367,7 +367,7 @@ async function openToolbarPanel(entry: PluginToolbarEntry, panelId: string, deps
     deps.setPanel({ key: entry.key, plugin, title: doc.title, document: doc });
     reportPluginAction(press, ActionOutcome.Ok, started, performance.now());
   } catch (err) {
-    deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+    notifyProblem(deps.onNotice)(err);
     reportPluginAction(press, ActionOutcome.Failed, started, performance.now(), err);
   }
 }
@@ -405,7 +405,7 @@ async function runToolbarAction(
     reportPluginAction(press, ActionOutcome.Ok, started, performance.now());
   } catch (err) {
     // The person's no, in Studio's review or the native dialog, says nothing.
-    if (!isUserCancelled(err)) deps.onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+    if (!isUserCancelled(err)) notifyProblem(deps.onNotice)(err);
     const outcome = reviewDeclined ? ActionOutcome.DeclinedReview : actionOutcome(err, true);
     reportPluginAction(press, outcome, started, performance.now(), err);
   } finally {

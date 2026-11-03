@@ -36,6 +36,66 @@ export const TurnStatus = {
 } as const satisfies Record<string, NonNullable<HarnessHostApi["turn.end"]["params"]["status"]>>;
 export type TurnStatus = (typeof TurnStatus)[keyof typeof TurnStatus];
 
+/**
+ * Why a chat turn that threw failed, as `turn.end`'s `failure` names it: the app keeps a copy
+ * (`shared/engine-requests.ts`), and its analytics count turns by it. Wire values: never rename one.
+ */
+export const TurnFailureCode = {
+  /** The model's context cannot hold the turn's instructions and tools, whatever the history. */
+  ContextTooSmall: "context_too_small",
+  /** The conversation still does not fit the model's context after compaction. */
+  ContextFull: "context_full",
+  /** A host call the turn made failed (`method` names it). */
+  HostCall: "host_call",
+  /** A host call outlived its deadline (`method` names it). */
+  HostDeadline: "host_deadline",
+  /** The engine's call failed (its kind is on the turn's `completion_call`). */
+  Engine: "engine",
+  /** Anything else the harness's own code threw (`name` is its error's type). */
+  Harness: "harness",
+} as const;
+export type TurnFailureCode = (typeof TurnFailureCode)[keyof typeof TurnFailureCode];
+
+/** The `code` a host call answered by its deadline carries (`RpcDeadline`). */
+const RPC_DEADLINE_CODE = "rpc_deadline";
+
+/** What `turn.end` is told about a turn that threw: never its words. */
+export interface TurnFailureRecord {
+  code: TurnFailureCode;
+  method?: string;
+  name?: string;
+}
+
+/** An error that says why its turn failed: the harness's own throw names its code (`turnFailure`). */
+export function withTurnFailure<E extends Error>(error: E, code: TurnFailureCode): E {
+  return Object.assign(error, { turnFailure: code });
+}
+
+/** The code a thrown value is read as: its own, a host call's (by `hostMethod`), an engine's (by `kind`), else the harness's. */
+function failureCode(err: {
+  turnFailure?: unknown;
+  hostMethod?: unknown;
+  code?: unknown;
+  kind?: unknown;
+}): TurnFailureCode {
+  const own = Object.values(TurnFailureCode).find((code) => code === err.turnFailure);
+  if (own) return own;
+  if (typeof err.kind === "string") return TurnFailureCode.Engine;
+  if (typeof err.hostMethod !== "string") return TurnFailureCode.Harness;
+  return err.code === RPC_DEADLINE_CODE ? TurnFailureCode.HostDeadline : TurnFailureCode.HostCall;
+}
+
+/** Why a turn that threw `err` failed, for `turn.end`: its code, the host call and the error's type. */
+export function turnFailureOf(err: unknown): TurnFailureRecord {
+  const thrown = (err !== null && typeof err === "object" ? err : {}) as Record<string, unknown>;
+  const { hostMethod, name } = thrown;
+  return {
+    code: failureCode(thrown),
+    ...(typeof hostMethod === "string" ? { method: hostMethod } : {}),
+    ...(typeof name === "string" ? { name } : {}),
+  };
+}
+
 /** Say `content` in the chat as this turn's assistant reply: recorded on the turn, then pushed. */
 export async function sayInTurn(ctx: HarnessCtx, turnId: string, content: string): Promise<void> {
   await ctx.call(HostMethod.TurnAppend, {

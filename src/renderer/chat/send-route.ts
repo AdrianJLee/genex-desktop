@@ -6,9 +6,8 @@ import { PlanReviewState } from "../../shared/composer.ts";
 import { keepsOwnPlan } from "../../shared/run-state.ts";
 import { EntryAction, EntryKind } from "../chat-entries.ts";
 import { noteSentWords, type ReplyAbout } from "../reply-about.ts";
-import { type Notify, ToastTone } from "../state/toasts.ts";
+import { type Notify, ToastTone, notifyProblem } from "../state/toasts.ts";
 import type { ComposerExtras } from "../ui/PromptBar.tsx";
-import { problemWords } from "../words.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
 import { SendRoute } from "../analytics/chat-vocabulary.ts";
 import {
@@ -24,7 +23,6 @@ import type { ChatThread } from "./use-chat-thread.ts";
 import type { ChatWorkView } from "./use-chat-work.ts";
 import type { FollowScroll } from "./use-follow-scroll.ts";
 import type { ReplyingAbout } from "./use-reply-about.ts";
-import { errorCode } from "../../shared/errors.ts";
 
 /** A legacy in-run plan that holds the worker until it is answered. */
 export const isHeldPlan = (entry: ConversationEntry, runId: string | null, now: number): boolean =>
@@ -49,7 +47,7 @@ async function sendNote(about: ReplyAbout, text: string, onNotice: Notify): Prom
   await window.studio
     .runFeedback({ threadId: about.threadId, runId: about.runId, ...about.target, text, label: about.label })
     .catch((err: unknown) => {
-      onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+      notifyProblem(onNotice)(err);
       throw err;
     });
   onNotice(noteSentWords(about), ToastTone.Ok);

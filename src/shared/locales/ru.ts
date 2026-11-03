@@ -5873,6 +5873,8 @@ export default {
   "Drag to turn": "Потяни, чтобы повернуть",
   "Genex hasn’t confirmed it yet. It shows under My items once it does. You won’t be charged twice.":
     "Genex ещё не подтвердил оплату. Предмет появится в «Мои предметы», как только это случится. Дважды не спишем.",
+  "Genex’s agents didn’t start, so this message went nowhere. Press Try again beside “Agents didn’t start”, then send it again.":
+    "Агенты Genex не запустились, поэтому сообщение никуда не ушло. Нажмите «Попробовать снова» рядом с «Агенты не запустились» и отправьте его ещё раз.",
   "Genex’s protected space needs an update": "Защищённому пространству Genex нужно обновление",
   Get: "Получить",
   "Get in {game}": "Получить в {game}",

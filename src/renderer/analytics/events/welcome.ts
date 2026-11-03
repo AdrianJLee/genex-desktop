@@ -116,6 +116,10 @@ export type SignInFinishedProperties = {
   used_code_box: boolean;
   fell_back_to_terminal: boolean;
   exit_code?: number | null;
+  /** Codex only: whether `codex login` printed a sign-in link, its window was shown, and how many lines it printed (at most 50). */
+  link_seen?: boolean;
+  card_shown?: boolean;
+  output_lines?: number;
 };
 
 /** A sign-in moving on to its next step. */

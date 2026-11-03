@@ -19,14 +19,13 @@ import {
   type StageWatch,
   StageView,
 } from "../../stage.ts";
-import { type Notify, ToastTone } from "../../state/toasts.ts";
-import { problemWords, TOAST_WORDS } from "../../words.ts";
+import { type Notify, ToastTone, notifyProblem } from "../../state/toasts.ts";
+import { TOAST_WORDS } from "../../words.ts";
 import { webBuildShown } from "../../web-build-shown.ts";
 import { reloadPressed } from "../../analytics/builds-stage.ts";
 import { track } from "../../analytics/client.ts";
 import { AnalyticsEvent } from "../../analytics/events.ts";
 import { type BuildSurface, LiveTrigger } from "../../analytics/events/builds.ts";
-import { errorCode } from "../../../shared/errors.ts";
 
 /** The run's build Live shows, as main says it (`live.behind` `shows`). */
 type ShownBuild = { head: string };
@@ -127,10 +126,7 @@ export function useLiveBehind(input: LiveBehindInput): {
     },
     [project, loadLive],
   );
-  const failed = useCallback(
-    (err: unknown) => onNotice(problemWords(err), ToastTone.Error, errorCode(err)),
-    [onNotice],
-  );
+  const failed = useCallback((err: unknown) => notifyProblem(onNotice)(err), [onNotice]);
 
   /** Swap a run's build into Live; `trigger` says who asked: the person's Play brings Live forward. True once it loaded. */
   const showMergedBuild = useCallback(

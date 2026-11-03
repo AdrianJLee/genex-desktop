@@ -35,8 +35,8 @@ offers Compact now (or `/compact`; Claude Code, Codex and Grok use
 included, compacts automatically. Then plan limits
 ([details](../connections-and-context.md#plan-limits)).
 
-Ollama's context is a loaded model's report, else an unknown estimate. Tools and images
-need reported capability; unsupported requests fail before inference.
+Ollama's context is a loaded model's report, else an estimate that refuses nothing. Tools and
+images need reported capability; unsupported requests fail before inference.
 
 Game files, instructions, reference images and enabled tools contribute through channels
 ([tool setup](assets-plugins.md)). Credentials stay in protected storage, never in messages

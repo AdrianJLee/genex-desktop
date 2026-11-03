@@ -21,6 +21,7 @@ import * as seedQueue from "../../src/harness-seed/loop/message-queue.ts";
 import * as seedRoles from "../../src/harness-seed/loop/model-roles.ts";
 import * as seedEffort from "../../src/harness-seed/loop/effort-cap.ts";
 import * as seedOutage from "../../src/harness-seed/loop/outage.ts";
+import { TurnFailureCode as seedTurnFailureCode } from "../../src/harness-seed/loop/turn-record.ts";
 import * as seedSandboxRefusal from "../../src/harness-seed/loop/workers/sandbox-refusal.ts";
 import * as seedOutcomes from "../../src/harness-seed/loop/outcomes.ts";
 import {
@@ -75,7 +76,13 @@ import {
 import { ProjectTool } from "../../src/shared/project-tools.ts";
 import { MAX_WORKERS_AT_ONCE } from "../../src/shared/workers.ts";
 import * as jobs from "../../src/shared/jobs.ts";
-import { DelegationRefusal, EngineFailureKind, MessageFrom, StopReason } from "../../src/shared/engine-requests.ts";
+import {
+  DelegationRefusal,
+  EngineFailureKind,
+  MessageFrom,
+  StopReason,
+  TurnFailureCode,
+} from "../../src/shared/engine-requests.ts";
 import * as queue from "../../src/shared/message-queue.ts";
 import * as roles from "../../src/shared/model-roles.ts";
 import { ReasoningEffort } from "../../src/shared/model-preferences.ts";
@@ -468,6 +475,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("has the same engine failure kinds", () => {
     assert.deepEqual(seedOutage.EngineFailure, EngineFailureKind);
+  });
+
+  it("names why a chat turn failed the same way", () => {
+    assert.deepEqual(seedTurnFailureCode, TurnFailureCode);
   });
 
   it("reads a delegated build's stop reasons the same way", () => {

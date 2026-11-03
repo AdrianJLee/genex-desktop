@@ -7,7 +7,7 @@ import type { PlanReviewState, SendFailure } from "../../../shared/composer.ts";
 import type { ChatActivityPhase } from "../../../shared/chat-activity.ts";
 import type { FilesStay } from "../../../shared/chat-rewind.ts";
 import type { EngineKind } from "../../../shared/engine-descriptor.ts";
-import type { EngineFailureKind, LimitKind } from "../../../shared/engine-requests.ts";
+import type { EngineFailureKind, LimitKind, TurnErrorName, TurnFailureCode } from "../../../shared/engine-requests.ts";
 import type { ToolCategory } from "../../../shared/eval-lane.ts";
 import type { SteerDelivery } from "../../../shared/message-queue.ts";
 import type { ReasoningEffort } from "../../../shared/model-preferences.ts";
@@ -150,6 +150,14 @@ export type ChatTurnEndedProperties = {
   stream_failed: boolean;
   /** How its engine failed: a direct engine's call, or main's word on a delegated one. */
   failure_kind?: EngineFailureKind;
+  /**
+   * Why a turn the harness ran threw (`turn_ended`'s `harnessFailure`): its code, the host call
+   * that failed and the error's type. A direct engine's turn that died before its model was asked
+   * has no `failure_kind`, only these.
+   */
+  failure_code?: TurnFailureCode;
+  failure_method?: string;
+  error_name?: TurnErrorName;
   /** The provider's limit it ended on, and how long the provider said to wait. */
   limit_kind?: LimitKind;
   retry_after_bucket?: RetryAfterBucket;

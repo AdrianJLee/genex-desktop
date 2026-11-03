@@ -1,7 +1,7 @@
 /**
  * The one Loop, on a project of any kind (a web game's too): the chat's own session leads in place,
- * workers come from the shared pool, and the Loop ends on its lead's finish, a stop, a pause or a turn that
- * ends with nothing at work — never by landing a copy, and never on a clock.
+ * workers come from the shared pool, and the Loop ends on its lead's finish, a stop or a pause (a turn that
+ * ends with nothing at work pauses it) — never by landing a copy, and never on a clock.
  */
 import assert from "node:assert/strict";
 import { readFile, utimes, writeFile } from "node:fs/promises";
@@ -110,7 +110,7 @@ async function hostOn(
 
 /**
  * `turn`, and the person's words sent while it worked, which wake the next turn: a turn that ends
- * with nothing at work and nothing to be woken for closes the Loop.
+ * with nothing at work and nothing to be woken for pauses the Loop.
  */
 const thenThePersonSays =
   (turn: LoopTurn, words = "Go on."): LoopTurn =>
@@ -1421,7 +1421,7 @@ const keepsRoom =
     await writeFile(path.join(host.dir, `room-${n}.txt`), `room ${n}\n`);
     await tool("save_point", { label: `Room ${n}`, summary: `room ${n}` });
     // Flipped (no clock): a turn that changed the folder carried on by itself; now the person's words
-    // (sent while it worked) wake the next turn, and a turn that ends with nothing at work closes the Loop.
+    // (sent while it worked) wake the next turn, and a turn that ends with nothing at work pauses the Loop.
     await host.say(`Now room ${n + 1}.`);
     return undefined;
   };
@@ -2768,7 +2768,7 @@ describe("a Loop with no clock", () => {
   );
 
   it(
-    "a turn that ends with nothing at work closes the Loop: the lead's last message is its summary",
+    "a turn that ends with nothing at work pauses the Loop for the person's next word: the lead's last message is its summary",
     TEST_TIMEOUT,
     async () => {
       const host = await hostOn(Project.GodotGame, {
@@ -2784,7 +2784,9 @@ describe("a Loop with no clock", () => {
       assert.equal(host.leadCalls().length, 1, "no wake and no wrap-up turn after it");
       assert.equal(host.appended("director_continued").length, 0);
       assert.equal(host.appended("run_finished").length, 1);
-      assert.equal(report.executionStatus, "completed", "closed, not paused");
+      // Flipped (BP-1): it closed, not paused; a build is the whole making of the game, so it waits.
+      assert.equal(report.executionStatus, "paused", "paused for the person's next word");
+      assert.equal(host.appended("autopilot_paused").length, 1);
       assert.equal(report.victory, false, "nobody claimed the goal");
       assert.equal(
         report.stoppedBecause,
@@ -2923,13 +2925,14 @@ describe("a Loop the earlier seed paused, resumed on this one", () => {
   });
 
   it(
-    "paused inside its old grace and resumed, a turn that ends with nothing at work closes it",
+    "paused inside its old grace and resumed, a turn that ends with nothing at work pauses it again",
     TEST_TIMEOUT,
     async () => {
       const host = await pausedByTheEarlierSeed("inGrace", [() => undefined]);
       const report = await host.start({ resume: true });
       assert.equal(host.leadCalls().length, 1, "no wrap-up turn for its old grace");
-      assert.equal(report.executionStatus, "completed");
+      // Flipped (BP-1): it closed; a turn with nothing at work pauses a build for the person's next word.
+      assert.equal(report.executionStatus, "paused");
     },
   );
 });

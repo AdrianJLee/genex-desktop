@@ -185,8 +185,9 @@ text for the chat's whole life, the lead's turns included (`director.ts` `seatTh
 session keeps the system text it started with (Claude Code 2.1.314 until a compaction, `codex exec
 resume`), so it holds only what no turn changes: Genex's identity (`appIdentity`,
 `loop/project-prompts.ts`: the folder, that Genex shows a web game in Live and what a Genex plugin
-is, never what the folder holds), that the person may not be a programmer, the language rule and
-the chat's Run button. What the folder holds is the session's to see: a game's own `CLAUDE.md` names
+is, never what the folder holds), that the person may not be a programmer, that words the person
+sends while it works get a line back before it goes on (`ANSWER_WHILE_WORKING`), the language rule
+and the chat's Run button. What the folder holds is the session's to see: a game's own `CLAUDE.md` names
 the build Genex runs before every preview, and a plugin's guidance says how its kind is built and
 linked; a turn that changes the kind tells the session in Genex's line (`factsReadyNotice`). The Loop's start,
 workers, the checkpoint, the kind tools, `start_web_game` and `plugins_find` are tools, never
@@ -463,7 +464,7 @@ counts the pool's running workers and the run's running jobs for it (`open/activ
 The open Loop's turns, as every Loop's (see [What ends a Loop](#what-ends-a-loop)): a turn has no time
 limit, and an outage is waited out on the Loop's clock. A turn that ends with nothing at work (no
 worker's run, no running job, no recovery of the project's app: `hasWorkAtHand`) and nothing to wake
-the lead for closes the Loop; with something at work the lead rests until it ends, the person speaks or
+the lead for pauses the Loop for the person's next word; with something at work the lead rests until it ends, the person speaks or
 asks to finish, or a rewind or restart it asked for has run at the turn's end (`NoteKind.AskDone`):
 nothing asks it what next. The person's finish reaching a resting lead opens its last turn. A lead whose game
 folder another chat's turn holds waits for it until it is free, outside the outage ladder
@@ -815,11 +816,13 @@ A Loop has no clock, one rule for every Loop (`director/wake.ts`, `wake-schedule
 no time limit of Genex's own ends a turn, wakes the lead or closes the run, and a lead's turn is
 delegated with no `timeoutMs`. The lead's `finish` ends it. A lead turn that ends with nothing at work
 (no worker's run, no running job of the run, no recovery of the project's app: `hasWorkAtHand`) and
-nothing to wake it for closes it, as a bare agent's turn ends: its last message is the summary, with no
-wrap-up turn after it, and the close says so ("the lead's turn ended with nothing at work"). With
+nothing to wake it for pauses it, as a bare agent's turn ends and waits for the person: a build is the
+whole making of the game, so their next word goes on with it (`director.ts` `closeLeftOpen`; the
+chat's own session holds `resume_run`). Its last message is the summary, with no wrap-up turn after
+it, and the pause says so ("the lead's turn ended with nothing at work"). With
 workers or jobs at work the lead rests, and Genex wakes it when one ends. The run's jobs are read at
 once after each turn, then every 5 seconds (`activeWork`); a read the host could not answer counts as
-work, so only one that says no job runs closes the Loop, and a job's end is read again at once before
+work, so only one that says no job runs pauses the Loop, and a job's end is read again at once before
 it does, so none is missed. The person's Finish, and a
 failed turn, give the lead its one wrap-up turn at once, opened with Genex's one line
 (`LOOP_WORDS.finishAsked`, or `turnFailed` with the failure: the Loop closes when this turn ends;
@@ -895,9 +898,12 @@ the new Loop rides on the same `run_control` record (`next-loop-record.ts`), and
 closed `handleRunStart` starts it on the same game with the run's engine, model and roles, as a
 launch from the chat would (`next-loop.ts`); a Stop pressed since starts nothing. Outside a run, the
 chat's own turn holds the Loop's start on the person's words (`loop/start-autopilot.ts`,
-`delegated-turn.ts` `launches`), after a run it led too, finished or paused; the agent decides when
-to call it, and
-every Loop it starts goes until its lead finishes it or its turn ends with nothing at work.
+`delegated-turn.ts` `launches`), after a run it led too, finished or paused. Its description says what
+a build is, the whole making of the game, and when one starts: as the agent sets to making the game
+or a change beyond a quick fix, instead of doing that work in its reply; a paused build is gone on
+with (`resume_run`), and a new one starts only when needed (the last one finished, or the person
+starts over). The agent decides, and every Loop it starts goes until its lead finishes it, paused
+whenever a turn ends with nothing at work.
 
 Worker plugin approvals are recorded in the run owner's conversation, resolved from host
 call attribution and persisted run starts. The original worker remains the cancellation

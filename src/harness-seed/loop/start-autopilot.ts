@@ -2,8 +2,9 @@
  * The Loop's start: the one tool a chat's own session is handed to start a Loop (delegated-turn.ts
  * bridges it in each turn of the chat's own session on the person's words; a run's turn, words
  * Genex wrote and the Studio's chat never have it). It lives here, outside `tools/`, so a direct engine's tool loop, which cannot lead a Loop,
- * is never handed it. The session decides when to call it; the tool says only what it does. The
- * harness runs it once the reply has ended (chat-dispatch.ts `launchFromIntake`).
+ * is never handed it. The session decides when to call it; the tool says what a build is and when
+ * one starts, since a tool that said only what it does was never called and the game was built in
+ * the chat's replies. The harness runs it once the reply has ended (chat-dispatch.ts `launchFromIntake`).
  */
 import type { AnyRecord, HarnessTool, ToolCtx } from "../types/harness.d.ts";
 import { RunMode } from "./run-events.ts";
@@ -88,7 +89,7 @@ function slugProject(text: unknown): string {
 export const startAutopilot: HarnessTool = {
   name: "start_autopilot",
   description:
-    "Start a Loop: a build of this game that goes on after your reply, which you lead with workers in parallel and save points until you call finish or the person stops it. It starts from this folder as you leave it when your reply ends: call it once, last.",
+    "Start a build: the whole making of this game, from its first work to its end, which you lead with workers in parallel and save points until you call finish or the person stops it. Call it as soon as you set to making the game or a change to it that is more than a quick fix, instead of doing that work in your reply: say in a line what the build will do and end your reply, and the build goes on in this same session from this folder as you leave it. A question, advice or a quick fix needs none. When this chat has a paused build of this game, go on with it (resume_run) instead: start a new build only when one is needed (the last one is finished, or the person wants to start over).",
   parameters: {
     type: "object",
     properties: {

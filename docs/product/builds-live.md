@@ -2,13 +2,13 @@
 
 ## From a request to a game
 
-There is no mode to set: the chat's agent answers, edits directly or starts a Loop, as the
-request needs. In a Loop the chat leads and builds beside workers
-[in the game's folder](projects-engines.md#loops-in-place). Judges answer only when the lead asks. A Loop goes on, with no clock, until its lead finishes it or a turn ends with nothing at
-work. Acceptance survives workers and restarts; external blockers pause it at its checkpoint.
-Asked to finish, the lead's last turn ends it
-([details](../harness-runtime.md#goal-completion-and-worker-approvals)). A local model's chat
-(Ollama) answers and edits; it starts no Loop.
+No mode to set: the agent answers and makes quick fixes itself; making the game is a build (a
+Loop): a paused one goes on, a new one starts only when needed. The chat
+leads it beside workers [in the game's folder](projects-engines.md#loops-in-place); judges answer
+only when asked. It has no clock: its lead finishes it, and a turn ending with nothing at work pauses
+it for the person's next word, as external blockers do. Acceptance survives restarts. Asked to
+finish, the lead's last turn ends it ([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
+Ollama's chat answers and edits; it starts no Loop.
 
 An active run opens Builds once; a build shown from chat, or empty Builds, opens Live. Files and images opened from chat get closable tabs.
 

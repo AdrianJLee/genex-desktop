@@ -815,9 +815,11 @@ describe("a change after a paused build (stale-pause)", () => {
     };
     const resume = afterLoopRunGrant(paused).interviewTools?.find((tool) => tool.name === "resume_run");
     const words = String(resume?.description);
-    assert.match(words, /go on with that build/);
+    // Flipped (BP-2): it went on only when the person asked to go on with that build; a build is the
+    // whole making of the game now, so any work on it beyond a quick fix goes on in it.
+    assert.match(words, /Go on with this chat's paused build/);
     assert.doesNotMatch(words, /new instruction after a stop is a request to continue/i);
-    assert.match(words, /Questions alone do not resume work/);
+    assert.match(words, /A question or a quick fix needs no build/);
   });
 });
 
@@ -1186,7 +1188,7 @@ describe("one session answers the chat (no-coordinator)", () => {
         }
         leadPrompts.push(request.prompt);
         // Flipped (no clock): the lead's turn ended at once and the lead rested until the Stop; a turn
-        // that ends with nothing at work closes the Loop now, so this one works until the Stop.
+        // that ends with nothing at work pauses the Loop now, so this one works until the Stop.
         await untilAborted(request.signal);
         return { summary: "Looking at the plaza.", sessionId: request.resume ?? "lead-1" };
       },
@@ -1415,6 +1417,36 @@ describe("the chat's agent decides when a Loop starts (always-launch)", () => {
       [],
     );
   });
+
+  // BP-2: the Loop's start said what a Loop is and nothing about when, so a lead made a whole Unreal
+  // game in its chat replies over nine messages and Builds stayed empty; its resume went on with a
+  // paused build only on "resume" or "keep going".
+  it("BP-2. the Loop's start says a build is the whole making of the game, started as the work begins, and a paused one is gone on with: the resume goes on with it for any work on it", async () => {
+    const { startAutopilot } = await import("../../src/harness-seed/loop/start-autopilot.ts");
+    const { afterLoopRunGrant } = await import("../../src/harness-seed/loop/after-loop-run.ts");
+    const start = String(startAutopilot.description);
+    assert.match(start, /whole making of this game/, "what a build is");
+    assert.match(start, /as soon as you set to making the game/, "when one starts: as the work begins");
+    assert.match(start, /instead of doing that work in your reply/, "never built in the reply instead");
+    assert.match(start, /paused build[^.]*resume_run/, "a paused build goes on");
+    assert.match(start, /new build only when one is needed/, "a new build only when needed");
+    assert.doesNotMatch(start, /call it once, last/, "it starts the work, it does not close it");
+    const paused = {
+      runId: "r1",
+      state: "paused",
+      engine: "claude-code",
+      onLeadEngine: true,
+      model: null,
+      inPlace: true,
+    };
+    const resume = afterLoopRunGrant(paused).interviewTools?.find((tool) => tool.name === "resume_run");
+    assert.match(
+      String(resume?.description),
+      /Any work on this game[^.]*goes on in it/,
+      "work on the game goes on in it",
+    );
+    assert.doesNotMatch(String(resume?.description), /when the user asks to go on/, "not only on an ask to resume");
+  });
 });
 
 /**
@@ -1604,13 +1636,26 @@ describe("the lead's later turns (wake loop)", () => {
   // Flipped: the ordinary end was worded as a session that stopped short ("the lead's session ended
   // (on its own) before it called finish"). Flipped again (one Loop): a web game's close added what
   // its landing did ("; nothing was landed …"); it closes in place, in the words every Loop's does.
-  it("no-clock. a web lead's turn that ends with nothing at work closes the Loop in its ordinary end's words", async () => {
+  it("no-clock. a web lead's turn that ends with nothing at work pauses the Loop in its ordinary end's words", async () => {
     const { turns, finished } = await lateTurnLoopRun("idle-end", async () => ({
       sessionId: "lead-1",
       summary: "the sky is blue",
     }));
     assert.equal(turns.length, 1, "no wake and no wrap-up turn after it");
     assert.equal(finished.stoppedBecause, "the lead's turn ended with nothing at work");
+  });
+
+  // BP-1: an Unreal game's lead asked the person something and its turn ended, which closed the build
+  // for good, so their answer could only start another; a build is the whole making of the game.
+  it("BP-1. a lead's turn that ends with nothing at work pauses the build, so the person's next word goes on with it", async () => {
+    const { events, finished } = await lateTurnLoopRun("idle-pause", async () => ({
+      sessionId: "lead-1",
+      summary: "Which bench should he sleep on first?",
+    }));
+    assert.equal(finished.executionStatus, "paused", "the build waits for the person");
+    assert.equal(finished.stoppedBecause, "the lead's turn ended with nothing at work");
+    const paused = customEvents(events, "autopilot_paused").filter((e) => e.runId === finished.runId);
+    assert.equal(paused.length, 1, "a Resume, or the chat's own session, picks it up");
   });
 
   it("D11. the lead's account disabled on a wake pauses the run: workers stopped, nothing landed, no wrap-up, the user told what to fix", async () => {
@@ -3035,7 +3080,7 @@ describe("a Loop has no time limit", () => {
     for (const call of calls) assert.doesNotMatch(call.prompt, /working minutes|time's up|minutes left/i);
   });
 
-  it("no-clock. a lead turn that ends with nothing at work closes the Loop at once: no wake, no wrap-up turn", async () => {
+  it("no-clock. a lead turn that ends with nothing at work pauses the Loop at once: no wake, no wrap-up turn", async () => {
     const w = clockNight();
     w.worker.state = "done";
     const { talk, calls } = w.lead(() => ({ ok: true, sessionId: "lead-1" }));
@@ -5370,5 +5415,15 @@ describe("the person's words reach the chat's own session as they wrote them (ch
     assert.ok(lead, "the lead took a turn");
     const chat = chatContext({ folderLabel: folderLabelOf(dir, host.game.name), appLanguage: null });
     assert.equal(lead.system, chat, "the lead's system text is the chat's own");
+  });
+
+  // CB-4: "You can use blender if needed", sent while an Unreal game's session worked, reached it
+  // mid-turn and got no word back: it read the permission, changed nothing yet and went on.
+  it("CB-4. a word the person sent while the session worked got no reply: its system text, the lead's too, asks for a line back before going on", async () => {
+    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const system = String((await chatTurn("Make a castle game")).delegated[0]?.system);
+    assert.equal(system, chatContext({ folderLabel: "games/keep", appLanguage: null }), "the lead sends the same text");
+    assert.match(system, /writes while you work, answer them in a line/);
+    assert.match(system, /even when it changes nothing yet/, "a permission or a note is answered too");
   });
 });

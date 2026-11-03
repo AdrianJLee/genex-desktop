@@ -147,7 +147,7 @@ describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
       facts: [{ id: "unreal-project", path: "." }],
       manifest: unrealManifest as unknown as LoopManifest,
       // Flipped (no clock): the run named 30 minutes of working time; a Loop has none. A turn that
-      // ends with nothing at work closes it, so the person's words wake each next turn.
+      // ends with nothing at work pauses it, so the person's words wake each next turn.
       run: { runId: "run-one-loop", budgets: {} },
       turns: [
         async ({ host, tool }) => {

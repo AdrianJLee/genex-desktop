@@ -217,6 +217,13 @@ export function isResumeFailure(err: any): boolean {
 const TALK =
   "The person may not be a programmer: talk with them about their game, never about the workspace, files, worktrees, hooks or Genex's own machinery.";
 
+/**
+ * The person's words sent while the session works reach it mid-turn. "You can use blender if needed"
+ * changed nothing yet, so the session went on with no word back, and the person read it as ignored.
+ */
+const ANSWER_WHILE_WORKING =
+  "When the person writes while you work, answer them in a line before you go on, even when it changes nothing yet: they wait to see that you read it.";
+
 /** The fence a command for the person to run goes in: the chat offers Run under a one-line block of it. */
 const USER_COMMAND_FENCE = "bash";
 
@@ -239,5 +246,5 @@ export function chatContext({
   folderLabel: string;
   appLanguage: AppLanguage | null;
 }): string {
-  return [appIdentity({ folderLabel }), TALK, languageRule(appLanguage), RUN_BUTTON].join("\n");
+  return [appIdentity({ folderLabel }), TALK, ANSWER_WHILE_WORKING, languageRule(appLanguage), RUN_BUTTON].join("\n");
 }

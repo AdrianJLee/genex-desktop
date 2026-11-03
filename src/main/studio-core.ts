@@ -2845,12 +2845,6 @@ export class StudioCore {
     return this.#delegation.runOfGame(project, runId);
   }
 
-  _directorToolsFor(
-    ...args: Parameters<DelegationService["_directorToolsFor"]>
-  ): ReturnType<DelegationService["_directorToolsFor"]> {
-    return this.#delegation._directorToolsFor(...args);
-  }
-
   // ── recovery ─────────────────────────────────────────────────────────────────────────────
   recover(...args: Parameters<RecoveryService["recover"]>): ReturnType<RecoveryService["recover"]> {
     // A loop the watchdog has to rewind crashed in a loop: its runs are the user's to resume.

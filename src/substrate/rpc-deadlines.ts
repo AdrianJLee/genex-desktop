@@ -109,7 +109,6 @@ export const RPC_CLASSES = {
   "preview.gpuErrors": RpcClass.Page,
   "preview.status": RpcClass.Page,
   "preview.ready": RpcClass.PageLoad,
-  "preview.showing": RpcClass.Page,
   "preview.observe": RpcClass.PageLoad,
   "preview.acquire": RpcClass.PageLoad,
   "preview.release": RpcClass.Page,

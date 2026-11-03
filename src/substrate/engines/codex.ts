@@ -2157,14 +2157,6 @@ function startsElsewhere(request: DelegateRequest): boolean {
 }
 
 /**
- * The build a lead leads outside its folder (`leadBuilds`): written as its own folder is, so it
- * edits, runs and commits there. None in Plan, which writes nothing, nor for any other session.
- */
-function leadBuildRoots(request: DelegateRequest): string[] {
-  return request.leadBuilds && !startsElsewhere(request) ? [path.resolve(request.leadBuilds)] : [];
-}
-
-/**
  * Whether the session runs as the person, with no box: the chat's own session in Bypass, and a
  * writing worker of a Bypass chat, as Codex's own Bypass runs in their terminal.
  */
@@ -2215,10 +2207,10 @@ function serverBox(request: DelegateRequest, runDir: string, bridge: string[]): 
   return request.worker ? [...box, ...workerWebSearch(request)] : box;
 }
 
-/** The folders a boxed session writes: a worker's (`workerRoots`); else its folder, the bridge's and the build a lead leads. */
+/** The folders a boxed session writes: a worker's (`workerRoots`); else its folder and the bridge's. */
 function boxRoots(request: DelegateRequest, runDir: string, bridge: string[]): string[] {
   if (request.worker) return workerRoots(request, runDir, bridge);
-  return [runDir, ...bridge, ...leadBuildRoots(request)];
+  return [runDir, ...bridge];
 }
 
 /**

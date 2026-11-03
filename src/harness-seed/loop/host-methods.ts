@@ -78,7 +78,6 @@ export const HostMethod = {
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",
   PreviewReady: "preview.ready",
-  PreviewShowing: "preview.showing",
   PreviewObserve: "preview.observe",
   PreviewAcquire: "preview.acquire",
   PreviewRelease: "preview.release",

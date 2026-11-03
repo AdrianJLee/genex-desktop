@@ -322,25 +322,30 @@ describe("codex engine", () => {
 
   /**
    * One session: a waking run's lead is its chat's own session, and no lead is read-only. It
-   * resumes the chat's session from the game folder and builds in the integration worktree it leads
-   * (`leadBuilds`), which its box writes beside its own folder; in the chat's Bypass it runs
-   * unboxed, as the chat's own session there does.
+   * resumes the chat's session from the game folder and builds there; in the chat's Bypass it runs
+   * unboxed, as the chat's own session there does. Flipped (one Loop): it also wrote the integration
+   * worktree it led (`leadBuilds`); every lead builds in its game folder now.
    */
-  it("runs a lead from its game folder, resumes the chat's session, and writes the build it leads", async () => {
+  it("runs a lead from its game folder, resumes the chat's session, and writes that folder alone", async () => {
     const { fn, seen } = fakeExec(successRun);
     const { engine, root } = await signedInEngine(fn);
     const game = path.join(root, "game");
-    const build = path.join(root, "scratch", "autopilot", "run_lead", "integration");
     await mkdir(game, { recursive: true });
-    await mkdir(build, { recursive: true });
-    const director = { runId: "run_lead", threadId: "t", project: "game", root: build, chatSession: true };
-    await engine.delegate({ prompt: "lead the run", cwd: game, resume: "chat-thread", leadBuilds: build, director });
+    const director = {
+      runId: "run_lead",
+      threadId: "t",
+      project: "game",
+      root: game,
+      chatSession: true,
+      inPlace: true,
+    };
+    await engine.delegate({ prompt: "lead the run", cwd: game, resume: "chat-thread", director });
     const call = seen[0]!;
     assert.deepEqual(call.argv.slice(0, 3), ["exec", "resume", "chat-thread"]);
     assert.equal(call.cwd, game, "started where its chat's session lives");
     const roots = call.argv.find((arg) => arg.startsWith("sandbox_workspace_write.writable_roots="))!;
     const writable = JSON.parse(roots.slice(roots.indexOf("=") + 1)) as string[];
-    assert.deepEqual(writable, [game, build], "it writes its folder and the build it leads");
+    assert.deepEqual(writable, [game], "it writes its folder");
     assert.doesNotMatch(call.prompt, /you only read|you cannot change/);
 
     const permissions = { mode: "bypassPermissions", allow: [], directories: [], protectWrites: [] };
@@ -349,7 +354,6 @@ describe("codex engine", () => {
       prompt: "lead the run",
       cwd: game,
       resume: "chat-thread",
-      leadBuilds: build,
       director,
       permissions: { ...permissions, ask } as never,
     });

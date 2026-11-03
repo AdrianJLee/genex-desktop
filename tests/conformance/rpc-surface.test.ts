@@ -73,7 +73,6 @@ const API_KEYS = [
   "preview.release",
   "preview.reload",
   "preview.screenshot",
-  "preview.showing",
   "preview.status",
   "run.artifact",
   "run.control",

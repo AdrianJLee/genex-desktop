@@ -333,12 +333,6 @@ export interface DelegateRequest {
    */
   leadAsks?: LeadAsks;
   /**
-   * A lead's build outside the folder it sits in (a web Loop's integration worktree, its seat's
-   * checked real path): the lead edits, runs and commits there, so whatever box its engine keeps
-   * writes it as it writes the session's own folder. Only the host sets it; never read-only.
-   */
-  leadBuilds?: string;
-  /**
    * A worker of a chat's lead, in the chat's mode: its seat, as the host found and built it. Only
    * the host sets it (the harness asks with a grant the host honours on its own finding), never
    * together with `permissions` or `leadAsks`. Absent, the engine keeps the unattended contract.

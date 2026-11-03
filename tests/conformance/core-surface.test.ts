@@ -12,7 +12,6 @@ import { coreLite } from "../helpers/core-lite.ts";
 
 const METHODS = [
   "_computerToolsFor",
-  "_directorToolsFor",
   "_runOfGame",
   "activeBuilders",
   "activityEvents",

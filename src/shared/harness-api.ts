@@ -649,11 +649,6 @@ export interface HarnessHostApi {
   "preview.status": { params: { handle?: string }; result: PreviewPortStatus };
   /** Readiness is a fact the page reports, not a sleep. */
   "preview.ready": { params: { handle?: string; timeoutMs?: number; gesture?: boolean }; result: ReadyResult };
-  /** What the user's own window is showing right now: their game folder, or a build they chose to play. */
-  "preview.showing": {
-    params: void;
-    result: { project: string; root: string | null; entry: string | undefined; loaded: string | null } | null;
-  };
   "preview.observe": { params: { handle?: string }; result: BuildObservation };
   "preview.acquire": { params: { label?: string }; result: { handle: string } };
   "preview.release": { params: { handle: string }; result: boolean };
@@ -799,7 +794,6 @@ export const HostMethod = {
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",
   PreviewReady: "preview.ready",
-  PreviewShowing: "preview.showing",
   PreviewObserve: "preview.observe",
   PreviewAcquire: "preview.acquire",
   PreviewRelease: "preview.release",

@@ -6151,4 +6151,11 @@ export default {
   Shots: "スクリーンショット",
   "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, other {{count}回プレイ}}",
   "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, other {いいね{count}件}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex はこのパソコンに {name} をインストールできません。ガイドに沿ってインストールしてから、もう一度確認してね。",
+  "Install {name} with its guide, then check again.":
+    "ガイドに沿って {name} をインストールしてから、もう一度確認してね。",
+  "Open install guide": "インストールガイドを開く",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "Windows では、OpenCode はガイドに沿って Chocolatey、Scoop、npm のどれかでインストールします。そのあともう一度確認してね。",
 } satisfies LocaleCatalog;

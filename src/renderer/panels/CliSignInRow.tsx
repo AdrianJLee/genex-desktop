@@ -46,6 +46,8 @@ const TerminalView = lazy(() => import("./TerminalView.tsx"));
 /** What a CLI's row can do: install, recheck, sign in or stop signing in, sign out (Cursor), update. */
 type CliRowActions = {
   install: () => void;
+  /** Open the CLI's install guide, or null where Genex installs it itself (`useCliInstall`'s `inApp`). */
+  openGuide: (() => void) | null;
   recheck: () => void;
   signIn: () => void;
   cancelSignIn: () => void;
@@ -141,25 +143,37 @@ const CURSOR_ROW: CliRowWords = {
   signOut: { title: CURSOR_WORDS.signOut, line: CURSOR_WORDS.signOutLine },
 };
 
+/** Not installed: Install, or where Genex can't install it, the CLI's install guide; and Check again. */
+function notInstalledView(act: CliRowActions, words: CliRowWords): RowView {
+  const { openGuide } = act;
+  return {
+    tone: RowTone.Off,
+    status: WORDS.notInstalled,
+    line: openGuide ? WORDS.installByGuideLine(words.card.name) : words.installLine,
+    actions: (
+      <>
+        {openGuide ? (
+          <Button variant="default" onClick={openGuide}>
+            {WORDS.installGuide}
+          </Button>
+        ) : (
+          <Button variant="default" onClick={act.install}>
+            {words.install}
+          </Button>
+        )}
+        <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
+      </>
+    ),
+  };
+}
+
 /** The row by its state: installing, missing, signing in, free models only, connected, outdated or unreachable. */
 function cliRowView(state: OpenCodeRowState, act: CliRowActions, words: CliRowWords): RowView {
   switch (state) {
     case OpenCodeRowState.Installing:
       return { tone: RowTone.Busy, status: WORDS.installing, line: words.installingLine, actions: null };
     case OpenCodeRowState.NotInstalled:
-      return {
-        tone: RowTone.Off,
-        status: WORDS.notInstalled,
-        line: words.installLine,
-        actions: (
-          <>
-            <Button variant="default" onClick={act.install}>
-              {words.install}
-            </Button>
-            <Button onClick={act.recheck}>{WORDS.checkAgain}</Button>
-          </>
-        ),
-      };
+      return notInstalledView(act, words);
     case OpenCodeRowState.SigningIn:
       return signingInView(act, words);
     case OpenCodeRowState.SignedOut:
@@ -353,6 +367,12 @@ export default function CliSignInRow({
         press(cliInstallAction(state));
         void install.install();
       },
+      openGuide: install.inApp
+        ? null
+        : () => {
+            press(ProviderAction.InstallGuide);
+            void run(() => window.studio.openUrl(words.card.guide));
+          },
       recheck: () => {
         press(cliRecheckAction(state));
         void run(recheck);

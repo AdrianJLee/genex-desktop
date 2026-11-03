@@ -153,6 +153,8 @@ export const WAYS_WORDS = {
     signInLede: t("OpenCode asks a few questions below. Choose with ↑ ↓ and press Return."),
     setUp: t("Set up OpenCode"),
     setUpNote: t("Installs OpenCode on this Mac. This can take a minute."),
+    installGuide: t("Open install guide"),
+    guideNote: t("On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again."),
     checkAgain: t("Already installed? Check again"),
     checking: t("Checking…"),
     readyStatus: t("OpenCode ready · free models"),

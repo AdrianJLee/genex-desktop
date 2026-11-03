@@ -6262,4 +6262,10 @@ export default {
   Shots: "Captures",
   "{n, plural, one {{count} play} other {{count} plays}}": "{n, plural, one {{count} partie} other {{count} parties}}",
   "{n, plural, one {{count} like} other {{count} likes}}": "{n, plural, one {{count} j’aime} other {{count} j’aime}}",
+  "Genex can't install {name} on this computer. Install it with its guide, then check again.":
+    "Genex ne peut pas installer {name} sur cet ordinateur. Installe-le avec son guide, puis vérifie à nouveau.",
+  "Install {name} with its guide, then check again.": "Installe {name} avec son guide, puis vérifie à nouveau.",
+  "Open install guide": "Ouvrir le guide d’installation",
+  "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
+    "Sous Windows, OpenCode s’installe depuis son guide avec Chocolatey, Scoop ou npm. Puis vérifie à nouveau.",
 } satisfies LocaleCatalog;

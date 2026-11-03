@@ -127,20 +127,16 @@ export interface SeedMoveNotice {
  * Code the seed moved between files, where the old file is still shipped. The old file keeps
  * exporting every moved name, re-exported from the new home, so a kept file of either vintage
  * still loads. What cannot be kept is the reach of an edit: when the agent edited, say,
- * `unrealTool` in its own lead-journal.ts, the upgrade keeps that file — but the untouched
- * callers are updated and now import it from lead-steps.ts, so the agent's fix runs only inside
- * the journal itself; `applySeed` reports the split (`moved`) so the agent can carry its edit to
- * the new home. A move out of a file the seed no longer ships is not listed: the archive epoch
- * (seed-archive.ts) archived every kept copy of one.
+ * `loopRunRefusal` in its own main.ts, the upgrade keeps that file — but the untouched callers are
+ * updated and now import it from run-dispatch.ts, so the agent's fix runs only inside main.ts
+ * itself; `applySeed` reports the split (`moved`) so the agent can carry its edit to the new home.
+ * A move out of a file the seed no longer ships is not listed: the archive epoch (seed-archive.ts)
+ * archived every kept copy of one.
  */
 export const SEED_MOVES: readonly SeedMove[] = [
   { from: "loop/main.ts", to: "loop/run-dispatch.ts", names: ["loopRunRefusal"] },
   { from: "loop/turn-loop.ts", to: "loop/chat-session.ts", names: ["nameFromAsk"] },
   { from: "loop/turn-loop.ts", to: "loop/tool-loop.ts", names: ["resolveContextWindow"] },
-  // The Unreal Loop's step machine gave way to one lead (loop/unreal/lead.ts).
-  { from: "loop/unreal/live-journal.ts", to: "loop/unreal/lead-journal.ts", names: ["unrealTool"] },
-  // The runner's plugin steps moved to a module of their own, which an older kept journal can't lack.
-  { from: "loop/unreal/lead-journal.ts", to: "loop/unreal/lead-steps.ts", names: ["unrealTool"] },
 ];
 
 /** A host call whose shape the seed changed: a kept copy of `file` without `marker` calls the older way. */
@@ -156,9 +152,7 @@ export interface SeedCallChange {
  * a kept copy of these files from before that change has every harness step refused as an unknown
  * tool. `plugins.tools` names the game (`project`), whose facts pick its plugin tools: a kept copy
  * that names none is offered a web game's tools whatever the game holds. `applySeed` reports such a
- * copy (`outdatedCalls`, each file once) and the boot notes it for the agent. The Unreal lead's
- * runner calls from `loop/unreal/lead-steps.ts`, new with the step change, so no kept copy of it is
- * older (a kept `lead-journal.ts` that still defines its own call is a move). `game.scaffold` with
+ * copy (`outdatedCalls`, each file once) and the boot notes it for the agent. `game.scaffold` with
  * no `kind` now makes an empty folder with no kind: a kept Loop launch or runner that names no kind
  * makes its new game empty, a kept run start leaves a game with no kind unstarted before its web
  * Loop, and a kept `tools/game-tools.ts` has no `start_web_game` for a local model. A kept
@@ -434,17 +428,9 @@ async function deletedBeforeMigration(
  *
  * The Unreal Loop's part plan and part prompts went with the part runner, and the step machine that
  * replaced it (its planner, keep rule, board, probes, checkpoint, helpers, prompts, tools, graph,
- * the part runner's shim) went when one lead took over (`loop/unreal/lead.ts`); an untouched copy
- * left behind would no longer type-check against the seed (`cpp.ts`, `live-contract.ts`). Two of
- * its files stay as shims, because files the agent may have kept import from them:
- * `loop/unreal/live.ts` (a kept `run-dispatch.ts`'s `runUnrealLive`, the lead now) and
- * `loop/unreal/live-journal.ts` (a kept `restore.ts`'s `unrealTool`, in `SEED_MOVES`). So do the
- * lead's own reading of whether Unreal is there (`editor-life.ts`) and a chat's own waits and reads
- * of Unreal (`editor-wait.ts`, `editor-activity.ts`): no current module calls them since Genex's
- * `health`, checkpoint and kinds' readiness took them over, but kept copies of `delegated-turn.ts`,
- * `unreal-prompts.ts`, `lead-turn.ts`, `restore.ts` and `save-point.ts` still import them, so they
- * stay until the Unreal runner's last by-name calls go. The prompt a chat's session once resumed
- * with (`editor-wait-prompts.ts`) is retired with the chat's own look-first wording.
+ * the part runner's shim) went when one lead took over; an untouched copy left behind would no
+ * longer type-check against the seed. The prompt a chat's session once resumed with
+ * (`editor-wait-prompts.ts`) is retired with the chat's own look-first wording.
  *
  * The JavaScript modules the TypeScript seed replaced (`loop/*.mjs` → `loop/*.ts`) are not listed
  * here: retiring an agent-edited `x.mjs` would keep it for ever beside an `x.ts` that is the one

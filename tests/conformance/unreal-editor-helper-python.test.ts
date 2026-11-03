@@ -10,8 +10,6 @@ import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { agentBrief } from "../../src/harness-seed/loop/unreal/agent-prompts.ts";
-import { AgentKind } from "../../src/harness-seed/loop/unreal/lead-contract.ts";
 import { TOOLSET_OF } from "../../src/plugins/unreal/loop-tools.ts";
 import { EnginePlayFindingCode } from "../../src/shared/engine-play.ts";
 import { checkPython, GENEX_NAMES } from "../../src/plugins/unreal/python-check.ts";
@@ -78,36 +76,6 @@ test("every editor tool the Loop sends to the Genex editor helper is one of its 
   assert.equal(run.status, 0, run.stderr);
   const names = JSON.parse(run.stdout) as Record<string, string[]>;
   for (const [tool, toolset] of routed) assert.ok(names[toolset]?.includes(tool), `${toolset} has no tool ${tool}`);
-});
-
-/** Each import tool's parameters, in order, as the build toolset declares them. */
-const IMPORT_PARAMS = `import inspect, json
-from genex_build.tools import GenexBuildTools
-names = ['import_model', 'import_character', 'import_animation', 'import_sound']
-print(json.dumps({n: list(inspect.signature(getattr(GenexBuildTools, n)).parameters) for n in names}))`;
-
-test("a sub-agent's brief writes every import call with every argument the build tools take", { skip: SKIP }, () => {
-  const run = spawnSync("python3", ["-c", IMPORT_PARAMS], PYTHON);
-  assert.equal(run.status, 0, run.stderr);
-  const params = JSON.parse(run.stdout) as Record<string, string[]>;
-  const brief = agentBrief({
-    kind: AgentKind.BlenderModel,
-    title: "Katana",
-    brief: "A katana.",
-    game: "Night Spire",
-    folder: "assets/agents/blender_model-1",
-    cppFolder: null,
-    inputs: [],
-    engine: "claude-code",
-  });
-  // The manifest's example import call: Unreal's tool schema has no defaults, so it passes them all.
-  const example = /"import_model (\{.*\})"/.exec(brief)?.[1]?.replace(/\\"/g, '"') ?? "{}";
-  assert.deepEqual(Object.keys(JSON.parse(example)), params.import_model);
-  for (const [tool, names] of Object.entries(params))
-    assert.ok(
-      brief.includes(`${tool} {${names.join(", ")}`),
-      `the brief names ${tool}'s arguments: ${names.join(", ")}`,
-    );
 });
 
 /** The public names of the `genex` module `apply_part` hands a part's apply.py. */

@@ -28,7 +28,6 @@ import { closeUnderWay } from "./close-latch.ts";
 import { reopenCommits, reopenMarkOf } from "./reopen.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import { newOpenJournal, OPEN_WALL_CLOCK, type OpenClock, openJournalOf } from "./open/contract.ts";
-import { resumedOpenJournal } from "./open/older-journal.ts";
 import {
   type OpenedGame,
   openGame,
@@ -429,17 +428,14 @@ async function prepareOpenLoopRun(
   const loopRun = bindLoopRun({ ctx, threadId, run, resume }, modules);
   const inbox = ctx.runInbox ?? createRunInbox(ctx, { threadId, runId: run.runId });
   ctx.setStatus(`run ${run.runId} · lead in place`);
-  const read = await readPriorJournal(ctx, threadId, run, resume);
-  // A run the Unreal runner paused goes on from its journal, turned into the one Loop's (older-journal.ts).
-  const resumed = resumedOpenJournal(read, clock.now());
-  const { prior: priorJournal, refused, spentBefore } = resumed;
+  const priorJournal = await readPriorJournal(ctx, threadId, run, resume);
   const saved = resume ? priorJournal?.director?.clock : null;
   const runClock = capClock({ saved, now: clock.now(), totalMs: openRunMs(run) });
   const game = await openGame(ctx, run);
-  if (!refused) recordCreditCap(run, spentBefore);
+  recordCreditCap(run);
   const report = loopRunReport(run, resume ? await earlierReport(ctx, threadId, run.runId) : null);
-  if (!refused) await announceRunStart(ctx, threadId, run, { resume, profile: LoopProfile.Open });
-  const baseCommit = refused ? null : await openStartingPoint(ctx, run, priorJournal);
+  await announceRunStart(ctx, threadId, run, { resume, profile: LoopProfile.Open });
+  const baseCommit = await openStartingPoint(ctx, run, priorJournal);
   Object.assign(loopRun, openLoopRunData({ run, threadId, priorJournal, inbox }, game, baseCommit, runClock, report));
   loopRun.gameFacts = game.facts;
   loopRun.game = { hookEvents: game.hookEvents };
@@ -449,11 +445,6 @@ async function prepareOpenLoopRun(
   loopRun.profile = LoopProfile.Open;
   loopRun.open = open;
   restoreLoopRun(loopRun);
-  if (refused) {
-    open.refused = refused;
-    open.refusalPauses = resumed.staysPaused === true;
-    return loopRun;
-  }
   await loopRun.saveJournal();
   await openLoopPool(loopRun, open);
   return loopRun;

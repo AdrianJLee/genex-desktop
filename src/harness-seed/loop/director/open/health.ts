@@ -57,7 +57,7 @@ const over = (loopRun: LoopRun): boolean =>
   closeUnderWay(loopRun.state) ||
   finishUnderWay(loopRun.state) ||
   loopRun.ctx.cancelled === true ||
-  Boolean(loopRun.open?.refused || loopRun.open?.betweenTurns);
+  Boolean(loopRun.open?.betweenTurns);
 
 /** How long the Loop's teardown waits for a recovery under way to stop, before its run ends anyway. */
 const RECOVERY_SETTLE_MS = OPEN_CLOSE_MS / 2;

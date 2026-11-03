@@ -21,7 +21,7 @@ export const UNTIL_DONE_CAP_MS = 24 * HOUR_MS;
 const OUT_OF_TIME_MS = MINUTE_MS;
 
 /** Whether a Loop runs for its hours (a timed one) rather than until its lead finishes it (∞). */
-export function timedLoop(run: Pick<Run, "budgets">): boolean {
+function timedLoop(run: Pick<Run, "budgets">): boolean {
   return run.budgets?.untilSatisfied !== true;
 }
 

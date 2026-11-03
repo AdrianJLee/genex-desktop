@@ -107,7 +107,7 @@ const CLOSED_FACE: Partial<Record<string, LeadFace>> = {
   [ExecutionStatus.Cancelled]: LeadFace.Stopped,
 };
 
-/** A row the lead works on itself, working now: one no worker holds (an Unreal lead's milestone). */
+/** A row the lead works on itself, working now: one no worker holds (a lead's milestone). */
 const isLeadAtWork = (row: PartRow): boolean => row.working && row.facet.worker === undefined;
 
 /**

@@ -61,14 +61,9 @@ export function openRunMs(run: Run): number {
   return Math.min(total, MAX_RUN_HOURS * HOUR_MS);
 }
 
-/**
- * The run's credit cap on its own record: its own whole number, or the default where it names none
- * (or none Genex can read), less what an earlier runner's jobs already spent (`spentBefore`, once:
- * the lowered cap is the record's from then on).
- */
-export function recordCreditCap(run: Run, spentBefore = 0): void {
-  const cap = creditCapOf(run) ?? DEFAULT_CREDIT_CAP;
-  run.budgets = { ...run.budgets, creditCap: Math.max(0, cap - spentBefore) };
+/** The run's credit cap on its own record: its own whole number, or the default where it names none (or none Genex can read). */
+export function recordCreditCap(run: Run): void {
+  run.budgets = { ...run.budgets, creditCap: creditCapOf(run) ?? DEFAULT_CREDIT_CAP };
 }
 
 /**
@@ -112,8 +107,6 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     hookEvents: game.hookEvents,
     journal,
     halted: null,
-    refused: null,
-    refusalPauses: false,
     turnSavedFrom: journal.savePoints.length,
     turnWorked: false,
     turnMark: null,

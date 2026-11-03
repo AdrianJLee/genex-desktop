@@ -3,7 +3,7 @@
  * `tool_permission` row names the worker (`worker.id`), and a pending row stays pending until the
  * person answers or the card's own wait ends (a run worker's, as a lead's: then its call hears that
  * nobody answered, which is not a no). The shared pool reads its own workers' rows; a run's own
- * workers (the director's builders, the Unreal lead's typed workers) are read here, so their lead is
+ * workers (the director's builders) are read here, so their lead is
  * told one waits on the person while it and the other workers go on.
  */
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";

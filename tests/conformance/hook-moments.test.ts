@@ -22,16 +22,6 @@ import {
   turnHeldLine,
   waitReady,
 } from "../../src/harness-seed/loop/hooks.ts";
-import {
-  betweenHeldWords,
-  closeHeldWords,
-  cppHeldWords,
-  crashHeldWords,
-  crashRestoreHeldWords,
-  restartHeldWords,
-  startHeldWords,
-  turnsHeldWords as unrealTurnsHeld,
-} from "../../src/harness-seed/loop/unreal/hold-words.ts";
 import { HOOK_LABEL_CHARS, isHookLabel } from "../../src/shared/plugin-hooks.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
@@ -433,14 +423,6 @@ describe("Genex's own holds, in the person's words on every surface", () => {
         return endOfTurnCheckpoint(recorder.ctx as never, { project: NAME, threadId: "t1" }, game);
       },
     ],
-    ["the Unreal Loop's start", (hold) => startHeldWords(held(hold))],
-    ["the Unreal Loop's close", (hold) => closeHeldWords(held(hold))],
-    ["the Unreal lead's turns held", (hold) => unrealTurnsHeld(held(hold))],
-    ["a restore or restart between turns", (hold) => betweenHeldWords(held(hold))],
-    ["adding C++", (hold) => cppHeldWords(held(hold))],
-    ["a crash Genex didn't reopen", (hold) => crashHeldWords(held(hold))],
-    ["a restart whose reopen Genex held", (hold) => restartHeldWords(held(hold))],
-    ["a crash whose way back Genex held", (hold) => crashRestoreHeldWords(held(hold))],
     ["a director run's start", (hold) => runHeldWords(held(hold))],
     ["a director run's lead turns held", (hold) => directorTurnsHeld(held(hold))],
     ["a chat's wait for the game's apps", (hold) => pendingLine(held(hold))],
@@ -469,17 +451,6 @@ describe("Genex's own holds, in the person's words on every surface", () => {
   it("a step's own block keeps its reason: no surface words it as Genex's hold", () => {
     // A step's block: its reason, and no hold of Genex's.
     const step = { reason: "The crane is being serviced.", hold: undefined };
-    for (const words of [
-      startHeldWords,
-      closeHeldWords,
-      unrealTurnsHeld,
-      betweenHeldWords,
-      cppHeldWords,
-      crashHeldWords,
-      restartHeldWords,
-      crashRestoreHeldWords,
-    ])
-      assert.equal(words(step), null);
     assert.match(runHeldWords(step), /a plugin of this game held it back: The crane is being serviced\./);
     assert.match(directorTurnsHeld(step), /The crane is being serviced\./);
     assert.match(turnHeldLine(step), /The crane is being serviced\./);

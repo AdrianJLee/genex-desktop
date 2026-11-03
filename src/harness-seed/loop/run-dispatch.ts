@@ -12,12 +12,9 @@ import {
   startWebIfPending,
 } from "./folder-facts.ts";
 import { BuiltinGate, fireGates } from "./builtin-hooks.ts";
-import { OLDER_LEAD_JOURNAL_KIND } from "./director/open/older-journal.ts";
 import { leadsInPlace } from "./engine-seat.ts";
-import { switchNamed, unrealRunnerOn } from "./loop-switch.ts";
 import { OPEN_LOOP_REFUSAL } from "./open-loop-prompts.ts";
 import { HookEvent } from "./hooks.ts";
-import { runUnrealLead } from "./unreal/lead.ts";
 import { EngineId, withRoles } from "./model-roles.ts";
 import { runDirector } from "./director.ts";
 import { createRunInbox } from "./run-inbox.ts";
@@ -84,8 +81,6 @@ export type LoopRefusal = (typeof LoopRefusal)[keyof typeof LoopRefusal];
 const RUNNERS: Record<RunnerKind, Runner> = {
   // A web game's Loop by the web method, or a Loop on any other project led in place.
   [RunnerKind.Director]: (ctx, options) => runDirector(ctx, options),
-  // The Unreal runner resumes from its journal (`kind: "unreal-lead"`, lead-journal.ts), behind the switch.
-  [RunnerKind.Unreal]: (ctx, { threadId, run, resume }) => runUnrealLead(ctx, { threadId, run, resume }),
   [RunnerKind.NeedsSession]: (ctx, options) =>
     refusedRun(ctx, options, OPEN_LOOP_REFUSAL.needsSession(engineName(options.run, options.described)), {
       refusal: LoopRefusal.NeedsSession,
@@ -105,18 +100,11 @@ const REFUSING_RUNNERS: ReadonlySet<RunnerKind> = new Set([RunnerKind.NeedsSessi
  * Which loop conducts `run`. Every Loop is its lead's session, on a project of any kind: a web game's
  * by the web method, any other project's in place. An engine that keeps no session of its own
  * (Ollama's tool loop) leads none: its run is refused with a typed reason (`LoopRefusal.NeedsSession`)
- * and its chat stays plain chat. The internal switch (`unrealRunner`, loop-switch.ts) sends an open
- * Loop to the Unreal runner.
+ * and its chat stays plain chat.
  */
-export function chooseRunner(
-  run: Run,
-  described: readonly EngineDescriptor[],
-  profile: LoopProfile = LoopProfile.Web,
-  { unrealRunner = false }: { unrealRunner?: boolean } = {},
-): RunnerKind {
+export function chooseRunner(run: Run, described: readonly EngineDescriptor[]): RunnerKind {
   const engine = described.find((e) => e.id === (run.engine ?? EngineId.Ollama));
-  if (!leadsInPlace(engine)) return RunnerKind.NeedsSession;
-  return profile === LoopProfile.Open && unrealRunner ? RunnerKind.Unreal : RunnerKind.Director;
+  return leadsInPlace(engine) ? RunnerKind.Director : RunnerKind.NeedsSession;
 }
 
 /**
@@ -519,16 +507,14 @@ async function conductRun(
   const route = await routeOf(host, run, { threadId, resume });
   const { games, profile } = route;
   const ask = {
-    threadId,
     described,
     games,
-    resume,
     reopen,
     profile,
     webElsewhere: route.webElsewhere,
     ...(route.classicResume ? { classicResume: route.classicResume } : {}),
   };
-  const chosen = route.refusal ? refusing(route.refusal, { reopen }) : await runnerFor(host, run, ask);
+  const chosen = route.refusal ? refusing(route.refusal, { reopen }) : runnerFor(run, ask);
   const report = await chosen.runner(ctx, { threadId, run, resume, profile, described });
   closed();
   host.notify("run.finished", report);
@@ -542,8 +528,8 @@ function profileOf(games: readonly GameProject[], project: string): LoopProfile 
 
 /**
  * The profile a resumed run goes on in: its own journal's, never the folder's now. A Loop that worked
- * in place (`director.open`, or the Unreal runner's journal) goes on in place whatever the folder
- * reads as; any other journal (the director's, classic Autopilot's) is a web Loop's. Null with no
+ * in place (`director.open`) goes on in place whatever the folder reads as; any other journal (the
+ * director's, classic Autopilot's) is a web Loop's. Null with no
  * journal: the folder decides. A journal the host can't read throws, as the runner's own read does:
  * read as none, the folder would decide, and the run would resume from a journal of the other kind.
  */
@@ -554,7 +540,7 @@ async function resumedJournal(host: Host, threadId: string, runId: string): Prom
 /** The profile a resumed journal goes on in (`resumedJournal`); null with no journal. */
 function resumedProfile(journal: AnyRecord | null): LoopProfile | null {
   if (!journal) return null;
-  return journal.director?.open || journal.kind === OLDER_LEAD_JOURNAL_KIND ? LoopProfile.Open : LoopProfile.Web;
+  return journal.director?.open ? LoopProfile.Open : LoopProfile.Web;
 }
 
 /**
@@ -562,7 +548,7 @@ function resumedProfile(journal: AnyRecord | null): LoopProfile | null {
  * to the director now, which can't pick it up — it would start the whole build again from its goal.
  */
 function classicJournal(journal: AnyRecord | null): boolean {
-  if (!journal || journal.director || journal.kind === OLDER_LEAD_JOURNAL_KIND) return false;
+  if (!journal || journal.director) return false;
   return Boolean(journal.plan || journal.facets);
 }
 
@@ -629,12 +615,10 @@ interface ChosenRunner {
   refuses: boolean;
 }
 
-/** What the runner is chosen from: the run's thread, its engines, its game's profile and whether it resumes. */
+/** What the runner is chosen from: the run's engines, its game and its game's profile. */
 interface RunnerAsk {
-  threadId: string;
   described: readonly EngineDescriptor[];
   games: readonly GameProject[];
-  resume: boolean;
   /** A finished build reopened: a refusal keeps it finished, never paused. */
   reopen: boolean;
   profile: LoopProfile;
@@ -666,27 +650,22 @@ interface RefusingHow {
 }
 
 /**
- * Which runner conducts the run: by its mode, its engine and its game's profile, and for an open
- * Loop the internal switch. An open Loop on kept older parts that can't lead one is refused with
- * the words that say so, and so is a paused web Loop whose folder reads as no web game now: it stays
- * paused, its journal untouched, for a Resume once the folder reads as it did.
+ * Which runner conducts the run: by its engine and its game's profile. A paused web Loop whose
+ * folder reads as no web game now is refused with the words that say so: it stays paused, its
+ * journal untouched, for a Resume once the folder reads as it did.
  */
-async function runnerFor(host: Host, run: Run, ask: RunnerAsk): Promise<ChosenRunner> {
-  const { threadId, described, games, resume, profile } = ask;
+function runnerFor(run: Run, ask: RunnerAsk): ChosenRunner {
+  const { described, games, profile } = ask;
   const byKind = (kind: RunnerKind): ChosenRunner => ({ runner: RUNNERS[kind], refuses: REFUSING_RUNNERS.has(kind) });
   if (ask.webElsewhere)
     return refusing(ask.reopen ? OPEN_LOOP_REFUSAL.webBuildElsewhere : ask.webElsewhere, { reopen: ask.reopen });
+  const kind = chooseRunner(run, described);
   if (profile !== LoopProfile.Open) {
-    const kind = chooseRunner(run, described, profile);
     // The director can't pick up a classic build: it would start it again from its goal, on a fresh clock.
     if (ask.classicResume && kind === RunnerKind.Director) return closingOlderBuild();
     return byKind(kind);
   }
   const game = games.find((listed) => listed.name === run.project);
-  // The saved journal's kind is read only when the switch is named: no other run makes the call.
-  const journalKind = resume && switchNamed(process.env) ? (await readJournal(host, threadId, run.runId))?.kind : null;
-  const unrealRunner = unrealRunnerOn({ env: process.env, game, resume, journalKind });
-  const kind = chooseRunner(run, described, profile, { unrealRunner });
   // The refusal names what Genex found that makes this project's Loop work in place.
   if (kind === RunnerKind.NeedsSession && game)
     return refusing(OPEN_LOOP_REFUSAL.needsSession(engineName(run, described), openLoopBecause(game)), {

@@ -2,8 +2,8 @@
  * C++ parts on the editor's side. `landPartCpp` brings a part's own C++ folder from a
  * builder's copy into the game's project before the editor queue hot-reloads it: plain headers
  * and sources only, that one folder replaced, nothing else touched, and a hostile folder (a link,
- * a file outside, another kind of file) copies nothing. The runner's `cpp-status` says whether this
- * computer compiles C++, the game's module and how adding it goes; `add-cpp-module` adds the module
+ * a file outside, another kind of file) copies nothing. `cpp-status` says whether this computer
+ * compiles C++, the game's module and how adding it goes; `add-cpp-module` adds the module
  * in the background: saves the editor's work, quits Unreal, writes the module, builds it and opens
  * Unreal again, and on any failure says why and reopens an editor it closed. Unreal, UBT and time
  * are stand-ins; the module's files are written for real.
@@ -14,7 +14,6 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { CppAddState as SeedCppAddState, readCppStatus } from "../../src/harness-seed/loop/unreal/cpp.ts";
 import type { PluginContext, PluginHookContext } from "../../src/plugin-sdk/index.d.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { CppAddState, CppEditorTool, landPartCpp } from "../../src/plugins/unreal/cpp-tools.ts";
@@ -408,8 +407,6 @@ describe("cpp-status", () => {
       module: null,
       adding: { state: CppAddState.Idle },
     });
-    assert.deepEqual(readCppStatus(answer), answer, "the Loop's runner reads it as it is");
-    assert.deepEqual(SeedCppAddState, CppAddState, "the runner names the same states");
   });
 
   it("names the game's module once it has one", async () => {

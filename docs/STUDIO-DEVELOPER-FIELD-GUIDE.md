@@ -519,11 +519,6 @@ read `logs`. A run paused by an engine limit or a loop crash continues from
 `[data-run-resume="<runId>"]` once the limit resets. Never restart or drive the window while the
 owner is using it; leave the profile running at the end.
 
-Run overrides reach the harness from the studio's environment only by name (`harnessRunEnv`):
-`STUDIO_UNREAL_RUNNER=lead` sends a new Loop on an Unreal project, and the resume of a run that
-runner wrote, to the Unreal runner from before the one Loop. It is no run record field and not
-shown in the UI; set it on start and restart.
-
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket
 permissions; on Windows the control is a named pipe with a fresh random name, which other accounts

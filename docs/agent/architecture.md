@@ -469,8 +469,8 @@ checkpoints are specified in [local models](../local-models.md) and
 The harness is TypeScript run by type stripping, dependency-free, with `.ts` import specifiers; see
 the [harness runtime guide](../harness-runtime.md) and [src notes](../../src/AGENTS.md#harness-seed).
 The Loop (`loop/director.ts`, its parts in `loop/director/`, an open Loop's in
-`loop/director/open/`, the Unreal runner's in `loop/unreal/`) shares primitives from `loop/git.ts`,
-`health-check.ts`, `build-turn.ts`, `config.ts` and `outcomes.ts`, and its workers are
+`loop/director/open/`) shares primitives from `loop/git.ts`,
+`health-check.ts`, `config.ts` and `outcomes.ts`, and its workers are
 `loop/workers/`; model-facing text sits in sibling `*-prompts.ts` modules.
 
 **Seed upgrades.** `applySeed` ([`src/substrate/seed-upgrade.ts`](../../src/substrate/seed-upgrade.ts),

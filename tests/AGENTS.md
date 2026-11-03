@@ -60,9 +60,7 @@ through the JS API imports `@typescript/typescript6`.
   answer (`startFakeAnswer`, an Auto check's verdict). `fake-xai-responses.ts`: the same for the real Grok Build CLI over
   xAI's (Grok's session service stood in for, signed in with a made-up token in a test's own home).
 - `snapshot-fixtures.ts`: dirty, untracked and nested user repositories.
-- `unreal-lead-host.ts`: a fake host for the Unreal runner's lead (its scripted turns calling the
-  run tools, the editor's answers, the clock), whose moments run on `unreal-moment-bus.ts`, a fake
-  of Genex's hook bus that plans each moment from a plugin manifest;
+- `unreal-moment-bus.ts`: a fake of Genex's hook bus that plans each moment from a plugin manifest;
   `unreal-editor-stand-in.ts`: the editor the Unreal plugin's queue talks to;
   `unreal-fake-engine.ts`: a small fake Unreal (the Blank template and Epic's three plugin
   templates) and the Unreal plugin's backend on it in an open game, launches and host calls recorded,
@@ -143,8 +141,7 @@ through the JS API imports `@typescript/typescript6`.
 Characterization so far: the `api()` keys and `StudioCore` surface (`core-surface`, `rpc-surface`),
 the seed contracts the app keeps its own copy of (`seed-contracts`), spike snapshot/worktree
 sequences (`loop-sequences`), snapshots of a user's own repository (`snapshots`), which loop runs a
-run, the tools each lead is offered and the one Loop's and the Unreal runner's calls, events, graph
-and journal (`loop-survival`), the one Loop on a project that isn't a web game (`one-loop`), which
+run and the one Loop's calls, events, graph and journal on an Unreal game (`loop-survival`), the one Loop on a project that isn't a web game (`one-loop`), which
 Loop a run gets (`one-loop-dispatch`), a whole Loop through the real studio on a plugin's project
 and on a folder with no plugin (`one-loop-projects`, L3), and the ten use cases of any project
 (`project-use-cases`; a test marked `todo` names the phase that turns it green, and a marked test

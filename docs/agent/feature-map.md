@@ -157,9 +157,9 @@ operation and selects Live; landing remains a separate action. Learning is recor
 from finished game execution. Graph, MorningCard and Review use the same host summary.
 
 Build outcome controls use visible hover/focus affordances and a pending Play state. An Unreal
-Loop's graph (`lead-graph.ts`, fixture lead-graph, run-graph-lead conformance): milestone rows
-(`lead-<id>`) of saves the lead kept (no eye), sub-agent nodes (`agent-<id>`) Delivered until used,
-critic advice as a `critic-s-advice` card row.
+lead's graph (fixture lead-graph, run-graph-workers conformance): milestone rows (`lead-<id>`) of
+saves the lead kept (no eye), sub-agent nodes (`agent-<id>`) Delivered until used, critic advice as
+a `critic-s-advice` card row.
 
 Startup content is separate from harness readiness: bootstrap loading draws nothing under the
 startup loader, failure shows Retry, and only a successful empty read shows the empty-games message.

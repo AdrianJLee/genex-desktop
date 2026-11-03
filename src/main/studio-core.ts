@@ -74,7 +74,6 @@ import {
   BootReason,
   type DispatchAction,
   DispatchActionType,
-  harnessRunEnv,
   HarnessCapability,
   HarnessState,
 } from "../shared/protocol.ts";
@@ -1598,8 +1597,6 @@ export class StudioCore {
       api: this.api(),
       updatesDir: this.layout.updates,
       compileCache: path.join(this.layout.scratch, HARNESS_COMPILE_CACHE_FOLDER),
-      // The harness's environment is an allow-list: the run overrides are handed on by name.
-      env: harnessRunEnv(process.env),
       heartbeatTimeoutMs: HARNESS_HEARTBEAT_TIMEOUT_MS,
       crashLoop: HARNESS_CRASH_LOOP,
       onNotify: (type, payload) => this.#onHarnessNotify(type, payload),

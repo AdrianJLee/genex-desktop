@@ -423,12 +423,12 @@ export function wasStopped(source: string | null | undefined): boolean {
 /** The harness's verdict source for a round kept because nothing regressed (its `VerdictSource.NoRegression`). */
 const KEPT_UNHARMED = "no-regression";
 
-/** The harness's verdict source for a save point the Unreal lead made itself (its `VerdictSource.Lead`). */
+/** The harness's verdict source for a save point the lead made itself (its `VerdictSource.Lead`). */
 const LEAD_SAVE = "lead";
 
 /**
- * A round the Unreal lead kept by saving it, after looking at its own captures: no reviewer judged
- * it and nothing compared it side by side, so it is never worded as a reviewer's verdict.
+ * A round the lead kept by saving it itself: no reviewer judged it and nothing compared it side by
+ * side, so it is never worded as a reviewer's verdict.
  */
 export function savedByLead(source: string | null | undefined): boolean {
   return source === LEAD_SAVE;

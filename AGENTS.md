@@ -77,7 +77,7 @@ when relevant.
   TypeScript JS API imports `@typescript/typescript6`, never `typescript`.
 - Harness (`src/harness-seed/`): the modes (director, the one Loop; the classic pipeline's
   autopilot, facet loop, gauntlet and spike) keep their own control flow and share primitives from
-  `loop/git.ts`, `evidence.ts`, `build-turn.ts`, `config.ts` and `outcomes.ts`; no classes, DI or
+  `loop/git.ts`, `evidence.ts`, `config.ts` and `outcomes.ts`; no classes, DI or
   FSM libraries. A judge is a second opinion the lead asks for: it gates no round, merge, finish
   or close. It is
   TypeScript, type-checked in CI (`tsconfig.harness.json`) and, for the agent's own code edits,

@@ -170,9 +170,6 @@ Every project's Loop is the director's wake loop, in one of two profiles (`LoopP
   at the cap (no new workers then), 15 minutes' grace (`GRACE_MS`), then Genex closes it with what
   is and isn't done ("not checked by a reviewer" when no claim reached one since it last opened);
   an ∞ Loop's cap is 24 hours. The lead's finish ends it early.
-- **Unreal runner**: the Unreal lead from before the one Loop (`loop/unreal/lead.ts`: milestones,
-  typed sub-agents, the critic, hero-camera captures), reached only through `STUDIO_UNREAL_RUNNER=lead`
-  until a live Unreal Loop passes on the one Loop.
 
 ## Three meanings of "loop"
 

@@ -184,10 +184,6 @@ export interface OpenLoop {
   journal: OpenJournal;
   /** Why the Loop pauses (the app could not be brought back), once it must; null while it runs. */
   halted: string | null;
-  /** Why the Loop closes before its first turn (a paused run's journal it can't read); null when it runs. */
-  refused: string | null;
-  /** The refused run stays paused (another kind of Loop's journal), rather than closing for good. */
-  refusalPauses: boolean;
   /** The save point count when the lead's turn under way began: a turn that saved none is autosaved. */
   turnSavedFrom: number;
   /** The lead's last turn did something (`between.ts`): it was no idle turn. */

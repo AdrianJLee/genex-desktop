@@ -677,7 +677,6 @@ describe("seed upgrade into the archive epoch, over an older install", () => {
 describe("seed upgrade across the harness step flag", () => {
   const shipped = path.resolve(fileURLToPath(new URL("../../src/harness-seed", import.meta.url)));
   const TURN = "loop/delegated-turn.ts";
-  const JOURNAL = "loop/unreal/lead-journal.ts";
 
   /** A workspace whose chat turn the agent edited: `older` still saves its game's editor itself, without Genex's checkpoint. */
   async function keptTurn(older: boolean) {
@@ -931,41 +930,6 @@ describe("seed upgrade across the harness step flag", () => {
       assert.match(note, /calls the host the older way/, file);
       assert.ok(note.length <= 300, `${file}: one memory value stays within the memory policy's limit`);
     }
-  });
-
-  it("a kept lead journal that still makes the runner's plugin call itself is a move, and its callers call from lead-steps.ts", async () => {
-    const root = await tmpDir("seed-step-journal-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
-    const copy = await readFile(path.join(ws, JOURNAL), "utf8");
-    const reexport = 'export { unrealTool } from "./lead-steps.ts";';
-    assert.ok(copy.includes(reexport));
-    // The older journal made the call itself, like an agent's.
-    const ownCall = [
-      'export function unrealTool(lead: Pick<Lead, "ctx" | "run" | "threadId">, name: string, args = {}) {',
-      "  return lead.ctx.call(HostMethod.PluginsInvoke, { project: lead.run.project, threadId: lead.threadId, name, args });",
-      "}",
-    ].join("\n");
-    await writeFile(path.join(ws, JOURNAL), `${copy.replace(reexport, ownCall)}\n// the agent's own change\n`);
-    const report = await applySeed({
-      seedDir: shipped,
-      workspaceDir: ws,
-      manifestFile: manifest,
-      backupDir: path.join(root, "backup"),
-    });
-    assert.ok(report.kept.includes(JOURNAL));
-    assert.deepEqual(report.outdatedCalls ?? [], []);
-    const move = report.moved.find((m) => m.from === JOURNAL);
-    assert.equal(move?.to, "loop/unreal/lead-steps.ts");
-    assert.deepEqual(move?.names, ["unrealTool"]);
-    // The runner's own plugin calls are the C++ module's now: every other editor step is a plugin's, at
-    // Genex's moments. `editor-life.ts` is the shim older kept copies still import, called by nothing.
-    assert.deepEqual([...(move?.callers ?? [])].sort(), [
-      "loop/unreal/editor-life.ts",
-      "loop/unreal/lead-between.ts",
-      "loop/unreal/lead.ts",
-    ]);
   });
 
   it("the boot writes an outdated call into the agent's memory, and takes it back once the copy takes Genex's checkpoint", async () => {

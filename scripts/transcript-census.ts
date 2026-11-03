@@ -48,9 +48,6 @@ export const ROLE_LITERALS = [
   ["loop:worker", "You are a worker: the lead of this chat started you for one task"],
   ["loop:reviewer", "You are the reviewer of a Loop"],
   ["judge:second-opinion", "You give a second opinion on a project someone else is building"],
-  ["unreal:lead", "You lead this Unreal Loop on the game"],
-  ["unreal:worker", "You are a worker of the Unreal Loop"],
-  ["unreal:critic", "You give a second opinion on captures of a game being built in Unreal Engine"],
 ] as const satisfies readonly (readonly [string, string])[];
 
 /**
@@ -92,7 +89,6 @@ export const RETIRED_ROLE_LITERALS = [
  */
 export const COMPLETION_ROLES: readonly string[] = [
   "judge:second-opinion",
-  "unreal:critic",
   "planner:replan",
   "judge:blind-compare",
   "judge:facet-compare",

@@ -10,7 +10,6 @@ import { secondOpinionNo } from "./director/second-opinion-prompts.ts";
 import { healthLine } from "./health-check.ts";
 import { chooseRunner } from "./run-dispatch.ts";
 import { RunnerKind } from "./studio-state.ts";
-import { LoopProfile } from "./folder-facts.ts";
 import { capClock } from "./time-cap.ts";
 import { HOUR_MS, MINUTE_MS } from "./time.ts";
 import type { Run } from "../types/harness.d.ts";
@@ -72,8 +71,8 @@ const SELFTEST_STEPS: readonly SelftestStep[] = [
       const run = { runId: "r", goal: "g", project: "p", engine: "claude" } as unknown as Run;
       const seated = [{ id: "claude", kind: "delegated" }] as never[];
       const plain = [{ id: "claude", kind: "direct", supportsSessions: false }] as never[];
-      check("session leads", chooseRunner(run, seated, LoopProfile.Web) === RunnerKind.Director);
-      check("no session refused", chooseRunner(run, plain, LoopProfile.Web) === RunnerKind.NeedsSession);
+      check("session leads", chooseRunner(run, seated) === RunnerKind.Director);
+      check("no session refused", chooseRunner(run, plain) === RunnerKind.NeedsSession);
     },
   ],
   [

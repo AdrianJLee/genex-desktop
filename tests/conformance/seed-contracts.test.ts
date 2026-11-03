@@ -13,16 +13,7 @@ import * as seedDelegatedTurn from "../../src/harness-seed/loop/delegated-turn.t
 import * as seedFolderFacts from "../../src/harness-seed/loop/folder-facts.ts";
 import * as seedEngineGame from "../../src/harness-seed/loop/engine-game.ts";
 import * as seedGameEngine from "../../src/harness-seed/loop/game-engine.ts";
-import * as seedUnrealLead from "../../src/harness-seed/loop/unreal/lead-contract.ts";
-import * as seedUnrealLive from "../../src/harness-seed/loop/unreal/live-contract.ts";
-import blenderManifest from "../../src/plugins/blender/plugin.json" with { type: "json" };
-import genexManifest from "../../src/plugins/genex/plugin.json" with { type: "json" };
-import { PartRunState, PlayCheckShot } from "../../src/plugins/unreal/editor-queue.ts";
-import { LiveLoopToolName, LoopToolName } from "../../src/plugins/unreal/loop-tools.ts";
-import { PluginCallBlocker as seedPluginCallBlocker } from "../../src/harness-seed/loop/unreal/lead-steps.ts";
-import { PluginCallBlocker } from "../../src/shared/plugins.ts";
-import { HelperState } from "../../src/plugins/unreal/setup.ts";
-import unrealManifest from "../../src/plugins/unreal/plugin.json" with { type: "json" };
+import { SAVE_POINT_VERDICT_SOURCE as seedSavePointSource } from "../../src/harness-seed/loop/director/open/graph.ts";
 import * as seedInbox from "../../src/harness-seed/loop/run-inbox.ts";
 import * as seedQueue from "../../src/harness-seed/loop/message-queue.ts";
 import * as seedRoles from "../../src/harness-seed/loop/model-roles.ts";
@@ -95,9 +86,7 @@ import {
   recordedRunLoop,
 } from "../../src/shared/run-state.ts";
 import { EventKind, type EventEnvelope, MessageUsageSource } from "../../src/shared/event-log.ts";
-import { harnessRunEnv, UNREAL_RUNNER_ENV, UnrealRunnerChoice } from "../../src/shared/protocol.ts";
 import * as seedEngineSeat from "../../src/harness-seed/loop/engine-seat.ts";
-import * as seedLoopSwitch from "../../src/harness-seed/loop/loop-switch.ts";
 import { EngineKind, EngineStatusCode } from "../../src/shared/engine-descriptor.ts";
 import { savedByLead } from "../../src/renderer/words.ts";
 
@@ -469,26 +458,6 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     for (const kind of [GameEngine.Web, GameEngine.Unreal, "toy-engine", undefined, null, "", "Toy Engine", 3])
       assert.equal(seedEngineGame.isEngineGame(kind), isEngineGame(kind), String(kind));
   });
-  it("reads why the host held a plugin call back as the host answers it", () => {
-    assert.deepEqual(seedPluginCallBlocker, PluginCallBlocker);
-  });
-
-  it("calls the Unreal plugin's Loop tools by their names, and reads a part run's end as the plugin writes it", () => {
-    const named = Object.fromEntries(
-      Object.entries(LoopToolName).map(([key, tool]) => [key, `${unrealManifest.id}__${tool}`]),
-    );
-    assert.deepEqual(seedUnrealLive.UnrealLoopTool, named);
-    assert.deepEqual(seedUnrealLive.PartRunEnd, { Done: PartRunState.Done, Failed: PartRunState.Failed });
-  });
-
-  it("calls the Unreal plugin's harness tools for the lead by their names, and reads a play-check as the plugin writes it", () => {
-    const named = Object.fromEntries(
-      Object.entries(LiveLoopToolName).map(([key, tool]) => [key, `${unrealManifest.id}__${tool}`]),
-    );
-    assert.deepEqual(seedUnrealLive.UnrealLivePluginTool, named);
-    assert.deepEqual(seedUnrealLive.LiveCamera, PlayCheckShot);
-    assert.deepEqual(seedUnrealLive.EditorHelperState, HelperState);
-  });
 
   it("names a run journal's phases as the harness writes them", () => {
     assert.deepEqual(seedRunEvents.JournalPhase, JournalPhase);
@@ -548,28 +517,8 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     for (const rel of paths) assert.equal(seedThroughClaudeFolder(rel), throughClaudeFolder(rel), rel);
   });
 
-  it("names the Unreal runner's switch in the studio's environment the same way", () => {
-    assert.equal(seedLoopSwitch.UNREAL_RUNNER_ENV, UNREAL_RUNNER_ENV);
-    assert.deepEqual(seedLoopSwitch.UnrealRunnerChoice, UnrealRunnerChoice);
-  });
-
   it("names the engine kind the host seats in place as the app does", () => {
     assert.equal(seedEngineSeat.SEATED_ENGINE_KIND, EngineKind.Delegated);
-  });
-
-  it("hands the harness only the run overrides of the studio's environment, each only when it is set", () => {
-    const cases: Array<[env: Record<string, string | undefined>, handed: Record<string, string>]> = [
-      [{}, {}],
-      [{ [UNREAL_RUNNER_ENV]: "lead" }, { [UNREAL_RUNNER_ENV]: "lead" }],
-      [{ [UNREAL_RUNNER_ENV]: " lead " }, { [UNREAL_RUNNER_ENV]: "lead" }],
-      [{ [UNREAL_RUNNER_ENV]: "" }, {}],
-      // Flipped (Loop phase 5): the long turn's switch is gone with the long turn: never handed on.
-      [{ STUDIO_DIRECTOR_LOOP: "turn" }, {}],
-      // The workers' handover switch of 2026-10-03 is gone with the handover: never handed on.
-      [{ STUDIO_WORKER_HANDOVER: "1" }, {}],
-      [{ HOME: "/Users/someone", ANTHROPIC_API_KEY: "sk-ant-x", PATH: "/usr/bin", STUDIO_OTHER: "1" }, {}],
-    ];
-    for (const [env, handed] of cases) assert.deepEqual(harnessRunEnv(env), handed, JSON.stringify(env));
   });
 
   it("reads a verdict record's pass and rule as the harness writes them", () => {
@@ -578,8 +527,8 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
   });
 
   it("writes a lead's save point with the verdict source the renderer reads as saved by the lead", () => {
-    assert.equal(seedUnrealLead.LEAD_VERDICT_SOURCE, seedVerdict.VerdictSource.Lead);
-    assert.equal(savedByLead(seedUnrealLead.LEAD_VERDICT_SOURCE), true);
+    assert.equal(seedSavePointSource, seedVerdict.VerdictSource.Lead);
+    assert.equal(savedByLead(seedSavePointSource), true);
   });
 
   it("names why a loop stopped the same way, and reads a run's close by its code", () => {
@@ -707,46 +656,6 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
   it("the seed's starters and project tool names are the app's", () => {
     assert.deepEqual(seedFolderFacts.ProjectStarter, ProjectStarter);
     assert.deepEqual(seedFolderFacts.ProjectTool, ProjectTool);
-  });
-});
-
-describe("a lead's sub-agent tools (bundled plugins ↔ loop/unreal/lead-contract.ts)", () => {
-  const { AgentKind, AGENT_TOOL_ALLOW } = seedUnrealLead;
-  const agentNames = (manifest: { id: string; tools?: Array<{ name: string }> }) =>
-    (manifest.tools ?? []).map((tool) => `${manifest.id}__${tool.name}`);
-  const allows = (kind: seedUnrealLead.AgentKind, name: string) =>
-    AGENT_TOOL_ALLOW[kind].some((entry) => name.startsWith(entry));
-
-  it("names only tools the bundled plugins have, by their agent names", () => {
-    const bundled = [blenderManifest, genexManifest, unrealManifest].flatMap(agentNames);
-    // A renamed plugin or tool fails here, not in a run.
-    for (const entry of Object.values(AGENT_TOOL_ALLOW).flat())
-      assert.ok(
-        bundled.some((name) => name.startsWith(entry)),
-        entry,
-      );
-    const offered: Array<[seedUnrealLead.AgentKind, string]> = [
-      [AgentKind.BlenderModel, `${blenderManifest.id}__model`],
-      [AgentKind.BlenderPrep, `${blenderManifest.id}__model`],
-      [AgentKind.GenexCast, `${genexManifest.id}__asset`],
-      [AgentKind.GenexCast, `${blenderManifest.id}__model`],
-      [AgentKind.Sound, `${genexManifest.id}__asset`],
-      [AgentKind.Texture, `${genexManifest.id}__asset`],
-      [AgentKind.Cpp, `${unrealManifest.id}__check-part`],
-    ];
-    for (const [kind, name] of offered) assert.equal(allows(kind, name), true, `${kind} ${name}`);
-  });
-
-  it("never offers any kind the user's editor, publishing, a CLI or the Unreal plugin's other tools", () => {
-    const never = [
-      "unreal-editor__call_tool",
-      "unreal-editor__list_toolsets",
-      "unreal-editor__describe_toolset",
-      ...["publish", "publish-status", "cli", "cli-paid", "package"].map((tool) => `${genexManifest.id}__${tool}`),
-      ...agentNames(unrealManifest).filter((name) => name !== `${unrealManifest.id}__check-part`),
-    ];
-    for (const kind of Object.values(AgentKind))
-      for (const name of never) assert.equal(allows(kind, name), false, `${kind} ${name}`);
   });
 });
 

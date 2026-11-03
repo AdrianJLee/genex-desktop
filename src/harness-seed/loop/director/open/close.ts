@@ -251,33 +251,6 @@ async function dropTurnReads(loopRun: LoopRun): Promise<void> {
   await gitAt(ctx, { project: run.project }, FOLDER_GIT.dropTurnStore(run.runId), { label }).catch(() => {});
 }
 
-/**
- * A resumed run the open Loop can't pick up, closed before anything of it runs: its start and its
- * close on the run's thread, paused for a Resume (another kind of Loop's journal) or for good (one no
- * version reads), with the person's words. Its journal and its earlier report are left as they were.
- */
-export async function refuseResume(loopRun: LoopRun, because: string, paused: boolean): Promise<void> {
-  const { report, run, state } = loopRun;
-  if (state.finished) return;
-  state.finished = true;
-  Object.assign(report, {
-    profile: LoopProfile.Open,
-    victory: false,
-    landed: false,
-    stoppedBecause: because,
-    finishedAt: new Date().toISOString(),
-    executionStatus: paused ? ExecutionStatus.Paused : ExecutionStatus.Completed,
-    ...(paused ? { paused: true } : {}),
-  });
-  const started = { runId: run.runId, goal: run.goal, project: run.project, budgets: run.budgets, resumed: true };
-  const pausedRecord = { runId: run.runId, project: run.project };
-  await appendClose(loopRun, [
-    { type: EventKind.Custom, event_type: RunEvent.RunStarted, payload: started },
-    { type: EventKind.Custom, event_type: RunEvent.RunFinished, payload: report },
-    ...(paused ? [{ type: EventKind.Custom, event_type: RunEvent.AutopilotPaused, payload: pausedRecord }] : []),
-  ]);
-}
-
 /** Close the open Loop in place (the module's header); a close already under way is joined, never repeated. */
 export async function closeInPlace(loopRun: LoopRun, end: OpenEnd): Promise<void> {
   // Through the latch even once the run reads as finished: a close still writing its records is joined.

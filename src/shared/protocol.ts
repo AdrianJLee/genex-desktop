@@ -292,34 +292,6 @@ export interface RunReference {
   frames?: ReferenceFrame[];
 }
 
-/**
- * The studio's environment variable that sends a Loop on an Unreal game to the Unreal runner it had
- * before the one Loop, for developers until a live Unreal Loop passes on the one Loop. Never a run
- * record field, never shown. The seed's copy is loop/loop-switch.ts.
- */
-export const UNREAL_RUNNER_ENV = "STUDIO_UNREAL_RUNNER";
-
-/** What `UNREAL_RUNNER_ENV` may name: the Unreal runner (`lead`). Never rename a value. */
-export const UnrealRunnerChoice = { Lead: "lead" } as const;
-export type UnrealRunnerChoice = (typeof UnrealRunnerChoice)[keyof typeof UnrealRunnerChoice];
-
-/** The studio's own variables a run's harness reads; nothing else of its environment is handed on. */
-const HARNESS_RUN_ENV = [UNREAL_RUNNER_ENV] as const;
-
-/**
- * What of the studio's own environment the harness it spawns is handed: the run overrides it
- * reads, each when it is set. The harness's environment is an allow-list, so without this an
- * override never reached the runs the harness starts from chat.
- */
-export function harnessRunEnv(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
-  const handed: Record<string, string> = {};
-  for (const name of HARNESS_RUN_ENV) {
-    const value = env[name]?.trim();
-    if (value) handed[name] = value;
-  }
-  return handed;
-}
-
 export interface RunSpec {
   runId: string;
   goal: string;

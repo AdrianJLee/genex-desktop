@@ -13,9 +13,7 @@
  *    union merge, the reviewer, the nested-repository check), and for the tests.
  *  - the helpers that run them through `ctx.call("run.exec")` in a worktree (`cwd`) or in the
  *    live game folder (`{ project }`): `gitAt`, `headOf`, `isAncestor`, `commitAll`,
- *    `updateRef`, `mergeNoFf`, `landIntegration`, `resetClean`, `gitlinks`. A sub-agent's delivery
- *    runs its command lines (`GIT.addFolder`, `GIT.treeEntries`, `GIT.checkoutPaths`) from a module
- *    of its own (`git-delivery.ts`), so a kept older copy of this file still loads beside it.
+ *    `updateRef`, `mergeNoFf`, `landIntegration`, `resetClean`, `gitlinks`.
  */
 import { HostMethod } from "./host-methods.ts";
 import { STUDIO_AS } from "./repo.ts";
@@ -191,17 +189,6 @@ export const GIT = Object.freeze({
   lsTreePath: (rel: string): string => `git ls-tree HEAD -- ${shellQuote(rel)}`,
   /** Every path a commit holds as a nested repository's pointer (a gitlink), one per line. */
   gitlinks: (rev: unknown): string => `git ls-tree -r ${commitArg(rev)} | awk '$1 == "160000" { print $4 }'`,
-  /** Stage everything under one folder (new, changed and removed files) and nothing outside it. */
-  addFolder: (folder: string): string => `git add -A -- ${shellQuote(folder)}`,
-  /**
-   * Every entry a commit holds under `folder`, recursively, with its size, NUL-terminated:
-   * `<mode> <type> <object> <size>\t<path>` (the size is `-` for what is not a blob).
-   */
-  treeEntries: (rev: unknown, folder: string): string =>
-    `git ls-tree -r -l -z ${commitArg(rev)} -- ${shellQuote(folder)}`,
-  /** These paths, as a commit holds them, checked out into the worktree and its index. */
-  checkoutPaths: (rev: unknown, files: readonly string[]): string =>
-    `git checkout ${commitArg(rev)} -- ${files.map(shellQuote).join(" ")}`,
 });
 
 /** Where a command runs: a worktree path, `{ cwd }`, or the live game folder `{ project }`. */

@@ -70,8 +70,8 @@ export interface WorkerScope {
   /** Told when a worker ends, so a run's lead hears of it with the rest of its news. */
   onEnded?: (record: WorkerRecord) => void;
   /**
-   * Chains a git write to the game folder after the lead's own there (the Unreal lead's landings,
-   * save points and restores): two at once fight over the game's one index. With none, it runs at once.
+   * Chains a git write to the game folder after the lead's own there (an open Loop's save points,
+   * restores and close): two at once fight over the game's one index. With none, it runs at once.
    */
   gitWrite?: <T>(write: () => Promise<T>) => Promise<T>;
   /**

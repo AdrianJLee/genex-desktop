@@ -7,7 +7,13 @@
 import { setTimeout as startTimer } from "node:timers";
 import { SECOND_MS } from "../../shared/duration.ts";
 import type { DesktopApp, DesktopDriver } from "../../substrate/desktop-driver.ts";
-import { type DesktopQuestion, type DesktopTools, type DesktopToolsDeps, desktopTools } from "./desktop-tools.ts";
+import {
+  type DesktopAnswer,
+  type DesktopQuestion,
+  type DesktopTools,
+  type DesktopToolsDeps,
+  desktopTools,
+} from "./desktop-tools.ts";
 
 /**
  * How long the driver's daemon outlives the last session: a chat's next turn, or the harness asking
@@ -55,7 +61,7 @@ export type DesktopSessionDeps = Pick<
   DesktopToolsDeps,
   "frameDir" | "frame" | "downscale" | "maxActions" | "enabled" | "engineApps" | "keepInFront" | "openPage"
 > & {
-  ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<boolean>;
+  ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<DesktopAnswer>;
 };
 
 /** The registry: what is installed, what is running, and how to stop it all. */

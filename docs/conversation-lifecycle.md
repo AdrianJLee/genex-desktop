@@ -285,43 +285,21 @@ composer reads "Talk to the lead while it builds…" instead of "Sends when the 
   its turn's own message, with Genex's notices beside it: the chat's latest 20 messages (`freshChat`),
   and for a lost one that it was lost and how the Loop began; reference stills reach a fresh session
   and the lead's first turn.
-  The delegation names no `cwd` (the game folder), is `readOnly`, and its director grant's `root` is
-  the integration worktree, with `chatSession` when it is the chat's. The host honours that grant
-  (`#leadRoot`) only for a `readOnly` delegation in this game's live folder, and only for a root
-  whose real path is below its run's own folder — `scratch/autopilot/<runId>/`, a real directory,
-  never a link to another run's — in the same repository (`--git-common-dir`), of a run the host's
-  records say is this game's: started (`run_registered`, `run_started`) in a chat of this game and
-  in no other game's, since `snapshot.worktree` can put any game's worktree under any run id. The
-  engine, the window, capture, computer and reads get that checked real path, never the name the
-  harness sent; a lead reads only that worktree of the run's folder, beside the game folder and the
-  run's own artifacts. Its lock is that worktree, not the game folder, so the chat's other turns
-  there and Make it live go on while it thinks; a turn refused because the lock is held
-  (`DelegationRefusal.FolderBusy`, the error's `code`) is asked again after each wait until the lock
-  is free, as an open Loop's lead waits for its folder; a Stop during the wait ends it as a failed
-  turn rather than the run's crash (`wake.ts` `waitsForFolder`). The
-  host keeps a `chatSession` lead's session as the chat's `contractor` after each turn; the harness
-  writes its `contractor_session` when it changed (`bookmarkLead`). Claude Code reads without
-  Write, Edit or Bash; Codex, which can always write where it is started, runs from a scratch
-  folder of its own (its one writable root, with the bridge) and resumes the chat's session there
-  by id, which Codex finds wherever it starts; a local (Bonsai) session resumes in the same folder
-  or starts fresh.
-  The lead builds with its own hands in the integration worktree it leads, by its full path, and
-  commits there (`syncHead` adopts its commits before each run tool); workers take the parts that
-  run side by side. It keeps no `.studio/DIRECTOR.md` (`prepareLoopRun({ oneSession })`
-  restores none, `keepMemory` keeps none; an older run's file stays in its artifacts): the
-  journal carries the run, and `run_status` answers where it stands. A merge conflict
-  goes to a worker (`director/conflict-worker.ts` `resolveByWorker`): a single `merge-<id>` from
-  the integration branch, owning the conflicted files, with the merge opened in its worktree before
-  its session (`mergeFirst`, keyed by a symbol a model's JSON cannot carry); the studio commits the
-  merge when it stops, and the lead integrates that worker. A session that leaves a conflict hunk
-  in any file it was to resolve (`markersLeft`) — done, unfinished or stopped — commits nothing:
-  the merge is aborted, the worker fails naming the files, and `integrate` refuses it
-  (`unresolvedOf`). The lead builds in the integration worktree with its own hands, never
-  read-only: what is uncommitted there (its edits, a game that builds in place) is committed on the
-  integration branch as its work before a merge or a worker's fork (`commitLeadEdits`), and the
-  answer says so. For a lead a single worker starts on a fork that does not run (its repair; a loop
-  worker ends at once, its fork gate run in the background), and a merged build that does not run is
-  answered in the lead's words.
+  The delegation names no `cwd` (the game folder), and its director grant's `root` is the game
+  folder itself (`inPlace`), with `chatSession` when it is the chat's. The host honours that grant
+  (`#leadRoot`, `#inPlaceRoot`) only for a writing lead whose root is this game's folder by name and
+  real path, in this game's own open chat, for a run the host's records say is this game's, started
+  in the chat the delegation and its grant name and going now; a grant it can't place, or one that
+  names no seat in place, leaves the session unattended. Its lock is the game folder: the chat's own
+  turns wait for the lead's turn there, and a lead's turn refused because another session holds it
+  (`DelegationRefusal.FolderBusy`, the error's `code`) is asked again after each wait until it is
+  free; a Stop during the wait ends it as a failed turn rather than the run's crash (`wake.ts`
+  `waitsForFolder`). The host keeps a `chatSession` lead's session as the chat's `contractor` after
+  each turn; the harness writes its `contractor_session` when it changed (`bookmarkLead`).
+  The lead builds with its own hands in the game folder, never read-only; workers take the parts
+  that run side by side, a copy worker's work merged into the folder with `worker_mark used`. The
+  journal carries the run, and `run_status` answers where it stands. A worker's work that conflicts
+  with the folder comes back to the lead, the merge undone and the files named.
   After the close the chat goes on in it with its hands back
   ([after the build](#after-the-build-the-same-session)), and a Resume leads in it again.
 

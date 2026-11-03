@@ -1757,8 +1757,9 @@ the set-up with the link. The host — never the plugin, never the agent — ask
   and was started in the chat the delegation names, and the connector belongs to the `game-engine`
   plugin holding the game's current link (`delegation.ts` `#runConsents`). Another game's run, a
   finished run, another connector, a web game, the chat's own session and a delegation naming no
-  chat or another chat of the game still ask; that chat's Plan mode refuses before any of it. That session has
-  no window: it gets only the run tools the harness forwards, never the computer, `look` or capture.
+  chat or another chat of the game still ask; that chat's Plan mode refuses before any of it. No
+  lead has a window of its own: it gets the run tools the harness forwards beside the tools every
+  session in the folder has.
 
 ## Backend SDK
 

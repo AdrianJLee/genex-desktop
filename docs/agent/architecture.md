@@ -468,8 +468,8 @@ checkpoints are specified in [local models](../local-models.md) and
 
 The harness is TypeScript run by type stripping, dependency-free, with `.ts` import specifiers; see
 the [harness runtime guide](../harness-runtime.md) and [src notes](../../src/AGENTS.md#harness-seed).
-The Loop (`loop/director.ts`, its parts in `loop/director/`, an open Loop's in
-`loop/director/open/`) shares primitives from `loop/git.ts`,
+The Loop (`loop/director.ts`, its parts in `loop/director/` and `loop/director/open/`) shares
+primitives from `loop/git.ts`,
 `health-check.ts`, `config.ts` and `outcomes.ts`, and its workers are
 `loop/workers/`; model-facing text sits in sibling `*-prompts.ts` modules.
 
@@ -560,21 +560,19 @@ clock while approval is pending; Cancel/Stop invalidates it; a waiting plan surv
 Approval dispatches the brief with the legacy `reviewPlan` flag cleared.
 
 **The Loop.** Every run is a Loop: its lead's session and the workers it may start
-(`loop/director.ts`, `loop/director/`) — on a web game in the run's integration worktree (at the base
-commit, or the prior integration head on a resume), on any other project in place
+(`loop/director.ts`, `loop/director/`), in the game folder on every project, a web game's too
 (`director/open/`). An engine that keeps no session of its own leads none: the run closes at once
-with `refusal: "needs_session"` (`run-dispatch.ts`). The web lead's tools: `run_status`, the pool's
-`worker_start`, `worker_status`, `worker_steer`, `worker_stop`, `worker_wait` and `worker_mark`,
-`judge` (a second opinion, `loop/second-opinion.ts`), `show`, `note`, `wrap_up` and `finish`. The
-studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool`). Rules:
+with `refusal: "needs_session"` (`run-dispatch.ts`). The lead's one tool list (`openTools`):
+`note`, `wrap_up`, `run_status`, the pool's `worker_start`, `worker_status`, `worker_steer`,
+`worker_stop`, `worker_wait` and `worker_mark`, `save_point`, `rewind` (and `restart` where a plugin
+restarts the app), `judge` (a second opinion, `loop/second-opinion.ts`), `pause` and `finish`. The
+studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool`); no lead is lent
+a preview window. Rules:
 
-- Every declared tool but `resolve_root` first syncs the head (`headSynced`) to the integration
-  head, kept on `refs/studio/runs/<runId>/integration`.
-- Workers are Genex's one worker pool (`loop/workers/`): a copy worker forks from the integration
-  head and `worker_mark used` merges its work back, then the one health check runs
-  (`director/integrate.ts` `afterMerge`, `loop/health-check.ts`: the host's `preview.observe` in a
-  window of the run's own). A lock is refused on a web Loop; once finish was asked, no worker
-  starts.
+- Workers are Genex's one worker pool (`loop/workers/`): a copy worker forks from a snapshot of the
+  game folder and `worker_mark used` merges its work into it; once finish was asked, no worker
+  starts. A web game's `finish` runs one health check of its page first (`loop/health-check.ts`:
+  the host's `preview.observe` in a window of the run's own).
 - The wake loop (`loop/director/wake.ts`, rules `wake-schedule.ts`, the one channel `news.ts`,
   Genex's own lines `wake-prompts.ts`): the lead ends its turn and the harness resumes the session
   with the person's message as they wrote it, or with Genex's one-line facts (a worker or a job
@@ -584,8 +582,9 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
   work closes the Loop; the lead calls `run_status` for where the run stands
   ([what wakes a Loop's lead](../harness-runtime.md#what-wakes-a-loops-lead)).
 - The full journal (`loop/director/journal.ts`): each save writes the run's record on
-  `journal.director` (health, recent log, wake state). A Resume reads it back (`restoreLoopRun`);
-  an earlier seed's `clock` in it is read by nothing.
+  `journal.director` (recent log, wake state, the Loop's own `open` record). A Resume reads it back
+  (`restoreLoopRun`); a web Loop's journal from an earlier Genex is refused at dispatch, naming its
+  ref.
 - The chat's messages reach the lead as written, each with its sender, once: mid-turn one steer
   each, and as a wake or after a cut the leading messages of one sender joined as written (the
   person's `from: person`); Genex's own messages and lines go `from: genex` (`MessageFrom`), which
@@ -597,11 +596,12 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
   [after the build](../conversation-lifecycle.md#after-the-build-the-same-session)).
 - Each turn of the lead's session ends with a host-written `session_activity` (`completed`,
   `interrupted` or `failed`), never a `turn_ended`, so the chat shows the build between turns.
-- A Loop has no clock ([what ends a Loop](../harness-runtime.md#what-ends-a-loop)); both closes are
-  one function (`closeTheLoopRun`).
+- A Loop has no clock ([what ends a Loop](../harness-runtime.md#what-ends-a-loop)); every close is
+  one function (`closeInPlace`).
 
 **Refs and the user's repository.** Everything a run must find later lives on the studio's refs:
-`refs/studio/runs/<runId>/integration`, its workers' copies' refs and `refs/studio/snap/<id>`
+its workers' copies' refs (and an earlier Genex's web Loop's `refs/studio/runs/<runId>/integration`)
+and `refs/studio/snap/<id>`
 (`loop/repo.ts`, `snapshots.ts`). One committer signs studio commits (`STUDIO_AS`, `GIT_ENV`). A
 chat keeps the game folder from before and after each answered message the same way, on
 `refs/studio/chat/<thread>/before|after/<message>`, for rewinding
@@ -620,18 +620,16 @@ sha or harness word; the lead's health checks and close append `director_verdict
 panel shows the staged build's newest record (`headVerdict`). An engine limit pauses the run, naming
 the limit; the host's auto-resume resumes it at the limit's reset.
 
-**Landing.** At the close the harness stops workers, syncs the head and lands when the head moved
-beyond the start and passed its health check; it asks no judge. A claim is the lead's word
-(`review=yes` asks a reviewer first, a second opinion). `report.landingResult` records `verified`, a
-`how` token and the morning card's `line`. A landing blocked by commits (`could-not-land`) or by
-uncommitted changes or a merge under way (`uncommitted-changes`) in the game folder waits for
-**Make it live** (`landBuild`); **Play this build** is `showBuild` ([feature map](feature-map.md)).
+**The close.** At the close the harness stops workers and keeps the last work in Genex's checkpoint
+(`open/close.ts`); it lands nothing and asks no judge. A claim is the lead's word (`review=yes` asks
+a reviewer first, a second opinion). A web Loop an earlier Genex ran keeps its `landingResult`;
+**Make it live** (`landBuild`) and **Play this build** (`showBuild`) still reach its build on its ref
+([feature map](feature-map.md)).
 
 **Nested repositories.** A game that arrived as its own Git repository is a gitlink. `worktreeAt`
 copies the nested tree into every worktree; with the user's consent (`AdoptOptions.versionNested`)
 it is converted in a deterministic commit. `landBuild` applies the same conversion before merging
-([feature map](feature-map.md)). The health check fails a head that still holds the path as a
-gitlink (`unversionedNested`), and the run's landing stops with `nested-not-versioned`.
+([feature map](feature-map.md)).
 
 ## Projects, builds and previews
 

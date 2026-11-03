@@ -3019,6 +3019,9 @@ export default {
   "Remove plugin": "Remover plugin",
   "Remove preset": "Remover predefinição",
   "Remove queued message": "Remover mensagem da fila",
+  "Edit queued message": "Editar mensagem da fila",
+  "Send now": "Enviar agora",
+  "Stop and send now": "Parar e enviar agora",
   "Remove tag": "Remover marcação",
   "Remove the waiting messages first: this harness cannot take them back.":
     "Primeiro remova as mensagens na fila: este Harness não consegue retirá-las.",

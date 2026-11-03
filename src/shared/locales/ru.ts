@@ -2959,6 +2959,9 @@ export default {
   "Remove plugin": "Удалить плагин",
   "Remove preset": "Удалить пресет",
   "Remove queued message": "Убрать сообщение из очереди",
+  "Edit queued message": "Изменить сообщение в очереди",
+  "Send now": "Отправить сейчас",
+  "Stop and send now": "Остановить и отправить сейчас",
   "Remove tag": "Убрать тег",
   "Remove the waiting messages first: this harness cannot take them back.":
     "Сначала убери сообщения из очереди: эта версия Harness не умеет забирать их обратно.",

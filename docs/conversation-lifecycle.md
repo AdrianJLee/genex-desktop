@@ -25,7 +25,10 @@ project, and graph: a request to wait for the remaining workers could start a se
   itself, never the learning pass after it; other chats remain independent. The transcript
   shows follow-ups in muted bubbles below the current work, reading Sending… until they are read,
   whether handed over or waiting: there is no Queued label, and only one still waiting (not
-  handed over) offers Remove (the harness keeps edit/hold for older clients).
+  handed over) offers Send now in that label's place (the composer's Stop, offered while there is
+  work to stop: the queue then answers what waits, oldest first), Edit (removed from the queue first, then its words and
+  the pictures the composer attached go back before the draft, as a rewound message's do;
+  `renderer/chat/put-back.ts`) and Remove. The harness keeps in-place edit/hold for older clients.
   Receipt, processing, completion, edit and removal have separate append-only events. Editing
   holds dispatch until saved or cancelled; that hold survives restart. Unanswered messages replay
   on boot, including updated text and attachments. A message cut off mid-answer is retried once

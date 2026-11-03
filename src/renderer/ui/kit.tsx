@@ -17,6 +17,15 @@ function TipText({ text }: { text: string }): JSX.Element {
   );
 }
 
+/**
+ * How far a tooltip turned to a side opens from its control: past the 8px it slides in by, less
+ * the glyph's own inset, so it never passes over the glyph and takes the hover from it as it opens.
+ */
+export const SIDE_TOOLTIP_OFFSET = 6;
+
+/** Where a tooltip opens beside its control when not above it. */
+export type TooltipSide = "right" | "bottom" | "left";
+
 /** A square button that is only a glyph, one control height tall, so groups stay level. */
 export function IconButton({
   icon,
@@ -28,6 +37,7 @@ export function IconButton({
   expanded,
   size = 16,
   className = "",
+  tooltipSide,
   ref,
 }: {
   icon: IconName;
@@ -41,6 +51,8 @@ export function IconButton({
   expanded?: boolean;
   size?: number;
   className?: string;
+  /** Where its tooltip opens when not above it (where it would cover what it sits under). */
+  tooltipSide?: TooltipSide;
   /** Menus anchor to their trigger, so the trigger has to be reachable. */
   ref?: Ref<HTMLButtonElement>;
 }): JSX.Element {
@@ -62,7 +74,7 @@ export function IconButton({
           <Icon name={icon} size={size} />
         </button>
       </TooltipTrigger>
-      <TooltipContent>
+      <TooltipContent {...(tooltipSide ? { side: tooltipSide, sideOffset: SIDE_TOOLTIP_OFFSET } : {})}>
         <TipText text={title ?? label} />
       </TooltipContent>
     </Tooltip>

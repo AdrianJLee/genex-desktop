@@ -2899,6 +2899,9 @@ export default {
   "Remove plugin": "플러그인 제거",
   "Remove preset": "프리셋 삭제",
   "Remove queued message": "대기 중인 메시지 삭제",
+  "Edit queued message": "대기 중인 메시지 편집",
+  "Send now": "지금 보내기",
+  "Stop and send now": "중지하고 지금 보내기",
   "Remove tag": "태그 삭제",
   "Remove the waiting messages first: this harness cannot take them back.":
     "먼저 대기 중인 메시지를 지워 주세요. 이 Harness는 메시지를 되돌릴 수 없어요.",

@@ -102,8 +102,9 @@ function trackStop(thread: string, how: { via: StopVia; ignored: StopIgnored; bu
 }
 
 /**
- * The chat's Stop, wired: `requestStop` for the composer's button, `stopping` for the status line,
- * and — while a turn or a plan is in flight — Escape in the composer.
+ * The chat's Stop, wired: `requestStop` for the composer's button (and a waiting message's Send
+ * now, which stops the work it waits for), `stopping` for the status line, and — while a turn or a
+ * plan is in flight — Escape in the composer.
  */
 export function useChatStop({
   threadId,
@@ -121,18 +122,21 @@ export function useChatStop({
   turnInFlight: boolean;
   events: EventEnvelope[];
   onNotice: Notify;
-}): { stopping: boolean; requestStop: () => void } {
+}): { stopping: boolean; requestStop: (via?: StopVia) => void } {
   const [mark, setMark] = useState<StopMark | null>(null);
   const stopping = isStopping(mark, { threadId, running: working, events });
-  const requestStop = useCallback((): void => {
-    const next = requestChatStop(window.studio, { threadId, stopping, events, mark }, (err) => {
-      setMark(null);
-      notifyProblem(onNotice)(err);
-    });
-    const ignored = next ? StopIgnored.None : StopIgnored.RepeatWithin5s;
-    if (threadId) trackStop(threadId, { via: StopVia.Button, ignored, buildRunning: Boolean(runId) });
-    if (next) setMark(next);
-  }, [threadId, runId, onNotice, stopping, events, mark]);
+  const requestStop = useCallback(
+    (via: StopVia = StopVia.Button): void => {
+      const next = requestChatStop(window.studio, { threadId, stopping, events, mark }, (err) => {
+        setMark(null);
+        notifyProblem(onNotice)(err);
+      });
+      const ignored = next ? StopIgnored.None : StopIgnored.RepeatWithin5s;
+      if (threadId) trackStop(threadId, { via, ignored, buildRunning: Boolean(runId) });
+      if (next) setMark(next);
+    },
+    [threadId, runId, onNotice, stopping, events, mark],
+  );
 
   // Escape belongs to the composer and to nothing else. It used to be a window listener that
   // stopped the run, so the Escape that closed the model menu at 11 pm ended the run; now it

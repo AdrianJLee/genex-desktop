@@ -234,11 +234,15 @@ the chat's tail per frame while something moves.
 A sent message appears at once, with its pictures. In an idle chat it is the next bubble and the
 live status reads **Sending** (no spinner) until it is saved. While the chat's agent works, the
 message goes into that work: it waits below as a muted bubble with a 12px **Sending…** label until
-the agent reads it, then sits where it was read and the reply continues below it. Only where it
+the agent reads it, then sits where it was read and the reply continues below it. Where it
 cannot join — for example during a build, to another model, in Studio's chat or with a local model
-without sessions — does it read **Queued**, with Remove, until its own turn. The saved row takes its
-place, carrying on the bubble's opening; a delivered one closes below the work as it opens where it
-was read. Every sent bubble reveals **Rewind**
+without sessions — it waits for its own turn. While there is work to stop, a 12px **Send now**
+text button (the composer's Stop; tooltip "Stop and send now") takes the label's place, so the
+line still says the message is on its way; then two 24px icon buttons with 12px glyphs: **Edit**
+(`rename`: off the queue, its words and pictures back in the composer) and **Remove** (`trash`).
+Their tooltips open below, 6px clear, off the bubble and never over the glyph as they slide in.
+The saved row takes its place, carrying on the bubble's opening; a delivered one closes below the
+work as it opens where it was read. Every sent bubble reveals **Rewind**
 (the `rewind` glyph, a counter-clockwise arrow that turns back once) as a 24px icon button 4px left
 of the bubble, centred on its last line, on row hover or focus-within and always under `hover: none`,
 including messages before a build and ones read into another's answer; it is absent while the
@@ -841,8 +845,8 @@ Stop replaces Send unless the composer has a sendable draft; typing a follow-up 
 and sending or clearing it restores Stop. Whitespace alone keeps Stop visible. The composer Stop control
 interrupts immediately and send the oldest queued message after the interrupted work settles;
 an empty queue stays stopped. Waiting messages sit below the current work as muted bubbles with a
-12px label: Sending… until the running turn reads them (no Remove), or Queued with a small Remove
-icon beneath, outside the bubble, where they wait for a turn of their own. A delivered message
+12px Sending… label until read: one the running turn took has no actions; one waiting for a turn
+of its own has Send now in the label's place, then Edit and Remove, beneath, outside the bubble. A delivered message
 closes below the work as it opens where it was read. Until stopped work records its end, the
 status reads Stopping. Worker task rows keep one truncated line; the full title is its tooltip.
 Sending follows the latest conversation.

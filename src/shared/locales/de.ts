@@ -3047,6 +3047,9 @@ export default {
   "Remove plugin": "Plugin entfernen",
   "Remove preset": "Vorlage entfernen",
   "Remove queued message": "Nachricht aus der Warteschlange entfernen",
+  "Edit queued message": "Nachricht in der Warteschlange bearbeiten",
+  "Send now": "Jetzt senden",
+  "Stop and send now": "Stoppen und jetzt senden",
   "Remove tag": "Tag entfernen",
   "Remove the waiting messages first: this harness cannot take them back.":
     "Entferne zuerst die wartenden Nachrichten: Dieses Harness kann sie nicht zurücknehmen.",

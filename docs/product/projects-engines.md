@@ -8,13 +8,13 @@ sidebar names a non-game's kind.
 
 New game makes an empty folder; the first message picks its kind. A vague ask builds a web game,
 a blank page owing Genex nothing. With an engine plugin on, a kindless game asks which engine. A port snapshots first, keeping
-the web files as reference.
+web files as reference.
 
 ## Plugins on or off
 
-Engine buttons show only on their games. Asking for an engine whose plugin is off, or opening its
-project, shows its card (**Turn on Unity** or **Install…**; × hides it); a click turns it on and
-chat goes on. A missing engine gets a setup card. Told to, agents go on without: jobs, `app_look`, docs.
+Engine buttons and tools show only on their games. Asking for an engine whose plugin is off, or
+opening its project, shows its card (**Turn on Unity** or **Install…**; × hides it); a click turns
+it on; chat goes on. A missing engine gets a setup card. Told to, agents go on without: jobs, `app_look`, docs.
 
 A plugin from a folder on this Mac starts off, runs with your access, and asks before each tool;
 Always allow lists it under **Runs without asking** until new code or turning it off; its steps at

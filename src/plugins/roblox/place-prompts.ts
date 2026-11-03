@@ -23,7 +23,7 @@ export const PLACE_PROMPTS = {
   NoGame: "New Roblox games are made in an open game: there is none here.",
   NoStudio: `Roblox Studio isn't on this computer. Call ${GET_STUDIO}: Genex gets it from Roblox once the person approves its card.`,
   StepsDone: "Every Roblox Studio step is done.",
-  StepsShown: `The Roblox Studio setup card is in the chat now. Do the steps left yourself with this plugin's tools (${GET_STUDIO}, ${agentTool(RobloxTool.Setup)}, ${agentTool(RobloxTool.RestartStudio)}, ${agentTool(RobloxTool.OpenStudio)}, ${agentTool(RobloxTool.DoItForMe)}, ${agentTool(RobloxTool.Places)} and ${agentTool(RobloxTool.UseProject)}); only signing in to Roblox is the person's.`,
+  StepsShown: `The Roblox Studio setup card is in the chat now. Do the steps left yourself with ${agentTool(RobloxTool.FinishSetup)}; only signing in to Roblox is the person's.`,
   StepsNoChat: "There is no chat to show the Roblox Studio setup card in.",
   /** `use-project` named a file in a folder macOS asks the person about before Genex reads it. */
   Guarded: `That place is in a folder macOS asks the person about before Genex reads it, so Genex didn't read it. If it is open in Roblox Studio, call ${agentTool(RobloxTool.Places)} and link it by its label with ${agentTool(RobloxTool.UseProject)} instead. If it isn't, opening it in Studio is the person's (only they can let Genex into that folder): ask them to open it there, then link it by its label.`,

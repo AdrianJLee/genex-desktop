@@ -301,8 +301,9 @@ export function engineWebFolderOf(game: GameKind): string | null {
 }
 
 /**
- * A game as its skills read it: a Unity or Godot game's web version left out, since it is the build
- * its engine exports and no web game's know-how fits it. Any other game is as it is.
+ * A game as its plugins' tools and skills read it: a Unity or Godot game's web version left out,
+ * since it is the build its engine exports and no web game's tool or know-how fits it. Any other
+ * game is as it is.
  */
 export function withoutEngineWebVersion(game: GameKind): GameKind {
   const web = engineWebFolderOf(game);

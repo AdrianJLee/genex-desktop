@@ -299,7 +299,7 @@ describe("the modeller in the loop (AG-930)", () => {
     const mcp = rig.core.mcp;
     const toolsReport = mcp.toolsReport.bind(mcp);
     mcp.toolsReport = async (...args: Parameters<typeof toolsReport>) => {
-      await rig.core.plugins.setEnabled("blender", false);
+      await rig.core.plugins.setEnabled("genex", false);
       return toolsReport(...args);
     };
     await apiOf(rig)["engine.delegate"]!({
@@ -310,8 +310,8 @@ describe("the modeller in the loop (AG-930)", () => {
     });
     const [request] = requests;
     assert.ok(request, "the builder was asked");
-    const tools = request.liveTools?.some((t) => t.name === "blender__model") ?? false;
-    const guidance = request.prompt.includes("[blender/local-modeling]");
+    const tools = request.liveTools?.some((t) => t.name === "genex__asset") ?? false;
+    const guidance = request.prompt.includes("[genex/genex-tool-model]");
     assert.equal(guidance, tools, "a brief never names a skill whose tools it lacks, nor tools it never explains");
     assert.equal(tools, true, "both come from the plugins as the session began");
   });
@@ -346,13 +346,13 @@ describe("the modeller in the loop (AG-930)", () => {
     const notice = (prompt: string) => (prompt.startsWith("build") ? null : (prompt.split("\n\n")[0] ?? ""));
 
     assert.equal(notice(await delegate("fake-delegate")), null, "a first session has nothing withdrawn");
-    await rig.core.plugins.setEnabled("blender", false);
-    assert.equal(notice(await delegate("fake-other", "ses")), null, "another engine never had Blender");
+    await rig.core.plugins.setEnabled("genex", false);
+    assert.equal(notice(await delegate("fake-other", "ses")), null, "another engine never had the Genex plugin");
 
     const resumed = notice(await delegate("fake-delegate", "ses"));
     assert.ok(resumed, "the resumed session is told before its brief");
-    assert.match(resumed, /\bblender\b/);
-    assert.match(resumed, /blender\/local-modeling/);
+    assert.match(resumed, /plugins: genex\b/);
+    assert.match(resumed, /genex\/genex-tool-model/);
     assert.match(resumed, /ignore/i);
 
     assert.equal(notice(await delegate("fake-delegate", "ses")), null, "the notice is given once");

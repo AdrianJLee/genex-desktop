@@ -378,35 +378,35 @@ export interface PluginScaffold {
   game?: boolean;
   facts?: FactRule[];
 }
-/** What of one plugin reaches a game's session: its agent tools, its skills and whether its skill reader does. */
+/** What of one plugin reaches a game's session: its agent tools and its skills. */
 export interface PluginReach {
   tools: PluginManifestTool[];
   skills: PluginSkill[];
-  skillTool: boolean;
 }
 /**
  * What of one plugin reaches a session for a game (`{ facts: [] }`: no kind yet, served as a web
- * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session was: the agent tools whose `facts` reach; the skills
- * whose scope reaches, never through a Unity or Godot game's web export, and, when they name tools,
- * one of those reaches too (a skill follows its tools); the skill reader while a file skill reaches. A narrowed session none of whose offered
- * tools the plugin has gets nothing of it, not even its skills. The registry's snapshot and the
- * capability facts both read this one rule.
+ * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session
+ * was, tools and skills alike never through a Unity or Godot game's web export: the agent tools
+ * whose `facts` reach; the skills whose scope reaches and, when they name tools, one of those
+ * reaches too (a skill follows its tools). A narrowed session none of whose offered tools the
+ * plugin has gets nothing of it, not even its skills. The registry's snapshot, its locks and the
+ * capability facts all read this one rule.
  */
 export function pluginReach(
   manifest: Pick<PluginManifest, "id" | "tools" | "skills">,
   game: GameKind,
   offered?: (agentName: string) => boolean,
 ): PluginReach {
-  const tools = manifest.tools.filter(
-    (t) => isAgentTool(t) && scopeReaches(t.facts, game) && (!offered || offered(`${manifest.id}__${t.name}`)),
-  );
-  if (offered && !tools.length) return { tools, skills: [], skillTool: false };
-  const reaching = new Set(tools.map((t) => t.name));
   const known = withoutEngineWebVersion(game);
+  const tools = manifest.tools.filter(
+    (t) => isAgentTool(t) && scopeReaches(t.facts, known) && (!offered || offered(`${manifest.id}__${t.name}`)),
+  );
+  if (offered && !tools.length) return { tools, skills: [] };
+  const reaching = new Set(tools.map((t) => t.name));
   const skills = manifest.skills.filter(
     (s) => scopeReaches(skillScope(s), known) && (!s.tools || s.tools.some((name) => reaching.has(name))),
   );
-  return { tools, skills, skillTool: skills.some(isFileSkill) };
+  return { tools, skills };
 }
 /** The tool name, after `<pluginId>__`, that reads a plugin's file skills; a manifest may not declare it beside them. */
 export const PLUGIN_SKILL_TOOL = "skill";

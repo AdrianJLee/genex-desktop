@@ -115,7 +115,7 @@ const AGENT_TOOLS = [
 ];
 /**
  * And, once the game holds an Unreal project, a builder's gate and lookups besides, its C++ module's
- * tools, and opening, quitting and reading the game's editor.
+ * tools, opening, quitting and reading the game's editor, and the reader of the editor's guide.
  */
 const UNREAL_PROJECT_TOOLS = [
   ...AGENT_TOOLS,
@@ -129,6 +129,7 @@ const UNREAL_PROJECT_TOOLS = [
   ...Object.values(EditorControlToolName).map((name) => `unreal__${name}`),
   ...Object.values(GamePackageToolName).map((name) => `unreal__${name}`),
   "unreal__click-interface",
+  "unreal__skill",
 ];
 /** The steps only the Unreal Loop's runner and the live builder's checkpoint take, through the harness's own plugin calls. */
 const RUNNER_TOOLS = [
@@ -216,7 +217,8 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   for (const name of UNREAL_PROJECT_TOOLS) assert.ok(unrealFacts.includes(name), `the facts name ${name}`);
   for (const name of RUNNER_TOOLS) assert.ok(!unrealFacts.includes(name), `the facts never name ${name}`);
   const counted = (await core.connectionSnapshot(threadId, project)).sources.find((s) => s.id === "unreal");
-  assert.equal(counted?.tools, UNREAL_PROJECT_TOOLS.length);
+  // The composer counts the plugin's own tools, as for every plugin: its skill reader is none of them.
+  assert.equal(counted?.tools, UNREAL_PROJECT_TOOLS.length - 1);
   await rm(path.join(core.games.dirFor(project), "DirtTrack.uproject"));
 
   // The runner's own path, as its own step: the call reaches run-part's handler, which refuses a

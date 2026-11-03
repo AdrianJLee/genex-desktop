@@ -90,6 +90,21 @@ test("a tool scoped to a fact reaches only games with it; an unscoped tool reach
   }
 });
 
+test("a Unity or Godot game's web export reaches no tool for web games, as it reaches no skill for them", async () => {
+  const registry = await registryWith([tool("greet"), tool("draw", { facts: [CoreFact.WebGame] })]);
+  try {
+    for (const engine of [CoreFact.UnityProject, CoreFact.GodotProject])
+      assert.deepEqual(
+        names(registry, [at(engine, "project"), at(CoreFact.WebGame, "web")]),
+        ["example__greet"],
+        engine,
+      );
+    assert.deepEqual(names(registry, WEB), ["example__greet", "example__draw"], "a web game gets it");
+  } finally {
+    registry.cancel();
+  }
+});
+
 test("a folder of a kind Genex can't name is served by no fact: only unscoped tools and skills reach it", async () => {
   const page = { name: "page", text: "Load the model with GLTFLoader.", engines: [GameEngine.Web] };
   const registry = await registryWith([tool("greet"), tool("draw", { facts: [CoreFact.WebGame] })], [page]);
@@ -164,7 +179,7 @@ test("a skill for one part of the folder names that part", async () => {
   }
 });
 
-test("the snapshot lists the kinds its tools make, and an agent never sees facts or makes", async () => {
+test("the snapshot lists the kinds its tools make, as a game with no kind yet is offered them, and an agent never sees facts or makes", async () => {
   const registry = await registryWith([
     tool("greet"),
     tool("new-toy", { makes: [TOY] }),
@@ -173,10 +188,7 @@ test("the snapshot lists the kinds its tools make, and an agent never sees facts
   try {
     const kind = { plugin: "example", name: exampleManifest.name, tool: "example__new-toy", makes: [TOY] };
     assert.deepEqual(registry.snapshot(WEB).kinds, [kind]);
-    assert.deepEqual(registry.snapshot(TOY_GAME).kinds, [
-      kind,
-      { plugin: "example", name: exampleManifest.name, tool: "example__build", makes: [TOY, CoreFact.WebGame] },
-    ]);
+    assert.deepEqual(registry.snapshot(TOY_GAME).kinds, [kind], "a toy game too, never its own toy tool");
     assert.deepEqual(registry.snapshot(WEB, (name) => name !== "example__new-toy").kinds, [], "not offered");
     for (const handed of registry.snapshot(TOY_GAME).tools) {
       assert.equal(Object.hasOwn(handed, "facts"), false, handed.name);

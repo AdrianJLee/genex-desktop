@@ -315,9 +315,10 @@ describe("the rules each kind gets", () => {
     // The harness names no plugin's tool: the plugin's own skill says which one links the project.
     assert.doesNotMatch(brief, /use-project/);
     const manifest = JSON.parse(readFileSync("src/plugins/unreal/plugin.json", "utf8")) as {
-      skills: Array<{ name: string; text?: string }>;
+      skills: Array<{ name: string; file?: string }>;
     };
-    const skill = manifest.skills.find((s) => s.name === "unreal-editor")?.text ?? "";
+    const file = manifest.skills.find((s) => s.name === "unreal-editor")?.file ?? "";
+    const skill = readFileSync(`src/plugins/unreal/${file}`, "utf8");
     assert.match(skill, /unreal__use-project links a project to this game[^\n]*setting it up for Genex first/);
     const linked = buildContractorBrief({
       ask: ASK,

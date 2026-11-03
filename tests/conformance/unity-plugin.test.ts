@@ -89,7 +89,11 @@ describe("the bundled Unity plugin", () => {
     assert.equal(tool(UnityTool.EngineStatus)?.audience, "harness");
     assert.deepEqual(tool(UnityTool.NewGame)?.makes, [CoreFact.UnityProject]);
     assert.equal(tool(UnityTool.NewGame)?.ready, UnityTool.EngineStatus);
-    assert.equal(tool(UnityTool.NewGame)?.facts, undefined, "any game may be made a Unity game");
+    assert.deepEqual(
+      tool(UnityTool.NewGame)?.facts,
+      [CoreFact.WebGame],
+      "a game with no kind yet or a web game may be made a Unity game",
+    );
     for (const name of [UnityTool.Setup, UnityTool.UndoSetup]) {
       assert.ok(tool(name)?.confirmation, `${name} changes the person's project, so they confirm it`);
       assert.deepEqual(tool(name)?.facts, [CoreFact.UnityProject]);
@@ -299,7 +303,6 @@ describe("the bundled Unity plugin", () => {
       assert.deepEqual(
         unityTools(UNITY_GAME),
         [
-          "unity__new-game",
           "unity__show-steps",
           "unity__multiplayer",
           "unity__setup",

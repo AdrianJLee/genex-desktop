@@ -130,9 +130,8 @@ test("the capability facts a session without plugin tools reads carry only the s
 
 /** The bundled plugins whose skills a game's brief can carry, all turned on. */
 const BUNDLED = ["blender", "genex", "roblox", "unreal"];
-/** The web-only skills of the bundled plugins: three.js loading, multiplayer, embed sign-in, Genex's web publishing and play-time lanes. */
+/** The web-only skills of the bundled plugins: three.js multiplayer, embed sign-in, Genex's web publishing and play-time lanes. */
 const WEB_ONLY = [
-  "blender/local-modeling",
   "genex/genex-threejs-multiplayer",
   "genex/genex-threejs-embed-auth",
   "genex/publishing",
@@ -142,7 +141,7 @@ const WEB_ONLY = [
   "genex/genex-monetization",
 ];
 
-async function bundledRegistry(seeds: string) {
+async function bundledRegistry(seeds: string, on: readonly string[] = BUNDLED) {
   const root = await tmpDir("studio-skill-engines-bundled-");
   const registry = new PluginRegistry(
     path.join(root, "installed"),
@@ -151,9 +150,180 @@ async function bundledRegistry(seeds: string) {
     async () => null,
   );
   await registry.init();
-  for (const id of BUNDLED) await registry.setEnabled(id, true);
+  for (const id of on) await registry.setEnabled(id, true);
   return registry;
 }
+
+/** Every bundled plugin with tools for a game's session, all turned on. */
+const ALL_ON = ["blender", "genex", "unity", "godot", "roblox", "unreal"];
+/** A game of each engine: its facts, its engine's plugin and fact, and a tool only that engine's games get. */
+const ENGINE_GAMES = [
+  { label: "Unity", facts: [{ id: CoreFact.UnityProject, path: "unity" }], plugin: "unity", own: "unity__open-editor" },
+  {
+    label: "Unity with its WebGL build",
+    facts: [
+      { id: CoreFact.UnityProject, path: "unity" },
+      { id: CoreFact.WebGame, path: "web" },
+    ],
+    plugin: "unity",
+    own: "unity__open-editor",
+  },
+  { label: "Godot", facts: [{ id: CoreFact.GodotProject, path: "godot" }], plugin: "godot", own: "godot__check" },
+  {
+    label: "Roblox",
+    facts: [{ id: CoreFact.RobloxProject, path: "." }],
+    plugin: "roblox",
+    own: "roblox__check-scripts",
+  },
+  {
+    label: "Unreal",
+    facts: [{ id: CoreFact.UnrealProject, path: "unreal" }],
+    plugin: "unreal",
+    own: "unreal__blueprint-guide",
+  },
+];
+/** The fact each engine's plugin makes a game of. */
+const ENGINE_FACT_OF: Record<string, string> = {
+  unity: CoreFact.UnityProject,
+  godot: CoreFact.GodotProject,
+  roblox: CoreFact.RobloxProject,
+  unreal: CoreFact.UnrealProject,
+};
+
+test("a game of each engine is offered its own engine's kind and handed its own engine's tools", async () => {
+  const resources = await makeResources({ tsc: false });
+  const registry = await bundledRegistry(path.join(resources, "plugins"), ALL_ON);
+  try {
+    for (const row of ENGINE_GAMES) {
+      const { kinds, tools } = registry.snapshot(row.facts);
+      const fact = ENGINE_FACT_OF[row.plugin] ?? "";
+      assert.ok(
+        kinds.some((kind) => kind.plugin === row.plugin && kind.makes.includes(fact)),
+        `${row.label}: its engine's plugin is on and makes its kind`,
+      );
+      assert.ok(
+        tools.some((tool) => tool.name === row.own),
+        `${row.label}: ${row.own}`,
+      );
+    }
+    const pending = registry.snapshot().kinds;
+    for (const plugin of Object.keys(ENGINE_FACT_OF))
+      assert.ok(
+        pending.some((kind) => kind.plugin === plugin),
+        `a game with no kind yet is offered ${plugin}'s`,
+      );
+  } finally {
+    registry.cancel();
+  }
+});
+
+test("a game of one engine is handed none of another engine's tools", async () => {
+  const resources = await makeResources({ tsc: false });
+  const registry = await bundledRegistry(path.join(resources, "plugins"), ALL_ON);
+  try {
+    for (const row of ENGINE_GAMES) {
+      const { tools, applied } = registry.snapshot(row.facts);
+      const others = Object.keys(ENGINE_FACT_OF).filter((plugin) => plugin !== row.plugin);
+      for (const { name } of tools) {
+        assert.ok(!others.some((plugin) => name.startsWith(`${plugin}__`)), `${row.label}: ${name}`);
+        assert.ok(!/__new-(game|plugin)$/.test(name), `${row.label}: ${name} makes a game of a kind it already has`);
+      }
+      assert.ok(!tools.some((tool) => tool.name === "genex__package"), `${row.label}: packaging is a web game's`);
+      assert.ok(applied.plugins.includes(row.plugin), `${row.label}: its own engine's plugin`);
+      for (const plugin of others)
+        assert.ok(!applied.plugins.includes(plugin), `${row.label}: ${plugin} is not handed`);
+    }
+  } finally {
+    registry.cancel();
+  }
+});
+
+/** Each engine's way in: what a game with no kind yet gets to make, link or set up a game of it. */
+const WAYS_IN = [
+  "unity__new-game",
+  "godot__new-game",
+  "roblox__new-game",
+  "roblox__finish-setup",
+  "roblox__get-studio",
+  "roblox__setup",
+  "roblox__restart-studio",
+  "roblox__open-studio",
+  "roblox__do-it-for-me",
+  "roblox__use-project",
+  "unreal__new-game",
+  "unreal__install-unreal",
+];
+/** Tools that work on a game of their engine's own kind, which a game with no kind yet does not have (Roblox's: `ROBLOX_ONLY_TOOLS`). */
+const GAME_TOOLS = ["godot__class-reference"];
+
+test("a game with no kind yet is handed each engine's way in and none of its game tools", async () => {
+  const resources = await makeResources({ tsc: false });
+  const registry = await bundledRegistry(path.join(resources, "plugins"), ALL_ON);
+  try {
+    const names = registry.snapshot().tools.map((tool) => tool.name);
+    for (const name of WAYS_IN) assert.ok(names.includes(name), name);
+    for (const name of GAME_TOOLS) assert.ok(!names.includes(name), name);
+  } finally {
+    registry.cancel();
+  }
+});
+
+/** Each engine's guide, with the game it reaches. */
+const ENGINE_GUIDES: Array<{ plugin: string; skill: string; facts: FactRef[] }> = [
+  { plugin: "unity", skill: "unity-editor", facts: [{ id: CoreFact.UnityProject, path: "unity" }] },
+  { plugin: "godot", skill: "godot", facts: [{ id: CoreFact.GodotProject, path: "godot" }] },
+  { plugin: "roblox", skill: "roblox-studio", facts: [{ id: CoreFact.RobloxProject, path: "." }] },
+  { plugin: "unreal", skill: "unreal-editor", facts: [{ id: CoreFact.UnrealProject, path: "unreal" }] },
+  {
+    plugin: "unreal",
+    skill: "unreal-plugin",
+    facts: [
+      { id: CoreFact.UnrealProject, path: "unreal" },
+      { id: CoreFact.UnrealPlugin, path: "unreal/Plugins/Stamp" },
+    ],
+  },
+];
+
+test("an engine's guide is read on demand, not carried whole in every brief", async () => {
+  const resources = await makeResources({ tsc: false });
+  const registry = await bundledRegistry(path.join(resources, "plugins"), ALL_ON);
+  const directory = await tmpDir("studio-skill-engines-guide-");
+  try {
+    for (const { plugin, skill, facts } of ENGINE_GUIDES) {
+      const text = await registry.skillText(plugin, skill);
+      const { guidance } = registry.snapshot(facts);
+      assert.ok(guidance.includes(`[${plugin}/${skill}] `), `${plugin}/${skill} has an index line`);
+      assert.ok(
+        guidance.includes(`${plugin}__skill ${JSON.stringify({ name: skill })}`),
+        `${plugin}/${skill}'s reader`,
+      );
+      assert.ok(!guidance.includes(text), `${plugin}/${skill}'s text is not in the brief`);
+      const page = (await registry.tool(`${plugin}__skill`, { name: skill }, { project: "guide", directory })) as {
+        text: string;
+      };
+      assert.ok(page.text.length > 0 && text.startsWith(page.text), `${plugin}/${skill} reads as its file`);
+    }
+  } finally {
+    registry.cancel();
+  }
+});
+
+test("a plugin's skill tool names only the skills that reach the game", async () => {
+  const resources = await makeResources({ tsc: false });
+  const registry = await bundledRegistry(path.join(resources, "plugins"), ALL_ON);
+  try {
+    const reader = (facts: FactRef[]) =>
+      registry.snapshot(facts).tools.find((tool) => tool.name === "genex__skill")?.description ?? "";
+    const unity = reader([{ id: CoreFact.UnityProject, path: "unity" }]);
+    assert.doesNotMatch(unity, /genex-threejs-multiplayer/, "a Unity game reads no three.js skill");
+    assert.match(unity, /genex-tool-model/);
+    const web = reader([at(CoreFact.WebGame)]);
+    assert.match(web, /genex-threejs-multiplayer/);
+    assert.match(web, /genex-tool-model/);
+  } finally {
+    registry.cancel();
+  }
+});
 
 /** The Unreal plugin's tools for a game that holds an Unreal project only. */
 const UNREAL_EDITOR_TOOLS = [
@@ -180,8 +350,8 @@ const UNREAL_PLUGIN_TOOLS = [
   "unreal__plugin-status",
 ];
 const UNREAL_PLUGIN_SKILL = "unreal/unreal-plugin";
-/** What a web game no longer gets from the Unreal plugin: its editor's and its plugin projects' tools and skills. */
-const UNREAL_ONLY_TOOLS = [...UNREAL_EDITOR_TOOLS, ...UNREAL_PLUGIN_TOOLS];
+/** What a web game no longer gets from the Unreal plugin: its editor's and its plugin projects' tools, their skills and the reader of those. */
+const UNREAL_ONLY_TOOLS = [...UNREAL_EDITOR_TOOLS, ...UNREAL_PLUGIN_TOOLS, "unreal__skill"];
 const UNREAL_ONLY_SKILLS = [UNREAL_SKILL, UNREAL_PLUGIN_SKILL];
 /** The Roblox plugin's skills, in manifest order: they reach a game that holds a Roblox place only. */
 const ROBLOX_SKILLS = [
@@ -219,6 +389,8 @@ const ROBLOX_ONLY_TOOLS = [
   "roblox__cover-pictures",
   "roblox__places",
   "roblox__add-luau-checks",
+  "roblox__quit-studio",
+  "roblox__undo-setup",
 ];
 
 /** A manifest as it was before skills could name engines or facts: every scope field taken out. */
@@ -265,7 +437,7 @@ test("the bundled plugins' web guidance is what it was before skills named engin
     assert.deepEqual(
       web.applied,
       {
-        // Every bundled plugin takes part: Roblox's and Unreal's place tools (new-game, use-project) reach any game.
+        // Every bundled plugin takes part: Roblox's and Unreal's place tools (new-game, use-project) reach a web game.
         plugins: was.applied.plugins,
         skills: was.applied.skills.filter((skill) => !ENGINE_ONLY_SKILLS.includes(skill)),
       },
@@ -286,8 +458,8 @@ test("the bundled plugins' web guidance is what it was before skills named engin
     assert.ok(unreal.applied.skills.includes("genex/genex-tool-model"), "assets are any engine's");
     assert.deepEqual(
       unreal.tools.map((tool) => tool.name).filter((name) => !web.tools.some((tool) => tool.name === name)),
-      UNREAL_EDITOR_TOOLS,
-      "an Unreal game has the editor tools a web game lacks",
+      [...UNREAL_EDITOR_TOOLS, "unreal__skill"],
+      "an Unreal game has the editor tools a web game lacks, and the reader of its guides",
     );
     // The seed reads the plugin as offering a new Unreal game exactly while it is on.
     assert.equal(offersUnrealGame(now.snapshot().tools), true);

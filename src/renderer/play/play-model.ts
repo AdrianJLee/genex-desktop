@@ -434,6 +434,19 @@ export function noteOn(
   return { note, look: NOTE_PLACE[note].look };
 }
 
+/** A like as a game page shows it: whether the person likes the game, and how many do. */
+export interface LikeShown {
+  liked: boolean;
+  likes: number;
+}
+
+/**
+ * The like a game page shows the moment it is pressed, before genex.games answers: the heart turns
+ * and the count moves by one, never below none (a count can lag the person's own like).
+ */
+export const likeFlipped = ({ liked, likes }: LikeShown): LikeShown =>
+  liked ? { liked: false, likes: Math.max(0, likes - 1) } : { liked: true, likes: likes + 1 };
+
 /** Whether the header just went from not liked to liked: the player's own like, worth a burst. */
 export const justLiked = (before: PlayBarState | null | undefined, after: PlayBarState | null | undefined): boolean =>
   before?.liked === false && after?.liked === true;

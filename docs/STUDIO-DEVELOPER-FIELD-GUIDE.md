@@ -376,9 +376,9 @@ finish-check (four Loops written after the start, one per finish check look: Don
 the Builds history, Not yet after one no, and the newest Checking),
 paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
 Paused, one Added after the resume, one Left out by the lead's stop),
-building-card (a 4h Loop still going after five finished ones, written after the start, for the chat's
-Building card and its steps: the lead's two save points, two parts added, one working with its time
-left, one restarted on one row; `[data-build-checklist]` open, `[data-build-toggle]` closes it;
+building-card (a Loop still going after five finished ones, written after the start, for the chat's
+Building card and its steps: the lead's two save points, two parts added, one working on its second
+round, one restarted on one row; `[data-build-checklist]` open, `[data-build-toggle]` closes it;
 Builds holds its six builds in the picker `[data-build-picker]`),
 stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
 renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and

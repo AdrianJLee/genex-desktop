@@ -27,6 +27,7 @@ import {
 import { type AutoCheck, changesSomething, permitCall, seatAsks, sessionMode } from "./local-session-permissions.ts";
 import { autoApprove } from "./auto-approver.ts";
 import { type LocalInbox, localInbox, steerUserMessage, takesSteer } from "./local-session-steer.ts";
+import { textAsSent } from "./genex-mark-prompts.ts";
 import {
   executeLocalTool,
   INSPECTION_TOOLS,
@@ -650,7 +651,9 @@ function continueHistory(saved: SavedSession, messages: Message[], request: Dele
   // briefs need not be concatenated at every continuation. Oversized fixed requirements
   // fail explicitly below instead of silently deleting the user's original request.
   const requirements = saved.requirements ?? [...(saved.task ? [saved.task] : [])];
-  if (requirements.at(-1) !== request.prompt) requirements.push(request.prompt);
+  // Genex's own message reads under its mark (genex-mark-prompts.ts), here and in a compaction.
+  const prompt = textAsSent({ text: request.prompt, from: request.from });
+  if (requirements.at(-1) !== prompt) requirements.push(prompt);
   saved.requirements = requirements;
   delete saved.task;
   // Interrupted tool calls are never replayed: their side effects may already exist.
@@ -661,7 +664,7 @@ function continueHistory(saved: SavedSession, messages: Message[], request: Dele
         messages.push({ role: "tool", tool_call_id: call.id, content: LOCAL_NOTE.interrupted });
   messages.push({
     role: "user",
-    content: `${request.prompt}\n\n${budget}`,
+    content: `${prompt}\n\n${budget}`,
     ...(request.images?.length ? { images: request.images } : {}),
   });
   return requirements;
@@ -736,9 +739,10 @@ async function readSteers(run: LocalRun): Promise<void> {
   const messages = run.inbox.take();
   if (!messages.length) return;
   for (const message of messages) {
-    run.messages.push(steerUserMessage(message));
-    // The person's words are instructions: a compaction keeps them in order with the rest.
-    if (message.text) run.requirements.push(message.text);
+    const said = steerUserMessage(message);
+    run.messages.push(said);
+    // A compaction keeps every message in order with the rest, Genex's still under its mark.
+    if (message.text) run.requirements.push(String(said.content));
   }
   await run.save();
   for (const { id } of messages) {

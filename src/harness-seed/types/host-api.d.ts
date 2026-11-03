@@ -201,6 +201,9 @@ export interface HarnessCompleteParams {
 }
 // ↑ src/shared/harness-api.ts
 
+export type MessageFrom = 'person' | 'genex';
+// ↑ src/shared/engine-requests.ts
+
 /** A studio tool in the flat shape a delegated engine exposes: string-typed properties only. */
 export interface StudioToolSpec {
   name: string;
@@ -377,6 +380,11 @@ export interface HarnessDelegateParams {
   chatTurn?: { messageId?: string };
   engine?: string;
   prompt: string;
+  /**
+   * Who wrote `prompt`: the person's words alone, or Genex's own message (a command's result, the
+   * cover step), which the engine shows as not the person's. Absent: a brief.
+   */
+  from?: MessageFrom;
   project: string;
   /** Build here instead of the live game folder — a facet worktree under scratch. */
   cwd?: string;
@@ -1083,12 +1091,14 @@ export interface DelegateResult {
 }
 // ↑ src/shared/engine-requests.ts
 
-/** A message the person sent while the chat's turn works, handed into that turn (steer). */
+/** A message handed into the chat's turn while it works (steer): the person's, or Genex's own line. */
 export interface SteerMessage {
   /** The queue's message id: what the delivery is recorded under. */
   id: string;
   text: string;
   images?: DelegateImage[];
+  /** Who wrote it; absent means the person. */
+  from?: MessageFrom;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -1631,7 +1641,7 @@ export type JobRole = 'lead' | 'chat' | 'worker';
 export type JobState = 'failed' | 'running' | 'succeeded' | 'stopped' | 'timed_out' | 'interrupted';
 // ↑ src/shared/jobs.ts
 
-export type JobStopper = 'agent' | 'person' | 'scope_ended' | 'quit';
+export type JobStopper = 'person' | 'agent' | 'scope_ended' | 'quit';
 // ↑ src/shared/jobs.ts
 
 /**
@@ -2243,14 +2253,14 @@ export type DispatchAction =
       pickedImages?: number;
       /** Reference files this message saved in the game (relative paths); a rewind with files removes them. */
       references?: string[];
-      /** Every file its attached pictures are saved as in the game (relative), already there or not: a run's lead reads them. */
-      pictureFiles?: string[];
       /** Composer Loop: the chat may start an unattended build when the ask needs one. */
       loop?: LoopCommission;
       /** Composer Autopilot: the chat may launch a build that decomposes into facets and runs until satisfied. */
       autopilot?: AutopilotCommission;
       /** Words the chat wrote itself (a command's result); the queue keeps it and the transcript hides it. */
       origin?: MessageOrigin;
+      /** Genex wrote these words (any `origin`, a plugin's ask): the agent reads them as not the person's. */
+      from?: MessageFrom;
     }
   | { type: "compact"; threadId: string; engine?: string; model?: string }
   | { type: "cancel"; threadId?: string }

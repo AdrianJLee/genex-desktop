@@ -509,11 +509,14 @@ export function loopHost(options: {
     handlers: handlers(host),
     ...(options.workspace ? { workspace: options.workspace } : {}),
   });
+  const steering = async (_address?: unknown, consume?: boolean) =>
+    consume ? host.inbox.said.splice(0) : [...host.inbox.said];
   Object.assign(host.rec.ctx, {
     runInbox: {
       finishing: async () => host.inbox.finishing,
-      steering: async (_address?: unknown, consume?: boolean) =>
-        consume ? host.inbox.said.splice(0) : [...host.inbox.said],
+      steering,
+      steers: async (address?: unknown, consume?: boolean) =>
+        (await steering(address, consume)).map((text) => ({ text })),
       backlog: async () => [...host.inbox.said],
     },
   });

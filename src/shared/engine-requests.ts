@@ -116,12 +116,29 @@ export interface DelegateImage {
   data: string;
 }
 
-/** A message the person sent while the chat's turn works, handed into that turn (steer). */
+/**
+ * Who wrote a message into a session: the person, or Genex itself (a worker ended, a command's
+ * result, the cover step). Each engine shows Genex's as not the person's words. Sent in requests:
+ * never rename a value.
+ */
+export const MessageFrom = {
+  Person: "person",
+  Genex: "genex",
+} as const;
+export type MessageFrom = (typeof MessageFrom)[keyof typeof MessageFrom];
+const MESSAGE_FROMS: ReadonlySet<unknown> = new Set(Object.values(MessageFrom));
+
+/** Whether `value` names who wrote a message, in its exact wire spelling. */
+export const isMessageFrom = (value: unknown): value is MessageFrom => MESSAGE_FROMS.has(value);
+
+/** A message handed into the chat's turn while it works (steer): the person's, or Genex's own line. */
 export interface SteerMessage {
   /** The queue's message id: what the delivery is recorded under. */
   id: string;
   text: string;
   images?: DelegateImage[];
+  /** Who wrote it; absent means the person. */
+  from?: MessageFrom;
 }
 
 /**

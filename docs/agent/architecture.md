@@ -585,10 +585,14 @@ studio forwards each call to the harness (`HarnessHost.dispatch`, `director_tool
   `journal.director` (clock with `workedMs`, health, recent log, wake state). A Resume gets the
   working time left (`loopRunClock`, paused time excluded), a reopen (`director/reopen.ts`) a fresh
   clock, and reads the rest back (`restoreLoopRun`).
-- User steering reaches the lead as USER SAYS once per steer and run.
+- The chat's messages reach the lead as written, each with its sender, once per steer and run:
+  mid-turn one steer each, and after a cut the resume of one sender's words at a time (the
+  person's `from: person`); Genex's own messages and lines said into a turn go `from: genex`
+  (`MessageFrom`), which each engine shows as not the person's. A wake's digest still carries them
+  under THE USER SAYS.
 - Live chat (`loop/live-chat.ts`, `director/lead-line.ts`) and one session
   (`director/lead-session.ts`, `after-loop-run.ts`, `reopen-run.ts`, the host's `#leadRoot`): the
-  lead is the chat's own session, which answers again after the close
+  lead is the chat's own session, one per chat, which goes on after the close
   ([live chat](../conversation-lifecycle.md#live-chat-during-a-build),
   [after the build](../conversation-lifecycle.md#after-the-build-the-same-session)).
 - Each turn of the lead's session ends with a host-written `session_activity` (`completed`,

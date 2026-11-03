@@ -14,7 +14,10 @@ import { describe, it } from "node:test";
 import { BONSAI_MODELS } from "../../src/substrate/bonsai/manifest.ts";
 import { BonsaiEngine } from "../../src/substrate/engines/bonsai.ts";
 import { LocalServerEngine } from "../../src/substrate/engines/local-server.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
 import { LocalSessions } from "../../src/substrate/engines/local-session.ts";
+import { steerUserMessage } from "../../src/substrate/engines/local-session-steer.ts";
 import { OpenRouterEngine } from "../../src/substrate/engines/openrouter.ts";
 import {
   type CompleteRequest,
@@ -339,5 +342,25 @@ describe("the engines whose sessions Genex runs", () => {
       }),
     ];
     for (const engine of engines) assert.equal(engine.steersMidTurn, true, engine.id);
+  });
+});
+
+describe("who wrote a steered message, as a local session's history carries it", () => {
+  it("a Genex line reads under the non-user mark; the person's words stay as they wrote them", () => {
+    const sketch = { label: "sketch", mimeType: "image/png", data: "iVBOR" };
+    assert.deepEqual(steerUserMessage({ id: "m1", text: "and add fog", images: [sketch] }), {
+      role: "user",
+      content: "and add fog",
+      images: [sketch],
+    });
+    assert.deepEqual(steerUserMessage({ id: "m2", text: "and add fog", from: MessageFrom.Person }), {
+      role: "user",
+      content: "and add fog",
+    });
+    assert.deepEqual(steerUserMessage({ id: "n1", text: 'worker sky "Sky": done.', from: MessageFrom.Genex }), {
+      role: "user",
+      content: `${GENEX_MARK}\nworker sky "Sky": done.`,
+    });
+    assert.equal(GENEX_MARK, "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]", "the mark Claude Code itself shows");
   });
 });

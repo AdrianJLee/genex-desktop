@@ -1,3 +1,4 @@
+import type { MessageFrom } from "./engine-requests.ts";
 import type { ModelPreferences } from "./model-preferences.ts";
 /**
  * Substrate ↔ harness wire protocol.
@@ -154,14 +155,14 @@ export type DispatchAction =
       pickedImages?: number;
       /** Reference files this message saved in the game (relative paths); a rewind with files removes them. */
       references?: string[];
-      /** Every file its attached pictures are saved as in the game (relative), already there or not: a run's lead reads them. */
-      pictureFiles?: string[];
       /** Composer Loop: the chat may start an unattended build when the ask needs one. */
       loop?: LoopCommission;
       /** Composer Autopilot: the chat may launch a build that decomposes into facets and runs until satisfied. */
       autopilot?: AutopilotCommission;
       /** Words the chat wrote itself (a command's result); the queue keeps it and the transcript hides it. */
       origin?: MessageOrigin;
+      /** Genex wrote these words (any `origin`, a plugin's ask): the agent reads them as not the person's. */
+      from?: MessageFrom;
     }
   | { type: "compact"; threadId: string; engine?: string; model?: string }
   | { type: "cancel"; threadId?: string }

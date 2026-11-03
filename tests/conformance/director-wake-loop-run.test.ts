@@ -425,7 +425,9 @@ describe("live chat during a build", () => {
 
     const resumed = lead[2]!;
     assert.equal(resumed.resume, "lead-1", "the same session, resumed");
-    assert.match(resumed.prompt, /THE USER SAYS[\s\S]*make the sky red instead/);
+    // Flipped: resumed with the person's words alone, as they wrote them.
+    assert.match(resumed.prompt, /(^|\n\n)make the sky red instead(\n\n|$)/);
+    assert.doesNotMatch(resumed.prompt, /THE USER SAYS|cut short/i);
     assert.doesNotMatch(resumed.prompt, /Your last turn failed/, "an interrupted turn is not a failed one");
     assert.doesNotMatch(resumed.prompt, /starts the wrap-up now/, "nor the start of a wrap-up");
     const continued = customEvents(events, "director_continued").filter((e) => e.runId === runId);
@@ -441,7 +443,7 @@ describe("live chat during a build", () => {
    * The golf game's lead: Codex continuing the chat's own session, whose first turn ran on while
    * "stop" sat unread for its whole 45 minutes. Its very first turn is cut for the words now.
    */
-  it("L10. a lead continuing the chat's own session is cut short in its first turn for a stop, and told a stop is wrap_up", {
+  it("L10. a lead continuing the chat's own session is cut short in its first turn for a stop, and resumed with the words alone", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("live-first-cut");
@@ -482,9 +484,8 @@ describe("live chat during a build", () => {
     assert.equal(lead[0]?.resume, "chat-1", "the first turn continues the chat's own session");
     const resumed = lead[1];
     assert.equal(resumed?.resume, "chat-1", "the same session, resumed");
-    assert.match(String(resumed?.prompt), /cut short/i, "it is told it was cut");
-    assert.match(String(resumed?.prompt), /stop or finish[^\n]*wrap_up/i, "and that a stop is wrap_up");
-    assert.match(String(resumed?.prompt), /THE USER SAYS[\s\S]*stop the build/);
+    // Flipped: the person's words alone; that a stop is wrap_up is said once, in wrap_up's own description.
+    assert.match(String(resumed?.prompt), /(^|\n\n)stop the build(\n\n|$)/);
   });
 
   it("L3. an engine that reads input mid-turn takes the message in the running turn, and it is not said again", {
@@ -544,11 +545,11 @@ describe("live chat during a build", () => {
     await running;
 
     assert.equal(lead.length, 2, "read in the running turn: no interrupt, no second wake");
-    assert.match(handed[0]!, /THE USER SAYS[\s\S]*add some fog/);
+    assert.equal(handed[0], "add some fog", "flipped: the person's words as they wrote them");
     assert.doesNotMatch(handed[0]!, /how is it going/, "what the lead was woken with is not said again");
   });
 
-  it("L4. Stop mid-build still hands over to the oldest queued message: a picture waits for the chat", {
+  it("L4. Stop mid-build still hands over to the oldest queued message: a slash command waits for the chat", {
     timeout: RIG_TIMEOUT_MS,
   }, async () => {
     const { rig, project, runId, dispatch, finished } = await loopRun("live-stop");
@@ -558,7 +559,7 @@ describe("live chat during a build", () => {
     fakeEngine(rig, async (request) => {
       if (answersChat(request)) {
         chats.push(request);
-        return turnResult(request.resume ?? "chat", "I see the picture.");
+        return turnResult(request.resume ?? "chat", "Reviewed.");
       }
       if (!request.director) return hangUntilStopped(request, () => {});
       lead.push(request);
@@ -569,9 +570,9 @@ describe("live chat during a build", () => {
     });
     const running = dispatch();
     await until(() => rested, "the lead's first turn to end");
-    const picture = { label: "ref", mimeType: "image/png", data: "iVBORw0KGgo=" };
-    const { thread, messageId } = await say(rig, project.name, "does it look like this?", { frames: [picture] });
-    assert.equal((await stateOf(rig, thread, messageId))?.state, "queued", "a picture waits for the chat");
+    // Flipped: a picture reaches the lead now, alone too (LM1, LM4); a slash command waits for the chat.
+    const { thread, messageId } = await say(rig, project.name, "/review");
+    assert.equal((await stateOf(rig, thread, messageId))?.state, "queued", "a command waits for the chat");
     await rig.core.stopThread(thread);
     const events = await finished();
     await running;
@@ -587,8 +588,7 @@ describe("live chat during a build", () => {
     assert.equal(lead.length, 1, "no turn of the lead after Stop");
     assert.equal(chats.length, 1, "the chat answers the message that waited");
     assert.equal(chats[0]!.resume, "lead-1", "the session that led the run");
-    assert.match(chats[0]!.prompt, /does it look like this\?/);
-    assert.equal(chats[0]!.images?.[0]?.data, "iVBORw0KGgo=", "with the picture");
+    assert.match(chats[0]!.prompt, /^\/review\n/, "the command the person sent");
   });
 
   it("L7. a run that crashes gives back what its lead never heard before the run closes: the chat keeps it Queued, and answers it", {

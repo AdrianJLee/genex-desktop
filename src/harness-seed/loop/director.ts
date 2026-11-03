@@ -55,9 +55,18 @@ import { bookmarkLead, freshChat, leadSeat } from "./director/lead-session.ts";
 import { retainSpan, type OperationSpan } from "./director/timing.ts";
 import { tracedContext } from "./director/trace.ts";
 import type { LoopRun } from "./director/loop-run.ts";
-import type { DirectorTalk, WakeClock } from "./director/wake.ts";
+import type { DirectorTalk, TurnSaid, WakeClock } from "./director/wake.ts";
 import type { AnyRecord, HarnessCtx, Run } from "../types/harness.d.ts";
-import type { DelegateImage, DelegateResult, LiveToolSpec, ReferenceFrame } from "../types/host-api.d.ts";
+import type {
+  DelegateImage,
+  DelegateResult,
+  HarnessDelegateParams,
+  LiveToolSpec,
+  ReferenceFrame,
+} from "../types/host-api.d.ts";
+
+/** One message to the lead's session: its prompt, and who wrote it when it is not a brief. */
+type LeadAsk = Pick<HarnessDelegateParams, "prompt" | "from">;
 
 export { directorTool } from "./director/tool-specs.ts";
 
@@ -95,7 +104,7 @@ function delegateTurn(
   loopRun: LoopRun,
   images: DelegateImage[],
   tools: LiveToolSpec[],
-  prompt: string,
+  { prompt, from }: LeadAsk,
   sessionId: string | null | undefined,
   timeoutMs: number,
 ): Promise<DelegateResult> {
@@ -104,6 +113,7 @@ function delegateTurn(
   return ctx.call(HostMethod.EngineDelegate, {
     engine: run.engine,
     prompt,
+    ...(from ? { from } : {}),
     project: run.project,
     threadId,
     ...(plannerModel(run) ? { model: plannerModel(run) } : {}),
@@ -120,11 +130,26 @@ function delegateTurn(
       project: run.project,
       root: integrationWorktree,
       tools,
-      ...(lead?.chatSession ? { chatSession: true } : {}),
+      ...(lead ? { chatSession: true } : {}),
       ...(leadsOpenLoop(loopRun) ? { inPlace: true } : {}),
     },
     ...(images.length ? { images } : {}),
   });
+}
+
+/**
+ * What one turn of the lead sends. A fresh lead session knows nothing of the chat it leads for: it
+ * is told the chat so far first, and that message is Genex's brief, never the person's words alone.
+ */
+async function leadAsk(
+  loopRun: LoopRun,
+  prompt: string,
+  sid: string | null | undefined,
+  said: TurnSaid | undefined,
+): Promise<LeadAsk> {
+  const chat = loopRun.lead && !sid ? await freshChat(loopRun.ctx, loopRun.threadId) : "";
+  if (chat) return { prompt: `${chat}\n\n${prompt}` };
+  return said?.from ? { prompt, from: said.from } : { prompt };
 }
 
 /**
@@ -142,12 +167,10 @@ export function directorTalk(loopRun: LoopRun, images: DelegateImage[], tools: L
   };
   const talk: DirectorTalk = {
     sessionId: lead ? lead.sessionId : (loopRun.priorJournal?.director?.sessionId ?? null),
-    session: async (prompt, sid, timeoutMs) => {
+    session: async (prompt, sid, timeoutMs, said) => {
       try {
-        // A fresh lead session knows nothing of the chat it leads for: it is told the chat so far first.
-        const chat = lead && !sid ? await freshChat(ctx, threadId) : "";
-        const asked = chat ? `${chat}\n\n${prompt}` : prompt;
-        return await delegateTurn(loopRun, stillsFor(sid), tools, asked, sid, timeoutMs);
+        const pictures = [...stillsFor(sid), ...(said?.images ?? [])];
+        return await delegateTurn(loopRun, pictures, tools, await leadAsk(loopRun, prompt, sid, said), sid, timeoutMs);
       } catch (err: any) {
         if (!isProviderLoss(err?.kind)) throw err;
         state.limit = engineLimitOf(err);
@@ -388,12 +411,12 @@ async function wakeLoopRun(
 const stoppedBeforeAnyTurn = (loopRun: LoopRun): boolean =>
   leadsOpenLoop(loopRun) && loopRun.ctx.cancelled === true && !loopRun.open?.halted && !loopRun.open?.sessionWorked;
 
-/** Seat the run's lead (director/lead-session.ts): the chat's own session when it can continue it. */
+/** Seat the run's lead (director/lead-session.ts): the chat's own session, continued when it can be. */
 async function seatTheLead(loopRun: LoopRun): Promise<void> {
-  const { ctx, journal, priorJournal, projectDir, run, threadId } = loopRun;
+  const { ctx, journal, projectDir, run, threadId } = loopRun;
   const events = await ctx.call(HostMethod.EventsList, { threadId }).catch(() => []);
-  loopRun.lead = leadSeat({ events, run, folder: projectDir, priorJournal });
-  journal.director.lead = { chatSession: loopRun.lead.chatSession };
+  loopRun.lead = leadSeat({ events, run, folder: projectDir });
+  journal.director.lead = { chatSession: true };
   await loopRun.saveJournal();
 }
 

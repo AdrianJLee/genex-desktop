@@ -10,7 +10,6 @@ import { describe, it } from "node:test";
 import type { DelegateResult } from "../../src/substrate/engines/types.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { type LegSwitch, steeredCall, type TurnSwitches } from "../../src/harness-seed/loop/chat-steer.ts";
-import { steeredTurnPrompt, withSteers } from "../../src/harness-seed/loop/chat-steer-prompts.ts";
 import { changesLoop } from "../../src/harness-seed/loop/steer-switch.ts";
 import {
   afterCommandPrompt,
@@ -153,7 +152,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     assert.deepEqual(
       calls[1],
       {
-        prompt: switchedTurnPrompt(["LOOP IS ON"], steeredTurnPrompt(["make it in the loop"])),
+        prompt: switchedTurnPrompt(["LOOP IS ON"], "make it in the loop"),
         resume: "s1",
         images: [],
         on: "loop",
@@ -186,7 +185,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await q.send("let codex finish it", { engine: "codex" });
     await until(() => q.state("build the boss")?.state === "handled");
     assert.deepEqual(calls[1], {
-      prompt: switchedTurnPrompt(["CODEX TAKES OVER"], withSteers("FRESH BRIEF", ["let codex finish it"])),
+      prompt: switchedTurnPrompt(["CODEX TAKES OVER"], "FRESH BRIEF\n\nlet codex finish it"),
       resume: null,
       images: [],
       on: "codex",
@@ -280,7 +279,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
       calls.slice(1),
       [
         { prompt: "/review", resume: "s1" },
-        { prompt: afterCommandPrompt([], true), resume: "s1" },
+        { prompt: afterCommandPrompt(true), resume: "s1" },
       ],
       "the command alone, then the work it cut short carried on",
     );
@@ -312,7 +311,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await until(() => q.state("build the boss")?.state === "handled");
     assert.deepEqual(
       calls.slice(1).map((c) => c.prompt),
-      ["/compact", afterCommandPrompt([], true)],
+      ["/compact", afterCommandPrompt(true)],
     );
     q.queue.stop();
   });
@@ -343,7 +342,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await until(() => q.state("build the boss")?.state === "handled");
     assert.deepEqual(
       calls.slice(1).map((c) => c.prompt),
-      ["/review", "/review", afterCommandPrompt(["and fog"], true)],
+      ["/review", "/review", "and fog", afterCommandPrompt(true)],
     );
     q.queue.stop();
   });

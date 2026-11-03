@@ -116,6 +116,7 @@ import {
 import { StudioTool, studioToolName } from "./studio-tool-prompts.ts";
 import { limitResetMs } from "./limit-reset.ts";
 import { JUDGE_RULES, dynamicToolsNote, offLimitsNote, planModeNote, readOnlyNote } from "./codex-prompts.ts";
+import { textAsSent } from "./genex-mark-prompts.ts";
 import { engineMode, PermissionMode } from "../../shared/permissions.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
@@ -1112,7 +1113,7 @@ export class CodexEngine implements Engine {
     // A chat session in Plan is told it plans, not that it tests a build.
     const planScratch = chatMode(request) === PermissionMode.Plan ? ctx.scratch : null;
     return [
-      request.prompt,
+      textAsSent({ text: request.prompt, from: request.from }),
       ctx.bridge?.instructions() ?? "",
       ctx.turn?.declaresTools ? dynamicToolsNote(bridgeTools(request).map((tool) => tool.name)) : "",
       planScratch

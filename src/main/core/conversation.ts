@@ -15,6 +15,7 @@ import {
   runSnapshot,
 } from "../../shared/chat-run.ts";
 import { CustomEvent, customEventData, customRecord, type AnyCustomPayload } from "../../shared/custom-events.ts";
+import { MessageFrom } from "../../shared/engine-requests.ts";
 import { EventKind, ThreadKind, type ConversationRecord, type EventEnvelope } from "../../shared/event-log.ts";
 import { t } from "../../shared/i18n.ts";
 import { crossesCompletionEngine } from "../../shared/model-roles.ts";
@@ -195,14 +196,13 @@ function chatSteers(events: readonly EventEnvelope[]): AnyCustomPayload[] {
   return payloadsOf(events, CustomEvent.RunSteering).filter((steer) => steer.how !== SteerDelivery.Lead);
 }
 
-/** A message's pictures as saved in its game: every file they are, and the ones it added. */
+/** A message's pictures as saved in its game: the files it added. */
 interface SavedPictures {
-  files: string[];
   added: string[];
 }
 
 /** No pictures saved: none sent, no game to save them in, or the save failed. */
-const NO_PICTURES: SavedPictures = Object.freeze({ files: [], added: [] }) as SavedPictures;
+const NO_PICTURES: SavedPictures = Object.freeze({ added: [] }) as SavedPictures;
 
 /** Does a game thread's next message go to a plan review first? */
 function needsPlanReview(options: ComposerSendOptions, waiting: PlanReview | undefined): boolean {
@@ -309,7 +309,6 @@ export class ConversationService {
       extraReads,
       stills,
       references: pictures.added,
-      pictureFiles: pictures.files,
     });
     const refusal = this.#commissionRefusal(sendOptions);
     if (refusal) {
@@ -412,8 +411,7 @@ export class ConversationService {
   /**
    * The mood board becomes durable project data the moment it commissions a run — the next
    * interview finds it in <project>/references/ even if the chat is long gone. Returns, relative to
-   * the game, every file the pictures are saved as (`files`: a run's lead reads them there, a picture
-   * sent before included) and the files this message added (`added`), which rewinding it takes back.
+   * the game, the files this message added (`added`), which rewinding it takes back.
    */
   async #saveMoodBoard(project: string | undefined, options: ComposerSendOptions): Promise<SavedPictures> {
     const frames = options.frames ?? options.autopilot?.frames;
@@ -422,11 +420,8 @@ export class ConversationService {
     try {
       const saved = await this.#core.saveReferenceFrames(project, frames);
       const relative = (file: string) => toPosixRelative(path.relative(dir, file));
-      return {
-        files: saved.map((entry) => relative(entry.file)),
-        // Only files this message added: a picture sent before is the game's already.
-        added: saved.filter((entry) => entry.created).map((entry) => relative(entry.file)),
-      };
+      // Only files this message added: a picture sent before is the game's already.
+      return { added: saved.filter((entry) => entry.created).map((entry) => relative(entry.file)) };
     } catch (err) {
       this.#core.options.onLog?.(`[core] mood board save failed: ${errorMessage(err)}`, "stderr");
       return NO_PICTURES;
@@ -555,8 +550,6 @@ export class ConversationService {
       extraReads: string[];
       stills: ReferenceFrame[] | undefined;
       references: string[];
-      /** Every file its pictures are saved as in the game, new or already there: a run's lead reads them. */
-      pictureFiles: string[];
     },
   ): DispatchAction {
     const { project, newProject, studioThread } = target;
@@ -577,8 +570,9 @@ export class ConversationService {
       ...(projectDir ? { projectDir } : {}),
       ...(extraReads.length ? { extraReads } : {}),
       ...(stills?.length ? { stills } : {}),
-      ...(context.pictureFiles.length ? { pictureFiles: context.pictureFiles } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
+      // Words the chat wrote itself, or a plugin's ask it shows: the agent reads them as Genex's.
+      ...(options.origin || options.from === MessageFrom.Genex ? { from: MessageFrom.Genex } : {}),
     };
   }
 

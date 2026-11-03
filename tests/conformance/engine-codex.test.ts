@@ -30,6 +30,8 @@ import { StudioBridge } from "../../src/substrate/engines/studio-bridge.ts";
 import { type DelegatePermissions, EngineError, type WorkerSeat } from "../../src/substrate/engines/types.ts";
 import { NeverTouchKind } from "../../src/substrate/engines/never-touch.ts";
 import { planModeNote } from "../../src/substrate/engines/codex-prompts.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { spawn } from "node:child_process";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -172,6 +174,19 @@ describe("codex engine", () => {
     assert.equal(result.stopReason, "stopped");
     assert.equal(result.sessionId, "stop-session");
     assert.equal(result.summary, "Partial work");
+  });
+
+  it("a prompt Genex wrote reads under the non-user mark; the person's words and a brief go in as written", async () => {
+    const { fn, seen } = fakeExec(successRun);
+    const { engine, root } = await signedInEngine(fn);
+    const cwd = path.join(root, "game");
+    await mkdir(cwd, { recursive: true });
+    await engine.delegate({ prompt: "The build landed. Make the cover.", from: MessageFrom.Genex, cwd });
+    await engine.delegate({ prompt: "stop building", from: MessageFrom.Person, cwd });
+    await engine.delegate({ prompt: "build pong", cwd });
+    assert.ok(seen[0]!.prompt.startsWith(`${GENEX_MARK}\nThe build landed. Make the cover.`), seen[0]!.prompt);
+    assert.ok(seen[1]!.prompt.startsWith("stop building"));
+    assert.ok(seen[2]!.prompt.startsWith("build pong"));
   });
 
   it("runs the contractor sandboxed, non-interactive, and on the studio's own credential home", async () => {

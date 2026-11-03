@@ -30,6 +30,8 @@ import {
 } from "../../src/substrate/engines/opencode-cli.ts";
 import { translateOpenCodeEvent } from "../../src/substrate/engines/opencode-events.ts";
 import { EngineError, type DelegateEvent } from "../../src/substrate/engines/types.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
+import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import { ProcessSandbox } from "../../src/substrate/spawn.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -325,6 +327,19 @@ describe("OpenCode sessions", () => {
     } finally {
       await sandbox.dispose();
     }
+  });
+
+  it("a prompt Genex wrote reads under the non-user mark; the person's words go in as written", async () => {
+    const { engine, seen } = await engineWith(async function* () {
+      yield* replay(await events("opencode-run-1.18.jsonl"));
+    });
+    const cwd = await game();
+    await engine.refreshModels(true);
+    const asked = { cwd, model: "opencode/big-pickle" };
+    await engine.delegate({ ...asked, prompt: "The build landed. Make the cover.", from: MessageFrom.Genex });
+    await engine.delegate({ ...asked, prompt: "stop building", from: MessageFrom.Person });
+    assert.ok(seen[0]?.prompt.startsWith(`${GENEX_MARK}\nThe build landed. Make the cover.`), seen[0]?.prompt);
+    assert.match(seen[1]?.prompt ?? "", /^stop building/);
   });
 
   it("builds from the prompt on stdin, mirrors every event, and adds up the run's tokens and price", async () => {

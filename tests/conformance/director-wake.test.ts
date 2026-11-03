@@ -154,76 +154,53 @@ const bookmarked = (payload: Record<string, unknown>) => ({
 describe("one session: whose session the lead is (lead-session.ts)", () => {
   const run = { runId: "run_s", project: "plaza", goal: "a dusk plaza", engine: "claude-code", model: "opus" };
 
-  it("O1. continues the chat's session only on the lead's engine, game and model; otherwise says whose session it keeps", () => {
-    const seat = (events: unknown[], priorJournal: unknown = null) =>
-      leadSeat({
-        events: events as never,
-        run: run as never,
-        folder: "/games/plaza",
-        priorJournal: priorJournal as never,
-      });
+  // Flipped (one session per chat): a lead never keeps a session of its own beside the chat's.
+  it("O1. the lead is always the chat's session: it continues it on the lead's engine and game, whatever the model", () => {
+    const seat = (events: unknown[]) =>
+      leadSeat({ events: events as never, run: run as never, folder: "/games/plaza" });
     const chat = bookmarked({ project: "plaza", engine: "claude-code", sessionId: "chat-1", model: "opus" });
     const rows = [
-      { label: "the chat's own session", events: [chat], want: { sessionId: "chat-1", chatSession: true } },
+      { label: "the chat's own session", events: [chat], want: { sessionId: "chat-1" } },
       {
         label: "a bookmark from before one session names no model",
         events: [bookmarked({ project: "plaza", engine: "claude-code", sessionId: "chat-0" })],
-        want: { sessionId: "chat-0", chatSession: true },
+        want: { sessionId: "chat-0" },
       },
       {
         label: "no bookmark: a fresh session that becomes the chat's",
         events: [],
-        want: { sessionId: null, chatSession: true },
+        want: { sessionId: null },
       },
       {
-        label: "another engine's session: the lead's own, the chat's left alone",
+        label: "another engine's session: a fresh one on the run's engine becomes the chat's",
         events: [bookmarked({ project: "plaza", engine: "codex", sessionId: "chat-codex", model: null })],
-        want: { sessionId: null, chatSession: false },
+        want: { sessionId: null },
       },
       {
-        label: "another model",
+        label: "another model: the same session, the lead's model its model option",
         events: [bookmarked({ project: "plaza", engine: "claude-code", sessionId: "chat-sonnet", model: "sonnet" })],
-        want: { sessionId: null, chatSession: false },
+        want: { sessionId: "chat-sonnet" },
       },
       {
         label: "another game's session",
         events: [bookmarked({ project: "other", engine: "claude-code", sessionId: "chat-other", model: "opus" })],
-        want: { sessionId: null, chatSession: false },
+        want: { sessionId: null },
       },
     ];
     for (const { label, events, want } of rows) {
       const got = seat(events);
-      assert.deepEqual({ sessionId: got.sessionId, chatSession: got.chatSession }, want, label);
+      assert.deepEqual({ sessionId: got.sessionId }, want, label);
       assert.equal(got.folder, "/games/plaza", label);
+      assert.equal(got.model, "opus", label);
     }
-    // A Resume of a lead that kept a session of its own goes on in it; one that was the chat's does not come back.
-    const other = [bookmarked({ project: "plaza", engine: "codex", sessionId: "chat-codex", model: null })];
-    const own = { director: { sessionId: "lead-own", lead: { chatSession: false } } };
-    assert.equal(seat(other, own).sessionId, "lead-own");
-    assert.equal(
-      seat(other, { director: { sessionId: "lead-was-chat", lead: { chatSession: true } } }).sessionId,
-      null,
-    );
-    assert.equal(
-      seat(other, { director: { sessionId: "pre-one-session" } }).sessionId,
-      null,
-      "an older run's director session sat elsewhere",
-    );
     // The chat's latest session wins, whatever engine an older one was on.
+    const other = bookmarked({ project: "plaza", engine: "codex", sessionId: "chat-codex", model: null });
     const latest = chatBookmark([
       bookmarked({ engine: "claude-code", sessionId: "old", model: "opus" }),
-      other[0],
+      other,
     ] as never);
     assert.equal(latest?.sessionId, "chat-codex");
-    assert.equal(
-      continuesChat(
-        { sessionId: "s", engine: "claude-code", model: "default", modelKnown: true },
-        { ...run, model: undefined } as never,
-        undefined,
-      ),
-      true,
-      "the engine's default is no model",
-    );
+    assert.equal(continuesChat(latest!, run as never), false, "another engine's session is not continued");
   });
 
   it("O2. a fresh lead is told the chat's latest messages, clipped, oldest first", () => {
@@ -239,22 +216,17 @@ describe("one session: whose session the lead is (lead-session.ts)", () => {
     assert.equal(chatSoFar([]), "", "no chat, nothing said");
   });
 
-  it("O3. the lead's session is written to the chat's bookmark only when it is the chat's and it changed", async () => {
+  it("O3. the lead's session is written to the chat's bookmark only when it changed", async () => {
     const appended: unknown[] = [];
     const ctx = { call: async (_method: string, params: { batch: unknown[] }) => appended.push(...params.batch) };
     const seat = leadSeat({ events: [], run: run as never, folder: "/games/plaza" });
     await bookmarkLead(ctx as never, { threadId: "t", run: run as never, seat }, "lead-1");
     await bookmarkLead(ctx as never, { threadId: "t", run: run as never, seat }, "lead-1");
-    await bookmarkLead(
-      ctx as never,
-      { threadId: "t", run: run as never, seat: { ...seat, chatSession: false } },
-      "lead-2",
-    );
     assert.deepEqual(appended, [
       {
         type: "custom",
         event_type: "contractor_session",
-        payload: { project: "plaza", engine: "claude-code", sessionId: "lead-1", model: "opus" },
+        payload: { project: "plaza", engine: "claude-code", sessionId: "lead-1" },
       },
     ]);
   });

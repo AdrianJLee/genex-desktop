@@ -501,12 +501,11 @@ export interface PlanReviewPayload extends RunScope {
   game?: { kind?: string | null } | null;
 }
 
-/** The chat's contractor session: what its next turn resumes, and the model it was opened on. */
+/** The chat's contractor session: what its next turn resumes, on which engine and game. */
 export interface ContractorSessionPayload {
   project?: string;
   engine?: string;
   sessionId?: string;
-  model?: string | null;
 }
 
 /** What a delegated build reported of itself, as a chat record keeps it (`DelegateResult`). */

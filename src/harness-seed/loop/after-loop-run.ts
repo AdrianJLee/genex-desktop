@@ -68,9 +68,7 @@ export interface AfterLoopRun {
   /** The turn runs on the engine its lead ran on: only there may it resume or reopen the build. */
   onLeadEngine: boolean;
   /**
-   * The model the turn runs on: the message's, else on the lead's engine the one its lead ran on —
-   * so a Resume's lead still continues the session (lead-session.ts `continuesChat` compares the
-   * bookmark's model).
+   * The model the turn runs on: the message's, else on the lead's engine the one its lead ran on.
    */
   model: string | null;
   /** The chat's message the session answers: the run's controls act for it (a resume records it). */

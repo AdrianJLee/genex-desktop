@@ -183,7 +183,7 @@ Tests that read local projects or open the network are skipped unless opted in:
 local Ollama probes (on Windows also Local Blender's and Godot's real downloads and sandboxed
 jobs, `blender-windows-live.test.ts` and `godot-windows-live.test.ts`), `STUDIO_GODOT_LIVE=1` for the Godot plugin against this Mac's own Godot
 (`godot-live.test.ts`), `STUDIO_CLAUDE_CLI_TESTS=1` for the real Claude Code CLI against
-`fake-anthropic.ts` (`claude-studio-shell-cli.test.ts`, `claude-tool-loading.test.ts`),
+`fake-anthropic.ts` (`claude-studio-shell-cli.test.ts`, `claude-tool-loading.test.ts`, `claude-steer-cli.test.ts`),
 `STUDIO_CODEX_CLI_TESTS=1` for the real Codex CLI against `fake-openai-responses.ts`
 (`codex-sandbox-cli.test.ts`), `STUDIO_GROK_CLI_TESTS=1` for the real Grok Build CLI in the real
 sandbox against `fake-xai-responses.ts` (`grok-cli-live.test.ts`; `STUDIO_GROK_BIN` names one, which

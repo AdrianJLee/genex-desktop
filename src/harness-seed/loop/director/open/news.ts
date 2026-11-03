@@ -11,6 +11,7 @@
  */
 import type { DelegateResult } from "../../../types/host-api.d.ts";
 import { HostMethod } from "../../host-methods.ts";
+import { MessageFrom } from "../../steer-delivery.ts";
 import { closeUnderWay } from "../close-latch.ts";
 import { settleCapLines, steerCapLine } from "../cap-lines.ts";
 import { StopReason } from "../../outage.ts";
@@ -80,7 +81,8 @@ export async function noteWorkerQuestions(loopRun: LoopRun, now: number): Promis
 
 /** Says one thing into the turn under way, never cutting it short; whether the session took it. */
 async function steer(loopRun: LoopRun, id: string, text: string): Promise<boolean> {
-  const params = { threadId: loopRun.threadId, into: loopRun.run.runId, messages: [{ id, text }], interrupt: false };
+  const messages = [{ id, text, from: MessageFrom.Genex }];
+  const params = { threadId: loopRun.threadId, into: loopRun.run.runId, messages, interrupt: false };
   const answer = await loopRun.ctx.call(HostMethod.EngineSteer, params).catch(() => null);
   return Boolean(answer?.accepted?.includes(id));
 }

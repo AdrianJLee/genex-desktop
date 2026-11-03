@@ -1,8 +1,9 @@
 import { messageQueueState } from "./message-queue.ts";
 import type { AnyRecord, HarnessCtx, HarnessEvent } from "../types/harness.d.ts";
+import type { SteerMessage } from "../types/host-api.d.ts";
 import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent, RunState, SteeringSource } from "./run-events.ts";
-import { SteerDelivery } from "./steer-delivery.ts";
+import { fromThePerson, MessageFrom, SteerDelivery } from "./steer-delivery.ts";
 
 /** What a `run_control` record asks of a run. Persisted: never rename a value. */
 export const RunControlAction = {
@@ -69,6 +70,16 @@ export function conversationThrough(events: readonly HarnessEvent[], messageId?:
 /** One steer the user sent a run: the event it came in, its payload, and when the event was logged. */
 type Steer = AnyRecord & { id: string; loggedAt?: string | null };
 
+/** A steer as a reader takes it: its words, who wrote it, and the artifact the chat keeps its pictures in. */
+export type SaidSteer = Pick<SteerMessage, "text" | "from"> & { attachmentsArtifact?: string };
+
+/** A steer's words, Genex when Genex wrote it, and where its pictures are kept when it brought any (live-chat.ts). */
+const saidOf = (steer: Steer): SaidSteer => ({
+  text: String(steer.text ?? ""),
+  ...(fromThePerson(steer) ? {} : { from: MessageFrom.Genex }),
+  ...(typeof steer.attachmentsArtifact === "string" ? { attachmentsArtifact: steer.attachmentsArtifact } : {}),
+});
+
 /** What a run's log says so far: whether this session was asked to wrap up, the steers, and who got them. */
 interface InboxFold {
   finishing: boolean;
@@ -101,8 +112,7 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   const d = event?.data;
   if (d?.type !== EventKind.Custom) return;
   const p = d.payload ?? {};
-  // A message a run's lead never heard went back to the chat, which answers it (live chat); so does
-  // one its lead was only told in its wrap-up, which the chat takes up once the run has closed.
+  // A message a run's lead never heard went back to the chat, which answers it (live chat).
   const chatAnswers =
     d.event_type === RunEvent.CoordinatorMessageRequeued || d.event_type === RunEvent.CoordinatorMessageProcessing;
   if (chatAnswers) settleLeadSteers(fold, p.messageId);
@@ -111,7 +121,8 @@ function absorbInboxEvent(fold: InboxFold, event: HarnessEvent, runId: string): 
   if (d.event_type === RunEvent.RunControl && p.action === RunControlAction.Finish) fold.finishing = true;
   // The director's own worker_steer events are steering too — but its own, not the
   // user's (a director must never ask the user to repeat an instruction it wrote itself).
-  const userSteer = d.event_type === RunEvent.RunSteering && p.text?.trim() && p.source !== SteeringSource.Director;
+  const said = Boolean(p.text?.trim() || p.attachmentsArtifact);
+  const userSteer = d.event_type === RunEvent.RunSteering && said && p.source !== SteeringSource.Director;
   if (userSteer) fold.instructions.push({ id: event.id, ...p, loggedAt: event.created_at ?? null });
   if (d.event_type === RunEvent.RunSteeringDelivered) absorbDelivery(fold, p);
 }
@@ -217,27 +228,28 @@ export function createRunInbox(
     }
     for (const item of selected) fold.consumed.add(item.id);
   }
+  /**
+   * The steers for one worker's brief (`facetId`) or the build's (none): the unaddressed ones and
+   * those addressed to it, every one so far unless only the ones this inbox has not answered
+   * with yet are asked for. Only the ones no session handed over yet are recorded as handed over.
+   */
+  async function steers(facetId?: string, consume = true, { onlyNew = false }: { onlyNew?: boolean } = {}) {
+    await drain();
+    const address = facetId ?? BUILD_ADDRESS;
+    const selected = fold.instructions.filter((i) => !i.facetId || i.facetId === facetId);
+    const untold = selected.filter((i) => !told.has(deliveryKey(i.id, address)) && !fold.settledByLead.has(i.id));
+    if (consume) await consumeFor(selected, address);
+    return (onlyNew ? untold : selected).map(saidOf);
+  }
   return {
     async finishing() {
       await drain();
       return fold.finishing;
     },
-    /**
-     * The steers for one worker's brief (`facetId`) or the build's (none): the unaddressed ones and
-     * those addressed to it, every one so far unless only the ones this inbox has not answered
-     * with yet are asked for. Only the ones no session handed over yet are recorded as handed over.
-     */
-    async steering(
-      facetId?: string,
-      consume = true,
-      { onlyNew = false }: { onlyNew?: boolean } = {},
-    ): Promise<string[]> {
-      await drain();
-      const address = facetId ?? BUILD_ADDRESS;
-      const selected = fold.instructions.filter((i) => !i.facetId || i.facetId === facetId);
-      const untold = selected.filter((i) => !told.has(deliveryKey(i.id, address)) && !fold.settledByLead.has(i.id));
-      if (consume) await consumeFor(selected, address);
-      return (onlyNew ? untold : selected).map((i) => i.text);
+    steers,
+    /** `steers`' words alone: a picture sent without words has none. */
+    async steering(facetId?: string, consume = true, options: { onlyNew?: boolean } = {}): Promise<string[]> {
+      return (await steers(facetId, consume, options)).map((said) => said.text).filter(Boolean);
     },
     /**
      * The user's steers addressed to one worker (`facetId`), and only those. `steering(undefined)`

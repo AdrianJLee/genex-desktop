@@ -13,6 +13,7 @@
 import { setTimeout as idle } from "node:timers/promises";
 import type { DelegateResult } from "../../types/host-api.d.ts";
 import { HostMethod } from "../host-methods.ts";
+import { MessageFrom } from "../steer-delivery.ts";
 import { minutes, SECOND_MS } from "../time.ts";
 import type { CapClock } from "../time-cap.ts";
 import { TIME_CAP_WORDS } from "../time-cap-prompts.ts";
@@ -111,7 +112,7 @@ export async function steerCapLine(loopRun: LoopRun, now: number): Promise<void>
   const params = {
     threadId: loopRun.threadId,
     into: loopRun.run.runId,
-    messages: [{ id, text: lineText(loopRun, line, now) }],
+    messages: [{ id, text: lineText(loopRun, line, now), from: MessageFrom.Genex }],
     interrupt,
   };
   const answer = await loopRun.ctx.call(HostMethod.EngineSteer, params).catch(() => null);

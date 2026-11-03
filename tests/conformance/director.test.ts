@@ -292,7 +292,7 @@ function finishingLoopRun(over: { finishing?: boolean; hold?: Promise<void> } = 
     softDeadline: Date.now() + 60 * 60_000,
     report: {},
     state,
-    inbox: { finishing: async () => over.finishing === true, steering: async () => [] },
+    inbox: { finishing: async () => over.finishing === true, steers: async () => [], steering: async () => [] },
     closeTheLoopRun: async (options: Record<string, unknown>) => {
       closes.push(options);
       await over.hold;

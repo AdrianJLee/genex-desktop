@@ -43,6 +43,7 @@ import type {
   DelegateResult,
   LiveToolResult,
   LiveToolSpec,
+  MessageFrom,
   SteerMessage,
   StudioToolSpec,
   ToolDefinition,
@@ -207,6 +208,11 @@ export interface DelegateRequest {
   contextPolicy?: import("../../shared/context.ts").ContextPolicy;
   /** The brief — written by the harness, improved by SkillOpt. */
   prompt: string;
+  /**
+   * Who wrote `prompt` (`HarnessDelegateParams.from`): the person's words alone, or Genex's own
+   * message, which the engine shows as not the person's (`genex-mark-prompts.ts`). Absent: a brief.
+   */
+  from?: MessageFrom;
   /**
    * What the session should know for its whole life (where it runs, its plugins and their
    * guidance), said once beside the engine's own system prompt instead of in every message. An

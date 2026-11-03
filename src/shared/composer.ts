@@ -1,7 +1,7 @@
 import type { AutopilotCommission, LoopCommission, MessageOrigin, ReferenceFrame } from "./protocol.ts";
 import type { ModelPreferences } from "./model-preferences.ts";
 import type { MentionRef } from "./prompt-mention.ts";
-import type { EngineFailureKind } from "./engine-requests.ts";
+import type { EngineFailureKind, MessageFrom } from "./engine-requests.ts";
 /** One send contract from the renderer through preload to the host. */
 export interface ComposerSendOptions {
   thread?: string;
@@ -22,6 +22,11 @@ export interface ComposerSendOptions {
   clientId?: string;
   /** Words the chat wrote itself rather than the user; absent for the user's own. */
   origin?: MessageOrigin;
+  /**
+   * Genex wrote these words, though the chat shows them (a plugin's "asks:"): the agent reads them
+   * as not the person's. A message with an `origin` is Genex's without it.
+   */
+  from?: MessageFrom;
 }
 /**
  * Why a message the composer sent did not reach its chat: the send's IPC failure carries it as its

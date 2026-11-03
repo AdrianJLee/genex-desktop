@@ -18,6 +18,7 @@ import { HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
 import {
   DelegationRefusal,
   EngineFailureKind,
+  isMessageFrom,
   StopReason,
   type TurnFailure,
   turnFailure,
@@ -2344,6 +2345,8 @@ export class DelegationService {
       contextPolicy: (await this.#core.contextPreferences.get(engineId, p.model ?? "", p.threadId)).policy,
       ...(await this.#settingsAndReads(p, session)),
       ...this.#brief(p, session, tools, reach, engineId),
+      // Who wrote the prompt: each engine says it its own way (claude-steer.ts, genex-mark-prompts.ts).
+      ...(isMessageFrom(p.from) ? { from: p.from } : {}),
       cwd: target.workCwd,
       signal: session.abort.signal,
       ...(p.model ? { model: p.model } : {}),

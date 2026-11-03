@@ -60,7 +60,7 @@ export const NOTE_SPEC: LiveToolSpec = {
 export const WRAP_UP_SPEC: LiveToolSpec = {
   name: DirectorTool.WrapUp,
   description:
-    "The user asked to finish or wrap up: call this first, quoting them. No worker starts after it; the wrap-up starts when this turn ends. To stop at once: finish user_asked.",
+    "The person asked to stop or finish the build: call this first, quoting their words. No worker starts after it; the wrap-up starts when this turn ends. To stop at once: finish user_asked.",
   parameters: {
     type: "object",
     properties: {

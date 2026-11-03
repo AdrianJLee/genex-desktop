@@ -21,6 +21,7 @@ import { type GenexFixtureApi, startGenexFixtureApi } from "../helpers/genex-fix
 import {
   hasNativeCommand,
   nativePublishArgs,
+  takesReplaceNativePage,
   nativeUploads,
   sendNativeBuild,
   sentBuild,
@@ -63,6 +64,15 @@ const CLIP_STALE = {
 };
 /** The archive hash `genex native publish --json` answers for the stand-in's app. */
 const ARCHIVE_SHA256 = "3f2a9c1d0e4b".padEnd(64, "7");
+
+describe("which CLI lets a web build replace a page of apps", () => {
+  it("is release 1.36.20 or newer, which knows --replace-native-page", () => {
+    for (const version of ["1.36.20", "1.36.21-dev.1", "1.37.0"])
+      assert.equal(takesReplaceNativePage(version), true, version);
+    for (const version of ["1.36.19", "1.36.20-dev.3", "1.36.18", "1.36.13", "latest", ""])
+      assert.equal(takesReplaceNativePage(version), false, version);
+  });
+});
 
 describe("which CLI sends apps", () => {
   it("is release 1.36.11 or newer: 1.36.10 has no `genex native`, and a dev build may predate it", () => {

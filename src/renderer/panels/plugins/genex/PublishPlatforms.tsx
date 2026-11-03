@@ -6,7 +6,9 @@
  * game's web row says it has none, and its rows for other systems say where they are packaged. A ready app goes with Publish once its web build is
  * public: the line under the rows says so, and its row then says it is being sent, is on Genex, or
  * was not sent (with why, under the rows). While Studio's Genex CLI cannot send apps, a built one
- * says "Coming soon" and its players get the web version. A web game with no app shows none of this.
+ * says "Coming soon" and its players get the web version. A game with no web build that Genex still
+ * plays one of (a page of mockups once sent as an Unreal game's) says so on its web row, with Remove,
+ * which takes it off Genex so the page shows the apps. A web game with no app shows none of this.
  * An Unreal game's Windows app on a Mac, which Unreal can't package here, offers "Build on Genex" once
  * the game has a page on Genex: Genex builds it on its own computers, and the row says how that goes.
  */
@@ -31,6 +33,7 @@ import {
   makesApps,
   makeWebAsk,
   rebuildAsk,
+  replacesAppsPage,
   PlatformEnd,
   type PlatformRow,
   platformRows,
@@ -103,16 +106,34 @@ const CLOUD_ENDS: ReadonlySet<PlatformEnd> = new Set([
 const askLabel = (row: PlatformRow, label: (name: string) => string): string =>
   row.target === PublishTarget.Web ? WORDS.makeWebLabel : label(row.name);
 
-/** What a row ends with: a note ("Coming soon", "On Genex"…), an ask for the agent, or that the agent was asked. */
+/** The web row's Remove: takes the web version Genex still plays off it, once the native dialog confirms. */
+function RemoveWeb({ onRemove }: { onRemove: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="genex-publish-platform-make"
+      aria-label={WORDS.removeWebLabel}
+      data-publish-platform-remove-web
+      onClick={onRemove}
+    >
+      {WORDS.removeWeb}
+    </button>
+  );
+}
+
+/** What a row ends with: a note ("Coming soon", "On Genex"…), an ask for the agent, that the agent was asked, or Remove. */
 function End({
   row,
   asked,
   onMake,
+  onRemoveWeb,
 }: {
   row: PlatformRow;
   asked: boolean;
   onMake: (target: PublishTarget, end: PlatformEnd) => void;
+  onRemoveWeb: () => void;
 }): JSX.Element | null {
+  if (row.end === PlatformEnd.RemoveWeb) return <RemoveWeb onRemove={onRemoveWeb} />;
   const note = NOTE[row.end];
   if (note)
     return (
@@ -148,10 +169,12 @@ function Row({
   row,
   asked,
   onMake,
+  onRemoveWeb,
 }: {
   row: PlatformRow;
   asked: boolean;
   onMake: (target: PublishTarget, end: PlatformEnd) => void;
+  onRemoveWeb: () => void;
 }): JSX.Element {
   return (
     <li className="genex-publish-platform" data-publish-platform={row.target} data-state={row.state}>
@@ -161,7 +184,7 @@ function Row({
         <span className="genex-publish-platform-detail">{row.detail}</span>
       </span>
       {row.size && <span className="genex-publish-platform-size">{row.size}</span>}
-      <End row={row} asked={asked} onMake={onMake} />
+      <End row={row} asked={asked} onMake={onMake} onRemoveWeb={onRemoveWeb} />
     </li>
   );
 }
@@ -185,6 +208,8 @@ export function PublishPlatforms({
   shown,
   native,
   onGenex = false,
+  hostedWeb,
+  onRemoveWeb,
 }: {
   project: string;
   /** The game folder's platforms as the Genex plugin can send them (`gateByPlugin`), null until read. */
@@ -194,6 +219,10 @@ export function PublishPlatforms({
   native?: GenexNativeRecord | undefined;
   /** The game has a page on Genex, which an app Genex builds goes on. */
   onGenex?: boolean;
+  /** Whether Genex's page for the game plays a web version, from the publish record (`hostedWeb`); absent while unknown. */
+  hostedWeb?: boolean | undefined;
+  /** The web row's Remove: the Genex plugin's `publish-remove-web`. */
+  onRemoveWeb: () => void;
 }): JSX.Element | null {
   const facts = useLibrary((s) => s.games.find((g) => g.name === project)?.facts);
   const engineGame =
@@ -205,7 +234,8 @@ export function PublishPlatforms({
   const [refused, setRefused] = useState<string | null>(null);
   if (!shown || !platforms || !listsPlatforms(platforms, engineGame)) return null;
   const webOffer = webOfferFor(facts ?? []);
-  const reach = reachLine(platforms, webOffer);
+  const reach = reachLine(platforms, webOffer, hostedWeb === true);
+  const replaces = replacesAppsPage(platforms, native, hostedWeb);
   const listing = listingLine(platforms, native);
   const rows = platformRows(
     platforms,
@@ -214,6 +244,7 @@ export function PublishPlatforms({
     webOffer,
     appsMadeHere(facts ?? [], hostPlatform()),
     onGenex,
+    hostedWeb === true,
   );
   const builds = (target: PublishTarget): number =>
     native?.cloud?.builds.filter((build) => build.platform === target).length ?? 0;
@@ -237,7 +268,13 @@ export function PublishPlatforms({
     <div className="genex-publish-platforms" data-genex-publish-platforms>
       <ul aria-label={WORDS.label}>
         {rows.map((row) => (
-          <Row key={row.target} row={row} asked={askedOf(row.target) && !isAnswered(row)} onMake={make} />
+          <Row
+            key={row.target}
+            row={row}
+            asked={askedOf(row.target) && !isAnswered(row)}
+            onMake={make}
+            onRemoveWeb={onRemoveWeb}
+          />
         ))}
       </ul>
       {failureLines(platforms, native).map((line) => (
@@ -248,6 +285,11 @@ export function PublishPlatforms({
       {listing && <p className="genex-publish-platform-failure">{listing}</p>}
       {refused && <p className="genex-publish-platform-failure">{refused}</p>}
       {reach && <p className="genex-publish-reach">{reach}</p>}
+      {replaces && (
+        <p className="genex-publish-reach" data-publish-replaces-apps>
+          {WORDS.replacesApps}
+        </p>
+      )}
     </div>
   );
 }

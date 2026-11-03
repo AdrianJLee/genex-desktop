@@ -5803,4 +5803,15 @@ export default {
   "Open install guide": "打开安装指南",
   "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
     "在 Windows 上，OpenCode 需按指南用 Chocolatey、Scoop 或 npm 安装。装好后再检查一次。",
+  "A web version is on Genex": "Genex 上有网页版",
+  "Genex keeps this web version: the game has no app on Genex yet, so players would have nothing to play.":
+    "Genex 会保留这个网页版：这款游戏在 Genex 上还没有应用，删掉后玩家就没东西可玩了。",
+  "Remove the web version from Genex": "从 Genex 移除网页版",
+  "The game’s page plays its web version until you remove it, so players don’t see the apps.":
+    "在你移除网页版之前，游戏页面会一直播放它，玩家看不到应用。",
+  "Publish makes this web version the game’s page, in place of its apps.":
+    "发布后，这个网页版会取代应用，成为游戏的页面。",
+  "This game was taken down, so Genex keeps its web version for now.":
+    "这款游戏已被下架，所以 Genex 暂时保留它的网页版。",
+  "Genex couldn’t finish removing the web version. Press Remove again.": "Genex 没能完成移除网页版。请再按一次“移除”。",
 } satisfies LocaleCatalog;

@@ -295,7 +295,8 @@ const ACTIONS: Record<string, Action> = {
     // The dialog names the game's apps by their place in its folder; only real builds inside it go.
     const apps = await appsToSend(ctx, args.native, service);
     const exportStage = () => service(PluginService.ExportStage, {});
-    return genex.publishGallery(ctx.project, exportStage, args.title, apps, remixChoice(args, ctx));
+    const replaceNativePage = args.replaceNativePage === true;
+    return genex.publishGallery(ctx.project, exportStage, args.title, apps, remixChoice(args, ctx), replaceNativePage);
   },
   [GenexAction.PublishApps]: async (genex, args, ctx, service) => {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
@@ -306,6 +307,7 @@ const ACTIONS: Record<string, Action> = {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
     return genex.cloudBuild(ctx.project, args.platform, ctx.directory);
   },
+  [GenexAction.PublishRemoveWeb]: withProject((genex, project) => genex.publishRemoveWeb(project)),
   [GenexAction.PublishAllowUpload]: withProject((genex, project, args) =>
     genex.publishAllowNewUpload(project, String(args.jobId ?? "")),
   ),

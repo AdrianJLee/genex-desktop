@@ -50,6 +50,8 @@ export const PlatformEnd = {
   CloudRetry: "cloud-retry",
   /** Genex is building it now. */
   Building: "building",
+  /** The web row of a game with no web build that Genex still plays one of: it can be taken off. */
+  RemoveWeb: "remove-web",
 } as const;
 export type PlatformEnd = (typeof PlatformEnd)[keyof typeof PlatformEnd];
 
@@ -156,9 +158,13 @@ function nativeEnd(row: PublishPlatform, native: GenexNativeRecord | undefined):
   return row.uploads ? sendEnd(row, native) : PlatformEnd.Soon;
 }
 
-/** The web row's second line and end: ready, or, with none, what the game is offered for one. */
-function webWords(row: PublishPlatform, offer: WebOffer): { detail: string; end: PlatformEnd } {
+/**
+ * The web row's second line and end: ready; with none in the folder but one Genex still plays
+ * (`hostedWeb`), that one, which can be taken off; else what the game is offered for one.
+ */
+function webWords(row: PublishPlatform, offer: WebOffer, hostedWeb: boolean): { detail: string; end: PlatformEnd } {
   if (row.state === PublishPlatformState.Ready) return { detail: WORDS.webReady, end: PlatformEnd.None };
+  if (hostedWeb) return { detail: WORDS.webOnGenex, end: PlatformEnd.RemoveWeb };
   if (offer === WebOffer.Make) return { detail: WORDS.missing, end: PlatformEnd.Make };
   const detail = offer === WebOffer.Unavailable ? WORDS.webUnavailable : WORDS.webMissing;
   return { detail, end: PlatformEnd.None };
@@ -226,7 +232,8 @@ function cloudWords(
  * The rows in the order they come, each as words; `native` is how the last Publish's apps went,
  * `webOffer` what a game with no web version is offered for one, `madeHere` the systems this
  * computer makes the game's apps for (`appsMadeHere`), `onGenex` whether the game has a page on
- * Genex, which an app Genex builds goes on.
+ * Genex, which an app Genex builds goes on, `hostedWeb` whether Genex's page for the game plays a
+ * web version (`GenexPublishState.hostedWeb`).
  */
 export function platformRows(
   platforms: readonly PublishPlatform[],
@@ -235,13 +242,14 @@ export function platformRows(
   webOffer: WebOffer = WebOffer.Quiet,
   madeHere: ReadonlySet<PublishTarget> | null = null,
   onGenex = false,
+  hostedWeb = false,
 ): PlatformRow[] {
   return platforms.map((row) => {
     if (!isNative(row))
       return {
         target: row.target,
         name: WORDS.name[row.target],
-        ...webWords(row, webOffer),
+        ...webWords(row, webOffer, hostedWeb),
         size: null,
         state: row.state,
       };
@@ -328,6 +336,27 @@ export function appsInReview(platforms: readonly PublishPlatform[], native: Gene
   return native.sent.every(waitsForReview);
 }
 
+/** Whether a sent app is what desktop players get: approved, or sent by an admin, whose apps Genex doesn't review. */
+const reachesPlayers = (sent: GenexNativeSent): boolean =>
+  sent.review === undefined || sent.review === GenexBuildReview.Approved;
+
+/**
+ * Whether Publish would make this web build the game's page in place of its apps: the folder holds
+ * a web build, Genex said its page plays none (`hostedWeb` false, never while unknown), and an app
+ * the last Publish sent reaches players. The dialog says so above the press, and its press then
+ * carries the person's word that it may (`replaceNativePage`), which Genex asks for.
+ */
+export function replacesAppsPage(
+  platforms: readonly PublishPlatform[],
+  native: GenexNativeRecord | undefined,
+  hostedWeb: boolean | undefined,
+): boolean {
+  const webReady = platforms.some(
+    (row) => row.target === PublishTarget.Web && row.state === PublishPlatformState.Ready,
+  );
+  return webReady && hostedWeb === false && (native?.sent.some(reachesPlayers) ?? false);
+}
+
 /** Whether the game has no web build. */
 const noWebBuild = (platforms: readonly PublishPlatform[]): boolean =>
   platforms.some((row) => row.target === PublishTarget.Web && row.state === PublishPlatformState.Missing);
@@ -353,10 +382,17 @@ function waitingLine(platforms: readonly PublishPlatform[], webOffer: WebOffer):
 
 /**
  * The line under the rows: the apps Publish sends too, and whose players get the web version; for a
- * game with nothing to send, why. `webOffer`: what the game is offered for a web version.
+ * game with nothing to send, why; for one with no web build that Genex still plays one of
+ * (`hostedWeb`), that its page plays that one until it is removed, whatever the apps. `webOffer`:
+ * what the game is offered for a web version.
  */
-export function reachLine(platforms: readonly PublishPlatform[], webOffer: WebOffer = WebOffer.Quiet): string | null {
+export function reachLine(
+  platforms: readonly PublishPlatform[],
+  webOffer: WebOffer = WebOffer.Quiet,
+  hostedWeb = false,
+): string | null {
   const web = platforms.find((row) => row.target === PublishTarget.Web);
+  if (hostedWeb && noWebBuild(platforms)) return WORDS.webOnPage;
   if (onlyApps(platforms)) return WORDS.onlyPlayers(NATIVE_WORDS.platforms(sendingPlayers(platforms)));
   if (nothingToPublish(platforms)) return waitingLine(platforms, webOffer);
   if (web?.state !== PublishPlatformState.Ready) return null;

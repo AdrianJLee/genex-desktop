@@ -379,8 +379,8 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginChooseFile: (id, request) => invoke("studio:plugins.choose-file", { id, request }),
     genexPublishReview: (project) => invoke("studio:plugins.genex-publish-review", { project }),
     genexPublishPlatforms: (project) => invoke("studio:plugins.genex-publish-platforms", { project }),
-    genexPublish: (project, review, title, remix) =>
-      invoke("studio:plugins.genex-publish", { project, review, title, remix }),
+    genexPublish: (project, review, title, remix, replaceNativePage) =>
+      invoke("studio:plugins.genex-publish", { project, review, title, remix, replaceNativePage }),
     genexPublishApps: (project, title, remix) => invoke("studio:plugins.genex-publish-apps", { project, title, remix }),
     genexCloudBuild: (project, platform) => invoke("studio:plugins.genex-cloud-build", { project, platform }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),

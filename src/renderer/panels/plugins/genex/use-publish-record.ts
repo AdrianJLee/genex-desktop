@@ -93,11 +93,14 @@ export function usePublishRecord(plugin: PluginInfo, project: string | null) {
       run(Pressing.Action, () => runPluginAction({ plugin, name, args, project, review: setReview })),
     listFiles: (): Promise<void> => run(Pressing.Files, currentFiles),
     /**
-     * Publish under `title`: the press is the consent to exactly the listed files, and to the game's
-     * project when `remix` (Allow remixing) is ticked.
+     * Publish under `title`: the press is the consent to exactly the listed files, to the game's
+     * project when `remix` (Allow remixing) is ticked, and to the web build taking the place of a page
+     * that shows only the game's apps when `replaceNativePage` (the dialog said so above the press).
      */
-    publish: (title: string, remix?: boolean): Promise<void> =>
-      run(Pressing.Publish, async () => window.studio.genexPublish(game, await currentFiles(), title, remix)),
+    publish: (title: string, remix?: boolean, replaceNativePage?: boolean): Promise<void> =>
+      run(Pressing.Publish, async () =>
+        window.studio.genexPublish(game, await currentFiles(), title, remix, replaceNativePage),
+      ),
     /** Publish a game that has only apps under `title`: the press is the consent to the apps its rows name. */
     publishApps: (title: string, remix?: boolean): Promise<void> =>
       run(Pressing.Publish, () => window.studio.genexPublishApps(game, title, remix)),

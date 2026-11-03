@@ -145,7 +145,7 @@ export function registerPluginsIpc(handle: IpcHandle, deps: PluginsIpcDeps): voi
   handle("studio:plugins.genex-publish-review", async (p) => publishReview(core, p?.project));
   handle("studio:plugins.genex-publish-platforms", async (p) => publishPlatforms(core, p?.project));
   handle("studio:plugins.genex-publish", async (p) =>
-    publishFromDialog(core, p?.project, p?.review, p?.title, undefined, p?.remix),
+    publishFromDialog(core, p?.project, p?.review, p?.title, undefined, p?.remix, p?.replaceNativePage),
   );
   handle("studio:plugins.genex-publish-apps", async (p) =>
     publishAppsFromDialog(core, p?.project, p?.title, undefined, p?.remix),

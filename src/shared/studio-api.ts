@@ -234,7 +234,14 @@ export interface StudioApi {
    * the files in `review`; `title` is the name players see; `remix` is its Allow remixing, whether the
    * game's project goes with it so others can remix it.
    */
-  genexPublish(project: string, review: ExportReview, title?: string, remix?: boolean): Promise<void>;
+  genexPublish(
+    project: string,
+    review: ExportReview,
+    title?: string,
+    remix?: boolean,
+    /** The dialog said the web build replaces a page that shows only the game's apps. */
+    replaceNativePage?: boolean,
+  ): Promise<void>;
   /**
    * Publish a game that has only apps (no web build) from Studio's Publish dialog: its ready Mac and
    * Windows apps go to Genex and the game is listed under `title`. The press, under the rows it names,

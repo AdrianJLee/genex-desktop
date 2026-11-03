@@ -44,6 +44,7 @@ import {
   PlatformEnd,
   platformRows,
   reachLine,
+  replacesAppsPage,
   WebOffer,
   webOfferFor,
 } from "../../src/renderer/panels/plugins/genex/publish-platforms-view.ts";
@@ -130,6 +131,19 @@ describe("Publish's platform rows from the game folder", () => {
     const rows = byTarget(await publishPlatforms(coreWith("dust", root, engine), "dust"));
     assert.equal(rows.mac.state, PublishPlatformState.Stale);
     assert.deepEqual([rows.web.state, rows.web.uploads], [PublishPlatformState.Missing, false]);
+  });
+
+  it("never offers an Unreal game's page of design mockups as its web build", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await macApp(path.join(root, "Builds", "Mac"), "Dust Runners", T0 + 10 * MINUTE_MS);
+    await source(root, "Source/Dust/Player.cpp", T0);
+    const facts = [
+      { id: CoreFact.UnrealProject, path: "." },
+      { id: CoreFact.WebGame, path: "ui_design" },
+    ];
+    const rows = byTarget(await publishPlatforms(coreWith("dust", root, facts), "dust", true));
+    assert.deepEqual([rows.web.state, rows.web.uploads], [PublishPlatformState.Missing, false]);
+    assert.deepEqual([rows.mac.state, rows.mac.uploads], [PublishPlatformState.Ready, true], "its app still goes");
   });
 
   it("keeps an app built within a minute of the last change ready, whatever the engine's caches do", async () => {
@@ -600,6 +614,52 @@ describe("Publish's platform rows as the dialog says them", () => {
     turnedDown.sent = turnedDown.sent.map((app) => ({ ...app, review: GenexBuildReview.Rejected }));
     assert.equal(listingLine(rows, turnedDown), null, "a turned-down app says why on its own line");
     assert.equal(listingLine([WEB, ready, WINDOWS], record({})), null, "a web game is listed by its web publish");
+  });
+
+  it("offers to remove a web version Genex still plays when the game folder holds none", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const ready = { ...MAC, uploads: true };
+    const rows = (hostedWeb: boolean) =>
+      platformRows([noWeb, ready], NOW, undefined, WebOffer.Unavailable, ON_MAC, false, hostedWeb);
+    const [held] = rows(true);
+    assert.deepEqual([held?.detail, held?.end], ["A web version is on Genex", PlatformEnd.RemoveWeb]);
+    assert.equal(
+      reachLine([noWeb, ready], WebOffer.Unavailable, true),
+      "The game’s page plays its web version until you remove it, so players don’t see the apps.",
+      "publishing the apps alone would change nothing players see",
+    );
+    const [none] = rows(false);
+    assert.deepEqual([none?.detail, none?.end], ["Unreal games don’t run in a browser", PlatformEnd.None]);
+    assert.equal(reachLine([noWeb, ready], WebOffer.Unavailable, false), "Only Mac players can play it.");
+    const [own] = platformRows([WEB, ready], NOW, undefined, WebOffer.Quiet, null, false, true);
+    assert.equal(own?.end, PlatformEnd.None, "a game with its own web build publishes it in that one's place");
+  });
+
+  it("says when Publish would make a web build the page of a game whose players get its apps", () => {
+    const ready = { ...MAC, uploads: true };
+    const sent = (review?: GenexBuildReview): GenexNativeRecord => ({
+      supported: true,
+      sending: false,
+      sent: [
+        {
+          platform: "mac",
+          arch: "universal",
+          version: "1",
+          sizeBytes: 1,
+          publishedAt: new Date(NOW).toISOString(),
+          ...(review ? { review } : {}),
+        },
+      ],
+      failed: [],
+    });
+    assert.equal(replacesAppsPage([WEB, ready], sent(), false), true, "an admin's app is on the page");
+    assert.equal(replacesAppsPage([WEB, ready], sent(GenexBuildReview.Approved), false), true);
+    assert.equal(replacesAppsPage([WEB, ready], sent(GenexBuildReview.Pending), false), false, "no player has it yet");
+    assert.equal(replacesAppsPage([WEB, ready], sent(), true), false, "the page plays a web version already");
+    assert.equal(replacesAppsPage([WEB, ready], sent(), undefined), false, "never while Genex's answer is unknown");
+    assert.equal(replacesAppsPage([WEB, ready], undefined, false), false, "no app went");
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    assert.equal(replacesAppsPage([noWeb, ready], sent(), false), false, "publishing apps keeps their page");
   });
 
   it("knows a game with only apps waits for Genex's review: no celebration until then", () => {

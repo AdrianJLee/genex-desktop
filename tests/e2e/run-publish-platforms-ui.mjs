@@ -6,7 +6,8 @@
  * build older than the game's last change says so; once the CLI sends apps, the line says Publish
  * sends the Mac app and its row says Sending…, On Genex or Not sent (with why), or In review and Not
  * approved (with why) for an app Genex reviews first; a web game with no
- * app shows no rows. Dark and
+ * app shows no rows; an Unreal game whose web version is still on Genex says so with Remove, and a
+ * Unity game's web build that would take its apps' page says so above the press. Dark and
  * light screens.
  */
 import { build } from "esbuild";
@@ -168,6 +169,22 @@ app.whenReady().then(async()=>{
   const linuxAsk=await step('makeLinux','window.platformsRig.make("linux")');
   assert.deepEqual(linuxAsk.composed,[{project:'dust-runners',text:'Make a Linux app of Dust Runners so I can publish it for Linux players.',send:true}]);
   report.unrealWindows=await capture('dark-unreal-windows');
+  // The incident: an Unreal game whose page plays a web version (mockups once sent as one) it no longer has.
+  const stuck=await step('unrealWebOnGenex','window.platformsRig.open({scene:"unrealWebOnGenex"})');
+  assert.deepEqual([stuck.rows[0].detail,stuck.rows[0].end],['A web version is on Genex','Remove']);
+  assert.equal(stuck.reach,'The game’s page plays its web version until you remove it, so players don’t see the apps.');
+  assert.equal(stuck.overflow,false);
+  report.unrealWebOnGenex=await capture('dark-unreal-web-on-genex');
+  const removed=await step('removeWeb','window.platformsRig.removeWeb()');
+  assert.deepEqual(removed.actions,['review:publish-remove-web','publish-remove-web'],'Remove is confirmed before the plugin action runs');
+  // A Unity game whose page shows its apps: a web build takes that page only with their consent.
+  const replaces=await step('unityReplacesApps','window.platformsRig.open({scene:"unityReplacesApps"})');
+  assert.equal(replaces.replaces,'Publish makes this web version the game’s page, in place of its apps.');
+  report.unityReplacesApps=await capture('dark-unity-replaces-apps');
+  const agreed=await step('unityReplacesAppsPress','window.platformsRig.press()');
+  assert.deepEqual(agreed.published,[{via:'web',replaceNativePage:true}]);
+  const engineOnly=await step('engineNoReplace','window.platformsRig.open({scene:"engine"})');
+  assert.equal(engineOnly.replaces,null,'no line while Genex has not said its page shows only apps');
   const soon=await step('unitySoon','window.platformsRig.open({scene:"unitySoon"})');
   assert.equal(soon.primaryDisabled,true);
   assert.equal(soon.rows[1].end,'Coming soon');
@@ -177,7 +194,7 @@ app.whenReady().then(async()=>{
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac, Windows and Linux; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why, and asks the agent for a web version; an Unreal game says it has none, and on a Mac offers its Windows app built on Genex; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac, Windows and Linux; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why, and asks the agent for a web version; an Unreal game says it has none, and on a Mac offers its Windows app built on Genex; Remove for a web version still on Genex; a web build that takes a page of apps says so and asks Genex with their consent; stale says so; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

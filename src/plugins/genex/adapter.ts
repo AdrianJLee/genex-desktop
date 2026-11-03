@@ -37,6 +37,7 @@ import {
   type GenexPublishState,
   type GenexRequest,
   type GenexStatus,
+  GenexWebRefusal,
 } from "../../shared/genex.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -66,6 +67,7 @@ import {
   listingOf,
   type NativeUpload,
   nativePublishArgs,
+  pinnedCliReplacesNativePage,
   pinnedCliSendsApps,
   sendNativeBuild,
 } from "./native-publish.ts";
@@ -144,6 +146,7 @@ import {
   DEFAULT_DASHBOARD,
   isGenexLink,
   MIN_POLL_INTERVAL_S,
+  codeOf,
   statusOf,
   withSignal,
 } from "./http.ts";
@@ -236,6 +239,14 @@ const PUBLISH_WAIT_MS = 150_000;
 const MIN_PUBLISH_WAIT_MS = SECOND_MS;
 /** How long a verified sign-in is trusted before status asks Genex again. */
 const SESSION_CACHE_MS = 2 * MINUTE_MS;
+/** How long Genex's word on whether a game's page plays a web version is kept before it is asked again. */
+const HOSTED_WEB_FRESH_MS = MINUTE_MS;
+/** What the person reads when Genex refuses Remove, by its refusal code; any other failure says itself. */
+const REMOVE_WEB_REFUSAL: Readonly<Record<string, () => string>> = {
+  [GenexWebRefusal.NoNativeBuild]: PUBLISH_MESSAGE.OnlyWebRefusal,
+  [GenexWebRefusal.GameTakenDown]: PUBLISH_MESSAGE.TakenDownRefusal,
+  [GenexWebRefusal.RemovalIncomplete]: PUBLISH_MESSAGE.RemovalIncomplete,
+};
 /**
  * How long a status read reuses a game's allowance before starting the CLI's `budget` again. The
  * page reads status every 5 s while a generation runs, and each `budget` is a whole Node process;
@@ -488,6 +499,8 @@ export class GenexTools {
   #nativeSteps = new Map<string, NativeStep>();
   /** Whether this CLI has `genex native`; tests say so of their stand-in. */
   readonly #sendsApps: boolean;
+  /** Whether the pinned Genex CLI takes `--replace-native-page` on its promotion and listing. */
+  readonly #replacesNativePage: boolean;
   /** Whether this CLI pushes a game's source from another folder (`--source`); tests say so of their stand-in. */
   readonly #sendsSource: boolean;
   readonly #buildsApps: boolean;
@@ -509,6 +522,8 @@ export class GenexTools {
   #settledGenerations = new Map<string, GenerationView>();
   /** Which generation each generic reservation became, by reservation id, as Genex named it. */
   #foundGenerations = new Map<string, FoundGeneration>();
+  /** Genex's last word on whether each game's page plays a web version, and when it said it. */
+  #hostedWebs = new Map<string, { web: boolean; at: number }>();
   /** How long a publish's new draft has to pass its test before the publish gives up on going public. */
   readonly #draftTestMs: number;
   readonly #coverTimeouts: CoverTimeouts;
@@ -534,6 +549,8 @@ export class GenexTools {
       termsWait?: { waitMs: number; pollMs: number };
       /** Whether the CLI sends apps (`genex native`); else read from the pinned CLI's version. */
       sendsApps?: boolean;
+      /** Whether the CLI takes `--replace-native-page`; else read from the pinned CLI's version. */
+      replacesNativePage?: boolean;
       /** Whether the CLI sends a game's project (`--source`); else read from the pinned CLI's version. */
       sendsSource?: boolean;
       /** Whether the CLI asks Genex to build apps (`genex native build`); else read from the pinned CLI's version. */
@@ -564,6 +581,7 @@ export class GenexTools {
     this.#deliver = options.deliver ?? deliverGenexFiles;
     this.#preload = options.preload ?? fileURLToPath(new URL("../../genex-host/preload.mjs", import.meta.url));
     this.#sendsApps = options.sendsApps ?? pinnedCliSendsApps();
+    this.#replacesNativePage = options.replacesNativePage ?? pinnedCliReplacesNativePage();
     this.#sendsSource = options.sendsSource ?? pinnedCliSendsSource();
     this.#buildsApps = options.buildsApps ?? pinnedCliBuildsApps();
     this.#cloudSleep = options.cloudSleep ?? ((ms, signal) => sleep(ms, undefined, { signal }).catch(() => {}));
@@ -697,6 +715,8 @@ export class GenexTools {
     return { ...state, version: 1, project };
   }
   async #savePublishState(project: string, state: GenexPublishState) {
+    // A publish that moved on may have changed what Genex plays: it is asked again.
+    this.#hostedWebs.delete(project);
     await atomicWriteJson(path.join(this.#publishDir(project), "publish.json"), state);
   }
   /** Save `job` into the latest publish record, carrying its error to `lastError`. */
@@ -864,9 +884,10 @@ export class GenexTools {
     title?: unknown,
     apps: readonly NativeUpload[] = [],
     remix: RemixChoice = {},
+    replaceNativePage = false,
   ): Promise<GenexPublishState> {
     return this.#account(() =>
-      this.#startPublish(project, GenexPublishKind.Gallery, { exportStage, title, apps, remix }),
+      this.#startPublish(project, GenexPublishKind.Gallery, { exportStage, title, apps, remix, replaceNativePage }),
     );
   }
   /**
@@ -997,11 +1018,13 @@ export class GenexTools {
       title,
       apps = [],
       remix = {},
+      replaceNativePage = false,
     }: {
       exportStage?: () => Promise<unknown>;
       title?: unknown;
       apps?: readonly NativeUpload[];
       remix?: RemixChoice;
+      replaceNativePage?: boolean;
     },
   ): Promise<GenexPublishState> {
     const state = await this.publishStatus(project);
@@ -1031,7 +1054,7 @@ export class GenexTools {
     delete state.warnings;
     delete state.lastError;
     await this.#savePublishState(project, state);
-    const done = this.#runPublishJob(project, kind, job, { cover, connect, apps, remix });
+    const done = this.#runPublishJob(project, kind, job, { cover, connect, apps, remix, replaceNativePage });
     this.#publishJobs.set(project, { job, done });
     this.#exporting.delete(project);
     void done.finally(() => {
@@ -1124,7 +1147,14 @@ export class GenexTools {
       connect,
       apps,
       remix,
-    }: { cover: boolean; connect: boolean; apps: readonly NativeUpload[]; remix: RemixChoice },
+      replaceNativePage,
+    }: {
+      cover: boolean;
+      connect: boolean;
+      apps: readonly NativeUpload[];
+      remix: RemixChoice;
+      replaceNativePage: boolean;
+    },
   ): Promise<void> {
     const dir = this.#publishDir(project);
     const home = path.join(dir, "home");
@@ -1150,7 +1180,8 @@ export class GenexTools {
       const outs = kind === GenexPublishKind.Draft ? [await this.#uploadDraft(run)] : await this.#uploadTested(run);
       if (!outs) return;
       const relist = needsRelisting(meta, (await this.#publishState(project)).title, job.title);
-      const listing = { title: job.title };
+      // Only a CLI that knows the word may carry it; an older one leaves Genex to refuse the promotion.
+      const listing = { title: job.title, replaceNativePage: replaceNativePage && this.#replacesNativePage };
       for (const phase of publicSteps(meta, kind, relist)) outs.push(await this.#runStep(run, phase, listing));
       // Remixing is settled before the publish is recorded done, so its record never lags the dialog.
       if (kind === GenexPublishKind.Gallery) await this.#settleRemixing(project, meta, allowed, run.staged, problem);
@@ -1585,7 +1616,54 @@ export class GenexTools {
     const cover = { shot, last, sending: this.#coverSteps.has(project), candidates, clip, clipLast, agentTook };
     const native = await this.#nativeRecord(project);
     const remix = { ...(await this.#remixRecord(project)), sending: this.#remixSends.has(project) };
-    return { ...state, ...(warnings.length ? { warnings } : {}), cover, native, remix };
+    const hostedWeb = await this.#hostedWebOf(project, state);
+    return {
+      ...state,
+      ...(warnings.length ? { warnings } : {}),
+      cover,
+      native,
+      remix,
+      ...(hostedWeb === undefined ? {} : { hostedWeb }),
+    };
+  }
+  /**
+   * Whether Genex's page for the game plays a web version (its owner read names a public build),
+   * asked at most once a {@link HOSTED_WEB_FRESH_MS} and never while a publish runs (what Genex plays
+   * is changing then, and the publish reads Genex's record itself); undefined while the game is not
+   * on Genex, the sign-in is gone or Genex can't be asked: no answer is evidence of nothing.
+   */
+  async #hostedWebOf(project: string, state: GenexPublishState): Promise<boolean | undefined> {
+    if (!state.connected || !state.slug) return undefined;
+    const kept = this.#hostedWebs.get(project);
+    if (this.#publishJobs.has(project)) return kept?.web;
+    if (kept && this.#now() - kept.at < HOSTED_WEB_FRESH_MS) return kept.web;
+    const hosted = (await this.#fetch(GenexRoute.projectBySlug(state.slug)).catch(() => null))?.project;
+    if (!hosted || typeof hosted !== "object" || !("commitSha" in hosted)) return undefined;
+    const web = typeof hosted.commitSha === "string" && hosted.commitSha !== "";
+    this.#hostedWebs.set(project, { web, at: this.#now() });
+    return web;
+  }
+  /**
+   * Publish's Remove on a web version Genex holds and the game folder has none of (confirmed in the
+   * native dialog): Genex takes the game's web version off its page and keeps its apps, so the page
+   * shows them again. Refused while a publish runs, before the game is on Genex, and by Genex while
+   * the game has no app there (the web version is all its players have). Answers the publish view.
+   */
+  async publishRemoveWeb(project: string): Promise<GenexPublishState> {
+    return this.#account(async () => {
+      if (this.#publishJobs.has(project)) throw new Error(PUBLISH_MESSAGE.StillRunning());
+      const state = await this.publishStatus(project);
+      if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
+      if (!state.projectId) throw new Error(PUBLISH_MESSAGE.NothingOnline());
+      await this.#fetch(GenexRoute.web(state.projectId), { method: "DELETE" }).catch((error: unknown) => {
+        const refusal = REMOVE_WEB_REFUSAL[codeOf(error) ?? ""];
+        throw refusal ? new Error(refusal()) : error;
+      });
+      // The draft Studio last verified is gone with it: a later upload is measured against no draft.
+      delete state.readyDraft;
+      await this.#savePublishState(project, state);
+      return this.publishView(project);
+    });
   }
   /**
    * genex__cover: keep the picture (and the clip) the agent made, from the game folder `directory`,

@@ -85,6 +85,13 @@ export async function assertPublishable(core: Pick<StudioCore, "games">, project
 /** The dialog's Allow remixing as the publish's argument: sent only when the dialog said yes or no. */
 const remixArg = (remix: unknown): { remix?: boolean } => (typeof remix === "boolean" ? { remix } : {});
 
+/**
+ * The dialog's word that this web build replaces a page that shows only the game's apps (the line
+ * it showed above the press) as the publish's argument: sent only when it said so, never assumed.
+ */
+const replaceArg = (replace: unknown): { replaceNativePage?: true } =>
+  replace === true ? { replaceNativePage: true } : {};
+
 /** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is installed. */
 async function boundGame(core: DialogCore, project: unknown): Promise<PluginBinding> {
   if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame());
@@ -110,7 +117,8 @@ export async function publishReview(core: DialogCore, project: unknown): Promise
 /**
  * Publish `project` to the Genex gallery under `title` (cleaned; the plugin picks the name when none is
  * left), after the person approved `review` in the dialog. The game's ready apps, which the dialog
- * lists above its press, go once the web build is public (`publishedApps`).
+ * lists above its press, go once the web build is public (`publishedApps`). `replaceNativePage`: the
+ * dialog said this web build takes the place of a page that shows only the game's apps.
  */
 export async function publishFromDialog(
   core: DialogCore,
@@ -119,12 +127,18 @@ export async function publishFromDialog(
   title?: unknown,
   sendsApps = pinnedCliSendsApps(),
   remix?: unknown,
+  replaceNativePage?: unknown,
 ): Promise<void> {
   if (!isExportReview(review)) throw new Error(MESSAGE.NoFileList());
   const binding = await dialogBinding(core, project);
   const name = cleanGenexTitle(title);
   const native = await publishedApps(core, binding.project, sendsApps);
-  const args = { ...(name ? { title: name } : {}), ...(native.length > 0 ? { native } : {}), ...remixArg(remix) };
+  const args = {
+    ...(name ? { title: name } : {}),
+    ...(native.length > 0 ? { native } : {}),
+    ...remixArg(remix),
+    ...replaceArg(replaceNativePage),
+  };
   // Genex exports inside this call, so the approval lives exactly as long as it.
   await core.withApprovedExport(GENEX_PLUGIN_ID, binding.project, review, () =>
     core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishGallery, args, binding),

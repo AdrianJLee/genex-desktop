@@ -195,6 +195,7 @@ import { nativePlays } from "./play/native-plays.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
 import { linuxGameWindows } from "./play/native-windows-linux.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
+import { unrealGameProgram } from "./play/unreal-launcher.ts";
 import { spawnLinuxGame } from "../substrate/plugins/linux-game.ts";
 import { windowsGames } from "../substrate/plugins/windows-game.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
@@ -1309,9 +1310,12 @@ function watchNativeUpdates(studio: StudioCore): void {
 const GAME_HOST_FOLDER = "game-host";
 
 /** How this system starts a native game, sees its window, brings it forward and asks it to quit. */
-function gameLauncher(): Pick<NativeSessionsDeps, "spawn" | "hasWindow" | "show" | "kill"> {
+function gameLauncher(): Pick<NativeSessionsDeps, "spawn" | "hasWindow" | "show" | "kill" | "program"> {
   // Windows runs a game in an AppContainer through Genex's game host, which says when its window is up.
-  if (process.platform === StudioPlatform.Windows) return windowsGames(path.join(userDataRoot, GAME_HOST_FOLDER));
+  // An Unreal game whose binary carries the Visual C++ runtime starts past Unreal's launcher, which
+  // would ask to install a runtime the game already has (unreal-launcher.ts).
+  if (process.platform === StudioPlatform.Windows)
+    return { ...windowsGames(path.join(userDataRoot, GAME_HOST_FOLDER)), program: unrealGameProgram };
   const kill = (pid: number, signal: NodeJS.Signals) => process.kill(pid, signal);
   // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
   if (process.platform === StudioPlatform.Linux) return { spawn: spawnLinuxGame, ...linuxGameWindows(), kill };

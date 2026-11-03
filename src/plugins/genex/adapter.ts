@@ -714,6 +714,16 @@ export class GenexTools {
     const state = await readJsonOr(path.join(this.#publishDir(project), "publish.json"), fallback);
     return { ...state, version: 1, project };
   }
+  /**
+   * The publish record with what the game's link says (`.genex/project.json`): its page, id and
+   * status. A game put on Genex outside this app's Publish (the CLI, another computer) has the link
+   * and no slug in `publish.json`.
+   */
+  async #linkedPublishState(project: string): Promise<GenexPublishState> {
+    const state = await this.#publishState(project);
+    mergeMeta(state, await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))));
+    return state;
+  }
   async #savePublishState(project: string, state: GenexPublishState) {
     // A publish that moved on may have changed what Genex plays: it is asked again.
     this.#hostedWebs.delete(project);
@@ -755,9 +765,8 @@ export class GenexTools {
   /** What Studio knows about this game's pages. Read-only: it never starts or resumes an upload. */
   async publishStatus(project: string, force = false): Promise<GenexPublishState> {
     await this.init();
-    const state = await this.#publishState(project);
+    const state = await this.#linkedPublishState(project);
     state.connected = !!(await this.#token());
-    mergeMeta(state, await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))));
     const live = this.#publishJobs.get(project);
     if (live) state.job = live.job;
     else if (interruptedInTest(state.job, this.#exporting.has(project))) {
@@ -1849,7 +1858,7 @@ export class GenexTools {
   async cloudBuild(project: string, platform: unknown, gameDir: string | undefined): Promise<GenexNativeRecord> {
     if (!this.#buildsApps) throw new Error(PUBLISH_MESSAGE.CloudBuildsUnavailableRefusal());
     if (!gameDir) throw new Error(PUBLISH_MESSAGE.NoGameFolderRefusal());
-    if (!(await this.#publishState(project)).slug) throw new Error(PUBLISH_MESSAGE.NotOnGenexRefusal());
+    if (!(await this.#linkedPublishState(project)).slug) throw new Error(PUBLISH_MESSAGE.NotOnGenexRefusal());
     const dir = await this.#publishWorkspace(project);
     const running = (await this.#cloud(project)).builds.find(
       (build) => build.platform === platform && isRunning(build),

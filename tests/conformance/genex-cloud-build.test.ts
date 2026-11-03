@@ -266,6 +266,27 @@ describe("the Genex plugin's builds on Genex", () => {
     );
   });
 
+  it("builds a game linked to its page on Genex but never published from this app, as the dialog offers", async () => {
+    // The incident: a game put on Genex through the CLI (its publish workspace's `.genex/project.json`)
+    // had no slug in `publish.json`. The dialog read the link and offered Build on Genex; the press
+    // read `publish.json` alone and answered "Publish the game first".
+    const { make, runs, game, workspace } = await toolsWithBuildCli();
+    await mkdir(path.join(workspace, ".genex"), { recursive: true });
+    await writeFile(
+      path.join(workspace, ".genex", "project.json"),
+      JSON.stringify({ id: "proj_1", slug: "seyda-neen", status: "published" }),
+    );
+    const genex = make();
+    assert.equal((await genex.publishView("seyda")).slug, "seyda-neen", "the dialog sees the game's page");
+    const started = await genex.cloudBuild("seyda", "windows", game);
+    assert.equal(started.cloud?.supported, true);
+    await genex.cloudSettled();
+    assert.deepEqual(
+      (await runs()).map((call) => call.args[1]),
+      ["build", "build-status"],
+    );
+  });
+
   it("follows a build Studio left running when it next reads the record", async () => {
     const { make, runs, onGenex, workspace } = await toolsWithBuildCli();
     await onGenex();

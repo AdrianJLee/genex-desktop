@@ -1,5 +1,6 @@
-/* Native games in Play (`play/GamePage.tsx`, `play/NativeBadge.tsx`): a card's badge over its cover and
-   a game's own page, in Play's blue and the app's surfaces (canvas boards "Main" and "GamePage"). */
+/* Native games in Play (`play/GamePage.tsx`, `play/GameHero.tsx`, `play/NativeBadge.tsx`): a card's badge
+   over its cover and a game's own page, in Play's blue and the app's surfaces (canvas boards "Main",
+   and "Bodycam game page" round 2's A for the page). */
 
 /* ── A card's badge: bottom-left of the cover, white like the stats, the download's line along its foot ── */
 .native-badge {
@@ -49,146 +50,329 @@
   gap: 7px;
 }
 
-/* ── A game's own page: media and About on the left, a 360px column on the right ── */
-.game-page {
+/* ── A game's own page (canvas "Bodycam game page", round 2, A): the top runs the game's clip or
+   pictures to the window's edge with its words over them; facts, shots, About and the Store under it ── */
+
+/* A bleed page lays its first picture under the bar, to the window's top edge, and the bar's
+   controls wear glass over it. Where the window's own controls keep a box of their own (Linux
+   always, Windows in a light theme: `window-controls.ts`), the bar keeps the window's colour and the
+   picture starts under it, so the box reads as part of the bar. */
+.play-page-bleed > .play-scroll > .people-content {
+  padding: 0;
+}
+.play-toolbar-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+.game-hero-pause {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 28px;
-  align-items: start;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.play-page-bleed .play-toolbar :is([data-play-back], .sidebar-toggle, .game-hero-pause) {
+  height: 32px;
+  border-radius: 10px;
+  background: rgb(14 13 15 / 0.42);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.1);
+  color: #ffffff;
+  backdrop-filter: blur(12px);
+}
+.play-page-bleed .play-toolbar :is([data-play-back], .sidebar-toggle, .game-hero-pause):hover {
+  background: rgb(44 44 50 / 0.62);
+  color: #ffffff;
+}
+/* Over the no-cover plate, or in the bar's own colour: the page's quiet controls. */
+:root:is([data-platform="linux"], [data-platform="win32"]:not([data-theme="dark"])) .play-page-bleed .play-toolbar,
+.play-page-bleed:has(.game-hero[data-game-hero="none"]) .play-toolbar {
+  --bar-control: color-mix(in oklab, var(--ink) 6%, transparent);
+}
+:root:is([data-platform="linux"], [data-platform="win32"]:not([data-theme="dark"])) .play-page-bleed .play-toolbar {
+  background: var(--background);
+}
+:root:is([data-platform="linux"], [data-platform="win32"]:not([data-theme="dark"]))
+  .play-page-bleed
+  .play-toolbar
+  :is([data-play-back], .sidebar-toggle, .game-hero-pause),
+.play-page-bleed:has(.game-hero[data-game-hero="none"])
+  .play-toolbar
+  :is([data-play-back], .sidebar-toggle, .game-hero-pause) {
+  background: var(--bar-control);
+  box-shadow: none;
+  color: var(--ink-2);
+  backdrop-filter: none;
+}
+:root:is([data-platform="linux"], [data-platform="win32"]:not([data-theme="dark"]))
+  .play-page-bleed
+  .play-toolbar
+  :is([data-play-back], .sidebar-toggle, .game-hero-pause):hover,
+.play-page-bleed:has(.game-hero[data-game-hero="none"])
+  .play-toolbar
+  :is([data-play-back], .sidebar-toggle, .game-hero-pause):hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.game-page {
+  container-type: inline-size;
   padding-block-end: 32px;
 }
-@media (max-width: 980px) {
-  .game-page {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.game-media {
+
+/* The top: art, a shade toward its foot and start, the words and the thumbnails. Its ink is white
+   over a picture; over the no-cover plate it takes the theme's. */
+.game-hero {
+  --hero-ink: #ffffff;
+  --hero-ink-soft: rgb(255 255 255 / 0.72);
+  --hero-glass: rgb(14 13 15 / 0.42);
+  --hero-glass-hover: rgb(44 44 50 / 0.62);
+  --hero-glass-edge: rgb(255 255 255 / 0.12);
+  /* The dark the picture fades to at its foot, in either theme: the words always sit on it. */
+  --hero-floor: #0e0d0f;
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-width: 0;
-}
-.game-media-main {
-  position: relative;
-  aspect-ratio: 16 / 9;
+  justify-content: flex-end;
+  min-height: clamp(440px, 66vh, 760px);
+  /* Under the bar: `.people-toolbar`'s 56px. */
+  margin-block-start: -56px;
   overflow: hidden;
-  border-radius: 14px;
-  background: var(--play-placeholder);
-  box-shadow: inset 0 0 0 1px var(--line);
+  background: var(--hero-floor);
+  color: var(--hero-ink);
 }
-.game-media-main img,
-.game-shot img {
-  display: block;
+.game-hero[data-game-hero="none"] {
+  --hero-ink: var(--ink);
+  --hero-ink-soft: var(--ink-3);
+  --hero-glass: color-mix(in oklab, var(--ink) 6%, transparent);
+  --hero-glass-hover: var(--hover);
+  --hero-glass-edge: var(--line);
+  min-height: clamp(360px, 48vh, 540px);
+  background: var(--page);
+}
+:root:is([data-platform="linux"], [data-platform="win32"]:not([data-theme="dark"])) .play-page-bleed .game-hero {
+  margin-block-start: 0;
+}
+.game-hero-art {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+}
+.game-hero-art > .play-no-cover {
+  position: absolute;
+  inset: 0;
+  color: var(--ink-3);
+  /* Its horizon would read as a rule under the bar: the plate rises out of the page instead. */
+  mask-image: linear-gradient(to bottom, transparent 22%, #000 58%);
+}
+.game-hero-frame {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 900ms var(--ease-smooth-out);
+}
+.game-hero-frame[data-current] {
+  opacity: 1;
+}
+.game-hero-frame > img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 400ms ease-out;
 }
-.game-shots {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+.game-hero-frame > img[data-shown] {
+  opacity: 1;
 }
-.game-shot {
-  aspect-ratio: 16 / 9;
-  overflow: hidden;
-  border-radius: 8px;
-  background: var(--play-placeholder);
-  cursor: pointer;
+/* A slideshow's still drifts while it shows; a still shown alone settles in once, so nothing on
+   the top keeps moving without a pause to stop it. */
+.game-hero-frame[data-current]:not([data-alone]) > img {
+  animation: game-hero-drift 9s ease-in-out infinite alternate;
 }
-.game-shot[aria-pressed="true"] {
-  box-shadow: 0 0 0 2px var(--people-primary-bottom);
+.game-hero-frame[data-alone] > img[data-shown] {
+  animation: game-hero-settle 4s var(--ease-smooth-out) both;
 }
-.game-shot:focus-visible {
-  outline: 2px solid var(--focus-edge);
-  outline-offset: 2px;
+.game-hero[data-still] .game-hero-frame > img {
+  animation-play-state: paused;
 }
-.game-about {
+:root[data-motion="rest"] .game-hero-frame > img {
+  animation-play-state: paused;
+}
+@keyframes game-hero-drift {
+  from {
+    transform: scale(1.03);
+  }
+  to {
+    transform: scale(1.13) translate(-2%, -1.5%);
+  }
+}
+@keyframes game-hero-settle {
+  from {
+    transform: scale(1.06);
+  }
+  to {
+    transform: none;
+  }
+}
+.game-hero-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgb(14 13 15 / 0.55), transparent 120px),
+    linear-gradient(to top, var(--hero-floor) 0%, rgb(14 13 15 / 0.92) 16%, rgb(14 13 15 / 0.35) 46%, transparent 64%),
+    linear-gradient(to right, rgb(14 13 15 / 0.78) 0%, rgb(14 13 15 / 0.35) 34%, transparent 56%);
+}
+.game-hero[data-game-hero="none"] .game-hero-shade {
+  background:
+    linear-gradient(to top, var(--page) 6%, color-mix(in srgb, var(--page) 70%, transparent) 42%, transparent 78%),
+    linear-gradient(to right, color-mix(in srgb, var(--page) 85%, transparent) 0%, transparent 60%);
+}
+.game-hero-foot {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 640px;
-  margin-block-start: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 120px 56px 52px;
 }
-.game-about h2 {
-  font-size: 16px;
-  font-weight: 500;
-}
-.game-about p {
-  color: var(--ink-2);
-  font-size: 14px;
-  line-height: 22px;
-  white-space: pre-line;
-}
-.game-side {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.game-hero-head {
   min-width: 0;
+  max-width: 760px;
+}
+.game-hero .game-side {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
 }
 .game-head {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 14px;
 }
 .game-title {
-  font-size: 30px;
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--hero-ink);
+  font-size: clamp(40px, 6.2cqi, 88px);
   font-weight: 500;
-  line-height: 36px;
-  letter-spacing: -0.02em;
-  overflow-wrap: break-word;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 24px rgb(0 0 0 / 0.35);
+  text-wrap: balance;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.game-title[data-long] {
+  font-size: clamp(34px, 4.4cqi, 64px);
+}
+.game-hero[data-game-hero="none"] .game-title {
+  text-shadow: none;
+}
+.game-by-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
 }
 .game-by {
-  font-size: 14px;
+  font-size: 15px;
 }
 .game-by-link {
-  color: var(--ink);
+  color: var(--hero-ink);
   text-decoration: underline;
-  text-decoration-color: color-mix(in oklab, var(--ink) 30%, transparent);
+  text-decoration-color: color-mix(in oklab, var(--hero-ink) 32%, transparent);
   text-underline-offset: 3px;
   cursor: pointer;
 }
+.game-by-link:hover {
+  text-decoration-color: color-mix(in oklab, var(--hero-ink) 85%, transparent);
+}
 .game-stats {
-  color: var(--ink-3);
-  font: 12px / 16px var(--font-family-mono);
+  color: var(--hero-ink-soft);
+  font: 13px / 18px var(--font-family-mono);
   letter-spacing: -0.02em;
 }
 
-/* The primary block: one 44px action, and at most one line under it. */
-.game-primary-block {
+/* The actions: the primary block, then Like, Comments and Share on its row, and its one line under them. */
+.game-actions {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.game-primary-block {
+  display: contents;
 }
 .game-primary {
-  height: 44px;
-  width: 100%;
-  border-radius: 11px;
-  font-size: 15px;
+  height: 52px;
+  min-width: 160px;
+  padding-inline: 30px 34px;
+  border-radius: 13px;
+  font-size: 16px;
+}
+.game-primary svg {
+  width: 18px;
+  height: 18px;
+}
+.game-primary.play-fill {
+  box-shadow:
+    0 10px 34px color-mix(in srgb, var(--people-primary-bottom) 42%, transparent),
+    0 0.5px 1.5px color-mix(in srgb, var(--people-primary-bottom) 25%, transparent);
+}
+/* Play's tint (Show game) over the art: its blue on the glass, in the top's own ink. */
+.game-hero .game-primary.play-tint {
+  background: color-mix(in srgb, var(--people-primary-bottom) 34%, var(--hero-glass));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--people-primary-top) 55%, transparent);
+  color: var(--hero-ink);
+  backdrop-filter: blur(12px);
+}
+.game-hero .game-primary.play-tint:enabled:hover {
+  background: color-mix(in srgb, var(--people-primary-bottom) 48%, var(--hero-glass));
 }
 .game-primary-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
 }
-.game-primary-row .game-primary {
-  width: auto;
-  padding-inline: 16px;
+.game-primary-row .game-primary:not(.game-primary-wide) {
+  min-width: 0;
+  padding-inline: 22px;
+  background: var(--hero-glass);
+  box-shadow: inset 0 0 0 1px var(--hero-glass-edge);
+  color: var(--hero-ink);
+  backdrop-filter: blur(12px);
 }
-.game-primary-row .game-primary-wide {
-  flex: 1;
+.game-primary-row .game-primary:not(.game-primary-wide):hover {
+  background: var(--hero-glass-hover);
 }
 .game-primary-size {
   opacity: 0.75;
+}
+.game-primary-note,
+.game-text-button {
+  order: 3;
+  flex-basis: 100%;
 }
 .game-primary-note {
   display: flex;
   align-items: center;
   gap: 7px;
-  color: var(--ink-3);
+  color: var(--hero-ink-soft);
   font: 12px / 16px var(--font-family-mono);
   letter-spacing: -0.02em;
 }
+/* Success is a bare check in the words' own ink, never green. */
 .game-check {
-  color: var(--green);
+  color: var(--hero-ink);
 }
 .game-live-dot {
   width: 7px;
@@ -202,17 +386,21 @@
 }
 .game-installing {
   position: relative;
-  height: 44px;
+  /* A fixed width, so the bar keeps its place in the row while the words above size it. */
+  width: 360px;
+  max-width: 100%;
+  height: 52px;
   overflow: hidden;
-  border-radius: 11px;
-  background: var(--people-tint);
-  box-shadow: inset 0 0 0 1px var(--people-tint-edge);
+  border-radius: 13px;
+  background: var(--hero-glass);
+  box-shadow: inset 0 0 0 1px var(--hero-glass-edge);
+  backdrop-filter: blur(12px);
 }
 .game-installing-fill {
   position: absolute;
   inset-block: 0;
   inset-inline-start: 0;
-  background: color-mix(in srgb, var(--people-primary-bottom) 22%, transparent);
+  background: color-mix(in srgb, var(--people-primary-bottom) 55%, transparent);
   transition: width var(--duration-quick) linear;
 }
 .game-installing-row {
@@ -221,132 +409,378 @@
   align-items: center;
   justify-content: space-between;
   height: 100%;
-  padding-inline: 16px 8px;
-  color: var(--ink);
+  padding-inline: 18px 10px;
+  color: var(--hero-ink);
   font: 14px / 20px var(--font-family-mono);
   letter-spacing: -0.02em;
 }
 .game-installing-cancel {
-  height: 30px;
-  padding-inline: 10px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  color: var(--ink-2);
+  height: 32px;
+  padding-inline: 12px;
+  border-radius: 9px;
+  background: var(--hero-glass);
+  color: var(--hero-ink);
   font: inherit;
   font-size: 13px;
   cursor: pointer;
 }
 .game-installing-cancel:hover {
-  background: var(--hover);
+  background: var(--hero-glass-hover);
 }
 .game-text-button {
-  align-self: center;
   height: 28px;
-  padding-inline: 8px;
-  color: var(--ink-3);
+  padding-inline: 0;
+  color: var(--hero-ink-soft);
   font: 13px / 20px var(--font-family-mono);
   letter-spacing: -0.02em;
+  text-align: start;
   text-decoration: underline;
-  text-decoration-color: color-mix(in oklab, var(--ink-3) 50%, transparent);
+  text-decoration-color: color-mix(in oklab, var(--hero-ink-soft) 33%, transparent);
   text-underline-offset: 3px;
   cursor: pointer;
 }
 .game-text-button:hover {
-  color: var(--ink);
+  color: var(--hero-ink);
 }
 .game-elsewhere {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border-radius: 11px;
-  background: var(--hover);
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  max-width: 420px;
+  /* As tall as the buttons beside it. */
+  height: 52px;
+  padding-inline: 16px;
+  border-radius: 13px;
+  background: var(--hero-glass);
+  box-shadow: inset 0 0 0 1px var(--hero-glass-edge);
+  backdrop-filter: blur(12px);
+}
+.game-elsewhere-title,
+.game-elsewhere-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .game-elsewhere-title {
   font-size: 14px;
   font-weight: 500;
-}
-.game-elsewhere-line {
-  color: var(--ink-3);
-  font-size: 12.5px;
   line-height: 18px;
 }
-
-/* Like, Comments and Share, as the viewer's bar draws them. */
-.game-pills {
-  display: flex;
-  gap: 6px;
+.game-elsewhere-line {
+  color: var(--hero-ink-soft);
+  font-size: 12px;
+  line-height: 16px;
 }
+
+/* Like, Comments and Share: glass over the art. */
 .game-pill {
+  order: 1;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding-inline: 12px;
-  border-radius: 9px;
-  background: color-mix(in oklab, var(--ink) 6%, transparent);
-  color: var(--ink);
-  font: 13px / 20px var(--font-family-mono);
+  justify-content: center;
+  gap: 7px;
+  height: 52px;
+  padding-inline: 18px;
+  border-radius: 13px;
+  background: var(--hero-glass);
+  box-shadow: inset 0 0 0 1px var(--hero-glass-edge);
+  color: var(--hero-ink);
+  font: 14px / 20px var(--font-family-mono);
   letter-spacing: -0.02em;
+  backdrop-filter: blur(12px);
   cursor: pointer;
+  transition: background-color var(--duration-quick);
 }
 .game-pill:hover {
-  background: var(--hover);
+  background: var(--hero-glass-hover);
 }
-.game-pill[aria-pressed="true"] .gi {
-  fill: currentColor;
+.game-pill > .gi {
+  width: 18px;
+  height: 18px;
+}
+.game-pill[aria-pressed="true"] > .gi {
+  fill: var(--play-like);
+  stroke: var(--play-like);
 }
 .game-pill-icon {
-  width: 32px;
-  justify-content: center;
+  width: 52px;
   padding: 0;
+}
+/* Share's icon pops in at each swap: the check (which draws itself) once the link is copied, the
+   share mark again after. */
+.game-share-mark {
+  display: inline-flex;
+}
+.game-share-mark[data-pop] {
+  animation: game-share-pop 320ms var(--ease-smooth-out) both;
+}
+@keyframes game-share-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.55) rotate(-12deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The thumbnails: one per picture, the one showing ringed, its line filling over HERO_FRAME_MS. */
+.game-hero-thumbs {
+  display: flex;
+  gap: 8px;
+}
+.game-hero-thumb {
+  position: relative;
+  width: 112px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 0.06);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  opacity: 0.72;
+  cursor: pointer;
+  transition:
+    opacity var(--duration-quick),
+    box-shadow var(--duration-quick);
+}
+.game-hero-thumb:hover,
+.game-hero-thumb[aria-pressed="true"] {
+  opacity: 1;
+}
+.game-hero-thumb[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px #ffffff;
+}
+.game-hero-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 350ms var(--ease-smooth-out);
+}
+.game-hero-thumb:hover > img {
+  transform: scale(1.05);
+}
+.game-hero-thumb-clip {
+  position: absolute;
+  inset-inline-start: 6px;
+  inset-block-end: 6px;
+  display: flex;
+  color: #ffffff;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.6));
+}
+.game-hero-thumb-clip > .gi {
+  fill: currentColor;
+}
+.game-hero-thumb-line {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  height: 3px;
+  background: #ffffff;
+  transform-origin: left;
+  animation: game-hero-line 5s linear both;
+}
+@keyframes game-hero-line {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* Under the top: the facts, the shots, About and the Store. */
+.game-body {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+  padding: 8px 56px 0;
+}
+/* In a light theme the picture's dark foot ends in an edge, not in the page: room below it. */
+/* In a light theme the picture's dark foot melts into the page below the words, as the dark
+   theme's does into its dark page. */
+:root[data-theme="light"] .game-hero:not([data-game-hero="none"]) {
+  --hero-melt: 180px;
+}
+:root[data-theme="light"] .game-hero:not([data-game-hero="none"]) .game-hero-foot {
+  padding-block-end: calc(52px + var(--hero-melt));
+}
+:root[data-theme="light"] .game-hero:not([data-game-hero="none"])::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  z-index: -1;
+  height: calc(var(--hero-melt) + 120px);
+  /* Eased stops: a straight fade from dark to light reads as a grey band. */
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--page) 3%, transparent) 12%,
+    color-mix(in srgb, var(--page) 10%, transparent) 24%,
+    color-mix(in srgb, var(--page) 22%, transparent) 36%,
+    color-mix(in srgb, var(--page) 38%, transparent) 48%,
+    color-mix(in srgb, var(--page) 57%, transparent) 60%,
+    color-mix(in srgb, var(--page) 76%, transparent) 72%,
+    color-mix(in srgb, var(--page) 91%, transparent) 85%,
+    var(--page)
+  );
+
+  pointer-events: none;
+}
+.game-facts {
+  position: relative;
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  grid-template-columns: minmax(0, 1.5fr);
+  gap: 1px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--line);
+}
+.game-facts::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px var(--line);
+  pointer-events: none;
+}
+.game-fact {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  padding: 20px 24px;
+  background: var(--surface);
+}
+/* Real marks sit bare, a small shadow on the floor beneath them. */
+.game-fact-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink);
+  filter: drop-shadow(0 4px 3px rgb(0 0 0 / 0.45));
+}
+:root[data-theme="light"] .game-fact-mark {
+  filter: drop-shadow(0 3px 2px rgb(0 0 0 / 0.16));
+}
+.game-fact-mark > .native-marks {
+  gap: 12px;
+}
+.game-fact-words {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.game-fact-label {
+  color: var(--ink-3);
+  font: 12px / 16px var(--font-family-mono);
+  letter-spacing: -0.02em;
+}
+.game-fact-value {
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 22px;
+  overflow-wrap: break-word;
+}
+.game-section-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 28px;
+}
+.game-shots-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.game-shots {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.game-shot {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--play-placeholder);
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: pointer;
+}
+.game-shot > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 500ms var(--ease-smooth-out);
+}
+.game-shot:hover > img {
+  transform: scale(1.03);
+}
+.game-about {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 720px;
+}
+.game-about p {
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 24px;
+  white-space: pre-line;
 }
 .game-pill:focus-visible,
 .game-by-link:focus-visible,
 .game-text-button:focus-visible,
-.game-installing-cancel:focus-visible {
+.game-installing-cancel:focus-visible,
+.game-hero-thumb:focus-visible,
+.game-hero-pause:focus-visible,
+.game-shot:focus-visible {
   outline: 2px solid var(--focus-edge);
   outline-offset: 2px;
 }
 
-/* The tiles: a mark and a line each; a long one ("Made with Unreal", "Mac · Apple silicon only")
-   takes a second line in the narrow column rather than being cut, and its row grows with it. */
-.game-tiles {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+/* A narrower window: the words and facts come in from the edges, the facts two by two, the
+   thumbnails leave the top (the shots stay under it). */
+@container (max-width: 900px) {
+  .game-hero-foot {
+    padding: 110px 28px 32px;
+  }
+  .game-hero-thumbs {
+    display: none;
+  }
+  .game-body {
+    gap: 40px;
+    padding-inline: 28px;
+  }
+  .game-facts {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .game-fact:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .game-shots {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-.game-tile {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 7px 10px 7px 7px;
-  border-radius: 12px;
-  background: var(--surface);
-  box-shadow: inset 0 0 0 1px var(--line);
-}
-.game-tile-mark {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  height: 32px;
-  padding-inline: 8px;
-  border-radius: 9px;
-  background: var(--people-tint);
-  color: color-mix(in oklab, var(--people-tint-color) 55%, var(--ink));
-}
-.game-tile-text {
-  display: -webkit-box;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 14px;
-  line-height: 18px;
-  overflow-wrap: break-word;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+@media (prefers-reduced-motion: reduce) {
+  .game-hero-frame,
+  .game-hero-frame > img,
+  .game-hero-thumb,
+  .game-hero-thumb > img,
+  .game-shot > img {
+    transition: none;
+  }
+  .game-hero-frame > img,
+  .game-hero-thumb-line,
+  .game-share-mark[data-pop] {
+    animation: none;
+  }
 }
 
 /* ── The viewer bar's native-app pill (canvas board "WebFirst"): an install's progress as a ring ── */

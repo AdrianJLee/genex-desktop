@@ -182,6 +182,7 @@ export function CardMenu({
   installed = null,
   open,
   onOpenChange,
+  triggerClassName = "play-card-menu",
 }: {
   game: PlayGame;
   /** The owner's and an admin's items; null for anyone else. */
@@ -190,6 +191,8 @@ export function CardMenu({
   installed?: InstalledGame | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The ⋯'s look: a card's corner button by default, or another surface's own. */
+  triggerClassName?: string;
 }): JSX.Element {
   const [dialog, setDialog] = useState<PlayCardAction | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -218,7 +221,7 @@ export function CardMenu({
           <button
             ref={trigger}
             type="button"
-            className="play-card-menu"
+            className={triggerClassName}
             aria-label={WORDS.trigger}
             title={WORDS.trigger}
             data-play-card-menu={game.slug}

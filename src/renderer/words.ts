@@ -5876,14 +5876,16 @@ export const NATIVE_WORDS = {
   /** A profile's card for a game this computer has no build of. */
   onlyOn: (platform: string) => t("Only on {platform}", { platform }),
   // The game page.
-  stats: (plays: string, likes: string, updated: string | null) =>
+  /** "4 plays · 1 like · Updated 33 minutes ago": each count as `formatCount` wrote it, its plural by the number. */
+  stats: (plays: { n: number; shown: string }, likes: { n: number; shown: string }, updated: string | null) =>
     [
-      t("{count} plays", { count: plays }),
-      t("{count} likes", { count: likes }),
+      t("{n, plural, one {{count} play} other {{count} plays}}", { n: plays.n, count: plays.shown }),
+      t("{n, plural, one {{count} like} other {{count} likes}}", { n: likes.n, count: likes.shown }),
       updated ? t("Updated {when}", { when: updated }) : null,
     ]
       .filter(Boolean)
       .join(" · "),
+  shots: t("Shots"),
   about: tc("game page", "About"),
   install: t("Install"),
   installLabel: (title: string, size: string) => t("Install {title}, {size}", { title, size }),
@@ -5915,11 +5917,10 @@ export const NATIVE_WORDS = {
   launchFailed: LAUNCH_FAILED,
   singlePlayer: t("Single player"),
   multiplayer: t("Multiplayer"),
-  madeWith: (engine: string) => t("Made with {engine}", { engine }),
   /** Engine ids as people say them; another id is shown as it is spelled. */
   engine: { unity: "Unity", godot: "Godot", unreal: "Unreal" } as Readonly<Record<string, string>>,
-  /** The game page's systems tile; its marks say which, and its hover names them. */
-  platformsTile: t("Platforms"),
+  /** The game page's facts, each a small label over its value. */
+  facts: { runsOn: t("Runs on"), size: t("Size"), players: t("Players"), madeWith: t("Made with") },
   appleSiliconOnly: t("Apple silicon only"),
   failedToLoad: t("Couldn’t load this game."),
   // The card menu's local items.

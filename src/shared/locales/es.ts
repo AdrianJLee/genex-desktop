@@ -2199,7 +2199,6 @@ export default {
   "Made Blueprint {blueprint}": "Creó el Blueprint {blueprint}",
   "Made by {name}": "Creado por {name}",
   "Made material {material}": "Creó el material {material}",
-  "Made with {engine}": "Hecho con {engine}",
   "Made {name} in this game's folder and linked it, but Roblox Studio didn't open: {why}":
     "Se creó {name} en la carpeta de este juego y se vinculó, pero Roblox Studio no se abrió: {why}",
   "Made {name} in this game's folder and opened it in Roblox Studio.":
@@ -5533,7 +5532,6 @@ export default {
   "{count} files couldn’t be added": "No se pudieron añadir {count} archivos",
   "{count} files didn’t go in": "{count} archivos no entraron",
   "{count} finished": "{count, plural, one {# terminado} other {# terminados}}",
-  "{count} likes": "{count} me gusta",
   "{count} more": "{count} más",
   "{count} more waiting": "{count} más en espera",
   "{count} newly passing": "{count} pasan ahora",
@@ -6237,4 +6235,11 @@ export default {
     "TypeSafe no aceptó esa clave. Revísala y pégala otra vez.",
   "TypeSafe key": "Clave de TypeSafe",
   "Unreal play-tests pick their moves with Jev": "Las pruebas en Unreal eligen sus jugadas con Jev",
+  "Made with": "Hecho con",
+  "Runs on": "Funciona en",
+  Shots: "Capturas",
+  "{n, plural, one {{count} play} other {{count} plays}}":
+    "{n, plural, one {{count} partida} other {{count} partidas}}",
+  "{n, plural, one {{count} like} other {{count} likes}}":
+    "{n, plural, one {{count} me gusta} other {{count} me gusta}}",
 } satisfies LocaleCatalog;

@@ -133,7 +133,7 @@ function Author({ author }: { author: PlayGame["author"] }): JSX.Element {
 }
 
 /** The card menu the signed-in account gets on `game`: its owner's items, an admin's, or none. */
-function useCardMenu(game: PlayGame) {
+export function useCardMenu(game: PlayGame) {
   const accountId = usePeople((s) => s.me?.id ?? null);
   const isAdmin = usePeople((s) => s.me?.isAdmin === true);
   // A search's card carries no curation to read its menu from, so it gets none.

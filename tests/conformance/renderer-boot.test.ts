@@ -24,6 +24,7 @@ import { gameOpened, initialPlay, type PlayState, viewerReported } from "../../s
 import {
   homeUnderControls,
   setHomeUnderControls,
+  setPictureUnderControls,
   syncWindowControls,
   windowControlColors,
 } from "../../src/renderer/window-controls.ts";
@@ -534,6 +535,34 @@ describe("window control colours", () => {
         { ...colors, seeThrough: false },
       ],
     );
+  });
+
+  it("let a game page's picture show through them only while their ink is light", () => {
+    const fake = fakeStudioApi();
+    const dark = style({ "--background": "#0e0d0f", "--foreground": "#dee0e2" });
+    const light = style({ "--background": "#f6f6f4", "--foreground": "#1d1d1f" });
+    let theme = dark;
+    const stop = syncWindowControls(fake.api, StudioPlatform.Windows, () => theme);
+    try {
+      setPictureUnderControls(true);
+      setPictureUnderControls(false);
+      setPictureUnderControls(true);
+      // A light theme's dark ink would vanish over the picture: the controls keep their own box.
+      theme = light;
+      setPictureUnderControls(false);
+      setPictureUnderControls(true);
+    } finally {
+      stop();
+      setPictureUnderControls(false);
+    }
+    const sent = fake.callsOf("setWindowControls").map(([controls]) => controls);
+    assert.deepEqual(sent, [
+      { color: "#0e0d0f", symbolColor: "#dee0e2", seeThrough: false },
+      { color: "#0e0d0f", symbolColor: "#dee0e2", seeThrough: true },
+      { color: "#0e0d0f", symbolColor: "#dee0e2", seeThrough: false },
+      { color: "#0e0d0f", symbolColor: "#dee0e2", seeThrough: true },
+      { color: "#f6f6f4", symbolColor: "#1d1d1f", seeThrough: false },
+    ]);
   });
 
   it("count Home's background under them only at rest, with no room, remix or game viewer over it", () => {

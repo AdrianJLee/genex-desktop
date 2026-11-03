@@ -6,7 +6,7 @@ import type { ChatPanelProps } from "./chat-panel-props.ts";
 import { useChatStop } from "./chat-stop.ts";
 import { busyLabel, chatWorkState, runCaption } from "./chat-work-state.ts";
 import type { ChatWorkProps } from "./ChatWork.tsx";
-import { type BuildParts, buildChecklist, checklistCaption, runPlanParts } from "./build-checklist.ts";
+import { buildChecklist, checklistCaption } from "./build-checklist.ts";
 import { buildCaption, currentWorkLabel } from "./current-work.ts";
 import { currentWorkItems, finishingRun, runStartedAt } from "./transcript.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
@@ -84,7 +84,7 @@ export function useChatWork(props: ChatPanelProps, chat: ChatThread, busy: boole
       personFirst,
     }),
     caption: runCaption({ running, caption: words.caption, personFirst }),
-    parts: words.parts,
+    summary: words.summary,
     waiting: waitsOnUser || (!plan.working && activity.phase === ChatActivityPhase.Waiting),
     busySince: props.busySince,
     details: currentDetails?.items ?? null,
@@ -128,19 +128,14 @@ function useWorkWords(
     [stateEvents, outcome, activeRunId, details],
   );
   const finishing = useMemo(() => finishingRun(threadEvents, activeRunId), [threadEvents, activeRunId]);
-  const planned = useMemo(() => runPlanParts(threadEvents, activeRunId), [threadEvents, activeRunId]);
-  const parts = useMemo<BuildParts | null>(
-    () => (activeRunId ? { summary: outcome, plan: planned, finishing } : null),
-    [activeRunId, outcome, planned, finishing],
-  );
-  // The parts' counts do not move with the clock: they are read once per change of the run.
-  const list = useMemo(() => (parts ? buildChecklist({ ...parts, now: Date.now() }) : null), [parts]);
+  // The steps' counts do not move with the clock: they are read once per change of the run.
+  const list = useMemo(() => buildChecklist(outcome, Date.now()), [outcome]);
   return {
     current: currentWorkLabel(activity, outcome, finishing, workItems, plan?.state),
     caption: list
       ? checklistCaption(list, finishing)
       : buildCaption(activity, outcome, finishing, workItems, plan?.state),
-    parts: list ? parts : null,
+    summary: list ? outcome : null,
     runStarted,
   };
 }

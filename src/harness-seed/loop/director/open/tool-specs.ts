@@ -45,7 +45,9 @@ const SAVE_POINT: LiveToolSpec = {
   parameters: {
     type: "object",
     properties: {
-      label: text(`A few words naming what works now (at most ${MAX_SAVE_POINT_LABEL} characters).`),
+      label: text(
+        `A few words naming what the player gets now: the person sees it as a done step on the Building card (at most ${MAX_SAVE_POINT_LABEL} characters).`,
+      ),
       summary: text("What this save point holds, in one sentence."),
       shows: text("Optional: the path in the project's folder of a picture (PNG or JPEG) for this save point."),
     },

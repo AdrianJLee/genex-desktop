@@ -3,9 +3,9 @@
  * log folded in), else a running build's status, else Studio quietly learning, else nothing.
  */
 import { type JSX, type Key, useMemo } from "react";
+import type { RunSummary } from "../../shared/run-summary.ts";
 import { LoadingState } from "../ui/LoadingState.tsx";
 import { Presence, type PresenceChild } from "../ui/Presence.tsx";
-import type { BuildParts } from "./build-checklist.ts";
 import { BuildStatus } from "./BuildStatus.tsx";
 import type { ActivityItem } from "./conversation-entries.ts";
 import { WorkLogContent } from "./WorkLog.tsx";
@@ -22,10 +22,10 @@ export interface ChatWorkProps {
   workKey: Key | null | undefined;
   /** What the busy line says (`busyLabel`). */
   label: string;
-  /** The running build's one line: its parts counted (`checklistCaption`), else what is happening now (`buildCaption`). */
+  /** The running build's one line: its steps counted (`checklistCaption`), else what is happening now (`buildCaption`). */
   caption: string;
-  /** What the running build's card lists its parts from (`build-checklist.ts`), once it has a plan or a worker. */
-  parts: BuildParts | null;
+  /** The running build's summary its card lists its steps from (`build-checklist.ts`), once it has a save point or a worker. */
+  summary: RunSummary | null;
   /** The busy line waits on the user rather than working. */
   waiting: boolean;
   busySince: number | null;
@@ -107,7 +107,7 @@ function workLine(props: ChatWorkProps): PresenceChild[] {
             <BuildStatus
               {...(props.runStarted !== undefined ? { since: props.runStarted } : {})}
               {...(props.onShowBuilds ? { onOpenBuilds: props.onShowBuilds } : {})}
-              parts={props.parts}
+              summary={props.summary}
               caption={props.caption}
             />
           </div>

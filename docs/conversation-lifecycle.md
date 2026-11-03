@@ -265,7 +265,9 @@ lead; a message sent while the run prepares its start waits for it (`live-chat.t
 and is then handed to the lead like any other. Stop (composer or Builds) stops a starting build. A waking
 run's start says its lead takes the chat (`autopilot_started.liveChat`), and while it runs the
 composer reads "Talk to the lead while it builds…" instead of "Sends when the build finishes…"
-(renderer `chat/live-chat.ts`).
+(renderer `chat/live-chat.ts`). What the lead does about a message shows as it does it: a worker
+it redirects (`worker_steer`) is a line of its own, "Told “<the worker's task>”: <the first sentence
+it was told>" (`[data-told-line]`), never a row folded among the turn's tool calls.
 
 - **One session.** The lead is the chat's own contractor session, not a second one
   (`loop/director/lead-session.ts`, words in `lead-session-prompts.ts`). `runDirector` seats it

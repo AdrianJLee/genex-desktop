@@ -1,20 +1,24 @@
 /**
  * The `building-card` fixture: a racing Loop still going, for the chat's Building card and its list
- * of parts, after five earlier Loops of the same chat that finished, so Builds holds its six builds
- * in the picker (more than its three tabs). Of the plan's five parts two are added, one works on its
- * second round, one was stopped and restarted (`replaces`, one row) and works on its first round, and
- * one has not started; its lead takes the chat's messages (live chat). Written once the app has
+ * of steps, after five earlier Loops of the same chat that finished, so Builds holds its six builds
+ * in the picker (more than its three tabs). Its lead made two save points; of its workers two are
+ * added, one works on its second round, and one was stopped and restarted (`replaces`, one row) and
+ * works on its first round; its lead takes the chat's messages (live chat). Written once the app has
  * started: the start closes every run an earlier app left open, so a Loop still going written before
  * it would read as stopped.
  */
-import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
+import { CustomEvent, customRecord, DELEGATED_PREFIX } from "../../shared/custom-events.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
-import { WorkerEnd, WorkerIsolation, WorkerStopCode } from "../../shared/workers.ts";
+import { poolWorkerId, WorkerEnd, WorkerIsolation, WorkerStopCode } from "../../shared/workers.ts";
 import type { StudioCore } from "../studio-core.ts";
-import { FIXTURE_MODEL, fixtureRun } from "./fixture-kit.ts";
+import { FIXTURE_MODEL, fixtureRun, LEAD_ROW, leadSavePoint } from "./fixture-kit.ts";
 
 const RUN_ID = "fixture-building-card";
+/** The cars' worker, by the id the pool gives it (`pool.w3`), so the lead's steer names its task. */
+const CARS = poolWorkerId("w3");
+/** What the lead told the cars' worker after the person's message. */
+const RED_CARS = "Change from the person: make the cars red. Keep the clear-coat shine on the new paint.";
 const GOAL = "Make a night street race on rain-slicked city streets.";
 /** One of the chat's earlier Loops, finished: what was asked, its plan, and each part's merged build. */
 interface EarlierLoop {
@@ -61,14 +65,8 @@ const EARLIER: readonly EarlierLoop[] = [
   },
 ];
 
-/** The plan's parts, in its order: id and title. */
-const PLAN: ReadonlyArray<[string, string]> = [
-  ["hud", "Speed and lap HUD"],
-  ["track", "Track and night city"],
-  ["cars", "Cars: clear-coat finish"],
-  ["world", "World: building facades"],
-  ["sound", "Engine, tyres and rain"],
-];
+/** The lead's save points, in the order it made them: their labels, in its words for the person. */
+const SAVE_POINTS = ["A car to drive on a test loop", "A full lap of the night city, with speed and lap time"] as const;
 
 /** Records of the run. */
 type Scoped = ReturnType<typeof fixtureRun>;
@@ -126,7 +124,7 @@ function finishedLoop(project: string, loop: EarlierLoop): EventData[] {
   ];
 }
 
-/** The Loop: its plan, two parts added, one at work, one restarted, one waiting. */
+/** The Loop: its lead's two save points, two parts added, one at work, one restarted. */
 function buildingLoop(project: string): EventData[] {
   const run = fixtureRun({ runId: RUN_ID, project });
   const stopped = "stopped by the director: the facades start again on the new street grid";
@@ -144,29 +142,48 @@ function buildingLoop(project: string): EventData[] {
       workerRecords: true,
       liveChat: true,
     }),
-    run(CustomEvent.AutopilotPlanReview, {
-      summary: "A night street race: a lit circuit, cars with a wet finish, and their sound.",
-      waitMinutes: 0,
-      facets: PLAN.map(([id, title]) => ({ id, title, identity: [], checks: [] })),
-    }),
+    run(CustomEvent.DirectorWorker, { ...LEAD_ROW, state: "running" }),
+    ...leadSavePoint(run, project, 1, SAVE_POINTS[0]),
     ...added(run, "hud", "Speed and lap HUD", "1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d"),
     ...added(run, "track", "Track and night city", "2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e"),
+    ...leadSavePoint(run, project, 2, SAVE_POINTS[1]),
     run(CustomEvent.WorkerStarted, {
-      workerId: "cars",
+      workerId: CARS,
       title: "Cars: clear-coat finish",
       isolation: WorkerIsolation.Copy,
     }),
     run(CustomEvent.DirectorWorker, {
-      workerId: "cars",
+      workerId: CARS,
       title: "Cars: clear-coat finish",
       mode: "loop",
       state: "running",
     }),
     run(CustomEvent.FacetBuildStarted, {
-      facetId: "cars",
+      facetId: CARS,
       facetTitle: "Cars: clear-coat finish",
       iteration: 2,
     }),
+    // The person asked for red cars mid-build; the lead told the cars' worker (the chat's told line).
+    {
+      type: EventKind.Custom,
+      event_type: `${DELEGATED_PREFIX}${EngineId.ClaudeCode}`,
+      payload: {
+        runId: RUN_ID,
+        project,
+        delegationId: "fixture-building-card-lead",
+        kind: "assistant",
+        data: {
+          parts: [
+            {
+              type: "tool_use",
+              id: "steer-cars",
+              name: "mcp__studio__worker_steer",
+              input: { id: "w3", text: RED_CARS },
+            },
+          ],
+        },
+      },
+    },
     ...begins(run, "world", "World: building facades"),
     roundEnds(run, "world", "World: building facades", stopped),
     run(CustomEvent.DirectorWorker, {

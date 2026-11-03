@@ -12,7 +12,10 @@ import * as seedDelegatedTurn from "../../src/harness-seed/loop/delegated-turn.t
 import * as seedFolderFacts from "../../src/harness-seed/loop/folder-facts.ts";
 import * as seedEngineGame from "../../src/harness-seed/loop/engine-game.ts";
 import * as seedGameEngine from "../../src/harness-seed/loop/game-engine.ts";
-import { SAVE_POINT_VERDICT_SOURCE as seedSavePointSource } from "../../src/harness-seed/loop/director/open/graph.ts";
+import {
+  OPEN_LEAD_PART as seedOpenLeadPart,
+  SAVE_POINT_VERDICT_SOURCE as seedSavePointSource,
+} from "../../src/harness-seed/loop/director/open/graph.ts";
 import * as seedInbox from "../../src/harness-seed/loop/run-inbox.ts";
 import * as seedQueue from "../../src/harness-seed/loop/message-queue.ts";
 import * as seedRoles from "../../src/harness-seed/loop/model-roles.ts";
@@ -46,6 +49,7 @@ import {
   CUSTOM_EVENT_TYPES,
   CompletionRole,
   CustomEvent,
+  LEAD_PART,
   LoopRefusal,
   RunStartRefusal,
   StopCode,
@@ -517,9 +521,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     assert.deepEqual(seedVerdict.VerdictRule, VerdictRule);
   });
 
-  it("writes a lead's save point with the verdict source the renderer reads as saved by the lead", () => {
+  it("writes a lead's save point with the verdict source the renderer reads as saved by the lead, under the lead's part", () => {
     assert.equal(seedSavePointSource, seedVerdict.VerdictSource.Lead);
     assert.equal(savedByLead(seedSavePointSource), true);
+    assert.equal(seedOpenLeadPart, LEAD_PART);
   });
 
   it("names why a loop stopped the same way, and reads a run's close by its code", () => {

@@ -2355,27 +2355,23 @@ export const WORKER_LINE_WORDS = {
       ? `${t("{task}: didn't finish.", { task: title })} ${asSentence(WORKER_STOP_WORDS[because])}`
       : t("{task}: didn't finish.", { task: title }),
   stopped: (title: string) => t("{task}: stopped.", { task: title }),
+  /** The lead redirected a worker (`worker_steer`): the worker's task, when known, and what it was told. */
+  told: (title: string | null, said: string) =>
+    title ? t("Told “{task}”: {said}", { task: title, said }) : t("Told a worker: {said}", { said }),
 } as const;
 
 /**
- * The Building card's checklist (`chat/build-checklist.ts`): each part's status on its row, the
- * lead's last step, and the card's one line, counted from the parts.
+ * The Building card's checklist (`chat/build-checklist.ts`): each step's status on its row, and the
+ * card's one line, counted from the steps.
  */
 export const BUILD_CHECKLIST_WORDS = {
   added: t("Added"),
   working: t("Working"),
   workingFor: (minutes: number) => t("Working · ~{minutes} min", { minutes }),
   workingRound: (round: number) => t("Working · round {round}", { round }),
-  waiting: t("Waiting to start"),
   notAdded: t("Not added"),
-  notStarted: t("Not started"),
-  next: t("Next"),
-  /** The lead's own last step, after the parts. */
-  together: t("Put it together and check"),
-  caption: (added: number, total: number, working: number) =>
-    working
-      ? t("{added} of {total} parts added · {working} working", { added, total, working })
-      : t("{added} of {total} parts added", { added, total }),
+  caption: (done: number, working: number) =>
+    working ? t("{done} done · {working} working", { done, working }) : t("{done} done", { done }),
   finishing: (working: number) => (working ? t("Finishing up · {working} working", { working }) : t("Finishing up")),
   open: t("Open in Builds"),
   /** The card's toggle, as a screen reader names it. */

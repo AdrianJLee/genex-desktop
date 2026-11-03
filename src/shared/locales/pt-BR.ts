@@ -2909,7 +2909,6 @@ export default {
   "Publishing this game ({phase})": "Publicando este jogo ({phase})",
   "Publishing…": "Publicando…",
   "Pull a recommended model from the Models tab.": "Baixe um modelo recomendado na aba Modelos.",
-  "Put it together and check": "Juntar tudo e verificar",
   "Put question aside": "Deixar a pergunta para depois",
   "Put the game files back as they were before this rewind; the chat stays rewound":
     "Restaurar os arquivos do jogo como estavam antes de voltar; o chat fica onde está",
@@ -4204,6 +4203,8 @@ export default {
   "Toggle Developer Tools": "Ferramentas do desenvolvedor",
   "Toggle Full Screen": "Tela cheia",
   "Toggle terminal": "Mostrar ou ocultar terminal",
+  "Told a worker: {said}": "Disse a um ajudante: {said}",
+  "Told “{task}”: {said}": "Disse a “{task}”: {said}",
   "Too large to run locally": "Grande demais para rodar localmente",
   "Too large to save, so it stays as it is: {names}.": "Grande demais para salvar, então fica como está: {names}.",
   "Too large to save, so they stay as they are: {names}.":
@@ -5287,9 +5288,6 @@ export default {
   "{action} {name}": "{action} {name}",
   "{action}: done": "{action}: concluído",
   "{added} of {total} added": "{added} de {total} adicionados",
-  "{added} of {total} parts added": "{added} de {total} partes adicionadas",
-  "{added} of {total} parts added · {working} working":
-    "{added} de {total} partes adicionadas · {working} em andamento",
   "{amount} Nex": "{amount} Nex",
   "{amount} more needed": "Faltam {amount}",
   "{app} settings": "Configurações do {app}",
@@ -5498,6 +5496,8 @@ export default {
   "{does}, asks you each time": "{does}, pergunta a você toda vez",
   "{doing} in {where}": "{doing} em {where}",
   "{done} MB": "{done} MB",
+  "{done} done": "{done, plural, one {# pronto} other {# prontos}}",
+  "{done} done · {working} working": "{done, plural, one {# pronto} other {# prontos}} · {working} em andamento",
   "{done} of {size} GB": "{done} de {size} GB",
   "{done} of {total}": "{done} de {total}",
   "{done} of {total} MB": "{done} de {total} MB",

@@ -1,4 +1,4 @@
-/** A worker a lead started, in its chat: one quiet line naming its task, rewritten as it ends. */
+/** A worker a lead started, in its chat: one quiet line naming its task, rewritten as it ends, and what it was told. */
 import type { JSX } from "react";
 import type { Entry, EntryKind } from "../chat-entries.ts";
 import { StepMark } from "./StepMark.tsx";
@@ -12,6 +12,15 @@ export function WorkerLine({ entry }: { entry: Extract<Entry, { kind: typeof Ent
     <div data-worker-line className="flex min-w-0 items-start gap-2.5 text-chat text-ink-3 [overflow-wrap:anywhere]">
       <StepMark done={entry.workerDone === true} />
       <span className="min-w-0 flex-1">{entry.text}</span>
+    </div>
+  );
+}
+
+/** What a session told a worker it redirected: "Told “Three levels and level flow”: make the ball red." */
+export function ToldLine({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind.Action }> }): JSX.Element {
+  return (
+    <div data-told-line className="min-w-0 text-chat text-ink-3 [overflow-wrap:anywhere]">
+      {entry.text}
     </div>
   );
 }

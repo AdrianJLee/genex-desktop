@@ -22,6 +22,9 @@ import {
   setupPluginOf,
   setupStepChanges,
   setupStepId,
+  SLOW_GRAPH_MS,
+  SLOW_GRAPH_REPEAT_MS,
+  slowGraphProperties,
   type StepStates,
   stepStateOf,
 } from "../../src/renderer/analytics/builds-stage.ts";
@@ -662,6 +665,19 @@ describe("the stage", () => {
     assert.equal(nodeKindOf("part:facet-7"), NodeKind.Part);
     assert.equal(nodeKindOf("step-abc"), NodeKind.Step);
     assert.equal(nodeKindOf("build:3"), NodeKind.Build, "a build of a Loop's line");
+  });
+
+  it("sends a slow projection of the Builds graph with its size, at most once in a while", () => {
+    const slow = { ms: SLOW_GRAPH_MS + 0.4, events: 90_000, parts: 40, buildsShown: true };
+    assert.deepEqual(slowGraphProperties(slow, T0, null), {
+      ms: SLOW_GRAPH_MS,
+      events: 90_000,
+      parts: 40,
+      builds_shown: true,
+    });
+    assert.equal(slowGraphProperties({ ...slow, ms: SLOW_GRAPH_MS - 1 }, T0, null), null, "a quick one is not sent");
+    assert.equal(slowGraphProperties(slow, T0 + SLOW_GRAPH_REPEAT_MS - 1, T0), null, "nor one soon after another");
+    assert.notEqual(slowGraphProperties(slow, T0 + SLOW_GRAPH_REPEAT_MS, T0), null);
   });
 
   it("tells a press the person declined from one that failed", () => {

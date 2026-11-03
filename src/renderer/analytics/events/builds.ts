@@ -222,6 +222,7 @@ export const BuildsEvent = {
   BuildMadeLive: "build_made_live",
   BuildsNodeOpened: "builds_node_opened",
   BuildsHistoryOpened: "builds_history_opened",
+  BuildsGraphSlow: "builds_graph_slow",
   FirstPreviewReady: "first_preview_ready",
   GameFirstBuildMade: "game_first_build_made",
   LiveGameShown: "live_game_shown",
@@ -255,6 +256,12 @@ export const BuildsEvent = {
   RobloxPublishFinished: "roblox_publish_finished",
 } as const;
 export type BuildsEvent = (typeof BuildsEvent)[keyof typeof BuildsEvent];
+
+/**
+ * One slow projection of the stage's graph from the conversation's log: how long it took, how
+ * many records it read and how many parts it drew, and whether Builds was shown (workers read).
+ */
+export type BuildsGraphSlowProperties = { ms: number; events: number; parts: number; builds_shown: boolean };
 
 /** A run's start as `run_started` carries it; also a chat turn's first worker (mode chat_turn). */
 export type RunStartedProperties = {
@@ -366,6 +373,7 @@ export type BuildsEventProperties = {
   [BuildsEvent.BuildPlayed]: { surface: BuildSurface; run_active: boolean; ok: boolean };
   [BuildsEvent.BuildMadeLive]: { ok: boolean };
   [BuildsEvent.BuildsNodeOpened]: { node_kind: GraphSelection | NodeKind; via: NodeVia; run_active: boolean };
+  [BuildsEvent.BuildsGraphSlow]: BuildsGraphSlowProperties;
   [BuildsEvent.BuildsHistoryOpened]: { via: HistoryVia; index_from_newest: number; running: boolean };
   [BuildsEvent.FirstPreviewReady]: {
     ms_build_to_ready: number | null;

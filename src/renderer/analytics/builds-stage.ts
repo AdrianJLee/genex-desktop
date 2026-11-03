@@ -5,7 +5,7 @@
  * in from the caller.
  */
 import { errorCodeIn, isUserCancelled } from "../../shared/errors.ts";
-import { SECOND_MS } from "../../shared/duration.ts";
+import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { type EventEnvelope, EventKind } from "../../shared/event-log.ts";
 import type { LiveBehindReason } from "../../shared/live-behind.ts";
 import { PluginSourceKind } from "../../shared/plugins.ts";
@@ -31,6 +31,10 @@ import { elapsedMs, oneOf } from "./properties.ts";
 export const BLANK_AFTER_MS = 10 * SECOND_MS;
 /** A Reload this soon after the last one of the same game is a rapid one. */
 export const RAPID_RELOAD_MS = 10 * SECOND_MS;
+/** A projection of the stage's graph this long blocks the window noticeably. */
+export const SLOW_GRAPH_MS = 250;
+/** A slow projection is sent at most once in this long: the stage projects again on every batch. */
+export const SLOW_GRAPH_REPEAT_MS = 5 * MINUTE_MS;
 
 type Props<E extends BuildsEvent> = BuildsEventProperties[E];
 
@@ -171,6 +175,33 @@ export function nodeKindOf(id: string): GraphSelection | NodeKind {
   if (fixed) return fixed;
   if (isBuildSelection(id)) return NodeKind.Build;
   return isPartSelection(id) ? NodeKind.Part : NodeKind.Step;
+}
+
+/** One projection of the stage's graph: what it read and drew, and how long it took. */
+export interface GraphProjection {
+  ms: number;
+  events: number;
+  parts: number;
+  buildsShown: boolean;
+}
+
+/**
+ * What a slow projection is sent as, or null when it was quick or one was sent less than
+ * `SLOW_GRAPH_REPEAT_MS` before `now` (`lastSentAt`, null before any).
+ */
+export function slowGraphProperties(
+  projection: GraphProjection,
+  now: number,
+  lastSentAt: number | null,
+): Props<typeof BuildsEvent.BuildsGraphSlow> | null {
+  if (projection.ms < SLOW_GRAPH_MS) return null;
+  if (lastSentAt !== null && now - lastSentAt < SLOW_GRAPH_REPEAT_MS) return null;
+  return {
+    ms: Math.round(projection.ms),
+    events: projection.events,
+    parts: projection.parts,
+    builds_shown: projection.buildsShown,
+  };
 }
 
 /** How a press that ran a plugin action ended: an error the person caused by saying no is a decline. */

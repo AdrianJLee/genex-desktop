@@ -6199,4 +6199,16 @@ export default {
   "Open install guide": "Abrir guía de instalación",
   "On Windows, OpenCode installs from its guide with Chocolatey, Scoop or npm. Then check again.":
     "En Windows, OpenCode se instala desde su guía con Chocolatey, Scoop o npm. Luego vuelve a comprobar.",
+  "A web version is on Genex": "Hay una versión web en Genex",
+  "Genex keeps this web version: the game has no app on Genex yet, so players would have nothing to play.":
+    "Genex mantiene esta versión web: el juego aún no tiene app en Genex, así que los jugadores no tendrían nada a lo que jugar.",
+  "Remove the web version from Genex": "Quitar la versión web de Genex",
+  "The game’s page plays its web version until you remove it, so players don’t see the apps.":
+    "La página del juego muestra su versión web hasta que la quites, así que los jugadores no ven las apps.",
+  "Publish makes this web version the game’s page, in place of its apps.":
+    "Publicar hace que esta versión web sea la página del juego, en lugar de sus apps.",
+  "This game was taken down, so Genex keeps its web version for now.":
+    "Este juego fue retirado, así que Genex mantiene su versión web por ahora.",
+  "Genex couldn’t finish removing the web version. Press Remove again.":
+    "Genex no pudo terminar de quitar la versión web. Pulsa Quitar otra vez.",
 } satisfies LocaleCatalog;

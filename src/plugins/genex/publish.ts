@@ -71,6 +71,13 @@ export const MESSAGE = {
   /** {@link MESSAGE.NoApps} as Publish's refusal. */
   NoAppsRefusal: () => t("This game has no Mac, Windows or Linux app ready to publish."),
   ListingRefused: "Genex did not list the game in the gallery.",
+  /** A taken-down game keeps its web version on Genex for the appeal. */
+  TakenDownRefusal: () => t("This game was taken down, so Genex keeps its web version for now."),
+  /** Genex stopped partway through taking the web version off; the same press finishes it. */
+  RemovalIncomplete: () => t("Genex couldn’t finish removing the web version. Press Remove again."),
+  /** Genex keeps a web version that is all the game's players have. */
+  OnlyWebRefusal: () =>
+    t("Genex keeps this web version: the game has no app on Genex yet, so players would have nothing to play."),
 } as const;
 
 /** Genex's own record of a hosted game, read by slug. `missing`: there is no hosted project. */
@@ -147,6 +154,9 @@ export function publishPhaseFor(meta: HostedMeta | null | undefined): GenexPubli
 export const checksDraftPage = (job: GenexPublishJob): boolean =>
   job.kind === GenexPublishKind.Draft || job.deployment !== undefined;
 
+/** The CLI's word that a web build may replace a page that shows only the game's apps. */
+const REPLACE_NATIVE_PAGE_FLAG = "--replace-native-page";
+
 /** The CLI command for each upload phase. Listing ships nothing: the promoted build is already live. */
 const CLI_ARGS_FOR_PHASE: Partial<Record<GenexPublishPhase, string[]>> = {
   [GenexPublishPhase.Uploading]: ["preview", "--no-build"],
@@ -154,12 +164,21 @@ const CLI_ARGS_FOR_PHASE: Partial<Record<GenexPublishPhase, string[]>> = {
   [GenexPublishPhase.Listing]: ["publish", "--no-push"],
 };
 
+/** The phases that can make a build the public one, so Genex asks whether it may replace a page of apps. */
+const GOES_PUBLIC: ReadonlySet<GenexPublishPhase> = new Set([GenexPublishPhase.Promoting, GenexPublishPhase.Listing]);
+
 /**
  * The CLI arguments that carry out an upload phase. Listing names the game. Its cover is a real
  * frame of the game with no name in it (`cover.ts`), so a new name never asks for a new picture.
+ * `replaceNativePage` (the person agreed this web build replaces a page that shows only the
+ * game's apps) goes with each phase that can make it public.
  */
-export function publishArgs(phase: GenexPublishPhase, listing: { title?: string } = {}): string[] {
+export function publishArgs(
+  phase: GenexPublishPhase,
+  listing: { title?: string; replaceNativePage?: boolean } = {},
+): string[] {
   const args = [...(CLI_ARGS_FOR_PHASE[phase] ?? [])];
+  if (listing.replaceNativePage && GOES_PUBLIC.has(phase)) args.push(REPLACE_NATIVE_PAGE_FLAG);
   if (phase !== GenexPublishPhase.Listing || !listing.title) return args;
   return [...args, "--title", listing.title];
 }

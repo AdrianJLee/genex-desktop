@@ -183,6 +183,21 @@ test("the game's ready Mac app goes with the dialog's publish once the Genex CLI
   }
 });
 
+test("the dialog's word that the web build replaces a page of apps reaches Genex only when it said so", async () => {
+  const rig = await dialogRig();
+  try {
+    const review = await publishReview(rig.core, GAME);
+    await publishFromDialog(rig.core, GAME, review, undefined, false, undefined, true);
+    assert.deepEqual(rig.calls.at(-1)?.args, { replaceNativePage: true });
+    for (const said of [undefined, false, "yes", 1]) {
+      await publishFromDialog(rig.core, GAME, await publishReview(rig.core, GAME), undefined, false, undefined, said);
+      assert.deepEqual(rig.calls.at(-1)?.args, {}, `never assumed: ${String(said)}`);
+    }
+  } finally {
+    await rig.close();
+  }
+});
+
 test("an Unreal game with a ready Mac app publishes as its app, never as a web game", async () => {
   const rig = await dialogRig();
   try {
@@ -340,6 +355,34 @@ test("Publish refuses an Unreal game, whose folder holds no web build, and still
       [[GenexAction.PublishGallery, GAME]],
     );
     assert.equal(rig.staged.length, 1, "Genex staged the web game's public copy");
+  } finally {
+    await rig.close();
+  }
+});
+
+test("an Unreal game with design mockups in a folder still publishes as its app, never the mockups as its web game", async () => {
+  const rig = await dialogRig();
+  try {
+    const game = await rig.core.games.scaffold("dust-two", { title: "Dust Two" });
+    // An Unreal project in place of the starter, and what an agent asked for a design board writes:
+    // a page of mockups in a folder of the game.
+    await rm(path.join(game.dir, "index.html"));
+    const meta = path.join(game.dir, "studio.json");
+    const { contractVersion: _starter, ...kept } = JSON.parse(await readFile(meta, "utf8")) as Record<string, unknown>;
+    await writeFile(meta, JSON.stringify(kept));
+    await writeFile(path.join(game.dir, "DustTwo.uproject"), "{}");
+    await mkdir(path.join(game.dir, "ui_design"), { recursive: true });
+    await writeFile(path.join(game.dir, "ui_design", "index.html"), "<!doctype html><title>UI mockups</title>");
+    const refused = (error: unknown): boolean => {
+      assert.ok(error instanceof PublishRefusedError, String(error));
+      assert.equal(error.code, PublishRefusal.UnrealGame);
+      return true;
+    };
+    await assert.rejects(publishReview(rig.core, "dust-two"), refused);
+    const review = await publishReview(rig.core, GAME);
+    await assert.rejects(publishFromDialog(rig.core, "dust-two", review, "Dust Two", true), refused);
+    assert.equal(rig.calls.length, 0, "Genex is asked nothing");
+    assert.equal(rig.staged.length, 0, "and nothing is staged");
   } finally {
     await rig.close();
   }

@@ -26,6 +26,8 @@ export const GenexAction = {
   PublishGallery: "publish-gallery",
   /** Publish a game that has only apps, no web build: send them and list the game (`genex native publish --gallery`). */
   PublishApps: "publish-apps",
+  /** Take the game's web version off Genex, keeping its apps: its page shows them again. */
+  PublishRemoveWeb: "publish-remove-web",
   PublishAllowUpload: "publish-allow-upload",
   PublishOpen: "publish-open",
   PublishBadge: "publish-badge",
@@ -51,6 +53,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
   GenexAction.PublishDraft,
   GenexAction.PublishGallery,
   GenexAction.PublishApps,
+  GenexAction.PublishRemoveWeb,
   GenexAction.PublishAllowUpload,
   GenexAction.PublishOpen,
   GenexAction.PublishBadge,
@@ -603,9 +606,30 @@ export interface GenexPublishState {
   cover?: GenexCoverRecord;
   /** The game's Mac, Windows and Linux apps as its last publish sent them, answered beside the record like the cover. */
   native?: GenexNativeRecord;
+  /**
+   * Whether Genex plays a web version of the game on its page (its public build), as Genex last
+   * answered; absent while unknown (not on Genex, signed out, Genex unreachable). A game with apps
+   * and a web version shows the web version, so its page shows the apps only once this is false.
+   */
+  hostedWeb?: boolean;
   /** The game's project as remixers get it, answered beside the record like the cover. */
   remix?: GenexRemixRecord;
 }
+
+/**
+ * Why Genex refused a change to a game's web version (the answer's `error`). Wire values: never
+ * rename one. `NoNativeBuild`: the web version is all the game has, so it stays; `GameTakenDown`:
+ * a taken-down game keeps its build for the appeal; `RemovalIncomplete`: Genex stopped partway and
+ * the same Remove finishes it; `NativePageWouldBeReplaced`: a web build would replace a page that
+ * shows only the game's apps, and the publish did not say it may.
+ */
+export const GenexWebRefusal = {
+  NoNativeBuild: "no_native_build",
+  GameTakenDown: "game_taken_down",
+  RemovalIncomplete: "web_removal_incomplete",
+  NativePageWouldBeReplaced: "native_page_would_be_replaced",
+} as const;
+export type GenexWebRefusal = (typeof GenexWebRefusal)[keyof typeof GenexWebRefusal];
 
 /** Where Genex's review of an app someone other than an admin sent stands. Wire values: never rename one. */
 export const GenexBuildReview = { Pending: "pending", Approved: "approved", Rejected: "rejected" } as const;

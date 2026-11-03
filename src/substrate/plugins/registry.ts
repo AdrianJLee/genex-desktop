@@ -465,16 +465,9 @@ function skillGuidance({ manifest, reach }: PluginPart, game: GameKind): string[
     return isFileSkill(s) ? fileSkillIndexLine(manifest.id, s, where) : `[${manifest.id}/${s.name}]${where}\n${s.text}`;
   });
 }
-/** One reaching kind tool as the snapshot offers it (with whether it answers its readiness). */
+/** One reaching kind tool as the snapshot offers it. */
 function kindOffer(manifest: PluginManifest, t: PluginManifestTool): PluginKindOffer {
-  const tool = `${manifest.id}__${t.name}`;
-  return {
-    plugin: manifest.id,
-    name: manifest.name,
-    tool,
-    makes: [...(t.makes ?? [])],
-    ...(t.ready ? { asksReady: true } : {}),
-  };
+  return { plugin: manifest.id, name: manifest.name, tool: `${manifest.id}__${t.name}`, makes: [...(t.makes ?? [])] };
 }
 /**
  * The kinds one plugin's reaching tools make, as the snapshot lists them: one offer per scaffold

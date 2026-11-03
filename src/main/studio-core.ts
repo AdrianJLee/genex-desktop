@@ -2124,8 +2124,8 @@ export class StudioCore {
     const where = options.parent === undefined ? {} : { parent: options.parent, allowed };
     const waiting = options.provisional === true ? { provisional: true } : {};
     const ready = await this.#readyProject(await this.games.create(title, { ...where, ...waiting }));
-    // The folder as it was made, once its repository exists: the chat's first build reads
-    // "nothing built yet" from it (the engine question, harness-seed `delegated-turn.ts`).
+    // The folder as it was made, once its repository exists: while it still matches, the game has
+    // no kind yet (`scaffoldStamp`), and it waits for its first build.
     const game = await this.games.rememberScaffold(ready.name);
     await this.threadForGame(game.name);
     return game;

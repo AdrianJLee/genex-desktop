@@ -1100,7 +1100,9 @@ export class CodexEngine implements Engine {
   /**
    * The message's parts: Genex's notices and the prompt as sent (`textsAsSent`), then what Codex can
    * only be told per turn: its tools, its folder, its limits (plan mode and the bridge's tools change
-   * between turns). Genex's context is the session's developer instructions, never a part.
+   * between turns). Genex's context is an app server thread's developer instructions; `codex exec`
+   * could take it only in argv, which a context with its plugins' guidance overflows on Windows, so a
+   * new exec session reads it on stdin as its first notice, and a resumed one has it in its history.
    */
   async #delegateTexts(
     request: DelegateRequest,
@@ -1142,7 +1144,9 @@ export class CodexEngine implements Engine {
     ]
       .filter((part) => part?.trim())
       .join("\n\n");
-    return [...textsAsSent(request), ...(notes ? [notes] : [])];
+    const newExecSession = !ctx.turn && !request.resume;
+    const told = newExecSession ? { ...request, notices: [request.system ?? "", ...(request.notices ?? [])] } : request;
+    return [...textsAsSent(told), ...(notes ? [notes] : [])];
   }
 
   /** `codex exec` (or `exec resume`) for this delegation: model, sandbox, effort, stills. */
@@ -1162,7 +1166,6 @@ export class CodexEngine implements Engine {
       ...windowsSandboxArgs(this.#platform),
       ...effortArgs(request.effort),
       ...(await this.preferenceArgs(request.model, request.preferences)),
-      ...developerArgs(request.system),
       ...imageArgs(imagePaths),
       "-",
     ];
@@ -2416,14 +2419,6 @@ async function isRegularFile(file: string): Promise<boolean> {
 /** Each still as an `-i` image argument. */
 function imageArgs(paths: string[]): string[] {
   return paths.flatMap((file) => ["-i", file]);
-}
-
-/**
- * Genex's context as the session's developer instructions (`DelegateRequest.system`), a `-c` of
- * exec's own scope: Codex drops a root `-c` when the nested command has its own.
- */
-function developerArgs(system: string | undefined): string[] {
-  return system ? ["-c", `developer_instructions=${JSON.stringify(system)}`] : [];
 }
 
 // ── small shared pieces ────────────────────────────────────────────────────────────────────

@@ -41,7 +41,6 @@ import { FolderHolds } from "../../src/shared/project-facts.ts";
 import { FindNext, PluginOffer } from "../../src/shared/project-tools.ts";
 import { inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
-import { chatContext } from "../../src/harness-seed/loop/chat-session.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { FinishCheckStep } from "../../src/harness-seed/loop/finish-contract.ts";
 import type { Run } from "../../src/harness-seed/types/harness.d.ts";
@@ -1382,10 +1381,8 @@ describe("an Unreal game with a web site: two facts, two views", () => {
     } finally {
       registry.cancel();
     }
-    // Flipped: each kind got rules of its own, named by path; the context names what is where, and
-    // the plugins' guidance (above) is scoped by path.
-    const context = chatContext({ facts }, { folderLabel: "AI Games/keep", appLanguage: null });
-    assert.match(context, /it holds an Unreal Engine project at its root, a web game in `site\/`/);
+    // Flipped: each kind got rules of its own, named by path, then the context named what is where.
+    // The plugins' guidance (above) is scoped by path, and the context never says what the folder holds.
   });
   it("two observers; Live shows the Unreal card, picked by the facts", async () => {
     const { descriptor, observers, plugins } = await withUnrealOn(async () => {

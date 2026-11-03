@@ -127,15 +127,6 @@ export function jobNotice(ended: readonly JobRecord[]): string {
 }
 
 /**
- * Beside a build's lead's plugin guidance: its plugin tools act on the build it leads, not the game
- * folder it sits in (delegation.ts `DelegationSession.leads`). Never the build's path: the brief's
- * WHERE YOU ARE line already names it.
- */
-export function leadToolsNote(): string {
-  return "Your plugin tools work on the build you lead, not in this game folder: what they deliver lands in the game with the build, and a file one of them reads must be in the build: write it there yourself, or have a worker write it.";
-}
-
-/**
  * Genex's line to a session that shows its plan by ending its turn (`plansByTurn`) once the person
  * approved it: the same session goes on in the mode they chose, which its engine is set to
  * (plan-approval.ts). Words the person sent the plan back with go as theirs, as they wrote them.

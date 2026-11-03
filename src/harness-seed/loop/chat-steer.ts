@@ -110,10 +110,7 @@ interface TurnLegs {
 
 const stillsOf = (items: readonly QueueAction[]): DelegateImage[] => items.flatMap((item) => item.stills ?? []);
 
-/** Who wrote the turn's message, as a leg carries it: nothing for a brief. */
-const fromOf = (options: SteeredCallOptions): Pick<Leg, "from"> => (options.from ? { from: options.from } : {});
-
-/** A leg's prompt and who wrote all of it, when someone did. */
+/** A leg's prompt and who wrote all of it, when someone did: nobody for a brief. */
 const said = (prompt: string, from?: MessageFrom): Pick<Leg, "prompt" | "from"> => ({
   prompt,
   ...(from ? { from } : {}),
@@ -153,10 +150,9 @@ export async function steeredCall(
   const run = (leg: Leg) => callOrStartFresh(seat, told, owed, leg);
   if (!steer)
     return run({
-      prompt: options.prompt,
+      ...said(options.prompt, options.from),
       resume: options.resume ?? null,
       images: options.images ?? [],
-      ...fromOf(options),
     });
   const turn: TurnLegs = {
     ctx,
@@ -327,10 +323,9 @@ function freshLeg(options: SteeredCallOptions, told: readonly QueueAction[], owe
   owed.length = 0;
   const joined = oneSender(owed, told, options.from === MessageFrom.Genex);
   return {
-    prompt: withWords(options.prompt, joined),
+    ...said(withWords(options.prompt, joined), options.from),
     resume: null,
     images: [...(options.images ?? []), ...stillsOf(joined)],
-    ...fromOf(options),
   };
 }
 

@@ -171,15 +171,6 @@ export function isSteadyPermissionMode(value: unknown): value is SteadyPermissio
   return isPermissionMode(value) && STEADY_PERMISSION_MODES.has(value);
 }
 
-/** Claude Code's mode names in English, as a session reads them in a notice. */
-export const PERMISSION_MODE_NAMES: Record<PermissionMode, string> = {
-  [PermissionMode.Auto]: "Auto",
-  [PermissionMode.Manual]: "Manual",
-  [PermissionMode.AcceptEdits]: "Accept edits",
-  [PermissionMode.Plan]: "Plan",
-  [PermissionMode.Bypass]: "Bypass permissions",
-};
-
 /**
  * The menu's words: Claude Code's mode names, each described in one line of the menu, in the
  * app's language. A function, as main reads it too and sets its language after loading.

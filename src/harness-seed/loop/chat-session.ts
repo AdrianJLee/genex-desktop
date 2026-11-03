@@ -3,16 +3,11 @@
  * knows of Genex for its whole life: its context, said once in its system text (`chatContext`).
  * The person's words reach it as they wrote them; a chat never guesses a different game folder.
  */
-import { GameEngine, engineOfGame } from "./game-engine.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
-import { CoreFact, type FactRef } from "./folder-facts.ts";
-import { appIdentity, factPrefix } from "./project-prompts.ts";
+import { appIdentity } from "./project-prompts.ts";
 import type { AppLanguage } from "./app-language.ts";
 import { languageRule } from "./language-prompts.ts";
-import { godotLinkLine, unrealLinkLine } from "./linked-project-prompts.ts";
-import { pluginWebBuilds, webBuildLine } from "./web-build.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
-import type { GameProject } from "../types/host-api.d.ts";
 
 /** How many content words of the ask a folder name keeps. */
 const NAME_WORDS = 3;
@@ -228,66 +223,21 @@ const USER_COMMAND_FENCE = "bash";
 /** What a one-line command block in a reply becomes in Genex's chat, and which commands earn one. */
 const RUN_BUTTON = `A one-line \`\`\`${USER_COMMAND_FENCE} block in your reply shows the person a Run button: offer one only for a step your sandbox blocks that only their own computer can do (an install that needs the network, a system tool, a sign-in), never one you can run yourself, sudo, or a pipe into a shell.`;
 
-/** A fact as the context reads it: what, where and, when the host said it, where it came from. */
-type SourcedFact = FactRef & { source?: string };
-
-/**
- * A game as its chat's context reads it: `game.list`'s record of it. `built`: the person brought it
- * in its own shape, which Genex builds before every preview.
- */
-export type ChatGame = Partial<Pick<GameProject, "holds" | "shape" | "built" | "engine">> & {
-  facts?: readonly SourcedFact[] | null;
-};
-
-/** A fact's what, where and source, nothing else of it. */
-const sourcedFact = ({ id, path, source }: SourcedFact): SourcedFact =>
-  typeof source === "string" ? { id, path, source } : { id, path };
-
-/**
- * The line one kind the folder holds adds to the identity, or none: the build Genex runs before every
- * preview of a game in its own shape, a plugin's web build, and where an Unreal project's work lands.
- * Every other kind is named by the identity and is the agent's to work with.
- */
-function factLine(game: ChatGame, fact: SourcedFact, builds: ReadonlySet<string>): string {
-  if (builds.has(fact.path)) return fact.id === CoreFact.WebGame ? webBuildLine(fact.path) : "";
-  if (fact.id === CoreFact.UnrealProject) return unrealLinkLine(game.engine?.project ?? null, fact.path);
-  const build = game.built ? game.shape?.build : null;
-  if (fact.id === CoreFact.WebGame && build)
-    return `Genex runs \`${build}\` before every preview: a build that fails is a black screen.`;
-  return "";
-}
-
-/** The game's lines beside the identity: each kind's, named by its folder when there are several, and a linked Godot project's. */
-function gameLines(game: ChatGame, facts: readonly SourcedFact[]): string[] {
-  const builds = pluginWebBuilds(facts);
-  const several = facts.length > 1;
-  const lines = facts.flatMap((fact) => {
-    const line = factLine(game, fact, builds);
-    return line ? [`${several ? factPrefix(fact) : ""}${line}`] : [];
-  });
-  const godot = engineOfGame(game) === GameEngine.Godot ? game.engine?.project : null;
-  return godot ? [...lines, godotLinkLine(godot)] : lines;
-}
-
 /**
  * Genex's context for the chat's own session, said once in its system text: who runs it and the
- * game's folder (`appIdentity`), who the person is, the language they read, what only Genex knows of
- * the game's kinds, and the chat's Run button. A pure function of the game and the app's language,
- * with no dates, turns or settings, so it is the same text on every turn while the game is the same,
- * the lead's turns included (director.ts): the Loop, workers, checkpoint, kind choice and every
- * other setting reach the session as its tools and its engine's options, never as text.
+ * game's folder (`appIdentity`), who the person is, the language they read and the chat's Run button.
+ * Only what holds for the session's whole life, the same text on every turn, the lead's included
+ * (director.ts): a resumed Claude Code or Codex session keeps the system text it started with. So
+ * what the folder holds, which a turn can change, is never in it: a turn that changes it tells the
+ * session in Genex's line (delegated-turn.ts `continueOnNewFacts`), and the Loop, workers, checkpoint,
+ * kind choice and every other setting reach the session as its tools and its engine's options.
  */
-export function chatContext(
-  game: ChatGame | null | undefined,
-  { folderLabel, appLanguage }: { folderLabel: string; appLanguage: AppLanguage | null },
-): string {
-  const facts = Array.isArray(game?.facts) ? game.facts.map(sourcedFact) : [];
-  const holds = game?.holds ?? null;
-  return [
-    appIdentity({ folderLabel, facts, holds }),
-    TALK,
-    languageRule(appLanguage),
-    ...gameLines(game ?? {}, facts),
-    RUN_BUTTON,
-  ].join("\n");
+export function chatContext({
+  folderLabel,
+  appLanguage,
+}: {
+  folderLabel: string;
+  appLanguage: AppLanguage | null;
+}): string {
+  return [appIdentity({ folderLabel }), TALK, languageRule(appLanguage), RUN_BUTTON].join("\n");
 }

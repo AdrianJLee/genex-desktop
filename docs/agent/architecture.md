@@ -323,9 +323,9 @@ questions and plan reviews pin above the composer (`chat/ChatQuestion.tsx`); onl
 confirmation calls the consent, permission or plan IPC.
 
 **Questions and Studio chat.** `ask_user` records a durable `interview_question` through both the
-direct tool registry and the delegated bridge, which hands it to a chat's session only for a new
-game's engine question; the provider turn ends, the answer arrives through the normal message
-queue and resumes the same session, and a question never launches a run by itself.
+direct tool registry and the delegated bridge, which hands it to a chat's session only while its
+game has no kind and a plugin on offers one; the provider turn ends, the answer arrives through the
+normal message queue and resumes the same session, and a question never launches a run by itself.
 Explicit Studio messages bypass game chats: `loop/studio-chat.ts` calls `engine.complete`
 with no tools, a bounded window, current attachments and host-owned `studio.context`; it never
 delegates or edits games, settings or harness files, and a blank reply is a durable error.
@@ -876,7 +876,8 @@ applied plugin/skill set from one live view, so a brief's tools and skill lines 
 contributes an index line (`skill-prompts.ts`) and the host-answered `<id>__skill` tool, which reads
 only declared files through a checked handle, pages at 24,000 characters and writes nothing.
 Skills are served from the installed package, never written into games. A session's plugins are
-its tool list and system text on each launch; delegation records only the revision it took
+its tool list on each launch and the system text it started with (a resumed Claude Code or Codex
+session keeps that text); delegation records only the revision it took
 (`tool_registry_applied`). Updates and hot reloads
 diff skills (`lastSkillChange`, scan `skillDigests`) for the trust dialog and plugin page.
 

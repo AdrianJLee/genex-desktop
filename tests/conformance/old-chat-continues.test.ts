@@ -1,12 +1,11 @@
 /**
  * The owner's check of the chat brief: a chat from before, whose Claude Code session holds its turns
  * in the old wrapped form (the person's words with Genex's rules glued after them, and no Genex
- * system text), goes on after the update. Its session is resumed with Genex's context as the system
- * text and the person's next message alone, as they wrote it, and the reply comes. The scripted case
- * proves what the engine hands Claude Code; opt-in (`STUDIO_CLAUDE_CLI_TESTS=1`), the real CLI against
- * `fake-anthropic.ts` resumes such a session and sends the model the old turns and the words, then
- * answers. Claude Code 2.1.314 keeps the system prompt a session started with on every resume (until
- * a compaction), so such a chat reads its old system text until then; the test reports which it sent.
+ * system text), goes on after the update with the person's next message alone, as they wrote it, and
+ * the reply comes. Opt-in (`STUDIO_CLAUDE_CLI_TESTS=1`): the real CLI against `fake-anthropic.ts`.
+ * Half of the check does not hold: Claude Code 2.1.314 keeps the system prompt a session started
+ * with on every resume (until a compaction), so such a chat reads its old system text, never
+ * Genex's new context. The test asserts that, so a CLI that changes it fails here.
  */
 import assert from "node:assert/strict";
 import { mkdir, realpath } from "node:fs/promises";
@@ -14,9 +13,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { MessageFrom } from "../../src/shared/engine-requests.ts";
 import { ClaudeCodeEngine } from "../../src/substrate/engines/claude-code.ts";
-import { fixtureCodingCli } from "../helpers/external-cli.ts";
 import { type FakeAnthropicRequest, startFakeAnthropic } from "../helpers/fake-anthropic.ts";
-import { scriptedClaude } from "../helpers/scripted-claude.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 delete process.env.CLAUDE_CONFIG_DIR;
@@ -68,31 +65,9 @@ function conversation(requests: readonly FakeAnthropicRequest[]): FakeAnthropicR
 }
 
 describe("a chat whose session holds its turns in the old wrapped form", () => {
-  it("is resumed with Genex's context as the system text and the person's words alone", async () => {
-    const { cwd, engineHome, systemHome } = await place("studio-old-chat-");
-    const scripted = scriptedClaude([]);
-    const engine = new ClaudeCodeEngine({
-      resolveCli: fixtureCodingCli,
-      engineHome,
-      systemHome,
-      queryFn: scripted.queryFn,
-    });
-    const result = await engine.delegate({
-      prompt: WORDS,
-      from: MessageFrom.Person,
-      resume: "session-from-before",
-      system: NEW_CONTEXT,
-      cwd,
-    } as never);
-    assert.equal(result.ok, true, "the reply comes");
-    assert.equal(scripted.options?.resume, "session-from-before", "its own session goes on");
-    assert.deepEqual(scripted.options?.systemPrompt, { type: "preset", preset: "claude_code", append: NEW_CONTEXT });
-    assert.equal(scripted.prompt, WORDS, "the words alone, as written");
-  });
-
-  it("the real CLI resumes a session started with an old wrapped brief: the model reads the old turns, then the words alone, and answers", {
+  it("the real CLI resumes a session started with an old wrapped brief: the model reads the old turns and old system text, then the words alone, and answers", {
     skip: !LIVE && "set STUDIO_CLAUDE_CLI_TESTS=1 to run the real Claude Code CLI",
-  }, async (t) => {
+  }, async () => {
     const { cwd, engineHome, systemHome } = await place("studio-old-chat-cli-");
     const saved = { ...process.env };
     const fake = await startFakeAnthropic({ command: "true" });
@@ -122,9 +97,8 @@ describe("a chat whose session holds its turns in the old wrapped form", () => {
       assert.ok(first, "the resumed turn's first request");
       assert.ok(!systemOf(first).includes("OLD-RULES-MARK"), "the old rules are no system text");
       // Claude Code 2.1.314 records a session's system prompt as it starts and sends that record on
-      // every resume (until a compaction): the new text reaches a new session, not this one. An
-      // older CLI renders it fresh on each launch. Either way the chat goes on.
-      t.diagnostic(`the resumed request's system holds the new text: ${systemOf(first).includes(NEW_CONTEXT)}`);
+      // every resume (until a compaction): the new text reaches a new session, not this one.
+      assert.ok(!systemOf(first).includes(NEW_CONTEXT), "the session keeps the system text it started with");
       const messages = (first.body as { messages?: Array<{ role?: string; content?: unknown }> }).messages ?? [];
       assert.ok(
         messages.some((m) => m.role === "user" && texts(m).some((text) => text.includes("OLD-RULES-MARK"))),

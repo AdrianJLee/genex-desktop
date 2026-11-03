@@ -75,7 +75,6 @@ import {
   type HandedPlugin,
   handedPluginsNote,
   unsavedFilesNotice,
-  leadToolsNote,
   silentConnectorLog,
 } from "./delegation-prompts.ts";
 import { computerTools, type ComputerGrant, type ComputerTools } from "./computer-tools.ts";
@@ -102,7 +101,8 @@ import { HookEvent } from "../../shared/plugin-hooks.ts";
 
 /**
  * Engines whose own system prompt takes a session's lasting context (`DelegateRequest.system`):
- * Claude Code's append, Codex's developer instructions.
+ * Claude Code's append, Codex's developer instructions (on its app server; a new `codex exec`
+ * session reads it as its first notice, codex.ts `#delegateTexts`).
  */
 const SYSTEM_CONTEXT_ENGINES: ReadonlySet<string> = new Set([ProviderId.ClaudeCode, ProviderId.Codex]);
 
@@ -2231,8 +2231,9 @@ export class DelegationService {
 
   /**
    * Record the revision this session is handed, each handed plugin's account state read first for
-   * its system text to say which are not set up yet. What a session was handed before is its own to
-   * see: its plugins' tools and guidance are its tool list and system text on each turn.
+   * its system text to say which are not set up yet. No notice says what changed since it last ran:
+   * its tool list is what it is handed now, while a resumed Claude Code or Codex session keeps the
+   * plugin guidance of the system text it started with.
    */
   async #applyPlugins(session: DelegationSession, engineId: string, tools: SessionTools) {
     tools.handed = await withAccounts(this.#core.plugins, tools.handed);
@@ -2414,16 +2415,16 @@ export class DelegationService {
     ].filter(Boolean);
   }
 
-  /** What holds for the session's whole life: the harness's context, its plugins, their guidance and connectors. */
+  /**
+   * The session's system text: the harness's context, its plugins, their guidance and connectors, the
+   * same for a chat's own session and its lead. A resumed Claude Code or Codex session keeps the text
+   * it started with, so of a plugin turned on or off since, only its tool list follows.
+   */
   #contextParts(p: DelegateParams, session: DelegationSession, tools: SessionTools): string[] {
-    // A lead of a build elsewhere is told its plugins work there; a lead in place works where it sits.
-    const leadsElsewhere = session.leads !== null && !session.leadsInPlace;
-    const toldWhereLeadToolsWork = session.hostTools && leadsElsewhere && tools.plugins.length > 0;
     return [
       p.system ?? "",
       session.hostTools ? handedPluginsNote(tools.handed) : "",
       session.hostTools ? tools.pluginGuidance : "",
-      toldWhereLeadToolsWork ? leadToolsNote() : "",
       this.#core.mcp.guidance(tools.mcp),
     ];
   }

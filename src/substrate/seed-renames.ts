@@ -30,7 +30,6 @@ export const RENAMED_SEED_NAMES: Readonly<Record<string, string>> = {
   afterLeadNight: "afterLeadLoopRun",
   afterNight: "afterLoopRun",
   afterNightGrant: "afterLoopRunGrant",
-  afterNightNote: "afterLoopRunNote",
   bindNight: "bindLoopRun",
   closeTheNight: "closeTheLoopRun",
   learnedTonight: "learnedThisRun",

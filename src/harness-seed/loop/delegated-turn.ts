@@ -65,7 +65,6 @@ import type {
   ReadyResult,
   DelegateImage,
   DelegateResult,
-  Message,
   MessageOrigin,
   StudioToolSpec,
 } from "../types/host-api.d.ts";
@@ -125,13 +124,14 @@ const MESSAGE = {
 /** What a delegated turn works with once its chat is read and its folder chosen. */
 interface Handoff {
   ask: string;
-  messages: Message[];
   /** The chat's own session is handed the Loop's start (`launches`). */
   launches: boolean;
   /** The contractor session this chat resumes, if any. */
   resume: string | null;
   /** The chat so far, for a session that starts in a chat that began before it (`historyNotice`); "" for none. */
   history: string;
+  /** The same with the ask kept: the history once the prompt is Genex's line, not the ask (`withFactsNow`). */
+  historyWithAsk: string;
   hasPriorAsk: boolean;
   project: string;
   descriptor: GameProject | null;
@@ -247,7 +247,9 @@ async function handOver(
   handoff: Handoff,
   ended: { handoff: Handoff },
 ): Promise<TurnOutcome> {
-  const context = await contextOf(ctx, handoff);
+  // Genex's context, the session's system text on every leg: the folder and the app's language, which
+  // no turn changes (chat-session.ts `chatContext`).
+  const context = chatContext({ folderLabel: handoff.folderLabel, appLanguage: await appLanguage(ctx) });
   await recordHandoff(ctx, options, handoff);
   const callId = await recordDelegateRequest(ctx, options, handoff);
   // A read-only turn is told apart from a build by what it did to the folder's content.
@@ -306,7 +308,8 @@ async function afterDelegation(ctx: HarnessCtx, seat: Seat, delegation: Delegati
 /**
  * How the chat's turn runs now: its options and handoff, Genex's context for its system text, and
  * the message whose settings it follows — the one it answers, or the last that changed them. A
- * switch replaces all four (steer-switch.ts); the legs and the turn's end read them as they are then.
+ * switch replaces its options, handoff and message (steer-switch.ts); the legs and the turn's end
+ * read them as they are then.
  */
 interface Seat {
   options: DelegatedOptions;
@@ -481,7 +484,8 @@ function endedWithSession(options: DelegatedOptions, turn: FinishedTurn): boolea
 /**
  * A chat's own turn that changed what its project is (the served facts at its end differ from its
  * start's: a port, a link to an Unreal project, or project files it wrote): tools are fixed per
- * turn, so the same session goes on by itself, with the tools and the context for the new kind. A turn
+ * turn, so the same session goes on by itself, with the tools for the new kind, told the kind in
+ * Genex's line (`factsReadyNotice`): its system text never says what the folder holds. A turn
  * that linked the game to an engine project, or switched its link to another, first waits until the
  * game's plugins say its apps are ready (`health`, `waitUntilReady`): that project's editor may still
  * be opening. One that never gets ready (a step blocks, or the wait's cap passes) goes on too, told
@@ -503,7 +507,7 @@ async function continueOnNewFacts(ctx: HarnessCtx, seat: Seat, turn: FinishedTur
   if (waited.wait === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
   if (waited.wait === ReadyWait.Held) return turn.outcome;
   // The seat runs on the new kind from now on: a switch sent meanwhile starts from it.
-  Object.assign(seat, { handoff: next, context: await contextOf(ctx, next) });
+  seat.handoff = next;
   const notReady = waited.wait === ReadyWait.NotReady ? waited.reason : undefined;
   return goOnInSession(ctx, seat, turn, factsReadyNotice(servedFactsOf(game), notReady));
 }
@@ -557,16 +561,20 @@ async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handof
   return { wait: ready.held ? ReadyWait.Held : ReadyWait.NotReady, reason: ready.reason };
 }
 
-/** The turn's handoff for the game as it is now: its kind is decided, so the question card is no longer bridged. */
+/**
+ * The turn's handoff for the game as it is now: its kind is decided, so the question card is no
+ * longer bridged; and its legs' prompt is Genex's line, so a new session they start is told the
+ * chat so far with the ask kept.
+ */
 async function withFactsNow(ctx: HarnessCtx, handoff: Handoff, game: Handoff["descriptor"]): Promise<Handoff> {
-  return { ...handoff, descriptor: game, scaffolded: false, questionCard: false };
+  return { ...handoff, descriptor: game, scaffolded: false, questionCard: false, history: handoff.historyWithAsk };
 }
 
 /**
  * The same session, told Genex's line `prompt` (its project's new kind), goes on as the chat's
  * current turn (a message sent while it waited joins it, a switch too), recorded and reported like
- * the turn's first leg, on the settings it ends on, with Genex's context for the game as it is now.
- * A session that cannot be resumed starts afresh with the same line and the chat so far.
+ * the turn's first leg, on the settings it ends on. A session that cannot be resumed starts afresh
+ * with the same line and the chat so far.
  */
 async function goOnInSession(ctx: HarnessCtx, seat: Seat, turn: FinishedTurn, prompt: string): Promise<TurnOutcome> {
   const callId = await recordDelegateRequest(ctx, seat.options, seat.handoff);
@@ -670,12 +678,13 @@ async function readChat(ctx: HarnessCtx, options: DelegatedOptions): Promise<Cha
   const project = resolveChatProject(options, games) ?? priorProject(latest, games);
   // A prior real ask means this chat is mid-conversation, whatever happened to its session.
   const hasPriorAsk = messages.some((m) => m.role === "user" && m.content?.trim() && m.content.trim() !== ask);
+  const handover = compactedSummary(events);
   return {
     ask,
-    messages,
     launches: launches(options),
     resume,
-    history: historyNotice(messages, ask, compactedSummary(events)),
+    history: historyNotice(messages, ask, handover),
+    historyWithAsk: historyNotice(messages, null, handover),
     hasPriorAsk,
     project,
     games,
@@ -710,8 +719,8 @@ async function placeHandoff(ctx: HarnessCtx, options: DelegatedOptions, chat: Ch
   const { games, ...reading } = chat;
   const extraReads = Array.isArray(options.extraReads) ? options.extraReads : [];
   if (chat.project) {
-    // The folder's own descriptor, not just its path: the session's context names what it holds,
-    // the way every run brief already does (director/briefs.ts).
+    // The folder's own descriptor, not just its path: what it holds decides the turn's card, its
+    // checks and, when a turn changes it, Genex's line to the session.
     const descriptor = games.find((g) => g.name === chat.project) ?? null;
     const projectDir = descriptor?.dir ?? null;
     return {
@@ -764,11 +773,6 @@ async function offersCard(
   if (!pending || options.runId) return false;
   const plugins = await ctx.call(HostMethod.PluginsTools, { project }).catch(() => null);
   return Array.isArray(plugins?.kinds) && plugins.kinds.length > 0;
-}
-
-/** Genex's context for the game as the handoff has it, the session's system text (chat-session.ts `chatContext`). */
-async function contextOf(ctx: HarnessCtx, handoff: Handoff): Promise<string> {
-  return chatContext(handoff.descriptor, { folderLabel: handoff.folderLabel, appLanguage: await appLanguage(ctx) });
 }
 
 /** "Claude Code (opus) · high effort": who the contractor is, as the handoff names it. */
@@ -878,14 +882,14 @@ function senses(options: DelegatedOptions, handoff: Handoff): AnyRecord {
 const bridged = (tool: HarnessTool) =>
   ({ name: tool.name, description: tool.description, parameters: tool.parameters }) as StudioToolSpec;
 
-/** The question card, for a chat asked to choose its new game's engine. */
+/** The question card, while the folder has no kind and a plugin on offers one (`offersCard`). */
 function questionCard(handoff: Handoff): StudioToolSpec[] {
   return handoff.questionCard ? [bridged(askUser)] : [];
 }
 
 /**
- * What the session is handed beside its own tools: the Loop's start, the question card when the
- * engine question is asked, and after a run it led, the run's controls and a paused run's resume.
+ * What the session is handed beside its own tools: the Loop's start, the question card while the
+ * folder has no kind, and after a run it led, the run's controls and a paused run's resume.
  */
 function sessionTools(options: DelegatedOptions, handoff: Handoff): AnyRecord {
   const own = [...(handoff.launches ? [bridged(startAutopilot)] : []), ...questionCard(handoff)];
@@ -1302,9 +1306,9 @@ async function previewOfTurn(
 
 /**
  * The game as the host lists it when the turn ends: the turn itself may have linked it to Unreal
- * (the turn that answers the engine question makes the Unreal project) or changed what its folder
- * holds. A host that cannot answer, or no longer lists the game, leaves the descriptor the turn
- * started with.
+ * (a turn whose session called `unreal__new-game` made the Unreal project) or changed what its
+ * folder holds. A host that cannot answer, or no longer lists the game, leaves the descriptor the
+ * turn started with.
  */
 async function gameAtTurnEnd(ctx: HarnessCtx, handoff: Handoff): Promise<Handoff["descriptor"]> {
   const games = await ctx.call(HostMethod.GameList).catch(() => null);

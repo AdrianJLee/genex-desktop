@@ -58,7 +58,7 @@ never enter composer text.
 
 Skills lists Studio’s own (local chat, planner, director), the game’s, providers’ global and plugin
 skills. Codex says whether workers load its catalog; Claude’s global entries stay excluded. Plugin
-switches cover all games; resumed workers hear what was withdrawn.
+switches cover all games; a resumed session's tools follow them.
 
 ## Where to work
 

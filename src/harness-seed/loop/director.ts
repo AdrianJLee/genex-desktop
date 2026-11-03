@@ -383,18 +383,13 @@ async function seatTheLead(loopRun: LoopRun): Promise<void> {
   const { ctx, journal, projectDir, run, threadId } = loopRun;
   const events = await ctx.call(HostMethod.EventsList, { threadId }).catch(() => []);
   loopRun.lead = leadSeat({ events, run, folder: projectDir });
-  loopRun.context = await leadContext(loopRun);
+  // The chat's own turns send the same text (delegated-turn.ts): one system text for the session.
+  loopRun.context = chatContext({
+    folderLabel: folderLabelOf(projectDir, run.project),
+    appLanguage: await appLanguage(ctx),
+  });
   journal.director.lead = { chatSession: true };
   await loopRun.saveJournal();
-}
-
-/** Genex's context for the lead: the one its chat's own turns send (chat-session.ts `chatContext`), for the game as listed. */
-async function leadContext(loopRun: LoopRun): Promise<string> {
-  const { ctx, run } = loopRun;
-  const games = await ctx.call(HostMethod.GameList, {});
-  const game = Array.isArray(games) ? (games.find((g) => g.name === run.project) ?? null) : null;
-  const folderLabel = folderLabelOf(game?.dir ?? null, run.project);
-  return chatContext(game, { folderLabel, appLanguage: await appLanguage(ctx) });
 }
 
 /** The run's host timings, a resumed run's earlier spans first, on its journal and its report. */

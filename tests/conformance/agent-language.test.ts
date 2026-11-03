@@ -21,8 +21,7 @@ describe("the agents' language", () => {
   // Flipped: the language rule came with every brief, a resumed one's too. It is the session's
   // system text now, which every turn sends.
   it("tells a chat's builder the person's language and the app's, in its context", () => {
-    const context = (appLanguage: typeof RUSSIAN | null) =>
-      chatContext({ facts: [] }, { folderLabel: "maze", appLanguage });
+    const context = (appLanguage: typeof RUSSIAN | null) => chatContext({ folderLabel: "maze", appLanguage });
     assert.match(context(RUSSIAN), SAYS_RUSSIAN);
     assert.match(context(null), /in the language the user writes to you in/, "a host that cannot say keeps the rule");
   });

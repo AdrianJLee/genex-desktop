@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { MessageFrom } from "../../shared/engine-requests.ts";
-import { genexMarked } from "./genex-mark-prompts.ts";
+import { markedNotices } from "./genex-mark-prompts.ts";
 import {
   DelegateEventType,
   type DelegateImage,
@@ -68,9 +68,7 @@ function imageBlocks(images: readonly DelegateImage[]) {
 
 /** Genex's notices as text blocks of their own, each under the mark, ahead of a message's words. */
 function noticeBlocks(notices: readonly string[]) {
-  return notices
-    .filter((notice) => notice.trim())
-    .map((notice) => ({ type: "text" as const, text: genexMarked(notice) }));
+  return markedNotices(notices).map((text) => ({ type: "text" as const, text }));
 }
 
 /** Notices, words and stills as one message's content blocks: the words only when there are any. */

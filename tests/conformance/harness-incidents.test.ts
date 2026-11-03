@@ -804,9 +804,6 @@ describe("a change after a paused build (stale-pause)", () => {
     const paused = {
       runId: "run_paused",
       state: "paused",
-      goal: "a photoreal plaza",
-      landed: null,
-      stoppedBecause: "stopped by the user",
       engine: "claude-code",
       onLeadEngine: true,
       model: null,
@@ -3939,10 +3936,7 @@ describe("the chat's main agent asked to read the owner's Downloads", () => {
   // permissions', and the person's question reaches it as they wrote it.
   it("names the game's folder without forbidding the rest of the Mac", async () => {
     const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const context = chatContext(
-      { facts: [{ id: "web-game", path: "." }] },
-      { folderLabel: "AI Games/blame", appLanguage: null },
-    );
+    const context = chatContext({ folderLabel: "AI Games/blame", appLanguage: null });
     assert.match(context, /`AI Games\/blame`/, "names the game's folder");
     assert.doesNotMatch(
       context,
@@ -3959,19 +3953,17 @@ describe("the chat's agent briefed like plain Claude Code (lean chat)", () => {
   // build was doing watched it keep building. Flipped: the words now go alone (chat brief, CB-1).
   it("gives a web game's context none of the judge-era template rules, nor any order to keep building", async () => {
     const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
-    for (const facts of [[], [{ id: "web-game", path: "index.html" }]]) {
-      const context = chatContext({ facts }, { folderLabel: "AI Games/cat", appLanguage: null });
-      for (const rule of [
-        /__studio/,
-        /Math\.random/,
-        /NOTES\.md/,
-        /\.studio\//,
-        /TMPDIR/,
-        /statically analyze/,
-        /left off|remaining work/i,
-      ])
-        assert.doesNotMatch(context, rule, `${rule}: ${context}`);
-    }
+    const context = chatContext({ folderLabel: "AI Games/cat", appLanguage: null });
+    for (const rule of [
+      /__studio/,
+      /Math\.random/,
+      /NOTES\.md/,
+      /\.studio\//,
+      /TMPDIR/,
+      /statically analyze/,
+      /left off|remaining work/i,
+    ])
+      assert.doesNotMatch(context, rule, `${rule}: ${context}`);
   });
 });
 
@@ -4094,14 +4086,16 @@ describe("an Unreal game is never checked as a web page", () => {
     return { events, said: messages.join("\n") };
   }
 
-  it("an Unreal game's chat build gets the Unreal brief and no web health pass: no black-screen line, no failed build_observation", async () => {
+  it("an Unreal game's chat build gets no web page's brief and no web health pass: no black-screen line, no failed build_observation", async () => {
     const { rig, prompts } = await unrealGameRig();
     await rig.core.sendUserMessage("Add a lighthouse", { engine: "vendor", project: GAME });
     const { events, said } = await afterTurn(rig);
     assert.equal(prompts.length, 1);
     // The Unreal plugin is off in this rig. Flipped: the brief also said it had no Unreal tools; its
-    // tool list says so, and Genex infers no plugin from the facts.
-    assert.match(prompts[0]!, /it holds an Unreal Engine project/, "the build is told it is an Unreal game");
+    // tool list says so, and Genex infers no plugin from the facts. Flipped again: it was told it is
+    // an Unreal game; a resumed session keeps the system text it started with, so the context never
+    // says what the folder holds.
+    assert.doesNotMatch(prompts[0]!, /it holds/, "the context names no kind");
     assert.doesNotMatch(prompts[0]!, /window\.__studio/, "and not as a web page");
     assert.equal(customEvents(events, "build_observation").length, 0, "no web observation of an Unreal game");
     assert.doesNotMatch(said, /black screen|loads clean|console error/, "no web verdict in the chat");
@@ -4935,11 +4929,10 @@ describe("a run whose every role was set to think at max effort", () => {
 
 describe("a chat in a game linked to an engine other than Unreal", () => {
   // Flipped: an older caller that named only the engine was briefed too; every caller hands the facts.
+  // The context no longer reads the game at all: it is the same text in every folder.
   it("EG1. its context never gives web-page rules, the preview's Reload or the web Loop", async () => {
     const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const engine = { kind: "toy-engine", project: "/g/garden/Garden.toyproj", linkedAt: "2026-11-01T00:00:00.000Z" };
-    const toy = { facts: [{ id: "toy-project", path: "." }], engine };
-    const context = chatContext(toy, { folderLabel: "AI Games/garden", appLanguage: null });
+    const context = chatContext({ folderLabel: "AI Games/garden", appLanguage: null });
     for (const words of [/window\.__studio/, /Reload/, /holds a web game/, /builders working in parallel/])
       assert.doesNotMatch(context, words, String(words));
   });
@@ -5026,7 +5019,7 @@ describe("a tool the user asked for that can't run here (claude-code-and-chatgpt
   // say why they can't run, and the person's words, naming Blender, reach the session as written.
   it("MK2. the contractor saw Blender was too old to run, said Unity was ready and queued a 24-hour build that never used Blender: the words naming Blender reach it as written, with no rule beside them", async () => {
     const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const context = chatContext({ facts: [] }, { folderLabel: "AI Games/fight", appLanguage: null });
+    const context = chatContext({ folderLabel: "AI Games/fight", appLanguage: null });
     assert.doesNotMatch(context, /never carry on without it in silence|can't run here/);
   });
 });
@@ -5113,7 +5106,7 @@ describe("the language of Genex's own turns", () => {
   it("AL1. a resume or continue is Genex's own English words, and the agent answered a Russian chat in English: the context names the app's language as the fallback for a turn of Genex's", async () => {
     const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
     const russian = { tag: "ru", name: "Русский" };
-    const context = chatContext({ facts: [] }, { folderLabel: "AI Games/x", appLanguage: russian });
+    const context = chatContext({ folderLabel: "AI Games/x", appLanguage: russian });
     assert.match(context, /a line marked as Genex's rather than the user's[\s\S]*Русский \(ru\)/);
   });
 });
@@ -5399,8 +5392,9 @@ describe("the person's words reach the chat's own session as they wrote them (ch
     assert.equal(resumed?.resume, "s1");
     assert.equal(first?.from, MessageFrom.Person, "the person wrote it");
     assert.match(String(first?.system), /inside Genex/, "Genex's context is the system text");
-    assert.match(String(first?.system), /Unity project/);
-    assert.equal(resumed?.system, first?.system, "byte-identical while the game is the same");
+    // Flipped: the context named the Unity project; it never says what the folder holds now.
+    assert.doesNotMatch(String(first?.system), /Unity project/);
+    assert.equal(resumed?.system, first?.system, "byte-identical on every turn");
     for (const told of [/worker_start/, /checkpoint/, /stays in this workspace/, /can't run here/])
       assert.doesNotMatch(String(first?.system), told, `${told}: the tools say it, or nobody needs it`);
     assert.equal(resumed?.notices, undefined, "a resumed session is told nothing beside the words");
@@ -5443,10 +5437,7 @@ describe("the person's words reach the chat's own session as they wrote them (ch
     await host.start();
     const [lead] = host.leadCalls();
     assert.ok(lead, "the lead took a turn");
-    const chat = chatContext(host.game as never, {
-      folderLabel: folderLabelOf(dir, host.game.name),
-      appLanguage: null,
-    });
+    const chat = chatContext({ folderLabel: folderLabelOf(dir, host.game.name), appLanguage: null });
     assert.equal(lead.system, chat, "the lead's system text is the chat's own");
   });
 });

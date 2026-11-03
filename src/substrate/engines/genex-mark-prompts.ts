@@ -13,6 +13,10 @@ export const GENEX_MARK = "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]";
 /** A line Genex wrote, under the mark. */
 export const genexMarked = (text: string): string => `${GENEX_MARK}\n${text}`;
 
+/** Genex's notices as every engine sends them: each under the mark, the blank ones left out. */
+export const markedNotices = (notices: readonly string[] = []): string[] =>
+  notices.filter((notice) => notice.trim()).map(genexMarked);
+
 /** A message's text as an engine with no sender field sends it: Genex's under the mark, anyone else's as written. */
 export function textAsSent(message: { text: string; from?: MessageFrom | undefined }): string {
   return message.from === MessageFrom.Genex ? genexMarked(message.text) : message.text;
@@ -27,7 +31,7 @@ export function textsAsSent(request: {
   from?: MessageFrom | undefined;
   notices?: readonly string[] | undefined;
 }): string[] {
-  const notices = (request.notices ?? []).filter((notice) => notice.trim()).map(genexMarked);
+  const notices = markedNotices(request.notices);
   const prompt = textAsSent({ text: request.prompt, from: request.from });
   return [...notices, ...(prompt.trim() ? [prompt] : [])];
 }

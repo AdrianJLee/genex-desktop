@@ -98,8 +98,6 @@ function commitFlags({
 /** The command lines, as data. Nothing here runs anything. */
 export const GIT = Object.freeze({
   head: "git rev-parse HEAD",
-  /** How many commits the branch holds: a game the studio just made has its one. */
-  commitCount: "git rev-list --count HEAD",
   status: "git status --porcelain",
   /**
    * A look that never writes (`--no-optional-locks`, no `git add`), capped: the monitor reads a

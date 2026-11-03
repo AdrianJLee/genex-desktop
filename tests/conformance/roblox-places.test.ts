@@ -622,8 +622,8 @@ describe("the engine choice", () => {
       await registry.setEnabled("roblox", true);
       const kinds = offered();
       assert.deepEqual(
-        kinds.map((kind) => [kind.tool, kind.label, kind.asksReady]),
-        [["roblox__new-game", "Roblox game", true]],
+        kinds.map((kind) => [kind.tool, kind.label]),
+        [["roblox__new-game", "Roblox game"]],
       );
     } finally {
       registry.cancel();

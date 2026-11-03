@@ -7,12 +7,7 @@
  */
 import { TRANSCRIPT_CHARS, TRANSCRIPT_MESSAGES } from "./brief-window.ts";
 import { handoverSection } from "./session-compact-prompts.ts";
-
-/** A message of the chat, as the notice quotes it. */
-export interface ChatMessage {
-  role?: string;
-  content?: string;
-}
+import type { Message } from "../types/host-api.d.ts";
 
 /** The chat's latest session, when it is this engine's: only that one goes on. */
 export function goesOn<T extends { engine?: string }>(latest: T | null, engine: string): T | null {
@@ -22,12 +17,18 @@ export function goesOn<T extends { engine?: string }>(latest: T | null, engine: 
 /**
  * The chat so far, for a session that starts in a chat that began before it: the handover the last
  * compaction wrote (`handover`), and the newest messages that fit, the one this turn answers (`ask`,
- * its prompt) left out. Empty when nothing came before.
+ * its prompt) left out (null keeps it, for a prompt that is not the ask). Empty when nothing came
+ * before.
  */
-export function historyNotice(messages: readonly ChatMessage[], ask: string, handover: string | null): string {
+export function historyNotice(
+  messages: readonly Partial<Pick<Message, "role" | "content">>[],
+  ask: string | null,
+  handover: string | null,
+): string {
   const said = messages.filter((m) => m.role === "user" || m.role === "assistant");
   const last = said.at(-1);
-  const earlier = last?.role === "user" && last.content?.trim() === ask.trim() ? said.slice(0, -1) : said;
+  const answered = ask !== null && last?.role === "user" && last.content?.trim() === ask.trim();
+  const earlier = answered ? said.slice(0, -1) : said;
   const latest = earlier
     .slice(-TRANSCRIPT_MESSAGES)
     .map((m) => `${m.role}: ${m.content ?? ""}`)

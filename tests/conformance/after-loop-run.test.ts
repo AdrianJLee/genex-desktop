@@ -166,9 +166,6 @@ describe("which chats after a run the chat's own session answers", () => {
     assert.deepEqual(loopRun, {
       runId: RUN,
       state: "paused",
-      goal: "a dusk plaza",
-      landed: false,
-      stoppedBecause: "stopped by the user",
       engine: "codex",
       onLeadEngine: true,
       model: null,
@@ -225,16 +222,8 @@ describe("which chats after a run the chat's own session answers", () => {
 });
 
 describe("what the chat's own session is told and handed after a run", () => {
-  const finished = {
-    runId: RUN,
-    state: "finished",
-    goal: "a dusk plaza",
-    landed: false,
-    stoppedBecause: null,
-    onLeadEngine: true,
-    model: null,
-  };
-  const paused = { ...finished, state: "paused", stoppedBecause: "stopped by the user" };
+  const finished = { runId: RUN, state: "finished", onLeadEngine: true, model: null };
+  const paused = { ...finished, state: "paused" };
   /** A paused run answered on another engine than its lead's: the chat's bookmark moves there. */
   const pausedElsewhere = { ...paused, onLeadEngine: false };
 

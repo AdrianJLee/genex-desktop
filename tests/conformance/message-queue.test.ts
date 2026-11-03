@@ -426,15 +426,13 @@ test("restart: a message handed over but unread runs on its own; one read by a c
   again.stop();
 });
 
-test("restart: a switch the cut-short turn read gets a turn of its own after its replay, with what was read after it; a command it read stays read", async () => {
+test("restart: a switch the cut-short turn read gets a turn of its own after its replay, with what was read after it", async () => {
   const f = steerFixture();
   const { append, receive } = writtenLog(f);
   receive("a", "build a pond", { engine: "claude-code" });
   append("coordinator_message_processing", { messageId: "a" });
   receive("b", "and ducks", { engine: "claude-code" });
   append("coordinator_message_delivered", { messageId: "b", into: "a", how: "native" });
-  receive("x", "/clear", { engine: "claude-code" });
-  append("coordinator_message_delivered", { messageId: "x", into: "a", how: "interrupt" });
   receive("c", "use sonnet", { engine: "claude-code", model: "sonnet" });
   append("coordinator_message_delivered", { messageId: "c", into: "a", how: "interrupt" });
   receive("d", "with a boss", { engine: "claude-code", model: "sonnet" });
@@ -452,7 +450,6 @@ test("restart: a switch the cut-short turn read gets a turn of its own after its
   ]);
   await until(() => f.state("d")?.state === "handled");
   assert.equal(f.state("b")!.state, "delivered", "words ride with the replay, once");
-  assert.equal(f.state("x")!.state, "delivered", "a command it read is never run twice");
   queue.stop();
 });
 

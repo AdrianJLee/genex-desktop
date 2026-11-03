@@ -10,7 +10,6 @@ import path from "node:path";
 import { after, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { lastContractorSession } from "../../src/harness-seed/loop/chat-session.ts";
-import { leadToolsNote } from "../../src/main/core/delegation-prompts.ts";
 import { customRecord } from "../../src/shared/custom-events.ts";
 import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
@@ -1495,8 +1494,8 @@ describe("a lead has the chat's own session's plugins and connectors, on the bui
       const context = request.system ?? "";
       assert.ok(context.includes(PLUGIN_GUIDANCE), `${label}: the plugins' guidance`);
       assert.ok(context.includes(CONNECTOR_GUIDANCE), `${label}: the connectors' guidance`);
-      // It sits in the game folder: told its plugins work on the build, whose path its brief never names.
-      assert.ok(context.includes(leadToolsNote()), `${label}: told where its plugins work`);
+      // Flipped: a lead of a build elsewhere was told its plugins work on the build. Its system text is
+      // its chat's own; it still never names the build's path.
       assert.equal(`${request.prompt}\n${context}`.includes(built), false, `${label}: never the build's path`);
       assert.deepEqual(heard, ["delivered", "found"], `${label}: answered`);
       const [plugin, connector] = calls;

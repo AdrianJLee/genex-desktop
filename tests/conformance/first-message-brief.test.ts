@@ -1,14 +1,14 @@
 /**
  * What a builder is handed on a project's first message, from the folder's facts; Genex never reads
  * the person's words to decide. The words go as written; Genex's context is the session's system
- * text: who runs it (Genex, the folder, what it holds and what a Genex plugin is), and only what
- * Genex alone knows of the kinds it holds. A folder with no kind yet is handed the question card
- * while a plugin on offers a kind; the kind tools, `start_web_game` and `plugins_find` are its tools,
- * never restated in words. Each kind's line is named by path when the folder holds more than one.
+ * text, the same whatever the folder holds: who runs it (Genex, the folder, what a Genex plugin is),
+ * never the folder's kinds, which a turn can change while a resumed session keeps the text it started
+ * with. A folder with no kind yet is handed the question card while a plugin on offers a kind, and
+ * what the session records with it is asked; the kind tools, `start_web_game` and `plugins_find` are
+ * its tools, never restated in words.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { chatContext } from "../../src/harness-seed/loop/chat-session.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { directorBrief } from "../../src/harness-seed/loop/director/briefs.ts";
 import { WorkerIsolation } from "../../src/harness-seed/loop/workers/contract.ts";
@@ -47,18 +47,37 @@ const UNREAL_KIND = { plugin: "unreal", name: "Unreal Engine", tool: "unreal__ne
 const UNREAL_ON = { tools: [], kinds: [UNREAL_KIND] };
 const NONE_ON = { tools: [], kinds: [] };
 
-/** One delegated chat turn on the game: its first message, the plugin kinds the host offers. */
-async function firstMessage(descriptor: unknown, plugins: { tools: unknown[]; kinds: unknown[] }) {
+/** What a turn may differ by: the chat's messages so far, the turn's own fields, the builder's answer. */
+interface TurnShape {
+  messages?: unknown[];
+  turn?: Record<string, unknown>;
+  answer?: Record<string, unknown>;
+}
+
+/** One delegated chat turn on the game: its first message (unless `shape` says otherwise), the plugin kinds the host offers. */
+async function firstMessage(
+  descriptor: unknown,
+  plugins: { tools: unknown[]; kinds: unknown[] },
+  shape: TurnShape = {},
+) {
   const recorder = ctxRecorder({
     unknown: { value: null },
     handlers: {
-      "events.messages": () => [{ role: "user", content: ASK }],
+      "events.messages": () => shape.messages ?? [{ role: "user", content: ASK }],
       "game.contentStamp": () => ({ all: null, source: null }),
       "game.list": () => [descriptor],
       "plugins.tools": () => ({ ...plugins, guidance: "", revision: 1 }),
       "engine.describe": () => [],
       "preview.ready": () => ({ ready: false }),
-      "engine.delegate": () => ({ ok: true, engine: CLAUDE, turns: 1, usage: {}, sessionId: "s", summary: "ok" }),
+      "engine.delegate": () => ({
+        ok: true,
+        engine: CLAUDE,
+        turns: 1,
+        usage: {},
+        sessionId: "s",
+        summary: "ok",
+        ...shape.answer,
+      }),
     },
   });
   const turn = {
@@ -68,14 +87,15 @@ async function firstMessage(descriptor: unknown, plugins: { tools: unknown[]; ki
     engine: CLAUDE,
     engineLabel: "Claude Code",
     project: NAME,
+    ...shape.turn,
   };
   await runDelegatedTurn(recorder.ctx as never, turn as never);
   const [delegated] = recorder.paramsOf("engine.delegate");
   assert.ok(delegated, "the ask reached the builder");
-  const handoff = recorder
+  const appended = recorder
     .paramsOf("turn.append")
-    .flatMap((p) => (p.batch as Array<{ event_type?: string; payload?: { text?: string } }>) ?? [])
-    .find((event) => event.event_type === RunEvent.ContractorHandoff);
+    .flatMap((p) => (p.batch as Array<{ event_type?: string; payload?: { text?: string; question?: string } }>) ?? []);
+  const handoff = appended.find((event) => event.event_type === RunEvent.ContractorHandoff);
   return {
     prompt: String(delegated.prompt),
     system: String(delegated.system),
@@ -83,12 +103,11 @@ async function firstMessage(descriptor: unknown, plugins: { tools: unknown[]; ki
     capture: Boolean(delegated.selfCapture),
     validated: recorder.sequence("game.validate").length > 0,
     handoffText: String(handoff?.payload?.text ?? ""),
+    questions: appended
+      .filter((event) => event.event_type === RunEvent.InterviewQuestion)
+      .map((event) => event.payload?.question),
   };
 }
-
-/** The context of a game as `game.list` lists it. */
-const contextOf = (descriptor: Record<string, unknown>) =>
-  chatContext(descriptor, { folderLabel: "AI Games/keep", appLanguage: null });
 
 describe("the first message on a project with no kind", () => {
   // Flipped: the brief told it to start web with start_web_game or find a plugin, and asked web or
@@ -101,110 +120,108 @@ describe("the first message on a project with no kind", () => {
     const on = await firstMessage(game([]), UNREAL_ON);
     assert.equal(on.prompt, ASK);
     assert.deepEqual(on.bridged, [AUTO_LOOP, "ask_user"]);
-    for (const told of [none.system, on.system]) {
-      assert.match(told, /its kind is not picked yet, and the person's request picks it/);
+    assert.equal(on.capture, true, "still a web game until the session picks");
+    for (const told of [none.system, on.system])
       assert.doesNotMatch(told, /start_web_game|plugins_find|unreal__new-game|THE ENGINE/, "its tools say it");
+  });
+
+  it("the question the session records is shown as the question card, not reported as a build", async () => {
+    const question = {
+      question: "Build it for the web or in Unreal Engine?",
+      options: "Web (Three.js)\nUnreal Engine",
+    };
+    const { questions } = await firstMessage(game([]), UNREAL_ON, {
+      answer: { studioToolCalls: [{ name: "ask_user", args: question }] },
+    });
+    assert.deepEqual(questions, [question.question]);
+  });
+
+  it("keeps the card on a resumed session and a later message while the folder has no kind, never on a run's own turn", async () => {
+    const turns: Record<string, [TurnShape, string[]]> = {
+      "a resumed session": [{ turn: { resume: "session-1" } }, [AUTO_LOOP, "ask_user"]],
+      "a run's own turn": [{ turn: { runId: "run-1" } }, []],
+      "a later message, after a greeting": [
+        {
+          messages: [
+            { role: "user", content: "hi" },
+            { role: "assistant", content: "Hello! What shall we make?" },
+            { role: "user", content: ASK },
+          ],
+        },
+        [AUTO_LOOP, "ask_user"],
+      ],
+    };
+    for (const [label, [shape, expected]] of Object.entries(turns)) {
+      const { bridged, prompt } = await firstMessage(game([]), UNREAL_ON, shape);
+      assert.deepEqual(bridged, expected, label);
+      if (!shape.turn?.runId) assert.equal(prompt, ASK, `${label}: the words alone`);
     }
   });
 
-  it("a folder of notes is new but not empty: it holds notes and no game yet", () => {
-    const told = contextOf(game([], { holds: "notes" }));
-    assert.doesNotMatch(told, /empty/, "a folder of notes is never called empty");
-    assert.match(told, /holds notes but no game yet/);
-  });
-
-  it("a folder of its own files of a kind no rule knows is never told it is empty", async () => {
+  it("a folder of its own files of a kind no rule knows gets no card", async () => {
     for (const plugins of [NONE_ON, UNREAL_ON]) {
-      const { system, bridged } = await firstMessage(game([], { holds: "own-files" }), plugins);
-      assert.doesNotMatch(system, /empty|holds nothing yet|nothing to inspect/, "it holds files");
-      assert.match(system, /files of its own of a kind Genex has no rules for/);
+      const { bridged } = await firstMessage(game([], { holds: "own-files" }), plugins);
       assert.deepEqual(bridged, [AUTO_LOOP], "no question card: it has a kind, just not one Genex knows");
     }
-    assert.match(contextOf(game([], { holds: "unreadable" })), /nothing Genex could read/);
   });
 
-  it("a project that has a kind gets no card", async () => {
+  it("a project that has a kind gets no card, and only a web game is captured as a page", async () => {
     const kinds: Record<string, unknown[]> = {
       web: [fact(CoreFact.WebGame)],
       unreal: [fact(CoreFact.UnrealProject, "unreal", "link")],
       godot: [fact(CoreFact.GodotProject)],
     };
+    const linked = { engine: { kind: GameEngine.Unreal, project: "/games/keep/unreal/Keep.uproject", linkedAt: "" } };
     for (const [label, facts] of Object.entries(kinds)) {
-      const { bridged } = await firstMessage(game(facts), UNREAL_ON);
+      const { bridged, capture } = await firstMessage(game(facts, label === "unreal" ? linked : {}), UNREAL_ON);
       assert.deepEqual(bridged, [AUTO_LOOP], label);
+      assert.equal(capture, label === "web", `${label}: captured as a page`);
     }
   });
 });
 
-describe("the lines each kind adds to the context", () => {
-  // Flipped: a kind no plugin on covered was told to look for a Genex plugin first, and an Unreal
-  // project with the plugin off that it had no Unreal tools. The tools it is handed say both.
-  it("a kind Genex has no line of its own for is named by the identity alone, with no rule about plugins", () => {
-    for (const descriptor of [
-      game([fact(CoreFact.UnrealProject)]),
-      game([fact(CoreFact.GodotProject)], { built: true, shape: { own: true } }),
-      game([fact("toy-project", ".", "plugin:toy-engine")]),
-    ])
-      assert.doesNotMatch(contextOf(descriptor), /plugins_find|plugins_suggest|no Unreal tools|from the shell/);
-    assert.match(contextOf(game([fact(CoreFact.GodotProject)])), /it holds a Godot project at its root/);
-  });
-
-  it("a game linked to a Godot project outside its folder says its work lands there", () => {
-    const linked = game([fact(CoreFact.GodotProject, "/Users/me/Documents/Godot Projects/Void", "link")], {
-      engine: {
-        kind: GameEngine.Godot,
-        project: "/Users/me/Documents/Godot Projects/Void/project.godot",
-        linkedAt: "",
-      },
-    });
-    assert.match(
-      contextOf(linked),
-      /Its work lands in its Godot project in `\/Users\/me\/Documents\/Godot Projects\/Void\/`/,
-    );
-    assert.doesNotMatch(contextOf(linked), /stays in this workspace/);
-  });
-
-  it("a plugin's web build in a folder is said once as a build", () => {
-    const told = contextOf(
-      game([
+describe("the context, whatever the folder holds", () => {
+  // Flipped: the context named what the folder holds and Genex's line of each kind (the build it runs
+  // before every preview, a plugin's web build, where a linked project's work lands). A resumed
+  // session keeps the system text it started with, so it is the same text for every folder: the
+  // game's own CLAUDE.md and its plugins' guidance say those, and Genex's line says a new kind.
+  it("is the same text for every folder: it names the folder and never what it holds", async () => {
+    const folders: Record<string, unknown> = {
+      "no kind yet": game([]),
+      notes: game([], { holds: "notes" }),
+      "own files": game([], { holds: "own-files" }),
+      unreadable: game([], { holds: "unreadable" }),
+      "a web game in its own shape": game([fact(CoreFact.WebGame)], {
+        built: true,
+        shape: { own: true, build: "npm run build" },
+      }),
+      "a Godot project with its web build": game([
         fact(CoreFact.GodotProject, "godot"),
         fact(CoreFact.WebGame, "web"),
         fact("godot-web-export", "web", "plugin:godot"),
       ]),
-    );
-    assert.match(told, /The web page in `web\/` is a web build a plugin exports[^\n]*Never edit its files/);
-    assert.ok(!told.includes("godot-web-export"), "the plugin's fact needs no line of its own");
-  });
-
-  it("each kind's line is named by path when there are two", () => {
-    const told = contextOf(
-      game([fact(CoreFact.UnrealProject, "unreal", "link"), fact(CoreFact.WebGame, "site")], {
-        built: true,
-        shape: { own: true, build: "npm run build" },
-        engine: { kind: GameEngine.Unreal, project: "/games/keep/unreal/Keep.uproject", linkedAt: "" },
-      }),
-    );
-    const lines = told.split("\n");
-    assert.ok(
-      lines.includes(
-        "For the web game in `site/`: Genex runs `npm run build` before every preview: a build that fails is a black screen.",
+      "a linked Godot project outside the folder": game(
+        [fact(CoreFact.GodotProject, "/Users/me/Documents/Godot Projects/Void", "link")],
+        {
+          engine: {
+            kind: GameEngine.Godot,
+            project: "/Users/me/Documents/Godot Projects/Void/project.godot",
+            linkedAt: "",
+          },
+        },
       ),
-    );
-    assert.ok(
-      lines.some((line) =>
-        line.startsWith("For the Unreal Engine project in `unreal/`: Its work lands in the Unreal project"),
-      ),
-    );
-    const single = contextOf(
-      game([fact(CoreFact.WebGame)], { built: true, shape: { own: true, build: "npm run build" } }),
-    );
-    assert.doesNotMatch(single, /^For the /m, "one kind needs no path");
-  });
-
-  it("an Unreal project the game is not linked to is said to be not linked, and nothing about building it", () => {
-    const told = contextOf(game([fact(CoreFact.UnrealProject, "unreal")]));
-    assert.match(told, /The Unreal project in `unreal\/` is not linked to this game yet\./);
-    assert.doesNotMatch(told, /lands in the Unreal project|use-project/, "the plugin's guidance says how it is linked");
+      "an Unreal project not linked yet": game([fact(CoreFact.UnrealProject, "unreal")]),
+      "a plugin's kind": game([fact("toy-project", ".", "plugin:toy-engine")]),
+    };
+    const systems = new Map<string, string>();
+    for (const [label, descriptor] of Object.entries(folders)) {
+      const { system } = await firstMessage(descriptor, NONE_ON);
+      assert.match(system, IDENTITY, label);
+      assert.match(system, /folder `games\/keep`/, label);
+      assert.doesNotMatch(system, /it holds|not picked yet|lands in|web build|before every preview|not linked/, label);
+      systems.set(label, system);
+    }
+    assert.equal(new Set(systems.values()).size, 1, "one text for every folder");
   });
 
   it("a Godot folder's builder gets no web capture, no contract check and no preview words", async () => {
@@ -240,12 +257,7 @@ describe("the lines each kind adds to the context", () => {
 });
 
 describe("who runs the session", () => {
-  it("every context and lead brief says it runs inside Genex, which folder, what it holds, and what a Genex plugin is", () => {
-    const told = contextOf(game([fact(CoreFact.WebGame)]));
-    assert.match(told, IDENTITY);
-    assert.match(told, /folder `AI Games\/keep`/);
-    assert.match(told, /a web game/);
-    assert.match(contextOf(game([])), /holds nothing yet/);
+  it("every lead brief says it runs inside Genex, which folder, what it holds, and what a Genex plugin is", () => {
     const director = directorBrief({
       run: { runId: "r", project: NAME, goal: "g" },
       integrationWorktree: "/w",

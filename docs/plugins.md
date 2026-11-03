@@ -181,7 +181,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `tools[].needs`, `mcpServers[].needs` | 3 | 1–4 of the manifest's lock ids a call of the tool, or of the connector's tools, holds while it runs; see [Locks](#locks-the-person-comes-first) |
 | `hooks[]` | 3 | Up to 32 `{on, tool, facts?, messages?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
 | `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
-| `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`) |
+| `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`); Genex itself no longer asks it |
 | `tools[].asset` | 3 | Agent tools only: `{kind, prompt?, tool?}`, the kind of asset a call makes; see [Assets being made](#assets-being-made) |
 | `icon` | any | The plugin's picture: a `.png`, `.jpg`, `.webp` or `.svg` file in the package, at most 512 KiB, square and full-bleed (Studio rounds the corners); see [Icons](#icons) |
 
@@ -264,8 +264,9 @@ skill lines, one line for each plugin it is handed: its name, the prefix of its 
 when it has any, and its description on one line, cut at 200 characters (`handedPluginsNote`). A
 plugin that declares an `account` whose state (`PluginAccountState`) is anything but `unlocked`
 adds that it is not set up yet and the person still has to connect its account on its page. The
-list is the session's system text (`delegation-prompts.ts`): no notice tells a resumed session a
-plugin was turned on or off since it last ran, since its tools are what it is handed now.
+list is the session's system text (`delegation-prompts.ts`), which a resumed Claude Code or Codex
+session keeps as it started: only its tool list follows a plugin turned on or off since, and no
+notice tells it of the change.
 
 ### Toolbar contributions
 
@@ -1105,9 +1106,7 @@ the version whose creation steps were compared with Epic's source. With only a n
 gives way to installing 5.8 beside it (Open the Epic Games Launcher leads) and a quieter Choose a
 project… (one made in Unreal's own New Project dialog works in chats, not in Loops); 5.8 without its
 templates gives way to verifying it in the Launcher. An agent's `new-game` is refused with the same
-ways, and the engine question never offers it then: with only a newer or only an older Unreal
-(`engine-status` newer-only or older-only, its `note` on the kind) it offers "Unreal Engine 5.8" as
-needing 5.8 beside it.
+ways, its answer naming what to install.
 
 **Open, quit and get Unreal.** `open-editor` runs `open -n -a <engine>/Engine/Binaries/Mac/UnrealEditor.app --args <uproject>`
 on a Mac, or starts `UnrealEditor.exe` detached on Windows, outside ProcessSandbox: it is the
@@ -1457,7 +1456,7 @@ each press of the panel is an agent tool under the action's own name: `setup`, `
 recent files, never Documents), beside `use-project`, `new-game`, `publish-update` and
 `first-publish`. A game with no kind yet or a web game gets only the plugin's way in
 ([Scope by facts](#scope-by-facts)); the rest reach a game that holds a place. Their answers, the connection's refusals ("isn't open for this game", "isn't
-answering", "isn't linked") and the engine question's words name the tool for the next step,
+answering", "isn't linked") name the tool for the next step,
 never a click for the person; only signing in, macOS's own prompts and Studio's or Roblox's own
 questions stay theirs. `do-it-for-me` starts the MCP switch's click itself when Studio is open,
 set up and silent with its switch off, and otherwise answers which tool does the step that is
@@ -2301,16 +2300,12 @@ composer's tool count for a game and `plugins.tools {project}` (the local harnes
 rule, and `mcp.toolsFor(project, {facts})` leaves out a server that does not reach. A skill that
 names `tools` reaches only while one of them does. A skill that applies only below the root says
 where after its name: `[example/page] (for site/)`. A tool's `makes` (1–4 fact ids, agent tools
-only) says which facts it makes in the game's folder; the snapshot lists what the plugins that are
-on make, as a game with no kind yet is offered it, as `kinds` (`{plugin, name, tool, makes,
-asksReady?, scaffold?, label?}`, `asksReady` when the tool declares `ready`; one per reaching
-scaffold when the plugin declares [scaffolds](#scaffolds)). For a game with no kind yet, `plugins.tools {project}`
-asks each kind tool's `ready` harness tool (5 s at most, `main/core/kind-readiness.ts`) and adds
-its answer as `ready` (a boolean) and `note` (the words the engine card offers the kind with); an
-answer that is late, throws or is odd leaves both out. The card offers each scaffold by its label,
-and one kind for a plugin with none: the one that answered, else one whose tool asks
-(`asksReady`), else the first; beside a plugin's note it names the tool as the session calls it (a
-plugin's note words its first kind; a later scaffold is offered by its own tool). An agent never sees `facts`, `makes` or `ready`.
+only) says which facts it makes in the game's folder; the snapshot lists the kind tools that reach
+the game as `kinds` (`{plugin, name, tool, makes, scaffold?, label?}`; one per reaching scaffold when
+the plugin declares [scaffolds](#scaffolds)), each as its plugin declares it: nobody asks a plugin
+whether its kind can be made now. A chat turn on a game with no kind yet bridges the question card
+(`ask_user`) while `plugins.tools {project}` lists any; which kind to make, and whether to ask, is
+the session's. An agent never sees `facts`, `makes` or `ready`.
 
 Every agent tool of a bundled engine plugin names facts. Its way in (`new-game`, `new-plugin`,
 `use-project`, `show-steps`, Unreal's `install-unreal`, Roblox's Studio setup tools `finish-setup`,
@@ -2333,7 +2328,7 @@ in the folder as the reference and no longer count as a kind; the app is told th
 the answer gains a note telling the session to end its reply (after a text answer's words, or under
 `genex`). When the chat's own turn ends with the game's served facts different from its start's (a
 port, or project files it wrote; a folder with no kind that took the web starter is no change), the
-harness continues the same session by itself with the tools and the context for the new kind
+harness continues the same session by itself with the tools for the new kind
 (`continueOnNewFacts` in `loop/delegated-turn.ts`), told Genex's one line of the project's new kind
 (`factsReadyNotice`, `from: genex`); a session that can't be resumed starts afresh with the same
 line and the chat so far. A run's turn never continues.
@@ -2544,15 +2539,14 @@ build (no program inside a Windows build's folder is a build of its own, and Unr
 `UEPrereqSetup` is a helper) and never a project's own `Binaries` beside its `.uproject`, which hold
 no cooked content. A chat build of a game still with no kind, with the plugin on, is handed the
 question card (`ask_user`) while `plugins.tools`'s `kinds` offer a kind (Unreal's are `Unreal game`
-and `Unreal plugin`, each with its label and its plugin's readiness `note`), beside the kind tools
+and `Unreal plugin`), beside the kind tools
 and `start_web_game`: which kind to make, and whether to ask, is the session's. A host that lists
 no kinds bridges no card. When a chat turn changed the game's kind and the new kind's plugins hook `health`, the
 chat waits on Genex's `health` moment before the same session goes on: it says the first pending
 reason once (and on the status line), asks again every 5 s for up to 20 minutes, says a step's block
 and stops there, and Stop ends the wait (`loop/delegated-turn.ts` `continueOnNewFacts`). A game from New game counts while it has no facts and nobody has answered in its chat;
-a run's turns are never asked. With the plugin off a new game's brief never names Unreal, and an
-Unreal project's brief says it has no Unreal tools and saves in the editor itself before a
-checkpoint (`unrealWithoutPlugin`, `loop/project-prompts.ts`). In the panel, "Use in this game" links the open game to the shown set-up project;
+a run's turns are never asked. With the plugin off no Unreal tool reaches a game, and nothing of
+Genex's says so: what the session has is its tool list. In the panel, "Use in this game" links the open game to the shown set-up project;
 a game that already builds in another project is offered it only for a project the person picked
 in the panel (Change), never for one the panel opened on. A New
 game made while a game is open goes in that game's folder as `unreal/<Name>.uproject` (refused when

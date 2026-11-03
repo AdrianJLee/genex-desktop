@@ -77,7 +77,6 @@ import {
   intakeToolReply,
   isInterview,
   RUN_COMMAND_TOOL,
-  SHELL_THIS_TURN,
   STUDIO_MCP_SERVER,
   STUDIO_SHELL_TOOL,
   STUDIO_TOOL_PREFIX,
@@ -1434,7 +1433,7 @@ export class ClaudeCodeEngine implements Engine {
       ...claudeLaunchOptions(cliInstallation.path),
       cwd: request.cwd,
       includePartialMessages: true,
-      systemPrompt: claudeCodeSystemPrompt(withShellLine(request, Boolean(shell), this.#platform)),
+      systemPrompt: claudeCodeSystemPrompt(request.system),
       ...permissionOptions(request, ctx.running),
       // A worker's never-touch list, and a lead's calls screened by the host ahead of every allow rule.
       ...sessionHooks(request, cwd, ctx.run),
@@ -2344,19 +2343,6 @@ function sessionPrompt(
   const session = steer ?? steerSession(() => {});
   run.feed = steerFeed(session, briefFrame(request), signal, () => run.sessionId);
   return run.feed.prompt;
-}
-
-/**
- * The session's system text, with the line naming its shell after it on Windows: its turns may run
- * commands in Genex's sandbox or in Bash (`studioShell`), and a resumed session remembers the other.
- * A Mac's never changes, and a session with no shell has none to name.
- */
-function withShellLine(request: DelegateRequest, genexShell: boolean, platform: NodeJS.Platform): string | undefined {
-  if (platform !== "win32") return request.system;
-  const bash = !disallowedToolsFor(request, genexShell).includes(SHELL_TOOL);
-  if (!genexShell && !bash) return request.system;
-  const line = genexShell ? SHELL_THIS_TURN.Studio : SHELL_THIS_TURN.Bash;
-  return [request.system, line].filter(Boolean).join("\n\n");
 }
 
 /**

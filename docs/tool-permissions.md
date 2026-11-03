@@ -120,13 +120,15 @@ input closes (a pick made while the session starts is applied once that control 
 host shows beside the picker.
 
 Every session runs on Claude Code's own system prompt (`claudeCodeSystemPrompt`: the `claude_code`
-preset, which the Agent SDK otherwise replaces with an empty one), with what holds for the session's
-whole life appended once (`DelegateRequest.system`: the harness's context, `chatContext` for the
-chat's own session and its lead, then its plugins, their guidance and connectors, and on Windows the
-line naming its shell), never repeated in each message ([delegation](../src/main/core/delegation.ts)
-`#brief`); Codex gets the same text as its developer instructions. Claude Code 2.1.314 records a
-session's system prompt as it starts and sends that record on every resume until a compaction, so a
-resumed session reads the text it started with.
+preset, which the Agent SDK otherwise replaces with an empty one), with Genex's text appended once
+(`DelegateRequest.system`: the harness's context, `chatContext` for the chat's own session and its
+lead, then its plugins, their guidance and connectors), never repeated in each message
+([delegation](../src/main/core/delegation.ts) `#brief`); Codex gets the same text as an app server
+thread's developer instructions, and a new `codex exec` session as its first notice. Claude Code 2.1.314 records a session's system prompt as it starts and
+sends that record on every resume until a compaction, and `codex exec resume` keeps the developer
+instructions a session started with, so a resumed session reads the text it started with: the
+harness's context holds only what no turn changes, and of a plugin turned on or off since, only the
+tool list follows. Which shell a Windows turn has is its tool list's to say.
 
 No session gets Claude Code's own sub-agents (`Agent`, `Task`), in any mode or seat: Genex runs the
 workers, under the person's ceiling and the chat's mode (`disallowedToolsFor`).
@@ -180,8 +182,8 @@ folders, a local session's files and commands (`leadBuildWrites`). On an engine 
 about each call it runs in the chat's mode (`#placedLeadSession`): Bypass unboxed, Plan read-only. Its plugin calls
 act on the worktree it leads (`DelegationSession.leads` as the binding's directory), as a
 director's in its worktree, so a delivery is recorded as the build's and reaches the game when the
-run lands, and its brief says so without naming the build's path (`leadToolsNote`); a lead in place
-acts on the game folder it sits in and is told nothing of the kind, and its run's own consent covers
+run lands; its system text is its chat's own, and its brief never names the build's path. A lead in
+place acts on the game folder it sits in, and its run's own consent covers
 its engine connector's calls (`liveRunOf`, `#runConsents`). An in-place grant the host refuses to seat is dropped whole (`honouredDirector`): the session
 runs unattended, with no director, run tools or window. Only a web Loop's lead is lent the preview window (`directorWindowed`: never a lead in place,
 nor one whose engine record binds another engine; read from the seat, never the folder's facts at the

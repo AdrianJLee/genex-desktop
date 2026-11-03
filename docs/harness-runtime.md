@@ -187,15 +187,15 @@ carries the workspace skills that name its folder's facts, never the web method.
 
 The chat's own session reads the person's words as they wrote them (`from: person`), on its first
 turn and every later one; pictures go as image blocks. What it knows of Genex is its system text,
-`chatContext` (`loop/chat-session.ts`), sent as `engine.delegate`'s `system` on every turn and the
-same text while the game is the same, the lead's turns included (`director.ts` `leadContext`), so a
-provider's prompt cache keeps it: Genex's identity (`appIdentity`, `loop/project-prompts.ts`: the
-folder, what it holds, that Genex shows a web game in Live and what a Genex plugin is), that the
-person may not be a programmer, the language rule, and only what Genex alone knows of the kinds the
-folder holds, each named by its folder when there are several: the build Genex runs before every
-preview of a game in its own shape, a plugin's web build (never edited), and where a linked Unreal
-or Godot project's work lands (`loop/linked-project-prompts.ts`; an Unreal project found in the
-folder and not linked is said to be not linked). Then the chat's Run button. The Loop's start,
+`chatContext` (`loop/chat-session.ts`), sent as `engine.delegate`'s `system` on every turn, the same
+text for the chat's whole life, the lead's turns included (`director.ts` `seatTheLead`). A resumed
+session keeps the system text it started with (Claude Code 2.1.314 until a compaction, `codex exec
+resume`), so it holds only what no turn changes: Genex's identity (`appIdentity`,
+`loop/project-prompts.ts`: the folder, that Genex shows a web game in Live and what a Genex plugin
+is, never what the folder holds), that the person may not be a programmer, the language rule and
+the chat's Run button. What the folder holds is the session's to see: a game's own `CLAUDE.md` names
+the build Genex runs before every preview, and a plugin's guidance says how its kind is built and
+linked; a turn that changes the kind tells the session in Genex's line (`factsReadyNotice`). The Loop's start,
 workers, the checkpoint, the kind tools, `start_web_game` and `plugins_find` are tools, never
 restated: Genex's own project and worker tools load with the prompt on Claude Code
 (`LiveToolSpec.alwaysLoad`), and the question card (`ask_user`) is bridged while the folder has no
@@ -956,8 +956,8 @@ Claude Code's would have been: the worker's roots (in Bypass the home folder too
 and the never-touch list denied, no network. The host reads the tool as `Bash` (its question card,
 the never-touch screen, the log). Its commands run under Git Bash, one at a time, nothing in the
 background, and a saved "always allow" rule for `Bash` does not cover them. A chat's session runs
-its commands in Bash on a turn the person answers and through `run_command` on an unattended one, so
-a resumed session is told which shell this turn has (`SHELL_THIS_TURN`). Where a CLI still refuses
+its commands in Bash on a turn the person answers and through `run_command` on an unattended one;
+the turn's tool list is what says which shell it has. Where a CLI still refuses
 its box, it refuses the session before the model says anything, and the engine reports it
 as `StopReason.SandboxUnavailable` with the CLI's own words (`engines/claude-code.ts`
 `sandboxRefusal`); a session that already replied keeps its ordinary failure. The refusal holds that

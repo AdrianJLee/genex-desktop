@@ -286,10 +286,10 @@ describe("a plugin's scaffolds", () => {
     });
     try {
       assert.deepEqual(
-        registry.snapshot([]).kinds.map((kind) => [kind.label, kind.tool, kind.asksReady]),
+        registry.snapshot([]).kinds.map((kind) => [kind.label, kind.tool]),
         [
-          ["Unreal game", "unreal__new-game", true],
-          ["Unreal plugin", "unreal__new-plugin", true],
+          ["Unreal game", "unreal__new-game"],
+          ["Unreal plugin", "unreal__new-plugin"],
         ],
       );
       assert.deepEqual(

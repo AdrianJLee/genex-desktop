@@ -1,22 +1,20 @@
 /**
  * Chat = one folder + one contractor session. These helpers are the load-bearing shape: a follow-up
  * never guesses a sibling game, the person's words reach the session as they wrote them, and what
- * the session knows of Genex is its system text (`chatContext`), the same on every turn while the
- * game is the same.
+ * the session knows of Genex is its system text (`chatContext`), the same on every turn.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { chatContext, lastContractorSession, resolveChatProject } from "../../src/harness-seed/loop/chat-session.ts";
-import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { fencedCommand } from "../../src/shared/terminal.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
 type ChatMessage = { role: string; content: string };
 
-/** The context of a game as `game.list` lists it, in the folder the chats name. */
-const contextOf = (game: Record<string, unknown>, appLanguage: { tag: string; name: string } | null = null) =>
-  chatContext(game, { folderLabel: "AI Games/blame", appLanguage });
+/** The chat's context in the folder the chats name. */
+const contextOf = (appLanguage: { tag: string; name: string } | null = null) =>
+  chatContext({ folderLabel: "AI Games/blame", appLanguage });
 
 describe("chat session helpers", () => {
   it("never guesses a project from preview or newest-game", () => {
@@ -54,29 +52,35 @@ describe("chat session helpers", () => {
   });
 
   it("tells the session how the chat runs a blocked step for the person: a block the chat can run", () => {
-    const context = contextOf({ facts: [{ id: "web-game", path: "." }] });
+    const context = contextOf();
     const fence = /A one-line ```(\w+) block in your reply shows the person a Run button/.exec(context)?.[1];
     assert.ok(fence, "the context names the fence a command for the person goes in");
     assert.equal(fencedCommand("brew install ffmpeg", fence), "brew install ffmpeg");
   });
 
-  it("opens with who runs the session and the folder, then who the person is, before any fact about the game", () => {
-    const context = contextOf({
-      facts: [{ id: "web-game", path: "." }],
-      built: true,
-      shape: { build: "npm run build" },
-    });
+  it("opens with who runs the session and the folder, then who the person is", () => {
+    const context = contextOf();
     const identity = context.indexOf("You are working inside Genex");
     const person = context.search(/may not be a programmer/);
-    const build = context.indexOf("npm run build");
     assert.equal(identity, 0);
-    assert.ok(identity < person && person < build, context);
+    assert.ok(identity < person, context);
     assert.match(context, /`AI Games\/blame`/);
+  });
+
+  // Flipped: an Unreal game's context said where its work lands, a game in its own shape the build
+  // Genex runs, a linked Godot project its folder. A resumed session keeps the system text it started
+  // with, so the context never says what the folder holds: the plugins' guidance and the game's own
+  // CLAUDE.md say those, and Genex's line says a new kind.
+  it("never says what the folder holds, nor when to start a Loop, use workers or checkpoint: those are tools", () => {
+    assert.doesNotMatch(
+      contextOf(),
+      /it holds|lands in|before every preview|not linked|start_autopilot|Loop|worker|checkpoint|window\.__studio/,
+    );
   });
 
   it("a Russian app language is the context's, never the words'", async () => {
     const russian = { tag: "ru", name: "Русский" };
-    assert.match(contextOf({ facts: [] }, russian), /Русский \(ru\)/);
+    assert.match(contextOf(russian), /Русский \(ru\)/);
     const recorder = ctxRecorder({
       threadId: "t1",
       unknown: { value: null },
@@ -162,48 +166,5 @@ describe("a chat's message in a game", () => {
     const [history] = (delegated.notices as string[] | undefined) ?? [];
     assert.match(String(history), /user: Make Blame!/);
     assert.doesNotMatch(String(history), /Keep going/, "the words it answers are its prompt");
-  });
-});
-
-describe("the context of a game that builds in Unreal", () => {
-  const PROJECT = "/Users/me/Unreal Projects/Valley/Valley.uproject";
-  const UNREAL = {
-    engine: { kind: GameEngine.Unreal, project: PROJECT, linkedAt: "" },
-    facts: [{ id: "unreal-project", path: "unreal", source: "link" }],
-  };
-  /** The web page's contract, its engine and its randomness rule: none of it is an Unreal game's. */
-  const WEB_PAGE = /window\.__studio|three\.?js|installStudio|Math\.random|deterministic|Reload/i;
-
-  it("says where its work lands, the linked project in the person's open editor, and nothing of a web page", () => {
-    const context = contextOf(UNREAL);
-    assert.ok(context.includes(PROJECT), "the work lands in the linked project");
-    assert.match(context, /open Unreal Editor/);
-    assert.doesNotMatch(context, /unreal-editor__/, "never a connector tool's name: the plugin's guidance has them");
-    assert.doesNotMatch(context, WEB_PAGE);
-  });
-
-  it("a project found in the folder and not linked yet is said to be not linked", () => {
-    const found = { facts: [{ id: "unreal-project", path: "unreal", source: "core" }] };
-    assert.match(contextOf(found), /The Unreal project in `unreal\/` is not linked to this game yet\./);
-  });
-
-  it("no context says when to start a Loop, use workers or checkpoint: those are tools", () => {
-    for (const game of [UNREAL, { facts: [{ id: "web-game", path: "." }] }, { facts: [] }])
-      assert.doesNotMatch(contextOf(game), /start_autopilot|Loop|worker|checkpoint/);
-  });
-
-  it("a game in its own shape is told the build Genex runs before every preview; the starter, nothing more", () => {
-    const own = contextOf({ facts: [{ id: "web-game", path: "." }], built: true, shape: { build: "npm run build" } });
-    assert.match(own, /Genex runs `npm run build` before every preview/);
-    const starter = contextOf({ facts: [{ id: "web-game", path: "." }], built: false });
-    assert.doesNotMatch(starter, /Genex runs `|window\.__studio|Unreal/);
-  });
-
-  it("a game linked to a Godot project says where its work lands", () => {
-    const godot = {
-      engine: { kind: GameEngine.Godot, project: "/Users/me/Games/Moss/project.godot", linkedAt: "" },
-      facts: [],
-    };
-    assert.match(contextOf(godot), /Its work lands in its Godot project in `\/Users\/me\/Games\/Moss\/`/);
   });
 });

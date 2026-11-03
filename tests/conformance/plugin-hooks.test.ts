@@ -14,7 +14,6 @@ import path from "node:path";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { after, before, describe, it } from "node:test";
 import { ChatCheckpoints, CheckpointPhase } from "../../src/main/chat-checkpoints.ts";
-import { kindsWithReadiness, READY_ASK_MS } from "../../src/main/core/kind-readiness.ts";
 import { HOOK_CALL_MS } from "../../src/main/core/plugin-hooks.ts";
 import { PERSON_FIRST_FRESH_MS, workerHolder } from "../../src/main/core/plugin-locks.ts";
 import { PluginToolService } from "../../src/main/core/plugin-tools.ts";
@@ -38,6 +37,7 @@ import { UiEvent, type UiEvent as UiEventEnvelope } from "../../src/shared/ui-ev
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 import {
   DESK_LABEL,
+  HOOK_FACT,
   HOOK_PLUGIN,
   type HookPackage,
   LIGHT_PLUGIN,
@@ -148,36 +148,19 @@ describe("Genex's moments in a real core", () => {
     await lite.close();
   });
 
-  it("the engine card's kinds carry each kind's readiness, asked through its ready tool, for a game with no kind yet", async () => {
-    type Listed = { kinds: Array<{ tool: string; asksReady?: boolean; ready?: boolean; note?: string }> };
-    const deskKind = async (project: string) =>
-      ((await call(HostMethod.PluginsTools, { project })) as Listed).kinds.find((kind) => kind.tool === "hk__new-desk");
-    // A game New game made: an empty folder with no kind yet.
+  // Flipped: a game with no kind yet had each kind's readiness asked through its `ready` tool for the
+  // engine card. Nothing reads it since the card is the session's own ask_user, so nobody is asked.
+  it("a game with no kind yet is offered each kind as its plugin declares it, and no plugin is asked whether it is ready", async () => {
     const bare = (await lite.core.createGame("Bare Desk")).name;
-    await hk.script({ ready: { ready: false, note: "  Set the desk up from the Hook demo button first.  " } });
-    const pending = await deskKind(bare);
-    assert.equal(pending?.ready, false);
-    assert.equal(pending?.note, "Set the desk up from the Hook demo button first.");
-    assert.deepEqual(await hk.trail(), ["ready"], "asked through the tool its manifest names");
-
-    await hk.script({ ready: { ready: true } });
-    const known = await deskKind(DESK);
-    assert.equal(known?.ready, undefined, "a game with a kind is offered no card");
-    assert.deepEqual(await hk.trail(), [], "and nobody is asked");
-
-    const odd: Array<[string, unknown]> = [
-      ["no answer", { throws: "the desk is away" }],
-      ["odd fields", { ready: "yes", note: 7 }],
-      ["nothing", null],
-    ];
-    for (const [label, answer] of odd) {
-      await hk.script({ ready: answer });
-      const kind = await deskKind(bare);
-      assert.ok(kind, label);
-      assert.equal(kind.ready, undefined, label);
-      assert.equal(kind.note, undefined, label);
-      assert.equal(kind.asksReady, true, `${label}: still the kind whose tool asks, for the card to prefer`);
-    }
+    await hk.script({ ready: { ready: false, note: "Set the desk up from the Hook demo button first." } });
+    const listed = (await call(HostMethod.PluginsTools, { project: bare })) as {
+      kinds: Array<{ tool: string }>;
+    };
+    assert.deepEqual(
+      listed.kinds.find((kind) => kind.tool === `${HOOK_PLUGIN}__new-desk`),
+      { plugin: HOOK_PLUGIN, name: "Hook demo", tool: `${HOOK_PLUGIN}__new-desk`, makes: [HOOK_FACT] },
+    );
+    assert.deepEqual(await hk.trail(), [], "nobody is asked");
   });
 
   it("a checkpoint runs the before steps, takes the snapshot, then the after steps, and answers their notes and pictures", async () => {
@@ -1265,31 +1248,6 @@ describe("Genex's moments in a real core", () => {
     await assert.rejects(take({ label: "" }), "a checkpoint names what it keeps");
     await assert.rejects(take({ label: "x".repeat(121) }));
     assert.deepEqual(await hk.trail(), []);
-  });
-});
-
-describe("a kind's readiness, asked in time", () => {
-  it("a plugin that never answers leaves its kind as listed once the ask's time is up, and its ask is stopped", async (t) => {
-    t.mock.timers.enable({ apis: ["setTimeout"] });
-    let stopped = false;
-    const core = {
-      plugins: {
-        list: () => [{ manifest: { id: "hk", tools: [{ name: "new-desk", ready: "ready" }] } }],
-        tool: (_name: string, _args: unknown, _binding: unknown, signal: AbortSignal) =>
-          new Promise(() => {
-            signal.addEventListener("abort", () => {
-              stopped = true;
-            });
-          }),
-      },
-      pluginBinding: async () => ({ project: "bare", directory: "/games/bare" }),
-    };
-    const kind = { plugin: "hk", name: "Desk", tool: "hk__new-desk", makes: ["hk-project"] };
-    const asked = kindsWithReadiness(core as never, "bare", { facts: [] }, [kind as never]);
-    for (let turn = 0; turn < 5; turn++) await nextTurn();
-    t.mock.timers.tick(READY_ASK_MS);
-    assert.deepEqual(await asked, [kind], "listed as it was: no readiness, no note");
-    assert.ok(stopped, "the late ask was stopped");
   });
 });
 

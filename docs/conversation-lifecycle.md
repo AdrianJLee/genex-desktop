@@ -645,14 +645,13 @@ yet (no facts: nothing to look at until its first message picks one). The pass g
 host that cannot answer leaves the descriptor the turn started with. A session's capture tool and
 contract check go by the folder's facts (`servedAsWeb` in `loop/folder-facts.ts`: a web game at the
 root, or no kind yet; never a folder of a kind Genex can't name): a Godot folder gets none of the
-web's. Its context (`chatContext`) names what the folder holds and, for an Unreal game, where its
-work lands (`loop/linked-project-prompts.ts`), and plugin tools, guidance and connectors go by the
-game's facts ([scope by facts](plugins.md#scope-by-facts)): no web-only skills, and the Unreal
+web's. Its context (`chatContext`) names the folder, never what it holds, and plugin tools,
+guidance and connectors go by the game's facts ([scope by facts](plugins.md#scope-by-facts)): no web-only skills, and the Unreal
 editor's tools only for a game that holds an Unreal project. A game with no kind yet, while an
 engine plugin offers a kind (`plugins.tools`'s `kinds`), is handed `ask_user` beside the kind tools;
 a recorded question is asked, and the next turn resumes the same session, which calls
 `unreal__new-game` for Unreal. A chat turn whose game's served facts changed (a port, or files it
-wrote) goes on by itself in the same session, with the tools and the context for the new kind
+wrote) goes on by itself in the same session, with the tools for the new kind
 (`continueOnNewFacts`, [plugins](plugins.md#scope-by-facts)), told Genex's one line of the
 project's new kind (`factsReadyNotice`); when the new kind's plugins hook
 `health` (an Unreal project linked or switched), it first waits until nothing is pending. A delegation that gave
@@ -673,4 +672,4 @@ turn is (`intake-continuation.test.ts`); no text match takes it away. While a ru
 follow-up goes to its lead; after the run the chat's own session has the Loop's start again, for a
 new run, and nothing commissions a duplicate run while one owns the project.
 
-A chat asks with `ask_user` when it is handed it (a new game's engine question). The question card answers on one press of an answer button (⌘↩ presses the recommended one), and the composer takes custom text. The selected answer remains an ordinary durable user message; reference images are not duplicated in the chat context. No worker or native provider turn waits while the question is open. Routine decisions, repairs and failure reports never become answer forms. Handoff/session bookkeeping is recorded as `contractor_handoff` diagnostics rather than assistant prose.
+A chat asks with `ask_user` when it is handed it (a game with no kind yet, while a plugin on offers one). The question card answers on one press of an answer button (⌘↩ presses the recommended one), and the composer takes custom text. The selected answer remains an ordinary durable user message; reference images are not duplicated in the chat context. No worker or native provider turn waits while the question is open. Routine decisions, repairs and failure reports never become answer forms. Handoff/session bookkeeping is recorded as `contractor_handoff` diagnostics rather than assistant prose.

@@ -8,7 +8,6 @@ import { mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { leadToolsNote } from "../../src/main/core/delegation-prompts.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { ThreadKind } from "../../src/shared/event-log.ts";
 import { engineMode, PermissionMode, type ToolPermissionEvent } from "../../src/shared/permissions.ts";
@@ -292,7 +291,6 @@ describe("a Loop's lead in place has its run's tools on the game folder", () => 
       assert.ok(request.leadAsks, "the chat's lead, in place");
       assert.deepEqual(heard, ["delivered", "found"], "its editor call needed no card: the run covers it");
       assert.deepEqual(bindings, [{ tool: PLUGIN_TOOL.name, directory: valley.dir }], "its plugin acts on the game");
-      assert.equal(request.prompt.includes(leadToolsNote()), false, "no note about a build it leads elsewhere");
       assert.equal(request.onCheckpoint, undefined, "Genex's save points are its, never the chat's checkpoint");
     },
   );

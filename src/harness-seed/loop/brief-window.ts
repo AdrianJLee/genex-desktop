@@ -3,7 +3,7 @@
  * verbatim (chat-continuity.ts `historyNotice`).
  */
 
-/** The latest messages the brief quotes. */
+/** The latest messages the history notice quotes. */
 export const TRANSCRIPT_MESSAGES = 20;
 /** The most of them it quotes, in characters, counted from the end. */
 export const TRANSCRIPT_CHARS = 18_000;

@@ -40,8 +40,9 @@ or a sidebar game returns without a reload. Skills has these sections, in order
   `studio:plugins.skill`; a plugin’s page shows what its last update added, changed or removed.
 
 A plugin’s switch, here and in the composer’s Add menu (hint “All games”), turns it on or off for
-every game. A session's plugins are its tool list and system text on each launch: no notice says
-one was turned on or off since it last ran. Discovery does not execute skills, import hooks/MCP servers or prove use in a
+every game. A session's plugins are its tool list on each launch and its system text as it started:
+a resumed Claude Code or Codex session keeps the plugin guidance it started with, and no notice
+says one was turned on or off since it last ran. Discovery does not execute skills, import hooks/MCP servers or prove use in a
 conversation. Refresh skills rechecks the inventory; errors are distinct from an empty list.
 Studio archives remain excluded; Claude shared-skill links are confined to known skill roots.
 
@@ -530,10 +531,12 @@ missing `--ignore-user-config`. A handshake refusal falls back to exec and the b
 turn and the engine's lifetime; resumed sessions, older CLIs and the default keep exec. The
 session's `system/init` event records `tool_delivery` (`dynamic_tools` or `file_bridge`).
 
-Genex's context for a Codex session (`DelegateRequest.system`) is its developer instructions:
-`developerInstructions` on `thread/start` and `thread/resume`, `-c developer_instructions=…` in
-`codex exec`'s own option scope (a root `-c` is dropped when the nested command has its own),
-never stdin. The message's parts follow in order (`#delegateTexts`): Genex's notices under its
+Genex's context for a Codex session (`DelegateRequest.system`) is an app server thread's developer
+instructions (`developerInstructions` on `thread/start` and `thread/resume`). `codex exec` could take
+it only in argv, which a context with its plugins' guidance overflows on Windows, so a new exec
+session reads it on stdin as its first notice, under Genex's mark, and a resumed one, which keeps
+its first instructions anyway, has it in its history. The message's parts follow in order
+(`#delegateTexts`): Genex's notices under its
 mark (`genex-mark-prompts.ts`), the prompt as its sender wrote it, then Codex's own per-turn notes
 (the bridge's tools, plan or read-only, the off-limits paths), each its own text item on the app
 server and apart by blank lines on exec's stdin.

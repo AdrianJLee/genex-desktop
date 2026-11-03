@@ -53,7 +53,7 @@ describe("what a session is briefed with after its chat was compacted", () => {
       { role: "user", content: "Build a plaza with a fountain." },
       { role: "assistant", content: "Done." },
       { role: "user", content: "Now add the market stalls." },
-    ];
+    ] as const;
     const notice = historyNotice(messages, "Now add the market stalls.", HANDOVER);
     assert.match(notice, /Where this chat stands/);
     assert.ok(notice.indexOf(HANDOVER) < notice.indexOf("user: Build a plaza with a fountain."), "the handover first");

@@ -191,28 +191,35 @@ const ENGINE_FACT_OF: Record<string, string> = {
 
 // Flipped: a game of each engine was offered its own engine's kind, read as for a game with no kind
 // yet, while the seed read the kinds as which plugins are on. A snapshot's kinds are the kind tools
-// that reach its game: never another engine's.
-test("a game of each engine is offered no other engine's kind and handed its own engine's tools", async () => {
+// that reach its game: an engine's way in reaches a game with no kind yet (and a web game), never a
+// game that already has an engine's kind.
+test("a game of each engine is offered no kind and handed its own engine's tools; a game with no kind yet each engine's", async () => {
   const resources = await makeResources({ tsc: false });
   const registry = await bundledRegistry(path.join(resources, "plugins"), ALL_ON);
   try {
     for (const row of ENGINE_GAMES) {
       const { kinds, tools } = registry.snapshot(row.facts);
-      assert.ok(
-        kinds.every((kind) => kind.plugin === row.plugin),
-        `${row.label}: never another engine's kind (${kinds.map((kind) => kind.tool).join(", ")})`,
+      assert.deepEqual(
+        kinds.map((kind) => kind.tool),
+        [],
+        `${row.label}: no kind`,
       );
       assert.ok(
         tools.some((tool) => tool.name === row.own),
         `${row.label}: ${row.own}`,
       );
     }
-    const pending = registry.snapshot().kinds;
-    for (const plugin of Object.keys(ENGINE_FACT_OF))
-      assert.ok(
-        pending.some((kind) => kind.plugin === plugin),
-        `a game with no kind yet is offered ${plugin}'s`,
-      );
+    assert.deepEqual(
+      registry.snapshot().kinds.map((kind) => [kind.tool, kind.makes]),
+      [
+        ["godot__new-game", [CoreFact.GodotProject]],
+        ["roblox__new-game", [CoreFact.RobloxProject]],
+        ["unity__new-game", [CoreFact.UnityProject]],
+        ["unreal__new-game", [CoreFact.UnrealProject]],
+        ["unreal__new-plugin", [CoreFact.UnrealProject, CoreFact.UnrealPlugin]],
+      ],
+      "a game with no kind yet is offered each engine's",
+    );
   } finally {
     registry.cancel();
   }

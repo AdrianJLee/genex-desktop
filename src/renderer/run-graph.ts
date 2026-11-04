@@ -303,6 +303,7 @@ export interface RunNode {
   id: "run";
   runId: string;
   project: string | null;
+  /** What the build was asked: its goal, or the words the chat last went on with it for. */
   goal: string;
   reference: { name: string; kind: string | null } | null;
   startedAt: string | null;
@@ -317,7 +318,7 @@ export interface RunNode {
   builderEngine: string | null;
   /** labels of the reference stills the run was given */
   referenceFrames: string[];
-  /** The pictures the person sent with the message the run answers, for its start node; null when none. */
+  /** The pictures sent with the message `goal` answers, for its start node and card; null when none. */
   asked: AskedPictures | null;
   /**
    * A run the lead runs itself (`autopilot_started.director`). It has no shared-base stage
@@ -731,6 +732,17 @@ interface GraphDraft {
   sentPictures: Map<string, number>;
   /** The person's message the chat answers now, with its pictures: what a run starting now was asked with. */
   answering: AskedPictures | null;
+  /** What the chat said to go on with the build while it was closed: what its next start is asked. */
+  goingOn: GoingOn | null;
+  /** The words the latest start that went on with the build was asked; null while only its first start asked. */
+  wentOnWith: string | null;
+}
+
+/** The chat's words for going on with a closed build (`run_steering`, its `resume_run`), and the message they answer. */
+interface GoingOn {
+  text: string;
+  threadId: string;
+  messageId: string | null;
 }
 
 /** One record of this run, read once: the part and round it names, after restarts are folded in. */
@@ -878,6 +890,8 @@ function newGraphDraft(runId: string, turn: string | null): GraphDraft {
     turn,
     sentPictures: new Map(),
     answering: null,
+    goingOn: null,
+    wentOnWith: null,
     workers: newWorkerLedger(),
     leadsWorkers: false,
     jobs: new Map(),
@@ -1130,6 +1144,9 @@ function applyRunEvent(graph: GraphDraft, custom: { event_type: string }, entry:
     case CustomEvent.RunStarted:
       onRunStarted(graph, entry);
       break;
+    case CustomEvent.RunSteering:
+      onSteer(graph, entry);
+      break;
     case CustomEvent.BlenderAsset:
       onBlenderAsset(graph, entry);
       break;
@@ -1258,9 +1275,10 @@ function onRunStarted(graph: GraphDraft, entry: RunEntry): void {
   const { run } = graph;
   const { payload } = entry;
   run.project = strOrNull(payload.project);
-  run.goal = str(payload.goal, "");
-  // Its first start record is the message it answers; a resume or a later steer is not.
+  // Its first start record is the message it answers; a later start, what the chat went on with it for.
   if (run.startedAt === null) run.asked = graph.answering;
+  else goOn(graph);
+  run.goal = graph.wentOnWith ?? str(payload.goal, "");
   run.startedAt = entry.event.created_at;
   const reference = record(payload.reference);
   run.reference = reference ? { name: str(reference.name, "reference"), kind: strOrNull(reference.kind) } : null;
@@ -1270,6 +1288,32 @@ function onRunStarted(graph: GraphDraft, entry: RunEntry): void {
   run.builderEngine = strOrNull(payload.builderEngine) ?? run.engine;
   const modeller = record(payload.blender);
   if (modeller) graph.blender = blenderNode(strOrNull(modeller.version));
+}
+
+/**
+ * A start after the build closed goes on with what the chat said meanwhile, when it said anything:
+ * those words are what this start was asked, with that message's pictures. A start with nothing
+ * said (Resume on its card) goes on with what it was last asked.
+ */
+function goOn(graph: GraphDraft): void {
+  const said = graph.goingOn;
+  if (!said) return;
+  graph.goingOn = null;
+  graph.wentOnWith = said.text;
+  const count = said.messageId ? (graph.sentPictures.get(said.messageId) ?? 0) : 0;
+  graph.run.asked = said.messageId && count > 0 ? { threadId: said.threadId, messageId: said.messageId, count } : null;
+}
+
+/**
+ * Words for the build while it is closed are what the chat goes on with it for (`resume_run`); while
+ * it works they steer its lead, and are not what it was asked.
+ */
+function onSteer(graph: GraphDraft, entry: RunEntry): void {
+  if (graph.turn || graph.run.active) return;
+  const text = str(entry.payload.text, "").trim();
+  if (!text) return;
+  const messageId = strOrNull(entry.payload.sourceMessageId);
+  graph.goingOn = { text, threadId: entry.event.thread_id, messageId };
 }
 
 function onBlenderAsset(graph: GraphDraft, entry: RunEntry): void {

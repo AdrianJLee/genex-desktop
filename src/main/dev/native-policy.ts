@@ -215,7 +215,6 @@ const FIXTURE_SAFE = [
   "studio:backdrop.make",
   "studio:game.update",
   "studio:game.remove",
-  "studio:game.references",
   "studio:game.asset.preview",
   "studio:game.asset.present",
   "studio:game.asset.rigs",

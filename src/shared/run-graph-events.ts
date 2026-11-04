@@ -34,13 +34,20 @@ export const isWorkerOfGraph = (workerKey: string, graphKey: string): boolean =>
   workerKey.startsWith(`${graphKey}\u0000`);
 
 /**
- * The queue records of the person's message a run answers: the last message the chat began
- * answering before the run's first record, as it was queued and then begun. They name no run, so a
- * run's own records leave them out; the start node reads its pictures from them.
+ * The queue records of the person's messages a run answers: the last message the chat began
+ * answering before the run's first record, as it was queued and then begun, and each message the
+ * chat went on with the run for (a `run_steering` of it names one), as it was queued. They name no
+ * run, so a run's own records leave them out; its start reads their pictures from them.
  */
 export function answeredRecords(events: readonly EventEnvelope[], runId: string): EventEnvelope[] {
   const first = events.findIndex((event) => customPayloadOf(event)?.runId === runId);
-  const before = first < 0 ? [] : events.slice(0, first);
+  if (first < 0) return [];
+  const asked = firstAsked(events.slice(0, first));
+  return [...asked, ...steeredMessages(events, runId).filter((queued) => !asked.includes(queued))];
+}
+
+/** The last message the chat began answering in `before`: its queue record, then its start. */
+function firstAsked(before: readonly EventEnvelope[]): EventEnvelope[] {
   const begun = before.findLast((event) => customTypeOf(event) === CustomEvent.CoordinatorMessageProcessing);
   const messageId = begun ? customPayloadOf(begun)?.messageId : undefined;
   if (!begun || typeof messageId !== "string") return [];
@@ -49,6 +56,24 @@ export function answeredRecords(events: readonly EventEnvelope[], runId: string)
       customTypeOf(event) === CustomEvent.CoordinatorMessageQueued && customPayloadOf(event)?.messageId === messageId,
   );
   return queued ? [queued, begun] : [begun];
+}
+
+/** The queue record of each message a steer of the run names (`sourceMessageId`), in the log's order. */
+function steeredMessages(events: readonly EventEnvelope[], runId: string): EventEnvelope[] {
+  const named = new Set<string>();
+  for (const event of events) {
+    const payload = customTypeOf(event) === CustomEvent.RunSteering ? customPayloadOf(event) : null;
+    if (payload?.runId === runId && typeof payload.sourceMessageId === "string") named.add(payload.sourceMessageId);
+  }
+  if (named.size === 0) return [];
+  return events.filter((event) => {
+    const messageId = customPayloadOf(event)?.messageId;
+    return (
+      customTypeOf(event) === CustomEvent.CoordinatorMessageQueued &&
+      typeof messageId === "string" &&
+      named.has(messageId)
+    );
+  });
 }
 
 const customTypeOf = (event: EventEnvelope): string | null =>

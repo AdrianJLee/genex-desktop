@@ -60,20 +60,26 @@ function knownImages(threadId: string | undefined, messageId: string | undefined
   return known.get(imagesKey(threadId, messageId)) ?? null;
 }
 
-/** The pictures sent with a chat message, once loaded (null until then): the chat's and the Builds graph's. */
+/**
+ * The pictures sent with a chat message, once loaded (null until then): the chat's and the Builds
+ * graph's. Only that message's: a view that moves on to another message, or to none, never keeps
+ * showing the one before.
+ */
 export function useMessageImages(threadId: string | undefined, messageId: string | undefined): ReferenceFrame[] | null {
-  const [images, setImages] = useState<ReferenceFrame[] | null>(() => knownImages(threadId, messageId));
+  const key = threadId && messageId ? imagesKey(threadId, messageId) : null;
+  const [loaded, setLoaded] = useState<{ key: string; images: ReferenceFrame[] } | null>(null);
   useEffect(() => {
     if (!threadId || !messageId) return;
     let current = true;
-    void imagesOf(threadId, messageId).then((list) => {
-      if (current) setImages(list);
+    void imagesOf(threadId, messageId).then((images) => {
+      if (current) setLoaded({ key: imagesKey(threadId, messageId), images });
     });
     return () => {
       current = false;
     };
   }, [threadId, messageId]);
-  return images;
+  if (key === null) return null;
+  return loaded?.key === key ? loaded.images : knownImages(threadId, messageId);
 }
 
 /** A sent picture as an image source. */

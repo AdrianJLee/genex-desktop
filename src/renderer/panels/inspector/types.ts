@@ -13,7 +13,6 @@ import type { NoteTarget } from "../../reply-about.ts";
 import type { PartRow, Step } from "../../run-steps.ts";
 import type { BuildTimeline } from "../../run-graph-builds.ts";
 import type { Notify } from "../../state/toasts.ts";
-import type { ReferenceFrame } from "../run-stills.ts";
 
 export type { NoteTarget } from "../../reply-about.ts";
 
@@ -45,7 +44,6 @@ export interface InspectorProps {
   blender: BlenderNode | null;
   assets: AssetsNode | null;
   project: string | null;
-  references: ReferenceFrame[];
   baseSrc: string | null;
   resultSrc: string | null;
   resultPath: string | null;

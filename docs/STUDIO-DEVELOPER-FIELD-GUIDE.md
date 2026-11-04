@@ -370,7 +370,8 @@ the lead's background work and the finish check not run yet; Fixture web Loop wi
 runs and their workers' records, drawn as trees),
 build-timeline (a web game's Loop written after the start, going in its folder: four save points on
 its line, one whose picture is the last's, twelve workers off them with a fold, a re-delivered sign,
-and deliveries into the game for the Assets tab; before it in Build history a finished web Loop of
+and deliveries into the game for the Assets tab; paused after save point 2 and gone on with for a
+second message with its own picture, which You asked shows alone; before it in Build history a finished web Loop of
 an earlier Genex with two pictured builds),
 finish-check (four Loops written after the start, one per finish check look: Done and Stopped in
 the Builds history, Not yet after one no, and the newest Checking),

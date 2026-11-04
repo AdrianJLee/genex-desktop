@@ -721,10 +721,6 @@ export interface StudioApi {
   /** Every window a worker is driving right now, with its last frame. */
   agentScreens(): Promise<import("./agent-screen.ts").AgentScreenFrame[]>;
   readRunStill(file: string, maxPx?: number): Promise<{ mimeType: string; data: string } | null>;
-  readReferenceStills(project: string): Promise<{
-    frames: Array<{ label: string; mimeType: string; data: string }>;
-    skipped: Array<{ file: string; why: string }>;
-  }>;
   /** Everything under the game's `assets/` and `public/assets/`, with where each file came from. */
   previewProjectAsset(p: {
     project: string;

@@ -76,6 +76,8 @@ export async function savePointTool(loopRun: LoopRun, args: AnyRecord): Promise<
   if (!label) return OPEN_WORDS.needsLabel;
   // A recovery may yet take the folder back: a save point now would name the wrong files.
   if (loopRun.open.recovering) return OPEN_WORDS.recovering;
+  // The app is closed: its plugin could save nothing of it, and the lead's fix is kept once it is back.
+  if (loopRun.open.appDown) return OPEN_WORDS.appDown;
   const summary = hasText(args.summary) ? args.summary.trim() : "";
   // Read before the checkpoint: the picture is the one the lead looked at, as the save point keeps the folder.
   const rel = hasText(args.shows) ? args.shows.trim() : "";

@@ -113,6 +113,9 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     wentBack: null,
     wentBackSeq: null,
     healthLook: null,
+    appDown: null,
+    handoffs: 0,
+    appDownSeq: 0,
   };
 }
 

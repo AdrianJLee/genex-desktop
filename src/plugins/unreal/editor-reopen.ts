@@ -311,7 +311,9 @@ type ReopenAsk = { storage: string; game: string; helper: boolean; build: boolea
 
 /**
  * Starts reopening the game's Unreal unless it already answers or a job already reopens it; with
- * `helper`, an outdated Genex editor helper is updated while Unreal is closed.
+ * `helper`, an outdated Genex editor helper is updated while Unreal is closed. An agent's Open after
+ * a reopen that failed builds the game's C++ module too: what stopped that reopen may be the code the
+ * agent just fixed, and Unreal's own Open would load the library the last good build left.
  */
 async function startReopen(
   deps: ReopenDeps,
@@ -319,9 +321,10 @@ async function startReopen(
   ask: ReopenAsk,
   restarting: Restarting,
 ): Promise<ReopenAnswer> {
-  const { storage, game, helper, build } = ask;
+  const { storage, game, helper } = ask;
   const project = await deps.project(storage, game);
   if (!project) throw new Error(MESSAGE.NoProject);
+  const build = ask.build || jobs.get(project)?.state === ReopenState.Failed;
   // Genex's own restart (adding the C++ module) opens Unreal again itself: no second editor, no second build.
   if (jobs.get(project)?.state === ReopenState.Reopening || restarting(project)) return { started: true };
   if (await answering(deps, { storage, game }).catch(() => false)) return { answering: true };
@@ -410,7 +413,8 @@ export function createReopenTools(deps: ReopenDeps, restarting: Restarting = () 
       startReopen(deps, jobs, { storage, game, helper, build: true }, restarting),
     /**
      * An agent's Open as a reopen job: what is left of the project's editor and crash reporter
-     * ended, then the project opened (Unreal's own Open builds a hot-reloaded module) and waited for.
+     * ended, then the project opened (Unreal's own Open builds a hot-reloaded module; after a reopen
+     * that failed, the job builds it first) and waited for.
      */
     open: (storage: string, game: string) =>
       startReopen(deps, jobs, { storage, game, helper: false, build: false }, restarting),

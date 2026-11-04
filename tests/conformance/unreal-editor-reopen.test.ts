@@ -864,6 +864,24 @@ describe("the agent's open-editor", () => {
     assert.ok(w.clock.at >= OPEN_TAKES_MS && w.clock.at < OPEN_TAKES_MS + 30_000, `waited ${w.clock.at} ms`);
   });
 
+  it("after a reopen that failed, builds the game's module first: a fix that still doesn't build fails with its errors, a fix that builds opens", async () => {
+    let fixed = false;
+    // Another program runs on the Mac, so a listing without the game's editor says it isn't running.
+    const shell = { pid: 6100, exec: "/bin/zsh", args: "/bin/zsh -l" };
+    const w = await reopenWorld({ compile: () => (fixed ? BUILT : BROKEN), rows: () => [shell] });
+    await w.reopen();
+    assert.equal((await w.reopened()).reopening.state, ReopenState.Failed);
+    assert.deepEqual(await w.agentCall(EditorControlToolName.OpenEditor), { started: true });
+    const still = await w.reopened();
+    assert.equal(still.reopening.state, ReopenState.Failed);
+    assert.match(still.reopening.error ?? "", /BikeGameMode\.cpp:42/, "the agent reads what still doesn't build");
+    fixed = true;
+    assert.deepEqual(await w.agentCall(EditorControlToolName.OpenEditor), { started: true });
+    const end = await w.reopened();
+    assert.equal(end.reopening.state, ReopenState.Done, end.reopening.error);
+    assert.deepEqual(w.events, ["compile", "compile", "compile", `forget ${NAME}.uproject`, `open ${NAME}.uproject`]);
+  });
+
   it("leaves an editor of the game that runs without answering, and ends and reopens it only with restart: true", async () => {
     const w = await reopenWorld({ rows: (p) => [ownEditor(p)] });
     const busy = (await w.agentCall(EditorControlToolName.OpenEditor)) as { busy: boolean; next: string };

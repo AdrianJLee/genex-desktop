@@ -738,7 +738,9 @@ Unreal, `editor-state` reads as reopening, so Genex's health watch waits and a c
 second editor or build (`editor-reopen.ts` `createReopenTools`). Agents manage the game's editor
 themselves and never ask the person to open, quit or restart it (`editor-control.ts`): `open-editor`
 answers `{answering}`, `{starting}` while Genex is already opening it, or `{started}` once a reopen
-job (no C++ build: Unreal's own Open builds a hot-reloaded module) ended what was left of a crashed
+job (no C++ build: Unreal's own Open builds a hot-reloaded module; after a reopen of the project
+that failed, such as a Loop's whose build broke, the job builds it first, so the agent's fix is what
+opens and a fix that still doesn't build fails with its errors) ended what was left of a crashed
 editor and its crash reporter and opened the project; an editor of the game that runs without
 answering is `{busy}` and ended only with `restart: true` (or at once when its log says the port is
 blocked). `quit-editor` saves through the helper's `save_all`, then sends Unreal's normal quit and waits

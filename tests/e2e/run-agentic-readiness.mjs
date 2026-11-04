@@ -441,20 +441,23 @@ try {
     },
   );
   await check(
-    "game state input and separate compositor capture",
+    "game input and separate compositor capture",
     "game",
-    "fixture state/input changes and two distinct actual images",
+    "a click redraws the fixture game, seen from outside, and two distinct actual images",
     async () => {
-      const before = await op(b, "game.state");
-      assert.equal(before.fixture, 1);
+      // The fixture's page tells Genex nothing (no window.__studio): its click counter shows only
+      // in what it draws, so the click is proven by the game's own pixels changing.
+      const gamePixels = async (name) =>
+        hash(fs.readFileSync((await op(b, "capture", { surface: "game", name })).file));
+      const before = await gamePixels("game-before-input");
+      assert.equal(await gamePixels("game-before-input-again"), before, "a still game captures the same pixels");
       await op(b, "game.input", { actions: [{ type: "click", x: 0.2, y: 0.2 }] });
-      const after = await op(b, "game.state");
-      assert.ok(after.clicks > before.clicks);
+      await until(async () => (await gamePixels("game-after-input")) !== before, "the click redraws the game");
       const game = await screenshot(b, "game", "game-surface"),
         desktop = await screenshot(b, "desktop", "desktop-separate");
       assert.notEqual(hash(fs.readFileSync(game.file)), hash(fs.readFileSync(desktop.file)));
       assert.equal((await op(b, "status")).window.focused, false);
-      return { before, after };
+      return { redrawnByInput: true };
     },
   );
   await check(

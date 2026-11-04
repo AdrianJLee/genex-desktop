@@ -299,7 +299,7 @@ async function acceptance() {
     check(
       "the chat tells the agent how the command went, without a bubble, and the same session answers",
       (await until(
-        `[...document.querySelectorAll('[data-chat-entry]')].some((e) => e.textContent.includes('A coast at night, understood.'))`,
+        `[...document.querySelectorAll('[data-chat-entry]')].some((e) => e.textContent.includes('ffmpeg is in. Converting the engine recordings now.'))`,
       )) &&
         !(await js(
           `[...document.querySelectorAll('[data-chat-entry]')].some((e) => e.textContent.includes('I ran this in the terminal'))`,

@@ -188,8 +188,9 @@ export async function cloudBuildFromDialog(core: DialogCore, project: unknown, p
  * The game's new name in Studio, given to Genex too: a game already on Genex is listed under it at
  * once (its title alone; the link stays), as the Publish dialog's own rename does, so the game has
  * one name everywhere. A game not on Genex is asked nothing: its first publish takes Studio's name.
- * Best effort and never in the person's way: signed out, without Genex, or refused, the rename in
- * Studio stands and the next publish lists the game under the new name.
+ * Best effort and never in the person's way: signed out or unanswered, the rename in Studio stands,
+ * the game's publish record keeps the name Genex hasn't taken, the Publish dialog offers it and the
+ * next publish sends it.
  */
 export function renameOnGenex(core: BindingCore, project: string, title: string): Promise<void> {
   const name = cleanGenexTitle(title);

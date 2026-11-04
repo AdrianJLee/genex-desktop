@@ -356,16 +356,19 @@ export function publishReport(project: string, title: string, view: PublishView)
 export type StudioName = { title?: string; provisional?: boolean };
 
 /**
- * The name the dialog offers: the one Genex lists the game under (a rename in Studio, on its page or
- * in Play gives it there), else the game's name in Studio, unless that name still waits for the
- * game's first idea; else the one Studio listed it under, Studio's title, its folder. A listed name
- * that is only the game's link is no name anyone chose (an older link change named the game after
- * its link), so Studio's name wins over it.
+ * The name the dialog offers: one the game was given in Studio that Genex hasn't taken yet, else
+ * the one Genex lists the game under (a rename in Studio, on its page or in Play gives it there),
+ * else the game's name in Studio, unless that name still waits for the game's first idea; else the
+ * one Studio listed it under, Studio's title, its folder. A listed name that is only the game's
+ * link is no name anyone chose (an older link change named the game after its link), so Studio's
+ * name wins over it.
  */
 export function offeredTitle(state: GenexPublishState | null, game: StudioName | undefined, project: string): string {
   const named = game?.provisional ? null : cleanGenexTitle(game?.title);
   const listed = state?.hostedTitle === state?.slug ? undefined : state?.hostedTitle;
-  return listed ?? named ?? state?.title ?? cleanGenexTitle(game?.title) ?? defaultGenexTitle(project);
+  return (
+    state?.renamed ?? listed ?? named ?? state?.title ?? cleanGenexTitle(game?.title) ?? defaultGenexTitle(project)
+  );
 }
 
 /** What Publish asks for before it can publish: a Genex account, or nothing. */

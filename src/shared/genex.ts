@@ -617,6 +617,11 @@ export interface GenexPublishState {
   projectId?: string;
   /** The name Studio last listed the game under; absent when Studio never sent one. */
   title?: string;
+  /**
+   * A name the game was given in Studio that Genex hasn't taken yet (signed out, or Genex
+   * unreachable): the Publish dialog offers it, and the next publish sends it.
+   */
+  renamed?: string;
   status?: GenexHostedStatus;
   draftUrl?: string;
   galleryUrl?: string;

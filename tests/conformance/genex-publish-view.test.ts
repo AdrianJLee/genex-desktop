@@ -365,9 +365,18 @@ test("the busy button's clock reads minutes and seconds", () => {
   assert.equal(clock(134), "2:14");
 });
 
-test("the name offered is Genex's listed one, else Studio's (unless it waits for the game's idea), the record's, the folder's", () => {
+test("the name offered is one Genex hasn't taken yet, else Genex's listed one, else Studio's (unless it waits for the game's idea), the record's, the folder's", () => {
   const listed = state({ title: "Rain Circuit", hostedTitle: "Night Rain" });
   assert.equal(offeredTitle(listed, { title: "Racing" }, "racing-demo"), "Night Rain", "renamed on Genex: kept");
+  assert.equal(
+    offeredTitle(
+      state({ title: "Rain Circuit", hostedTitle: "Rain Circuit", renamed: "Racing" }),
+      { title: "Racing" },
+      "x",
+    ),
+    "Racing",
+    "renamed in Studio while signed out: Studio's name, not the one Genex still has",
+  );
   const asLink = state({ title: "Bodycam game", slug: "genex-strike", hostedTitle: "genex-strike" });
   assert.equal(
     offeredTitle(asLink, { title: "Genex strike" }, "bodycam-game"),

@@ -996,12 +996,14 @@ export class GenexTools {
       const meta = await this.#ensureHostedProject(project, dir, path.join(dir, "home"), job, controller.signal);
       job.phase = GenexPublishPhase.Uploading;
       await this.#persistJob(project, job);
-      const sending = this.#sendApps(project, job.id, apps, controller.signal, { title: job.title ?? project });
+      const started = job.title;
+      const sending = this.#sendApps(project, job.id, apps, controller.signal, { title: started ?? project });
       step.done = sending.then(() => {});
       this.#nativeSteps.set(project, step);
       await this.#recordApps(project, job, meta, await sending);
       // The cover goes once the game is on Genex, as a gallery publish's does: never instead of an app.
       if (job.state === GenexPublishJobState.Done) {
+        await this.#settleName(project, job, started);
         // Apps carry no source: the project goes on its own once the game is on Genex.
         await this.#sendProjectAfterApps(project, meta, remix, controller.signal);
         this.#startCoverStep(project, job.id);
@@ -1233,6 +1235,7 @@ export class GenexTools {
       // Remixing is settled before the publish is recorded done, so its record never lags the dialog.
       if (kind === GenexPublishKind.Gallery) await this.#settleRemixing(project, meta, allowed, run.staged, problem);
       await this.#recordUpload(project, dir, kind, job, meta, outs);
+      await this.#settleName(project, job, listing.title);
       if (cover && coverRides(kind, await this.#pages(project))) this.#startCoverStep(project, job.id);
       // The apps go once the web build is public: a draft is not for players, and apps are live at once.
       if (kind === GenexPublishKind.Gallery && apps.length > 0) void this.publishApps(project, job.id, apps);
@@ -1340,8 +1343,10 @@ export class GenexTools {
     const existing = await readJsonOr<HostedMeta>(metaFile(dir));
     if (existing?.slug && !(await this.#linkGone(existing, signal))) return existing;
     // A link changed elsewhere, or by a link change whose answer never came back, reads nothing at
-    // the old link: the game is still this account's, under the link Genex gives it now.
-    if (existing?.slug && (await this.#followMoved(project, existing.id, existing.slug, signal).catch(() => null)))
+    // the old link: the game is still this account's, under the link Genex gives it now. When Genex
+    // can't say, this throws and the publish fails, keeping the link: setting it aside would leave
+    // a second game for good, since a moved link is never found again at its old name.
+    if (existing?.slug && (await this.#followMoved(project, existing.id, existing.slug, signal)))
       return (await readJsonOr<HostedMeta>(metaFile(dir))) ?? existing;
     // A deleted game, or one this account doesn't own, refuses every upload: this account's own
     // game set aside earlier (another sign-in's publish) comes back, else a new game is made.
@@ -1701,12 +1706,17 @@ export class GenexTools {
   }
   /**
    * Genex's owner read of the game with id `id`, once Studio's link and publish record follow the
-   * link Genex gives it now; null when Genex names no other link than `slug`, or can't be asked.
+   * link Genex gives it now; null when this account has no such game (deleted, or another's) or
+   * Genex names no other link than `slug`. Throws when Genex can't be asked.
    */
   async #followMoved(project: string, id: unknown, slug: unknown, signal?: AbortSignal) {
     if (typeof id !== "string" || !id) return null;
     const init = signal ? withSignal(signal) : {};
-    const moved = (await this.#fetch(GenexRoute.project(id), init).catch(() => null))?.project;
+    const read = await this.#fetch(GenexRoute.project(id), init).catch((error: unknown) => {
+      if (statusOf(error) === HTTP_NOT_FOUND) return null;
+      throw error;
+    });
+    const moved = read?.project;
     const next: unknown = moved?.slug;
     if (typeof next !== "string" || genexSlug(next) !== next || next === slug) return null;
     await this.#followLink(project, { slug: next, playUrl: moved.playUrl });
@@ -1786,31 +1796,79 @@ export class GenexTools {
    *
    * `fromStudio`: the game was renamed in Studio itself, which keeps the name a first publish uses,
    * so only a game already on Genex is renamed, and only when its record or Genex names another name
-   * (the dialog's own rename saves the record first, and is not sent twice).
+   * (the dialog's own rename saves the record first, and is not sent twice). One that can't reach
+   * Genex (signed out, Genex unreachable or refusing) is kept as the record's `renamed`: the dialog
+   * offers it, and the next publish sends it.
    */
   async publishName(project: string, title: unknown, fromStudio = false): Promise<GenexPublishState> {
     return this.#account(async () => {
       const name = cleanGenexTitle(title);
       if (!name) throw new Error(PUBLISH_MESSAGE.NoName());
       const state = await this.publishStatus(project);
-      if (fromStudio) {
-        // A publish under way lists the game under the name it started with: it takes this one.
-        const running = this.#publishJobs.get(project)?.job;
-        if (running?.title !== undefined) running.title = name;
-        if (!(await this.#listedOtherwise(project, state, name))) return state;
-      }
-      if (state.projectId) {
-        if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
-        await this.#fetch(GenexRoute.project(state.projectId), {
-          method: "PATCH",
-          body: JSON.stringify({ title: name }),
-        });
-      }
-      const record = await this.#publishState(project);
-      record.title = name;
-      await this.#savePublishState(project, record);
+      if (fromStudio && !(await this.#studioRenameDue(project, state, name))) return state;
+      if (state.projectId) await this.#nameOnGenex(project, state, name, fromStudio);
+      await this.#recordListedName(project, name);
       return this.publishView(project);
     });
+  }
+  /**
+   * Whether a rename in Studio goes to Genex: only for a game Genex lists under another name. A
+   * publish under way takes the name either way (it lists the game under the name it started with).
+   */
+  async #studioRenameDue(project: string, state: GenexPublishState, name: string): Promise<boolean> {
+    const running = this.#publishJobs.get(project)?.job;
+    if (running?.title !== undefined) running.title = name;
+    if (await this.#listedOtherwise(project, state, name)) return true;
+    // Named back to the name Genex has: a rename that never reached it waits no more.
+    if (state.renamed !== undefined) await this.#recordListedName(project, name);
+    return false;
+  }
+  /**
+   * Genex lists the game under `name`. A rename from Studio that doesn't reach it is kept as the
+   * record's `renamed` before this throws, so Studio's name for the game is never lost.
+   */
+  async #nameOnGenex(project: string, state: GenexPublishState, name: string, fromStudio: boolean): Promise<void> {
+    try {
+      if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
+      await this.#retitle(String(state.projectId), name);
+    } catch (error) {
+      if (fromStudio) await this.#keepRenamed(project, name);
+      throw error;
+    }
+  }
+  /** Rename the game on Genex, its title alone: nothing is uploaded and its link stays. */
+  async #retitle(projectId: string, name: string): Promise<void> {
+    await this.#fetch(GenexRoute.project(projectId), { method: "PATCH", body: JSON.stringify({ title: name }) });
+  }
+  /** The record names the game as Genex lists it now, and no rename waits to be sent. */
+  async #recordListedName(project: string, name: string): Promise<void> {
+    const record = await this.#publishState(project);
+    record.title = name;
+    delete record.renamed;
+    await this.#savePublishState(project, record);
+  }
+  /** A name given in Studio that Genex hasn't taken yet, kept for the dialog and the next publish. */
+  async #keepRenamed(project: string, name: string): Promise<void> {
+    const record = await this.#publishState(project);
+    record.renamed = name;
+    await this.#savePublishState(project, record);
+  }
+  /**
+   * After a publish: a name given in Studio while it ran (its listing went with the name it
+   * `started` with), or one that never reached Genex (`renamed`), goes to Genex now, so Studio and
+   * Genex name the game alike. Failing, it stays `renamed` for the next publish.
+   */
+  async #settleName(project: string, job: GenexPublishJob, started: string | undefined): Promise<void> {
+    const record = await this.#publishState(project);
+    const name = job.title;
+    const due = name !== started || record.renamed !== undefined;
+    if (job.state !== GenexPublishJobState.Done || !name || !record.projectId || !due) return;
+    try {
+      await this.#retitle(record.projectId, name);
+      await this.#recordListedName(project, name);
+    } catch {
+      await this.#keepRenamed(project, name);
+    }
   }
   /**
    * Whether the game is on Genex under another name than `name`: in Studio's record of it, or on

@@ -175,6 +175,23 @@ describe("renaming a game from the Publish dialog", () => {
     assert.equal((await onGenex.saved()).title, "Street Patrol");
   });
 
+  it("keeps a rename in Studio that Genex didn't take, for the dialog to offer and the next publish to send", async () => {
+    const down = await genexWith({ refuse: 503 });
+    const unanswered = await tools(down.server.url);
+    await assert.rejects(unanswered.genex.publishName(PROJECT, "Street Patrol", true));
+    const kept = await unanswered.saved();
+    assert.deepEqual([kept.title, kept.renamed], ["Bodycam game", "Street Patrol"]);
+
+    const out = await genexWith();
+    const signedOut = await tools(out.server.url);
+    signedOut.signOut();
+    await assert.rejects(signedOut.genex.publishName(PROJECT, "Street Patrol", true));
+    assert.equal(out.renames().length, 0, "nothing sent while signed out");
+    assert.equal((await signedOut.saved()).renamed, "Street Patrol");
+    await signedOut.genex.publishName(PROJECT, "Bodycam game", true);
+    assert.equal((await signedOut.saved()).renamed, undefined, "named back to Genex's name: nothing waits");
+  });
+
   it("is a Publish dialog action that asks nothing first, so Enter saves", async () => {
     const manifest = validateManifest(
       JSON.parse(await readFile(path.join(process.cwd(), "src/plugins/genex/plugin.json"), "utf8")),

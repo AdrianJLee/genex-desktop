@@ -89,7 +89,7 @@ function slugProject(text: unknown): string {
 export const startAutopilot: HarnessTool = {
   name: "start_autopilot",
   description:
-    "Start a build: the whole making of this game, from its first work to its end, which you lead with workers in parallel and save points until you call finish or the person stops it. Call it as soon as you set to making the game or a change to it that is more than a quick fix, instead of doing that work in your reply: say in a line what the build will do and end your reply, and the build goes on in this same session from this folder as you leave it. A question, advice or a quick fix needs none. When this chat has a paused build of this game, go on with it (resume_run) instead: start a new build only when one is needed (the last one is finished, or the person wants to start over).",
+    "Start a build: the whole making of this game, which you lead with workers in parallel and save points until you call finish or the person stops it. Call it as soon as you set to making the game or a change beyond a quick fix, instead of doing that work in your reply: say in a line what the build will do and end your reply. It goes on in this session from this folder as you leave it. When this chat has a paused build, go on with it (resume_run) unless the person wants to start over.",
   parameters: {
     type: "object",
     properties: {

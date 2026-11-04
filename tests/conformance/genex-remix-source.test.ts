@@ -345,6 +345,13 @@ describe("a game's project staged for a build on Genex", () => {
     assert.equal(staged.files, SOURCE_MAX_FILES + 2);
   });
 
+  it("counts only the game's own .uproject: one in a package or a cache leaves the project found", async () => {
+    const stray = { ...unrealGame, "node_modules/kit/Sample.uproject": "{}", "unreal/Saved/Old.uproject": "{}" };
+    const { game, dest } = await gameWith(stray);
+    await stageBuildSource(game, dest, listing(Object.keys(stray)));
+    assert.deepEqual(await filesIn(dest), ["Config/DefaultGame.ini", "Content/Maps/Arena.umap", "Strike.uproject"]);
+  });
+
   it("sends the whole game, as remixers get it, when it has no Unreal project or more than one", async () => {
     const two = { ...unrealGame, "other/Other.uproject": "{}" };
     const both = await gameWith(two);

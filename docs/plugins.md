@@ -3251,17 +3251,19 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
-- The dialog offers the game's name in Studio, or, while that name still waits for the game's
-  first idea, the one Genex lists the game under (`offeredTitle`). A name typed there is saved at
-  once (`publish-name`: a game on Genex is renamed there, its title alone; one not on Genex keeps
-  it for its first publish) and then in Studio. A rename in Studio itself (`updateGame` →
-  `renameOnGenex`, in the background) renames a game Genex lists under another name, and asks
-  nothing of one not on Genex. Change link (`publish-link`) sends `keepTitle`: a link is only the
-  address, and the game keeps its name. A link change Genex finished after Studio stopped waiting
-  (20 s, `API_REQUEST_TIMEOUT_MS`) says so, and the next read of the record follows the link Genex
-  gives the game (by its id, when its old link reads nothing); so does a link changed on
-  genex.games or another computer. A publish under way on Genex (`release_conflict`) is said in
-  plain words.
+- The dialog offers the name Genex lists the game under, else the game's name in Studio unless
+  that still waits for the game's first idea (`offeredTitle`); a listed name that is only the
+  game's link (an older link change named games after their link) gives way to Studio's. A name
+  typed there is saved at once (`publish-name`: a game on Genex is renamed there, its title alone;
+  one not on Genex keeps it for its first publish) and then in Studio. A rename in Studio itself
+  (`updateGame` → `renameOnGenex`, in the background, one game's renames in order) renames a game
+  Genex lists under another name, asks nothing of one not on Genex, and is the name a publish
+  under way lists. Change link (`publish-link`) sends `keepTitle`: a link is only the address, and
+  the game keeps its name. A link change Genex finished after Studio stopped waiting (20 s,
+  `API_REQUEST_TIMEOUT_MS`) says so, and the next read of the record, or the next publish, follows
+  the link Genex gives the game (by its id, when its old link reads nothing) instead of making a
+  new game; so does a link changed on genex.games or another computer. A publish under way on
+  Genex (`release_conflict`) is said in plain words.
 - For a game linked to an engine, or one whose folder holds a player build, the dialog lists its
   platforms above the presses (`PublishPlatforms.tsx`, `publish-platforms-view.ts`; read by
   `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app,

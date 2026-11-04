@@ -247,6 +247,7 @@ describe("changing a game's link from the Publish dialog", () => {
   it("says Genex didn't answer in time, and the next look at the game follows the link Genex gave it", async () => {
     const { server, moves } = await genexWith({ slowLink: true });
     const { genex, saved, link } = await tools(server.url);
+    assert.equal((await genex.publishView(PROJECT)).slug, SLUG, "the dialog is open, its view read");
     const realTimeout = AbortSignal.timeout.bind(AbortSignal);
     const shortWait = mock.method(AbortSignal, "timeout", () => realTimeout(SLOW_ANSWER_MS));
     try {

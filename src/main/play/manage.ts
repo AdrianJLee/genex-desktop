@@ -131,10 +131,10 @@ function changeCall(
 }
 
 /** The 409s of a link change that name why, by the error genex.games gives; any other is a taken link. */
-const LINK_CONFLICT: Partial<Record<string, typeof PlayChangeOutcome.LinkLimit | typeof PlayChangeOutcome.LinkBusy>> = {
-  [ManageError.RenameLimit]: PlayChangeOutcome.LinkLimit,
-  [ManageError.ReleaseBusy]: PlayChangeOutcome.LinkBusy,
-};
+const LINK_CONFLICT = new Map<unknown, typeof PlayChangeOutcome.LinkLimit | typeof PlayChangeOutcome.LinkBusy>([
+  [ManageError.RenameLimit, PlayChangeOutcome.LinkLimit],
+  [ManageError.ReleaseBusy, PlayChangeOutcome.LinkBusy],
+]);
 
 /**
  * Why genex.games kept a game's old link, read from its refusal, or null for a refusal of another
@@ -143,9 +143,7 @@ const LINK_CONFLICT: Partial<Record<string, typeof PlayChangeOutcome.LinkLimit |
  */
 function linkKept(answer: { status: number; body: unknown }): PlayChangeResult | null {
   if (answer.status === HTTP_CONFLICT) {
-    const error = errorOf(answer.body);
-    const named = typeof error === "string" ? LINK_CONFLICT[error] : undefined;
-    return { outcome: named ?? PlayChangeOutcome.LinkTaken };
+    return { outcome: LINK_CONFLICT.get(errorOf(answer.body)) ?? PlayChangeOutcome.LinkTaken };
   }
   return answer.status === HTTP_BAD_REQUEST ? { outcome: PlayChangeOutcome.LinkReserved } : null;
 }

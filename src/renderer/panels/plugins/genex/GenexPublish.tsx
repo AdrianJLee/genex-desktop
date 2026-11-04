@@ -14,6 +14,7 @@ import { SECOND_MS } from "../../../../shared/duration.ts";
 import type { FeedbackDraft } from "../../../../shared/feedback.ts";
 import { gameCoverUrl } from "../../../../shared/game-cover.ts";
 import {
+  cleanGenexTitle,
   GENEX_PLUGIN_ID,
   GENEX_SLUG_MAX_CHARS,
   GENEX_TITLE_MAX_CHARS,
@@ -1008,9 +1009,10 @@ function useBannerTitle(
     }
     void record.rename(typed).then(async (renamed) => {
       // Studio names the game as Genex now does, so the library, the chat and the next Publish agree.
+      // The name as Genex took it, cleaned of line breaks and controls, which Studio would refuse.
       if (renamed)
         await studio()
-          .saveGame(project, { title: typed })
+          .saveGame(project, { title: cleanGenexTitle(typed) ?? typed })
           .catch(() => undefined);
       setTitle(null);
     });

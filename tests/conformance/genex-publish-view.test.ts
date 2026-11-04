@@ -365,10 +365,17 @@ test("the busy button's clock reads minutes and seconds", () => {
   assert.equal(clock(134), "2:14");
 });
 
-test("the name offered is Studio's, unless it still waits for the game's idea; then Genex's, the listed one, the folder's", () => {
-  const listed = state({ title: "Rain Circuit", hostedTitle: "rain-circuit" });
-  assert.equal(offeredTitle(listed, { title: "Racing" }, "racing-demo"), "Racing", "Studio's name wins");
-  assert.equal(offeredTitle(listed, { title: "New game", provisional: true }, "racing-demo"), "rain-circuit");
+test("the name offered is Genex's listed one, else Studio's (unless it waits for the game's idea), the record's, the folder's", () => {
+  const listed = state({ title: "Rain Circuit", hostedTitle: "Night Rain" });
+  assert.equal(offeredTitle(listed, { title: "Racing" }, "racing-demo"), "Night Rain", "renamed on Genex: kept");
+  const asLink = state({ title: "Bodycam game", slug: "genex-strike", hostedTitle: "genex-strike" });
+  assert.equal(
+    offeredTitle(asLink, { title: "Genex strike" }, "bodycam-game"),
+    "Genex strike",
+    "a name that is only the link",
+  );
+  assert.equal(offeredTitle(asLink, { title: "New game", provisional: true }, "bodycam-game"), "Bodycam game");
+  assert.equal(offeredTitle(state({ title: "Rain Circuit" }), { title: "Racing" }, "racing-demo"), "Racing");
   assert.equal(offeredTitle(state({ title: "Rain Circuit" }), { title: "   " }, "racing-demo"), "Rain Circuit");
   assert.equal(
     offeredTitle(state(), { title: "Hyper-Realistic Racing" }, "hyper-realistic-racing-demo"),

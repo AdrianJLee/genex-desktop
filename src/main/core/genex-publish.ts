@@ -191,13 +191,25 @@ export async function cloudBuildFromDialog(core: DialogCore, project: unknown, p
  * Best effort and never in the person's way: signed out, without Genex, or refused, the rename in
  * Studio stands and the next publish lists the game under the new name.
  */
-export async function renameOnGenex(core: BindingCore, project: string, title: string): Promise<void> {
+export function renameOnGenex(core: BindingCore, project: string, title: string): Promise<void> {
   const name = cleanGenexTitle(title);
-  if (!name) return;
-  try {
-    const binding = await boundGame(core, project);
-    await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishName, { title: name, fromStudio: true }, binding);
-  } catch {
-    // The publish record keeps its old name; the next publish relists the game under Studio's.
-  }
+  if (!name) return Promise.resolve();
+  // One game's renames reach Genex in the order they were made, so the last name is the one listed.
+  const before = renamesUnderWay.get(project) ?? Promise.resolve();
+  const sent = before.then(async () => {
+    try {
+      const binding = await boundGame(core, project);
+      await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishName, { title: name, fromStudio: true }, binding);
+    } catch {
+      // The publish record keeps its old name; the next publish relists the game under Studio's.
+    }
+  });
+  renamesUnderWay.set(project, sent);
+  void sent.then(() => {
+    if (renamesUnderWay.get(project) === sent) renamesUnderWay.delete(project);
+  });
+  return sent;
 }
+
+/** Each game's rename on its way to Genex, the newest last. */
+const renamesUnderWay = new Map<string, Promise<void>>();

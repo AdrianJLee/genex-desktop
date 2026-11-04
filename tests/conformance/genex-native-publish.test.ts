@@ -543,6 +543,30 @@ describe("a game with only apps, published", () => {
     }
   });
 
+  it("follows its game to the link Genex gives it now when the old one reads nothing, instead of making a new game", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      // Moved by a link change whose answer never came back, or on genex.games: the old link is gone.
+      if (req.url.startsWith("/api/projects/by-slug/new-link"))
+        return reply.json({ project: { id: "p1", slug: "new-link", status: "published", owner: { id: "u-me" } } });
+      if (req.url === "/api/projects/p1")
+        return reply.json({ project: { id: "p1", slug: "new-link", playUrl: "https://new-link.genex.technology/" } });
+    });
+    servers.push(server);
+    const { genex, runs } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "old-link", id: "p1", status: "published" });
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    await genex.publishWait("dust");
+    assert.equal(
+      (await runs()).some((call) => call.args[0] === "init"),
+      false,
+      "no new hosted project",
+    );
+    const link = JSON.parse(await readFile(path.join(workspace, ".genex", "project.json"), "utf8"));
+    assert.deepEqual([link.slug, link.id], ["new-link", "p1"], "the same game, at its new link");
+    assert.deepEqual(await readdir(path.join(workspace, ".genex")), ["project.json"], "nothing set aside");
+  });
+
   it("keeps publishing to its hosted project while Genex says it is this account's, or can't be asked", async () => {
     const server = await startGenexFixtureApi((req, reply) => {
       if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });

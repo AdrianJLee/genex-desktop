@@ -1339,6 +1339,10 @@ export class GenexTools {
   ): Promise<HostedMeta> {
     const existing = await readJsonOr<HostedMeta>(metaFile(dir));
     if (existing?.slug && !(await this.#linkGone(existing, signal))) return existing;
+    // A link changed elsewhere, or by a link change whose answer never came back, reads nothing at
+    // the old link: the game is still this account's, under the link Genex gives it now.
+    if (existing?.slug && (await this.#followMoved(project, existing.id, existing.slug, signal).catch(() => null)))
+      return (await readJsonOr<HostedMeta>(metaFile(dir))) ?? existing;
     // A deleted game, or one this account doesn't own, refuses every upload: this account's own
     // game set aside earlier (another sign-in's publish) comes back, else a new game is made.
     if (existing?.slug) await this.#unlink(dir);
@@ -1691,12 +1695,21 @@ export class GenexTools {
    * so does `state`, so the view shows the link the game has. Null when Genex names no other link.
    */
   async #movedProject(project: string, state: GenexPublishState): Promise<unknown> {
-    if (!state.projectId) return null;
-    const moved = (await this.#fetch(GenexRoute.project(state.projectId)).catch(() => null))?.project;
-    const slug: unknown = moved?.slug;
-    if (typeof slug !== "string" || genexSlug(slug) !== slug || slug === state.slug) return null;
-    await this.#followLink(project, { slug, playUrl: moved.playUrl });
-    mergeMeta(state, await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))));
+    const moved = await this.#followMoved(project, state.projectId, state.slug).catch(() => null);
+    if (moved) mergeMeta(state, await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))));
+    return moved;
+  }
+  /**
+   * Genex's owner read of the game with id `id`, once Studio's link and publish record follow the
+   * link Genex gives it now; null when Genex names no other link than `slug`, or can't be asked.
+   */
+  async #followMoved(project: string, id: unknown, slug: unknown, signal?: AbortSignal) {
+    if (typeof id !== "string" || !id) return null;
+    const init = signal ? withSignal(signal) : {};
+    const moved = (await this.#fetch(GenexRoute.project(id), init).catch(() => null))?.project;
+    const next: unknown = moved?.slug;
+    if (typeof next !== "string" || genexSlug(next) !== next || next === slug) return null;
+    await this.#followLink(project, { slug: next, playUrl: moved.playUrl });
     return moved;
   }
   /**
@@ -1719,6 +1732,8 @@ export class GenexTools {
         method: "POST",
         body: JSON.stringify({ name: slug, keepTitle: true }),
       }).catch((error: unknown) => {
+        // Genex may have moved the game anyway (an answer that never came back): the next read asks.
+        this.#hostedWebs.delete(project);
         throw new Error(linkRefusal(error) ?? errorMessage(error));
       });
       const moved = answer?.project;
@@ -1778,7 +1793,12 @@ export class GenexTools {
       const name = cleanGenexTitle(title);
       if (!name) throw new Error(PUBLISH_MESSAGE.NoName());
       const state = await this.publishStatus(project);
-      if (fromStudio && !(await this.#listedOtherwise(project, state, name))) return state;
+      if (fromStudio) {
+        // A publish under way lists the game under the name it started with: it takes this one.
+        const running = this.#publishJobs.get(project)?.job;
+        if (running?.title !== undefined) running.title = name;
+        if (!(await this.#listedOtherwise(project, state, name))) return state;
+      }
       if (state.projectId) {
         if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
         await this.#fetch(GenexRoute.project(state.projectId), {

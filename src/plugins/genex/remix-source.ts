@@ -285,10 +285,11 @@ export async function stageBuildSource(
   deps: RemixSourceDeps = { listFiles: gitListFiles },
 ): Promise<StagedSource> {
   const root = await realpath(gameDir);
-  const listed = await deps.listFiles(root);
-  const unreal = unrealProjectRoot(listed);
+  const own = await projectFiles(root, await deps.listFiles(root));
+  // Counted among the game's own files: a `.uproject` in a cache or a package is no project of its.
+  const unreal = unrealProjectRoot(own.map((file) => file.file));
   const inProject = (file: string): boolean => unreal === null || unreal === "" || file.startsWith(`${unreal}/`);
-  const files = (await projectFiles(root, listed))
+  const files = own
     .filter((file) => inProject(file.file))
     .map((file) => (unreal ? { ...file, file: file.file.slice(unreal.length + 1) } : file));
   if (files.length === 0) throw new RemixSourceError(GenexRemixProblem.Empty);

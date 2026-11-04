@@ -18,6 +18,7 @@ import {
   publishAppsFromDialog,
   publishFromDialog,
   publishReview,
+  renameOnGenex,
 } from "../../src/main/core/genex-publish.ts";
 import type { ExportResult } from "../../src/shared/game-project.ts";
 import { GENEX_PLUGIN_ID, GenexAction, GenexPublishKind } from "../../src/shared/genex.ts";
@@ -296,6 +297,31 @@ test("a game renamed in Studio is renamed on Genex too, and Studio's name stands
       (await rig.core.games.presentation(GAME)).title,
       "Rain Circuit",
       "refused on Genex, renamed in Studio",
+    );
+  } finally {
+    await rig.close();
+  }
+});
+
+test("two quick renames in Studio reach Genex in the order they were made, so the last name is listed", async () => {
+  const rig = await dialogRig();
+  try {
+    const bind = rig.core.pluginBinding.bind(rig.core);
+    let slowFirst = true;
+    rig.core.pluginBinding = async (project) => {
+      if (slowFirst) {
+        slowFirst = false;
+        await delay(ASK_POLL_MS * 5);
+      }
+      return bind(project);
+    };
+    await Promise.all([renameOnGenex(rig.core, GAME, "Street Patrol"), renameOnGenex(rig.core, GAME, "Rain Circuit")]);
+    assert.deepEqual(
+      rig.calls.map((call) => call.args),
+      [
+        { title: "Street Patrol", fromStudio: true },
+        { title: "Rain Circuit", fromStudio: true },
+      ],
     );
   } finally {
     await rig.close();

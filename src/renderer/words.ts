@@ -31,7 +31,7 @@ import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from
 import { DataFolderProblem } from "../shared/data-folder.ts";
 import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
-import { PlayCardAction, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
+import { PlayCardAction, PlayChangeOutcome, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload, LoopRefusal } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
@@ -4828,6 +4828,13 @@ export const GENEX_WORDS = {
     copied: t("Copied"),
     /** The public link's label in the dialog, beside the globe. */
     publicLink: t("Public:"),
+    /** The public link's own press, its pencil: the field it opens, its Save and the line under it. */
+    changeLink: t("Change the link"),
+    newLink: t("New link"),
+    saveLink: t("Save"),
+    linkSaved: t("Link saved"),
+    oldLinkWorks: t("The old link will still open the game"),
+    changesLeft: (count: number) => t("{count, plural, one {# change left} other {# changes left}}", { count }),
     /** The tested draft, while players do not have it yet: its label, its Copy, and the line under it. */
     testLink: t("Test link:"),
     copyTestLinkLabel: t("Copy the test link"),
@@ -4841,8 +4848,6 @@ export const GENEX_WORDS = {
     slow: t("Taking longer than usual."),
     /** The banner's name, the one moment an attempt the dialog watched goes live: `<name>` is the name's own press. */
     isLive: t("<name>{title}</name> <live>is live!</live>"),
-    /** The press that lists a game renamed right after it went live under its new name. */
-    saveName: t("Save name"),
     replay: t("Play the celebration again"),
     /** The banner's cover controls: ask for another, say what it should show, flip through the recent ones. */
     anotherCover: t("Another cover"),
@@ -5731,6 +5736,8 @@ export const PLAY_CARD_MENU_WORDS = {
   item: {
     [PlayCardAction.CopyLink]: t("Copy link"),
     [PlayCardAction.Remixing]: t("Turn off remixing"),
+    [PlayCardAction.Rename]: t("Rename"),
+    [PlayCardAction.Link]: t("Change link"),
     [PlayCardAction.Cover]: t("Change cover"),
     [PlayCardAction.Mobile]: t("Mobile support"),
     [PlayCardAction.Tags]: t("Edit tags"),
@@ -5800,6 +5807,31 @@ export const PLAY_CARD_MENU_WORDS = {
     working: t("Deleting…"),
     done: (title: string) => t("{title} is deleted", { title }),
     failed: t("Couldn’t delete the game."),
+  },
+  rename: {
+    title: (title: string) => t("Rename {title}", { title }),
+    sub: t("The name players see on Play and genex.games."),
+    label: t("Name"),
+    noName: t("Give the game a name with a letter or a number in it."),
+    done: (title: string) => t("Renamed to {title}", { title }),
+    failed: t("Couldn’t rename the game."),
+  },
+  link: {
+    title: (title: string) => t("Change the link of {title}", { title }),
+    sub: t("The old link will still open the game, for players who already have it too."),
+    label: t("New link"),
+    empty: t("Give the link a letter or a number."),
+    done: (address: string) => t("The game is at {address} now", { address }),
+    failed: t("Couldn’t change the link."),
+    kept: {
+      [PlayChangeOutcome.LinkTaken]: t("Another game already has this link. Try another one."),
+      [PlayChangeOutcome.LinkLimit]: t("This game has used all its link changes."),
+      [PlayChangeOutcome.LinkReserved]: t("Genex keeps this link for itself. Try another one."),
+    },
+  },
+  players: {
+    label: t("Players"),
+    failed: t("Couldn’t change Players."),
   },
   remixing: {
     on: (title: string) => t("Anyone can remix {title} now", { title }),

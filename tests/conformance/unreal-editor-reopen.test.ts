@@ -696,6 +696,11 @@ describe("at Genex's moments", () => {
     await failed.reopened();
     const lost = (await failed.atMoment(LoopToolName.EditorState, health)) as Answer;
     assert.match(lost.block ?? "", /reopening Unreal failed: .*didn't build/);
+    // An editor of the game opened since (by the person) and still loading reads busy, never as that failure.
+    failed.rows.push({ pid: 9300, exec: EDITOR_EXEC, args: `${EDITOR_EXEC} ${failed.paths.project}` });
+    const loading = (await failed.atMoment(LoopToolName.EditorState, health)) as Answer;
+    assert.match(loading.pending ?? "", /busy/);
+    assert.equal(loading.block, undefined, "a loading editor is no crash");
   });
 
   it("editor-state's answer at health, in a run and in a chat: pending while Unreal may yet answer, blocked once it can't", () => {

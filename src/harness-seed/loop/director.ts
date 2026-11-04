@@ -363,13 +363,14 @@ async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, 
       await closeHeldStart(loopRun, start.blocked);
       return;
     }
-    if (start.blocked) await appDownAtStart(loopRun, start.blocked.reason);
-    else appUpAtStart(loopRun);
     if (loopRun.ctx.cancelled) {
       await line.release();
       await closeStoppedStart(loopRun);
       return;
     }
+    // Read only once the start went on: a Stop's start said nothing of the app, and its journal keeps it as it was.
+    if (start.blocked) await appDownAtStart(loopRun, start.blocked.reason);
+    else appUpAtStart(loopRun);
     await wakeLoopRun(loopRun, talk, startLines(loopRun, start), line, clock);
   } catch (err: any) {
     await line.release();

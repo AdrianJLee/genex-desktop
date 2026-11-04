@@ -158,8 +158,9 @@ async function backTo(
  * none, and that other turn is never cut.
  */
 async function halt(loopRun: LoopRun, open: OpenLoop, words: string): Promise<void> {
-  // A close under way decides how the Loop ends: a recovery that ends after it pauses nothing.
-  if (closing(loopRun)) return;
+  // A close under way decides how the Loop ends: a recovery that ends after it pauses nothing; a
+  // pause already made (the lead's own, for the person) keeps its words.
+  if (closing(loopRun) || open.halted) return;
   open.halted = words;
   await loopRun.saveJournal().catch(() => {});
   if (open.inTurn) await abortLead(loopRun);
@@ -274,21 +275,18 @@ export type Rewound = { held: HookHeldBy | null; restored: boolean; notBack: str
 
 /**
  * What a rewind at the end of a lead's turn left of the stopped app: back, the lead has it no more;
- * a restore Genex itself held back pauses the Loop in Genex's words, as a recovery's way back does.
- * Still closed: where the project's restore steps reopen its app, they just tried on the save point's
- * files and the lead has it again; elsewhere Genex's steps run once more, as after any turn.
+ * a restore Genex itself held back pauses the Loop in Genex's words, as a recovery's way back does;
+ * still closed, Genex's try runs on the folder as the rewind left it, as after any turn (a project's
+ * steps after a restore reopen only an app they closed for it, so they can't stand for that try).
  */
 export async function afterRewindWhileDown(loopRun: LoopRun, open: OpenLoop, rewound: Rewound): Promise<void> {
   if (givesUp(loopRun)) return;
-  const { held, restored, notBack } = rewound;
-  const heldWords = held ? backHeldWords(held) : null;
+  const heldWords = rewound.held ? backHeldWords(rewound.held) : null;
   if (heldWords) return halt(loopRun, open, heldWords);
-  if (restored && notBack === null) {
+  if (rewound.restored && rewound.notBack === null) {
     appIsBack(open);
     return;
   }
-  const restoreReopened = restored && hooksOn(loopRun.game, HookEvent.RestoreAfter);
-  if (notBack !== null && restoreReopened) return handToLead(loopRun, open, notBack);
   void reopenAfterTurn(loopRun, open);
 }
 

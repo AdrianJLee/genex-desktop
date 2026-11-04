@@ -501,9 +501,8 @@ else hands the app to the lead (`OpenLoop.appDown`): a line with the app's own r
 error names its file and line) wakes or reaches it (`NoteKind.AppCrashed`), its turn is never cut, no
 recovery starts, `save_point` and `finish` are refused, and a turn's end that heard that line (never
 the wrap-up turn's) keeps nothing and runs the rewind the lead asked for (a restore Genex held pauses
-in its hold's words; one that leaves the app closed is the lead's again where steps follow a restore,
-which reopen Unity's and Unreal's editors), then Genex's try beside the wake loop (standing for its
-`restart`): a `health` look first, an app that answers or is only busy waited for and never reopened
+in its hold's words; one that brings the app back ends there), then, unless a rewind brought it
+back, Genex's try beside the wake loop (standing for its `restart`): a `health` look first, an app that answers or is only busy waited for and never reopened
 under it, else `crash` once more. A clean `health` answer meanwhile (the lead's own Open) gives the app
 back; a look no step answered says nothing. Past `MAX_HANDOFFS` such tries since the lead's last
 `save_point` (an app that answers only to stop again counts on) it pauses the Loop in the person's

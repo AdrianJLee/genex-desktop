@@ -735,7 +735,8 @@ one only for the harness (`PluginRegistry.tool`'s `caller`). `cpp-status` and `a
 agent tools for an `unreal-project` (`facts`), which the one Loop's lead calls; `add-cpp-module`
 asks the person first (its `confirmation`) and holds the `editor` lock. While its job restarts
 Unreal, `editor-state` reads as reopening, so Genex's health watch waits and a crash step starts no
-second editor or build (`editor-reopen.ts` `createReopenTools`). Agents manage the game's editor
+second editor or build (`editor-reopen.ts` `createReopenTools`); a reopen that failed reads as failed
+only until an editor of the game runs again (one the agent opened, still loading, reads busy). Agents manage the game's editor
 themselves and never ask the person to open, quit or restart it (`editor-control.ts`): `open-editor`
 answers `{answering}`, `{starting}` while Genex is already opening it, or `{started}` once a reopen
 job (no C++ build: Unreal's own Open builds a hot-reloaded module; while the project's last module

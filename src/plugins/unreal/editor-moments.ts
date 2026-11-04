@@ -305,14 +305,21 @@ async function silentHealth(ops: MomentOps, project: string | null): Promise<Hea
   return { health: LIFE_HEALTH[await lifeOf(ops)], project };
 }
 
-/** Where Unreal stands for a health check. */
+/** What a silent Unreal reads after a reopen that failed when an editor of the game was opened since: still on its way. */
+const OPENED_SINCE: ReadonlySet<EditorHealth> = new Set([EditorHealth.Starting, EditorHealth.Busy]);
+
+/**
+ * Where Unreal stands for a health check. After a reopen that failed, an editor of the game opened
+ * since (by the person, the panel or the agent) that is starting or busy reads so, never as the old
+ * failure: a crash step on it would end it while it loads.
+ */
 async function healthOf(ops: MomentOps): Promise<HealthRead> {
   const state = await ops.state();
   if (state.reopening.state === ReopenState.Reopening) return { health: EditorHealth.Reopening };
   if (state.answering) return { health: EditorHealth.Answers };
-  if (state.reopening.state === ReopenState.Failed)
-    return { health: EditorHealth.ReopenFailed, error: state.reopening.error ?? "" };
-  return silentHealth(ops, await ops.projectName().catch(() => null));
+  const silent = await silentHealth(ops, await ops.projectName().catch(() => null));
+  if (state.reopening.state !== ReopenState.Failed || OPENED_SINCE.has(silent.health)) return silent;
+  return { health: EditorHealth.ReopenFailed, error: state.reopening.error ?? "" };
 }
 
 /** `editor-state` at `health`: quiet while Unreal answers, pending while it may yet, blocked once it can't. */

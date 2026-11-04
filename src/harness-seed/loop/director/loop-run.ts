@@ -51,10 +51,10 @@ export interface LoopRunState {
   finishAsk?: FinishAsk | null;
 }
 
-/** What the run knows (`prepareLoopRun`, setup.ts). */
 /** How a lead's turn ended, for what waits for its end: `last` when it was the run's wrap-up turn, after which none comes. */
 export type TurnEnds = { last: boolean };
 
+/** What the run knows (`prepareLoopRun`, setup.ts). */
 export interface LoopRunData {
   ctx: HarnessCtx;
   threadId: string;

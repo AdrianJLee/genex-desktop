@@ -261,7 +261,8 @@ Each builder brief is built from one registry `snapshot(engine)`, so its tools a
 lease, and by the capability facts a session without plugin tools reads), the web's when no game
 is named. The tools are the same for every engine. A session with host tools also reads, beside the
 skill lines, one line for each plugin it is handed: its name, the prefix of its tools (`<id>__`)
-when it has any, and its description on one line, cut at 200 characters (`handedPluginsNote`). A
+when it has any, and its description on one line, cut at 200 characters (`handedPluginsNote`); a
+plugin under the hood ([First-party privileges](#first-party-privileges)) has its skill lines alone. A
 plugin that declares an `account` whose state (`PluginAccountState`) is anything but `unlocked`
 adds that it is not set up yet and the person still has to connect its account on its page. The
 list is the session's system text (`delegation-prompts.ts`), which a resumed Claude Code or Codex
@@ -2344,7 +2345,7 @@ gets both, and its card shows in the one chat its run was started in, as the hos
 never a thread the harness names; a worker the host seated gets `plugins_find` only and reports
 what it found to its lead; any other session (a reviewer, a judge) gets
 neither. Only the chat's own session gets `start_web_game`. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
-the installed plugins that match (on, then off or removed), then the entries of Genex's curated
+the installed plugins that match (on, then off or removed; never one under the hood), then the entries of Genex's curated
 catalog not installed, and never anything from another source (`main/core/plugin-finder.ts`). A
 plugin matches when it detects, is scoped to or makes `fact`, or when a word of `text` other than a
 generic one ("engine", "plugin", "editor"…) is a word, or starts a word, of its id, name, description
@@ -3219,6 +3220,13 @@ Genex:
   and Publish; `servesAction`); only its tools, MCP servers, skills and toolbar contributions go.
   It can't be removed. A finished sign-in turns it on unless the person turned it off themselves
   (the record's `turnedOff`, set only by `setEnabled(false)`).
+- Its advice, the bundled `genex-recommendations`, works under its hood (`PluginRegistry.underHood`,
+  set by `studio-core.ts`): it is on exactly while Genex is, whatever an older profile recorded (a
+  copy installed off, turned off or removed comes back on at the next start), and nobody switches or
+  removes it by itself (`plugin_under_hood`). Its skills reach a brief as skill lines and its skill
+  tool; it is left out of every list a person or an agent picks plugins from (`shown`): the
+  window's (`studio:plugins.list`), `plugins_find` and `plugins_suggest`, a session's handed-plugins
+  note and the planning step's capability facts.
 - `host-cli` MCP servers run Studio's own bundled Genex CLI (`@genex-ai/cli-demo`, an app
   dependency unpacked from the asar) behind `src/genex-host/preload.mjs`. A bundled seed is copied
   into the profile without its `node_modules` (Windows 11 held the CLI's 2,394 fresh files past the
@@ -3466,7 +3474,8 @@ Genex:
   exactly once) take Genex's design and process advice out of the vendored text, and the prefaces
   carry the API facts those passages held. That advice, reworded as optional, is the bundled
   `genex-recommendations` plugin (skills only: multiplayer patterns, cover craft, asset sources, shop
-  design, player experience, play-time models), which every new profile installs off (`seedEnabled`). Genex's currency is Nex (the cards
+  design, player experience, play-time models), which works under the hood of Genex (see
+  [First-party privileges](#first-party-privileges)). Genex's currency is Nex (the cards
   call it coin): a thing priced in Nex, or sold for real money with no currency named, is a store
   item listed with `shop add` and its picture; coins, gold or gems are the game's own currency
   unless the person says they are for real money. Dynamic payments

@@ -260,6 +260,7 @@ const MESSAGE = {
   AccountPlugin: (name: string) =>
     t("{name} holds your account, so it can't be removed: turn it off instead", { name }),
   OnlyLocalWatch: () => t("Only plugins loaded from a local folder can be watched"),
+  UnderHood: "This plugin works under another plugin's switch; it is never switched or removed by itself",
   UnlockRequired: "Explicit account unlock required",
   ConnectionRequired: "Explicit account connection required",
   DisconnectRequired: "Explicit disconnect required",
@@ -860,6 +861,13 @@ export class PluginRegistry {
     | undefined;
   seedEnabled: Record<string, boolean> = {};
   /**
+   * Bundled plugins that work under the hood, each by the plugin whose switch it follows: one is on
+   * exactly while that plugin is, whatever an older profile recorded, is never switched or removed
+   * by itself, and stays out of what a person or an agent picks plugins from (`shown`). The host
+   * sets it before `init`.
+   */
+  underHood: ReadonlyMap<string, string> = new Map();
+  /**
    * The plugin whose account is the app's own (Genex) and the actions it answers while off: its
    * sign-in and Publish belong to the person, not to the agent. Turned off, it loses its tools,
    * servers, skills, hooks and toolbar but keeps its account signed in and serves these actions;
@@ -1013,7 +1021,8 @@ export class PluginRegistry {
   /**
    * Record every bundled seed's manifest, and install a copy of the seed where the profile has no
    * copy, lost its copy, or holds an older version the person did not remove: a bundled plugin runs
-   * as the build that ships it; a removed one stays removed.
+   * as the build that ships it; a removed one stays removed, except a plugin under the hood, which
+   * is installed again and is always on.
    */
   async #installSeeds() {
     const bundled: PluginSource = { kind: PluginSourceKind.Bundled };
@@ -1026,7 +1035,7 @@ export class PluginRegistry {
       const installed = this.#installed.get(id);
       const previous = installed ?? this.#lostSeedCopies.get(id);
       this.#lostSeedCopies.delete(id);
-      if (installed && !seedSupersedes(manifest, installed)) continue;
+      if (installed && !this.#seedReplaces(manifest, installed)) continue;
       await inspectPackage(directory);
       const copy = path.join(this.#packages(), id, `${manifest.version}-${randomUUID()}`);
       await mkdir(path.dirname(copy), { recursive: true });
@@ -1045,12 +1054,12 @@ export class PluginRegistry {
         directory: copy,
         manifest,
         source: PluginSourceKind.Bundled,
-        enabled: switched ? switched.enabled : !previous?.turnedOff && this.seedEnabled[id] !== false,
+        enabled: this.#seedStartsOn(id, previous, switched),
         removed: false,
         origin: { kind: PluginSourceKind.Bundled },
         identity: pluginIdentity(manifest, bundled),
       };
-      if (previous?.turnedOff) p.turnedOff = true;
+      if (previous?.turnedOff && !this.underHood.has(id)) p.turnedOff = true;
       // A seed laid over an older copy is an update: the Plugins page says which skills it changed.
       p.lastSkillChange = previous ? pluginSkillChange(previous, p) : undefined;
       this.#installed.set(id, p);
@@ -1058,6 +1067,30 @@ export class PluginRegistry {
     // A lost copy of a plugin Studio no longer ships has nothing to be copied from.
     for (const [id, p] of this.#lostSeedCopies) this.#refuse(id, p, new Error(MESSAGE.PackageMissing()));
     this.#lostSeedCopies.clear();
+    this.#wakeUnderHood();
+  }
+  /** Whether this build's seed is laid over `installed`: an update, or a plugin under the hood that was removed. */
+  #seedReplaces(manifest: PluginManifest, installed: Installed): boolean {
+    if (seedSupersedes(manifest, installed)) return true;
+    return installed.removed && this.underHood.has(manifest.id);
+  }
+  /**
+   * Whether a seed's fresh copy starts on: a plugin under the hood always; another as the person
+   * left it (`switched`), else on unless they turned it off or the host ships it off.
+   */
+  #seedStartsOn(id: string, previous: Installed | undefined, switched: Installed | undefined): boolean {
+    if (this.underHood.has(id)) return true;
+    if (switched) return switched.enabled;
+    return !previous?.turnedOff && this.seedEnabled[id] !== false;
+  }
+  /** Every installed plugin under the hood on, whatever an older profile recorded for it. */
+  #wakeUnderHood() {
+    for (const id of this.underHood.keys()) {
+      const p = this.#installed.get(id);
+      if (!p || p.removed) continue;
+      p.enabled = true;
+      delete p.turnedOff;
+    }
   }
   /**
    * Updates that waited for a lease when Studio closed take effect now, unless the plugin was
@@ -1215,12 +1248,12 @@ export class PluginRegistry {
       ([id, p]): PluginInfo => ({
         manifest: p.manifest,
         source: p.source,
-        enabled: p.enabled,
+        enabled: p.enabled && this.#leaderOn(id),
         removed: p.removed,
         health: this.#health(id, p),
         error: this.#errors.get(id),
         pendingVersion: this.#pending.get(id)?.manifest.version,
-        state: isLive(p) ? "enabled" : "disabled",
+        state: this.#isOn(id, p) ? "enabled" : "disabled",
         origin: p.origin,
         scan: p.scan,
         watching: this.#watchers.has(id),
@@ -1245,14 +1278,18 @@ export class PluginRegistry {
     );
     return [...installed, ...unlisted];
   }
+  /** The plugins as {@link list} gives them, less those under the hood: what a person or an agent picks from. */
+  shown(): PluginInfo[] {
+    return this.list().filter((info) => !this.underHood.has(info.manifest.id));
+  }
   /**
-   * The plugins as {@link list} gives them, each manifest's texts a person reads in `locale` (the
+   * The plugins as {@link shown} gives them, each manifest's texts a person reads in `locale` (the
    * app's language by default) from the plugin's own catalog: what the window shows. Every other
    * field, of the manifest too, is the one `list` gives; the manifests the registry runs on stay English.
    */
   async displayList(locale: Locale = currentLocale()): Promise<PluginInfo[]> {
     return Promise.all(
-      this.list().map(async (info) => {
+      this.shown().map(async (info) => {
         const found = info.unlisted ? this.#unlisted.get(info.manifest.id) : this.#installed.get(info.manifest.id);
         return found ? { ...info, manifest: await this.#words.manifest(info.manifest, found.directory, locale) } : info;
       }),
@@ -1362,7 +1399,16 @@ export class PluginRegistry {
     return this.#running(id);
   }
   enabled(id: string) {
-    return isLive(this.#installed.get(id));
+    return this.#isOn(id, this.#installed.get(id));
+  }
+  /** Whether the plugin `id` follows under the hood is on; true for a plugin that follows none. */
+  #leaderOn(id: string): boolean {
+    const leader = this.underHood.get(id);
+    return leader === undefined || isLive(this.#installed.get(leader));
+  }
+  /** Whether `p` is on now: by its own switch, and a plugin under the hood by the one it follows too. */
+  #isOn(id: string, p: Installed | undefined): boolean {
+    return isLive(p) && this.#leaderOn(id);
   }
   /**
    * The engines the installed plugins declare (`engine` in a `game-engine` plugin's manifest), on or
@@ -1626,6 +1672,7 @@ export class PluginRegistry {
   }
   async setEnabled(id: string, enabled: boolean) {
     return this.#serial(async () => {
+      this.#refuseUnderHood(id);
       const p = this.#installed.get(id);
       if (!p || p.removed) throw new CodedError(PluginStateRefusal.InstallFirst, MESSAGE.InstallFirst());
       const wasEnabled = p.enabled;
@@ -1642,6 +1689,10 @@ export class PluginRegistry {
       await this.#mcpSync(id);
       this.#fire({ id, reason: enabled ? PluginChangeReason.Enabled : PluginChangeReason.Disabled });
     });
+  }
+  /** A plugin under the hood follows another's switch: nobody switches or removes it by itself. */
+  #refuseUnderHood(id: string) {
+    if (this.underHood.has(id)) throw new CodedError(PluginStateRefusal.UnderHood, MESSAGE.UnderHood);
   }
   /**
    * What turning a plugin off stops: its tools' grants, its account, its folder's watch and its
@@ -1674,6 +1725,7 @@ export class PluginRegistry {
   }
   async remove(id: string) {
     return this.#serial(async () => {
+      this.#refuseUnderHood(id);
       const p = this.#installed.get(id);
       if (!p) throw new CodedError(PluginInstallProblem.NotFound, MESSAGE.UnknownPlugin);
       if (this.#keepsAccount(p))

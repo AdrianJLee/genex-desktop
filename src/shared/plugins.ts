@@ -713,6 +713,8 @@ export const PluginStateRefusal = {
   InstallFirst: "plugin_install_first",
   /** It holds the app's account, so it can be turned off but not removed. */
   KeepsAccount: "plugin_keeps_account",
+  /** It works under the hood, by another plugin's switch: it is never switched or removed by itself. */
+  UnderHood: "plugin_under_hood",
 } as const;
 export type PluginStateRefusal = (typeof PluginStateRefusal)[keyof typeof PluginStateRefusal];
 

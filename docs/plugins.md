@@ -735,10 +735,14 @@ one only for the harness (`PluginRegistry.tool`'s `caller`). `cpp-status` and `a
 agent tools for an `unreal-project` (`facts`), which the one Loop's lead calls; `add-cpp-module`
 asks the person first (its `confirmation`) and holds the `editor` lock. While its job restarts
 Unreal, `editor-state` reads as reopening, so Genex's health watch waits and a crash step starts no
-second editor or build (`editor-reopen.ts` `createReopenTools`). Agents manage the game's editor
+second editor or build (`editor-reopen.ts` `createReopenTools`); a reopen that failed reads as failed
+only until an editor of the game runs again (one the agent opened, still loading, reads busy). Agents manage the game's editor
 themselves and never ask the person to open, quit or restart it (`editor-control.ts`): `open-editor`
 answers `{answering}`, `{starting}` while Genex is already opening it, or `{started}` once a reopen
-job (no C++ build: Unreal's own Open builds a hot-reloaded module) ended what was left of a crashed
+job (no C++ build: Unreal's own Open builds a hot-reloaded module; while the project's last module
+build failed, such as a Loop's reopen whose build broke, the job builds it first, so the agent's fix is
+what opens and a fix that still doesn't build fails with its errors; a reopen that failed for anything
+else, such as Xcode not ready, leaves the Open as it is) ended what was left of a crashed
 editor and its crash reporter and opened the project; an editor of the game that runs without
 answering is `{busy}` and ended only with `restart: true` (or at once when its log says the port is
 blocked). `quit-editor` saves through the helper's `save_all`, then sends Unreal's normal quit and waits

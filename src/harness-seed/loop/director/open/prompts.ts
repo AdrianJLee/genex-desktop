@@ -44,6 +44,9 @@ export const OPEN_WORDS = {
   /** A save point or a finish while Genex brings the project's app back: nothing is kept or checked. */
   recovering:
     "Genex is bringing the project's app back; nothing was kept or checked. Try again once it says the app is back.",
+  /** A save point or a finish while the project's app stays closed for the lead to fix (`OPEN_NEWS.appDown`). */
+  appDown:
+    "The project's app is still closed, so nothing was kept or checked. Genex tries to reopen it when this turn ends; try again once it says the app is back.",
   saved: (label: string, notes: readonly string[], shows: string | null = null) =>
     [
       `Saved save point "${label}".`,
@@ -96,4 +99,14 @@ export const OPEN_NEWS = {
       : "The project's app stopped, and Genex reopened it. Work not yet saved in it may be lost.",
   wentBack: (label: string) =>
     `The project's app stopped and wouldn't reopen on the folder as it was, so Genex went back to save point "${label}". Work since it is gone from the folder.`,
+  /**
+   * Genex couldn't bring the app back, and it stays closed for the lead (`health.ts` `handToLead`):
+   * the app's own reason, as its plugin wrote it for agents, and how many more times Genex tries.
+   */
+  appDown: (why: string, tries: number) =>
+    `The project's app is closed, and Genex couldn't open it again: ${clause(why)}. It stays closed until what stops it is fixed. When this turn ends, Genex tries again on the folder as you leave it (${tries === 1 ? "a last try" : `${tries} tries left`}); after that the Loop pauses for the person.`,
+  /** Genex's try at a turn's end brought the app back. */
+  appReopened: "Genex reopened the project's app on the folder as you left it.",
+  /** The app answers again while it was the lead's to bring back (the lead or the person opened it). */
+  appAnswers: "The project's app answers again.",
 } as const;

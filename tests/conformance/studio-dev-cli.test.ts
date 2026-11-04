@@ -335,7 +335,8 @@ test("a live profile on a Mac starts through macOS's launcher, so Electron holds
 test("a live Mac launch hands `open` log files of its own: macOS's launcher refuses one that already exists", () => {
   // `open --stdout <file>` fails with LaunchServices error -10810 when <file> exists, and the
   // launcher creates its own stdio files before spawning, so the two must never be the same file.
-  const root = "/repo/.studio-dev/evidence/launch-b-1";
+  // In this platform's own separators: Windows runs this file too, and `path.dirname` answers in `\`.
+  const root = path.join(path.sep, "repo", ".studio-dev", "evidence", "launch-b-1");
   const live = launchLogPaths(root, { owner: { providers: "live" }, platform: "darwin" });
   const created = [live.spawn.stdout, live.spawn.stderr];
   assert.ok(

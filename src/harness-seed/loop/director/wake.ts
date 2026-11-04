@@ -623,7 +623,7 @@ async function turnThenBetween(
   lead: readonly string[],
 ): Promise<Partial<DelegateResult>> {
   const result = await takeTurn(loopRun, wake, kit, lead);
-  if (loopRun.afterTurn && !runOver(loopRun)) await loopRun.afterTurn();
+  if (loopRun.afterTurn && !runOver(loopRun)) await loopRun.afterTurn({ last: wake.wrapping });
   return result;
 }
 

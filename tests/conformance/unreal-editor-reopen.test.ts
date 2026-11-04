@@ -880,6 +880,16 @@ describe("the agent's open-editor", () => {
     const end = await w.reopened();
     assert.equal(end.reopening.state, ReopenState.Done, end.reopening.error);
     assert.deepEqual(w.events, ["compile", "compile", "compile", `forget ${NAME}.uproject`, `open ${NAME}.uproject`]);
+    // The editor stops again: the good build cleared the mark, so the agent's Open is Unreal's own.
+    w.state.answering = false;
+    w.rows.splice(
+      w.rows.findIndex((row) => row.pid !== shell.pid),
+      1,
+    );
+    w.events.length = 0;
+    assert.deepEqual(await w.agentCall(EditorControlToolName.OpenEditor), { started: true });
+    assert.equal((await w.reopened()).reopening.state, ReopenState.Done);
+    assert.deepEqual(w.events, [`forget ${NAME}.uproject`, `open ${NAME}.uproject`], "no build once it built");
   });
 
   it("after a reopen that failed for anything but the build (Xcode not ready), opens by Unreal's own Open", async () => {

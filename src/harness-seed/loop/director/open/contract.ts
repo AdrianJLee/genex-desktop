@@ -56,6 +56,12 @@ export interface OpenJournal {
   /** What the lead asked for when its turn ends: the save point to go back to (resolved when asked), a restart. */
   between: { rewind: OpenRewind | null; restart: boolean };
   crashes: number;
+  /**
+   * The project's app was closed and the lead's to bring back (`OpenLoop.appDown`) when the journal was
+   * kept: a Resume whose start can't open the app is the lead's again (the person was told a Resume
+   * lets the agent try again), and one that opens it tells the lead it is back.
+   */
+  appLost: boolean;
 }
 
 /** Whether the lead asked for a rewind or a restart that its turn's end has not run yet. */
@@ -70,6 +76,7 @@ export function newOpenJournal(): OpenJournal {
     savePoints: [],
     between: { rewind: null, restart: false },
     crashes: 0,
+    appLost: false,
   };
 }
 
@@ -112,6 +119,7 @@ export function openJournalOf(saved: AnyRecord | null | undefined): OpenJournal 
       .filter((point): point is OpenSavePoint => point !== null),
     between: { rewind: rewindOf(between.rewind), restart: between.restart === true },
     crashes: countOf(open.crashes),
+    appLost: open.appLost === true,
   };
 }
 
@@ -188,7 +196,12 @@ export interface OpenLoop {
   handoffs: number;
   /** The run log's line that last handed the lead the stopped app: Genex tries again after a turn that heard it. */
   appDownSeq: number;
+  /** The moment whose steps Genex's tries for the lead run: the crash steps, or a held start's own (`appDownAtStart`). */
+  reopenAt: OpenReopenAt;
 }
+
+/** The moments whose steps bring the project's app back for the lead. */
+export type OpenReopenAt = typeof HookEvent.Crash | typeof HookEvent.RunPrepare;
 
 /** Whether a plugin of the project restarts its app (`restore.before` or `restore.after`): its lead is offered `restart`. */
 export function restartsApp(game: HookedGame): boolean {

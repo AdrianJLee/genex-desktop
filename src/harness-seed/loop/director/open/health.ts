@@ -44,6 +44,7 @@ import {
   MAX_REOPENS,
   OPEN_CLOSE_MS,
   type OpenLoop,
+  type OpenReopenAt,
   type OpenSavePoint,
 } from "./contract.ts";
 import { appLostWords, backHeldWords, crashHeldWords } from "../held-words.ts";
@@ -85,12 +86,19 @@ async function answersAgain(loopRun: LoopRun, open: OpenLoop): Promise<Failed | 
   return { why: ready.timedOut ? MESSAGE.timedOut(minutes(REOPEN_WAIT_MS)) : ready.reason };
 }
 
-/** The project's crash steps once, then the wait; why the app isn't back, or null once it is. */
-async function reopenOnce(loopRun: LoopRun, open: OpenLoop): Promise<Failed | null> {
-  const crash = await fireHooks(loopRun.ctx, loopRun.game, HookEvent.Crash, runScope(loopRun));
+/**
+ * The project's steps that bring its app back once (its crash steps, or as a held start's are, its
+ * start's: `open.reopenAt`), then the wait; why the app isn't back, or null once it is.
+ */
+async function reopenOnce(
+  loopRun: LoopRun,
+  open: OpenLoop,
+  on: OpenReopenAt = HookEvent.Crash,
+): Promise<Failed | null> {
+  const steps = await fireHooks(loopRun.ctx, loopRun.game, on, runScope(loopRun));
   // Held back by Genex: nothing reopened the app, so there is nothing to wait for.
-  if (crash.blocked && holdOf(crash.blocked)) return { why: crash.blocked.reason, ...crash.blocked };
-  if (crash.blocked) return { why: crash.blocked.reason };
+  if (steps.blocked && holdOf(steps.blocked)) return { why: steps.blocked.reason, ...steps.blocked };
+  if (steps.blocked) return { why: steps.blocked.reason };
   // A Loop that began to close meanwhile waits for nothing more.
   return closing(loopRun) ? null : answersAgain(loopRun, open);
 }
@@ -189,6 +197,8 @@ const wentBackLine = (label: string, stopped: readonly string[]): string =>
  */
 function appIsBack(open: OpenLoop): void {
   open.appDown = null;
+  open.reopenAt = HookEvent.Crash;
+  open.journal.appLost = false;
 }
 
 /**
@@ -198,6 +208,8 @@ function appIsBack(open: OpenLoop): void {
  */
 async function handToLead(loopRun: LoopRun, open: OpenLoop, why: string): Promise<void> {
   if (closing(loopRun)) return;
+  // Kept on the journal: a Resume while the app still doesn't open is the lead's again (`appDownAtStart`).
+  open.journal.appLost = true;
   if (open.handoffs >= MAX_HANDOFFS) return halt(loopRun, open, appLostWords());
   open.handoffs += 1;
   open.appDown = why;
@@ -211,16 +223,21 @@ async function handToLead(loopRun: LoopRun, open: OpenLoop, why: string): Promis
 export const heardAppDown = (loopRun: LoopRun, open: OpenLoop): boolean => loopRun.waitSeq >= open.appDownSeq;
 
 /**
- * Genex's crash steps once more for the lead, on the folder as it left it (it may have fixed what
- * stopped them). Back, the lead hears it; held back by Genex, the Loop pauses in Genex's words;
- * still closed, the lead has it again (`handToLead`).
+ * Genex's try for the lead, on the folder as it left it (it may have fixed what stopped the app). A
+ * look first: an app that answers, or is only busy (loading, compiling, a dialog), is waited for and
+ * never reopened under it, which would end it with its work. Else the steps that bring it back run
+ * once more. Back, the lead hears it; held back by Genex, the Loop pauses in Genex's words; still
+ * closed, the lead has it again (`handToLead`).
  */
 async function reopenForLead(loopRun: LoopRun, open: OpenLoop): Promise<void> {
-  const failed = await reopenOnce(loopRun, open);
+  const look = await fireHooks(loopRun.ctx, loopRun.game, HookEvent.Health, runScope(loopRun));
+  // A look no step answered (the host failed to ask) says nothing of the app: the steps run.
+  const answers = !look.blocked && look.ran.length > 0;
+  const failed = answers ? await answersAgain(loopRun, open) : await reopenOnce(loopRun, open, open.reopenAt);
   if (givesUp(loopRun)) return;
   if (!failed) {
     appIsBack(open);
-    return told(loopRun, OPEN_NEWS.appReopened);
+    return told(loopRun, answers ? OPEN_NEWS.appAnswers : OPEN_NEWS.appReopened);
   }
   const held = crashHeldWords(failed);
   await (held ? halt(loopRun, open, held) : handToLead(loopRun, open, failed.why));
@@ -249,31 +266,50 @@ export function reopenAfterTurn(loopRun: LoopRun, open: OpenLoop): Promise<void>
   return running;
 }
 
-/** What came of the lead's rewind while the app is closed: Genex's own hold on its restore, and whether the app answers after it. */
-export type Rewound = { held: HookHeldBy | null; back: boolean };
+/**
+ * What came of the lead's rewind while the app is closed: Genex's own hold on its restore, whether the
+ * restore happened, and why the app doesn't answer after it (a restore that failed included), or null.
+ */
+export type Rewound = { held: HookHeldBy | null; restored: boolean; notBack: string | null };
 
 /**
  * What a rewind at the end of a lead's turn left of the stopped app: back, the lead has it no more;
- * a restore Genex itself held back pauses the Loop in Genex's words, as a recovery's way back does;
- * still closed, Genex's crash steps run on the folder as the rewind left it, as after any turn.
+ * a restore Genex itself held back pauses the Loop in Genex's words, as a recovery's way back does.
+ * Still closed: where the project's restore steps reopen its app, they just tried on the save point's
+ * files and the lead has it again; elsewhere Genex's steps run once more, as after any turn.
  */
 export async function afterRewindWhileDown(loopRun: LoopRun, open: OpenLoop, rewound: Rewound): Promise<void> {
   if (givesUp(loopRun)) return;
-  const held = rewound.held ? backHeldWords(rewound.held) : null;
-  if (held) return halt(loopRun, open, held);
-  if (rewound.back) {
+  const { held, restored, notBack } = rewound;
+  const heldWords = held ? backHeldWords(held) : null;
+  if (heldWords) return halt(loopRun, open, heldWords);
+  if (restored && notBack === null) {
     appIsBack(open);
     return;
   }
+  const restoreReopened = restored && hooksOn(loopRun.game, HookEvent.RestoreAfter);
+  if (notBack !== null && restoreReopened) return handToLead(loopRun, open, notBack);
   void reopenAfterTurn(loopRun, open);
 }
 
 /**
- * A resumed Loop whose app a plugin's step couldn't open as it prepared (a build that fails, an app
- * that doesn't answer): the lead's to bring back, as after a crash Genex couldn't mend, so the
- * person's Resume is the agent's next try and never the plugin's own error.
+ * A Loop paused while its app was the lead's to bring back (after the lead's tries ran out, or a Stop
+ * or the lead's own pause meanwhile), resumed while a plugin's step still can't open it (a build that
+ * still fails): the lead's to bring back again, so the person's Resume is the agent's next try and
+ * never the plugin's own error. Genex's tries run the start's steps.
  */
-export const appDownAtStart = (loopRun: LoopRun, why: string): Promise<void> => handToLead(loopRun, loopRun.open, why);
+export function appDownAtStart(loopRun: LoopRun, why: string): Promise<void> {
+  // Its start's steps (which open the app and set the rest of the start up) are the ones to try again.
+  loopRun.open.reopenAt = HookEvent.RunPrepare;
+  return handToLead(loopRun, loopRun.open, why);
+}
+
+/** A resumed Loop whose app was the lead's to bring back opened it as it prepared: the lead hears it is back. */
+export function appUpAtStart(loopRun: LoopRun): void {
+  if (!loopRun.open.journal.appLost) return;
+  appIsBack(loopRun.open);
+  loopRun.note(OPEN_NEWS.appAnswers, NoteKind.Folder);
+}
 
 /** The crash handled, start to end (the module's header). */
 async function recover(loopRun: LoopRun, open: OpenLoop, reason: string): Promise<void> {
@@ -345,7 +381,8 @@ async function lookAtApp(loopRun: LoopRun, open: OpenLoop): Promise<void> {
   const health = await fireHooks(loopRun.ctx, loopRun.game, HookEvent.Health, runScope(loopRun));
   if (over(loopRun)) return;
   if (!health.blocked) {
-    if (!open.appDown || health.pending) return;
+    // Only an answer a step gave says the app is back: a look the host failed to ask says nothing.
+    if (!open.appDown || health.pending || !health.ran.length) return;
     appIsBack(open);
     loopRun.note(OPEN_NEWS.appAnswers, NoteKind.Folder);
     return;

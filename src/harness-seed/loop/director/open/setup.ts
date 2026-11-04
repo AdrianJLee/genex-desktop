@@ -7,6 +7,7 @@
  */
 import type { AnyRecord, HarnessCtx, Run } from "../../../types/harness.d.ts";
 import { type FactRef, factsOfGame, type FolderHolds, seenInWindow } from "../../folder-facts.ts";
+import { HookEvent } from "../../hooks.ts";
 import { HostMethod } from "../../host-methods.ts";
 import { modelOn, RoleKey, roleEffort, roleEngine } from "../../model-roles.ts";
 import { folderLabelOf } from "../../workers/identity.ts";
@@ -116,6 +117,7 @@ export function openLoopOf(game: OpenedGame, journal: OpenJournal, clock: OpenCl
     appDown: null,
     handoffs: 0,
     appDownSeq: 0,
+    reopenAt: HookEvent.Crash,
   };
 }
 

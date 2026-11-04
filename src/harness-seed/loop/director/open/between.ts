@@ -27,7 +27,7 @@ import {
   waitReady,
 } from "../../hooks.ts";
 import { HostMethod } from "../../host-methods.ts";
-import type { LoopRun } from "../loop-run.ts";
+import type { LoopRun, TurnEnds } from "../loop-run.ts";
 import { closeUnderWay } from "../close-latch.ts";
 import { NoteKind } from "../wake-schedule.ts";
 import { folderChanged } from "./close.ts";
@@ -124,12 +124,12 @@ async function rewind(loopRun: LoopRun, open: OpenLoop, { label, snapshotId }: O
   const failed = await restoreSnapshot(loopRun, snapshotId, label);
   if (failed) {
     tellDone(loopRun, OPEN_NEWS.noRewind(label, failed.why));
-    return { held: failed.held, back: false };
+    return { held: failed.held, restored: false, notBack: failed.why };
   }
   const notBack = await answered(loopRun, open);
   tellDone(loopRun, OPEN_NEWS.rewound(label));
   if (notBack) tellDone(loopRun, OPEN_NEWS.notAnswering(notBack));
-  return { held: null, back: notBack === null };
+  return { held: null, restored: true, notBack };
 }
 
 /**
@@ -190,11 +190,12 @@ function whileRecovering(loopRun: LoopRun, open: OpenLoop, savedInTurn: boolean)
  * can save nothing of it; the next turn's end keeps the lead's fix once it is back). The rewind the
  * lead asked for runs first, and its restore steps may reopen the app; unless they did, Genex's crash
  * steps run once more on the folder as the lead (or the rewind) left it, beside the wake loop
- * (`reopenAfterTurn`), and stand for the restart it may have asked for.
+ * (`reopenAfterTurn`), and stand for the restart it may have asked for. After the run's wrap-up turn
+ * nothing runs: the close keeps the folder as it is, and no try would be heard.
  */
-async function whileAppDown(loopRun: LoopRun, open: OpenLoop): Promise<void> {
+async function whileAppDown(loopRun: LoopRun, open: OpenLoop, ends: TurnEnds): Promise<void> {
   // A turn that never heard the app is closed (it failed, or was cut first) had no chance at it: the line wakes the next.
-  if (!heardAppDown(loopRun, open)) return;
+  if (ends.last || !heardAppDown(loopRun, open)) return;
   const { between } = open.journal;
   between.restart = false;
   const writers = writersInPlace(open).map((record) => record.id);
@@ -207,10 +208,10 @@ async function whileAppDown(loopRun: LoopRun, open: OpenLoop): Promise<void> {
 }
 
 /** The between-turns work itself (the module's header), once no recovery can start beside it. */
-async function betweenTurns(loopRun: LoopRun, open: OpenLoop): Promise<void> {
+async function betweenTurns(loopRun: LoopRun, open: OpenLoop, ends: TurnEnds): Promise<void> {
   const savedInTurn = open.journal.savePoints.length > open.turnSavedFrom;
   if (open.recovering) whileRecovering(loopRun, open, savedInTurn);
-  else if (open.appDown) await whileAppDown(loopRun, open);
+  else if (open.appDown) await whileAppDown(loopRun, open, ends);
   else {
     const writers = writersInPlace(open).map((record) => record.id);
     // A turn that kept a save point left nothing for an autosave.
@@ -223,14 +224,14 @@ async function betweenTurns(loopRun: LoopRun, open: OpenLoop): Promise<void> {
 }
 
 /** The between-turns work (the module's header), for an open Loop's run. */
-export async function openBetweenTurns(loopRun: LoopRun): Promise<void> {
+export async function openBetweenTurns(loopRun: LoopRun, ends: TurnEnds = { last: false }): Promise<void> {
   const open = loopRun.open;
   if (!open || over(loopRun, open)) return;
   // A look the turn started settles first: a crash it saw starts its recovery now, never in the middle of what follows.
   if (open.healthLook) await open.healthLook;
   open.betweenTurns = true;
   try {
-    await betweenTurns(loopRun, open);
+    await betweenTurns(loopRun, open, ends);
   } finally {
     open.betweenTurns = false;
   }

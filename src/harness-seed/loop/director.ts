@@ -19,7 +19,7 @@ import { closeInPlace } from "./director/open/close.ts";
 import { MESSAGE as END_WORDS, openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
 import { creditCapOf, OPEN_WALL_CLOCK, type OpenClock, restartsApp } from "./director/open/contract.ts";
-import { appDownAtStart, settleRecovery } from "./director/open/health.ts";
+import { appDownAtStart, appUpAtStart, settleRecovery } from "./director/open/health.ts";
 import { openTools } from "./director/open/tool-specs.ts";
 import { openHandler } from "./director/open/tools.ts";
 import { HostMethod } from "./host-methods.ts";
@@ -320,7 +320,7 @@ function keepTimings(loopRun: LoopRun, timings: HostTimings): void {
 /** The lead's tools, and the dispatch of them. */
 function seatTools(loopRun: LoopRun): LiveToolSpec[] {
   const types = loopRun.open.pool?.state.types ?? [];
-  loopRun.afterTurn = () => openBetweenTurns(loopRun);
+  loopRun.afterTurn = (ends) => openBetweenTurns(loopRun, ends);
   directors.set(loopRun.run.runId, openHandler(loopRun));
   return openTools(types, {
     restart: restartsApp(loopRun.game),
@@ -331,12 +331,14 @@ function seatTools(loopRun: LoopRun): LiveToolSpec[] {
 }
 
 /**
- * Whether the lead takes a held start: a resumed Loop whose app a plugin's step couldn't open (never
- * Genex's own hold), where a plugin watches that app. A fresh start held back closes for the chat's
- * agent to fix and start again (core/held-start.ts); a Resume is the person's ask that the lead goes on.
+ * Whether the lead takes a held start: the Resume of a Loop that paused while its app was the lead's
+ * to bring back (`appLost`; the person was told a Resume lets the agent try again), held back by a
+ * plugin's step (never Genex's own hold), where a plugin watches that app. Any other held start keeps
+ * its plugin's words: a fresh one closes for the chat's agent to fix and start again
+ * (core/held-start.ts), a resumed one stays paused for what only the person can do.
  */
 const leadTakesTheStart = (loopRun: LoopRun, blocked: HeldBack): boolean =>
-  loopRun.resume && !holdOf(blocked) && hooksOn(loopRun.game, HookEvent.Health);
+  loopRun.resume && loopRun.open.journal.appLost && !holdOf(blocked) && hooksOn(loopRun.game, HookEvent.Health);
 
 /** A start a plugin held back closes before any turn, saying why. */
 async function closeHeldStart(loopRun: LoopRun, blocked: HeldBack): Promise<void> {
@@ -362,6 +364,7 @@ async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, 
       return;
     }
     if (start.blocked) await appDownAtStart(loopRun, start.blocked.reason);
+    else appUpAtStart(loopRun);
     if (loopRun.ctx.cancelled) {
       await line.release();
       await closeStoppedStart(loopRun);

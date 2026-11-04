@@ -3521,6 +3521,25 @@ describe("what is not set up yet", () => {
     }
   });
 
+  it("takes srt-win's own word for a disabled Secondary Logon service when `sc` could not read it", () => {
+    // Feedback from 0.1.25: `sc` said nothing, so Set up installed the sandbox user alone, and the
+    // start then failed on srt-win's "seclogon is disabled" with no Set up to turn it on.
+    const installed = { state: "installed" };
+    const missing = { provisioned: false, credPresent: false };
+    assert.deepEqual(needs(setupGaps({ user: { ...set, seclogon: "disabled" }, wfp: installed, logonService: null })), [
+      WindowsSetupNeed.LogonService,
+    ]);
+    assert.deepEqual(
+      needs(setupGaps({ user: { ...missing, seclogon: "disabled" }, wfp: { state: "absent" }, logonService: null })),
+      [WindowsSetupNeed.Sandbox, WindowsSetupNeed.LogonService],
+    );
+    // Turned on, a service that is not there (Set up cannot turn that on), or one srt-win cannot read.
+    for (const seclogon of ["ok", "missing", "cannot-read"]) {
+      const user = { ...set, seclogon };
+      assert.deepEqual(setupGaps({ user, wfp: installed, logonService: null }), [], seclogon);
+    }
+  });
+
   it("asks srt-win and `sc` together; srt-win's failure is the start's own error, an unread service is no gap", async () => {
     const status = async () => ({ user: set, wfp: { state: "installed" } });
     const off = async () => ServiceStartType.Disabled;
@@ -3529,6 +3548,10 @@ describe("what is not set up yet", () => {
       throw new Error("sc.exe: Access is denied");
     };
     assert.deepEqual(await windowsSetupGaps({ status, logonService: unread }), []);
+    const disabledBySrt = async () => ({ user: { ...set, seclogon: "disabled" }, wfp: { state: "installed" } });
+    assert.deepEqual(needs(await windowsSetupGaps({ status: disabledBySrt, logonService: unread })), [
+      WindowsSetupNeed.LogonService,
+    ]);
     const failing = async () => {
       throw new Error("srt-win missing");
     };

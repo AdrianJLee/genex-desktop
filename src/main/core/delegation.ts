@@ -1051,8 +1051,9 @@ export class DelegationService {
       { facts: seat.facts, holds: seat.holds },
       toolAllowRule(p.toolAllow) ?? undefined,
     );
-    // Their names from the same view: the brief's list names exactly the plugins the snapshot hands.
-    const handed = handedPlugins(this.#core.plugins.list(), plugins);
+    // Their names from the same view: the brief's list names exactly the plugins the snapshot hands,
+    // less those under the hood, whose skills reach the brief as guidance alone.
+    const handed = handedPlugins(this.#core.plugins.shown(), plugins);
     const releaseMcp = this.#core.mcp.lease(p.project);
     const session = this.#session(p, target, grants, seat, worker);
     const tools = sessionTools(plugins, handed);

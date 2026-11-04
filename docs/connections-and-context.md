@@ -839,7 +839,8 @@ Studio keeps a plain frame of the game as it loads (`cover-auto`, once the turns
 settle and as the Publish dialog opens), never over the agent's picture, the person's pick or the
 owner's cover. The dialog's banner flips between the last four pictures (`cover-pick` pins one) and
 its Another cover sends a request to the game's chat ([plugins](plugins.md#first-party-privileges)).
-How to compose a cover is optional advice in the `genex-recommendations` plugin, off by default.
+How to compose a cover is optional advice in the `genex-recommendations` plugin, which works under
+the hood of Genex: on while Genex is, and listed nowhere.
 
 ## Credentials
 

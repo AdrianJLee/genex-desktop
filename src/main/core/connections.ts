@@ -72,7 +72,7 @@ export class ConnectionService {
     const game = project ? (await this.#core.games.list()).find((g) => g.name === project) : undefined;
     const kind: GameKind = game ?? { facts: [] };
     const connectors = await this.#enabledConnectors(project, kind);
-    const text = planningCapabilities(revision, this.#core.plugins.list(), connections, connectors, kind);
+    const text = planningCapabilities(revision, this.#core.plugins.shown(), connections, connectors, kind);
     return { revision, text };
   }
 

@@ -96,6 +96,71 @@ describe("a saved model the plan no longer offers", () => {
     const out: EngineDescriptor = { ...codex, status: { code: "needs_login", detail: "" } };
     assert.equal(notOffered([claude, out], "codex::gpt-5.5").selected?.split("::")[0], "codex");
   });
+
+  it("gives the workers and reviewers of a dropped local model the model that replaced it", () => {
+    // Field case (0.1.25): Ollama lost the model every job was on; the chat opened on the one left,
+    // and the workers and reviewers were still sent to the model that was gone.
+    const left = { ...local, models: [model("small")] };
+    const dropped = { planner: "big", builder: "big", judge: "big" };
+    const view = resolveComposerModel({
+      studio: false,
+      engines: [left],
+      modelKey: "ollama::big",
+      effort: null,
+      roles: dropped,
+    });
+    assert.equal(view.selected, "ollama::small");
+    assert.deepEqual(
+      { planner: view.roles?.planner, builder: view.roles?.builder, judge: view.roles?.judge },
+      { planner: "small", builder: "small", judge: "small" },
+    );
+    const sent = composerSendOptions({ ...view, preferences: {} }, "ollama::small");
+    assert.equal(sent.roles?.builder, "small", "a worker the turn hires runs on the model that is there");
+
+    const reading = { ...left, catalog: { state: "loading", revision: 1, refreshing: false } } as EngineDescriptor;
+    const unsure = resolveComposerModel({
+      studio: false,
+      engines: [reading],
+      modelKey: "ollama::small",
+      effort: null,
+      roles: { planner: "small", builder: "big", judge: "big" },
+    });
+    assert.equal(unsure.roles?.builder, "big", "a list still being read is not proof the model is gone");
+  });
+
+  it("keeps a worker on a signed-out subscription, and moves one whose subscription dropped its model", () => {
+    const crossed = {
+      planner: "qwen",
+      builder: "gpt-old",
+      judge: "gpt-old",
+      engines: { builder: "codex", judge: "codex" },
+    };
+    const out: EngineDescriptor = { ...codex, status: { code: "needs_login", detail: "" } };
+    const kept = resolveComposerModel({
+      studio: false,
+      engines: [local, out],
+      modelKey: "ollama::qwen",
+      effort: null,
+      roles: crossed,
+    });
+    assert.deepEqual(
+      kept.roles?.engines,
+      { builder: "codex", judge: "codex" },
+      "the sign-in is asked for, the pick stays",
+    );
+    const moved = resolveComposerModel({
+      studio: false,
+      engines: [local, codex],
+      modelKey: "ollama::qwen",
+      effort: null,
+      roles: crossed,
+    });
+    assert.deepEqual(
+      { builder: moved.roles?.builder, judge: moved.roles?.judge, engines: moved.roles?.engines },
+      { builder: "qwen", judge: "qwen", engines: undefined },
+      "a model the ready subscription no longer lists falls back to the chat's own preset",
+    );
+  });
 });
 
 describe("what a chat opens with", () => {

@@ -287,7 +287,9 @@ export async function afterRewindWhileDown(loopRun: LoopRun, open: OpenLoop, rew
   if (givesUp(loopRun)) return;
   const heldWords = rewound.held ? backHeldWords(rewound.held) : null;
   if (heldWords) return halt(loopRun, open, heldWords);
-  if (rewound.restored && rewound.notBack === null) {
+  // A held start's steps set more up than the app: Genex's try runs them even once it answers.
+  const back = rewound.restored && rewound.notBack === null && open.reopenAt === HookEvent.Crash;
+  if (back) {
     appIsBack(open);
     return told(loopRun, OPEN_NEWS.appAnswers);
   }
@@ -342,7 +344,10 @@ async function recover(loopRun: LoopRun, open: OpenLoop, reason: string): Promis
   // Its stop may take a while: a close or a Stop meanwhile leaves the folder as it is.
   if (givesUp(loopRun)) return;
   const back = await backTo(loopRun, open, last, stopped);
-  if (loopRun.ctx.cancelled || !back) return;
+  // A Stop or a close took nothing back (or cut the wait): the journal still says the app is closed.
+  if (givesUp(loopRun)) return;
+  // Back at the save point, the app answering: the journal no longer says it is closed.
+  if (!back) return appIsBack(open);
   // Back, though the app still doesn't answer: Genex's own hold pauses the Loop; anything else is the lead's to fix.
   const backHeld = backHeldWords(back);
   await (backHeld ? halt(loopRun, open, backHeld) : handToLead(loopRun, open, back.why));

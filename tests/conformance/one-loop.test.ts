@@ -138,6 +138,7 @@ function journalOf(host: LoopHost) {
       open: {
         savePoints: Array<{ label: string; snapshotId: string; auto: boolean; notes: string[] }>;
         crashes: number;
+        appLost: boolean;
       };
     };
   };
@@ -866,6 +867,11 @@ describe("the one Loop's health watch", () => {
       assert.equal(restore?.snapshotId, journalOf(back.host).director.open.savePoints[0]?.snapshotId);
       assert.match(String(back.host.prompts()[1]), /went back to save point "One"/);
       assert.equal(back.host.appended("run_finished")[0]?.victory, true);
+      assert.equal(
+        journalOf(back.host).director.open.appLost,
+        false,
+        "back at the save point, the journal no longer says the app is closed",
+      );
 
       // Flipped: with no save point the Loop paused at once, cut the lead's turn and showed the person
       // the app's own reason; now the lead hears that reason in its turn and works on, Genex tries the
@@ -1264,6 +1270,36 @@ describe("the one Loop's app the lead brings back", () => {
 });
 
 describe("the one Loop's held crash steps", () => {
+  it("a pause the lead took is never overwritten by one Genex's recovery comes to after it", TEST_TIMEOUT, async () => {
+    const why = "I need the person to pick the door's colour.";
+    const flow = { paused: false };
+    const toy = await crashingToy(
+      [
+        async ({ tool, host }) => {
+          toy.state.broken = true;
+          assert.ok(await host.until(() => toy.state.reopens > 0), "Genex reopens it");
+          await tool("pause", { why });
+          // Genex's next crash step is held back (Plan mode): its recovery would pause the Loop too.
+          host.planning = true;
+          flow.paused = true;
+          const by = Date.now() + 300;
+          while (host.rec.paramsOf("engine.abort").length === 0 && Date.now() < by) await delay(5);
+          return undefined;
+        },
+      ],
+      { reopenFixes: false },
+    );
+    const { host, state } = toy;
+    host.stepAnswers.set("reopen-editor", async () => {
+      state.reopens += 1;
+      await host.until(() => flow.paused);
+      return {};
+    });
+    const report = await host.start();
+    assert.equal(report.executionStatus, "paused");
+    assert.equal(report.stoppedBecause, why, "the lead's own words");
+  });
+
   it(
     "a crash step Genex held (Plan mode, the person in the app) pauses with Genex's words, never as an app that failed to reopen",
     TEST_TIMEOUT,
@@ -3211,15 +3247,63 @@ describe("the one Loop's resume held back", () => {
       // The person opened the app; the start's steps hold back for something else at first.
       state.broken = false;
       let prepares = 0;
+      let looks = 0;
+      host.stepAnswers.set("editor-state", (hook) => {
+        if (hook.on === "health") looks += 1;
+        if (hook.on !== "run.prepare") return {};
+        prepares += 1;
+        return prepares === 1 ? { block: "The toy helper isn't set up." } : {};
+      });
+      const answers: unknown[] = [];
+      host.turns.push(async ({ host, tool }) => {
+        // A look at the app while the lead works finds it answering: that alone doesn't give it back.
+        const seen = looks;
+        assert.ok(await host.until(() => looks > seen), "a look ran during the turn");
+        answers.push(await tool("save_point", { label: "Two", summary: "the second room" }));
+        return undefined;
+      }, finishes);
+      const resumed = await host.start({ resume: true });
+      assert.deepEqual(answers, [OPEN_WORDS.appDown], "nothing kept before the start's steps passed");
+      assert.match(String(host.prompts().at(-2)), /The toy helper isn't set up/, "the lead's first turn has it");
+      assert.equal(prepares, 2, "the start's steps ran again as that turn ended, though the app answered");
+      assert.equal(resumed.victory, true, String(resumed.stoppedBecause));
+    },
+  );
+
+  it(
+    "the Resume of a Loop whose app was the lead's, held back by a step while the app answers, has that step pass after the lead's rewind too",
+    TEST_TIMEOUT,
+    async () => {
+      const lost = await crashingToy(
+        [
+          async ({ host, tool }) => {
+            await tool("save_point", { label: "One", summary: "the first room" });
+            lost.state.broken = true;
+            assert.ok(await host.until(() => host.steered.some((s) => /couldn't open it again/.test(s.text))), "told");
+            return undefined;
+          },
+        ],
+        { reopenFixes: false },
+      );
+      const { host, state } = lost;
+      const paused = await host.start();
+      assert.equal(paused.stoppedBecause, appLostWords());
+      // The person opened the app; the start's steps hold back for something else at first.
+      state.broken = false;
+      let prepares = 0;
       host.stepAnswers.set("editor-state", (hook) => {
         if (hook.on !== "run.prepare") return {};
         prepares += 1;
         return prepares === 1 ? { block: "The toy helper isn't set up." } : {};
       });
-      host.turns.push(async () => undefined, finishes);
+      const restores = host.rec.paramsOf("snapshot.restore").length;
+      host.turns.push(async ({ tool }) => {
+        await tool("rewind", { label: "One" });
+        return undefined;
+      }, finishes);
       const resumed = await host.start({ resume: true });
-      assert.match(String(host.prompts().at(-2)), /The toy helper isn't set up/, "the lead's first turn has it");
-      assert.equal(prepares, 2, "the start's steps ran again as that turn ended, though the app answered");
+      assert.equal(host.rec.paramsOf("snapshot.restore").length, restores + 1, "the lead's rewind");
+      assert.equal(prepares, 2, "the start's steps ran again after the rewind, though the app answered");
       assert.equal(resumed.victory, true, String(resumed.stoppedBecause));
     },
   );

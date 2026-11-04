@@ -48,8 +48,6 @@ export const PluginsOpenedFrom = {
   SuggestionManage: "suggestion_manage",
   /** The sidebar's plugin updates list. */
   PluginUpdatesMenu: "plugin_updates_menu",
-  /** A toolbar button's Update. */
-  ToolbarUpdate: "toolbar_update",
 } as const;
 export type PluginsOpenedFrom = (typeof PluginsOpenedFrom)[keyof typeof PluginsOpenedFrom];
 

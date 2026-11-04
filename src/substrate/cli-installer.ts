@@ -15,7 +15,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { CliInstallProblem } from "../shared/cli-install.ts";
+import { CliInstallProblem, installsInApp } from "../shared/cli-install.ts";
 import type { CodingProvider } from "../shared/coding-cli.ts";
 import { MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { EngineId } from "../shared/providers.ts";
@@ -40,7 +40,7 @@ const EXIT_GRACE_MS = 2 * SECOND_MS;
 /** One CLI's installers, the shell its macOS/Linux script is written for, and what keeps it from asking. */
 interface Installer {
   unix: string;
-  /** The vendor's PowerShell installer, or null when it publishes none (OpenCode). */
+  /** The vendor's PowerShell installer, or null when it publishes none (OpenCode, `installsInApp`). */
   windows: string | null;
   shell: string;
   set: Record<string, string>;
@@ -105,6 +105,7 @@ export function installerSource(
   platform: NodeJS.Platform,
 ): { url: string; extension: ".sh" | ".ps1" } | null {
   const installer = installerOf(provider);
+  if (!installsInApp(provider, platform)) return null;
   if (!isWindows(platform)) return { url: installer.unix, extension: ".sh" };
   return installer.windows ? { url: installer.windows, extension: ".ps1" } : null;
 }
@@ -163,7 +164,7 @@ export async function installCodingCli(
   const parent = options.env ?? process.env;
   const source = installerSource(provider, platform);
   if (!source)
-    return { ok: false, problem: CliInstallProblem.Download, detail: MESSAGE.noInstaller(provider, platform) };
+    return { ok: false, problem: CliInstallProblem.Unsupported, detail: MESSAGE.noInstaller(provider, platform) };
   const script = await download(source.url, options.fetch ?? fetch);
   if (!script.ok) return { ok: false, problem: CliInstallProblem.Download, detail: script.detail };
   const folder = await mkdtemp(path.join(options.tmpRoot ?? os.tmpdir(), "genex-cli-install-"));

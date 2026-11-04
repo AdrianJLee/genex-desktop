@@ -114,7 +114,10 @@ export interface Step {
   verdict: VerdictRecord | null;
   /** What a worker's own records say, on the one node of its row: it picks the node's words. */
   worker?: WorkerInfo;
-  /** A worker's picture: what it delivered, else for a reader the save point it looked at. */
+  /**
+   * A worker's picture: what it delivered, else the build right after its merge, else for a reader
+   * the save point it looked at.
+   */
   picture?: WorkerPicture;
   /** A save point after the first: the one before it, whose pictures its own are compared with. */
   earlier?: IterationNode;
@@ -126,10 +129,14 @@ export const PictureSource = {
   File: "file",
   /** Blender's render of a model it made, under the run's folder */
   Render: "render",
+  /** the copy Genex kept of a picture it delivered, under the run's folder: there before its build lands */
+  Kept: "kept",
   /** a model or image it delivered, drawn as the Assets stage draws it */
   Asset: "asset",
   /** a reader that delivered nothing: the save point it looked at */
   Reviewed: "reviewed",
+  /** a worker whose work was merged: the health check's screenshot of the build right after its merge */
+  Build: "build",
 } as const;
 export type PictureSource = (typeof PictureSource)[keyof typeof PictureSource];
 
@@ -137,6 +144,8 @@ export type PictureSource = (typeof PictureSource)[keyof typeof PictureSource];
 export type WorkerPicture =
   | { source: typeof PictureSource.File; file: string }
   | { source: typeof PictureSource.Render; path: string }
+  | { source: typeof PictureSource.Kept; path: string }
+  | { source: typeof PictureSource.Build; path: string }
   | { source: typeof PictureSource.Asset; asset: ProjectAsset }
   | { source: typeof PictureSource.Reviewed; round: IterationNode };
 
@@ -363,6 +372,7 @@ function savePointsOf(graph: RunGraph): IterationNode[] {
 interface Delivery {
   files: string[];
   render: string | null;
+  picture?: string;
   preview?: ProjectAsset;
   inGame?: boolean;
 }
@@ -381,25 +391,46 @@ function deliveriesOf(graph: RunGraph, facetId: string): Delivery[] {
   return [...own, ...folded].sort((a, b) => (a.at < b.at ? -1 : Number(a.at > b.at)));
 }
 
-/** A delivery's picture: an image it delivered, the modeller's render, else the model as the Assets stage draws it. */
+/** The kinds of asset a node draws as the Assets stage does: a picture, a model or a clip's first frame. */
+const DRAWN_KINDS: ReadonlySet<ProjectAsset["kind"]> = new Set(["image", "model", "video"]);
+
+/**
+ * A delivery's picture: the copy Genex kept of an image it delivered (readable before its build
+ * lands), the image in the game, the modeller's render, else the model as the Assets stage draws it.
+ */
 function deliveryPicture(delivery: Delivery): WorkerPicture | null {
+  if (delivery.picture) return { source: PictureSource.Kept, path: delivery.picture };
   const image = delivery.files.find((file) => assetFormat(file)?.raster);
   if (image) return { source: PictureSource.File, file: image };
   if (delivery.render) return { source: PictureSource.Render, path: delivery.render };
-  return delivery.preview ? { source: PictureSource.Asset, asset: delivery.preview } : null;
+  // A sound has no picture to draw: a worker that made only sounds shows its build instead.
+  const drawable = delivery.preview && DRAWN_KINDS.has(delivery.preview.kind) ? delivery.preview : null;
+  return drawable ? { source: PictureSource.Asset, asset: drawable } : null;
+}
+
+/** The health check's screenshot of the build right after this part's worker was merged (its newest merge). */
+function mergedBuildPicture(graph: RunGraph, facetId: string): string | null {
+  return graph.health.findLast((look) => look.worker === facetId && look.picture !== null)?.picture ?? null;
 }
 
 /**
  * A worker's picture: what it delivered, newest first and what is in the game before what is not;
- * a reader that delivered nothing shows the save point that was current when it started to look.
+ * else, once its work was merged, the build right after that merge; a reader that delivered nothing
+ * shows the save point that was current when it started to look.
  */
-function workerPicture(facet: FacetNode, made: Delivery[], saves: IterationNode[]): WorkerPicture | undefined {
+function workerPicture(
+  facet: FacetNode,
+  made: Delivery[],
+  saves: IterationNode[],
+  merged: string | null,
+): WorkerPicture | undefined {
   const newest = [...made].reverse();
   const inGame = newest.filter((delivery) => delivery.inGame === true);
   for (const delivery of [...inGame, ...newest]) {
     const picture = deliveryPicture(delivery);
     if (picture) return picture;
   }
+  if (merged) return { source: PictureSource.Build, path: merged };
   const worker = facet.worker;
   if (worker?.isolation !== WorkerIsolation.Read || worker.startedSeq === null) return undefined;
   const startedAt = worker.startedSeq;
@@ -434,7 +465,9 @@ function sessionStep(
   const verdict = sessionVerdict(graph, facet, task);
   const made = facet.worker ? deliveriesOf(graph, facet.facetId) : [];
   const state = sessionState(graph, facet, task, { ...part, nothingMade: madeNothing(facet, made) });
-  const picture = facet.worker ? workerPicture(facet, made, savePointsOf(graph)) : undefined;
+  const picture = facet.worker
+    ? workerPicture(facet, made, savePointsOf(graph), mergedBuildPicture(graph, facet.facetId))
+    : undefined;
   return {
     id: `session:${facet.facetId}`,
     facetId: facet.facetId,
@@ -859,12 +892,23 @@ export interface ResultStatus {
   state: StepState;
 }
 
+/**
+ * Whether the build on offer failed its health check: the merge record's word on its head, else
+ * (a Loop's merges write none) the newest check of that head.
+ */
+function failedItsCheck(graph: RunGraph, summary: RunSummary | null): boolean {
+  const head = summary?.head ?? null;
+  if (head === null) return false;
+  const merged = graph.mergedHead;
+  if (merged?.head === head && merged.healthy !== null) return !merged.healthy;
+  const checked = graph.health.findLast((look) => look.head === head);
+  return checked !== undefined && !checked.ok;
+}
+
 /** A running run's build: none yet, one that did not start, one being tried, or one to play. */
 function runningResultStatus(graph: RunGraph, summary: RunSummary | null): ResultStatus {
   if (!hasNewBuild(graph, summary)) return { word: t("Nothing yet"), tone: Tone.Muted, state: StepState.Waiting };
-  const merged = graph.mergedHead;
-  const didNotStart = merged !== null && summary !== null && merged.head === summary.head && merged.healthy === false;
-  if (didNotStart) return { word: t("Didn't start"), tone: Tone.Red, state: StepState.Undone };
+  if (failedItsCheck(graph, summary)) return { word: t("Didn't start"), tone: Tone.Red, state: StepState.Undone };
   if (checkingBuild(graph, summary))
     return { word: t("Checking it starts…"), tone: Tone.Accent, state: StepState.Judging };
   return { word: t("Ready to play"), tone: Tone.Green, state: StepState.InBuild };
@@ -938,28 +982,12 @@ export function leadWorking(graph: RunGraph, summary: RunSummary | null, rows: P
   return !rows.some((row) => row.working) && !checkingBuild(graph, summary);
 }
 
-/** How far a run is into the time it was given: "9 of 30 min", "1 h 5 min of 2 h". */
-export function budgetWords(elapsedMs: number, budgetMs: number): string {
-  const elapsed = Math.max(0, Math.floor(elapsedMs / MINUTE_MS));
-  const budget = Math.max(1, Math.round(budgetMs / MINUTE_MS));
-  if (budget < MINUTES_PER_HOUR) return t("{elapsed} of {budget} min", { elapsed, budget });
-  return t("{elapsed} of {budget}", { elapsed: spanWords(elapsed), budget: spanWords(budget) });
-}
-
 /** A span of whole minutes in the chat build card's short units: "9m", "1h", "1h 5m". */
 function shortSpanWords(minutes: number): string {
   if (minutes < MINUTES_PER_HOUR) return t("{minutes}m", { minutes });
   const rest = minutes % MINUTES_PER_HOUR;
   const hours = Math.floor(minutes / MINUTES_PER_HOUR);
   return rest ? t("{hours}h {minutes}m", { hours, minutes: rest }) : t("{hours}h", { hours });
-}
-
-/**
- * The time a build was given, as the chat's build card says it: "up to 10h". It is a cap, not a
- * target — the build may finish well before it.
- */
-export function capWords(budgetMs: number): string {
-  return t("up to {time}", { time: shortSpanWords(Math.max(1, Math.round(budgetMs / MINUTE_MS))) });
 }
 
 /** Whole minutes from `from` to `to` (or now); null when unknown, backwards or under a minute. */
@@ -988,8 +1016,6 @@ const MAX_NAMED_MISSING = 2;
 interface LineFacts {
   /** how long the build has worked, pauses aside: "1 h 5 min" */
   worked: string | null;
-  /** the same for a build that can go on, against the time it was given when it has one: "1 h 5 min of 8 h" */
-  time: string | null;
   hasBuild: boolean;
 }
 
@@ -1010,23 +1036,13 @@ export function workedShortWords(worked: RunWorked | null | undefined, now = Dat
   return minutes < 1 ? null : shortSpanWords(minutes);
 }
 
-/**
- * The time a build has worked (run-state.ts `RunWorked`, left out while its start is unknown),
- * said once for every state, and against the time it was given while it can still go on.
- */
+/** The time a build has worked (run-state.ts `RunWorked`, left out while its start is unknown), said once for every state. */
 function lineFacts(graph: RunGraph, summary: RunSummary | null, now: number): LineFacts {
-  const run = graph.nodes.find((node) => node.kind === GraphNodeKind.Run);
-  const budget = run?.kind === GraphNodeKind.Run ? (run.durationMs ?? null) : null;
   const ms = summary?.worked ? workedMs(summary.worked, now) : null;
-  const worked = ms === null ? null : workedWords(ms);
-  return {
-    worked,
-    time: ms !== null && budget ? budgetWords(ms, budget) : worked,
-    hasBuild: hasNewBuild(graph, summary),
-  };
+  return { worked: ms === null ? null : workedWords(ms), hasBuild: hasNewBuild(graph, summary) };
 }
 
-/** A state and the time the build has worked: "Paused · 1 h of 8 h". */
+/** A state and the time the build has worked: "Paused · 1 h 5 min". */
 const timed = (state: string, time: string | null): string => (time ? `${state} · ${time}` : state);
 
 /**
@@ -1042,7 +1058,7 @@ export function statusLine(graph: RunGraph, summary: RunSummary | null, rows: Pa
   if (execution === ExecutionStatus.Paused)
     return {
       tone: Tone.Orange,
-      strong: timed(t("Paused"), facts.time),
+      strong: timed(t("Paused"), facts.worked),
       rest: facts.hasBuild ? t("an earlier build is ready to play · resume from chat") : t("resume from chat"),
     };
   if (execution === ExecutionStatus.Failed || execution === ExecutionStatus.Cancelled)
@@ -1080,7 +1096,7 @@ function runningLine(graph: RunGraph, summary: RunSummary | null, rows: PartRow[
   if (startFailed)
     rest = building || working ? `${rest} · ${t("the starting point failed")}` : startFailedWords(base.error);
   const doing = step?.state === StepState.Judging ? t("Checking") : t("Building");
-  return { tone: "live", strong: timed(doing, facts.time), rest };
+  return { tone: "live", strong: timed(doing, facts.worked), rest };
 }
 
 /** The starting point failed, with the harness's own error when it gave one. */
@@ -1238,8 +1254,6 @@ export const STEPS = {
 const EMPTY_BUS_REACH = 40;
 /** How far a row's label stops short of the result's bus. */
 const LABEL_INSET = 8;
-/** The link between the optimisation card and the result. */
-const OPTIMIZATION_LINK = 24;
 
 /** How an edge is drawn: merged, merging later, never merged, or in hand now. */
 export const StepEdgeKind = { Solid: "solid", Pending: "pending", Dotted: "dotted", Live: "live" } as const;
@@ -1263,7 +1277,7 @@ export interface StepsLayout {
   /** The steps in reading order when the layout has one of its own (a lead's tree in place); else row by row. */
   order?: string[];
   /**
-   * `start`, `assets`, `optimization`, `final`, `lead`, every step id, `row:<facetId>` for a label,
+   * `start`, `assets`, `final`, `lead`, every step id, `row:<facetId>` for a label,
    * and in a tree `jobs` and `finish_check`
    */
   rects: Record<string, Rect>;
@@ -1289,7 +1303,6 @@ export interface LayoutOptions {
   assets?: boolean;
   /** the start shows the person's pictures, its words in a strip under them */
   startWords?: boolean;
-  optimization?: boolean;
   resultGate?: Gate | null;
   /** the lead has the run to itself: drawn after the result, or in a tree, on a live line into it */
   lead?: boolean;
@@ -1383,7 +1396,7 @@ export function layoutSteps(rows: PartRow[], options: LayoutOptions = {}): Steps
     if (label) label.w = Math.max(S.nodeW, rightBus - origin.rowX - LABEL_INSET);
   }
   const into = rightBus + S.resultGap;
-  const final = placeResult(draft, into, midY, options.optimization === true);
+  const final = placeResult(draft, into, midY);
   placeEnd(draft, final, midY, options);
   draft.edges.unshift(...busIn(drawn, midY, into, origin));
   draft.edges.push(...busOut(drawn, rightBus, midY, into));
@@ -1487,21 +1500,10 @@ export function placeStart(draft: LayoutDraft, midY: number, assets: boolean, wo
   });
 }
 
-/** The result, with the optimisation card before it when there is one; returns the result's rect. */
-export function placeResult(draft: LayoutDraft, into: number, midY: number, optimization: boolean): Rect {
+/** The result; returns its rect. */
+export function placeResult(draft: LayoutDraft, into: number, midY: number): Rect {
   const S = STEPS;
-  const y = midY - S.resultH / 2;
-  if (!optimization) {
-    draft.rects.final = { x: into, y, w: S.resultW, h: S.resultH };
-    return draft.rects.final;
-  }
-  draft.rects.optimization = { x: into, y, w: S.resultW, h: S.resultH };
-  draft.edges.push({
-    id: "optimization",
-    d: `M${into + S.resultW} ${midY} H${into + S.resultW + OPTIMIZATION_LINK}`,
-    kind: StepEdgeKind.Solid,
-  });
-  draft.rects.final = { x: into + S.resultW + OPTIMIZATION_LINK, y, w: S.resultW, h: S.resultH };
+  draft.rects.final = { x: into, y: midY - S.resultH / 2, w: S.resultW, h: S.resultH };
   return draft.rects.final;
 }
 

@@ -124,11 +124,7 @@ export class PlanReviewController {
       }
       if (review.state !== PlanReviewState.Waiting || !review.plan) return false;
       await this.host.save(thread, { ...review, state: PlanReviewState.Starting });
-      const options = {
-        ...review.options,
-        reviewPlan: false,
-        autopilot: review.options.autopilot ? { ...review.options.autopilot, reviewPlan: false } : undefined,
-      };
+      const options = { ...review.options, reviewPlan: false };
       try {
         await this.host.dispatch(approvedPlanMessage(review.text, review.plan), options);
         await this.host.save(thread, { ...review, state: PlanReviewState.Approved });

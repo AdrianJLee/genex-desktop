@@ -28,9 +28,11 @@ import {
   customRecord,
   DELEGATED_PREFIX,
   delegatedPayload,
+  type LoopRefusal,
+  loopRefusalOf,
 } from "../shared/custom-events.ts";
 import { isHandoffNarration } from "../shared/chat-presentation.ts";
-import { isCoordinatorTool } from "../shared/coordinator.ts";
+import { isHostRunTool } from "../shared/chat-run.ts";
 import { SessionActivityRole } from "../shared/chat-activity.ts";
 import type { EventData, Message } from "../shared/event-log.ts";
 import { EventKind } from "../shared/event-log.ts";
@@ -42,7 +44,7 @@ import {
 } from "../shared/game-assets.ts";
 import { GENEX_COVER_TOOL, GENEX_PLUGIN_ID, GenexCoverOperation } from "../shared/genex.ts";
 import { SteerDelivery } from "../shared/message-queue.ts";
-import { engineLabel, roleName } from "../shared/model-roles.ts";
+import { poolWorkerId, WorkerTool } from "../shared/workers.ts";
 import { ExecutionStatus, RoundOutcome, roundOutcome } from "../shared/run-state.ts";
 import { skillUpdatedWords } from "../shared/skill-words.ts";
 import { MINUTE_MS } from "../shared/duration.ts";
@@ -94,7 +96,9 @@ import {
   showWords,
   snapshotWords,
   soundsLikeTrouble,
+  firstSentence,
   TRANSCRIPT_WORDS,
+  WORKER_LINE_WORDS,
   toolActivityWords,
   toolWords,
   usingPluginWords,
@@ -144,6 +148,8 @@ export const EntryAction = {
   Job: "job",
   /** A worker a lead started (`worker_started`): one line naming its task, rewritten as it ends. */
   Worker: "worker",
+  /** A session redirected a worker (`worker_steer`): one line, what it told it. */
+  Told: "told",
   /** Genex can't see app windows yet (`app_look_access`): one line, with Open Privacy settings per pane. */
   AppAccess: "app-access",
   /** A blind judge played the game for the chat's own session (`chat_judge_result`): one line, the question inside. */
@@ -290,6 +296,8 @@ export type Entry =
       landed: boolean | null;
       /** how the Loop worked on its project (`run_finished.profile`): an `open` Loop kept its work in place */
       profile: LoopProfile | null;
+      /** why the Loop did not run at all (`run_finished.refusal`), when it didn't */
+      refusal: LoopRefusal | null;
       project: string | null;
       commit: string | null;
       /** the first and last frames the run recorded, as saved-run stills */
@@ -617,6 +625,8 @@ interface ChatDraft {
   endedJobs: Set<string>;
   /** Each worker's line by its graph and id (`workerKeyOf`), with what its records said, so later ones rewrite it. */
   workerLines: Map<string, { entry: ActionEntry; line: WorkerLine }>;
+  /** Each worker's task by the id its records name (`pool.w2`), a run's too: what a steer's line calls it. */
+  workerTitles: Map<string, string>;
   /** The chat's newest result card: only it offers Keep building. */
   latestResult: MorningEntry | null;
 }
@@ -669,6 +679,7 @@ function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, str
     jobs: new Map(),
     endedJobs: new Set(),
     workerLines: new Map(),
+    workerTitles: new Map(),
     latestResult: null,
     rounds: { kept: 0, undone: 0, firstShot: null, lastShot: null },
     rowByCall: new Map(),
@@ -1076,19 +1087,20 @@ function readDelegatedTurn(chat: ChatDraft, eventId: string, scope: string, payl
     // next tool call does not say better. Only what it *did* gets a row.
     if (part.type !== "tool_use" || !part.name) continue;
     if (recordedByHost(chat, part.name)) continue;
+    if (readSteer(chat, key, part)) continue;
     addDelegatedToolRow(chat, eventId, scope + (part.id ?? key), part, payload);
   }
 }
 
 /**
  * A call the host records itself, so its mirror would be a second row: a plugin's (`plugin_tool`),
- * a connector's (`connector_tool`), and a run control of the coordinator's or of the chat's own session after a run — the host
- * records its request and result when it runs it (conversation.ts `coordinatorTool`). A resume the
+ * a connector's (`connector_tool`), and a run control of the chat's own session after a run — the
+ * host records its request and result when it runs it (conversation.ts `runControl`). A resume the
  * session only recorded runs once its reply ends, and shows then.
  */
 function recordedByHost(chat: ChatDraft, name: string): boolean {
   if (chat.hostedTools.has(pluginToolKey(name))) return true;
-  return isCoordinatorTool(name.trim().replace(STUDIO_TOOL_PREFIX, ""));
+  return isHostRunTool(name.trim().replace(STUDIO_TOOL_PREFIX, ""));
 }
 
 /**
@@ -1138,6 +1150,23 @@ function addDelegatedToolRow(
   trackCaller(chat, row.key, payload);
 }
 
+/**
+ * A session redirecting a worker it started (`worker_steer`): a line of its own with the worker's
+ * task and the first sentence it was told, as Claude Code shows the call. Folded among the turn's
+ * tool calls, a steer that acts on the person's message mid-build read as that message ignored.
+ */
+function readSteer(chat: ChatDraft, key: string, part: DelegatedPart): boolean {
+  if (part.name?.trim().replace(STUDIO_TOOL_PREFIX, "") !== WorkerTool.Steer) return false;
+  const input = typeof part.input === "object" && part.input ? (part.input as { id?: unknown; text?: unknown }) : {};
+  const said = typeof input.text === "string" ? firstSentence(input.text) : "";
+  if (!said) return false;
+  const title = typeof input.id === "string" ? (chat.workerTitles.get(poolWorkerId(input.id)) ?? null) : null;
+  closeGroup(chat);
+  const text = WORKER_LINE_WORDS.told(title, said);
+  chat.entries.push({ id: key, kind: EntryKind.Action, tag: SystemTag.TheLead, action: EntryAction.Told, text });
+  return true;
+}
+
 /** Who made a delegated call: the run it answers for, and whether a build's worker (a facet) made it. */
 function trackCaller(chat: ChatDraft, key: string, payload: DelegatedRecord): void {
   if (payload.runId) chat.runByCall.set(key, payload.runId);
@@ -1172,8 +1201,8 @@ function readQuiet(chat: ChatDraft, data: EventData): boolean {
 
 /**
  * Steered in by interrupting the chat's session: the leg it cut off never sends the results that
- * would settle its tools, and the resumed session starts from the message. A run's coordinator
- * carries its runId too, so only a direct turn's calls and build workers' rows are left alone.
+ * would settle its tools, and the resumed session starts from the message. Only a direct turn's
+ * calls and build workers' rows are left alone.
  */
 function stopInterruptedLeg(chat: ChatDraft): void {
   for (const [id, row] of chat.rowByCall) {
@@ -1379,6 +1408,7 @@ const ofRun = (payload: { runId?: unknown }): boolean => typeof payload.runId ==
  */
 function narrateWorkerStarted(chat: ChatDraft, event: EventEnvelope): void {
   const payload = customPayload(event.data, CustomEvent.WorkerStarted);
+  if (payload?.workerId && payload.title) chat.workerTitles.set(payload.workerId, payload.title);
   const key = payload && !ofRun(payload) ? workerKeyOf(payload) : null;
   if (!payload || !key) return;
   const known = chat.workerLines.get(key)?.line;
@@ -1520,26 +1550,12 @@ function narrateSkillAccepted(chat: ChatDraft, event: EventEnvelope): void {
   chat.entries.push({ id: event.id, kind: EntryKind.Learning, text, link: TRANSCRIPT_WORDS.seeInHarness });
 }
 
-/** An engine's name as a person says it: the provider table's, else the role table's. */
-function providerName(engine: string): string {
-  return providerInfo(engine)?.label ?? engineLabel(engine);
-}
-
 /** An unattended run narrates itself in the game's own chat: start, verdicts, ending, lessons. */
 function narrateRunStart(chat: ChatDraft, event: EventEnvelope): void {
   const started = customPayload(event.data, CustomEvent.RunStarted);
   if (!started) return;
-  // Which model judges this run, by name: a stale saved preference can put the judging on the
-  // orchestrator's model, and nothing else on screen says which model is answering. And on
-  // which subscription, when the judges are not on the run's own (cross-provider roles).
-  const judge = started.judgeModel ?? started.roles?.judge;
-  const judgeEngine = started.judgeEngine ?? started.engine ?? "";
-  const judgeName = judge ? roleName(judgeEngine, judge) : null;
-  const crossProvider = Boolean(judgeName && started.engine && judgeEngine !== started.engine);
-  const judgeWords = crossProvider
-    ? t("{model} on {provider}", { model: judgeName ?? "", provider: providerName(judgeEngine) })
-    : judgeName;
-  say(chat, event.id, SystemTag.Run, runStartWords(started.reference ?? null, judgeWords));
+  const words = runStartWords(started.reference ?? null);
+  if (words) say(chat, event.id, SystemTag.Run, words);
 }
 
 function narrateAutopilotStart(chat: ChatDraft, event: EventEnvelope): void {
@@ -1643,18 +1659,30 @@ function makingIds(payload: { callId?: string; jobId?: string; generationId?: st
 }
 
 /**
- * A finished `genex__cover` shoot that kept a new shot: Genex's own tool asked to shoot, and its
- * answer carried the shot's preview (a shot the host could not take answers none, and the last
- * shot stays kept). The tool is read however the record names it (`cover`, `genex__cover`,
- * `mcp__studio__genex__cover`).
+ * A finished `genex__cover` call that kept a new cover: the agent handed over its picture as a file
+ * (`{ image, clip? }`, the call the tool takes now; the caller passes only one that succeeded), or
+ * an older record's shoot whose answer carried the shot's preview (a shot the host could not take
+ * answers none, and the last shot stays kept). The tool is read however the record names it
+ * (`cover`, `genex__cover`, `mcp__studio__genex__cover`).
  */
 function keptGenexCover(payload: PluginCallPayload): boolean {
   const named = pluginToolKey(String(payload.tool ?? payload.toolName ?? ""));
   const tool = named.startsWith(`${GENEX_PLUGIN_ID}__`) ? named.slice(GENEX_PLUGIN_ID.length + 2) : named;
-  const genexCover = payload.pluginId === GENEX_PLUGIN_ID && tool === GENEX_COVER_TOOL;
-  const shoot = digestOperation(payload.args) === GenexCoverOperation.Shoot;
-  return genexCover && shoot && Number(payload.images ?? 0) > 0;
+  if (payload.pluginId !== GENEX_PLUGIN_ID || tool !== GENEX_COVER_TOOL) return false;
+  const operation = digestOperation(payload.args);
+  if (operation === null) return handsOverImage(payload.args);
+  return operation === GenexCoverOperation.Shoot && Number(payload.images ?? 0) > 0;
 }
+
+/** Whether a call's arguments digest names the image file it hands over (`image=<path>`). */
+function handsOverImage(args: string | undefined): boolean {
+  return (args ?? "")
+    .split(" ")
+    .some((part) => part.startsWith(COVER_IMAGE_ARG) && part.length > COVER_IMAGE_ARG.length);
+}
+
+/** How the host's arguments digest names the cover picture a `genex__cover` call hands over. */
+const COVER_IMAGE_ARG = "image=";
 
 /**
  * This shoot's shot is the one Genex's storage holds now, so the card is its: an earlier card comes
@@ -2139,6 +2167,7 @@ function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload): Mo
     undone: rounds.undone,
     landed: finished.landed ?? null,
     profile: profileOf(finished),
+    refusal: loopRefusalOf(finished.refusal),
     project: finished.project ?? null,
     commit: unlandedHead && finished.project ? unlandedHead : null,
     before: rounds.firstShot,

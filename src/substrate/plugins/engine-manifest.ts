@@ -52,7 +52,7 @@ const MESSAGE = {
     "Invalid engine projectInFolder (true when the Loop needs the project inside the game folder)",
   InvalidWritesProjectFiles:
     "Invalid engine writesProjectFiles (true when the engine's agents change the project as files)",
-  InvalidPlay: `Invalid engine play (an object with optional players 1-${MAX_PLAY_PLAYERS}, clock ${[...CLOCK_LEVELS].join("|")}, pointer and state booleans)`,
+  InvalidPlay: `Invalid engine play (an object with optional players 1-${MAX_PLAY_PLAYERS}, clock ${[...CLOCK_LEVELS].join("|")}, pointer, state, walk and pilot booleans)`,
   InvalidApps: `Invalid engine apps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Editor; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
   InvalidPlayerApps: `Invalid engine playerApps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Player; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
   InvalidPages: `Invalid engine pages (1-${LIMIT.Pages} distinct lowercase web hosts such as create.example.com, never an address, a port or a path)`,
@@ -97,13 +97,17 @@ function enginePlay(raw: unknown): EnginePlayDeclaration {
     isOptional(raw.players, isPlayers) &&
     isOptional(raw.clock, (clock) => CLOCK_LEVELS.has(clock)) &&
     isOptional(raw.pointer, isBoolean) &&
-    isOptional(raw.state, isBoolean);
+    isOptional(raw.state, isBoolean) &&
+    isOptional(raw.walk, isBoolean) &&
+    isOptional(raw.pilot, isBoolean);
   if (!valid) throw new Error(MESSAGE.InvalidPlay);
   const play: EnginePlayDeclaration = {};
   if (raw.players !== undefined) play.players = raw.players as number;
   if (raw.clock !== undefined) play.clock = raw.clock as ClockLevel;
   if (raw.pointer !== undefined) play.pointer = raw.pointer as boolean;
   if (raw.state !== undefined) play.state = raw.state as boolean;
+  if (raw.walk !== undefined) play.walk = raw.walk as boolean;
+  if (raw.pilot !== undefined) play.pilot = raw.pilot as boolean;
   return play;
 }
 

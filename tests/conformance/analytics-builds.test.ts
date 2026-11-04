@@ -22,6 +22,9 @@ import {
   setupPluginOf,
   setupStepChanges,
   setupStepId,
+  SLOW_GRAPH_MS,
+  SLOW_GRAPH_REPEAT_MS,
+  slowGraphProperties,
   type StepStates,
   stepStateOf,
 } from "../../src/renderer/analytics/builds-stage.ts";
@@ -40,6 +43,7 @@ import {
   type JobPhases,
   jobPhaseChanges,
   LiveOutcome,
+  LiveWaitSaw,
   LiveTrigger,
   NodeKind,
   PartTrouble,
@@ -53,7 +57,13 @@ import {
 import type { StepsCard } from "../../src/renderer/chat/engine-steps.ts";
 import { GraphSelection } from "../../src/renderer/panels/inspector/selection.ts";
 import { MakingKind, MakingPhase } from "../../src/shared/asset-making.ts";
-import { AutoResumeCause, CustomEvent, customEventData, StopCode } from "../../src/shared/custom-events.ts";
+import {
+  AutoResumeCause,
+  CustomEvent,
+  customEventData,
+  LoopRefusal,
+  StopCode,
+} from "../../src/shared/custom-events.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../src/shared/duration.ts";
 import { EngineFailureKind, StopReason } from "../../src/shared/engine-requests.ts";
 import { type EventEnvelope, EventKind } from "../../src/shared/event-log.ts";
@@ -106,7 +116,9 @@ const only = (found: readonly BuildsTracked[]): BuildsTracked => {
 };
 
 describe("runs from the log", () => {
-  it("sends a Loop's start once its autopilot_started says how it works, with its run_started's budgets", () => {
+  // Intentionally flipped: the start carried the Loop's hours and until-satisfied flag, the person's
+  // Mode pick; with no Loop control a start sends neither, only its completion policy.
+  it("sends a Loop's start once its autopilot_started says how it works, with its run_started's completion policy", () => {
     const memory = memoryWith();
     const found = read(memory, [
       record(
@@ -124,8 +136,6 @@ describe("runs from the log", () => {
       event: BuildsEvent.RunStarted,
       properties: {
         mode: BuildMode.Loop,
-        loop_hours: 2,
-        until_satisfied: false,
         completion_policy: null,
         director: true,
         facets: 0,
@@ -214,10 +224,11 @@ describe("runs from the log", () => {
       victory: false,
       duration_ms: 80 * MINUTE_MS,
       worked_ms: 20 * MINUTE_MS,
-      loop_hours: 1.5,
+      // Flipped (no clock): `loop_hours: 1.5` was the close's hours; a Loop has none to tell.
       rounds_accepted: 2,
       rounds_rejected: 1,
       profile: LoopProfile.Web,
+      loop_refusal: null,
       game_ref: REF,
     });
 
@@ -230,6 +241,25 @@ describe("runs from the log", () => {
     assert.equal(next.event, BuildsEvent.RunStarted);
     assert.equal(next.properties.previous_run_state, ExecutionStatus.Completed);
     assert.equal(next.properties.ms_since_previous_end, 5 * MINUTE_MS);
+  });
+
+  it("a Loop refused on an engine that keeps no session says so by its code", () => {
+    const refused = only(
+      read(memoryWith(), [
+        record(
+          CustomEvent.RunFinished,
+          { runId: "r-ollama", project: "pong", landed: false, refusal: LoopRefusal.NeedsSession },
+          0,
+        ),
+      ]),
+    );
+    assert.ok(refused.event === BuildsEvent.RunFinished, refused.event);
+    assert.equal(refused.properties.loop_refusal, LoopRefusal.NeedsSession);
+    const unknown = only(
+      read(memoryWith(), [record(CustomEvent.RunFinished, { runId: "r-odd", refusal: "something_new" }, 0)]),
+    );
+    assert.ok(unknown.event === BuildsEvent.RunFinished, unknown.event);
+    assert.equal(unknown.properties.loop_refusal, null, "a code the app does not know is no code");
   });
 
   it("a close of a run that started before this launch has no worked time", () => {
@@ -313,7 +343,7 @@ describe("runs from the log", () => {
       step: FinishCheckStep.Rejected,
       rejections: 2,
       stopped: false,
-      time_left: true,
+      // Flipped (no clock): `time_left: true` was the record's working time left; a settle names none.
       done_count: 1,
       not_done_count: 2,
       reviewer_engine: EngineId.ClaudeCode,
@@ -475,21 +505,10 @@ describe("chat builds, jobs and plugin calls from the log", () => {
 });
 
 describe("main's run events", () => {
-  it("sends a reviewer's retry by kind, and a stop with the time the run worked", () => {
+  it("sends a stop with the time the run worked", () => {
     const memory = memoryWith();
     read(memory, [record(CustomEvent.RunStarted, { runId: "r1" }, 0)]);
-    const retry = buildsUiEvents(
-      { type: UiEvent.JudgeRetry, payload: { kind: EngineFailureKind.RateLimit, attempt: 2, waitMs: 3000 } },
-      memory,
-      T0,
-    );
     const stop = buildsUiEvents({ type: UiEvent.RunStopping, payload: { runId: "r1" } }, memory, T0 + MINUTE_MS);
-    assert.deepEqual(retry, [
-      {
-        event: BuildsEvent.ReviewerRetried,
-        properties: { kind: EngineFailureKind.RateLimit, attempt: 2, wait_ms: 3000 },
-      },
-    ]);
     assert.deepEqual(stop, [{ event: BuildsEvent.RunStopRequested, properties: { worked_ms: MINUTE_MS } }]);
   });
 });
@@ -583,10 +602,14 @@ describe("the stage", () => {
       firstMessageAt: T0 - 9 * MINUTE_MS,
       state: { drawCalls: 12, flow: { phase: "menu", playing: false } },
       gameRef: REF,
+      probes: { pageSeenAt: T0 + SECOND_MS, saw: LiveWaitSaw.ThisGame, mainAnswered: true },
     });
     assert.deepEqual(properties, {
       outcome: LiveOutcome.Shown,
       load_ms: 4 * SECOND_MS,
+      page_seen_ms: SECOND_MS,
+      wait_saw: LiveWaitSaw.ThisGame,
+      main_answered: true,
       trigger: LiveTrigger.FirstBuildAuto,
       first_in_launch: true,
       game_age_ms: 10 * MINUTE_MS + 4 * SECOND_MS,
@@ -598,6 +621,17 @@ describe("the stage", () => {
       crash_reason: null,
     });
     assert.equal(liveShownProperties({ ...inputWithout(), load: { since: T0 } }).trigger, null);
+    const unseen = liveShownProperties({
+      ...inputWithout(),
+      probes: { pageSeenAt: null, saw: LiveWaitSaw.Nothing, mainAnswered: false },
+    });
+    assert.deepEqual(
+      [unseen.page_seen_ms, unseen.wait_saw, unseen.main_answered],
+      [null, LiveWaitSaw.Nothing, false],
+      "a wait that never saw the page says so",
+    );
+    const refused = liveShownProperties(inputWithout());
+    assert.deepEqual([refused.page_seen_ms, refused.wait_saw, refused.main_answered], [null, null, null]);
   });
 
   it("suspects a blank game only after it showed and drew nothing for a while", () => {
@@ -646,6 +680,20 @@ describe("the stage", () => {
     assert.equal(nodeKindOf(GraphSelection.FinishCheck), GraphSelection.FinishCheck);
     assert.equal(nodeKindOf("part:facet-7"), NodeKind.Part);
     assert.equal(nodeKindOf("step-abc"), NodeKind.Step);
+    assert.equal(nodeKindOf("build:3"), NodeKind.Build, "a build of a Loop's line");
+  });
+
+  it("sends a slow projection of the Builds graph with its size, at most once in a while", () => {
+    const slow = { ms: SLOW_GRAPH_MS + 0.4, events: 90_000, parts: 40, buildsShown: true };
+    assert.deepEqual(slowGraphProperties(slow, T0, null), {
+      ms: SLOW_GRAPH_MS,
+      events: 90_000,
+      parts: 40,
+      builds_shown: true,
+    });
+    assert.equal(slowGraphProperties({ ...slow, ms: SLOW_GRAPH_MS - 1 }, T0, null), null, "a quick one is not sent");
+    assert.equal(slowGraphProperties(slow, T0 + SLOW_GRAPH_REPEAT_MS - 1, T0), null, "nor one soon after another");
+    assert.notEqual(slowGraphProperties(slow, T0 + SLOW_GRAPH_REPEAT_MS, T0), null);
   });
 
   it("tells a press the person declined from one that failed", () => {
@@ -928,14 +976,14 @@ describe("hostile input never reaches an event", () => {
   });
 
   it("main's events send no words of theirs", () => {
+    const memory = memoryWith();
+    read(memory, [record(CustomEvent.RunStarted, { runId: SECRET }, 0)]);
     const found = buildsUiEvents(
-      { type: UiEvent.JudgeRetry, payload: { engine: SECRET, kind: SECRET, message: PATH, attempt: SECRET } },
-      memoryWith(),
+      { type: UiEvent.RunStopping, payload: { runId: SECRET, engine: SECRET, message: PATH } },
+      memory,
       T0,
     );
-    assert.deepEqual(found, [
-      { event: BuildsEvent.ReviewerRetried, properties: { kind: null, attempt: null, wait_ms: null } },
-    ]);
+    assert.deepEqual(found, [{ event: BuildsEvent.RunStopRequested, properties: { worked_ms: 0 } }]);
   });
 
   it("the stage's builders read no words from the page, a plugin's card or the library", () => {

@@ -10,23 +10,14 @@
  *
  * Two layers:
  *  - `GIT`, the command lines themselves, pure: for code that already has its own exec (the
- *    union merge, the reviewer, the nested-repository check), and for the tests.
+ *    union merge, the reviewer), and for the tests.
  *  - the helpers that run them through `ctx.call("run.exec")` in a worktree (`cwd`) or in the
- *    live game folder (`{ project }`): `gitAt`, `headOf`, `isAncestor`, `commitAll`,
- *    `updateRef`, `mergeNoFf`, `landIntegration`, `resetClean`, `gitlinks`. A sub-agent's delivery
- *    runs its command lines (`GIT.addFolder`, `GIT.treeEntries`, `GIT.checkoutPaths`) from a module
- *    of its own (`git-delivery.ts`), so a kept older copy of this file still loads beside it.
+ *    live game folder (`{ project }`): `gitAt`, `headOf`, `isAncestor`, `updateRef`,
+ *    `mergeNoFf`, `resetClean`.
  */
 import { HostMethod } from "./host-methods.ts";
 import { STUDIO_AS } from "./repo.ts";
 import { commitArg, REFUSED_VALUE_CHARS, shellQuote } from "./shell.ts";
-
-/**
- * This part serves a lead that is its chat's own session and writes nothing (one session): its
- * strays are set aside with `GIT.snapshotCommit`, which an older copy lacks, so a run seats a
- * lead only when this says so (lead-session.ts `servesLead`).
- */
-export const SERVES_LEAD = true;
 import { GIT_TIMEOUT_MS } from "./config.ts";
 import { isRecord } from "./json.ts";
 import type { HarnessCtx } from "../types/harness.d.ts";
@@ -62,16 +53,6 @@ export type MergeOutcome =
   | { ok: true; union: boolean; resolved?: any }
   | { ok: false; error: string; conflicts: string[]; resolved: any };
 
-/** How much of a commit a sentence for the lead or the log quotes. */
-export const SHORT_SHA_LENGTH = 10;
-/** How much of a commit a capture or snapshot label (`gate_<sha>`, `health_<sha>`) carries. */
-export const LABEL_SHA_LENGTH = 8;
-
-/** A commit as a line quotes it: its first `length` characters (`String(sha)`, as the lines always wrote it). */
-export function shortSha(sha: unknown, length: number = SHORT_SHA_LENGTH): string {
-  return String(sha).slice(0, length);
-}
-
 /**
  * A ref the studio writes. Only its own names, spelled only with what a ref name and a shell
  * word both take as plain text — a run id or a facet id that carried anything else is refused
@@ -100,8 +81,6 @@ function commitFlags({
 /** The command lines, as data. Nothing here runs anything. */
 export const GIT = Object.freeze({
   head: "git rev-parse HEAD",
-  /** How many commits the branch holds: a game the studio just made has its one. */
-  commitCount: "git rev-list --count HEAD",
   status: "git status --porcelain",
   /**
    * A look that never writes (`--no-optional-locks`, no `git add`), capped: the monitor reads a
@@ -149,9 +128,6 @@ export const GIT = Object.freeze({
   /** Paths changed against `base`, restricted to `pathspec` (already-quoted shell words). */
   diffNames: (base: unknown, pathspec: string): string => `git diff --name-only ${commitArg(base)} -- ${pathspec}`,
   diff: (base: unknown, pathspec: string): string => `git diff ${commitArg(base)} -- ${pathspec}`,
-  /** Does `rev:file` exist? Answers `yes` or `no` on stdout. */
-  catFileExists: (rev: string, file: string): string =>
-    `git cat-file -e ${shellQuote(`${rev}:${file}`)} && echo yes || echo no`,
   checkoutPath: (rev: unknown, file: string): string => `git checkout ${commitArg(rev)} -- ${shellQuote(file)}`,
   /**
    * Is the worktree's `file` byte-identical to its copy at `rev` (and does `rev` hold it at all)?
@@ -187,21 +163,6 @@ export const GIT = Object.freeze({
   /** A three-way union merge of three files; the arguments are shell words the caller built. */
   mergeFileUnion: (ours: string, base: string, theirs: string): string =>
     `git merge-file -p --union ${ours} ${base} ${theirs}`,
-  /** How a commit holds one path: a line starting `160000` is a nested repository's pointer. */
-  lsTreePath: (rel: string): string => `git ls-tree HEAD -- ${shellQuote(rel)}`,
-  /** Every path a commit holds as a nested repository's pointer (a gitlink), one per line. */
-  gitlinks: (rev: unknown): string => `git ls-tree -r ${commitArg(rev)} | awk '$1 == "160000" { print $4 }'`,
-  /** Stage everything under one folder (new, changed and removed files) and nothing outside it. */
-  addFolder: (folder: string): string => `git add -A -- ${shellQuote(folder)}`,
-  /**
-   * Every entry a commit holds under `folder`, recursively, with its size, NUL-terminated:
-   * `<mode> <type> <object> <size>\t<path>` (the size is `-` for what is not a blob).
-   */
-  treeEntries: (rev: unknown, folder: string): string =>
-    `git ls-tree -r -l -z ${commitArg(rev)} -- ${shellQuote(folder)}`,
-  /** These paths, as a commit holds them, checked out into the worktree and its index. */
-  checkoutPaths: (rev: unknown, files: readonly string[]): string =>
-    `git checkout ${commitArg(rev)} -- ${files.map(shellQuote).join(" ")}`,
 });
 
 /** Where a command runs: a worktree path, `{ cwd }`, or the live game folder `{ project }`. */
@@ -287,28 +248,6 @@ export async function isAncestor(
 }
 
 /**
- * Stage everything and commit it under the studio's name: two commands, `git add -A` and then the
- * commit, so a failure says which. The message is quoted — a judge's reason or a worker's title
- * is model-written, and in double quotes a backtick in it still ran.
- */
-export async function commitAll(
-  ctx: HarnessCtx,
-  at: Where,
-  message: string,
-  {
-    allowEmpty = false,
-    label = null,
-    timeoutMs = GIT_TIMEOUT_MS.slow,
-    failure = shortFailure,
-    trim = "end",
-  }: ExecOptions & { allowEmpty?: boolean; failure?: FailureWording; trim?: Trim } = {},
-): Promise<string> {
-  const options = { label, timeoutMs, failure, trim };
-  await gitAt(ctx, at, GIT.addAll, options);
-  return gitAt(ctx, at, GIT.commit(message, { allowEmpty }), options);
-}
-
-/**
  * Point one of the studio's refs at `rev` (a hash or HEAD).
  */
 export function updateRef(
@@ -350,49 +289,6 @@ export async function resetClean(
     if (bestEffort) await step().catch(() => {});
     else await step();
   }
-}
-
-/**
- * The paths `rev` holds as nested repositories' pointers. A command that fails answers none.
- */
-export async function gitlinks(
-  ctx: HarnessCtx,
-  at: Where,
-  rev: unknown,
-  { label = null, timeoutMs = GIT_TIMEOUT_MS.ref }: ExecOptions = {},
-): Promise<string[]> {
-  try {
-    const exec = await gitExec(ctx, at, GIT.gitlinks(rev), { label, timeoutMs });
-    return String(exec?.stdout ?? "")
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Nested repositories a build does not carry. The user's own game may live in a folder that is a
- * git repository of its own; the studio versions it inside every fork when the user allowed that
- * (substrate/snapshots.ts `worktreeAt`), and this is the check that it happened. A path the
- * commit still holds as a pointer is a path whose every edit is invisible to the merge, the
- * landing and the user — a silent loss, said out loud. A plain `git status`
- * cannot see it: git does not walk into a gitlink path, which is why the loss was silent.
- *
- * `exec` runs git in the worktree being asked about; `nested` are the paths the game's history
- * holds as repositories of their own. Answers the ones this commit still holds as a pointer.
- */
-export async function unversionedNested(
-  exec: (command: string) => Promise<string>,
-  nested: readonly string[] = [],
-): Promise<string[]> {
-  const lost: string[] = [];
-  for (const rel of nested) {
-    const listed = String((await exec(GIT.lsTreePath(rel)).catch(() => "")) ?? "").trim();
-    if (listed.startsWith("160000")) lost.push(rel);
-  }
-  return lost;
 }
 
 /**
@@ -462,23 +358,4 @@ export async function mergeNoFf(
   }
   await gitExec(ctx, at, GIT.mergeAbort, { label: cleanupLabel }).catch(() => {});
   return { ok: false, error, conflicts, resolved };
-}
-
-/**
- * Land a run's integrated build in the live game folder: one `--no-ff` merge, aborted on any
- * conflict. The live folder sat at the base for the whole run, so a conflict here is the user's own work;
- * nothing is ever forced over it (`git reset --hard` once was) — the build stays on its ref and
- * "Make it live" lands it once the folder is theirs to merge into.
- */
-export function landIntegration(
-  ctx: HarnessCtx,
-  {
-    project,
-    head,
-    message,
-    label = null,
-    timeoutMs = GIT_TIMEOUT_MS.slow,
-  }: ExecOptions & { project: string; head: string; message: string },
-): Promise<MergeOutcome> {
-  return mergeNoFf(ctx, { project }, head, { message, label, timeoutMs });
 }

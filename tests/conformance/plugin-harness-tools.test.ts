@@ -1,8 +1,8 @@
 /**
  * A plugin tool only Genex's harness calls (`tools[].audience: "harness"`, API 3), such as the
  * Unreal Loop runner's editor-queue steps. No agent is handed it: not a chat's or a builder's
- * delegated session, not the local harness's tool registry, not the capability facts a plan or a
- * chat reads, not the composer's tool count. An agent that names it anyway is refused, and the
+ * delegated session, not the local harness's tool registry, not the capability facts a plan reads,
+ * not the composer's tool count. An agent that names it anyway is refused, and the
  * harness's own `plugins.invoke` step (`step: true`) still reaches it. The field is typed, checked where a
  * manifest is parsed, and refused in any other shape.
  */
@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
-import { UnrealLivePluginTool, UnrealLoopTool } from "../../src/harness-seed/loop/unreal/live-contract.ts";
+import { LiveLoopToolName, LoopToolName } from "../../src/plugins/unreal/loop-tools.ts";
 import { MotionToolName } from "../../src/plugins/unreal/motion-tools.ts";
 import { EditorControlToolName } from "../../src/plugins/unreal/editor-control.ts";
 import { GamePackageToolName } from "../../src/plugins/unreal/game-package.ts";
@@ -19,7 +19,7 @@ import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { coreLite } from "../helpers/core-lite.ts";
-import { copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
+import { capabilityFactsOf, copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 // biome-ignore lint/suspicious/noExplicitAny: a hostile manifest is any shape a writer may send.
@@ -115,30 +115,32 @@ const AGENT_TOOLS = [
 ];
 /**
  * And, once the game holds an Unreal project, a builder's gate and lookups besides, its C++ module's
- * tools, and opening, quitting and reading the game's editor.
+ * tools, opening, quitting and reading the game's editor, and the reader of the editor's guide.
  */
 const UNREAL_PROJECT_TOOLS = [
   ...AGENT_TOOLS,
-  UnrealLoopTool.BlueprintGuide,
-  UnrealLoopTool.FindNodes,
-  UnrealLoopTool.CheckPart,
-  UnrealLoopTool.CppStatus,
-  UnrealLoopTool.AddCppModule,
+  `unreal__${LoopToolName.BlueprintGuide}`,
+  `unreal__${LoopToolName.FindNodes}`,
+  `unreal__${LoopToolName.CheckPart}`,
+  `unreal__${LoopToolName.CppStatus}`,
+  `unreal__${LoopToolName.AddCppModule}`,
   `unreal__${MotionToolName.Status}`,
   `unreal__${MotionToolName.Add}`,
   ...Object.values(EditorControlToolName).map((name) => `unreal__${name}`),
   ...Object.values(GamePackageToolName).map((name) => `unreal__${name}`),
+  "unreal__click-interface",
+  "unreal__skill",
 ];
 /** The steps only the Unreal Loop's runner and the live builder's checkpoint take, through the harness's own plugin calls. */
 const RUNNER_TOOLS = [
-  UnrealLoopTool.RunPart,
-  UnrealLoopTool.PartResult,
-  UnrealLoopTool.RollbackPart,
-  UnrealLoopTool.ReloadLevel,
-  UnrealLoopTool.ExportReference,
-  UnrealLoopTool.ReopenEditor,
-  UnrealLoopTool.EditorState,
-  ...Object.values(UnrealLivePluginTool),
+  `unreal__${LoopToolName.RunPart}`,
+  `unreal__${LoopToolName.PartResult}`,
+  `unreal__${LoopToolName.RollbackPart}`,
+  `unreal__${LoopToolName.ReloadLevel}`,
+  `unreal__${LoopToolName.ExportReference}`,
+  `unreal__${LoopToolName.ReopenEditor}`,
+  `unreal__${LoopToolName.EditorState}`,
+  ...Object.values(LiveLoopToolName).map((name) => `unreal__${name}`),
 ];
 
 test("the Unreal plugin's runner-only tools reach no chat, builder, plan or count, its editor tools only an Unreal project's; the harness still runs them", async (t) => {
@@ -198,7 +200,7 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   assert.deepEqual((await localTools({ project })).sort(), [...AGENT_TOOLS].sort(), "the local harness's agents");
   assert.deepEqual((await localTools(undefined)).sort(), [...AGENT_TOOLS].sort(), "no game named: a web game's");
 
-  const facts = String(await api["capabilities.describe"]?.({ threadId, project }));
+  const facts = await capabilityFactsOf(core, project);
   for (const name of AGENT_TOOLS) assert.ok(facts.includes(name), `the facts name ${name}`);
   for (const name of [...RUNNER_TOOLS, ...UNREAL_PROJECT_TOOLS.slice(AGENT_TOOLS.length)])
     assert.ok(!facts.includes(name), `a web game's facts never name ${name}`);
@@ -211,22 +213,24 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   await delegate({});
   assert.deepEqual(sessions.at(-1)?.tools.sort(), [...UNREAL_PROJECT_TOOLS].sort(), "the chat of an Unreal project");
   assert.deepEqual((await localTools({ project })).sort(), [...UNREAL_PROJECT_TOOLS].sort());
-  const unrealFacts = String(await api["capabilities.describe"]?.({ threadId, project }));
+  const unrealFacts = await capabilityFactsOf(core, project);
   for (const name of UNREAL_PROJECT_TOOLS) assert.ok(unrealFacts.includes(name), `the facts name ${name}`);
   for (const name of RUNNER_TOOLS) assert.ok(!unrealFacts.includes(name), `the facts never name ${name}`);
   const counted = (await core.connectionSnapshot(threadId, project)).sources.find((s) => s.id === "unreal");
-  assert.equal(counted?.tools, UNREAL_PROJECT_TOOLS.length);
+  // The composer counts the plugin's own tools, as for every plugin: its skill reader is none of them.
+  assert.equal(counted?.tools, UNREAL_PROJECT_TOOLS.length - 1);
   await rm(path.join(core.games.dirFor(project), "DirtTrack.uproject"));
 
   // The runner's own path, as its own step: the call reaches run-part's handler, which refuses a
   // name that isn't a part. The same call without `step` is an agent's, and refused before it.
   const step = { project, threadId, step: true };
   await assert.rejects(
-    api["plugins.invoke"]?.({ ...step, name: UnrealLoopTool.RunPart, args: { part: "../x" } }) ?? Promise.resolve(),
+    api["plugins.invoke"]?.({ ...step, name: `unreal__${LoopToolName.RunPart}`, args: { part: "../x" } }) ??
+      Promise.resolve(),
     /not a part name/,
   );
   await assert.rejects(
-    api["plugins.invoke"]?.({ project, threadId, name: UnrealLoopTool.RunPart, args: { part: "../x" } }) ??
+    api["plugins.invoke"]?.({ project, threadId, name: `unreal__${LoopToolName.RunPart}`, args: { part: "../x" } }) ??
       Promise.resolve(),
     /Unknown tool: unreal__run-part/,
   );
@@ -238,16 +242,16 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
     return { approved: true, by: "user" };
   };
   await assert.rejects(
-    api["plugins.invoke"]?.({ ...step, name: UnrealLoopTool.AddCppModule, args: {} }) ?? Promise.resolve(),
+    api["plugins.invoke"]?.({ ...step, name: `unreal__${LoopToolName.AddCppModule}`, args: {} }) ?? Promise.resolve(),
     /isn't linked to an Unreal project/,
   );
   assert.deepEqual(asked, ["add-cpp-module"], "the person was asked first");
   // So are reopen-editor's and editor-state's: there is no Unreal to reopen, and none answers.
   await assert.rejects(
-    api["plugins.invoke"]?.({ ...step, name: UnrealLoopTool.ReopenEditor, args: {} }) ?? Promise.resolve(),
+    api["plugins.invoke"]?.({ ...step, name: `unreal__${LoopToolName.ReopenEditor}`, args: {} }) ?? Promise.resolve(),
     /isn't linked to an Unreal project/,
   );
-  assert.deepEqual(await api["plugins.invoke"]?.({ ...step, name: UnrealLoopTool.EditorState, args: {} }), {
+  assert.deepEqual(await api["plugins.invoke"]?.({ ...step, name: `unreal__${LoopToolName.EditorState}`, args: {} }), {
     answering: false,
     running: null,
     reopening: { state: "idle" },
@@ -255,9 +259,9 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   });
   // The live builder's tools reach their handlers too: each needs a game linked to an Unreal project.
   for (const name of [
-    UnrealLivePluginTool.LogErrors,
-    UnrealLivePluginTool.EndEditor,
-    UnrealLivePluginTool.UpdateHelper,
+    `unreal__${LiveLoopToolName.LogErrors}`,
+    `unreal__${LiveLoopToolName.EndEditor}`,
+    `unreal__${LiveLoopToolName.UpdateHelper}`,
   ])
     await assert.rejects(
       api["plugins.invoke"]?.({ ...step, name, args: {} }) ?? Promise.resolve(),
@@ -267,7 +271,7 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
   await assert.rejects(
     api["plugins.invoke"]?.({
       ...step,
-      name: UnrealLivePluginTool.PlayCheck,
+      name: `unreal__${LiveLoopToolName.PlayCheck}`,
       args: { checks: { "feature:track:0": { tag: "terrain", exists: true } } },
     }) ?? Promise.resolve(),
     /queued nothing/,

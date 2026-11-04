@@ -258,7 +258,6 @@ export function chatPool(host: Host, repo: string, turnOrOptions: string | PoolO
     engine: CLAUDE,
     gameDir: repo,
     ...(options.hookEvents ? { game: { hookEvents: options.hookEvents } } : {}),
-    leadFolder: { project: PROJECT },
     identity: { folderLabel: "AI Games/garden", facts: options.facts ?? WEB_FACTS },
     clock: fastClock(),
   });

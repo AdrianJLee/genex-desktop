@@ -1,11 +1,10 @@
 /**
- * Keep building: after a Loop ended with something still to fix, the person's one tap starts the
- * chat's Loop again on what is left. The chat's result card and the Builds card both ask the chat
- * that owns the run through this event; the chat sends it through its composer (`loopOn`).
+ * Keep building: after a Loop ended with something still to fix, the person's one tap sends what is
+ * left as their message, and the chat's agent decides how to go on with it. The chat's result card
+ * and the Builds card both ask the chat that owns the run through this event.
  */
 import { RunState } from "../shared/run-state.ts";
 import type { HistoryEntry } from "./build-progress.ts";
-import type { ComposerExtras } from "./ui/PromptBar.tsx";
 import { STILL_TO_FIX_WORDS } from "./words.ts";
 import { track } from "./analytics/client.ts";
 import { AnalyticsEvent } from "./analytics/events.ts";
@@ -31,7 +30,7 @@ export interface KeepBuilding extends KeepBuildingAsk {
 
 /**
  * Ask the chat that owns the run to keep building on what is left; true once its message went out
- * (false when no open chat took it, or it sent nothing: a sign-in first, a Loop this game can't run).
+ * (false when no open chat took it, or it sent nothing: a sign-in first).
  */
 export function keepBuilding(ask: KeepBuildingAsk): Promise<boolean> {
   const sent = new Promise<boolean>((resolve) => {
@@ -85,8 +84,3 @@ export function keepsBuildingOn(builds: readonly HistoryEntry[], runId: string |
 
 /** The message Keep building sends: what is left, as the person's ask. */
 export const keepBuildingAsk = (notDone: readonly string[]): string => STILL_TO_FIX_WORDS.ask(notDone);
-
-/** A Loop commission sent with Keep building's mark, or none when the chat's Loop can't run here. */
-export function keepBuildingExtras(extras: ComposerExtras): ComposerExtras | null {
-  return extras.autopilot ? { ...extras, autopilot: { ...extras.autopilot, keepBuilding: true } } : null;
-}

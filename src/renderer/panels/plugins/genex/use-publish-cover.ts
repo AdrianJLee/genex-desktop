@@ -92,8 +92,6 @@ export function usePublishCover({
   const [taking, setTaking] = useState(false);
   const [asks, rememberAsk] = useCoverAsks(project, state?.cover);
   const tried = useRef(false);
-  const kept = state?.cover?.shot?.sha256 ?? null;
-  const clip = state?.cover?.clip?.sha256 ?? null;
   const wanted = state ? needsCover(state) : false;
   useEffect(() => {
     if (!wanted || tried.current || !project) return;
@@ -122,7 +120,7 @@ export function usePublishCover({
   const ask = (kind: CoverKind, want: string): void => {
     const text =
       kind === CoverKind.Clip ? WORDS.coverAnotherClipPrompt(want.trim()) : WORDS.coverAnotherPrompt(want.trim());
-    const pending: CoverAsk = { kind, from: kind === CoverKind.Clip ? clip : kept, at: Date.now() };
+    const pending: CoverAsk = { kind, at: Date.now() };
     // Kept only once the chat really sent it: words left in its composer (no model, a sign-in
     // first) start nothing, so the banner says nothing is being made.
     composeInChat({ project, text, send: true, sent: () => rememberAsk(pending) });

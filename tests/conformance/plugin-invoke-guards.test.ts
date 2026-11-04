@@ -12,9 +12,7 @@ import { CustomEvent, customEventData } from "../../src/shared/custom-events.ts"
 import { HostMethod, harnessParamsProblem } from "../../src/shared/harness-api.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { PluginCallBlocker, PluginToolAudience } from "../../src/shared/plugins.ts";
-import { UnrealLivePluginTool, UnrealLoopTool } from "../../src/harness-seed/loop/unreal/live-contract.ts";
-import { heldInPlan, unrealTool, unrealWrite } from "../../src/harness-seed/loop/unreal/lead-steps.ts";
-import { LeadPluginTool } from "../../src/harness-seed/loop/unreal/save-point.ts";
+import { LeadLoopToolName, LiveLoopToolName, LoopToolName } from "../../src/plugins/unreal/loop-tools.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 import { copyOfExample, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
@@ -48,7 +46,7 @@ describe("the harness's plugins.invoke", () => {
   it("in Plan mode the harness's own steps still run", async () => {
     await lite.core.setPermissionMode(threadId, PermissionMode.Plan);
     try {
-      assert.deepEqual(await invoke({ name: UnrealLoopTool.EditorState, step: true }), EDITOR_IDLE);
+      assert.deepEqual(await invoke({ name: `unreal__${LoopToolName.EditorState}`, step: true }), EDITOR_IDLE);
     } finally {
       await lite.core.setPermissionMode(threadId, PermissionMode.Auto);
     }
@@ -57,25 +55,10 @@ describe("the harness's plugins.invoke", () => {
   it("in Plan mode a chat checkpoint's steps change nothing", async () => {
     await lite.core.setPermissionMode(threadId, PermissionMode.Plan);
     try {
-      for (const name of [LeadPluginTool.EditorActivity, UnrealLivePluginTool.SaveAll]) {
+      for (const name of [`unreal__${LeadLoopToolName.EditorActivity}`, `unreal__${LiveLoopToolName.SaveAll}`]) {
         const answer = (await invoke({ name, step: true, checkpoint: true })) as { blocker?: unknown };
         assert.equal(answer?.blocker, PluginCallBlocker.PlanMode, name);
       }
-    } finally {
-      await lite.core.setPermissionMode(threadId, PermissionMode.Auto);
-    }
-  });
-
-  it("in Plan mode the Unreal Loop runner's writes wait; its reads still run", async () => {
-    const api = lite.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
-    const ctx = { call: (method: string, params: unknown) => api[method]!(params) };
-    const lead = { ctx, run: { project: PROJECT }, threadId } as never;
-    await lite.core.setPermissionMode(threadId, PermissionMode.Plan);
-    try {
-      // A held write throws, so whatever it was part of (a save point, a rewind, a module) is not done.
-      for (const name of [UnrealLivePluginTool.SaveAll, UnrealLivePluginTool.EndEditor, UnrealLoopTool.AddCppModule])
-        await assert.rejects(unrealWrite(lead, name), (err) => heldInPlan(err), name);
-      assert.deepEqual(await unrealTool(lead, UnrealLoopTool.EditorState), EDITOR_IDLE);
     } finally {
       await lite.core.setPermissionMode(threadId, PermissionMode.Auto);
     }
@@ -92,7 +75,13 @@ describe("the harness's plugins.invoke", () => {
       ["step: {}", { step: {} }, true],
     ];
     for (const [label, extra, mistyped] of hostile) {
-      const params = { project: PROJECT, threadId, name: UnrealLoopTool.RunPart, args: { part: "../x" }, ...extra };
+      const params = {
+        project: PROJECT,
+        threadId,
+        name: `unreal__${LoopToolName.RunPart}`,
+        args: { part: "../x" },
+        ...extra,
+      };
       const refused = harnessParamsProblem(HostMethod.PluginsInvoke, params);
       assert.equal(refused !== null, mistyped, label);
       if (refused) assert.match(refused.message, /step/, label);
@@ -107,7 +96,7 @@ describe("the harness's plugins.invoke", () => {
       const params = {
         project: PROJECT,
         threadId,
-        name: UnrealLivePluginTool.SaveAll,
+        name: `unreal__${LiveLoopToolName.SaveAll}`,
         args: {},
         step: true,
         checkpoint,
@@ -117,7 +106,7 @@ describe("the harness's plugins.invoke", () => {
       assert.match(refused.message, /checkpoint/, JSON.stringify(checkpoint));
     }
     await assert.rejects(
-      invoke({ name: UnrealLoopTool.RunPart, args: { part: "../x" }, step: true }),
+      invoke({ name: `unreal__${LoopToolName.RunPart}`, args: { part: "../x" }, step: true }),
       /not a part name/,
     );
   });

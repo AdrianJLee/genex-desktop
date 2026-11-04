@@ -96,7 +96,9 @@ leaves that side on genex.games.
 The controller builds immutable output under `.studio-dev/builds/<id>` and returns actual
 readiness and profile/build/source/runtime identity. Rebuilding does not update a running app.
 Each start removes the builds no profile's `launch.json` or `attempt.json` names, once they are an
-hour old.
+hour old. A running app keeps its build's `build.json` open, so `lsof +D .studio-dev/builds/<id>`
+lists it; never remove a build by age alone, because the app loads screens such as the terminal
+from it hours after it started.
 Use the controller to stop owned sessions; a PID alone is not authority to signal a process.
 `clean --profile <name>` removes only stopped recognized disposable state. Retained live
 profiles, evidence and normal games are not disposable fixture cleanup.
@@ -265,13 +267,14 @@ self-improving conformance tests protect product behavior. Native login/picker/d
 verification requires separate explicit prerequisites; fixtures do not certify it.
 `npm run test:computer:e2e` runs the real Electron with a fixture game: the computer tool over an
 offscreen window (WebGL and WebGPU), the requested-state setup, agent screens on their Builds nodes, and a
-scripted director's run end to end (worker, look, integrate, show, finish, landing).
+scripted lead's Loop end to end in the game folder (the lead's own computer, a worker in a copy, its
+merge, finish).
 It also checks secure contexts in Live and worker views. Register `game` and `studio-plugin`
 privileges in one call before Electron is ready; a second registration loses the game's secure
 context and disables WebGPU, while Three.js can silently render through its WebGL fallback.
 `npm run test:shapes:e2e` is the milestone's own proof, and part of `npm run verify`. It opens
-each of the five games under `tests/fixtures/games` as the user's own game — four of them with no
-edit at all, the bundled one with the two-line `installStudio({ renderer, player })` — waits for
+each of the five games under `tests/fixtures/games` as the user's own game — all of them with no
+edit at all — waits for
 the page to report itself ready, shadow-builds the one that has a build, drives it, photographs
 it and judges the evidence with the harness's own `gatherEvidence`; then drives the same five
 again through the real Codex file bridge (the shim run as a child process, only the CLI scripted)
@@ -285,23 +288,10 @@ passed, and nothing installs a package — the one fixture that builds links the
 `node_modules` and builds with esbuild. `--only <id>` and `--engine fixture|codex|claude` keep the
 inner loop under ten seconds; the full regression gate runs the whole set.
 
-`tests/conformance/director.test.ts` runs a whole run on the plain-Node rig, once per shape a
-run can take — every `it` in its own describe block, so the list is read there rather than
-counted here. They cover the finish and its landing; a game from scratch getting its base stage,
-and a starting point that could not be built; the fork gate refusing a base that does not run and
-exempting the run's own starting points; a game that cannot be judged until the contract is
-installed, and a wiring session whose page still does not answer; a worker the lead stops
-mid-round; a steer that interrupts a loop worker, a user steer addressed to one, and a steered
-single session; the director's own commit becoming the head it lands; a landing that conflicts
-with the user's own commits and changes nothing; a merge that carries nothing from a repository
-inside the game, and a consented one whose landing is left to the user; a run whose director
-dies of the engine's session limit; a run killed outright and then resumed; a reviewed plan
-held for the user's go, and one the user answers in their own words; a worker's commit outliving
-its worktree; the restored `.studio/DIRECTOR.md`; and a close that looks through the studio's
-stand-in because the pool has none free, leaving the user's window alone. The head must be on
-the run's ref, the close must look again and land on the judge's word, `landingResult` must say
-what the landing may claim, the run must pause where it can be picked up, and `showBuild` /
-`landBuild` must work on the head afterwards.
+`tests/conformance/one-loop-projects.test.ts` runs a whole Loop on the plain-Node rig, on a
+plugin's project and on a folder with no plugin, and `director-wake-loop-run.test.ts` runs a web
+game's Loop there for the wake loop and live chat: every Loop works in its game folder, closes
+there, and pauses where Resume picks it up.
 `tests/conformance/engine-limits.test.ts` covers limit classification, reset-time parsing and the
 inherited-console rule.
 
@@ -312,7 +302,7 @@ skipped) and asserts no run id, sha or ref survives translation, and that no ren
 words.ts holds a translation. `morning-words`/`run-graph`/`build-progress` replay synthetic director and probe fixtures (`tests/fixtures/director-loop-run.json` and
 `tests/fixtures/nested-probes.json`) and pin what the morning
 card, the Builds header and the stage say about it. `door.test.ts` covers the opening chat and
-the run's promised clock, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
+the composer's instruction, `stopped-round.test.ts` the grey stopped round, `sidebar.test.ts`
 the ported rail's tokens, and `run-controls.test.ts` the one-Stop rule across the whole
 renderer plus the keep-awake wiring in main. Behaviour that needs a window — the two chat Stop
 controls, immediate thread cancellation, the blocker held past the request, the morning card
@@ -347,9 +337,8 @@ session and actual tool result; a clean preview alone does not prove the request
 Milestones 2 and 3: the pure half (shapes read from evidence, adoption, sheet words, build memos,
 the scoreboard, move ladder, ledger and verdict record) runs in `npm test` through the
 `project-shape`, `game-build`, `snapshots`, `scoreboard`, `facet-loop-v2`, `learning`, `verdict`
-and `words` suites. `director.test.ts`'s rig drives the real core and harness with scripted engines
-for the nested-repository policy, plan review, interrupting steer and landing refusals; the build
-smoke and `npm run test:computer:e2e` need a real window. No live account, real `npm install` or
+and `words` suites. `one-loop-projects.test.ts`'s and `director-wake-loop-run.test.ts`'s rigs drive
+the real core and harness with scripted engines; the build smoke and `npm run test:computer:e2e` need a real window. No live account, real `npm install` or
 vendor sign-in verifies M2/M3; those stay separate prerequisites.
 
 Developer commands and acceptance coverage are described below; consult the AG-933
@@ -373,21 +362,24 @@ transport credentials from reports. No permanent monitor or performance threshol
 `npm run studio:dev -- start --profile ag-933 --fixture app-basics` builds current inputs
 into `.studio-dev/builds/<build-id>`, creates fresh owned fixture state and returns actual
 readiness/identity JSON. `npm run studio:dev -- fixtures` lists the named fixtures. Among them:
-build-graph (two sword-in-ice runs: folded tries, an undone step, a lead-merged unjudged round),
-lead-graph (two Unreal lead runs: milestone columns, save points, sub-agents with their cards, the
-critic's advice on a round),
-chat-workers (a chat message's two workers on Builds and as chat lines, after an earlier Loop; three
+build-graph (two sword-in-ice runs as an earlier Genex recorded web Loops: folded tries, an undone
+step, a lead-merged unjudged round),
+chat-workers (a chat message's two workers on Builds and as chat lines, after an earlier Loop; two
 more games, written after the start so their Loops read as going: Fixture Loop with three workers,
 the lead's background work and the finish check not run yet; Fixture web Loop with build-graph's
-runs and Fixture Unreal Loop with lead-graph's, each with its workers' records, drawn as trees),
+runs and their workers' records, drawn as trees),
+build-timeline (a web game's Loop written after the start, going in its folder: four save points on
+its line, one whose picture is the last's, twelve workers off them with a fold, a re-delivered sign,
+and deliveries into the game for the Assets tab; before it in Build history a finished web Loop of
+an earlier Genex with two pictured builds),
 finish-check (four Loops written after the start, one per finish check look: Done and Stopped in
 the Builds history, Not yet after one no, and the newest Checking),
 paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
 Paused, one Added after the resume, one Left out by the lead's stop),
-building-card (a 4h Loop still going after five finished ones, written after the start, for the chat's
-Building card and its parts: two added, one working with its time left, one restarted on one row,
-one waiting; `[data-build-checklist]` open, `[data-build-toggle]` closes it; Builds holds its six
-builds in the picker `[data-build-picker]`),
+building-card (a Loop still going after five finished ones, written after the start, for the chat's
+Building card and its steps: the lead's two save points, two parts added, one working on its second
+round, one restarted on one row; `[data-build-checklist]` open, `[data-build-toggle]` closes it;
+Builds holds its six builds in the picker `[data-build-picker]`),
 stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
 renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
 Mountain pass, a Blender game with no run, whose Live says where pictures come from),
@@ -408,9 +400,7 @@ sandbox-setup (the window opens on "Set up the protected workspace" for a Linux 
 bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]` opens the studio) and
 agents-start-failed (the open studio's sidebar says "Agents didn't start", `[data-agents-start]`, with
 a stand-in srt-win timeout under its details; Try again clears it) and update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
-itself is refused as native) and plugin-updates (Genex and Blender installed one version back: their
-rows and pages offer `Update to <version>` and the sidebar `[data-plugins-update]`, each refused as
-native) and unreal-game (the game linked to a stand-in Unreal project inside
+itself is refused as native) and unreal-game (the game linked to a stand-in Unreal project inside
 its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card with a
 stand-in viewport shot from one finished run, and the steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
 and unreal-chat (a short synthetic Unreal chat, `tests/fixtures/unreal-chat/sample-chat.json`:
@@ -507,25 +497,21 @@ source there until it ends: a stale build refuses every UI operation, and a rest
 Drive only through hooks: the welcome's `[data-onboarding-action="next"]`, then `"start"` (only
 `"skip"` means nothing is signed in: stop and ask; never sign in yourself); the home composer's
 `[aria-label="Model settings"]` role rows `[data-role]` and `[data-model-choice]`, the
-`[aria-label^="Effort:"]` pill, then arrow keys on `[data-effort-slider]`, `[aria-label="Mode"]` with
-`[aria-label="Loop time limit"] [data-value]`, and `textarea[aria-label="Prompt"]`. Answer a
+`[aria-label^="Effort:"]` pill, then arrow keys on `[data-effort-slider]`, and
+`textarea[aria-label="Prompt"]`. Answer a
 `[data-chat-question]`, plan review or permission card only as a recorded human intervention.
 Watch with `runs` and `status`; no new record for a long while, or a `lastFailure`, is the cue to
 read `logs`. A run paused by an engine limit or a loop crash continues from
 `[data-run-resume="<runId>"]` once the limit resets. Never restart or drive the window while the
 owner is using it; leave the profile running at the end.
 
-Run overrides reach the harness from the studio's environment only by name (`harnessRunEnv`):
-`STUDIO_DIRECTOR_LOOP=turn` picks the long turn for a run that names no loop, and
-`STUDIO_UNREAL_RUNNER=lead` sends a new Loop on an Unreal project, and the resume of a run that
-runner wrote, to the Unreal runner from before the one Loop. Neither is a run record field or shown
-in the UI; set it on start and restart.
-
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket
 permissions; on Windows the control is a named pipe with a fresh random name, which other accounts
 can open only read-only. Protocol v1 uses bounded newline-delimited JSON, request IDs and one operation at
-a time. A timeout is not success and does not authorize retrying a mutation blindly.
+a time; `status`, `runs` and `stop` answer while another runs, and an operation that times out frees
+the slot though it may still finish (`main/dev/operation-slot.ts`). A timeout is not success and does
+not authorize retrying a mutation blindly.
 
 ## Embedded terminal acceptance
 

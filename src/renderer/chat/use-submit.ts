@@ -1,12 +1,9 @@
 import { MessageOrigin } from "../../shared/protocol.ts";
-import { RunState } from "../../shared/run-state.ts";
 import { SendBlock, SendRoute, SendSource } from "../analytics/chat-vocabulary.ts";
-import { chatLoopExtras, loopAvailableFor, loopCommissions, reportCommissions } from "../loop-setting.ts";
-import { browserStorage } from "../storage.ts";
 import type { ComposerExtras } from "../ui/PromptBar.tsx";
 import type { ChatPanelProps } from "./chat-panel-props.ts";
-import { type SendParts, sendTracking, sourceOf, trackSendBlocked } from "./send-analytics.ts";
-import { isHeldPlan, sendDestination, sendKey, sentAsNote, showSend } from "./send-route.ts";
+import { type SendParts, sendTracking, trackSendBlocked } from "./send-analytics.ts";
+import { isHeldPlan, sendDestination, sentAsNote, showSend } from "./send-route.ts";
 import type { ChatComposerState } from "./use-chat-composer.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import type { ChatWorkView } from "./use-chat-work.ts";
@@ -51,8 +48,7 @@ async function deliverSend(
     await window.studio.runFeedback({ threadId: chat.threadId, runId: heldRun, text });
     return;
   }
-  const options = { autopilot: loopCommissions(chat.run), ...(extras ? { extras } : {}) };
-  await props.onSend(text, { ...composerSendOptions(model, key, options), ...(clientId ? { clientId } : {}) });
+  await props.onSend(text, { ...composerSendOptions(model, key, extras), ...(clientId ? { clientId } : {}) });
   if (clientId) chat.sends.settle(clientId);
 }
 
@@ -89,13 +85,13 @@ export function useSubmit(
     return transcript.entries.some((entry) => isHeldPlan(entry, activeRunId, now)) ? activeRunId : null;
   };
   // Keep building is the person asking the build to go on: never a note to the build in reply.
-  const asNote = (text: string, extras: ComposerExtras | undefined): Promise<boolean> =>
-    extras?.autopilot?.keepBuilding === true
+  const asNote = (text: string, source: SendSource): Promise<boolean> =>
+    source === SendSource.KeepBuilding
       ? Promise.resolve(false)
       : sentAsNote(reply, threadId, text, props.onNotice, follow);
   // A note to the build, a sign-in first, or no model to send with: the send ends here.
   const goesNowhere = async (text: string, extras: ComposerExtras | undefined, source: SendSource) => {
-    if (await asNote(text, extras)) {
+    if (await asNote(text, source)) {
       sendTracking(parts, { text, extras, key: model.selected, source, route: SendRoute.NoteToBuild }).sent();
       return true;
     }
@@ -104,13 +100,13 @@ export function useSubmit(
       await gate.signIn();
       return true;
     }
-    if (sendKey(model, extras) || extras?.autopilot) return false;
+    if (model.selected) return false;
     trackSendBlocked(parts, SendBlock.NoModel, null);
     return true;
   };
-  return async (text, extras, preserveDraft = false, source = sourceOf(extras)) => {
+  return async (text, extras, preserveDraft = false, source = SendSource.Composer) => {
     if (await goesNowhere(text, extras, source)) return false;
-    const key = sendKey(model, extras);
+    const key = model.selected;
     // The held plan's inbox takes words only: pictures alone go to the chat.
     const heldRun = text.trim() ? heldPlanRun() : null;
     const destination = sendDestination({ chat, work }, text, extras, heldRun);
@@ -139,6 +135,7 @@ const REPORT_SOURCE: Readonly<Record<MessageOrigin, SendSource>> = {
   [MessageOrigin.SetupCard]: SendSource.SetupCard,
   [MessageOrigin.TagRetry]: SendSource.TagRetry,
   [MessageOrigin.LoopHeld]: SendSource.LoopHeld,
+  [MessageOrigin.CoverStep]: SendSource.CoverStep,
 };
 
 /** Sends words the chat wrote itself, marked with who wrote them. */
@@ -146,8 +143,7 @@ export type Report = (text: string, origin: MessageOrigin) => Promise<void>;
 
 /**
  * Send words the chat wrote itself (a command's result): to the agent with the chat's model, as a
- * plain chat message, with no bubble, no draft change and no reply-about note. It carries the chat's
- * Loop only before the chat's first build, and never reopens one (`reportCommissions`).
+ * plain chat message, with no bubble, no draft change and no reply-about note.
  */
 export function useReport(
   props: ChatPanelProps,
@@ -156,24 +152,15 @@ export function useReport(
   work?: ChatWorkView,
 ): Report {
   const { model } = composer;
-  const { threadId, run } = chat;
+  const { threadId } = chat;
   return async (text: string, origin: MessageOrigin): Promise<void> => {
-    const key = sendKey(model, undefined);
+    const key = model.selected;
     if (!key || !threadId) return;
-    const extras = chatLoopExtras({
-      storage: browserStorage(),
-      threadId,
-      build: composer.build,
-      coordinating: run?.state === RunState.Running,
-      gameMode: !chat.isStudioThread,
-      loopAvailable: loopAvailableFor(chat.folder),
-    });
-    const options = { autopilot: reportCommissions(run), extras };
     const source = REPORT_SOURCE[origin];
     const parts = { props, chat, composer, ...(work ? { work } : {}) };
-    const tracking = sendTracking(parts, { text, extras, key, source, route: SendRoute.Chat });
+    const tracking = sendTracking(parts, { text, extras: undefined, key, source, route: SendRoute.Chat });
     try {
-      await props.onSend(text, { ...composerSendOptions(model, key, options), origin });
+      await props.onSend(text, { ...composerSendOptions(model, key), origin });
     } catch (error) {
       tracking.failed(error);
       throw error;

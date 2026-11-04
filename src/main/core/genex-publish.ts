@@ -13,6 +13,7 @@ import { publishesAsWebGame } from "../../shared/project-workspace.ts";
 import { cleanGenexTitle, GENEX_PLUGIN_ID, GenexAction } from "../../shared/genex.ts";
 import { type ExportReview, type PluginBinding, PluginSourceKind } from "../../shared/plugins.ts";
 import type { StudioCore } from "../studio-core.ts";
+import { CLOUD_PLATFORMS } from "../../plugins/genex/cloud-build.ts";
 import { pinnedCliSendsApps } from "../../plugins/genex/native-publish.ts";
 import { publishedApps } from "./publish-platforms.ts";
 import { t } from "../../shared/i18n.ts";
@@ -26,6 +27,7 @@ const MESSAGE = {
     t("{title} builds in Unreal; publishing an Unreal game isn't supported yet.", { title }),
   NotWebGame: (title: string) => t("{title} isn't a web game, so Genex can't publish it yet.", { title }),
   NoApps: () => t("This game has no Mac, Windows or Linux app ready to publish"),
+  NoCloudPlatform: () => t("Genex builds only Windows apps on its own computers"),
 } as const;
 
 /** Why a game can't be published at all, by code: callers act on it, never on its words. */
@@ -83,6 +85,13 @@ export async function assertPublishable(core: Pick<StudioCore, "games">, project
 /** The dialog's Allow remixing as the publish's argument: sent only when the dialog said yes or no. */
 const remixArg = (remix: unknown): { remix?: boolean } => (typeof remix === "boolean" ? { remix } : {});
 
+/**
+ * The dialog's word that this web build replaces a page that shows only the game's apps (the line
+ * it showed above the press) as the publish's argument: sent only when it said so, never assumed.
+ */
+const replaceArg = (replace: unknown): { replaceNativePage?: true } =>
+  replace === true ? { replaceNativePage: true } : {};
+
 /** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is installed. */
 async function boundGame(core: DialogCore, project: unknown): Promise<PluginBinding> {
   if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame());
@@ -108,7 +117,8 @@ export async function publishReview(core: DialogCore, project: unknown): Promise
 /**
  * Publish `project` to the Genex gallery under `title` (cleaned; the plugin picks the name when none is
  * left), after the person approved `review` in the dialog. The game's ready apps, which the dialog
- * lists above its press, go once the web build is public (`publishedApps`).
+ * lists above its press, go once the web build is public (`publishedApps`). `replaceNativePage`: the
+ * dialog said this web build takes the place of a page that shows only the game's apps.
  */
 export async function publishFromDialog(
   core: DialogCore,
@@ -117,12 +127,18 @@ export async function publishFromDialog(
   title?: unknown,
   sendsApps = pinnedCliSendsApps(),
   remix?: unknown,
+  replaceNativePage?: unknown,
 ): Promise<void> {
   if (!isExportReview(review)) throw new Error(MESSAGE.NoFileList());
   const binding = await dialogBinding(core, project);
   const name = cleanGenexTitle(title);
   const native = await publishedApps(core, binding.project, sendsApps);
-  const args = { ...(name ? { title: name } : {}), ...(native.length > 0 ? { native } : {}), ...remixArg(remix) };
+  const args = {
+    ...(name ? { title: name } : {}),
+    ...(native.length > 0 ? { native } : {}),
+    ...remixArg(remix),
+    ...replaceArg(replaceNativePage),
+  };
   // Genex exports inside this call, so the approval lives exactly as long as it.
   await core.withApprovedExport(GENEX_PLUGIN_ID, binding.project, review, () =>
     core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishGallery, args, binding),
@@ -152,4 +168,16 @@ export async function publishAppsFromDialog(
     { native, ...(name ? { title: name } : {}), ...remixArg(remix) },
     binding,
   );
+}
+
+/**
+ * Ask Genex, from the dialog, to build `project`'s `platform` app on its own computers: the app this
+ * computer can't make (an Unreal game's Windows app on a Mac). The row's press is the consent to send
+ * the game's project privately for it, as Publish's is to send its apps. Refused for a system Genex
+ * builds no app for, before Genex is asked anything.
+ */
+export async function cloudBuildFromDialog(core: DialogCore, project: unknown, platform: unknown): Promise<void> {
+  if (typeof platform !== "string" || !CLOUD_PLATFORMS.has(platform)) throw new Error(MESSAGE.NoCloudPlatform());
+  const binding = await boundGame(core, project);
+  await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.CloudBuild, { platform }, binding);
 }

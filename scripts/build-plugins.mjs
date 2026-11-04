@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 /** A Node backend bundle, as every bundled plugin ships one. */
 const NODE_BACKEND = { bundle: true, platform: "node", format: "esm", target: "node24", logLevel: "silent" };
 /** Files of the vendored Genex skills that only `scripts/refresh-genex-skills.ts` reads. */
-const GENEX_SKILL_SOURCES = new Set(["PREFACE.md", "vendor.json"]);
+const GENEX_SKILL_SOURCES = new Set(["PREFACE.md", "vendor.json", "cuts.json"]);
 
 /** The package.json of `name` as `from` resolves it, found by walking up when the package hides it. */
 async function packageJsonOf(name, from) {
@@ -136,6 +136,16 @@ async function buildGenex(root, resources, { dependencies }) {
   await copyDependencyTree(copying, "@genex-ai/cli-demo", require.resolve("@genex-ai/cli-demo/package.json"));
 }
 
+/** Genex's optional advice: skills only, with a backend that answers nothing (Studio reads the skills). */
+async function buildGenexRecommendations(root, resources) {
+  const source = path.join(root, "src/plugins/genex-recommendations");
+  const target = path.join(resources, "plugins/genex-recommendations");
+  await mkdir(target, { recursive: true });
+  for (const file of ["plugin.json", "icon.png", "backend.mjs"])
+    await cp(path.join(source, file), path.join(target, file));
+  await cp(path.join(source, "skills"), path.join(target, "skills"), { recursive: true });
+}
+
 async function buildBlender(root, resources, sdk) {
   const blender = path.join(resources, "plugins/blender");
   await mkdir(blender, { recursive: true });
@@ -165,6 +175,7 @@ async function buildUnreal(root, resources, sdk) {
   await mkdir(unreal, { recursive: true });
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/unreal", file), path.join(unreal, file));
+  await cp(path.join(root, "src/plugins/unreal/skills"), path.join(unreal, "skills"), { recursive: true });
   await copyLocales(path.join(root, "src/plugins/unreal"), unreal);
   // Genex's own type goes in as data: a panel can load no font from anywhere else.
   const panel = await inlinePanelSdk(
@@ -423,6 +434,7 @@ async function buildUnity(root, resources, sdk) {
 export async function buildPlugins(root, resources, { dependencies = true } = {}) {
   await cp(path.join(root, "src/plugin-sdk"), path.join(resources, "plugin-sdk"), { recursive: true });
   await buildGenex(root, resources, { dependencies });
+  await buildGenexRecommendations(root, resources);
   const sdk = path.join(root, "src/plugin-sdk");
   await buildBlender(root, resources, sdk);
   await buildUnreal(root, resources, sdk);

@@ -8,39 +8,19 @@ import { type RewindResult, rewindableMessages } from "../../shared/chat-rewind.
 import { t } from "../../shared/i18n.ts";
 import type { EventEnvelope } from "../types.ts";
 import { type Notify, ToastTone } from "../state/toasts.ts";
-import { COMPOSE_FRAMES_EVENT } from "../ui/PromptBar.tsx";
 import { chatMemory, noteRewound } from "../analytics/chat-memory.ts";
 import { messagesBack, rewindCompletedProperties } from "../analytics/chat-properties.ts";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
+import { focusPromptEnd, promptInput, restorePictures } from "./put-back.ts";
 
 /** The event a user bubble was written in: its entry id is `<event id>-<message index>:user` (chat-entries.ts). */
 export const bubbleEvent = (entryId: string): string => entryId.replace(/-\d+:user(?::\d+)?$/, "");
-
-/** The composer's prompt, where a rewound message comes back. */
-const promptInput = (): HTMLTextAreaElement | null => document.querySelector("[data-promptbar] textarea");
 
 export interface RewindTarget {
   threadId: string;
   eventId: string;
   messageId: string;
-}
-
-/** Only the pictures the composer had attached come back: the rest came from paths the text still names. */
-function restorePictures(threadId: string, result: RewindResult): void {
-  for (const sent of [{ messageId: result.messageId, pickedImages: result.pickedImages }, ...result.held]) {
-    if (!sent.pickedImages) continue;
-    void window.studio
-      .messageImages(threadId, sent.messageId)
-      .then((frames) =>
-        window.dispatchEvent(
-          new CustomEvent(COMPOSE_FRAMES_EVENT, {
-            detail: { conversationKey: threadId, frames: frames.slice(0, sent.pickedImages) },
-          }),
-        ),
-      )
-      .catch(() => {});
-  }
 }
 
 const restoredWords = (files: number): string =>
@@ -90,15 +70,14 @@ export function useChatRewind(input: {
     input.putBack(done.threadId, result.text);
     noteRewound(chatMemory, done.threadId);
     track(AnalyticsEvent.RewindCompleted, rewindCompletedProperties(result));
-    restorePictures(done.threadId, result);
+    restorePictures(done.threadId, [
+      { messageId: result.messageId, pickedImages: result.pickedImages },
+      ...result.held,
+    ]);
     returnFocus.current = promptInput();
     if (result.files) input.onNotice(restoredWords(result.files), ToastTone.Ok);
     input.jumpToLatest();
-    requestAnimationFrame(() => {
-      const prompt = promptInput();
-      prompt?.focus();
-      prompt?.setSelectionRange(prompt.value.length, prompt.value.length);
-    });
+    focusPromptEnd();
   };
   const offers = useCallback(
     (entryId: string) => !studio && between && rewindable.has(bubbleEvent(entryId)),

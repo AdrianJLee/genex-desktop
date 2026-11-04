@@ -40,11 +40,10 @@ import type {
   DelegateCaptureGrant,
   DelegateDirectorGrant,
   DelegateImage,
-  DelegateOwnership,
-  DelegatePlaytestGrant,
   DelegateResult,
   LiveToolResult,
   LiveToolSpec,
+  MessageFrom,
   SteerMessage,
   StudioToolSpec,
   ToolDefinition,
@@ -55,8 +54,6 @@ export type {
   DelegateCaptureGrant,
   DelegateDirectorGrant,
   DelegateImage,
-  DelegateOwnership,
-  DelegatePlaytestGrant,
   DelegateResult,
   LiveToolResult,
   LiveToolSpec,
@@ -209,10 +206,23 @@ export type DelegateEvent =
 
 export interface DelegateRequest {
   contextPolicy?: import("../../shared/context.ts").ContextPolicy;
-  /** Host-derived final optimizer scope; never taken from model arguments. */
-  optimization?: { denyWrites: string[] };
-  /** The brief — written by the harness, improved by SkillOpt. */
+  /** The person's words for a chat turn (`from`), or a brief for a session nobody answers. */
   prompt: string;
+  /**
+   * Who wrote `prompt` (`HarnessDelegateParams.from`): the person's words alone, or Genex's own
+   * message, which the engine shows as not the person's (`genex-mark-prompts.ts`). Absent: a brief.
+   */
+  from?: MessageFrom;
+  /**
+   * What the session should know for its whole life (Genex's context, its plugins and their
+   * guidance), said once beside the engine's own system prompt instead of in every message. Only an
+   * engine with a system channel is sent it (Claude Code's append, Codex's developer instructions on
+   * its app server); any other, and a new `codex exec` session, reads it as the first notice of a new
+   * session. A resumed session keeps the text it started with.
+   */
+  system?: string;
+  /** Genex's own lines that ride beside the prompt, each a block of its own ahead of it, unmarked: the engine marks them (`genex-mark-prompts.ts`). */
+  notices?: readonly string[];
   cwd: string;
   model?: string;
   /** Reasoning effort for the contractor's model ("low" | "medium" | "high" | "max"). */
@@ -263,7 +273,7 @@ export interface DelegateRequest {
    * matching `onCapture` closure itself — a function never travels over RPC.
    */
   selfCapture?: DelegateCaptureGrant;
-  /** `page`: a bench page (a .html file in the workspace) to capture in place of the game. */
+  /** `page`: a .html file in the workspace to capture in place of the game. `cameras` is accepted from older callers and ignored: a capture photographs the page. */
   onCapture?: (args: { cameras?: string; page?: string }) => Promise<string>;
   /**
    * The computer: with a `selfCapture` grant the builder also gets `computer` — hands
@@ -273,16 +283,9 @@ export interface DelegateRequest {
   computer?: boolean;
 
   /**
-   * Live studio tools (the playtester): MCP tools whose handler runs
-   * *during* the session and answers — unlike intake tools, which only record. `playtest` is
-   * the serializable half that crosses the RPC; the studio injects `liveTools`/`onLiveTool`
-   * bound to a pooled preview of the build under test.
-   */
-  playtest?: DelegatePlaytestGrant;
-  /**
    * The director: the run's orchestrating session. Its cwd is the run's integration
    * worktree (`root`) — or, for a waking run's lead, the game folder, leading that worktree; it gets the computer tool on a window of its own (`look` points that window at
-   * any build of the run), capture, and the harness's run tools — workers, judges, playtests,
+   * any build of the run), capture, and the harness's run tools — workers, a second opinion,
    * merges, finish — which the studio forwards to the harness process that owns them. The
    * serializable half; the studio injects the closures.
    */
@@ -290,36 +293,18 @@ export interface DelegateRequest {
   liveTools?: LiveToolSpec[];
   onLiveTool?: (name: string, args: Record<string, unknown>) => Promise<LiveToolResult>;
   /**
-   * A session that may look and talk but never edit or run commands (the playtester), unless it
-   * asks in the chat's mode (`leadAsks`: a waking run's lead, the run's coordinator).
+   * A session that may look and talk but never edit or run commands (a reviewer, a reader worker).
+   * Never a run's lead: the host seats every lead as a full agent.
    */
   readOnly?: boolean;
-  /**
-   * A judge that plays: read-only, and it may not read files either. It sees the build only through
-   * its live tools, from an empty folder, so a note the builder left in the code cannot sway it.
-   */
-  blind?: boolean;
   /** A Loop's reviewer: the folder it reads (its cwd is a home of its own, which its brief must not name as the build). */
   reviewer?: { reads: string };
-  /** Host-owned stable coordinator workspace; keep session cwd across chat turns. */
-  coordinator?: boolean;
   /**
    * Stills that go into the builder's prompt as image blocks: the
    * reference frames on a facet's first iteration, reference|build pair images when a style
    * or vision check is failing. A path in a text prompt is not a picture.
    */
   images?: DelegateImage[];
-  /**
-   * Edit-time file ownership: the engine blocks Write/Edit outside `owns` (plus the
-   * facet's notes and the wiring line of src/main.js) before the edit lands, with a reason
-   * the contractor reads. `ownsMain` also allows src/main.js, src/studio.js and index.html.
-   *
-   * `template: false` is a game the user brought (M4.6): the entry has no wiring block to pass
-   * through, and a worker with no seam owns the repository minus the entry, the contract and
-   * the page. `neverLock` names directory prefixes the Codex locks must leave writable — a
-   * shape's own build output, on top of the lockfiles and caches every game has.
-   */
-  ownership?: DelegateOwnership;
   /**
    * This delegation is the chat's current turn, and the person's messages may reach it mid-turn
    * (only for an engine with `steersMidTurn`). The engine calls `ready` once, as soon as it knows
@@ -337,7 +322,7 @@ export interface DelegateRequest {
    */
   permissions?: DelegatePermissions;
   /**
-   * A build's lead, or the run's coordinator, in a game chat: the chat's main agent, limited only by
+   * A build's lead in a game chat: the chat's main agent, limited only by
    * the chat's mode and the rules the person saved. Its session gets Claude Code's tools, no sandbox
    * and no blanket shell, in its chat's Auto, Accept edits or Bypass, else in Manual
    * (`LeadAsks.mode`), which the picker switches while it runs (`onControl`); every tool call but a
@@ -446,7 +431,7 @@ export interface AskFirst {
 }
 
 /**
- * What a build's lead or the run's coordinator is handed: a session that asks, and the host's word
+ * What a build's lead is handed: a session that asks, and the host's word
  * on each tool call before anything else decides it. Claude Code applies its mode and allow rules
  * (the saved ones, a game's own `.claude` settings) before it asks, so only a check that runs ahead
  * of them holds while the chat is in a mode the session could not be switched to.

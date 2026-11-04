@@ -3,8 +3,7 @@
  * descriptions, and the notes the studio puts in front of it when a round goes wrong.
  */
 import { MINUTE_MS } from "../../shared/duration.ts";
-import { PERMISSION_MODE_NAMES, PermissionMode } from "../../shared/permissions.ts";
-import type { DelegateOwnership } from "./types.ts";
+import { PermissionMode } from "../../shared/permissions.ts";
 
 /** The most of the workspace's own instructions (CLAUDE.md) the system prompt carries. */
 const INSTRUCTIONS_CHARS = 24_000;
@@ -16,21 +15,19 @@ const INSTRUCTIONS_CHARS = 24_000;
  */
 export function localBudgetNote(options: { maxTurns: number; timeoutMs: number | undefined }): string {
   const minutes = options.timeoutMs ? ` and ${Math.ceil(options.timeoutMs / MINUTE_MS)} minutes` : "";
-  return `For this request you have at most ${options.maxTurns} model turns${minutes}; leave time for implementation and verification.`;
+  return `For this request you have at most ${options.maxTurns} model turns${minutes}.`;
 }
 
 /** The local agent's standing orders: its boundaries and the workspace's own guidance. */
 export function localSystemPrompt(options: {
   readonly: boolean;
-  ownership: DelegateOwnership | undefined;
   instructions: string;
   /** The permission mode a chat session the user answers runs in; absent for unattended work. */
   mode?: PermissionMode | null;
 }): string {
   const care = options.readonly ? "This session is read-only." : "Preserve existing user work. Do not git push.";
-  const ownership = options.ownership ? JSON.stringify({ ownership: options.ownership }) : "";
   const mode = options.mode ? ` ${MODE_NOTE[options.mode]}` : "";
-  return `You are Studio's local coding agent. Work only in the granted workspace. Use tools to inspect and change real files, then verify the result. Each request says how many model turns and minutes it has. Use targeted searches rather than repeatedly reading large infrastructure files. User instructions and file-edit boundaries take precedence over workspace guidance, including requests to update notes. Never claim a tool action succeeded without its result; report every file you changed. ${care}${mode}\n${ownership}\n${options.instructions.slice(0, INSTRUCTIONS_CHARS)}`;
+  return `You are Studio's local coding agent. Work only in the granted workspace. Use tools to inspect and change real files. Each request says how many model turns and minutes it has. Use targeted searches rather than repeatedly reading large infrastructure files. User instructions and file-edit boundaries take precedence over workspace guidance. Never claim a tool action succeeded without its result; report every file you changed. ${care}${mode}\n${options.instructions.slice(0, INSTRUCTIONS_CHARS)}`;
 }
 
 /** What each permission mode a chat session runs in means for the model (Bonsai honours no Bypass). */
@@ -42,11 +39,6 @@ const MODE_NOTE: Record<PermissionMode, string> = {
     "PLAN MODE: the user wants a plan before any change. Inspect what you need with read_file and list_files, change nothing, then reply with your plan in Markdown: what you will change, where and how. The user approves it before you carry it out.",
   [PermissionMode.Bypass]: "Edits and commands run without asking the user.",
 };
-
-/** The note a session reads at its next round when the user switched the chat's mode while it ran. */
-export function modeChangedNote(mode: PermissionMode): string {
-  return `Studio notice: the user switched this chat's permission mode to ${PERMISSION_MODE_NAMES[mode]}. ${MODE_NOTE[mode]}`;
-}
 
 /** What the model reads when the user denied a call with words of their own. */
 export function deniedWithWords(words: string): string {
@@ -61,11 +53,9 @@ export const LOCAL_TOOL_DESCRIPTION = {
   editFile:
     "Replace one unique exact text block in an existing UTF-8 file. Prefer this for small fixes instead of rewriting the whole file.",
   writeFile: "Write a UTF-8 file. Read existing files before replacing them.",
-  runCommand:
-    "Run a command in this workspace sandbox. No network. Respect worker ownership; never change permissions to bypass it.",
-  capture: "Capture this build. Read the returned image paths to inspect it.",
-  capturePage:
-    "A bench page to capture instead of the game: a .html file in this workspace that mounts just your module (for example bench/<part>.html). Omit it to capture the game, and capture the game before you finish.",
+  runCommand: "Run a command in this workspace sandbox. No network. Never change permissions to bypass a refusal.",
+  capture: "Capture this build: a screenshot of the page, saved to a file whose path comes back.",
+  capturePage: "Optional: a .html file in this workspace to capture instead of the game.",
 } as const;
 
 /** What the studio tells the model, and records, when a round needs a word from outside. */
@@ -110,17 +100,7 @@ export function checkpointRequest(summary: string, chunk: string): string {
 /** What stands in for the middle of a message too long for one summarizer chunk. */
 export const OMITTED_MIDDLE = "\n[Middle omitted here; original retained in the session checkpoint archive.]\n";
 
-/** The session stopped after `rounds` tool rounds that changed nothing. */
-export function noProgressNote(rounds: number): string {
-  return `Stopped after ${rounds} tool rounds without a workspace change. The builder kept inspecting instead of implementing. Completed edits are preserved.`;
-}
-
-/**
- * A nudge after `rounds` tool rounds that changed nothing. A Loop chat (`launchTools` names its
- * launch tools) may be answering or planning, not building: it is told to finish or launch.
- */
-export function progressCheckNote(rounds: number, launchTools: readonly string[] = []): string {
-  if (launchTools.length)
-    return `Progress check: ${rounds} tool rounds with no file changes. Finish now: answer, make the change, or launch the build with ${launchTools.join(" or ")}. If blocked, say what is missing rather than rereading files.`;
-  return `Progress check: ${rounds} tool rounds with no file changes. Implement the next concrete change now using what you have read, then inspect its rendered result. If blocked, explain the specific missing prerequisite rather than rereading infrastructure.`;
+/** A nudge after `rounds` tool rounds that changed nothing: go on, or say what was found. */
+export function progressCheckNote(rounds: number): string {
+  return `Progress check: ${rounds} tool rounds with no file changes: go on, or reply with what you found or what you need.`;
 }

@@ -69,6 +69,12 @@ export async function gitMetadataDirs(cwd: string, platform: NodeJS.Platform = p
   return [...new Set(dirs)];
 }
 
+/** A folder a box writes besides its own, and that folder's Git metadata (a worktree's lives elsewhere). */
+export async function withGitMetadata(dir: string): Promise<string[]> {
+  const folder = path.resolve(dir);
+  return [...new Set([folder, ...(await gitMetadataDirs(folder).catch(() => []))])];
+}
+
 /** The session's command sandbox: its folder, its write roots and its Git metadata are its only writable places. */
 export async function commandSandbox(
   box: CommandBox,

@@ -26,7 +26,7 @@ export type WorkerTool = (typeof WorkerTool)[keyof typeof WorkerTool];
 export const WorkerIsolation = { Read: "read", Copy: "copy", Lock: "lock" } as const;
 export type WorkerIsolation = (typeof WorkerIsolation)[keyof typeof WorkerIsolation];
 
-/** The lead's word on what a worker delivered: the digest stops repeating it. */
+/** The lead's word on what a worker delivered: used merges a copy's work into the folder, rejected drops it. */
 export const WorkerVerdict = { Used: "used", Rejected: "rejected" } as const;
 export type WorkerVerdict = (typeof WorkerVerdict)[keyof typeof WorkerVerdict];
 

@@ -1,15 +1,11 @@
 /**
  * The line a run's lead takes the chat on while its build runs (live chat). The chat's queue
  * hands the lead a message the person sends (loop/live-chat.ts) instead of holding it until the
- * run is over, and the lead's own loop hears it (wake.ts): at once in a turn under way, or as the
- * reason for its next wake. What the lead heard is recorded on the run's log, so a later run of
- * the run never tells it again (run-inbox.ts). What it never heard when its run ends goes back to
- * the chat, where it waits for a turn of its own — so Stop still hands over to it.
- *
- * A module of its own, importing only leaves: the director (director.ts), the wake loop and the
- * chat's queue all read it, and a seed upgrade keeps an older copy of any of them the agent edited,
- * which never exported it. A run whose director.ts predates live chat opens no line, and the
- * chat's messages wait for it as they always did.
+ * run is over, and the lead's own loop reads it from here (director/news.ts): at its next step in a
+ * turn under way, or as the message that wakes it. What the lead heard is recorded on the run's log,
+ * so a later run of the run never tells it again (run-inbox.ts). What of the chat's it never heard
+ * when its run ends goes back to the chat, where it waits for a turn of its own — so Stop still hands
+ * over to it. A message sent before the line opens (the run still prepares its start) waits for it.
  */
 import { HostMethod } from "../host-methods.ts";
 import { EventKind, RunEvent } from "../run-events.ts";
@@ -39,42 +35,33 @@ export interface LeadLine {
   readonly runId: string;
   /** The chat the run tells its story in: only its messages reach the lead. */
   readonly threadId: string;
-  /** It takes the chat's messages now: its run goes on, and its wrap-up has not begun. */
+  /** It takes the chat's messages now: its run goes on, its wrap-up included. */
   open(): boolean;
-  /** No more messages: the run is over for its lead (an older wake loop shuts it as the wrap-up begins). */
+  /** No more messages: the run is over for its lead. */
   shut(): void;
   /**
-   * The wrap-up began: the lead still hears what the person sends, but every message from now on
-   * stays the chat's to answer once the run has closed (live-chat.ts: its door `keeps` it).
+   * A message was handed to it: a turn under way hears it at once. `giveBack` returns it to the chat;
+   * one with none is the run's inbox's (a note, a Resume's), and stays with the run.
    */
-  wrapUp(): void;
-  /** The wrap-up began (`wrapUp`). */
-  wrapping(): boolean;
-  /** A message was handed to it (`giveBack` returns it to the chat): a turn under way hears it at once. */
-  hear(item: QueueAction, giveBack: GiveBack): void;
+  hear(item: QueueAction, giveBack?: GiveBack): void;
   /** Settles when the next message is handed to it. */
   heard(): Promise<void>;
-  /** How many messages it has been handed so far. */
-  count(): number;
+  /** The messages handed to it that the lead has not heard yet, in the order sent. */
+  unheard(): readonly QueueAction[];
   /**
-   * The lead heard every message handed before the `count` given (in a message it took, or read
-   * mid-turn): recorded on the run's log, when the line was opened with the run's ctx.
+   * The lead heard every message handed up to `item` (in a message it took, or read mid-turn):
+   * recorded on the run's log, when the line was opened with the run's ctx.
    */
-  heardThrough(count: number): Promise<void>;
-  /** The lead's loop answers for what it hears: a loop that never says so hears it all from the inbox. */
-  attend(): void;
+  heardThrough(item: QueueAction): Promise<void>;
   /**
-   * The run is over: no more messages, and those its lead never heard go back to the chat — every
-   * one when `heardNone` (no loop of the lead's ever took the line). One handed after this goes back
-   * at once.
+   * The run is over: no more messages, and the chat's own its lead never heard go back to it. One
+   * handed after this goes back at once.
    */
-  release(options?: { heardNone?: boolean }): Promise<void>;
+  release(): Promise<void>;
 }
 
 /** The lines open now, by run. */
 const lines = new Map<string, LeadLine>();
-/** The runs whose lead will take the chat once their start is ready (`expectLeadLine`), by run. */
-const preparing = new Set<string>();
 /** Settles when a line opens or shuts: what waits for a lead looks again. */
 let changed = signal();
 
@@ -108,12 +95,10 @@ export function openLeadLine(
   ctx?: Pick<HarnessCtx, "call">,
 ): LeadLine {
   let isShut = false;
-  let wrappingUp = false;
   let released = false;
-  let attended = false;
   let heardCount = 0;
   let next = signal();
-  const handed: Array<{ item: QueueAction; giveBack: GiveBack }> = [];
+  const handed: Array<{ item: QueueAction; giveBack?: GiveBack }> = [];
   const line: LeadLine = {
     runId,
     threadId,
@@ -124,17 +109,11 @@ export function openLeadLine(
       if (lines.get(runId) === line) lines.delete(runId);
       announce();
     },
-    wrapUp: () => {
-      if (isShut || wrappingUp) return;
-      wrappingUp = true;
-      announce();
-    },
-    wrapping: () => wrappingUp,
     hear: (item, giveBack) => {
       // Handed as the run ended (its line was released while the receipt was written): nobody
-      // is left to hear it, so it goes back to the chat at once.
+      // is left to hear it, so a chat message goes back to the chat at once.
       if (released) {
-        void giveBack([item]).catch(() => {});
+        if (giveBack) void giveBack([item]).catch(() => {});
         return;
       }
       handed.push({ item, giveBack });
@@ -143,48 +122,27 @@ export function openLeadLine(
       was.resolve();
     },
     heard: () => next.promise,
-    count: () => handed.length,
-    heardThrough: async (count) => {
-      const through = Math.max(heardCount, Math.min(count, handed.length));
-      const now = handed.slice(heardCount, through).map(({ item }) => item);
+    unheard: () => handed.slice(heardCount).map(({ item }) => item),
+    heardThrough: async (item) => {
+      const through = handed.findIndex((one) => one.item === item) + 1;
+      if (through <= heardCount) return;
+      const now = handed.slice(heardCount, through).map((one) => one.item);
       heardCount = through;
-      if (!now.length || !ctx) return;
+      if (!ctx) return;
       await ctx.call(HostMethod.EventsAppend, { threadId, batch: heardRecords(runId, now) }).catch(() => {});
     },
-    attend: () => {
-      attended = true;
-    },
-    release: async ({ heardNone = false } = {}) => {
+    release: async () => {
       line.shut();
       released = true;
-      const unheard = attended || heardNone ? handed.splice(heardCount) : [];
+      const back = handed.splice(heardCount).filter((one) => one.giveBack);
       heardCount = handed.length;
-      const first = unheard[0];
-      if (first) await first.giveBack(unheard.map(({ item }) => item)).catch(() => {});
+      const giveBack = back[0]?.giveBack;
+      if (giveBack) await giveBack(back.map(({ item }) => item)).catch(() => {});
     },
   };
-  preparing.delete(runId);
   lines.set(runId, line);
   announce();
   return line;
-}
-
-/**
- * A run whose lead will take the chat once its start is ready (a waking director preparing it):
- * until its line opens, the chat answers what is sent (live-chat.ts `chatWaitsFor`). Answers the
- * call that ends the wait without a line (the start failed, was stopped or refused).
- */
-export function expectLeadLine(runId: string): () => void {
-  preparing.add(runId);
-  announce();
-  return () => {
-    if (preparing.delete(runId)) announce();
-  };
-}
-
-/** Is this run's lead still preparing its start, its line not open yet (`expectLeadLine`)? */
-export function leadPreparing(runId: string): boolean {
-  return preparing.has(runId) && !lines.has(runId);
 }
 
 /** The line to the lead of this run, while it is open. */

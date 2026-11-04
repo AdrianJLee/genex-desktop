@@ -67,7 +67,7 @@ const pendingRpc = new Map();
 function call(method, params) {
   return new Promise((resolve, reject) => {
     const id = nextRpcId++;
-    pendingRpc.set(id, { resolve, reject });
+    pendingRpc.set(id, { resolve, reject, method });
     out({ kind: MessageKind.Rpc, id, method, params });
   });
 }
@@ -215,6 +215,8 @@ function settleRpc(message) {
   // Rehydrate structured detail (e.g. an engine failure's `kind` and `fallbacks`) so the
   // agent's own code can act on it rather than string-matching a message.
   Object.assign(error, message.error?.data ?? {});
+  // Which call failed, so a turn that dies of it can say so without quoting its words.
+  error.hostMethod = pending.method;
   pending.reject(error);
 }
 

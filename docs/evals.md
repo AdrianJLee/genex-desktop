@@ -100,8 +100,8 @@ no file fails the zero-files guard. A failure is a typed `harnessFailure`.
 ### Genex lanes (A, D)
 
 The runner builds the SHA under test once into `$GENEX_EVALS_HOME/builds/<sha>` (`git archive`,
-`npm ci`, `node scripts/build.mjs`), reads the commission and permission mode from that build's
-own `loop-setting.ts` and `permissions.ts`, writes `lane-spec.json` in the lane root and launches
+`npm ci`, `node scripts/build.mjs`), reads the permission mode from that build's own
+`permissions.ts`, writes `lane-spec.json` in the lane root and launches
 `electron <build> --studio-smoke --userdata=<lane root>/userdata --studio-eval-lane=<spec>`
 (`--studio-eval-fixture` selects the scripted fixture engines). A live spec pins `executables` to
 the CLIs the raw lanes resolve; a fixture spec pins none.
@@ -259,12 +259,12 @@ The Genex lanes read these from the eval profile's event log (`genex-events.ts`,
   (`plan-approval.ts` `joinedResult`).
   Context readings keep their source ([native context telemetry](connections-and-context.md#native-context-telemetry)).
 - `completion_call` records every `engine.complete`: requested and served model, usage, latency,
-  failure kind and the caller's provenance (judge, playtester or SkillOpt gate).
+  failure kind and the caller's provenance (`judge`; an older record's other roles count as a judge's).
 - `build_observation` keeps a chat build's duration, turns, usage and the `preview.ready` answer
   (`ready.pageMs` is a field row's first boot); the delegated turn's reply (`messages`) carries
   the same usage, marked `usage_source: delegation`, and is the one counted;
   `preview_ready` marks a project's first ready preview after a chat build
-  ([conversation lifecycle](conversation-coordinator.md)).
+  ([conversation lifecycle](conversation-lifecycle.md)).
 - Blind verdicts carry `judged` provenance and the `judgeCall` audit, an eval profile may pin its
   judge, and autopilot closes carry a `stopCode` ([harness runtime](harness-runtime.md)).
 

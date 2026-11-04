@@ -1,7 +1,7 @@
 /**
  * Workers in a chat: the chat's own session, answering a turn on an engine that carries a worker's
- * seat, is offered the worker tools (never a worker, a run's builder or lead, the coordinator or a
- * local model's session); the seed's chat turn hands its session the tools and the brief's line and
+ * seat (every engine that keeps a session, a local model's included), is offered the worker tools
+ * (never a worker, or a run's builder or lead); the seed's chat turn hands its session the tools and the brief's line and
  * closes the pool however the turn ends; a worker tool call reaches the harness's pool of the live
  * turn only; Plan holds writers and merges (no snapshot, no copy, no delegation, no merge) while a
  * reader runs; and a worker the pool starts carries the turn's grant, on the Workers role's engine,
@@ -14,7 +14,6 @@ import path from "node:path";
 import { after, describe, it } from "node:test";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { chatWorkerTool, closeChatWorkers, openChatWorkers } from "../../src/harness-seed/loop/workers/chat-workers.ts";
-import { WORKERS_BRIEF_LINE } from "../../src/harness-seed/loop/workers/prompts.ts";
 import { keptRef } from "../../src/harness-seed/loop/workers/records.ts";
 import { WORKER_TOOLS } from "../../src/harness-seed/loop/workers/specs.ts";
 import { SessionActivityRole } from "../../src/shared/chat-activity.ts";
@@ -72,12 +71,12 @@ function harnessInProcess(chat: Chat): { dispatched: Array<Record<string, unknow
 }
 
 /** Open the seed's pool for the chat turn `turn`, on the core, as a delegated chat turn does. */
-function openPoolFor(chat: Chat, ctx: CtxRecorder, turn: string, commission: Record<string, unknown> | null = null) {
+function openPoolFor(chat: Chat, ctx: CtxRecorder, turn: string, roles: Record<string, unknown> | null = null) {
   return openChatWorkers(ctx.ctx as never, {
     threadId: chat.threadId,
     turn,
     engine: "claude-code",
-    commission,
+    roles,
     project: chat.game,
     gameDir: chat.project.dir,
     folderLabel: `AI Games/${chat.game}`,
@@ -135,8 +134,8 @@ async function seedTurn(
     steer?: string;
     /** What the person said in the message the turn answers. */
     text?: string;
-    /** The Loop commission the turn's message carries (`loop`), its roles included. */
-    commission?: Record<string, unknown>;
+    /** The roles the turn's message carries (the composer's roles panel). */
+    roles?: Record<string, unknown>;
     delegate?: (params: Record<string, unknown>) => Promise<unknown>;
     abort?: (params: Record<string, unknown>) => unknown;
   },
@@ -174,7 +173,7 @@ async function seedTurn(
     project: chat.game,
     ...(options.steer ? { steer: quietSteer(options.steer) } : {}),
     ...(options.runId ? { runId: options.runId } : {}),
-    ...(options.commission ? { loop: options.commission } : {}),
+    ...(options.roles ? { roles: options.roles } : {}),
   };
   const error = await runDelegatedTurn(host.ctx as never, turn as never).then(
     () => null,
@@ -197,7 +196,7 @@ async function headOf(dir: string): Promise<string> {
 }
 
 describe("workers in a chat", () => {
-  it("the chat's own session is offered the worker tools; a worker, a run's builder or lead, the coordinator and a local model's session are not", {
+  it("the chat's own session is offered the worker tools; a worker, a run's builder or lead and a local model's session are not", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await workerChat();
@@ -210,6 +209,9 @@ describe("workers in a chat", () => {
     await delegate({ chatTurn: { messageId: turn }, ...grant });
     assert.deepEqual(workerToolsOf(seen.at(-1)).sort(), WORKER_TOOL_NAMES, "the chat's own session");
     assert.ok(!seen.at(-1)?.liveTools?.some((tool) => tool.name === "rm_everything"), "only worker tools pass");
+    // Flipped: a brief line said the session can start workers. Genex's own worker tools load with the prompt instead.
+    const loaded = (seen.at(-1)?.liveTools ?? []).filter((tool) => WORKER_TOOL_NAMES.includes(tool.name as never));
+    assert.ok(loaded.length > 0 && loaded.every((tool) => tool.alwaysLoad === true), "they load with the prompt");
     const notOffered: Array<[string, Record<string, unknown>, string?]> = [
       ["a worker: depth is one", runWorker()],
       ["a run's builder", { cwd: chat.worktree, attribution: { runId: RUN_ID, agentId: "b1" } }],
@@ -221,16 +223,17 @@ describe("workers in a chat", () => {
           director: { runId: RUN_ID, threadId, project: game, root: project.dir, setup: null, tools: [] },
         },
       ],
-      ["the run's coordinator", { coordinator: { runId: RUN_ID, messageId: turn }, readOnly: true }],
-      ["a local model's own session", { chatTurn: { messageId: await personSays() } }, LOCAL],
     ];
     for (const [label, extra, engine] of notOffered) {
       await delegate({ ...extra, ...grant }, engine);
       assert.deepEqual(workerToolsOf(seen.at(-1)), [], label);
     }
+    // Flipped (Loop phase 3): a local model's own session orchestrates as any engine with sessions does.
+    await delegate({ chatTurn: { messageId: await personSays() }, ...grant }, LOCAL);
+    assert.deepEqual(workerToolsOf(seen.at(-1)).sort(), WORKER_TOOL_NAMES, "a local model's own session");
   });
 
-  it("the seed's chat turn hands its own session the worker tools and the brief's line; a run's turn, a local model and a turn with no message none", {
+  it("the seed's chat turn hands its own session the worker tools, with no line about them; a run's turn and a turn with no message none", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await workerChat();
@@ -239,18 +242,20 @@ describe("workers in a chat", () => {
     const own = asked(await seedTurn(chat, { steer: turn }));
     const tools = (own.workers as { tools?: Array<{ name: string }> } | undefined)?.tools ?? [];
     assert.deepEqual(tools.map((tool) => tool.name).sort(), WORKER_TOOL_NAMES, "the chat's own session");
-    assert.ok(String(own.prompt).includes(WORKERS_BRIEF_LINE), "its brief says it runs workers");
+    assert.equal(own.prompt, "build the level", "the words alone: the tools say it runs workers");
     assert.deepEqual(own.chatTurn, { messageId: turn });
     const none: Array<[string, Parameters<typeof seedTurn>[1]]> = [
       ["a run's turn", { steer: turn, runId: RUN_ID }],
-      ["a local model's turn", { steer: turn, engine: "bonsai" }],
       ["a turn with no message", {}],
     ];
     for (const [label, options] of none) {
       const params = asked(await seedTurn(chat, options));
       assert.equal(params.workers, undefined, label);
-      assert.ok(!String(params.prompt).includes(WORKERS_BRIEF_LINE), `${label}: no line`);
     }
+    // Flipped (Loop phase 3): a local model's session (Bonsai's) is handed the worker tools too.
+    const local = asked(await seedTurn(chat, { steer: await chat.personSays(), engine: "bonsai" }));
+    const localTools = (local.workers as { tools?: Array<{ name: string }> } | undefined)?.tools ?? [];
+    assert.deepEqual(localTools.map((tool) => tool.name).sort(), WORKER_TOOL_NAMES, "a local model's turn");
   });
 
   it("a chat turn that fails or is stopped still stops its running worker, and a copy's work is kept on the chat's ref", {
@@ -460,7 +465,7 @@ describe("workers in a chat", () => {
     }
   });
 
-  it("a chat turn whose message carries a Loop's roles hands them to its workers: they start on the Workers role's engine and model", {
+  it("a chat turn whose message carries roles hands them to its workers: they start on the Workers role's engine and model", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await workerChat();
@@ -472,7 +477,7 @@ describe("workers in a chat", () => {
       chatWorkerTool({ threadId: chat.threadId, turn, name, args });
     const host = await seedTurn(chat, {
       steer: turn,
-      commission: { hours: 2, roles: { builder: CODEX_MODEL, engines: { builder: CODEX } } },
+      roles: { builder: CODEX_MODEL, engines: { builder: CODEX } },
       delegate: async (params) => {
         if (params.worker) {
           workers.push(params);
@@ -496,7 +501,7 @@ describe("workers in a chat", () => {
     const chat = await workerChat();
     const { ctx } = harnessInProcess(chat);
     const turn = await chat.personSays();
-    await openPoolFor(chat, ctx, turn, { roles: { builder: CODEX_MODEL, engines: { builder: CODEX } } });
+    await openPoolFor(chat, ctx, turn, { builder: CODEX_MODEL, engines: { builder: CODEX } });
     try {
       const count = chat.seen.length;
       await chatWorkerTool({

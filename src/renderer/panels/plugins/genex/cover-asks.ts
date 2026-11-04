@@ -17,10 +17,9 @@ export type CoverKind = (typeof CoverKind)[keyof typeof CoverKind];
 
 const KINDS: readonly string[] = Object.values(CoverKind);
 
-/** An ask still waiting: which kind, the kept frame it was asked over (null: none yet), and when (ms). */
+/** An ask still waiting: which kind, and when (ms). */
 export interface CoverAsk {
   kind: CoverKind;
-  from: string | null;
   at: number;
 }
 
@@ -36,19 +35,13 @@ const NOTHING_ASKED: CoverAskMemory = { ask: null, took: {} };
 const measurable = (ms: number): boolean => Number.isFinite(ms) && ms > 0 && ms < COVER_MAKING_MS;
 
 /**
- * When the ask was answered (ms; NaN when the answer has no readable time), or null while it waits.
- * The agent's own frame or clip of the asked kind after the ask answers it, never Studio's own takes
- * or a publish's shot. A plugin older than `agentTook` cannot say who took a frame: there any new
- * kept frame of the kind answers.
+ * When the ask was answered (ms), or null while it waits. The agent's own frame or clip of the
+ * asked kind after the ask answers it, never Studio's own takes or a publish's shot.
  */
 function answeredAt(ask: CoverAsk, record: GenexCoverRecord): number | null {
   const clip = ask.kind === CoverKind.Clip;
-  if (record.agentTook) {
-    const at = Date.parse((clip ? record.agentTook.clip : record.agentTook.shot) ?? "");
-    return at > ask.at ? at : null;
-  }
-  const kept = clip ? record.clip : record.shot;
-  return kept && kept.sha256 !== ask.from ? Date.parse(kept.takenAt) : null;
+  const at = Date.parse((clip ? record.agentTook.clip : record.agentTook.shot) ?? "");
+  return at > ask.at ? at : null;
 }
 
 /**
@@ -80,10 +73,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 function readAsk(value: unknown): CoverAsk | null {
   if (!isRecord(value)) return null;
-  const { kind, from, at } = value;
+  const { kind, at } = value;
   const sound = typeof kind === "string" && KINDS.includes(kind) && typeof at === "number" && Number.isFinite(at);
-  if (!sound || !(from === null || typeof from === "string")) return null;
-  return { kind: kind as CoverKind, from, at };
+  return sound ? { kind: kind as CoverKind, at } : null;
 }
 
 function readTook(value: unknown): CoverAskMemory["took"] {

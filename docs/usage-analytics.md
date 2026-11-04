@@ -60,9 +60,16 @@ stops recording, opts out and resets the id.
 - **Failure codes**: a failure is told by a typed code, never its words. Main throws a refusal it
   names as a `CodedError` (`shared/errors.ts`); `main/ipc-handle.ts` sends its code beside the words
   (`IpcResult.code`), the preload rejects with it again, and the renderer reads it with `errorCode`
-  (`errorCodeIn` for one vocabulary). Only values of the vocabularies in `shared/error-codes.ts`
-  cross, each unique across them, so `error_toast_shown` (from `notify`'s code) says which failure
-  it was; a Node `ENOENT`, words or a path read as none. Other failures ride their own records:
+  (`errorCodeIn` for one vocabulary). Electron's context bridge passes an `Error` into the page as
+  its message alone, so the preload's calls reject with a plain record instead, and a wrapper run in
+  the page (`preload/main-world.ts`) throws it again as an `Error` with its `code` and `channel`.
+  Only values of the vocabularies in `shared/error-codes.ts` cross, each unique across them, so
+  `error_toast_shown` (from `notify`'s code, and `channel` for the call that failed) says which
+  failure it was; a Node `ENOENT`, words or a path read as none. A direct engine's chat turn that
+  threw (Ollama, a local server) ends with `turn.end`'s `failure`: a `TurnFailureCode`, the host
+  call that failed and the error's type (`loop/turn-record.ts`). Main re-checks it into the turn's
+  `harnessFailure`, and `chat_turn_ended` says it as `failure_code`, `failure_method` and
+  `error_name`. Other failures ride their own records:
   the sign-in states' `problem` (`ClaudeLoginProblem`, `CodexLoginProblem`), OpenRouter's
   `OpenRouterSignInProblem`, a model install job's `problem` and `failedPhase`, `EngineStatus.reason`,
   `chat.error`'s `failure` or `refusal`, `PlanReview.failure`, `compaction_failed`'s `failure`, and
@@ -79,9 +86,17 @@ stops recording, opts out and resets the id.
   `failed` and `declined` apart and `plugin_failed` says how a running plugin failed
   (`PluginChange.failure`, a `PluginFailure`).
   Live's status (`previewLive`) names why its page did not load (`loadFailure`, a
-  `LiveLoadFailure`: Chromium's error by kind, or the game's own build that failed or fell back to
-  the last one that worked) and why its renderer went away (`gone`); a load Electron refused
+  `LiveLoadFailure`: Chromium's error by kind, a page still loading after a minute, or the game's own
+  build that failed or fell back to the last one that worked) and why its renderer went away
+  (`gone`); a load Electron refused
   crosses IPC with its kind, and `live_game_shown` says both as `load_failure` and `crash_reason`.
+  It also says when a probe first saw this game's page (`page_seen_ms`), what the last one saw
+  (`wait_saw`) and whether main had answered the load (`main_answered`). A wait that ran out
+  without ever seeing the page ends `no_page`, not `timed_out`.
+  A Codex sign-in's `provider_sign_in_finished` says whether the CLI printed a sign-in link, its
+  window was shown and how many lines it printed (`link_seen`, `card_shown`, `output_lines`). Main's
+  log gets each sign-in step with the same counts, and a send that failed with its code, plus the
+  agents' own code when they never started.
   The harness writes `refusal` (`RunStartRefusal`) beside `run_start_blocked`'s words for
   `run_start_refused`, and a refused Resume throws a `ResumeRefusal`.
 - **Main's own facts**: a launch that may send keeps a small marker of its session in the data

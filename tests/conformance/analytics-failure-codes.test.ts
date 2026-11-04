@@ -18,7 +18,8 @@ import { createStudioBridge } from "../../src/preload/studio-bridge.ts";
 import { ClaudeLoginProblem, ClaudeLoginRefusal, type ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import { CliInstallOperation, CliInstallRefusal } from "../../src/shared/cli-install.ts";
 import { CodexLoginProblem } from "../../src/shared/codex-login.ts";
-import { type PlanReview, PlanReviewState, SendFailure, SendRefusal } from "../../src/shared/composer.ts";
+import { type BootFailureCode, SandboxProblemCode } from "../../src/shared/boot.ts";
+import { type PlanReview, PlanReviewState, SendFailure } from "../../src/shared/composer.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import {
   type EngineDescriptor,
@@ -26,7 +27,14 @@ import {
   EngineStatusCode,
   EngineStatusReason,
 } from "../../src/shared/engine-descriptor.ts";
-import { EngineFailureKind, turnFailure } from "../../src/shared/engine-requests.ts";
+import {
+  EngineFailureKind,
+  harnessTurnFailure,
+  TurnFailureCode,
+  turnFailure,
+} from "../../src/shared/engine-requests.ts";
+import { isHostMethod } from "../../src/shared/harness-api.ts";
+import { turnFailureOf } from "../../src/harness-seed/loop/turn-record.ts";
 import { studioErrorVocabularies } from "../../src/shared/error-codes.ts";
 import { CodedError, errorCode, errorCodeIn } from "../../src/shared/errors.ts";
 import { type EventData, type EventEnvelope, EventKind } from "../../src/shared/event-log.ts";
@@ -44,7 +52,7 @@ import { installProblem } from "../../src/substrate/bonsai/runtime.ts";
 import { EngineError } from "../../src/substrate/engines/types.ts";
 import { createChatMemory } from "../../src/renderer/analytics/chat-memory.ts";
 import { chatObservers, retryAfterBucket, type SendEvent } from "../../src/renderer/analytics/chat-observe.ts";
-import { RetryAfterBucket, SendFailStage, TurnStatus } from "../../src/renderer/analytics/chat-vocabulary.ts";
+import { RetryAfterBucket, TurnStatus } from "../../src/renderer/analytics/chat-vocabulary.ts";
 import { ChatEvent } from "../../src/renderer/analytics/events/chat.ts";
 import { errorToastsShown } from "../../src/renderer/analytics/events/launch.ts";
 import type { EventProperties } from "../../src/renderer/analytics/properties.ts";
@@ -70,6 +78,9 @@ import {
 } from "../../src/renderer/analytics/welcome-vocabulary.ts";
 import { createToastsStore, notifyProblem, ToastTone } from "../../src/renderer/state/toasts.ts";
 import { assertClean, HOSTILE, HOSTILE_THREAD, HOSTILE_THROWS } from "../helpers/failure-codes.ts";
+import { exposedInMainWorld, installedInMainWorld } from "../helpers/context-bridge.ts";
+import { crossableCalls } from "../../src/preload/main-world.ts";
+import { failedChannel } from "../../src/shared/ipc-channels.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const T0 = Date.parse("2026-10-27T10:00:00.000Z");
@@ -138,23 +149,63 @@ describe("phase 2 analytics: a failure's code crosses IPC", () => {
     }
   });
 
-  it("an error toast keeps its failure's code, and error_toast_shown counts it by code and screen", () => {
+  it("an error toast keeps its failure's code and call, and error_toast_shown counts it by both and screen", () => {
     const toasts = createToastsStore(() => undefined);
     const before = toasts.getState();
     notifyProblem(toasts.notify)(new CodedError(SendFailure.HarnessNotRunning, "harness is not running"));
     toasts.notify("Saved", ToastTone.Ok);
     notifyProblem(toasts.notify)(new Error("ENOENT: /Users/alice/Secret Game"));
+    notifyProblem(toasts.notify)(Object.assign(new Error("failed"), { channel: "studio:reveal-project" }));
+    notifyProblem(toasts.notify)(Object.assign(new Error("failed"), { channel: "/Users/alice/Secret Game" }));
     assert.equal(toasts.getState().items[0]?.code, SendFailure.HarnessNotRunning);
     assert.deepEqual(errorToastsShown(before, toasts.getState(), "/game/chat"), [
-      { code: SendFailure.HarnessNotRunning, screen: "/game/chat" },
-      { code: null, screen: "/game/chat" },
+      { code: SendFailure.HarnessNotRunning, channel: null, screen: "/game/chat" },
+      { code: null, channel: null, screen: "/game/chat" },
+      { code: null, channel: "studio:reveal-project", screen: "/game/chat" },
+      { code: null, channel: null, screen: "/game/chat" },
     ]);
-    // A toast whose code was never one of the app's (a later caller passing words) still counts, with none.
+    // A toast whose code or call was never one of the app's (a later caller passing words) still counts, with none.
     const forged = JSON.parse(
-      '{"items":[{"id":9,"text":"x","tone":"err","code":"/Users/alice/Secret Game"}],"lastId":9}',
+      '{"items":[{"id":9,"text":"x","tone":"err","code":"/Users/alice/Secret Game","channel":"C:\\\\x"}],"lastId":9}',
     );
     const shown = errorToastsShown({ lastId: 8 }, forged, "/home");
-    assert.deepEqual(shown, [{ code: null, screen: "/home" }]);
+    assert.deepEqual(shown, [{ code: null, channel: null, screen: "/home" }]);
+  });
+
+  it("a failed call keeps its code and channel through the context bridge into the page", async () => {
+    const answers: unknown[] = [];
+    const bridge = createStudioBridge({
+      invoke: async () => answers.shift(),
+      on: () => undefined,
+      off: () => undefined,
+    });
+    // Characterization: put in the page as it was (`exposeInMainWorld`), the code and channel were lost.
+    answers.push({ ok: false, error: "busy", code: CliInstallRefusal.Busy });
+    await assert.rejects(exposedInMainWorld(bridge).cliInstall(EngineId.Codex), (err: unknown) => {
+      assert.equal(errorCode(err), null);
+      assert.equal(failedChannel(err), null);
+      return true;
+    });
+    const page = installedInMainWorld(crossableCalls(bridge));
+    answers.push({ ok: false, error: "busy", code: CliInstallRefusal.Busy });
+    await assert.rejects(page.cliInstall(EngineId.Codex), (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.equal(err.message, "busy");
+      assert.equal(errorCode(err), CliInstallRefusal.Busy);
+      assert.equal(failedChannel(err), "studio:cli-install.start");
+      return true;
+    });
+    // An uncoded failure still names its call; an answer and a call the preload answers itself pass unchanged.
+    answers.push({ ok: false, error: "ENOENT: /Users/alice/Secret Game" });
+    await assert.rejects(page.cliInstall(EngineId.Codex), (err: unknown) => {
+      assert.equal(errorCode(err), null);
+      assert.equal(failedChannel(err), "studio:cli-install.start");
+      return true;
+    });
+    answers.push({ ok: true, value: true });
+    assert.equal(await page.cliInstall(EngineId.Codex), true);
+    assert.deepEqual(page.systemLanguages(), []);
+    assert.ok(Object.isFrozen(page), "the page cannot swap the bridge's calls");
   });
 });
 
@@ -583,20 +634,59 @@ describe("phase 2 analytics: a chat says how it failed", () => {
       [SendFailure.Rewinding, SendFailure.Other],
     );
 
-    // The renderer: a refusal main announces is counted; a failure's own event is counted where it was sent.
+    // The renderer: a failure's own event is counted where it was sent, never again from main's error.
     const heard = hearing();
-    heard.ui({
-      type: UiEvent.ChatError,
-      payload: { threadId: THREAD, message: HOSTILE[7], refusal: SendRefusal.LoopOutdated },
-    });
     heard.ui({
       type: UiEvent.ChatError,
       payload: { threadId: THREAD, message: HOSTILE[7], failure: SendFailure.Other },
     });
-    heard.ui(JSON.parse(JSON.stringify({ type: UiEvent.ChatError, payload: { message: "x", refusal: HOSTILE[0] } })));
-    assert.deepEqual(heard.of(ChatEvent.MessageSendFailed), [
-      { stage: SendFailStage.Refused, code: SendRefusal.LoopOutdated },
+    assert.deepEqual(heard.of(ChatEvent.MessageSendFailed), []);
+  });
+
+  // On a Windows PC whose sandbox was never set up the agents never start, and every send said only
+  // "harness is not running": the chat now says what to do, and the log why, in codes.
+  it("a send the agents never got says why in the chat and the log, never the message's words", async () => {
+    const { registerThreadsIpc } = await import("../../src/main/ipc/threads.ts");
+    const pushed: UiEvent[] = [];
+    const appended: string[] = [];
+    const logged: string[] = [];
+    let agents: BootFailureCode | null = SandboxProblemCode.NotProvisioned;
+    const listeners = new Map<string, (event: IpcSender, payload: unknown) => Promise<IpcResult>>();
+    const handle = createIpcHandle(
+      { handle: (channel, listener) => listeners.set(channel, listener) },
+      { fixture: false, isStudioUi: () => true },
+    );
+    const core = {
+      mainThread: "thread-main",
+      sendUserMessage: async () => {
+        throw new CodedError(SendFailure.HarnessNotRunning, "harness is not running");
+      },
+    };
+    const deps = {
+      core,
+      pushUiEvent: (event: UiEvent) => pushed.push(event),
+      appendErrorDurably: async (_thread: string | undefined, message: string) => void appended.push(message),
+      smokeReads: null,
+      agentsProblem: () => agents,
+      log: (line: string) => logged.push(line),
+    } as unknown as Parameters<typeof registerThreadsIpc>[1];
+    registerThreadsIpc(handle, deps);
+    const send = listeners.get("studio:send");
+    assert.ok(send);
+    const sender = { sender: "studio", senderFrame: "main-frame" };
+    const refused = await send(sender, { text: "SECRET-Alice-Plan", thread: THREAD });
+    assert.equal(refused.ok === false && refused.code, SendFailure.HarnessNotRunning);
+    assert.match(appended[0] ?? "", /agents didn’t start.*Try again/);
+    assert.deepEqual(logged, [
+      "a message could not be sent (harness_not_running): the agents did not start (not-provisioned)",
     ]);
+
+    agents = null;
+    await send(sender, { text: "SECRET-Alice-Plan", thread: THREAD });
+    assert.match(appended[1] ?? "", /harness is not running/, "agents still starting: main's own words");
+    assert.equal(logged[1], "a message could not be sent (harness_not_running)");
+    assert.ok(!logged.some((line) => line.includes("SECRET")));
+    assert.equal(pushed.length, 2);
   });
 
   it("a delegated turn's failure and limit reach its end, its message and its event", async () => {
@@ -659,6 +749,72 @@ describe("phase 2 analytics: a chat says how it failed", () => {
     assert.equal(clean.failure_kind, undefined);
     assert.equal(clean.limit_kind, undefined);
     for (const { event, properties } of [...heard.sent, ...forged.sent]) assertClean(event, properties);
+  });
+
+  it("a direct engine's turn that threw says why: its code, the host call and the error's type, never its words", () => {
+    // The harness's side: what it reads off what was thrown (`turn.end`'s `failure`).
+    const hostCall = Object.assign(new Error("ENOENT: /Users/alice/Secret Game"), {
+      name: "SubstrateError",
+      hostMethod: "plugins.tools",
+      code: "ENOENT",
+    });
+    const deadline = Object.assign(new Error("took too long"), {
+      name: "RpcDeadline",
+      hostMethod: "game.tree",
+      code: "rpc_deadline",
+    });
+    const engine = Object.assign(new Error("fetch failed"), { hostMethod: "engine.complete", kind: "other" });
+    assert.deepEqual(turnFailureOf(hostCall), {
+      code: TurnFailureCode.HostCall,
+      method: "plugins.tools",
+      name: "SubstrateError",
+    });
+    assert.deepEqual(turnFailureOf(deadline), {
+      code: TurnFailureCode.HostDeadline,
+      method: "game.tree",
+      name: "RpcDeadline",
+    });
+    assert.equal(turnFailureOf(engine).code, TurnFailureCode.Engine);
+    assert.deepEqual(turnFailureOf(new TypeError("x is undefined")), {
+      code: TurnFailureCode.Harness,
+      name: "TypeError",
+    });
+    assert.deepEqual(turnFailureOf("busy"), { code: TurnFailureCode.Harness });
+
+    // The app's side: what main keeps on the record, then what chat_turn_ended carries.
+    assert.deepEqual(harnessTurnFailure(turnFailureOf(hostCall), isHostMethod), turnFailureOf(hostCall));
+    const heard = hearing();
+    heard.log(record({ type: EventKind.TurnStarted, metadata: { engine: EngineId.Ollama } }, T0));
+    heard.log(
+      record(
+        {
+          type: EventKind.TurnEnded,
+          status: TurnStatus.Error,
+          metadata: { harnessFailure: { code: TurnFailureCode.ContextTooSmall, name: "Error" } },
+        },
+        T0 + 150,
+      ),
+    );
+    const [turn] = heard.of(ChatEvent.ChatTurnEnded);
+    assert.equal(turn?.failure_code, TurnFailureCode.ContextTooSmall);
+    assert.equal(turn?.error_name, "Error");
+    assert.equal(turn?.failure_kind, undefined, "the model was never asked");
+
+    // Hostile records: words, paths or a Node code where a code, a method or a type goes.
+    for (const hostile of HOSTILE) {
+      const forged = { code: TurnFailureCode.HostCall, method: hostile, name: hostile };
+      assert.deepEqual(harnessTurnFailure(forged, isHostMethod), { code: TurnFailureCode.HostCall, name: "other" });
+      assert.equal(harnessTurnFailure({ code: hostile }, isHostMethod), null);
+      const one = hearing();
+      one.log(record({ type: EventKind.TurnStarted, metadata: { engine: EngineId.Ollama } }, T0));
+      one.log(
+        record({ type: EventKind.TurnEnded, status: TurnStatus.Error, metadata: { harnessFailure: forged } }, T0),
+      );
+      const [clean] = one.of(ChatEvent.ChatTurnEnded);
+      assert.ok(clean);
+      assert.equal(clean.failure_method, undefined, hostile);
+      assertClean("chat_turn_ended", clean);
+    }
   });
 
   it("a wait is bucketed, never sent as it was said", () => {

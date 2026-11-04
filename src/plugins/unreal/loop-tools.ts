@@ -169,6 +169,11 @@ export const TOOLSET_OF = {
   [LoopTool.PlayerState]: HELPER_TOOLSET,
   [LoopTool.Mouse]: HELPER_TOOLSET,
   [LoopTool.Pause]: HELPER_TOOLSET,
+  [LoopTool.WalkTo]: HELPER_TOOLSET,
+  [LoopTool.LookAt]: HELPER_TOOLSET,
+  [LoopTool.Pilot]: HELPER_TOOLSET,
+  [LoopTool.LightPlay]: HELPER_TOOLSET,
+  [LoopTool.PilotStep]: HELPER_TOOLSET,
   [LoopTool.GetProperties]: OBJECT_TOOLSET,
   [LoopTool.SetProperties]: OBJECT_TOOLSET,
   [LoopEditorTool.RollbackPart]: LOOP_TOOLSET,
@@ -347,6 +352,8 @@ export type LoopToolsDeps = {
   project(storage: string, game: string): Promise<string | undefined>;
   /** Where Xcode stands against the engine in `engineDir` (C++ compiles only when Ready on a Mac), and its app. */
   xcode(engineDir: string | undefined): Promise<Pick<XcodeStatus, "state"> & Partial<Pick<XcodeStatus, "app">>>;
+  /** Windows: `LINUX_MULTIARCH_ROOT` as Epic's Linux toolchain installer set it, for a Linux package. */
+  linuxToolchain?(): Promise<string | undefined>;
   /** Compiles a game copy's editor target; UnrealBuildTool's own unless a test stands in. */
   compile?(options: CompileOptions): Promise<CompileResult>;
   /** Writes a Blueprint project's C++ module; `addCppModule` unless a test stands in. */
@@ -620,6 +627,12 @@ async function compileProblems(
   return result.errors.map((e) => problem(fileOf(e.file), e.message, e.line));
 }
 
+/** Whether a shot the editor writes is there and has bytes: Unreal makes the file before it fills it. */
+export async function shotFileReady(file: string): Promise<boolean> {
+  const info = await stat(file).catch(() => null);
+  return info?.isFile() === true && info.size > 0;
+}
+
 /** The one editor queue the Loop's tools share, made on first use for the plugin's storage. */
 /** What the editor queue and the computer's play tools reach the game's editor and the clock through. */
 function queueDepsFor(deps: LoopToolsDeps, storage: string): QueueDeps {
@@ -633,7 +646,7 @@ function queueDepsFor(deps: LoopToolsDeps, storage: string): QueueDeps {
     landCpp: landPartCpp,
     now: deps.now,
     sleep: deps.sleep,
-    fileReady: async (file) => (await stat(file).catch(() => null))?.isFile() === true,
+    fileReady: shotFileReady,
     readShot: async (file) => {
       const info = await stat(file);
       if (info.size > MAX_SHOT_BYTES) throw new Error(`${file} is too large`);

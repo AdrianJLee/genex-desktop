@@ -51,8 +51,12 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 ## The dashboard
 
-- Games, Tools and Assets, each with tabs and search; Recent once something was played; Top
-  creators (the last 30 days) above Games' tabs. The promo card shows until the first sign-in or
+- Games, Tools and Assets, each with tabs and search; Recent once something was played (opened in
+  the viewer, a native-only game's page shown however it was reached, or a native app launched). A
+  Recent row takes the newest cover any card or page shows for its game; one still without a cover,
+  or whose cover no longer loads, reads its game's page once a window. A game with no cover shows a
+  still wire floor (`NoCover.tsx`) on its row and card. Top creators (the last 30 days) above
+  Games' tabs. The promo card shows until the first sign-in or
   its ×.
 - Assets are square tiles under two switchers: kind (All · 3D · Images · Sounds · Videos, a kind
   read from the whole catalog) and Everyone · Mine (the account's library, Saved/Shared tags, signed
@@ -213,6 +217,8 @@ is.
   trusts (`NATIVE_BUILD_HOSTS`: `cdn.genex.technology` by exact name, so a game's own
   `<slug>.genex.technology` site never hands out an app), with no port or credentials, never
   redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
+  A Windows app Genex built from an Unreal game's project on its own computers (Publish's Build on
+  Genex, [plugins](plugins.md)) comes as any other row.
 - The build a computer installs is its platform's for its own processor, else a universal Mac app,
   else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
   (`buildFor`). Games launch on the Mac, on Linux and on Windows. Play names the computer "this Mac" on a Mac and "this
@@ -222,6 +228,18 @@ is.
   needed. A card not installed shows its systems' marks on one plate. A game with no web
   build and no build for this computer is left out of the tabs and search; its maker's profile
   still lists it.
+- A native game's page (`play/GamePage.tsx`, its top `play/GameHero.tsx`, the rules in
+  `play/game-hero.ts`) opens on its art under the window's top edge, with the title, maker,
+  counts, the primary block and Like · Comments · Share over it: the cover clip over the cover
+  (it plays by the clip rules above, with the page bar's pause), the cover alone (it settles in
+  once and has no pause), or, with nothing, the no-cover floor on a shorter top in the theme's
+  colours. Two pictures or more (the cover, then the world item's `shots`) run as a slideshow
+  with thumbnails and a Shots section; Reduce Motion or the pause holds it. A picture that fails to
+  load leaves the run, so a broken cover falls back to the floor. Below: Runs on, Size (of the
+  build for this computer), Players and Made with, About when there is a description, and the
+  Store. Share copies the page's link and turns into a check; a ⋯ after it holds the card's menu (Show in Finder and Remove from this Mac for an installed game, the owner's items). On Windows in a dark theme the
+  window buttons have no box over the art (`setPictureUnderControls`); a light theme there and
+  Linux keep the bar in its own colour above it.
 - Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as
   `UiEvent.PlayInstalls`): one install at a time, the rest queued; a free-space check (download,
   unpacked game and 1 GiB); the archive streamed to `installed-games/.downloads/` (resumed by
@@ -263,7 +281,11 @@ is.
   in a job killed with the host (also with no other desktops, logging off, clipboard reads or system
   settings); the host ends it when Genex's process or the host's stdin ends, says when its window
   is up (Genex counts it as on screen then), brings that window forward once, and passes Quit on as
-  `WM_CLOSE`. A game opens full screen with its engine's own argument
+  `WM_CLOSE`. An Unreal game whose binary carries Microsoft's Visual C++ runtime beside it (Build on
+  Genex ships it there) starts past Unreal's launcher: the launcher reads the runtime from the
+  registry and would ask to install one the game already has, so Play starts the binary its
+  resources name, inside the app, with their arguments (`unreal-launcher.ts`); any other app
+  starts its launcher, which offers its installer. A game opens full screen with its engine's own argument
   (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
   engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
   Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;
@@ -315,7 +337,9 @@ is.
   `native-games` fixture builds their Mac apps on this Mac (Xcode, `dev/fixture-native-app.ts`),
   serves the archives from the profile at a few MB a second, and starts with Frigate installed,
   Puck Rush one version behind, and a Mac build in the library game's `Builds/Mac`, so its Publish
-  dialog lists platforms ([Genex publish](plugins.md#first-party-privileges)).
+  dialog lists platforms ([Genex publish](plugins.md#first-party-privileges)). Their pages show
+  each top: Dust Runners and Frigate a slideshow, Puck Rush its cover alone (as genex.games sends
+  every page today: no shots), Iron Tide nothing at all (no cover, shots or description).
 - `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
   description, screenshots and when it changed.
 

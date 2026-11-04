@@ -10,12 +10,12 @@ import { CustomEvent, customEventData, DELEGATED_PREFIX } from "../../shared/cus
 import { EventKind, type EventData } from "../../shared/event-log.ts";
 import { GrantKind, PLAN_TOOL, RuleScope } from "../../shared/permissions.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { GameEngine } from "../../shared/game-engine.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { ChatCheckpoints, CheckpointPhase } from "../chat-checkpoints.ts";
 import { FIXTURE_MODEL, FixtureName, fixtureRun, SHOT } from "./fixture-kit.ts";
 import { ExecutionStatus } from "../../shared/run-state.ts";
-import { MINUTE_MS } from "../../shared/duration.ts";
 
 /** Why a chat fixture cannot be seeded. */
 const MESSAGE = {
@@ -27,8 +27,6 @@ const CHAT_MESSAGES = 600;
 const TOOL_READS = 55;
 const FAILED_READ = 53;
 const LAST_READ = TOOL_READS - 1;
-/** The time limit the long chat's builds were given, so Mode shows a build's own limit. */
-const FIXTURE_BUILD_LIMIT_MS = 30 * MINUTE_MS;
 
 /** A long game chat, and a build under way in it that made a cover and names files in its reply. */
 export async function seedChatHistory(core: StudioCore, project: { name: string; dir: string }, threadId: string) {
@@ -53,7 +51,6 @@ export async function seedChatHistory(core: StudioCore, project: { name: string;
   );
   await append(CustomEvent.RunStarted, {
     goal: "A bridge and a village at dusk",
-    budgets: { wallClockMs: FIXTURE_BUILD_LIMIT_MS },
     engine: EngineId.Ollama,
     model: FIXTURE_MODEL,
   });
@@ -266,7 +263,6 @@ export async function activateLiveChat(
     [
       run(CustomEvent.RunStarted, {
         goal: "A bridge and a village at dusk",
-        budgets: { wallClockMs: FIXTURE_BUILD_LIMIT_MS },
         engine: EngineId.Ollama,
         model: FIXTURE_MODEL,
       }),
@@ -345,7 +341,9 @@ async function askToUseTexture(core: StudioCore, fixture: { threadId: string; pr
 
 /**
  * Chats a build's feedback leaves: a delivered result, two stopped builds, a failed plan, a failed
- * build, and a reply that hands the user a command its sandbox refused.
+ * build, and a reply that hands the user a command its sandbox refused. An engine plugin is on, so
+ * a new game's first turn is handed the question card (the engine question), which the fixture
+ * engine answers with a question of its own.
  */
 export async function seedChatFeedback(core: StudioCore, project: string, threadId: string): Promise<void> {
   await seedDeliveredResult(core);
@@ -353,6 +351,7 @@ export async function seedChatFeedback(core: StudioCore, project: string, thread
   await seedFailedPlan(core);
   await seedFailedBuild(core, project, threadId);
   await seedCommandOffer(core);
+  await core.plugins.setEnabled(GameEngine.Godot, true);
 }
 
 /** A reply that needs ffmpeg the sandbox could not install, offered as a command the user can run. */
@@ -502,7 +501,6 @@ async function seedFailedPlan(core: StudioCore): Promise<void> {
       engine: EngineId.ClaudeCode,
       model: FIXTURE_MODEL,
       reviewPlan: true,
-      autopilot: { hours: 1 },
     },
   };
   await core.store.updateThread(recoveryThread, {

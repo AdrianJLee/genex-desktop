@@ -7,7 +7,9 @@ import unreal
 import toolset_registry
 
 from genex_loop.errors import short_message
-from genex_play import motion, play, route
+from genex_play import detect, motion, play, route, walk
+from genex_play import light, ui
+from genex_play import pilot as pilot_run
 
 
 def _answer(step, *args) -> str:
@@ -18,13 +20,28 @@ def _answer(step, *args) -> str:
         return json.dumps({'error': short_message(error)})
 
 
+def _state_and_findings(take_findings: bool = False) -> dict:
+    """The player's state with what the play's detectors told since the computer last took them (taken
+    when take_findings, else only peeked); the findings ride along even when the state can't be read
+    (the pawn they describe may be gone)."""
+    detect.ensure()
+    try:
+        state = motion.player_state()
+    except Exception as error:  # noqa: BLE001 - no pawn, a position that is not a number, an ended play
+        state = {'error': short_message(error)}
+    state['findings'] = detect.take() if take_findings else detect.peek()
+    return state
+
+
 @unreal.uclass()
 class GenexPlayTools(unreal.ToolsetDefinition):
     """Plays the game like a player during a play session (PIE): holds input actions or keys
     for a time, lets the pawn settle, drives it along the game's route, and reads where the
     player's pawn is. Every time here is the play session's game time: a slow editor plays the
     same amount of game, only more slowly (a wait still ends after 4x its seconds plus 10 s of
-    wall clock when the game stalls)."""
+    wall clock when the game stalls). They suit a quick look (one key, a value); minutes of real
+    play (a bug hunt, a fight, a goal) go better through a pilot with Genex's computer tool, which
+    plays every frame (the game folder's pilots/explore.py is Genex's starter)."""
 
     @toolset_registry.tool_call
     @staticmethod
@@ -107,17 +124,59 @@ class GenexPlayTools(unreal.ToolsetDefinition):
 
     @toolset_registry.tool_call
     @staticmethod
-    def player_state() -> str:
-        """Reads the player's pawn in the running play session, the game clock and the latest settle and drive.
+    def player_state(take_findings: bool = False) -> str:
+        """Reads the player's pawn in the running play session, the game clock, the latest settle and drive,
+        and what the play's bug detectors noticed since Genex's computer last took them.
+
+        Args:
+            take_findings: True only for Genex's computer, which hands the findings to its agent and
+                clears them; every other read sees them and leaves them.
 
         Returns:
             JSON {pawn, location, rotation, speedKmh, held, gameSeconds, fps, routeProgressM,
             settle: {state: watching|settled|unsettled, gameSeconds, speedCmS} or null,
-            drive: {state: driving|done, gameSeconds, progressM, route} or null}, or {error}.
-            fps is the editor's frames per second lately; routeProgressM is how far the latest
-            drive got along the route (m), null without a route.
+            drive: {state: driving|done, gameSeconds, progressM, route} or null,
+            findings: [{code: nan|player-gone|long-fall|hitch|teleport, detail, gameSeconds, count}]},
+            or {error, findings}. fps is the editor's frames per second lately; routeProgressM is how
+            far the latest drive got along the route (m), null without a route. A kind of finding is
+            told on its 1st, 10th, 100th and 1000th time.
         """
-        return _answer(motion.player_state)
+        return _answer(_state_and_findings, take_findings)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def walk_to(target: str, within: float = 1.2, seconds: float = 20.0) -> str:
+        """Walks the player's pawn to a target as a player would, in game time: along the level's nav
+        mesh when it has one, else straight, steered by the game's move action (W/A/S/D without one);
+        it never walks off a drop, and when blocked it jumps, side-steps and plans again before saying
+        it is stuck. Returns at once; read player_state's walk until it is no longer walking.
+
+        Args:
+            target: An actor's label or name (or part of it: the closest match wins), or "x,y,z" in cm.
+            within: How near to stop, in meters.
+            seconds: The most game seconds the walk may take.
+
+        Returns:
+            JSON {walking, target, way: navmesh|direct, waypoints, distanceM}, or {error} naming the
+            closest actor labels when nothing matches.
+        """
+        return _answer(walk.walk_to, target, within, seconds)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def look_at(target: str, tolerance: float = 2.5, seconds: float = 6.0) -> str:
+        """Turns the player's view onto a target with the mouse, as a player would, measuring each frame
+        how far the mouse turned it. Returns at once; read player_state's look until it is no longer looking.
+
+        Args:
+            target: An actor's label or name (or part of it), or "x,y,z" in cm.
+            tolerance: How near the view must point, in degrees.
+            seconds: The most game seconds the turn may take.
+
+        Returns:
+            JSON {looking, target}, or {error}.
+        """
+        return _answer(walk.look_at, target, tolerance, seconds)
 
     @toolset_registry.tool_call
     @staticmethod
@@ -166,3 +225,80 @@ class GenexPlayTools(unreal.ToolsetDefinition):
             a play session.
         """
         return _answer(route.probe_route)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def pilot(file: str, seconds: float = 60.0, decide: bool = False) -> str:
+        """Starts a pilot: a file of the project (Pilots/<goal>.py, written against genex_play.pilot_kit)
+        that plays toward one goal by itself, every frame in game time, choosing among the moves it names.
+        A pilot already running stops first.
+
+        Returns at once; call pilot_step until its phase is over.
+
+        Args:
+            file: The pilot's .py file, relative to the project folder.
+            seconds: The most game seconds the pilot may play, 1 to 300.
+            decide: Put each decision out as an ask for a decider (the host's fast decision model)
+                to answer through pilot_step; False picks every move by the pilot's own order.
+
+        Returns:
+            JSON {piloting, pilot, seconds, decide, stages}, or {error} with the file's line.
+        """
+        return _answer(pilot_run.start, file, seconds, decide)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def pilot_step(answer: str = '', stop: bool = False) -> str:
+        """One step of the running pilot: hands it the decider's answer to its ask, or stops it, and
+        says how it stands.
+
+        Args:
+            answer: JSON {id, probabilities: {move: p}, answers: {question: answer}, ms}, for the
+                ask with that id; empty for none.
+            stop: End the run now.
+
+        Returns:
+            JSON {phase: piloting, ask (the decision it waits on, or null), applied, running, stage,
+            byOrder, gameSeconds}, or {phase: over, report: {outcome, note, evidence, gameSeconds,
+            stages, moves, asked, answered, byOrder, facts, timeline, errors}}.
+        """
+        return _answer(pilot_run.step, answer, stop)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def light_play(on: bool = True) -> str:
+        """Lowers the rendering while an agent plays (half resolution, lower shadows, lighting, reflections,
+        effects, foliage and post-processing), or puts back exactly what it was.
+
+        Args:
+            on: True to lower it for the play, False to put the kept values back.
+
+        Returns:
+            JSON {light, kept} or {light, restored}.
+        """
+        return _answer(light.light_play, on)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def ui_widgets() -> str:
+        """Lists the game's own on-screen interface during play: every visible widget that shows text or is
+        a button, with its kind and its box on screen in the play shot's pixels (1280x720).
+
+        Returns:
+            JSON {view, widgets: [{name, kind, text, button, box: [x, y, w, h]}]}, or {error}.
+        """
+        return _answer(ui.widgets)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def ui_press(button: str) -> str:
+        """Presses a visible, enabled button of the game's interface by its text or name, as clicking it
+        does (its own click event; hit-testing skipped).
+
+        Args:
+            button: The button's text or name, or part of it.
+
+        Returns:
+            JSON {pressed, name}, or {error} naming the buttons on screen.
+        """
+        return _answer(ui.press, button)

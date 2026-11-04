@@ -15,16 +15,16 @@ Tabs switch [accounts](../connections-and-context.md#several-accounts-per-subscr
 Unavailable picks block sends; without models, Connect AI model replaces the pill. A
 listing proves no access.
 
-Each chat keeps its model, effort and Loop; fresh games inherit the last picks. One effort, on the
+Each chat keeps its model and effort; fresh games inherit the last picks. One effort, on the
 main agent's levels, serves every role (Workers and Reviewers at most high).
-Workers and Reviewers run only in Loop,
-surviving a main-agent change. Each Ollama job takes its own model; Reviewers must see images and
+The Workers pick runs the chat's workers too; Reviewers
+run only in a Loop. Both survive a main-agent change; dropped models fall back. Each Ollama job takes its own model; Reviewers must see images and
 check a Loop's finish.
 
 Local Models (Bonsai/Ollama) downloads and deletes. Metered
 [OpenRouter, OpenCode](../connections-and-context.md#openrouter-and-opencode),
-[Grok Build](../connections-and-context.md#grok-build) and [Cursor](../connections-and-context.md#cursor)
-are never auto-chosen unless Free and alone; OpenRouter, OpenCode and Cursor show three. Local server connects your LM
+[Grok Build](../connections-and-context.md#grok-build), [Cursor](../connections-and-context.md#cursor) and
+[Genex](../connections-and-context.md#build-with-genex-credits) are never auto-chosen unless Free and alone; OpenRouter, OpenCode and Cursor show three. Local server connects your LM
 Studio, llama.cpp or TabbyAPI ([details](../connections-and-context.md#your-own-model-server)).
 
 ## What the model knows
@@ -35,8 +35,8 @@ offers Compact now (or `/compact`; Claude Code, Codex and Grok use
 included, compacts automatically. Then plan limits
 ([details](../connections-and-context.md#plan-limits)).
 
-Ollama's context is a loaded model's report, else an unknown estimate. Tools and images
-need reported capability; unsupported requests fail before inference.
+Ollama's context is a loaded model's report, else an estimate that refuses nothing. Tools and
+images need reported capability; unsupported requests fail before inference.
 
 Game files, instructions, reference images and enabled tools contribute through channels
 ([tool setup](assets-plugins.md)). Credentials stay in protected storage, never in messages
@@ -44,13 +44,13 @@ or logs.
 
 ## Permissions
 
-Every chat's pill after Mode picks **Auto** (Recommended; stops dangerous actions),
-**Manual**, **Accept edits**, **Plan** or **Bypass permissions** (confirmed; Rewind restores
-only the game); modes the engine cannot honour are greyed with why
+Every chat's permissions pill picks **Auto** (Recommended; stops dangerous actions),
+**Manual**, **Accept edits**, **Plan** or **Bypass permissions** (confirmed; Rewind
+restores only the game); modes an engine cannot honour are greyed
 ([by engine](../tool-permissions.md#other-engines)). Chats keep their mode; new ones inherit the
-last Auto, Manual or Accept edits. Claude's chat and build lead work anywhere on your Mac with
-your access, workers in your mode but never in sign-ins, Genex's data or other games; a Loop
-worker's question lapses after five minutes ([details](../tool-permissions.md)).
+last Auto, Manual or Accept edits. Chats and leads work anywhere on your Mac with your access,
+workers with the lead's tools in your mode but never in sign-ins, Genex's data or other games; a
+question waits for your answer ([details](../tool-permissions.md)).
 
 Read denials cover sensitive system/account locations; Codex's are advisory, not whole-disk
 isolation.
@@ -59,6 +59,6 @@ isolation.
 
 Start at [ModelsSection](../../src/renderer/panels/ModelsSection.tsx) and
 [PromptBar](../../src/renderer/ui/PromptBar.tsx); see [Local models](../local-models.md),
-[continuation](../conversation-coordinator.md),
+[continuation](../conversation-lifecycle.md),
 [composer design](../agent/design.md#prompt-composer) and
 [judge evaluation](../judge-evaluation.md).

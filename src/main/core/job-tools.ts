@@ -27,7 +27,7 @@ import { PermissionDecision } from "../../shared/permissions.ts";
 import { neverTouchFence, neverTouchScreen } from "../../substrate/engines/claude-permissions.ts";
 import { neverTouchReason, SHELL_TOOL } from "../../substrate/engines/never-touch.ts";
 import type { PermissionReply } from "../../substrate/engines/types.ts";
-import { JobRefusal, JOB_DEFAULT_HOURS } from "../../substrate/jobs.ts";
+import { JobRefusal } from "../../substrate/jobs.ts";
 import { isInside } from "../../substrate/paths.ts";
 import type { StudioCore } from "../studio-core.ts";
 import type { CoreInternals } from "./internals.ts";
@@ -210,10 +210,10 @@ async function screenCommand(command: string, reach: JobReach, cwd: string): Pro
   }
 }
 
-/** A job's time limit in whole hours, as its record has it. */
-function hoursOf(record: JobRecord): number {
-  const ms = Date.parse(record.deadlineAt) - Date.parse(record.startedAt);
-  return Number.isFinite(ms) ? Math.round((ms / HOUR_MS) * 100) / 100 : JOB_DEFAULT_HOURS;
+/** A job's time limit in hours, as its record has it; null for a job with none. */
+function hoursOf(record: JobRecord): number | null {
+  const ms = Date.parse(record.deadlineAt ?? "") - Date.parse(record.startedAt);
+  return Number.isFinite(ms) ? Math.round((ms / HOUR_MS) * 100) / 100 : null;
 }
 
 /** Whether two scopes are the same chat, run or turn. */
@@ -295,14 +295,16 @@ export interface JobNews {
 }
 
 /**
- * The chat's own session's news of its own jobs: those that ended since it was last told, and
- * those still running. A worker's and a lead's jobs are their own sessions' to follow.
+ * The chat's own session's news of its own jobs: those that ended since it was last told. Those
+ * still running are `job_list`'s to say. A worker's and a lead's jobs are their own sessions' to follow.
  */
 export async function jobNews(core: StudioCore, owner: Pick<JobOwner, "project" | "chatThreadId">): Promise<JobNews> {
-  const jobs = (await core.jobs.list(owner.project)).filter(
-    (record) => record.owner.chatThreadId === owner.chatThreadId && record.owner.role === JobRole.Chat,
+  const ended = (await core.jobs.list(owner.project)).filter(
+    (record) =>
+      record.owner.chatThreadId === owner.chatThreadId &&
+      record.owner.role === JobRole.Chat &&
+      isEndedJob(record) &&
+      record.toldChat !== true,
   );
-  const ended = jobs.filter((record) => isEndedJob(record) && record.toldChat !== true);
-  const running = jobs.filter((record) => !isEndedJob(record));
-  return { notice: jobNotice(ended, running), told: ended.map((record) => record.id) };
+  return { notice: jobNotice(ended), told: ended.map((record) => record.id) };
 }

@@ -9,9 +9,7 @@ import assert from "node:assert/strict";
 import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
-import { ownKindRules, pendingKindRule } from "../../src/harness-seed/loop/project-prompts.ts";
-import { engineChoiceRule } from "../../src/harness-seed/loop/unreal-prompts.ts";
+import { pendingKindRule } from "../../src/harness-seed/loop/project-prompts.ts";
 import { projectKindLabel } from "../../src/renderer/project-kind.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
@@ -23,7 +21,6 @@ import {
   FolderHolds,
   type ProjectFact,
   parseScaffoldRecord,
-  pluginFactSource,
 } from "../../src/shared/project-facts.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
@@ -171,61 +168,9 @@ describe("a plugin's scaffolds", () => {
     }
   });
 
-  it("the question offers only what makes a game; a scaffold that makes something else is made when the request asks for it", () => {
-    const offers: PluginKindOffer[] = [
-      {
-        plugin: "unreal",
-        name: "Unreal Engine",
-        tool: "unreal__new-game",
-        makes: [],
-        scaffold: "game",
-        label: "Unreal game",
-      },
-      {
-        plugin: "unreal",
-        name: "Unreal Engine",
-        tool: "unreal__new-plugin",
-        makes: [],
-        scaffold: "plugin",
-        label: "Unreal plugin",
-        game: false,
-      },
-    ];
-    const rule = engineChoiceRule("claude-code", null, offers);
-    const question = rule.slice(0, rule.indexOf("and end your reply"));
-    assert.ok(question.includes('"Unreal game"'), "a game's kind is an option");
-    assert.ok(!question.includes("Unreal plugin"), "an Unreal plugin project is no answer to where a game plays");
-    assert.match(rule, /When the request asks for an Unreal plugin, call mcp__studio__unreal__new-plugin/);
-    const only = engineChoiceRule("claude-code", null, [offers[1]!]);
-    assert.doesNotMatch(only, /ask the user/, "with no game on offer but the web, nothing is asked");
-    assert.match(only, /asks for an Unreal plugin/);
-  });
-
-  it("the card offers each scaffold by its label", () => {
-    const unreal = (tool: string, scaffold: string, label: string): PluginKindOffer => ({
-      plugin: "unreal",
-      name: "Unreal Editor",
-      tool,
-      makes: ["unreal-project"],
-      asksReady: true,
-      ready: true,
-      scaffold,
-      label,
-    });
-    const rule = engineChoiceRule("claude-code", null, [
-      unreal("unreal__new-game", "game", "Unreal game"),
-      unreal("unreal__new-plugin", "plugin", "Unreal plugin"),
-      { plugin: "godot", name: "Godot", tool: "godot__use", makes: ["godot-project"] },
-      { plugin: "godot", name: "Godot", tool: "godot__new", makes: ["godot-project"], asksReady: true },
-    ]);
-    for (const option of ['"Unreal game"', '"Unreal plugin"', '"Godot"']) assert.ok(rule.includes(option), option);
-    assert.match(rule, /is Unreal plugin, call mcp__studio__unreal__new-plugin/);
-    assert.match(rule, /is Unreal game, call mcp__studio__unreal__new-game/);
-    assert.match(rule, /is Godot, call mcp__studio__godot__new/);
-    assert.doesNotMatch(rule, /godot__use/, "a plugin with no scaffolds still offers one kind");
-  });
-
-  it("with no card, the brief pairs each scaffold's label with its own tool", () => {
+  // Flipped: the chat's brief asked which kind with each scaffold's label; the session's question
+  // card and kind tools are its own now, and each offer carries its label (above).
+  it("the local engine's prompt pairs each scaffold's label with its own tool", () => {
     const unreal = (tool: string, scaffold: string, label: string): PluginKindOffer => ({
       plugin: "unreal",
       name: "Unreal Editor",
@@ -238,7 +183,7 @@ describe("a plugin's scaffolds", () => {
       unreal("unreal__new-game", "game", "Unreal game"),
       unreal("unreal__new-plugin", "plugin", "Unreal plugin"),
     ];
-    const rules = pendingKindRule("claude-code", offers, null, null, false).join("\n");
+    const rules = pendingKindRule("claude-code", offers, null).join("\n");
     assert.match(
       rules,
       /names Unreal game, call mcp__studio__unreal__new-game: it makes the game's Unreal game project/,
@@ -250,20 +195,8 @@ describe("a plugin's scaffolds", () => {
     assert.doesNotMatch(rules, /names Unreal Editor/, "never two lines with one trigger");
   });
 
-  it("a plugin's own kind held only by a scaffold's record looks for its plugin first", () => {
-    const fact = (source: ProjectFact["source"]): ProjectFact => ({ id: TOY_PLUGIN_FACT, path: ".", source });
-    const scaffolded = ownKindRules("claude-code", fact(FactSource.Scaffold)).join("\n");
-    assert.match(scaffolded, /plugins_find/, "the plugin may be off: it is looked for, never assumed on");
-    const detected = ownKindRules("claude-code", fact(pluginFactSource("toys"))).join("\n");
-    assert.doesNotMatch(detected, /plugins_find/, "one its plugin's detect found has that plugin on");
-    assert.match(ownKindRules("claude-code", { id: CoreFact.GodotProject, path: "." }).join("\n"), /plugins_find/);
-    const roblox = ownKindRules("claude-code", { id: CoreFact.RobloxProject, path: ".", source: FactSource.Core });
-    assert.match(roblox.join("\n"), /plugins_find/, "a Roblox place with Roblox Studio off looks for it first");
-    assert.match(roblox.join("\n"), /holds a Roblox place/, "and names it in words");
-    const brief = buildContractorBrief({ ask: "go on", engine: "claude-code", facts: [fact(FactSource.Scaffold)] });
-    assert.match(brief, /plugins_find/, "the chat's brief keeps the fact's source");
-  });
-
+  // Flipped: a plugin's own kind held only by a scaffold's record was told to look for its plugin
+  // first. Genex infers no plugin from the facts: the tools the session is handed say which are on.
   it("a project that isn't a game shows what it is; a game shows nothing", () => {
     const fact = (id: string, source: ProjectFact["source"] = FactSource.Core, where = "."): ProjectFact => ({
       id,
@@ -353,10 +286,10 @@ describe("a plugin's scaffolds", () => {
     });
     try {
       assert.deepEqual(
-        registry.snapshot([]).kinds.map((kind) => [kind.label, kind.tool, kind.asksReady]),
+        registry.snapshot([]).kinds.map((kind) => [kind.label, kind.tool]),
         [
-          ["Unreal game", "unreal__new-game", true],
-          ["Unreal plugin", "unreal__new-plugin", true],
+          ["Unreal game", "unreal__new-game"],
+          ["Unreal plugin", "unreal__new-plugin"],
         ],
       );
       assert.deepEqual(

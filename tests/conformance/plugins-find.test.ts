@@ -9,11 +9,7 @@ import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { findPlugins } from "../../src/main/core/plugin-finder.ts";
-import {
-  PLUGINS_FIND_TOOL,
-  PLUGINS_SUGGEST_ANSWER,
-  PLUGINS_SUGGEST_TOOL,
-} from "../../src/main/core/project-tools-prompts.ts";
+import { PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL } from "../../src/main/core/project-tools-prompts.ts";
 import { EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
 import { SuggestionState, suggestionShown, suggestionState } from "../../src/renderer/chat/plugin-suggestion.ts";
 import { CustomEvent, type CustomEventName, customEvent, customEventData } from "../../src/shared/custom-events.ts";
@@ -226,7 +222,7 @@ describe("suggesting a Genex plugin, through the core", () => {
     await mkdir(places);
     lite = await coreLite({
       gamesRoot: path.join(root, "games"),
-      executionPolicy: { allowedProjectRoot: root, runBackgroundImprovement: false },
+      executionPolicy: { allowedProjectRoot: root },
     });
     lite.core.plugins.catalog = async () => [GODOT_ENTRY, { ...GODOT_ENTRY, manifest: BLENDER_MANIFEST }];
   });
@@ -426,7 +422,7 @@ describe("plugin search by seat", () => {
 
   it("a lead may look for a plugin and show its card in the chat it answers; a worker may only look; a builder of a classic run gets neither", async () => {
     const chat = await workerChat();
-    const { api, core, game, seen, threadId, worktree } = chat;
+    const { core, game, seen, threadId, worktree } = chat;
     /** What each session was handed of Genex's project tools, and what its calls answered. */
     const projectToolsOf = (index: number) =>
       (seen[index]?.liveTools ?? [])
@@ -442,9 +438,9 @@ describe("plugin search by seat", () => {
     /** The cards of each kind in a thread's log. */
     const cardsIn = async (thread: string, kind: CustomEventName) =>
       (await core.store.listEvents(thread)).filter((event) => customEvent(event, kind)).length;
-    // The thread the harness names for its run: never a chat the card may show in.
-    const runThread = String(await api[HostMethod.ThreadCreate]!({ title: "run" }));
-    const integration = await chat.copyOf(RUN_ID, "integration");
+    // Flipped (one Loop): the lead sat in a copy of the folder (the web Loop's) and answered in a
+    // thread the harness named; it sits in the game folder and answers in its game's chat.
+    const gameDir = await realpath(chat.project.dir);
     const suggest: [string, Record<string, unknown>] = [
       ProjectTool.PluginsSuggest,
       { plugin: UNREAL, reason: "asked" },
@@ -462,24 +458,20 @@ describe("plugin search by seat", () => {
     // The run's lead: the plugin search and the card, shown in the chat the run was started in.
     callsDuringTurn([suggest, nothingFits]);
     await chat.delegate({
-      threadId: runThread,
-      cwd: integration,
-      director: { runId: RUN_ID, threadId: runThread, project: game, root: integration, setup: null, tools: [] },
+      cwd: gameDir,
+      director: { runId: RUN_ID, threadId, project: game, root: gameDir, setup: null, tools: [] },
     });
     assert.deepEqual(projectToolsOf(0), [ProjectTool.PluginsFind, ProjectTool.PluginsSuggest].sort());
     assert.equal(await cardsIn(threadId, CustomEvent.PluginSuggested), 1, "the card is in the chat the lead answers");
-    assert.equal(await cardsIn(runThread, CustomEvent.PluginSuggested), 0, "never in the thread the harness named");
     notesWithoutCheck("the lead");
 
-    // A lead of a run nobody started in a chat shows nothing anywhere.
-    const stray = await chat.copyOf("run_stray", "integration");
-    callsDuringTurn([suggest]);
+    // A lead of a run nobody started in this chat is no lead: no project tool, nothing shown.
+    callsDuringTurn([]);
     await chat.delegate({
-      threadId: runThread,
-      cwd: stray,
-      director: { runId: "run_stray", threadId, project: game, root: stray, setup: null, tools: [] },
+      cwd: gameDir,
+      director: { runId: "run_stray", threadId, project: game, root: gameDir, setup: null, tools: [] },
     });
-    assert.equal(answers.at(-1), PLUGINS_SUGGEST_ANSWER.noChat);
+    assert.deepEqual(projectToolsOf(1), [], "a stray lead");
     assert.equal(await cardsIn(threadId, CustomEvent.PluginSuggested), 1, "no second card");
 
     // The run's worker may look, never show.

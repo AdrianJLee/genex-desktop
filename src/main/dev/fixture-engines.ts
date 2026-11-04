@@ -1,14 +1,17 @@
 /**
  * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode, Grok Build, Cursor,
- * OpenRouter and local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
+ * Genex, OpenRouter and local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
  * network, and start no vendor worker. Markers in
  * the user's words (`fixture:pending`, `fixture:stream`, `fixture:plan`, …) choose the script.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
+import { RunControl } from "../../shared/chat-run.ts";
 import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { HOUR_MS } from "../../shared/duration.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { GENEX_HELPER_MODEL, GENEX_MODELS, GenexAccess, isGenexAccess } from "../../shared/genex-build.ts";
+import { genexStatus } from "../../substrate/engines/genex.ts";
 import { MODEL_LIMIT_PREFIX } from "../../shared/provider-usage.ts";
 import { type LocalServerInfo, LocalServerKind } from "../../shared/local-server.ts";
 import {
@@ -35,6 +38,7 @@ const FIXTURE_ENGINES = [
   EngineId.OpenCode,
   EngineId.Grok,
   EngineId.Cursor,
+  EngineId.Genex,
   EngineId.OpenRouter,
   EngineId.LocalServer,
 ] as const;
@@ -54,18 +58,23 @@ const FIXTURE_SERVER: LocalServerInfo = {
 };
 /** Cursor's CLI is not on a fixture session's computer, so the picker's lists stay as they were. */
 const NO_CURSOR: EngineStatus = { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Cursor CLI" };
-/** The status each fixture starts with when the session names none: ready, but for the local server and Cursor. */
+/**
+ * The status each fixture starts with when the session names none: ready, but for the local server,
+ * Cursor and Genex, whose account is signed out until `STUDIO_FIXTURE_USAGE_FILE` says otherwise.
+ */
 const DEFAULT_STATUS: Partial<Record<string, EngineStatus>> = {
   [EngineId.LocalServer]: NO_LOCAL_SERVER,
   [EngineId.Cursor]: NO_CURSOR,
+  [EngineId.Genex]: genexStatus(GenexAccess.SignIn),
 };
 /**
  * How each subscription's plan limits answer, read again on every read so a reviewer can change it
  * while the window is open: a JSON file named by `STUDIO_FIXTURE_USAGE_FILE`, for example
  * `{"claude-code":"slow","codex":"failed"}`. `slow` answers after `SLOW_USAGE_MS`, `failed` throws,
  * `none` shares no limits, `signed_out` also makes the subscription signed out, `ready` makes a
- * stand-in that starts not installed (Cursor's) ready; anything else, or no file, answers the
- * fixed limits at once.
+ * stand-in that starts not installed (Cursor's) or signed out (Genex's) ready; Genex also takes any of
+ * genex.games's access words (`needs_plan`, `out_of_credits`, `paused`, …); anything else, or no
+ * file, answers the fixed limits at once.
  */
 const FixtureUsage = { Slow: "slow", Failed: "failed", None: "none", SignedOut: "signed_out", Ready: "ready" } as const;
 const SLOW_USAGE_MS = 8000;
@@ -121,7 +130,6 @@ const MESSAGE = {
   streamedReply:
     "The bridge is ready. **You can cross the river now.** I kept the path level with the river bank and added rails along both sides. The village lights are warm and the cover is ready in Assets. You can try the crossing in the preview. The water keeps moving beneath it.",
   modelLimit: "You have reached your model limit. Choose another model.",
-  coordinatorOnly: "Fixture accepts coordinator work only; no vendor worker is started",
   stoppedByYou: "stopped by you",
   commandReply:
     "Converting the engine recordings needs ffmpeg, and my sandbox can’t download it. Run this once, then I’ll convert them:\n\n```bash\nbrew install ffmpeg\n```",
@@ -132,8 +140,6 @@ const LONG_STREAM_MARKER = "fixture:stream-long";
 const PENDING_MARKER = "fixture:pending";
 /** The marker whose reply offers the user a command to run, as a reply the sandbox blocked does. */
 const COMMAND_MARKER = "fixture:command";
-/** Where a coordinator's prompt puts the words it answers. */
-const LATEST_MESSAGE = "LATEST USER MESSAGE:\n";
 
 /**
  * First launch: an empty library, Claude Code waiting for a sign-in, Codex, OpenCode, Grok Build and
@@ -182,32 +188,50 @@ function fixtureEngine(
             (statuses[id] ?? NO_LOCAL_SERVER).code === EngineStatusCode.Ready ? FIXTURE_SERVER : null,
         }
       : {}),
-    models: async () => [
-      {
-        id: FIXTURE_MODEL,
-        label: "Fixture v1",
-        efforts: [ReasoningEffort.Low, ReasoningEffort.Medium, ReasoningEffort.High],
-        defaultEffort: ReasoningEffort.Medium,
-        supportsFast: !direct,
-        contextWindow: 200000,
-        maxTokens: 8192,
-        supportsTools: true,
-        supportsVision: true,
-        supportsThinking: true,
-      },
-    ],
-    defaultModel: async () => FIXTURE_MODEL,
+    models: async () => (id === EngineId.Genex ? genexFixtureModels() : fixtureModels(direct)),
+    defaultModel: async () => (id === EngineId.Genex ? GENEX_HELPER_MODEL : FIXTURE_MODEL),
     // Deterministic plan limits so the composer's usage panel has something honest to show; only a
-    // subscription has a plan.
-    ...(isSubscriptionFixture(id) ? { readUsage: () => readFixtureUsage(id) } : {}),
+    // subscription has a plan, and Genex its monthly credits.
+    ...(isSubscriptionFixture(id) || id === EngineId.Genex ? { readUsage: () => readFixtureUsage(id) } : {}),
     complete: (request: CompleteRequest) => completeFixture(id, request),
     delegate: (request: DelegateRequest) => delegateFixture(id, request, pendingSessions),
   };
 }
 
+/** The one model every stand-in but Genex offers. */
+function fixtureModels(direct: boolean) {
+  return [
+    {
+      id: FIXTURE_MODEL,
+      label: "Fixture v1",
+      efforts: [ReasoningEffort.Low, ReasoningEffort.Medium, ReasoningEffort.High],
+      defaultEffort: ReasoningEffort.Medium,
+      supportsFast: !direct,
+      contextWindow: 200000,
+      maxTokens: 8192,
+      supportsTools: true,
+      supportsVision: true,
+      supportsThinking: true,
+    },
+  ];
+}
+
+/** Genex's three models, as genex.games lists them. */
+function genexFixtureModels() {
+  return GENEX_MODELS.map((model) => ({
+    ...model,
+    contextWindow: 200000,
+    maxTokens: 64000,
+    supportsTools: true,
+    supportsVision: true,
+    supportsThinking: true,
+  }));
+}
+
 /** A stand-in's status: as `STUDIO_FIXTURE_USAGE_FILE` sets it, else as the session names it, else its default. */
 function fixtureStatus(id: EngineId, statuses: Record<string, EngineStatus>): EngineStatus {
   const mode = fixtureUsageMode(id);
+  if (id === EngineId.Genex && isGenexAccess(mode)) return genexStatus(mode);
   if (mode === FixtureUsage.SignedOut) return SIGNED_OUT_STATUS;
   if (mode === FixtureUsage.Ready) return READY_STATUS;
   return statuses[id] ?? DEFAULT_STATUS[id] ?? READY_STATUS;
@@ -218,6 +242,11 @@ const isSubscriptionFixture = (id: EngineId): boolean => id === EngineId.ClaudeC
 
 function fixtureUsage(id: EngineId) {
   const inDays = (days: number) => new Date(Date.now() + days * DAY_MS).toISOString();
+  if (id === EngineId.Genex)
+    return {
+      measuredAt: new Date().toISOString(),
+      windows: [{ id: "credits", label: "Monthly credits", percent: 30, resetsAt: inDays(12) }],
+    };
   if (id === EngineId.Codex)
     return {
       measuredAt: new Date().toISOString(),
@@ -332,8 +361,8 @@ async function streamPieces(
   }
 }
 
-/** A game chat's reply, streamed as a coordinator's text deltas arrive; the whole text is its summary. */
-async function streamCoordinatorReply(id: EngineId, request: DelegateRequest, content: string): Promise<string> {
+/** A game chat's reply, streamed as a session's text deltas arrive; the whole text is its summary. */
+async function streamChatReply(id: EngineId, request: DelegateRequest, content: string): Promise<string> {
   for (const delta of content.match(new RegExp(`[\\s\\S]{1,${LONG_PIECE_CHARS}}`, "g")) ?? []) {
     if (request.signal?.aborted) throw new EngineError(EngineFailureKind.Aborted, id, "Fixture streaming stopped");
     request.onEvent?.({ type: DelegateEventType.TextDelta, payload: { streamId: "fixture-long-reply", delta } });
@@ -364,22 +393,23 @@ async function planReply(id: EngineId, transcript: string) {
 
 async function delegateFixture(id: EngineId, request: DelegateRequest, pendingSessions: Set<string>) {
   const reads = steerReads(request);
-  if (request.prompt.split(LATEST_MESSAGE).at(-1)?.includes(COMMAND_MARKER)) return reads.answer(commandReply(id));
+  if (request.prompt.includes(COMMAND_MARKER)) return reads.answer(commandReply(id));
   if (request.interviewTools?.some((tool) => tool.name === "ask_user"))
     return reads.answer(interviewReply(id, request));
-  if (!request.coordinator) throw new Error(MESSAGE.coordinatorOnly);
   const stopped = await pendingSession(id, request, pendingSessions);
   if (stopped) return reads.answer(stopped);
-  if (request.onLiveTool) await request.onLiveTool("run_status", {});
-  const long = request.prompt.split(LATEST_MESSAGE).at(-1)?.includes(LONG_STREAM_MARKER);
-  const summary = long ? await streamCoordinatorReply(id, request, longReply()) : MESSAGE.plainReply;
+  // After a closed Loop run the chat's own session holds the run's controls: it reads the run first.
+  const controls = request.liveTools?.some((tool) => tool.name === RunControl.RunStatus);
+  if (controls && request.onLiveTool) await request.onLiveTool(RunControl.RunStatus, {});
+  const long = request.prompt.includes(LONG_STREAM_MARKER);
+  const summary = long ? await streamChatReply(id, request, longReply()) : MESSAGE.plainReply;
   return reads.answer({
     ok: true,
     engine: id,
     model: FIXTURE_MODEL,
     turns: 1,
     usage: {},
-    sessionId: "fixture-coordinator-v1",
+    sessionId: "fixture-chat-v1",
     summary,
   });
 }
@@ -416,7 +446,7 @@ async function pendingSession(
   pendingSessions: Set<string>,
 ): Promise<DelegateResult | null> {
   const resumed = request.resume && pendingSessions.has(request.resume) ? request.resume : null;
-  const asked = request.prompt.split(LATEST_MESSAGE).at(-1)?.includes(PENDING_MARKER);
+  const asked = request.prompt.includes(PENDING_MARKER);
   if (!asked && !resumed) return null;
   const sessionId = resumed ?? `fixture-pending-${pendingSessions.size + 1}`;
   pendingSessions.add(sessionId);

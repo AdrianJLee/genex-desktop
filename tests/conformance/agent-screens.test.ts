@@ -9,7 +9,6 @@ import { describe, it } from "node:test";
 import { coverCursor } from "../../src/renderer/panels/inspector/screen-cursor.ts";
 import {
   frameReceived,
-  leadFrameOf,
   partFrameOf,
   screenClosed,
   screensLoaded,
@@ -131,22 +130,19 @@ describe("a window's trail", () => {
 describe("which screen a node shows", () => {
   const frames = [
     frame({ handle: "old", at: 1 }),
-    frame({ handle: "new", role: "playtester", at: 5 }),
-    frame({ handle: "lead", role: "director", facetId: "director", at: 9 }),
+    frame({ handle: "new", role: "builder", at: 5 }),
     frame({ handle: "other-part", facetId: "coins", at: 7 }),
     frame({ handle: "other-run", runId: "run_b", at: 8 }),
     frame({ handle: "other-game", project: "kart", at: 9 }),
   ];
   const state: AgentScreensState = { frames, trails: {} };
-  it("a step shows the newest screen of its part's agent in its run and game, never the lead's", () => {
+  // Flipped (one Loop): a step never showed the lead's screen, and the lead's node showed only the
+  // lead's (`leadFrameOf`); no session holds a lead's screen now, the lead's window being its chat's.
+  it("a step shows the newest screen of its part's agent in its run and game", () => {
     assert.equal(partFrameOf(state, "pond", "run_a", "jump-pad")?.handle, "new");
     assert.equal(partFrameOf(state, "pond", "run_a", "coins")?.handle, "other-part");
-    assert.equal(partFrameOf(state, "pond", "run_a", "director"), undefined);
     assert.equal(partFrameOf(state, "pond", "run_c", "jump-pad"), undefined);
     assert.equal(partFrameOf(state, null, "run_a", "jump-pad"), undefined);
-  });
-  it("the lead's node shows only the lead's", () => {
-    assert.equal(leadFrameOf(state, "pond", "run_a")?.handle, "lead");
   });
 });
 

@@ -7,6 +7,11 @@ import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
+/** What a session is handed beside its tools: its system text, a new session's notices and the person's words. */
+function handed(request: DelegateRequest): string {
+  return [request.system ?? "", ...(request.notices ?? []), request.prompt].join("\n\n");
+}
+
 it("Claude, Codex and local builders receive the same host-owned asset status contract", async () => {
   const rig = await startRig({ replies: [] });
   try {
@@ -24,7 +29,7 @@ it("Claude, Codex and local builders receive the same host-owned asset status co
         models: async () => [],
         delegate: async (request: DelegateRequest) => {
           assert.ok(request.liveTools?.some((tool) => tool.name === "genex__asset"));
-          assert.match(request.prompt, /Genex/);
+          assert.match(handed(request), /Genex/);
           observed.push(JSON.parse(String(await request.onLiveTool!("genex__asset", { operation: "status" }))));
           await assert.rejects(
             Promise.resolve().then(() => request.onLiveTool!("genex__asset", { operation: "publish" })),
@@ -165,7 +170,7 @@ it("turned-off Genex leaves coding, existing assets and public export independen
           request.liveTools?.some((t) => t.name.startsWith("genex")),
           false,
         );
-        assert.doesNotMatch(request.prompt, /Genex/);
+        assert.doesNotMatch(handed(request), /Genex/);
         return { ok: true, engine: "codex", summary: "Built without plugins", turns: 1, usage: {} };
       },
     } as never);

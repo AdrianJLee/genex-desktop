@@ -7,7 +7,7 @@
  * as one argument. And a game chat's own session, which a person is answering, is given the
  * mode they chose, the rules they saved, and `canUseTool`: the Allow / Deny question it asks is
  * carried to the host and the person's answer back, as Claude Code would ask in a terminal. A
- * build's lead or the run's coordinator asks the same way (`askLead`), from its chat's Auto, Accept
+ * build's lead asks the same way (`askLead`), from its chat's Auto, Accept
  * edits or Bypass, or from Manual, and the host answers for the person's mode; the host also screens
  * each of its calls first (`leadScreenHook`), ahead of every allow rule, to ask first while the chat
  * is in a mode its session could not be switched to. The picker switches both kinds of session
@@ -65,7 +65,7 @@ const MESSAGE = {
   keepPlanning: "The user wants to keep planning. Ask what to change.",
   keepPlanningSaying: (message: string) => `The user wants to keep planning: ${message}`,
   cannotSwitch: "this Claude Code session cannot change its permission mode",
-  /** A lead's or coordinator's own way to ask or to plan, refused without asking the host. */
+  /** A lead's own way to ask or to plan, refused without asking the host. */
   askInReply:
     "This session cannot ask the person here or change its permission mode. Do not retry it; say in your reply what you need.",
   /** The host could not screen a lead's call: it is refused, never let through. */
@@ -85,12 +85,12 @@ const SESSION_DESTINATIONS: ReadonlySet<string> = new Set(["session", "cliArg"])
 /** Where every kept suggestion is pointed: never `.claude/settings.local.json` in the game folder. */
 const SESSION_DESTINATION = "session";
 /**
- * Claude Code's own ways to ask and to plan: a build's lead or the run's coordinator answers the
+ * Claude Code's own ways to ask and to plan: a build's lead answers the
  * person in its reply, and its mode is never its own to change.
  */
 const LEAD_REFUSED_TOOLS: ReadonlySet<string> = new Set(["AskUserQuestion", "EnterPlanMode", PLAN_TOOL]);
 /**
- * What a lead's or coordinator's session does without the host's screen: reading (in Manual a read
+ * What a lead's session does without the host's screen: reading (in Manual a read
  * outside its folders still asks, and the host answers that as any question; Auto reads without
  * asking, as it does for the chat's own session), and its own bookkeeping (a
  * deferred tool's schema, its todo list). The studio's own tools pass too (`STUDIO_TOOL_PREFIX`).
@@ -531,7 +531,7 @@ export interface RuleInput {
  * transcripts, the prompt history) is reached as Claude Code reaches it for a person in a
  * terminal, which is parity, not a gap: a read outside the working folders asks in Manual and
  * Accept edits, Auto leaves it to the classifier, Bypass allows it. A shell command runs with
- * the person's own access the same way. A build's lead or the run's coordinator is fenced the same.
+ * the person's own access the same way. A build's lead is fenced the same.
  */
 function personDeny(fence: ProtectedTargets, input: RuleInput, permissions: DelegateAsks): string[] {
   const unreadable = [...fence.whole, ...fence.secrets];
@@ -733,7 +733,7 @@ async function carryQuestion(
   return answerResult(answer ?? null, input, updates, running, toolName === PLAN_TOOL);
 }
 
-/** Grants and kept updates without a mode: a lead's or coordinator's mode is never its own to change. */
+/** Grants and kept updates without a mode: a lead's mode is never its own to change. */
 function withoutModes({ grants, updates }: ReturnType<typeof permissionGrants>): ReturnType<typeof permissionGrants> {
   return {
     grants: grants.filter((grant) => grant.kind !== GrantKind.Mode),
@@ -742,7 +742,7 @@ function withoutModes({ grants, updates }: ReturnType<typeof permissionGrants>):
 }
 
 /**
- * A build's lead's or the run's coordinator's question. Claude Code decides what to ask from the
+ * A build's lead's question. Claude Code decides what to ask from the
  * mode the session started in (Manual: every edit and command, and a read outside its folders);
  * the host answers it for the chat's mode, whether or not the person is talking to it. Its own ways
  * to ask the person or to plan are refused here, never carried: it answers in its reply.
@@ -768,7 +768,7 @@ export function askingOptions(permissions: DelegatePermissions, running: Running
 }
 
 /**
- * The options of a build's lead or the run's coordinator in a game chat: the mode the host chose
+ * The options of a build's lead in a game chat: the mode the host chose
  * for it (`LeadAsks.mode`), its questions routed by the host. Its chat's Auto, Accept edits or
  * Bypass, so Claude Code decides as it does for the chat's own session; Manual for any other mode,
  * so every edit and command reaches `canUseTool` and the host answers for the chat's mode. Launched,
@@ -807,7 +807,7 @@ function unscreened(tool: string): boolean {
 }
 
 /**
- * A lead's or coordinator's screen, as a PreToolUse hook: Claude Code runs hooks before its deny,
+ * A lead's screen, as a PreToolUse hook: Claude Code runs hooks before its deny,
  * ask and allow rules, in every mode, so the host's demand to ask first holds where the mode the
  * session runs in (Auto's classifier, Accept edits), a saved "always allow" rule or the game's own
  * `.claude/settings.json` would have let the call through: a session whose chat is in a mode it
@@ -845,8 +845,7 @@ function switchFailure(mode: string, cause: unknown): Error & { code: ModeSwitch
 }
 
 /**
- * The mode picker's hold on a running session that asks (the chat's own, a lead's, the
- * coordinator's, a worker's): handed to the host once the session starts, and taken back once when
+ * The mode picker's hold on a running session that asks (the chat's own, a lead's, a worker's): handed to the host once the session starts, and taken back once when
  * it stops taking control requests (`release`).
  */
 export function liveControl(asks: DelegateAsks | undefined, stream: unknown): { release(): void } {
@@ -893,10 +892,13 @@ export function workerReadOnly(seat: WorkerSeat, reader: boolean): boolean {
 }
 
 /**
- * A worker's box: whether sandboxed commands run unasked, whether one may leave the box (asking),
- * whether it writes, and whether it writes the home folder as well as its roots.
+ * A worker's box: whether it has one at all, whether sandboxed commands run unasked, whether one
+ * may leave the box (asking), whether it writes, and whether it writes the home folder as well as
+ * its roots.
  */
 export interface WorkerBox {
+  /** False in Bypass: the worker runs as the person, as Claude Code's own Bypass does. */
+  boxed: boolean;
   autoAllow: boolean;
   unsandboxed: boolean;
   writes: boolean;
@@ -904,25 +906,24 @@ export interface WorkerBox {
 }
 
 /**
- * Each mode a worker that asks runs in: the session's mode and its box. Bypass's box writes the
- * home folder too, runs every command unasked and never lets one leave it, so the never-touch list
- * holds at the OS boundary in Bypass as in every other mode.
+ * Each mode a worker that asks runs in: the session's mode and its box. Bypass has none: the person
+ * chose it for their chat, so its workers run as Claude Code's own Bypass does, reaching the
+ * network and the GPU (Blender, an engine's editor); the never-touch hook still screens each call.
  */
 const WORKER_MODES: Record<Exclude<PermissionMode, typeof PermissionMode.Plan>, WorkerBox> = {
-  [PermissionMode.Bypass]: { autoAllow: true, unsandboxed: false, writes: true, home: true },
-  [PermissionMode.Auto]: { autoAllow: true, unsandboxed: true, writes: true, home: false },
-  [PermissionMode.AcceptEdits]: { autoAllow: false, unsandboxed: true, writes: true, home: false },
-  [PermissionMode.Manual]: { autoAllow: false, unsandboxed: true, writes: true, home: false },
+  [PermissionMode.Bypass]: { boxed: false, autoAllow: true, unsandboxed: true, writes: true, home: true },
+  [PermissionMode.Auto]: { boxed: true, autoAllow: true, unsandboxed: true, writes: true, home: false },
+  [PermissionMode.AcceptEdits]: { boxed: true, autoAllow: false, unsandboxed: true, writes: true, home: false },
+  [PermissionMode.Manual]: { boxed: true, autoAllow: false, unsandboxed: true, writes: true, home: false },
 };
 /** A worker that cannot ask, or a read-only one: the unattended box, writing only its roots (if any). */
-const UNASKED_BOX = { autoAllow: true, unsandboxed: false, home: false } as const;
+const UNASKED_BOX = { boxed: true, autoAllow: true, unsandboxed: false, home: false } as const;
 
 /**
- * A worker's box, in every mode: Bypass's writes the home folder and runs every command in it
- * unasked; Auto runs its sandboxed commands unasked, Accept edits and Manual ask about each; those
- * three may run one outside the box once the mode approves it (Auto's classifier, the person
- * otherwise), held then by the never-touch hook alone. A read-only worker, or one whose engine
- * cannot ask, keeps the unattended box: nothing leaves it.
+ * A worker's box: none in Bypass; Auto runs its sandboxed commands unasked, Accept edits and Manual
+ * ask about each; those three may run one outside the box once the mode approves it (Auto's
+ * classifier, the person otherwise), held then by the never-touch hook alone. A read-only worker,
+ * or one whose engine cannot ask, keeps the unattended box: nothing leaves it.
  */
 export function workerBox(seat: WorkerSeat, reader: boolean): WorkerBox {
   if (workerReadOnly(seat, reader)) return { ...UNASKED_BOX, writes: false };

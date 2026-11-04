@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { setImmediate as tick } from "node:timers/promises";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { KEEP_AWAKE_FALLBACK_MS, KeepAwake, type FallbackTimers } from "../../src/main/keep-awake.ts";
-import { registerRunsIpc, extFromMime, safeLabel, type RunsIpcDeps } from "../../src/main/ipc/runs.ts";
+import { registerRunsIpc, type RunsIpcDeps } from "../../src/main/ipc/runs.ts";
 import { registerLoginIpc, type LoginIpcDeps } from "../../src/main/ipc/login.ts";
 import { badgeText, registerNotificationsIpc } from "../../src/main/ipc/notifications.ts";
 import { registerModelsIpc, type ModelsIpcDeps } from "../../src/main/ipc/models.ts";
@@ -28,6 +28,8 @@ import { mkdtempSync, existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
+import { FastDecisions } from "../../src/main/core/fast-decisions.ts";
+import { memoryKeyStore } from "../../src/substrate/provider-keys.ts";
 import type { CodexLoginState } from "../../src/shared/codex-login.ts";
 import { OpenRouterSignInProblem } from "../../src/shared/openrouter-login.ts";
 import { ModelPullProblem } from "../../src/shared/model-install.ts";
@@ -36,6 +38,7 @@ import { EngineError } from "../../src/substrate/engines/types.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
 import { RestartAnswer, UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
+import { recommendModels, type HardwareInfo } from "../../src/substrate/hardware.ts";
 
 type Listener = (event: IpcSender, payload: unknown) => Promise<IpcResult>;
 const studio = { sender: "studio", senderFrame: "main-frame" };
@@ -156,7 +159,6 @@ function runsFixture(
   const calls: string[] = [];
   const { blocker, timers } = blockerAndTimers();
   const keepAwake = new KeepAwake(blocker, timers);
-  const events: UiEvent[] = [];
   const core = {
     host: {
       dispatch: async (action: unknown, timeoutMs?: number) => {
@@ -169,14 +171,6 @@ function runsFixture(
       calls.push(`stopRun ${runId} ${timeoutMs}`);
       await dispatch({ type: "run_stop", runId }, timeoutMs);
     },
-    newRunId: () => "run_1",
-    saveRunArtifact: async (_runId: string, name: string) => {
-      calls.push(`save ${name}`);
-      return `/runs/${name}`;
-    },
-    dispatchRun: async (run: { runId: string; reference: { shots: string[] } }) => {
-      calls.push(`run ${run.runId} ${run.reference.shots.join(",")}`);
-    },
     mainThread: "studio",
     layout: { runs: "/nowhere/runs" },
     runPreviewIdentity: () => null,
@@ -186,10 +180,8 @@ function runsFixture(
     core,
     keepAwake,
     runSummaryReader: { forProject: async () => history },
-    pushUiEvent: (event) => events.push(event),
-    appendErrorDurably: async () => {},
   });
-  return { invoke, keepAwake, timers, calls, events };
+  return { invoke, keepAwake, timers, calls };
 }
 
 describe("the run controls", () => {
@@ -209,36 +201,6 @@ describe("the run controls", () => {
     keepAwake.hold();
     assert.deepEqual(await invoke("studio:run.stop", { runId: "run_1" }), { ok: false, error: "harness gone" });
     assert.equal(timers.armed(), 1);
-  });
-
-  it("starting a run holds the Mac awake and saves the reference frames before dispatching", async () => {
-    const { invoke, keepAwake, calls } = runsFixture(async () => true);
-    const frames = [
-      { data: "aGk=", mimeType: "image/png", label: "Title Screen!" },
-      { data: "aGk=", mimeType: "image/webp" },
-    ];
-    const result = await invoke("studio:run.start", {
-      goal: "g",
-      project: "pong",
-      hours: 1,
-      reference: { name: "ref", kind: "reference", frames },
-    });
-    assert.deepEqual(result, { ok: true, value: { runId: "run_1" } });
-    assert.equal(keepAwake.held, true);
-    assert.deepEqual(calls, [
-      "save reference/01-title-screen.png",
-      "save reference/02-frame-2.webp",
-      "run run_1 /runs/reference/01-title-screen.png,/runs/reference/02-frame-2.webp",
-    ]);
-    assert.deepEqual(
-      await invoke("studio:run.start", {
-        goal: "g",
-        project: "pong",
-        hours: 1,
-        reference: { name: "ref", kind: "reference", frames: frames.slice(0, 1) },
-      }),
-      { ok: false, error: 'A "beat a real game" run needs at least two screenshots of the reference.' },
-    );
   });
 
   it("a live summary sends only the graph events after the ones the renderer holds", async () => {
@@ -264,15 +226,6 @@ describe("the run controls", () => {
     // A cursor that no longer matches, or one the renderer made up, gets everything again.
     for (const cursor of [{ count: 2, lastId: "e9" }, { count: 9, lastId: "e3" }, { count: "2", lastId: "e2" }, "e2"])
       assert.deepEqual(await read(cursor), [0, ["e1", "e2", "e3"]], JSON.stringify(cursor));
-  });
-
-  it("frame names are safe file names", () => {
-    assert.equal(extFromMime("image/png"), "png");
-    assert.equal(extFromMime("image/gif"), "gif");
-    assert.equal(extFromMime("image/jpeg"), "jpg");
-    assert.equal(safeLabel("  ../Boss: Phase 2  "), "boss-phase-2");
-    assert.equal(safeLabel(undefined), "");
-    assert.equal(safeLabel("x".repeat(60)).length, 40);
   });
 });
 
@@ -809,6 +762,39 @@ describe("both sign-in paths go through the controllers", () => {
   });
 });
 
+describe("local model hardware in isolated acceptance", () => {
+  it("uses the supplied machine and its catalog without detecting the host", async () => {
+    const hardware: HardwareInfo = {
+      cpu: "Fixture Apple Silicon",
+      ramBytes: 32 * 1024 ** 3,
+      ramGb: 32,
+      usableModelGb: 23,
+      platform: "darwin",
+      arch: "arm64",
+      appleSilicon: true,
+    };
+    const report = { hardware, recommendation: await recommendModels(hardware) };
+    let reads = 0;
+    const core = { engines: {} } as ModelsIpcDeps["core"];
+    const { handle, invoke } = registrar();
+    registerModelsIpc(handle, {
+      core,
+      subscription: () => null,
+      pushUiEvent: () => {},
+      openRouterLogin: noSignIn,
+      readHardware: async () => {
+        reads++;
+        return report;
+      },
+      usage: noUsage,
+    });
+    assert.deepEqual(await invoke("studio:hardware"), { ok: true, value: report });
+    assert.equal(reads, 1);
+    for (const model of ["bonsai-2:27b-pq2_0", "bonsai-2:27b-ptq1_0"])
+      assert.ok(report.recommendation.picks.some((pick) => pick.model === model && pick.fits));
+  });
+});
+
 describe("the composer's plan limits", () => {
   it("answer with the limits as they stand at once, and push each subscription's fresh read", async () => {
     const usage = {
@@ -953,7 +939,7 @@ it("model refresh validates provider identities before invoking discovery", asyn
     },
   });
   // Only the registrar's engine registry is needed; no profile or credentials are opened.
-  const core = { engines };
+  const core = { engines, fastDecisions: noFastDecisions };
   const { handle, invoke } = registrar();
   registerModelsIpc(handle, {
     core,
@@ -1057,7 +1043,7 @@ it("model refresh and recheck reach OpenCode and OpenRouter, which have no subsc
   const events: UiEvent[] = [];
   const { handle, invoke } = registrar();
   registerModelsIpc(handle, {
-    core: { engines },
+    core: { engines, fastDecisions: noFastDecisions },
     subscription: () => null,
     usage: noUsage,
     pushUiEvent: (event) => events.push(event),
@@ -1071,6 +1057,8 @@ it("model refresh and recheck reach OpenCode and OpenRouter, which have no subsc
 
 /** A browser sign-in that is never started: the registrars under test do not reach it. */
 /** No subscription's limits: the tests that use it never ask for them. */
+/** No TypeSafe key: the fast decision model is optional, and these tests never reach TypeSafe. */
+const noFastDecisions = new FastDecisions(memoryKeyStore());
 const noUsage: ModelsIpcDeps["usage"] = { snapshot: () => [], refresh: async () => {} };
 
 const noSignIn: ModelsIpcDeps["openRouterLogin"] = {
@@ -1098,7 +1086,7 @@ it("the OpenRouter key is saved and forgotten through the engine, and only its s
     const events: UiEvent[] = [];
     const { handle, invoke } = registrar();
     registerModelsIpc(handle, {
-      core: { engines },
+      core: { engines, fastDecisions: noFastDecisions },
       subscription: () => null,
       usage: noUsage,
       pushUiEvent: (event) => events.push(event),
@@ -1166,7 +1154,7 @@ it("the browser sign-in hands its key to the engine, and only how it ended comes
     const { handle, invoke } = registrar();
     let login = returning("sk-or-v1-refused-refused-refused");
     registerModelsIpc(handle, {
-      core: { engines },
+      core: { engines, fastDecisions: noFastDecisions },
       subscription: () => null,
       usage: noUsage,
       pushUiEvent: (event) => events.push(event),

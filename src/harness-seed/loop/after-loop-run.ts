@@ -1,22 +1,13 @@
 /**
- * The same agent after the build: once a run a lead led as its chat's own session
- * (one session, director/lead-session.ts) has closed — finished or paused — the chat's next message
- * goes to that same session, in the game folder, with its hands back, instead of to a separate
- * read-only coordinator. It answers, and does the work it is asked for itself; it keeps the run's
- * controls as tools: `run_status`, `show_build` and `land_build` answered live by the host
- * (`runControls`), and after a paused run `resume_run`, bridged in and recorded, which the studio
- * does once the reply ends — the resumed run's lead is this same session, so it may not run while
- * the session still answers. After a finished run with Loop on it may record `reopen_run` instead,
- * and the chat reopens that same run once the reply ends (reopen-run.ts).
- *
- * The coordinator (coordinator.ts) still answers after the long turn (`directorLoop: "turn"`), the
- * classic pipeline, a kept director.ts or part that seats no lead, a lead that was a session of its
- * own, and a message on another engine than the lead's — and whenever a kept chat runner, turn or
- * brief does not serve this (`servesAfterLoopRun`). After a finished run that seated a lead, a
- * message with Loop on lets that coordinator's continue_build reopen the same run once its reply
- * ends, when it answers in a session (reopen-run.ts `finishedLoopRun`).
+ * The same agent after the build: once a Loop run whose journal seated a lead has closed — finished
+ * or paused — the chat's own session answers the chat's next message, in the game folder, with its
+ * hands. It answers, and does the work it is asked for itself; it keeps the run's status as a tool,
+ * `run_status`, answered live by the host (`runControls`). On the build's own engine, after a paused
+ * Loop that worked in the game folder it may record `resume_run`, bridged in, which the studio does
+ * once the reply ends — the resumed run's lead may be this same session, so it may not run while the
+ * session still answers. A turn on another engine moves the chat's bookmark there, so a
+ * lead the build seats later starts afresh.
  */
-import { coordinatorTools } from "./run-inbox.ts";
 import { readJournal } from "./run-journal.ts";
 import { HostMethod } from "./host-methods.ts";
 import { hasSessionRoles, plannerModel, RoleKey, roleEngine, supportsSessions } from "./model-roles.ts";
@@ -31,6 +22,25 @@ import type { StudioToolSpec } from "../types/host-api.d.ts";
 export const RESUME_RUN = "resume_run";
 
 /**
+ * The resume a chat's own session may record after a paused run: no run to name — the chat resumes
+ * the run it answers after, never another.
+ */
+const RESUME_RUN_TOOL: StudioToolSpec = {
+  name: RESUME_RUN,
+  description:
+    "Go on with this chat's paused build, the whole making of this game, with its completed work: you lead it again once your reply ends. Any work on this game beyond a quick fix goes on in it (more of the game, a change, the person's answer to your question, new guidance after Stop) instead of in your reply or a new build: say in a line that you go on and end your reply. Supply what to do as text. A question or a quick fix needs no build.",
+  parameters: {
+    type: "object",
+    properties: {
+      text: {
+        type: "string",
+        description: "The latest requested change or continuation, preserving the user's intent.",
+      },
+    },
+  },
+};
+
+/**
  * How long the chat holds its next message for the run it asked to resume to be reserved
  * (run-dispatch.ts `handleRunStart`). It is reserved within moments of the host's resume, unless
  * the paused run's learning pass is still being waited out; past this the chat is free again.
@@ -42,33 +52,25 @@ const RESERVE_POLL_MS = SECOND_MS / 20;
 /** The states a run is over in: the chat's own session answers after either. */
 const CLOSED: readonly string[] = [RunState.Finished, RunState.Paused];
 
-/** A run that is over, as the chat's own session is told it and handed its controls. */
+/** A run that is over, as the chat's own session is handed its controls. */
 export interface AfterLoopRun {
   runId: string;
   /** `finished` or `paused`. */
   state: string;
-  goal: string | null;
-  /** Whether its close put the build in the game folder; null when it did not say. */
-  landed: boolean | null;
-  /** Why it stopped, as its close said. */
-  stoppedBecause: string | null;
-  /**
-   * The engine its lead ran on, where the chat's own session is: the turn runs on it, also for a
-   * message that names no engine. A message on another engine is another session's (the coordinator's).
-   */
+  /** The engine the turn runs on: the message's, else the one its lead ran on. */
   engine: string;
+  /** The turn runs on the engine its lead ran on: only there may it resume the build. */
+  onLeadEngine: boolean;
   /**
-   * The model the turn runs on: the message's, else the one its lead ran on — so a Resume's lead
-   * still continues the session (lead-session.ts `continuesChat` compares the bookmark's model).
+   * The model the turn runs on: the message's, else on the lead's engine the one its lead ran on.
    */
   model: string | null;
   /** The chat's message the session answers: the run's controls act for it (a resume records it). */
   messageId?: string;
-  /** chat-dispatch.ts may reopen this finished run (reopen-run.ts) once its parts serve it. */
-  reopenable?: boolean;
   /**
-   * The run was a Loop that worked in the game folder itself (`journal.director.open`): it has no
-   * build to show or land, and a finished one is never reopened (a Loop message starts the next).
+   * The run was a Loop that worked in the game folder itself (`journal.director.open`): only such a
+   * paused run goes on. A web game's Loop an earlier Genex paused is refused on Resume, so the chat
+   * answers after it as after a finished run.
    */
   inPlace?: boolean;
 }
@@ -76,29 +78,18 @@ export interface AfterLoopRun {
 /** What the harness calls the host with here. */
 type Caller = { call: HostCall };
 
-/**
- * Does every part the chat's own session after a run depends on serve it (`SERVES_AFTER_LOOP_RUN`):
- * its runner passes it the run, its turn hands it the run's controls, its brief tells it the build
- * is over? A seed upgrade keeps a part the agent edited before, which never exported the mark — and
- * could give the session no run controls and tell it to pick up where it left off. Then the
- * coordinator answers, as before.
- */
-export function servesAfterLoopRun(parts: readonly Readonly<Record<string, unknown>>[]): boolean {
-  return parts.every((part) => part.SERVES_AFTER_LOOP_RUN === true);
-}
-
 /** Does the engine this message goes to hold a session: one known by name, or described so? */
-async function holdsSession(host: Caller, engine: string): Promise<boolean> {
+export async function holdsSession(host: Caller, engine: string): Promise<boolean> {
   if (hasSessionRoles(engine)) return true;
   const described = await host.call(HostMethod.EngineDescribe, {}).catch(() => []);
   return supportsSessions(described.find((e) => e.id === engine));
 }
 
 /**
- * The run the chat's own session answers after, or null for the coordinator: a closed run whose
- * lead was the chat's own session (`journal.director.lead.chatSession`), for a message on the lead's
- * engine (or none), which holds a session. A run under way, a run no lead led, one whose lead was a
- * session of its own and a message on another engine — another session — are the coordinator's.
+ * The run the chat's own session answers after with the run's controls, or null for a plain turn: a
+ * closed run whose journal seated a lead (`journal.director.lead`), for a message on an engine that
+ * holds a session. A run under way, the classic pipeline, the long turn and a run with no journal
+ * get a plain turn, and so does an engine without sessions (Ollama).
  */
 export async function afterLeadLoopRun(
   host: Caller,
@@ -106,61 +97,52 @@ export async function afterLeadLoopRun(
   run: AnyRecord,
 ): Promise<AfterLoopRun | null> {
   if (!CLOSED.includes(run.state) || !run.runId) return null;
-  const engine = roleEngine(run, RoleKey.Planner);
-  if (action.engine && action.engine !== engine) return null;
+  const leadEngine = roleEngine(run, RoleKey.Planner);
+  const engine = action.engine ?? leadEngine;
   if (!(await holdsSession(host, engine))) return null;
   const journal = await readJournal(host, action.threadId, run.runId);
-  if (journal?.director?.lead?.chatSession !== true) return null;
+  if (typeof journal?.director?.lead?.chatSession !== "boolean") return null;
+  const onLeadEngine = engine === leadEngine;
+  const leadModel = onLeadEngine ? (plannerModel(run) ?? null) : null;
   return {
     runId: run.runId,
     state: run.state,
-    goal: typeof run.goal === "string" ? run.goal : null,
-    landed: typeof run.landed === "boolean" ? run.landed : null,
-    stoppedBecause: typeof run.stoppedBecause === "string" ? run.stoppedBecause : null,
     engine,
-    model: action.model ?? plannerModel(run) ?? null,
+    onLeadEngine,
+    model: action.model ?? leadModel,
     ...(journal.director.open ? { inPlace: true } : {}),
   };
 }
 
-/**
- * The resume a chat's own session may record after a paused run: the run's own `resume_run`,
- * without its `runId` — the chat resumes the run it answers after, never another it could name.
- */
-function resumeTool(): StudioToolSpec[] {
-  return (coordinatorTools as StudioToolSpec[])
-    .filter((tool) => tool.name === RESUME_RUN)
-    .map((tool) => {
-      const { runId: _anotherRun, ...properties } = tool.parameters.properties;
-      return { ...tool, parameters: { ...tool.parameters, properties } };
-    });
+/** May this turn resume its run: a paused Loop that worked in place, on its lead's engine? */
+function resumes(loopRun: AfterLoopRun): boolean {
+  return loopRun.state === RunState.Paused && loopRun.onLeadEngine && loopRun.inPlace === true;
 }
 
 /**
  * What the chat's own session is handed on its turn after a run: the run's controls the host
- * answers for this run and message, and after a paused run the resume, bridged in and recorded.
+ * answers for this run and message, and the resume, bridged in and recorded, when it may resume.
  */
 export function afterLoopRunGrant(loopRun: AfterLoopRun): {
-  runControls: { runId: string; messageId?: string; inPlace?: boolean };
+  runControls: { runId: string; messageId?: string };
   interviewTools?: StudioToolSpec[];
 } {
   const { runId, messageId } = loopRun;
   return {
-    // A Loop that worked in place keeps its status alone: the host offers no build to show or land.
-    runControls: { runId, ...(messageId ? { messageId } : {}), ...(loopRun.inPlace ? { inPlace: true } : {}) },
-    ...(loopRun.state === RunState.Paused ? { interviewTools: resumeTool() } : {}),
+    runControls: { runId, ...(messageId ? { messageId } : {}) },
+    ...(resumes(loopRun) ? { interviewTools: [RESUME_RUN_TOOL] } : {}),
   };
 }
 
 /**
- * The resume the session recorded, when its run is paused: its instruction (`text`) and nothing
- * else — a run it names is not the one it was granted — else null.
+ * The resume the session recorded, when it may resume: its instruction (`text`) and nothing else —
+ * a run it names is not the one it was granted — else null.
  */
 export function resumeAsked(
   loopRun: AfterLoopRun,
   recorded: ReadonlyArray<{ name: string; args?: AnyRecord }>,
 ): AnyRecord | null {
-  if (loopRun.state !== RunState.Paused) return null;
+  if (!resumes(loopRun)) return null;
   const call = recorded.find((c) => c.name === RESUME_RUN);
   if (!call) return null;
   const text = call.args?.text;
@@ -206,7 +188,7 @@ export async function resumeAfterReply(
   const asked: AskedResume = { runId, until: Date.now() + within, taken: false, stopped: false };
   askedOf(studio).set(threadId, asked);
   try {
-    await studio.host.call(HostMethod.CoordinatorTool, {
+    await studio.host.call(HostMethod.RunControl, {
       threadId,
       runId,
       ...(messageId ? { messageId } : {}),
@@ -222,9 +204,9 @@ export async function resumeAfterReply(
 }
 
 /**
- * Hold until run-dispatch.ts reserves the run (or, from an older copy that never looks here, until
- * it is among the loop's runs), the bound passes, or Stop comes: then the reservation, when it
- * comes, does not start the run (`resumeStopped`).
+ * Hold until run-dispatch.ts reserves the run — or holds it already, resumed meanwhile from Builds
+ * — the bound passes, or Stop comes: then the reservation, when it comes, does not start the run
+ * (`resumeStopped`).
  */
 async function untilReserved(
   studio: Studio,

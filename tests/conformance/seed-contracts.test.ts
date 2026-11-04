@@ -1,79 +1,57 @@
 /**
  * The app and the harness each keep a copy of the contracts they share, because the app must not
  * load the agent's editable seed (scripts/check-boundaries.ts) and the seed cannot import from
- * the app. These tests hold the copies together: the same coordinator tools, the same queue
+ * the app. These tests hold the copies together: the same run readings and build names, the same queue
  * states and readings of the same logs, the same role tables and presets, the same skill
  * edits and the same vocabularies. A change to one copy that the other lacks fails here.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import * as seedChatDispatch from "../../src/harness-seed/loop/chat-dispatch.ts";
-import * as seedContractLessons from "../../src/harness-seed/loop/contract-lessons.ts";
-import * as seedCompletionPolicy from "../../src/harness-seed/loop/completion-policy.ts";
 import { endsSessions as seedEndsSessions } from "../../src/harness-seed/loop/compaction-log.ts";
 import * as seedDelegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
 import * as seedFolderFacts from "../../src/harness-seed/loop/folder-facts.ts";
 import * as seedEngineGame from "../../src/harness-seed/loop/engine-game.ts";
 import * as seedGameEngine from "../../src/harness-seed/loop/game-engine.ts";
-import * as seedUnrealLead from "../../src/harness-seed/loop/unreal/lead-contract.ts";
-import * as seedUnrealLive from "../../src/harness-seed/loop/unreal/live-contract.ts";
-import blenderManifest from "../../src/plugins/blender/plugin.json" with { type: "json" };
-import genexManifest from "../../src/plugins/genex/plugin.json" with { type: "json" };
-import { PartRunState, PlayCheckShot } from "../../src/plugins/unreal/editor-queue.ts";
-import { LeadLoopToolName, LiveLoopToolName, LoopToolName } from "../../src/plugins/unreal/loop-tools.ts";
-import { LeadPluginTool as seedLeadPluginTool } from "../../src/harness-seed/loop/unreal/save-point.ts";
-import { PluginCallBlocker as seedPluginCallBlocker } from "../../src/harness-seed/loop/unreal/lead-steps.ts";
-import { PluginCallBlocker } from "../../src/shared/plugins.ts";
-import { LOCK_LABEL_CHARS } from "../../src/shared/plugin-hooks.ts";
-import { HelperState } from "../../src/plugins/unreal/setup.ts";
-import unrealManifest from "../../src/plugins/unreal/plugin.json" with { type: "json" };
+import {
+  OPEN_LEAD_PART as seedOpenLeadPart,
+  SAVE_POINT_VERDICT_SOURCE as seedSavePointSource,
+} from "../../src/harness-seed/loop/director/open/graph.ts";
 import * as seedInbox from "../../src/harness-seed/loop/run-inbox.ts";
 import * as seedQueue from "../../src/harness-seed/loop/message-queue.ts";
 import * as seedRoles from "../../src/harness-seed/loop/model-roles.ts";
 import * as seedEffort from "../../src/harness-seed/loop/effort-cap.ts";
 import * as seedOutage from "../../src/harness-seed/loop/outage.ts";
+import { TurnFailureCode as seedTurnFailureCode } from "../../src/harness-seed/loop/turn-record.ts";
 import * as seedSandboxRefusal from "../../src/harness-seed/loop/workers/sandbox-refusal.ts";
 import * as seedOutcomes from "../../src/harness-seed/loop/outcomes.ts";
 import {
   PreviewConsoleSource as seedPreviewConsoleSource,
   PreviewGone as seedPreviewGone,
 } from "../../src/harness-seed/loop/preview-gone.ts";
-import { PageMethod as seedPageMethod } from "../../src/harness-seed/loop/page-contract.ts";
 import * as seedJudgeProvenance from "../../src/harness-seed/loop/judge-provenance.ts";
-import { InteractionObjective, InteractionSource, InteractionStatus } from "../../src/shared/run-summary.ts";
-import * as seedInteractionEvidence from "../../src/harness-seed/loop/interaction-evidence.ts";
-import * as seedInteractionWords from "../../src/harness-seed/loop/interaction-words.ts";
-import * as seedComputerLoop from "../../src/harness-seed/loop/computer-loop.ts";
-import { ScreenRole } from "../../src/shared/agent-screen.ts";
-import { ComputerPacing } from "../../src/shared/computer-target.ts";
 import * as seedRunDispatch from "../../src/harness-seed/loop/run-dispatch.ts";
 import * as seedRunEvents from "../../src/harness-seed/loop/run-events.ts";
-import * as seedSkills from "../../src/harness-seed/loop/skills.ts";
-import * as seedStateShape from "../../src/harness-seed/loop/state-shape.ts";
-import { SteerDelivery as seedSteerDelivery } from "../../src/harness-seed/loop/steer-delivery.ts";
+import {
+  MessageFrom as seedMessageFrom,
+  SteerDelivery as seedSteerDelivery,
+} from "../../src/harness-seed/loop/steer-delivery.ts";
 import * as seedTime from "../../src/harness-seed/loop/time.ts";
-import * as seedWakeSchedule from "../../src/harness-seed/loop/director/wake-schedule.ts";
 import { DelegationRefusal as seedDelegationRefusal } from "../../src/harness-seed/loop/director/lead-session.ts";
 import * as seedWorkers from "../../src/harness-seed/loop/workers/contract.ts";
-import * as seedWhere from "../../src/harness-seed/loop/workers/where.ts";
-import * as seedWorkerRecords from "../../src/harness-seed/loop/workers/records.ts";
 import * as seedJobs from "../../src/harness-seed/loop/jobs/contract.ts";
-import * as seedBudgets from "../../src/harness-seed/loop/director/budgets.ts";
-import { yes as seedYes } from "../../src/harness-seed/loop/director/args.ts";
-import { DirectorTool as seedDirectorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
-import { finishLands, RunWriteTool } from "../../src/main/core/worker-tools.ts";
 import { RESUME_RUN as seedResumeRun } from "../../src/harness-seed/loop/after-loop-run.ts";
-import { REOPEN_RUN as seedReopenRun } from "../../src/harness-seed/loop/reopen-run-prompts.ts";
-import { tools as seedGameTools } from "../../src/harness-seed/tools/game-tools.ts";
+import { startAutopilot as seedStartAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
 import * as seedVerdict from "../../src/harness-seed/loop/verdict.ts";
 import { endsChatSessions } from "../../src/shared/chat-rewind.ts";
-import * as coordinator from "../../src/shared/coordinator.ts";
+import * as chatRun from "../../src/shared/chat-run.ts";
 import { throughClaudeFolder as seedThroughClaudeFolder } from "../../src/harness-seed/loop/workers/claude-folder.ts";
 import { throughClaudeFolder } from "../../src/substrate/paths.ts";
 import {
   CUSTOM_EVENT_TYPES,
   CompletionRole,
   CustomEvent,
+  LEAD_PART,
+  LoopRefusal,
   RunStartRefusal,
   StopCode,
   customPayload,
@@ -81,7 +59,6 @@ import {
 import * as duration from "../../src/shared/duration.ts";
 import { TargetRuntime } from "../../src/shared/computer-target.ts";
 import { ENGINE_ID, engineOf, GameEngine, isEngineGame } from "../../src/shared/game-engine.ts";
-import { ToolPermissionState } from "../../src/shared/permissions.ts";
 import {
   CoreFact,
   type FactRef,
@@ -91,48 +68,29 @@ import {
   kindPending,
   kindUnknown,
   LoopProfile,
-  loopProfileOf,
   ProjectStarter,
   pluginFactSource,
   servedAsWebGame,
   servedFacts,
-  WEB_LOOP_FACTS,
 } from "../../src/shared/project-facts.ts";
 import { ProjectTool } from "../../src/shared/project-tools.ts";
-import * as workers from "../../src/shared/workers.ts";
+import { MAX_WORKERS_AT_ONCE } from "../../src/shared/workers.ts";
 import * as jobs from "../../src/shared/jobs.ts";
-import { SnapshotRefusal } from "../../src/substrate/snapshots.ts";
-import { DelegationRefusal, EngineFailureKind, StopReason } from "../../src/shared/engine-requests.ts";
+import {
+  DelegationRefusal,
+  EngineFailureKind,
+  MessageFrom,
+  StopReason,
+  TurnFailureCode,
+} from "../../src/shared/engine-requests.ts";
 import * as queue from "../../src/shared/message-queue.ts";
 import * as roles from "../../src/shared/model-roles.ts";
 import { ReasoningEffort } from "../../src/shared/model-preferences.ts";
-import { GameFront, GameSteer, PreviewConsoleSource, PreviewGone } from "../../src/shared/preview-contract.ts";
+import { PreviewConsoleSource, PreviewGone } from "../../src/shared/preview-contract.ts";
 import { EngineId } from "../../src/shared/providers.ts";
-import {
-  CompletionPolicy,
-  ExecutionStatus,
-  JournalPhase,
-  VerdictPass,
-  VerdictRule,
-  recordedRunLoop,
-} from "../../src/shared/run-state.ts";
-import { applyEdits, SKILL_EDIT_OPS } from "../../src/shared/skill-edits.ts";
-import * as studioStateShape from "../../src/shared/studio-state-shape.ts";
-import { CONTRACT_LESSONS_FILE, LESSONS_SKILL, StagedTarget } from "../../src/shared/self-change-files.ts";
+import { ExecutionStatus, JournalPhase, VerdictPass, VerdictRule } from "../../src/shared/run-state.ts";
 import { EventKind, type EventEnvelope, MessageUsageSource } from "../../src/shared/event-log.ts";
-import {
-  DIRECTOR_LOOP_ENV,
-  HarnessCapability,
-  harnessRunEnv,
-  UNREAL_RUNNER_ENV,
-  UnrealRunnerChoice,
-} from "../../src/shared/protocol.ts";
-import { CHAT_JUDGE_CAPABILITY } from "../../src/harness-seed/loop/chat-judge.ts";
-import * as seedEngineJudges from "../../src/harness-seed/loop/engine-judges.ts";
-import { judgePlayToolWithJudges } from "../../src/main/core/judge-play-tool-prompts.ts";
-import { LOCAL_ROLES_CAPABILITY } from "../../src/harness-seed/loop/local-roles-served.ts";
 import * as seedEngineSeat from "../../src/harness-seed/loop/engine-seat.ts";
-import * as seedLoopSwitch from "../../src/harness-seed/loop/loop-switch.ts";
 import { EngineKind, EngineStatusCode } from "../../src/shared/engine-descriptor.ts";
 import { savedByLead } from "../../src/renderer/words.ts";
 
@@ -224,53 +182,34 @@ const LOGS: Record<string, EventEnvelope[]> = {
   ],
 };
 
-describe("the coordinator contract (shared/coordinator.ts ↔ loop/run-inbox.ts)", () => {
-  it("offers the same tools, word for word", () => {
-    assert.deepEqual(coordinator.coordinatorTools, seedInbox.coordinatorTools);
-    for (const tool of seedInbox.coordinatorTools)
-      assert.equal(coordinator.isCoordinatorTool(tool.name), true, tool.name);
-    assert.equal(coordinator.isCoordinatorTool("delete_game"), false);
-  });
-
+describe("the chat's run (shared/chat-run.ts ↔ loop/run-inbox.ts)", () => {
   it("the chat's own session after a run keeps the host's own tools: live run controls, and the resume it records", () => {
-    for (const tool of coordinator.runControlTools) assert.equal(coordinator.isCoordinatorTool(tool.name), true);
+    for (const tool of chatRun.runControlTools) assert.equal(chatRun.isHostRunTool(tool.name), true);
     assert.deepEqual(
-      coordinator.runControlTools.map((tool) => tool.name),
-      Object.values(coordinator.RunControl),
+      chatRun.runControlTools.map((tool) => tool.name),
+      Object.values(chatRun.RunControl),
     );
-    // The resume is the coordinator's own `resume_run`, never a live control: its reply ends first.
-    assert.equal(coordinator.isCoordinatorTool(seedResumeRun), true);
-    assert.equal(coordinator.isRunControl(seedResumeRun), false);
+    // The resume is the host's to answer too, never a live control: its reply ends first.
+    assert.equal(chatRun.isHostRunTool(seedResumeRun), true);
+    assert.equal(chatRun.isRunControl(seedResumeRun), false);
+    assert.equal(chatRun.isHostRunTool("delete_game"), false);
   });
 
   it("names the builds a chat's own session records to start as the seed's tools do, which Plan holds", () => {
-    const seedNames = new Set([...seedGameTools.map((tool) => tool.name), seedReopenRun, seedResumeRun]);
-    for (const name of Object.values(coordinator.BuildLaunch)) assert.equal(seedNames.has(name), true, name);
-    assert.equal(coordinator.BuildLaunch.ReopenRun, seedReopenRun);
-    assert.equal(coordinator.BuildLaunch.ResumeRun, seedResumeRun);
-    assert.equal(coordinator.isBuildLaunch("ask_user"), false, "a question is no launch");
-  });
-
-  it("one vocabulary names the coordinator's tools, in menu order, and the run's controls are some of them", () => {
-    const names: string[] = Object.values(coordinator.CoordinatorTool);
-    assert.deepEqual(
-      coordinator.coordinatorTools.map((tool) => tool.name),
-      names,
-    );
-    for (const control of Object.values(coordinator.RunControl)) assert.ok(names.includes(control), control);
+    assert.deepEqual(Object.values(chatRun.BuildLaunch), [seedStartAutopilot.name, seedResumeRun]);
+    assert.equal(chatRun.isBuildLaunch("ask_user"), false, "a question is no launch");
   });
 
   for (const [name, events] of Object.entries(LOGS)) {
     it(`reads the run and the conversation of the same log the same way: ${name}`, () => {
-      assert.deepEqual(coordinator.latestRun(events), seedInbox.latestRun(events as never));
+      assert.deepEqual(chatRun.latestRun(events), seedInbox.latestRun(events as never));
       for (const runId of ["r1", "r2", "lost", "none"]) {
-        assert.deepEqual(coordinator.latestRun(events, runId), seedInbox.latestRun(events as never, runId), runId);
-        assert.deepEqual(coordinator.runSnapshot(events, runId), seedInbox.runSnapshot(events as never, runId), runId);
+        assert.deepEqual(chatRun.latestRun(events, runId), seedInbox.latestRun(events as never, runId), runId);
       }
-      assert.deepEqual(coordinator.conversationThrough(events), seedInbox.conversationThrough(events as never));
+      assert.deepEqual(chatRun.conversationThrough(events), seedInbox.conversationThrough(events as never));
       for (const messageId of ["a", "b", "c", "red"])
         assert.deepEqual(
-          coordinator.conversationThrough(events, messageId),
+          chatRun.conversationThrough(events, messageId),
           seedInbox.conversationThrough(events as never, messageId),
           messageId,
         );
@@ -298,10 +237,10 @@ describe("a compaction's end of the chat's sessions (shared/chat-rewind.ts ↔ l
   }
 });
 
-describe("the run inbox's wrap-up (shared/coordinator.ts ↔ loop/run-inbox.ts)", () => {
-  it("names the wrap-up and the chat's stop the same way, in their persisted spelling", () => {
-    assert.deepEqual(coordinator.RunControlAction, { Finish: "finish", Stop: "stop" });
-    assert.deepEqual(seedInbox.RunControlAction, coordinator.RunControlAction);
+describe("the run inbox's wrap-up (shared/chat-run.ts ↔ loop/run-inbox.ts)", () => {
+  it("names the wrap-up the same way, in its persisted spelling", () => {
+    assert.deepEqual(chatRun.RunControlAction, { Finish: "finish" });
+    assert.deepEqual(seedInbox.RunControlAction, chatRun.RunControlAction);
   });
 
   const finish = (id: number, runId = "r") => custom(id, "run_control", { runId, action: "finish" });
@@ -316,7 +255,7 @@ describe("the run inbox's wrap-up (shared/coordinator.ts ↔ loop/run-inbox.ts)"
   for (const { label, events, expected } of rows) {
     it(`reads whether this session was asked to wrap up the same way: ${label}`, () => {
       assert.equal(seedInbox.finishRequested(events as never, "r"), expected, "harness");
-      assert.equal(coordinator.finishRequested(events, "r"), expected, "app");
+      assert.equal(chatRun.finishRequested(events, "r"), expected, "app");
     });
   }
 });
@@ -329,6 +268,7 @@ describe("the follow-up queue (shared/message-queue.ts ↔ loop/message-queue.ts
     assert.deepEqual([...seen].sort(), [...queue.QUEUE_STATES].sort());
     assert.equal(queue.MESSAGE_ATTEMPTS, seedQueue.MESSAGE_ATTEMPTS);
     assert.deepEqual(queue.SteerDelivery, seedSteerDelivery, "how a steered message was read, as both write it");
+    assert.deepEqual(MessageFrom, seedMessageFrom, "who wrote a message into a session, as both write it");
   });
 
   for (const [name, events] of Object.entries(LOGS)) {
@@ -382,11 +322,6 @@ describe("the follow-up queue (shared/message-queue.ts ↔ loop/message-queue.ts
 describe("model roles (shared/model-roles.ts ↔ loop/model-roles.ts)", () => {
   it("has the same tables", () => {
     for (const key of ["FABLE", "OPUS", "SOL", "TERRA"] as const) assert.equal(roles[key], seedRoles[key], key);
-    // The older seed's engine constants stay exported for kept files; they are the app's ids.
-    assert.deepEqual(
-      [seedRoles.CLAUDE_CODE_ENGINE, seedRoles.CODEX_ENGINE, seedRoles.BONSAI_ENGINE],
-      [EngineId.ClaudeCode, EngineId.Codex, EngineId.Bonsai],
-    );
     assert.deepEqual(roles.ROLES, seedRoles.ROLES);
     assert.deepEqual(roles.CLAUDE_CODE_MODELS, seedRoles.CLAUDE_CODE_MODELS);
     assert.deepEqual(roles.CODEX_MODELS, seedRoles.CODEX_MODELS);
@@ -489,27 +424,6 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     assert.deepEqual(seedRunEvents.EventKind, EventKind);
   });
 
-  it("names who played and what an interaction rests on as the app does", () => {
-    assert.deepEqual(seedInteractionWords.InteractionSource, InteractionSource);
-    assert.deepEqual(seedInteractionWords.InteractionObjective, InteractionObjective);
-    assert.deepEqual(seedInteractionEvidence.InteractionStatus, InteractionStatus);
-  });
-
-  it("names who holds the computer and how its clock is held as the host does", () => {
-    const roles: Readonly<Record<string, string>> = ScreenRole;
-    for (const [member, role] of Object.entries(seedComputerLoop.PlayRole))
-      assert.equal(roles[member], role, `PlayRole.${member} is ScreenRole.${member}`);
-    const pacings: Readonly<Record<string, string>> = ComputerPacing;
-    for (const [member, pacing] of Object.entries(seedComputerLoop.PlayPacing))
-      assert.equal(pacings[member], pacing, `PlayPacing.${member} is ComputerPacing.${member}`);
-  });
-
-  it("stages a lessons suggestion for the file the host lets it write", () => {
-    assert.deepEqual(seedContractLessons.StagedTarget, StagedTarget);
-    assert.equal(seedContractLessons.CONTRACT_LESSONS_FILE, CONTRACT_LESSONS_FILE);
-    assert.equal(seedContractLessons.LESSONS_SKILL, LESSONS_SKILL);
-  });
-
   it("marks a reply's usage source as the log does", () => {
     assert.deepEqual(seedDelegatedTurn.MessageUsageSource, MessageUsageSource);
   });
@@ -520,6 +434,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("names why a run's start was refused as the app reads it", () => {
     assert.deepEqual(seedRunDispatch.RunStartRefusal, RunStartRefusal);
+  });
+
+  it("names why a Loop did not run at all as the app reads it", () => {
+    assert.deepEqual(seedRunDispatch.LoopRefusal, LoopRefusal);
   });
 
   it("names the same game engines as the app's engine record", () => {
@@ -542,26 +460,6 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     for (const kind of [GameEngine.Web, GameEngine.Unreal, "toy-engine", undefined, null, "", "Toy Engine", 3])
       assert.equal(seedEngineGame.isEngineGame(kind), isEngineGame(kind), String(kind));
   });
-  it("reads why the host held a plugin call back as the host answers it", () => {
-    assert.deepEqual(seedPluginCallBlocker, PluginCallBlocker);
-  });
-
-  it("calls the Unreal plugin's Loop tools by their names, and reads a part run's end as the plugin writes it", () => {
-    const named = Object.fromEntries(
-      Object.entries(LoopToolName).map(([key, tool]) => [key, `${unrealManifest.id}__${tool}`]),
-    );
-    assert.deepEqual(seedUnrealLive.UnrealLoopTool, named);
-    assert.deepEqual(seedUnrealLive.PartRunEnd, { Done: PartRunState.Done, Failed: PartRunState.Failed });
-  });
-
-  it("calls the Unreal plugin's harness tools for the lead by their names, and reads a play-check as the plugin writes it", () => {
-    const named = Object.fromEntries(
-      Object.entries(LiveLoopToolName).map(([key, tool]) => [key, `${unrealManifest.id}__${tool}`]),
-    );
-    assert.deepEqual(seedUnrealLive.UnrealLivePluginTool, named);
-    assert.deepEqual(seedUnrealLive.LiveCamera, PlayCheckShot);
-    assert.deepEqual(seedUnrealLive.EditorHelperState, HelperState);
-  });
 
   it("names a run journal's phases as the harness writes them", () => {
     assert.deepEqual(seedRunEvents.JournalPhase, JournalPhase);
@@ -579,6 +477,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     assert.deepEqual(seedOutage.EngineFailure, EngineFailureKind);
   });
 
+  it("names why a chat turn failed the same way", () => {
+    assert.deepEqual(seedTurnFailureCode, TurnFailureCode);
+  });
+
   it("reads a delegated build's stop reasons the same way", () => {
     assert.deepEqual(seedOutage.StopReason, StopReason);
   });
@@ -591,20 +493,17 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     assert.deepEqual(seedPreviewConsoleSource, PreviewConsoleSource);
   });
 
-  it("calls the game's front-end verb by the name the harness drives it with", () => {
-    assert.equal(GameFront.Begin, seedPageMethod.Begin);
-  });
-
-  it("calls the racing-line assist by the name the harness steers with", () => {
-    assert.equal(GameSteer.Assist, seedPageMethod.Assist);
-  });
-
   it("reads why the host refused a delegation the same way", () => {
     // The director's copy names the lock; the worker pool's copy names the ceiling.
     assert.deepEqual(
       { ...seedDelegationRefusal, TooManyWorkers: seedWorkers.WorkerRefusal.TooManyWorkers },
       DelegationRefusal,
     );
+  });
+
+  it("runs at most as many workers at once as Settings offers", () => {
+    // Settings' ceiling is the app's copy; the pool stops at the seed's.
+    assert.equal(seedWorkers.MAX_WORKERS_AT_ONCE, MAX_WORKERS_AT_ONCE);
   });
 
   it("finds Claude Code's own folder in a path as the host does, however it is spelled", () => {
@@ -624,36 +523,8 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     for (const rel of paths) assert.equal(seedThroughClaudeFolder(rel), throughClaudeFolder(rel), rel);
   });
 
-  it("names the director loop's override in the studio's environment the same way", () => {
-    assert.equal(seedWakeSchedule.DIRECTOR_LOOP_ENV, DIRECTOR_LOOP_ENV);
-  });
-
-  it("names the Unreal runner's switch in the studio's environment the same way", () => {
-    assert.equal(seedLoopSwitch.UNREAL_RUNNER_ENV, UNREAL_RUNNER_ENV);
-    assert.deepEqual(seedLoopSwitch.UnrealRunnerChoice, UnrealRunnerChoice);
-  });
-
   it("names the engine kind the host seats in place as the app does", () => {
     assert.equal(seedEngineSeat.SEATED_ENGINE_KIND, EngineKind.Delegated);
-  });
-
-  it("hands the harness only the run overrides of the studio's environment, each only when it is set", () => {
-    const cases: Array<[env: Record<string, string | undefined>, handed: Record<string, string>]> = [
-      [{}, {}],
-      [{ [DIRECTOR_LOOP_ENV]: "turn" }, { [DIRECTOR_LOOP_ENV]: "turn" }],
-      [{ [DIRECTOR_LOOP_ENV]: " turn " }, { [DIRECTOR_LOOP_ENV]: "turn" }],
-      [{ [DIRECTOR_LOOP_ENV]: "  " }, {}],
-      [{ [UNREAL_RUNNER_ENV]: "lead" }, { [UNREAL_RUNNER_ENV]: "lead" }],
-      [
-        { [UNREAL_RUNNER_ENV]: " lead ", [DIRECTOR_LOOP_ENV]: "turn" },
-        { [UNREAL_RUNNER_ENV]: "lead", [DIRECTOR_LOOP_ENV]: "turn" },
-      ],
-      [{ [UNREAL_RUNNER_ENV]: "" }, {}],
-      // The workers' handover switch of 2026-10-03 is gone with the handover: never handed on.
-      [{ STUDIO_WORKER_HANDOVER: "1" }, {}],
-      [{ HOME: "/Users/someone", ANTHROPIC_API_KEY: "sk-ant-x", PATH: "/usr/bin", STUDIO_OTHER: "1" }, {}],
-    ];
-    for (const [env, handed] of cases) assert.deepEqual(harnessRunEnv(env), handed, JSON.stringify(env));
   });
 
   it("reads a verdict record's pass and rule as the harness writes them", () => {
@@ -661,9 +532,10 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     assert.deepEqual(seedVerdict.VerdictRule, VerdictRule);
   });
 
-  it("writes a lead's save point with the verdict source the renderer reads as saved by the lead", () => {
-    assert.equal(seedUnrealLead.LEAD_VERDICT_SOURCE, seedVerdict.VerdictSource.Lead);
-    assert.equal(savedByLead(seedUnrealLead.LEAD_VERDICT_SOURCE), true);
+  it("writes a lead's save point with the verdict source the renderer reads as saved by the lead, under the lead's part", () => {
+    assert.equal(seedSavePointSource, seedVerdict.VerdictSource.Lead);
+    assert.equal(savedByLead(seedSavePointSource), true);
+    assert.equal(seedOpenLeadPart, LEAD_PART);
   });
 
   it("names why a loop stopped the same way, and reads a run's close by its code", () => {
@@ -681,29 +553,7 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
   });
 
   it("logs a chat's delegation under the tool name the app reads", () => {
-    assert.equal(seedDelegatedTurn.DELEGATE_TOOL, coordinator.DELEGATE_TOOL);
-  });
-
-  it("names what ends a run (its budgets' completion policy) the same way", () => {
-    assert.deepEqual(seedCompletionPolicy.CompletionPolicy, CompletionPolicy);
-  });
-
-  it("names a bounded state's markers and keep limits the same way, and validates keep paths the same way", () => {
-    assert.deepEqual(seedStateShape.StateShape, studioStateShape.StateShape);
-    assert.deepEqual(seedStateShape.ElidedKind, studioStateShape.ElidedKind);
-    assert.equal(seedStateShape.MAX_KEEP_PATHS, studioStateShape.MAX_KEEP_PATHS);
-    assert.equal(seedStateShape.MAX_KEEP_PATH_CHARS, studioStateShape.MAX_KEEP_PATH_CHARS);
-    const raws: unknown[] = [
-      undefined,
-      "race.cars",
-      [1, null, {}, ["race"]],
-      ["", ".race", "race.", "race..cars", "a".repeat(121), "a".repeat(120)],
-      ["__proto__.polluted", "a.constructor", "prototype", "race.cars", "race.cars", "cars.0.x"],
-      Array.from({ length: 200 }, (_, i) => `p${i}`),
-    ];
-    for (const raw of raws) {
-      assert.deepEqual(seedStateShape.keepPathsOf(raw), studioStateShape.keepPathsOf(raw), String(raw).slice(0, 40));
-    }
+    assert.equal(seedDelegatedTurn.DELEGATE_TOOL, chatRun.DELEGATE_TOOL);
   });
 
   it("has the same time units", () => {
@@ -772,181 +622,16 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
       );
   });
 
-  it("picks a Loop's profile from the folder's facts as the app does", () => {
-    assert.deepEqual(seedFolderFacts.LoopProfile, LoopProfile);
-    assert.deepEqual([...seedFolderFacts.WEB_LOOP_FACTS].sort(), [...WEB_LOOP_FACTS].sort());
-    const at = (id: string, where: string) => ({ id, path: where });
-    const { Web, Open } = LoopProfile;
-    const table: Array<[string, { facts: FactRef[]; holds?: FolderHolds }, LoopProfile]> = [
-      ["no kind yet", { facts: [] }, Web],
-      ["its own files of a kind no rule knows", { facts: [], holds: FolderHolds.OwnFiles }, Open],
-      ["a web game", { facts: [at(CoreFact.WebGame, ".")] }, Web],
-      ["a web game with a second site", { facts: [at(CoreFact.WebGame, "."), at(CoreFact.WebGame, "site")] }, Web],
-      [
-        "a web game holding Blender files",
-        { facts: [at(CoreFact.WebGame, "."), at(CoreFact.BlenderAssets, "assets")] },
-        Web,
-      ],
-      ["a site in a subfolder only", { facts: [at(CoreFact.WebGame, "site")] }, Open],
-      ["an Unreal project", { facts: [at(CoreFact.UnrealProject, ".")] }, Open],
-      [
-        "a web game with an Unreal project linked in",
-        { facts: [at(CoreFact.WebGame, "."), at(CoreFact.UnrealProject, "unreal")] },
-        Open,
-      ],
-      [
-        "an Unreal project with a site",
-        { facts: [at(CoreFact.UnrealProject, "."), at(CoreFact.WebGame, "site")] },
-        Open,
-      ],
-      ["a Godot project", { facts: [at(CoreFact.GodotProject, ".")] }, Open],
-      ["a plugin's kind", { facts: [at("toy-project", ".")] }, Open],
-      ["Blender files alone", { facts: [at(CoreFact.BlenderAssets, ".")] }, Open],
-      ["an Unreal plugin", { facts: [at(CoreFact.UnrealPlugin, ".")] }, Open],
-    ];
-    for (const [name, game, profile] of table) {
-      assert.equal(loopProfileOf(game), profile, `${name}: the app's profile`);
-      assert.equal(seedFolderFacts.loopProfileOf(game), profile, `${name}: the seed's profile`);
-    }
+  // Flipped (one Loop): it also held the seed's profile choice (`loopProfileOf`, `WEB_LOOP_FACTS`) to
+  // the app's; every Loop works in place now, and only the persisted vocabulary is shared. Flipped:
+  // the seed's vocabulary equalled the app's; it keeps only the value it writes, which the app names
+  // alike (the app alone keeps `web`, an earlier Genex's, for history).
+  it("names a Loop's profile as the app does", () => {
+    assert.deepEqual(seedFolderFacts.LoopProfile, { Open: LoopProfile.Open });
   });
-
   it("the seed's starters and project tool names are the app's", () => {
     assert.deepEqual(seedFolderFacts.ProjectStarter, ProjectStarter);
     assert.deepEqual(seedFolderFacts.ProjectTool, ProjectTool);
-  });
-
-  it("the capabilities the seed claims when its parts serve them are the app's", () => {
-    assert.equal(CHAT_JUDGE_CAPABILITY, HarnessCapability.ChatJudge);
-    assert.equal(LOCAL_ROLES_CAPABILITY, HarnessCapability.LocalRoles);
-  });
-
-  it("names an engine's judge in judge_play by the argument the host reads, for a direct model and a Loop lead alike", async () => {
-    const judges = [{ id: "crowd", label: "Crowd" }];
-    const keys = (spec: { parameters?: { properties?: Record<string, unknown> } } | undefined) =>
-      Object.keys(spec?.parameters?.properties ?? {}).sort();
-    const hostTool = judgePlayToolWithJudges(judges);
-    const [directTool] = (await import("../../src/harness-seed/tools/judge-tools.ts")).tools;
-    assert.equal(directTool?.name, hostTool.name);
-    assert.deepEqual(
-      keys(directTool as never),
-      keys(hostTool),
-      "the direct model's tool takes the session's arguments",
-    );
-    assert.deepEqual(keys(seedEngineJudges.judgePlaySpec(judges)), keys(hostTool), "so does a Loop lead's");
-    assert.equal(seedEngineJudges.servesEngineJudges(), true, "the shipped judge modules hand the judge on");
-  });
-});
-
-describe("a lead's sub-agent tools (bundled plugins ↔ loop/unreal/lead-contract.ts)", () => {
-  const { AgentKind, AGENT_TOOL_ALLOW } = seedUnrealLead;
-  const agentNames = (manifest: { id: string; tools?: Array<{ name: string }> }) =>
-    (manifest.tools ?? []).map((tool) => `${manifest.id}__${tool.name}`);
-  const allows = (kind: seedUnrealLead.AgentKind, name: string) =>
-    AGENT_TOOL_ALLOW[kind].some((entry) => name.startsWith(entry));
-
-  it("names only tools the bundled plugins have, by their agent names", () => {
-    const bundled = [blenderManifest, genexManifest, unrealManifest].flatMap(agentNames);
-    // A renamed plugin or tool fails here, not in a run.
-    for (const entry of Object.values(AGENT_TOOL_ALLOW).flat())
-      assert.ok(
-        bundled.some((name) => name.startsWith(entry)),
-        entry,
-      );
-    const offered: Array<[seedUnrealLead.AgentKind, string]> = [
-      [AgentKind.BlenderModel, `${blenderManifest.id}__model`],
-      [AgentKind.BlenderPrep, `${blenderManifest.id}__model`],
-      [AgentKind.GenexCast, `${genexManifest.id}__asset`],
-      [AgentKind.GenexCast, `${blenderManifest.id}__model`],
-      [AgentKind.Sound, `${genexManifest.id}__asset`],
-      [AgentKind.Texture, `${genexManifest.id}__asset`],
-      [AgentKind.Cpp, `${unrealManifest.id}__check-part`],
-    ];
-    for (const [kind, name] of offered) assert.equal(allows(kind, name), true, `${kind} ${name}`);
-  });
-
-  it("never offers any kind the user's editor, publishing, a CLI or the Unreal plugin's other tools", () => {
-    const never = [
-      "unreal-editor__call_tool",
-      "unreal-editor__list_toolsets",
-      "unreal-editor__describe_toolset",
-      ...["publish", "publish-status", "cli", "cli-paid", "package"].map((tool) => `${genexManifest.id}__${tool}`),
-      ...agentNames(unrealManifest).filter((name) => name !== `${unrealManifest.id}__check-part`),
-    ];
-    for (const kind of Object.values(AgentKind))
-      for (const name of never) assert.equal(allows(kind, name), false, `${kind} ${name}`);
-  });
-});
-
-describe("the Unreal plugin's harness tools a save asks (plugins/unreal ↔ the seed's and the app's names)", () => {
-  const harness = new Set(
-    (unrealManifest.tools as Array<{ name: string; audience?: string }>)
-      .filter((tool) => tool.audience === "harness")
-      .map((tool) => `${unrealManifest.id}__${tool.name}`),
-  );
-
-  it("names the lead's tools as the plugin does, each a harness tool of its manifest", () => {
-    const named = Object.fromEntries(
-      Object.entries(LeadLoopToolName).map(([key, tool]) => [key, `${unrealManifest.id}__${tool}`]),
-    );
-    assert.deepEqual(seedLeadPluginTool, named);
-    for (const name of Object.values(seedLeadPluginTool)) assert.ok(harness.has(name), name);
-  });
-});
-
-describe("skill edits (shared/skill-edits.ts ↔ loop/skills.ts)", () => {
-  const skill =
-    "---\nname: pacing\ndescription: keep it moving\n---\n# Pacing\nShort rounds.\n<!-- SLOW_UPDATE -->\nNever touch this.\n<!-- SLOW_UPDATE -->\nTail.\n";
-  const edits: unknown[][] = [
-    SKILL_EDIT_OPS.map((op) => ({ op, anchor: "Short rounds.", text: "Shorter." })),
-    [{ op: "append", text: "- one more rule" }, { op: "append" }],
-    [
-      { op: "insert_after", anchor: "# Pacing", text: "Lead line." },
-      { op: "insert_after", text: "no anchor" },
-      { op: "insert_after", anchor: "  ", text: "blank" },
-    ],
-    [
-      { op: "replace", anchor: "Never touch this.", text: "x" },
-      { op: "delete", anchor: "Never" },
-      { op: "insert_after", anchor: "Never touch", text: "y" },
-    ],
-    [
-      { op: "replace", anchor: "missing", text: "x" },
-      { op: "delete", anchor: "Tail." },
-      { op: "rename", anchor: "Tail." },
-    ],
-    [
-      { op: "replace", anchor: "Short rounds.", text: 42 },
-      { op: "insert_after", anchor: "# Pacing" },
-    ],
-  ];
-  for (const list of edits) {
-    it(`replays ${JSON.stringify(list).slice(0, 80)} as the harness applied it`, () => {
-      assert.deepEqual(applyEdits(skill, list), seedSkills.applyEdits(skill, list as never));
-    });
-  }
-});
-
-describe("run budgets (shared/run-state.ts ↔ loop/chat-dispatch.ts)", () => {
-  it("reads the Loop back as the seed recorded it: ∞ as until satisfied, hours as hours", () => {
-    assert.deepEqual(recordedRunLoop(seedChatDispatch.intakeBudgets({ hours: 24, untilSatisfied: true })), {
-      hours: null,
-    });
-    assert.deepEqual(recordedRunLoop(seedChatDispatch.intakeBudgets({ hours: 1 })), { hours: 1 });
-  });
-});
-
-describe("how many workers a run may run (shared/builders.ts ↔ loop/director/budgets.ts)", () => {
-  it("lets the lead run every worker the Maximum concurrent workers setting offers, and keeps the lead's own windows apart", async () => {
-    const { LEAD_WINDOWS, MAX_BUILDERS, DEFAULT_BUILDERS } = await import("../../src/shared/builders.ts");
-    const budgets = await import("../../src/harness-seed/loop/director/budgets.ts");
-    assert.equal(budgets.MAX_WORKERS, MAX_BUILDERS, "no hidden cap below the setting's most");
-    assert.ok(budgets.MAX_PLAN_WORKERS >= MAX_BUILDERS, "a plan can name a part for every worker");
-    for (const builders of [1, DEFAULT_BUILDERS, MAX_BUILDERS])
-      assert.equal(
-        budgets.workerWindows(builders + LEAD_WINDOWS),
-        builders,
-        `${builders} builders in a pool of ${builders + LEAD_WINDOWS}`,
-      );
   });
 });
 
@@ -973,63 +658,6 @@ describe("long processes the agents start (shared/jobs.ts ↔ loop/jobs/contract
   });
 });
 
-describe("one worker model (shared/workers.ts ↔ loop/workers/contract.ts)", () => {
-  it("names the worker tools, isolations, verdicts and refusals as the app does", () => {
-    assert.deepEqual(seedWorkers.WorkerTool, workers.WorkerTool);
-    assert.deepEqual(seedWorkers.WorkerIsolation, workers.WorkerIsolation);
-    assert.deepEqual(seedWorkers.WorkerVerdict, workers.WorkerVerdict);
-    assert.equal(seedWorkers.MAX_WORKERS_AT_ONCE, workers.MAX_WORKERS_AT_ONCE);
-    assert.equal(seedWorkers.WorkerRefusal.TooManyWorkers, DelegationRefusal.TooManyWorkers);
-    assert.equal(seedWorkers.WorkerRefusal.CopyTooLarge, SnapshotRefusal.CopyTooLarge);
-    assert.equal(seedWorkers.WORKER_QUESTION_EVENT, CustomEvent.ToolPermission);
-    assert.equal(seedWorkers.WORKER_QUESTION_PENDING, ToolPermissionState.Pending);
-    // A worker waits as long as the director's own wait may.
-    assert.equal(seedWorkers.MAX_WORKER_WAIT_S, seedBudgets.MAX_WAIT_S);
-    // The verdict the Unreal lead's agents are marked with is the worker verdict, value for value.
-    assert.deepEqual({ ...seedUnrealLead.AgentVerdict }, { ...workers.WorkerVerdict });
-    // A worker's start and end records, its end states, its pool id and the caps of its words.
-    assert.deepEqual(
-      { ...seedWorkers.WorkerEvent },
-      { Started: CustomEvent.WorkerStarted, Finished: CustomEvent.WorkerFinished },
-    );
-    assert.deepEqual(seedWorkers.WorkerEnd, workers.WorkerEnd);
-    assert.deepEqual(seedWorkers.WorkerStopCode, workers.WorkerStopCode);
-    // Each end is a state the pool's records keep, by the same word.
-    const { Done, Failed, Stopped } = seedWorkerRecords.WorkerState;
-    assert.deepEqual({ ...workers.WorkerEnd }, { Done, Failed, Stopped });
-    assert.equal(seedWorkers.POOL_WORKER_PREFIX, workers.POOL_WORKER_PREFIX);
-    assert.equal(seedWorkers.WORKER_TASK_CHARS, workers.WORKER_TASK_CHARS);
-    assert.equal(seedWorkers.WORKER_ASK_CHARS, workers.WORKER_ASK_CHARS);
-    assert.equal(seedWorkers.WORKER_SUMMARY_CHARS, workers.WORKER_SUMMARY_CHARS);
-    assert.equal(seedWorkers.WORKER_TITLE_CHARS, workers.WORKER_TITLE_CHARS);
-    // Where an in-place worker works is a lock's label, as long as a label may be.
-    assert.equal(seedWhere.WORKER_WHERE_CHARS, LOCK_LABEL_CHARS);
-  });
-
-  it("Plan holds the director's merge and its landing finish by the seed's own names and its own reading of land", () => {
-    assert.equal(RunWriteTool.Integrate, seedDirectorTool.Integrate);
-    assert.equal(RunWriteTool.Finish, seedDirectorTool.Finish);
-    for (const land of [
-      undefined,
-      null,
-      "",
-      " ",
-      "yes",
-      "Y",
-      "true",
-      "1",
-      "no",
-      "n",
-      "false",
-      "0",
-      "maybe",
-      true,
-      false,
-    ])
-      assert.equal(finishLands({ land }), seedYes(land, true), `land=${JSON.stringify(land)}`);
-  });
-});
-
 describe("Genex's moments (shared/plugin-hooks.ts ↔ loop/hooks.ts)", () => {
   it("names the hook events, the blocking ones, checkpoint skips, Genex's holds and the label cap as the app does", async () => {
     const seed = await import("../../src/harness-seed/loop/hooks.ts");
@@ -1053,16 +681,14 @@ describe("Genex's moments (shared/plugin-hooks.ts ↔ loop/hooks.ts)", () => {
 });
 
 describe("a game's observers and a lead's claim (shared/observers.ts ↔ loop/finish-contract.ts)", () => {
-  it("names the finish check's steps, its rejection and reason caps, the capture sources, the events and the lead call's deadline as the app does", async () => {
+  it("names the finish check's steps, its reason caps, the capture sources, the events and the lead call's deadline as the app does", async () => {
     const seed = await import("../../src/harness-seed/loop/finish-contract.ts");
     const app = await import("../../src/shared/observers.ts");
     const check = await import("../../src/shared/finish-check.ts");
     const { BRIDGE_TOOL_DEADLINE_MS } = await import("../../src/substrate/engines/studio-bridge.ts");
     assert.deepEqual({ ...seed.FinishCheckStep }, { ...check.FinishCheckStep });
-    assert.equal(seed.MAX_FINISH_REJECTIONS, check.MAX_FINISH_REJECTIONS);
     assert.equal(seed.MAX_FINISH_REASONS, check.MAX_FINISH_REASONS);
     assert.equal(seed.FINISH_REASON_CHARS, check.FINISH_REASON_CHARS);
-    assert.equal(seed.FINISH_TIME_LEFT_MS, check.FINISH_TIME_LEFT_MS);
     assert.deepEqual({ ...seed.StopWhy }, { ...check.StopWhy });
     assert.equal(seed.FINISH_CHECK_EVENT, CustomEvent.FinishCheck);
     assert.deepEqual({ ...seed.ObserverSource }, { ...app.ObserverSource });

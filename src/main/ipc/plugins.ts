@@ -17,7 +17,12 @@ import {
 } from "../../shared/plugins.ts";
 import type { PluginMarketplace } from "../../substrate/plugins/marketplace.ts";
 import { scanPackage } from "../../substrate/plugins/scan.ts";
-import { publishAppsFromDialog, publishFromDialog, publishReview } from "../core/genex-publish.ts";
+import {
+  cloudBuildFromDialog,
+  publishAppsFromDialog,
+  publishFromDialog,
+  publishReview,
+} from "../core/genex-publish.ts";
 import { createPluginFilePicker } from "../core/plugin-file-picker.ts";
 import { openGenexPage } from "../genex-browser.ts";
 import { assertNativeActionAllowed } from "../dev/native-policy.ts";
@@ -140,11 +145,12 @@ export function registerPluginsIpc(handle: IpcHandle, deps: PluginsIpcDeps): voi
   handle("studio:plugins.genex-publish-review", async (p) => publishReview(core, p?.project));
   handle("studio:plugins.genex-publish-platforms", async (p) => publishPlatforms(core, p?.project));
   handle("studio:plugins.genex-publish", async (p) =>
-    publishFromDialog(core, p?.project, p?.review, p?.title, undefined, p?.remix),
+    publishFromDialog(core, p?.project, p?.review, p?.title, undefined, p?.remix, p?.replaceNativePage),
   );
   handle("studio:plugins.genex-publish-apps", async (p) =>
     publishAppsFromDialog(core, p?.project, p?.title, undefined, p?.remix),
   );
+  handle("studio:plugins.genex-cloud-build", async (p) => cloudBuildFromDialog(core, p?.project, p?.platform));
   handle("studio:plugins.install", async (p) => installPlugin(ctx, p.id));
   handle("studio:plugins.index", async (p) => requireMarketplace(ctx).index(p?.refresh === true, core.plugins.list()));
   handle("studio:plugins.install-github", async (p) => installFromGithub(ctx, p.spec));

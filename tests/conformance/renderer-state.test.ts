@@ -728,20 +728,11 @@ describe("what each UI event makes the renderer read again", () => {
   const ev = (type: string, payload: unknown = {}): UiEvent => ({ type, payload }) as UiEvent;
 
   it("pulls logged events in live, and lists on their own changes", () => {
-    for (const type of [
-      "chat.message",
-      "run.finished",
-      "delegated.event",
-      "plugin.consent",
-      "improvement.applied",
-      "coordinator.queued",
-      "run.optimization",
-    ]) {
+    for (const type of ["chat.message", "run.finished", "delegated.event", "plugin.consent", "coordinator.queued"]) {
       assert.deepEqual(reads(ev(type)), ["events"], type);
     }
     assert.deepEqual(reads(ev("thread.bound")), ["events", "threads"]);
     assert.deepEqual(reads(ev("game.changed")), ["events", "games", "threads"]);
-    assert.deepEqual(reads(ev("skillopt.staged")), ["staged"]);
     assert.deepEqual(reads(ev("engines.changed")), ["engines"]);
     assert.deepEqual(reads(ev("model.pull", { model: "m", progress: { status: "pulling" } })), []);
     assert.deepEqual(reads(ev("model.pull", { model: "m", progress: { status: "success" } })), ["engines"]);
@@ -904,26 +895,15 @@ describe("the studio: one subscription, the bootstrap and the commands that span
     const { fake, app } = started();
     await tick();
     app.selectThread("rift-chat");
-    const heard: Array<[string, string]> = [];
-    const stop = app.onUiEvent((event) => heard.push([event.type, app.layout.getState().stageView]));
+    const heard: Array<[string, string | null | undefined]> = [];
+    const stop = app.onUiEvent((event) => heard.push([event.type, app.update.getState().ready?.version]));
     assert.equal(fake.listeners("onEvent"), 1, "no IPC listener of its own");
-    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
-    assert.deepEqual(heard, [["stage.show", "live"]], "the stores took it first");
+    // Flipped (one Loop): heard through stage.show, which nothing sends any more; an update's news now.
+    fake.emit({ type: "update.ready", payload: { version: "0.2.0", action: UpdateAction.Restart } });
+    assert.deepEqual(heard, [["update.ready", "0.2.0"]], "the stores took it first");
     stop();
-    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
+    fake.emit({ type: "update.ready", payload: { version: "0.2.1", action: UpdateAction.Restart } });
     assert.equal(heard.length, 1, "a stopped listener hears nothing more");
-  });
-
-  it("a build the chat put on screen for the game on the stage shows Live", async () => {
-    const storage = memoryStorage({ "studio.previewView": "builds" });
-    const { fake, app } = started({}, storage);
-    await tick();
-    app.selectThread("rift-chat");
-    assert.equal(app.layout.getState().stageView, "builds");
-    fake.emit({ type: "stage.show", payload: { project: "pond", view: "live" } });
-    assert.equal(app.layout.getState().stageView, "builds", "another game's build leaves this stage alone");
-    fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
-    assert.equal(app.layout.getState().stageView, "live");
   });
 
   it("makes the copy of the game the bar's Remix closed the viewer on, as a card's Remix does", async () => {
@@ -1205,9 +1185,9 @@ function rendererFiles(): string[] {
 describe("Settings → Permissions: Let agents control your computer", () => {
   it("is off unless the host's settings say it is on, and offered only on macOS and Windows", () => {
     assert.equal(computerControlOn(null), false, "before the settings load");
-    assert.equal(computerControlOn({ learning: true, selfImproving: false }), false, "an older host's view");
-    assert.equal(computerControlOn({ learning: true, selfImproving: false, computerControl: false }), false);
-    assert.equal(computerControlOn({ learning: true, selfImproving: false, computerControl: true }), true);
+    assert.equal(computerControlOn({ learning: true }), false, "an older host's view");
+    assert.equal(computerControlOn({ learning: true, computerControl: false }), false);
+    assert.equal(computerControlOn({ learning: true, computerControl: true }), true);
     assert.equal(computerControlOffered(StudioPlatform.Mac), true);
     assert.equal(computerControlOffered(StudioPlatform.Windows), true, "the desktop driver ships on Windows too");
     for (const platform of [StudioPlatform.Linux, ""])
@@ -1233,7 +1213,7 @@ describe("Settings → Permissions: Let agents control your computer", () => {
 
   it("the switch sends only this setting and shows what the host saved", async () => {
     const fake = fakeStudioApi();
-    fake.stub("setSettings", async () => ({ learning: true, selfImproving: false, computerControl: false }));
+    fake.stub("setSettings", async () => ({ learning: true, computerControl: false }));
     const view = await setComputerControl(fake.api, true);
     assert.deepEqual(fake.callsOf("setSettings"), [[{ computerControl: true }]]);
     assert.equal(computerControlOn(view), false, "the switch follows the host's answer, not the click");

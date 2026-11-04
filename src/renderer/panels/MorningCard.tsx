@@ -16,14 +16,14 @@ import type { RunSummary } from "../../shared/run-summary.ts";
 import { useRunSummary } from "../use-run-summary.ts";
 import { RunOutcome } from "./RunOutcome.tsx";
 import { MorningAction, morningWords } from "../morning-words.ts";
-import { type Notify, ToastTone } from "../state/toasts.ts";
-import { problemWords } from "../words.ts";
+import { type Notify, ToastTone, notifyProblem } from "../state/toasts.ts";
 import { ResultButton as Button } from "../ui/ResultButton.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
 import { FileText } from "../ui/FileText.tsx";
 import { AssetResults } from "../chat/AssetResults.tsx";
 import type { AssetDeliveredPayload } from "../../shared/game-assets.ts";
 import type { LoopProfile } from "../../shared/project-facts.ts";
+import type { LoopRefusal } from "../../shared/custom-events.ts";
 import { Presence, type PresenceChild } from "../ui/Presence.tsx";
 import { webBuildShown } from "../web-build-shown.ts";
 import { type StillToFix, stopWhyLine } from "../chat-entries.ts";
@@ -31,7 +31,6 @@ import { StillToFixCard } from "../chat/StillToFixCard.tsx";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 import { BuildSurface } from "../analytics/events/builds.ts";
-import { errorCode } from "../../shared/errors.ts";
 
 /** A build played from the card, and whether it played. */
 const playedHere = (ok: boolean): void =>
@@ -99,6 +98,8 @@ export interface MorningCardProps {
   learned?: string | null;
   /** how the Loop worked on its project (`run_finished.profile`), until its run summary says so too */
   profile?: LoopProfile | null;
+  /** why the Loop did not run at all (`run_finished.refusal`), when it didn't */
+  refusal?: LoopRefusal | null;
   project: string | null;
   /** the merged build, when the run left one that is not the live game */
   commit: string | null;
@@ -166,6 +167,7 @@ export function MorningCard({
   landingLine,
   learned,
   profile = null,
+  refusal = null,
   project,
   commit,
   after,
@@ -181,7 +183,7 @@ export function MorningCard({
 }: MorningCardProps): JSX.Element {
   const outcome = useRunSummary(project, runId);
   const waiting = useResultWait(outcome !== null);
-  const noticeFailure = (err: unknown): void => onNotice?.(problemWords(err), ToastTone.Error, errorCode(err));
+  const noticeFailure = onNotice ? notifyProblem(onNotice) : () => undefined;
   const words = morningWords({
     rounds,
     kept,
@@ -197,6 +199,7 @@ export function MorningCard({
     learned: learned ?? null,
     // The close says how the Loop worked before its summary loads: an in-place Loop never promises Live meanwhile.
     profile: outcome?.profile ?? profile,
+    refusal,
   });
   const outcomeHasPlayback = Boolean(project && outcome?.head && outcome.head !== outcome.base);
   const actions = handedOff

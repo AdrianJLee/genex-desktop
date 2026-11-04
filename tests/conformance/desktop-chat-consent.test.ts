@@ -99,3 +99,55 @@ it("one yes covers the chat's later turns; Stop, the shortcut and turning contro
     await lite.close();
   }
 });
+
+it("a session's card nobody answers expires as unanswered, never as a no: the model reads so and the next call asks again", async () => {
+  // The owner's Unreal chat: the card waited nine minutes with nobody at the computer, and the model
+  // read "the person did not allow computer control", so it told them control was off.
+  const desktop = desktopControl({
+    findDriver: async () => "/fake/cua-driver",
+    connect: async () => quietDriver(),
+    ownApp: () => false,
+  });
+  let asked = 0;
+  const lite = await coreLite({
+    desktop,
+    consentTimeoutMs: 20,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      if ((event.payload as { state: string }).state === "pending") asked += 1;
+    },
+  });
+  try {
+    const { core } = lite;
+    await core.updateSettings({ computerControl: true });
+    const project = "desk-unanswered";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const answers: string[] = [];
+    core.engines.register({
+      id: "fixture-delegate",
+      label: "Fixture",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "Fixture" }),
+      models: async () => [],
+      delegate: async (request: DelegateRequest) => {
+        for (let call = 0; call < 2; call++) {
+          const result = await request.onLiveTool!("desktop", { action: "screenshot" });
+          answers.push(typeof result === "string" ? result : result.text);
+        }
+        return { ok: true, engine: "fixture-delegate", summary: "done", turns: 1, usage: {} };
+      },
+    } as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    await api[HostMethod.EngineDelegate]!({ engine: "fixture-delegate", project, threadId, prompt: "go" });
+
+    assert.equal(asked, 2, "an expired card is no answer: the next call asks again");
+    assert.equal(answers.length, 2);
+    for (const answer of answers) {
+      assert.match(answer, /nobody answered/);
+      assert.doesNotMatch(answer, /did not allow/);
+    }
+  } finally {
+    await lite.close();
+  }
+});

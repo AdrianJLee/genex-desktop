@@ -29,7 +29,6 @@ import { RewindDialog } from "../chat/RewindDialog.tsx";
 import { type ChatParts, useChatPanel } from "../chat/use-chat-panel.ts";
 import { HeldState } from "../chat/use-launch-handover.ts";
 import { chatPlaceholder } from "../composer-placeholder.ts";
-import { loopAvailableFor } from "../loop-setting.ts";
 import { notifyProblem } from "../state/toasts.ts";
 import { isLocalDraft } from "../../shared/item-draft.ts";
 import { useLocalItemsSettle } from "../chat/use-local-items.ts";
@@ -39,7 +38,7 @@ import { QuestionVia, SendBlock, SendSource } from "../analytics/chat-vocabulary
 import { sendQuestionAnswer } from "../analytics/events/chat.ts";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { PromptBar, type PromptBarHandle } from "../ui/PromptBar.tsx";
-import { engineLoopGate, engineRewindNote } from "../engine-game.ts";
+import { engineRewindNote } from "../engine-game.ts";
 
 export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const { loading } = props;
@@ -160,6 +159,7 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
       loading={parts.props.loading}
       connectModel={chat.isStudioThread && !gate.needsSignIn && composer.noModel}
       signIn={heldAsksSignIn(parts) ? null : gate.card}
+      genex={heldAsksSignIn(parts) ? null : gate.genex}
       questions={transcript.interviewQuestions.filter((entry) => entry.kind === EntryKind.Question)}
       questionsDisabled={busy || working}
       onAnswerQuestion={(answer) => submit(answer, undefined, true, SendSource.QuestionCard)}
@@ -175,8 +175,6 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
         <PromptBar
           ref={composerRef}
           project={chat.meta.project}
-          loopAvailable={loopAvailableFor(chat.folder)}
-          loopGate={engineLoopGate(chat.folder)}
           conversationKey={threadId}
           build={composer.build}
           about={

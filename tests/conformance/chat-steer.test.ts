@@ -12,7 +12,6 @@ import type { EventEnvelope } from "../../src/substrate/types.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
-import { steeredTurnPrompt, withSteers } from "../../src/harness-seed/loop/chat-steer-prompts.ts";
 
 const rigs: Rig[] = [];
 after(async () => {
@@ -105,6 +104,113 @@ function interruptingQueue(run: (action: any, steer: any) => Promise<unknown>) {
 }
 
 describe("steered session: an engine without input mid-turn is interrupted and resumed", () => {
+  // Flipped: the resume with the person's words alone says they are theirs, as the lead's does.
+  it("a turn on Genex's own message says so on its first leg; the leg resumed with the person's words says they are theirs", async () => {
+    const froms: unknown[] = [];
+    const started = deferred();
+    const q = interruptingQueue(async (action, steer) => {
+      if (action.text !== "make the cover") return;
+      await steeredCall({ cancelled: false }, steer, {
+        prompt: "PROMPT",
+        from: "genex",
+        call: async (_prompt, _resume, _images, from) => {
+          froms.push(from);
+          if (froms.length > 1) return ok("Cover made.", "s1");
+          const cut = deferred();
+          q.onInterrupt(() => cut.resolve());
+          started.resolve();
+          await cut.promise;
+          return stopped("s1", 2);
+        },
+      });
+    });
+    await q.send("make the cover");
+    await started.promise;
+    await q.send("and make it dark");
+    await until(() => q.state("make the cover")?.state === "handled");
+    assert.deepEqual(froms, ["genex", "person"]);
+    q.queue.stop();
+  });
+
+  it("a Genex turn's first prompt is its message alone: the person's words sent while it was prepared follow as a leg of their own", async () => {
+    const calls: any[] = [],
+      preparing = deferred(),
+      prepared = deferred();
+    const q = interruptingQueue(async (action, steer) => {
+      if (action.text !== "make the cover") return;
+      preparing.resolve();
+      await prepared.promise;
+      await steeredCall({ cancelled: false }, steer, {
+        prompt: "COVER",
+        from: "genex",
+        call: async (prompt, resume, images, from) => {
+          calls.push({ prompt, resume, images: images.length, from });
+          return ok("done", "s1");
+        },
+      });
+    });
+    await q.send("make the cover");
+    await preparing.promise;
+    await q.send("and make it dark", { stills: [{ label: "dark", mimeType: "image/png", data: "d" }] });
+    prepared.resolve();
+    await until(() => q.state("make the cover")?.state === "handled");
+    assert.deepEqual(calls, [
+      { prompt: "COVER", resume: null, images: 0, from: "genex" },
+      { prompt: "and make it dark", resume: "s1", images: 1, from: "person" },
+    ]);
+    assert.equal(q.state("and make it dark")!.state, "delivered");
+    q.queue.stop();
+  });
+
+  it("a Genex message that joins the person's turn is a leg of its own after their words, never folded into them", async () => {
+    const calls: any[] = [],
+      preparing = deferred(),
+      prepared = deferred();
+    const q = interruptingQueue(async (action, steer) => {
+      if (action.text !== "build a pond") return;
+      preparing.resolve();
+      await prepared.promise;
+      await steeredCall({ cancelled: false }, steer, {
+        prompt: "PROMPT",
+        call: async (prompt, _resume, _images, from) => {
+          calls.push([prompt, from]);
+          return ok("done", "s1");
+        },
+      });
+    });
+    await q.send("build a pond");
+    await preparing.promise;
+    await q.send("and ducks");
+    await q.send("You turned on the Blender plugin.", { origin: "plugin-turned-on", from: "genex" });
+    prepared.resolve();
+    await until(() => q.state("build a pond")?.state === "handled");
+    assert.deepEqual(calls, [
+      ["PROMPT\n\nand ducks", undefined],
+      ["You turned on the Blender plugin.", "genex"],
+    ]);
+    q.queue.stop();
+  });
+
+  // Flipped: a new session got a fresh brief of its own; it gets the same words (Genex's context and
+  // the chat so far are the caller's system text and notices).
+  it("a Genex turn whose saved session is gone starts fresh with the same words, still saying it is Genex's", async () => {
+    const calls: unknown[] = [];
+    await steeredCall({ cancelled: false }, null, {
+      prompt: "COVER",
+      resume: "gone",
+      from: "genex",
+      call: async (prompt, resume, _images, from) => {
+        calls.push([prompt, resume, from]);
+        if (resume) throw new Error("No conversation found with session ID: gone");
+        return ok("done", "s2");
+      },
+    });
+    assert.deepEqual(calls, [
+      ["COVER", "gone", "genex"],
+      ["COVER", null, "genex"],
+    ]);
+  });
+
   it("resumes the same session with the message in front, recorded as delivered before the resume", async () => {
     const calls: any[] = [],
       started = deferred(),
@@ -136,7 +242,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await until(() => q.state("build a pond")?.state === "handled");
     assert.equal(calls.length, 2);
     assert.equal(calls[1].resume, "s1", "the same session, not a fresh one");
-    assert.equal(calls[1].prompt, steeredTurnPrompt(["and ducks"]));
+    assert.equal(calls[1].prompt, "and ducks");
     assert.deepEqual(calls[1].images, [{ label: "duck", mimeType: "image/png", data: "synthetic" }]);
     const delivered = custom(q.events, "coordinator_message_delivered");
     assert.equal(delivered.length, 1);
@@ -177,7 +283,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       await started.promise;
       await q.send("and ducks");
       await until(() => q.state("build a pond")?.state === "handled");
-      assert.deepEqual(calls[1], { prompt: withSteers("PROMPT", ["and ducks"]), resume: "prior" }, cutOff);
+      assert.deepEqual(calls[1], { prompt: "PROMPT\n\nand ducks", resume: "prior" }, cutOff);
       assert.equal(q.state("and ducks")!.state, "delivered");
       q.queue.stop();
     }
@@ -255,7 +361,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     assert.equal(q.interrupts.length, 0, "nothing was interrupted");
     assert.deepEqual(
       calls.map((c) => [c.prompt, c.resume, c.images.length]),
-      [[withSteers("PROMPT", ["and ducks"]), "prior", 2]],
+      [["PROMPT\n\nand ducks", "prior", 2]],
     );
     const delivered = custom(q.events, "coordinator_message_delivered");
     assert.deepEqual(
@@ -300,7 +406,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       prepared.resolve();
       await until(() => seen.length === (opens ? 1 : 2) && q.state("build a pond")?.state === "handled");
       if (opens) {
-        assert.deepEqual(calls, [withSteers("PROMPT", ["and ducks"])]);
+        assert.deepEqual(calls, ["PROMPT\n\nand ducks"]);
         assert.equal(q.state("and ducks")!.state, "delivered");
       } else {
         await until(() => q.state("and ducks")?.state === "handled");
@@ -310,8 +416,8 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     }
   });
 
-  it("a message to a run whose engine answers with a session shows Sending… while that session is set up, though the message names no engine", async () => {
-    // The run's coordinator is Claude Code; the messages name no engine, so the turn's engine is the run's.
+  it("a message after a build whose lead's engine answers with a session shows Sending… while that session is set up, though the message names no engine", async () => {
+    // The build's lead ran on Claude Code; the messages name no engine, so the turn's engine is the lead's.
     const events: any[] = [
         {
           id: "0001",
@@ -321,6 +427,11 @@ describe("steered session: an engine without input mid-turn is interrupted and r
             event_type: "run_started",
             payload: { runId: "r1", project: "pond", engine: "claude-code" },
           },
+        },
+        {
+          id: "0002",
+          thread_id: "chat",
+          data: { type: "custom", event_type: "run_finished", payload: { runId: "r1" } },
         },
       ],
       settingUp = deferred(),
@@ -332,8 +443,9 @@ describe("steered session: an engine without input mid-turn is interrupted and r
             events.push({ id: String(events.length + 1).padStart(4, "0"), thread_id: p.threadId, data });
         if (method === "events.list") return events;
         if (method === "engine.describe") return [];
+        if (method === "artifact.read") return { director: { lead: { chatSession: true } } };
         if (method === "turn.begin") {
-          // The coordinator's session is being set up: this test ends the turn here.
+          // The turn's session is being set up: this test ends the turn here.
           settingUp.resolve();
           await release.promise;
           throw new Error("the turn ends here");
@@ -344,7 +456,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     const studio = {
       host,
       cancels: new Set(),
-      moodBoards: new Map(),
       activeRuns: new Map(),
       startingRuns: new Map(),
       orphanRuns: new Map(),
@@ -475,7 +586,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await started.promise;
     await q.send("make it run"); // interrupts that leg before it read anything
     await until(() => seen.length === 3);
-    assert.equal(calls[1], withSteers(withSteers("PROMPT", ["and ducks"]), ["make it run"]));
+    assert.equal(calls[1], "PROMPT\n\nand ducks\n\nmake it run");
     assert.deepEqual(
       seen,
       ["build a pond", "and ducks", "make it run"],
@@ -513,7 +624,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     await q.send("and ducks");
     await until(() => q.state("build a pond")?.state === "handled");
     assert.equal(calls.length, 2);
-    assert.equal(calls[1], steeredTurnPrompt(["and ducks", "and run"]));
+    assert.equal(calls[1], "and ducks\n\nand run");
     const textOf = (messageId: string) =>
       q.events.find(
         (r) => r.data.event_type === "coordinator_message_queued" && r.data.payload.messageId === messageId,
@@ -533,7 +644,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       await steeredCall({ cancelled: false }, steer, {
         prompt: "PROMPT",
         resume: "prior",
-        fresh: () => "FRESH",
         call: async (prompt, resume) => {
           calls.push({ prompt, resume });
           if (calls.length === 1) {
@@ -556,7 +666,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       calls.map((c) => c.resume),
       ["prior", "s1", null],
     );
-    assert.equal(calls[2].prompt, withSteers("FRESH", ["and ducks"]));
+    assert.equal(calls[2].prompt, "PROMPT\n\nand ducks");
     q.queue.stop();
   });
 
@@ -566,7 +676,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       prompt: "PROMPT",
       resume: "prior",
       images: [{ label: "pond", mimeType: "image/png", data: "p" }],
-      fresh: () => "FRESH",
       call: async (prompt, resume, images) => {
         calls.push({ prompt, resume, images: images.length });
         if (calls.length === 1) throw new Error("No conversation found with session ID: prior");
@@ -575,7 +684,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     });
     assert.deepEqual(calls, [
       { prompt: "PROMPT", resume: "prior", images: 1 },
-      { prompt: "FRESH", resume: null, images: 1 },
+      { prompt: "PROMPT", resume: null, images: 1 },
     ]);
     assert.equal(result.summary, "done");
     assert.equal("steered" in result, false, "the result is the engine's, untouched");
@@ -594,7 +703,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     const result = await steeredCall({ cancelled: false }, undefined, {
       prompt: "PROMPT",
       resume: "aa932c8a-f6c0-463c-8fa0-87a9ae52895c",
-      fresh: () => "FRESH",
       call: async (prompt, resume) => {
         calls.push({ prompt, resume });
         return calls.length === 1 ? lost : ok("done", "s2");
@@ -604,7 +712,7 @@ describe("steered session: an engine without input mid-turn is interrupted and r
       calls.map((c) => [c.prompt, c.resume]),
       [
         ["PROMPT", "aa932c8a-f6c0-463c-8fa0-87a9ae52895c"],
-        ["FRESH", null],
+        ["PROMPT", null],
       ],
     );
     assert.equal(result.summary, "done");
@@ -615,7 +723,6 @@ describe("steered session: an engine without input mid-turn is interrupted and r
     const answer = await steeredCall({ cancelled: false }, undefined, {
       prompt: "PROMPT",
       resume: "s1",
-      fresh: () => "FRESH",
       call: async (_prompt, resume) => {
         once.push(resume);
         return capped;
@@ -626,8 +733,8 @@ describe("steered session: an engine without input mid-turn is interrupted and r
   });
 });
 
-/** A chat whose game has a finished run: its messages are answered by the run's coordinator. */
-async function coordinatorChat(rig: Rig, project: string, engine: string): Promise<string> {
+/** A chat whose game has a finished run (no lead journal): its messages are the chat's own plain turns. */
+async function finishedRunChat(rig: Rig, project: string, engine: string): Promise<string> {
   await rig.core.games.scaffold(project);
   const thread = await rig.core.createGameThread(project);
   await rig.core.append(
@@ -651,7 +758,7 @@ describe("steer through the host and the harness process", () => {
   it("an engine that reads input mid-turn gets the message in the running session, recorded where it read it", async () => {
     const rig = await startRig();
     rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-native", "claude-code");
+    const thread = await finishedRunChat(rig, "steer-native", "claude-code");
     const calls: DelegateRequest[] = [],
       handed = deferred<SteerMessage>();
     rig.core.engines.register({
@@ -708,7 +815,7 @@ describe("steer through the host and the harness process", () => {
   it("Codex fallback: the session is interrupted and resumed with the message in front, never read as a Stop", async () => {
     const rig = await startRig();
     rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-codex", "codex");
+    const thread = await finishedRunChat(rig, "steer-codex", "codex");
     const calls: DelegateRequest[] = [],
       started = deferred();
     rig.core.engines.register({
@@ -726,8 +833,7 @@ describe("steer through the host and the harness process", () => {
           return stopped("codex-thread", 3);
         }
         assert.equal(request.resume, "codex-thread");
-        assert.equal(request.prompt.split("\n\n")[0], steeredTurnPrompt(["Make it run"]).split("\n\n")[0]);
-        assert.match(request.prompt, /> Make it run/);
+        assert.equal(request.prompt.split("\n\n")[0], "Make it run", "the person's words alone");
         return ok("Night falls on the pond.", "codex-thread");
       },
     });
@@ -835,81 +941,8 @@ describe("steer through the host and the harness process", () => {
     assert.deepEqual(rewound.held, [], "a delivered message does not come back as a waiting follow-up");
   });
 
-  it("the Loop switched on while the chat's answer works: read at the session's next step, which goes on in the Loop and starts the build", async () => {
-    const rig = await startRig();
-    rigs.push(rig);
-    const project = "steer-loop";
-    await rig.core.games.scaffold(project);
-    const thread = await rig.core.createGameThread(project);
-    const chat: DelegateRequest[] = [],
-      runs: DelegateRequest[] = [],
-      started = deferred();
-    rig.core.engines.register({
-      id: "claude-code",
-      label: "Claude",
-      kind: "delegated",
-      steersMidTurn: true,
-      status: async () => ({ code: "ready", detail: "" }),
-      models: async () => [],
-      delegate: async (request) => {
-        // The build the turn launches: its sessions end at once, and the test stops it.
-        const inTheGame = request.cwd?.endsWith(`/games/${project}`) === true;
-        if (request.director || !inTheGame) {
-          runs.push(request);
-          return ok("Looked around.", `run-session-${runs.length}`);
-        }
-        chat.push(request);
-        if (chat.length === 1) {
-          // Flipped: Auto is handed the Loop's start too, for a Loop the user asks for in words.
-          assert.deepEqual(
-            request.interviewTools?.map((tool) => tool.name),
-            ["start_autopilot"],
-            "Loop off: only the Loop asked for in words",
-          );
-          // A session that reads words mid-turn: the switch must never be handed to it as words.
-          request.steer?.ready(() => assert.fail("a switch is never read as words mid-turn"));
-          started.resolve();
-          await whenAborted(request.signal);
-          return stopped("chat-session", 3);
-        }
-        assert.equal(request.resume, "chat-session", "the same session goes on");
-        assert.ok(
-          (request.interviewTools ?? []).some((tool) => tool.name === "start_autopilot"),
-          "with the Loop's start",
-        );
-        assert.match(request.prompt, /The Loop is on/);
-        assert.match(request.prompt, /> make it in the loop/);
-        return ok("Starting the Loop for the boss fight.", "chat-session", {
-          studioToolCalls: [
-            { name: "start_autopilot", args: { goal: "a boss fight with a giant exterminator", direction: "dark" } },
-          ],
-        });
-      },
-    });
-    await rig.core.sendUserMessage("Build the boss fight", { thread, engine: "claude-code" });
-    await started.promise;
-    await rig.core.sendUserMessage("make it in the loop", { thread, engine: "claude-code", autopilot: {} });
-    let events = (await waitForLog(rig.core, handledCount(thread, 1), 30000)).filter((e) => e.thread_id === thread);
-    assert.equal(chat.length, 2, "one answer, cut once at its next step");
-    assert.equal(byText(events, "make it in the loop").state, "delivered", "read by the answer: never queued");
-    assert.deepEqual(
-      custom(events, "coordinator_message_delivered").map((e) => payloadOf(e).how),
-      ["interrupt"],
-    );
-    events = (await waitForLog(rig.core, (es) => custom(es, "run_registered").length > 0, 30000)).filter(
-      (e) => e.thread_id === thread,
-    );
-    assert.equal(custom(events, "run_registered").length, 1, "the Loop started from the answer");
-    await rig.core.stopThread(thread);
-    await waitForLog(
-      rig.core,
-      (es) => custom(es, "run_finished").length + custom(es, "autopilot_paused").length > 0,
-      60000,
-    );
-  });
-
   it("a build the answer launched before an engine, model or effort change starts on the change", async () => {
-    const asked = { engine: "claude-code", model: "opus", effort: "medium", autopilot: { hours: 2 } };
+    const asked = { engine: "claude-code", model: "opus", effort: "medium" };
     const cases: Array<[string, Record<string, unknown>, Record<string, unknown>]> = [
       ["effort", { effort: "high" }, { engine: "claude-code", model: "opus", effort: "high" }],
       ["model", { model: "sonnet" }, { engine: "claude-code", model: "sonnet", effort: "medium" }],
@@ -965,118 +998,10 @@ describe("steer through the host and the harness process", () => {
     }
   });
 
-  it("a message steered into a turn that continues the build reaches the builder, restated or not", async () => {
-    for (const restate of [false, true]) {
-      const rig = await startRig();
-      rigs.push(rig);
-      const thread = await coordinatorChat(rig, `steer-continue-${restate}`, "claude-code");
-      const builders: DelegateRequest[] = [],
-        handed = deferred<SteerMessage>();
-      let started = 0;
-      rig.core.engines.register({
-        id: "claude-code",
-        label: "Claude",
-        kind: "delegated",
-        steersMidTurn: true,
-        status: async () => ({ code: "ready", detail: "" }),
-        models: async () => [],
-        delegate: async (request) => {
-          if (!request.coordinator) {
-            builders.push(request);
-            return ok("Built it.", "builder");
-          }
-          started++;
-          request.steer?.ready((message) => {
-            handed.resolve(message);
-            return true;
-          });
-          await request.onLiveTool!("continue_build", { text: "Make the sky red" });
-          const message = await handed.promise;
-          request.onEvent?.({ type: "steer_delivered", payload: { id: message.id } });
-          if (restate) await request.onLiveTool!("continue_build", { text: "Make the sky red and add rain" });
-          return ok("On it.", "coordinator", { steered: [message.id] });
-        },
-      });
-      await rig.core.sendUserMessage("Make the sky red", { thread, engine: "claude-code" });
-      await waitForLog(rig.core, () => started === 1, 15000);
-      await rig.core.sendUserMessage("And add rain", { thread, engine: "claude-code" });
-      await waitForLog(rig.core, handledCount(thread, 1), 20000);
-      assert.equal(builders.length, 1, `restated: ${restate}`);
-      assert.match(builders[0]!.prompt, /Make the sky red/);
-      assert.match(builders[0]!.prompt, /add rain/i, "the steered request is built, not only answered");
-      assert.equal(
-        (builders[0]!.prompt.match(/add rain/gi) ?? []).length,
-        1,
-        "once, whether or not the coordinator restated it",
-      );
-    }
-  });
-
-  it("a replayed turn that continues the build hands the builder what it had read, once", async () => {
-    const rig = await startRig();
-    rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-replay-continue", "codex");
-    const builders: DelegateRequest[] = [];
-    rig.core.engines.register({
-      id: "codex",
-      label: "Codex",
-      kind: "delegated",
-      status: async () => ({ code: "ready", detail: "" }),
-      models: async () => [],
-      delegate: async (request) => {
-        if (!request.coordinator) {
-          builders.push(request);
-          return ok("Built it.", "builder");
-        }
-        await request.onLiveTool!("continue_build", { text: "Make the sky red" });
-        return ok("On it.", "coordinator");
-      },
-    });
-    const action = (messageId: string, text: string) => ({
-      messageId,
-      type: "user_message",
-      threadId: thread,
-      project: "steer-replay-continue",
-      text,
-      engine: "codex",
-    });
-    await rig.core.append(
-      [
-        { type: "messages", messages: [{ role: "user", content: "Make the sky red" }] },
-        {
-          type: "custom",
-          event_type: "coordinator_message_queued",
-          payload: { messageId: "sky", action: action("sky", "Make the sky red") },
-        },
-        { type: "custom", event_type: "coordinator_message_processing", payload: { messageId: "sky" } },
-        { type: "messages", messages: [{ role: "user", content: "And add rain" }] },
-        {
-          type: "custom",
-          event_type: "coordinator_message_queued",
-          payload: { messageId: "rain", action: action("rain", "And add rain") },
-        },
-        {
-          type: "custom",
-          event_type: "coordinator_message_delivered",
-          payload: { messageId: "rain", into: "sky", how: "interrupt" },
-        },
-      ],
-      thread,
-    );
-    await rig.core.host.dispatch({ type: "boot_notice", notice: { reason: "crash_restart" } });
-    await waitForLog(rig.core, handledCount(thread, 1), 20000);
-    assert.equal(builders.length, 1);
-    assert.equal(
-      (builders[0]!.prompt.match(/And add rain/g) ?? []).length,
-      1,
-      "carried into the builder once, not twice",
-    );
-  });
-
   it("restart: a turn cut short is answered once more with the message it had read, and nothing twice", async () => {
     const rig = await startRig();
     rigs.push(rig);
-    const thread = await coordinatorChat(rig, "steer-replay", "codex");
+    const thread = await finishedRunChat(rig, "steer-replay", "codex");
     const prompts: string[] = [];
     rig.core.engines.register({
       id: "codex",
@@ -1133,9 +1058,9 @@ describe("steer through the host and the harness process", () => {
     await rig.core.host.dispatch({ type: "boot_notice", notice: { reason: "cold_start" } });
     await settle(300);
     assert.equal(prompts.length, 2, "the cut-short turn once, the unread message once");
-    assert.match(prompts[0]!, /LATEST USER MESSAGE:\nBuild a pond/);
-    assert.match(prompts[0]!, /address it too:\n> And ducks/, "the message it had read rides with it");
-    assert.match(prompts[1]!, /LATEST USER MESSAGE:\nMake it run/);
+    assert.match(prompts[0]!, /^Build a pond/, "the chat's own turn asks the message first");
+    assert.match(prompts[0]!, /\n\nAnd ducks(\n|$)/, "the message it had read rides with it, as typed");
+    assert.match(prompts[1]!, /^Make it run/);
     const events = await rig.core.store.listEvents(thread);
     assert.deepEqual(
       ["pond", "ducks", "night"].map((id) => messageQueueState(events as never).messages.get(id)!.state),

@@ -37,7 +37,8 @@ import {
 import { cursorHomes } from "../../src/substrate/credential-homes.ts";
 import { EngineError, type DelegateEvent } from "../../src/substrate/engines/types.ts";
 import { ProcessSandbox } from "../../src/substrate/spawn.ts";
-import { EngineFailureKind, StopReason } from "../../src/shared/engine-requests.ts";
+import { EngineFailureKind, MessageFrom, StopReason } from "../../src/shared/engine-requests.ts";
+import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
 import { EngineStatusCode, LoginSource } from "../../src/shared/engine-descriptor.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -325,7 +326,7 @@ describe("a Cursor session", () => {
     assert.ok(invocation.sandbox.secretPaths.includes(path.join(root, "secrets")));
   });
 
-  it("plans from a scratch folder, plays blind without the game, and resumes the session it is given", async () => {
+  it("plans from a scratch folder, and resumes the session it is given", async () => {
     const { engine, seen } = await engineWith(async function* () {
       yield* replay(await events("cursor-run-written-2026.10.22.jsonl"));
     });
@@ -337,15 +338,23 @@ describe("a Cursor session", () => {
       resume: "s-1",
       permissions: { ...asks, mode: PermissionMode.Plan },
     });
-    await engine.delegate({ cwd, prompt: "Play it", blind: true, readOnly: true });
-    const [plan, blind] = seen;
-    assert.ok(plan && blind);
+    const [plan] = seen;
+    assert.ok(plan);
     assert.notEqual(plan.cwd, cwd, "Plan runs from a folder of its own");
     assert.ok(!plan.sandbox.writableRoots.includes(cwd), "and cannot change the game");
     assert.match(plan.prompt, /PLAN MODE/);
     assert.deepEqual(plan.argv.slice(-2), ["--resume", "s-1"]);
-    assert.ok(blind.sandbox.secretPaths.includes(cwd), "a blind judge reads none of the build");
-    assert.match(blind.prompt, /YOU JUDGE BY PLAYING/);
+  });
+
+  it("a prompt Genex wrote reads under the non-user mark; the person's words go in as written", async () => {
+    const { engine, seen } = await engineWith(async function* () {
+      yield* replay(await events("cursor-run-written-2026.10.22.jsonl"));
+    });
+    const cwd = await game();
+    await engine.delegate({ cwd, prompt: "The build landed. Make the cover.", from: MessageFrom.Genex });
+    await engine.delegate({ cwd, prompt: "stop building", from: MessageFrom.Person });
+    assert.ok(seen[0]?.prompt.startsWith(`${GENEX_MARK}\nThe build landed. Make the cover.`), seen[0]?.prompt);
+    assert.match(seen[1]?.prompt ?? "", /^stop building/);
   });
 
   it("answers a judge in Cursor's ask mode from an empty folder, with the critic's rules", async () => {

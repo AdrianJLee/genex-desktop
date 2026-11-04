@@ -165,15 +165,28 @@ export function useRecheck(engineId: string, onEnginesRefresh: () => Promise<voi
 
 const OPEN_ROUTER_WORDS: ProviderWords = { name: WORDS.openRouter.name, plans: "", guide: WORDS.openRouter.keysUrl };
 
-/** The key field: paste, save (checked by OpenRouter first), get a key, or cancel a replacement. */
-function KeyEntry({
+/** OpenRouter's Get a key: its keys page in the browser. */
+function getOpenRouterKey(): void {
+  reportSignInHelper(EngineId.OpenRouter, SignInHelper.GetKeyClicked, { surface: ProviderSurface.Settings });
+  void window.studio.openUrl(WORDS.openRouter.keysUrl);
+}
+
+/** The words of a key field: its label and placeholder, and its buttons. */
+export type KeyEntryWords = { keyLabel: string; keyPlaceholder: string; save: string; getKey: string; cancel: string };
+
+/** The key field: paste, save (checked by the key's service first), get a key, or cancel a replacement. */
+export function KeyEntry({
   saving,
   onSave,
   onCancel,
+  words = WORDS.openRouter,
+  onGetKey = getOpenRouterKey,
 }: {
   saving: boolean;
   onSave: (key: string) => Promise<void>;
   onCancel: (() => void) | null;
+  words?: KeyEntryWords;
+  onGetKey?: () => void;
 }): JSX.Element {
   const [key, setKey] = useState("");
   const save = async (): Promise<void> => {
@@ -182,17 +195,13 @@ function KeyEntry({
     setKey("");
     await onSave(pasted);
   };
-  const getKey = (): void => {
-    reportSignInHelper(EngineId.OpenRouter, SignInHelper.GetKeyClicked, { surface: ProviderSurface.Settings });
-    void window.studio.openUrl(WORDS.openRouter.keysUrl);
-  };
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input
         type="password"
         data-analytics-mask
-        aria-label={WORDS.openRouter.keyLabel}
-        placeholder={WORDS.openRouter.keyPlaceholder}
+        aria-label={words.keyLabel}
+        placeholder={words.keyPlaceholder}
         autoComplete="off"
         spellCheck={false}
         value={key}
@@ -204,10 +213,10 @@ function KeyEntry({
         className="h-8 w-64 rounded-control border border-input bg-field px-2.5 font-mono text-xs text-foreground outline-none placeholder:text-muted-foreground focus:border-accent-ink"
       />
       <Button variant="default" disabled={saving || !key.trim()} onClick={() => void save()}>
-        {saving ? WORDS.saving : WORDS.openRouter.save}
+        {saving ? WORDS.saving : words.save}
       </Button>
-      <Button onClick={getKey}>{WORDS.openRouter.getKey}</Button>
-      {onCancel && <Button onClick={onCancel}>{WORDS.openRouter.cancel}</Button>}
+      <Button onClick={onGetKey}>{words.getKey}</Button>
+      {onCancel && <Button onClick={onCancel}>{words.cancel}</Button>}
     </div>
   );
 }

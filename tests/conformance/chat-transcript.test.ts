@@ -15,8 +15,6 @@ import {
   isPendingConsent,
   isPendingQuestion,
   pendingPlanReview,
-  runBudgetMs,
-  runLoopSetting,
   runStartedAt,
   sentImages,
   transcriptEntries,
@@ -389,74 +387,6 @@ describe("runStartedAt: how long the build row says the build has run", () => {
   });
 });
 
-describe("runBudgetMs: the time a build was given", () => {
-  const started = (n: number, runId: string, budgets?: unknown) =>
-    custom(n, "run_started", { runId, ...(budgets === undefined ? {} : { budgets }) });
-
-  it("reads the start record's wall-clock budget", () => {
-    assert.equal(runBudgetMs([started(1, "r1", { wallClockMs: 1_800_000 })], "r1"), 1_800_000);
-  });
-
-  it("lets a later record with a budget win, and keeps it through a later start without one", () => {
-    const registered = custom(2, "run_registered", { runId: "r1", budgets: { wallClockMs: 3_600_000 } });
-    assert.equal(runBudgetMs([started(1, "r1", { wallClockMs: 1_800_000 }), registered], "r1"), 3_600_000);
-    const resumed = [started(1, "r1", { wallClockMs: 1_800_000 }), started(2, "r1")];
-    assert.equal(runBudgetMs(resumed, "r1"), 1_800_000, "a resumed start without budgets keeps the earlier one");
-  });
-
-  it("ignores another run's records", () => {
-    assert.equal(runBudgetMs([started(1, "r2", { wallClockMs: 1_800_000 })], "r1"), null);
-  });
-
-  it("knows nothing without a usable budget or a run", () => {
-    for (const budgets of [undefined, {}, { wallClockMs: 0 }, { wallClockMs: "30" }]) {
-      assert.equal(runBudgetMs([started(1, "r1", budgets)], "r1"), null, JSON.stringify(budgets));
-    }
-    assert.equal(runBudgetMs([started(1, "r1", { wallClockMs: 1_800_000 })], null), null);
-  });
-
-  it("gives an ∞ build no budget, so its row shows the elapsed clock rather than its 24 h ceiling", () => {
-    const unbounded = [started(1, "r1", { wallClockMs: 86_400_000, untilSatisfied: true })];
-    assert.equal(runBudgetMs(unbounded, "r1"), null);
-  });
-});
-
-describe("runLoopSetting: the Loop a build was given, as Mode shows it", () => {
-  const record = (n: number, event_type: string, budgets?: unknown) =>
-    custom(n, event_type, { runId: "r1", ...(budgets === undefined ? {} : { budgets }) });
-
-  it("reads ∞ as until satisfied, and a timed build as its hours", () => {
-    const unbounded = [record(1, "run_registered", { wallClockMs: 86_400_000, untilSatisfied: true })];
-    assert.deepEqual(runLoopSetting(unbounded, "r1"), { on: true, hours: null });
-    assert.deepEqual(runLoopSetting([record(1, "run_started", { wallClockMs: 1_800_000 })], "r1"), {
-      on: true,
-      hours: 0.5,
-    });
-  });
-
-  it("reads a build recorded before ∞ was kept as its 24 h", () => {
-    assert.deepEqual(runLoopSetting([record(1, "run_started", { wallClockMs: 86_400_000 })], "r1"), {
-      on: true,
-      hours: 24,
-    });
-  });
-
-  it("keeps a resumed build's budgets through a later start that carries none", () => {
-    const resumed = [
-      record(1, "run_registered", { wallClockMs: 1_800_000 }),
-      record(2, "autopilot_paused"),
-      record(3, "run_started"),
-    ];
-    assert.deepEqual(runLoopSetting(resumed, "r1"), { on: true, hours: 0.5 });
-  });
-
-  it("knows nothing without a start record that kept one, or without a run", () => {
-    assert.equal(runLoopSetting([record(1, "run_started")], "r1"), null);
-    assert.equal(runLoopSetting([], "r1"), null);
-    assert.equal(runLoopSetting([record(1, "run_started", { wallClockMs: 1_800_000 })], null), null);
-  });
-});
-
 it("a Codex sign-in failure never narrates a Claude failure", () => {
   const rows = entries({ threadEvents: [custom(1, "needs_signin", { engine: "codex", message: "401" })] });
   const text = JSON.stringify(rows);
@@ -614,5 +544,16 @@ describe("transcriptEntries: which Genex cover shot gets the card", () => {
     for (const [name, over] of others)
       assert.deepEqual(coverCards(entries({ threadEvents: coverCall(1, "c", over) })), [], name);
     assert.deepEqual(coverCards(entries({ threadEvents: coverCall(1, "c").slice(0, 1) })), [], "a shot still running");
+  });
+
+  it("shows the card for a cover the agent handed over as files, the call genex__cover takes now", () => {
+    const handed = coverCall(1, "handed", { args: "image=.genex/cover.png clip=.genex/clip.webm" }, { images: 0 });
+    assert.deepEqual(coverCards(entries({ threadEvents: handed })), [{ callId: "handed", project: "harbor-run" }]);
+    const imageOnly = coverCall(1, "image", { args: "image=cover.jpg" }, { images: 0 });
+    assert.deepEqual(coverCards(entries({ threadEvents: imageOnly })), [{ callId: "image", project: "harbor-run" }]);
+    const refused = coverCall(1, "refused", { args: "image=tiny.png" }, { ok: false, error: "smaller than 1280×720" });
+    assert.deepEqual(coverCards(entries({ threadEvents: refused })), [], "a refused file keeps nothing");
+    for (const args of ["clip=clip.webm", "image=", "operation=status image=cover.png"])
+      assert.deepEqual(coverCards(entries({ threadEvents: coverCall(1, "c", { args }, { images: 0 }) })), [], args);
   });
 });

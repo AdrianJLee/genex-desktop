@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
-import { mkdtemp, cp, mkdir, readFile, writeFile, rename, rm, stat, symlink } from "node:fs/promises";
+import { mkdtemp, cp, mkdir, readdir, readFile, writeFile, rename, rm, stat, symlink } from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import os from "node:os";
@@ -23,6 +23,7 @@ import { RESERVED_TOOLBAR_LABELS } from "../../src/substrate/plugins/reserved-la
 import type { PluginChange, PluginInfo, PluginManifest, PluginSource } from "../../src/shared/plugins.ts";
 import { CallCutOff } from "../../src/shared/plugins.ts";
 import { PluginCallCutOff } from "../../src/substrate/plugins/process.ts";
+import { WINDOWED_KEY } from "../../src/main/play/native-unpack.ts";
 const source = EXAMPLE_PLUGIN;
 test("bundled plugin uses a real child, tools and settings share one contract; disabled fails closed", async () => {
   const f = await fixture();
@@ -1809,27 +1810,102 @@ test("successful browser credential save publishes MCP without unlock and launch
   }
 });
 
-test("bundled seed upgrades are offered explicitly and removed seeds never resurrect", async () => {
+/** Give the example seed a new version, as a newer build of Studio ships it, its manifest passed through `mutate`. */
+async function bumpExampleSeed(
+  f: Awaited<ReturnType<typeof fixture>>,
+  version: string,
+  mutate?: (manifest: any) => void,
+): Promise<void> {
+  const file = path.join(f.seeds, "example", "plugin.json");
+  const manifest = JSON.parse(await readFile(file, "utf8"));
+  manifest.version = version;
+  mutate?.(manifest);
+  await writeFile(file, JSON.stringify(manifest));
+}
+
+test("a newer bundled seed replaces the installed copy at launch, keeping it off when it was off; a removed one never resurrects", async () => {
   const f = await fixture();
   try {
-    const original = f.registry.list()[0]!.manifest.version;
-    const manifest = JSON.parse(await readFile(path.join(f.seeds, "example", "plugin.json"), "utf8"));
-    manifest.version = "9.0.0";
-    await writeFile(path.join(f.seeds, "example", "plugin.json"), JSON.stringify(manifest));
+    await f.registry.setEnabled("example", false);
+    await bumpExampleSeed(f, "9.0.0", (m) => {
+      m.skills[0].text = `${m.skills[0].text} Greet by name.`;
+    });
     f.registry.cancel();
-    const next = new PluginRegistry(f.registry.root, f.seeds, f.registry.bootstrap, (id, m, a, b) =>
-      f.services.call(id, m, a, b),
-    );
+    const next = await reopened(f, f.registry.root);
     try {
-      await next.init();
-      assert.equal(next.list()[0]!.manifest.version, original);
-      assert.equal(next.list()[0]!.availableVersion, "9.0.0");
-      await next.restore("example", manifest.capabilities);
+      // Flipped from "the installed copy stays, and 9.0.0 is offered": a built-in runs as the build that ships it.
       assert.equal(next.list()[0]!.manifest.version, "9.0.0");
+      assert.equal(next.list()[0]!.enabled, false, "the person's off stays off");
+      assert.deepEqual(
+        next.list()[0]!.lastSkillChange,
+        { added: [], changed: ["greeting"], removed: [] },
+        "the Plugins page says which skills the new seed changed",
+      );
       await next.remove("example");
-      await next.init();
-      assert.equal(next.list()[0]!.removed, true);
-      assert.equal(next.list()[0]!.availableVersion, undefined);
+    } finally {
+      next.cancel();
+    }
+    await bumpExampleSeed(f, "9.1.0");
+    const after = await reopened(f, f.registry.root);
+    try {
+      assert.equal(after.list()[0]!.removed, true);
+      assert.equal(after.list()[0]!.manifest.version, "9.0.0", "a removed built-in is never laid down again");
+    } finally {
+      after.cancel();
+    }
+  } finally {
+    await f.close();
+  }
+});
+
+for (const [turnedOff, enabled] of [
+  [false, true],
+  [true, false],
+] as const)
+  test(`a newer seed laid over an older copy that failed to load is ${enabled ? "on" : "off"} as the person left it`, async () => {
+    const f = await fixture();
+    try {
+      if (turnedOff) await f.registry.setEnabled("example", false);
+      f.registry.cancel();
+      // This build refuses the older copy (an API version it no longer supports), and ships a newer seed.
+      const [copy] = await readdir(path.join(f.registry.root, "packages", "example"));
+      const installedManifest = path.join(f.registry.root, "packages", "example", copy!, "plugin.json");
+      const older = JSON.parse(await readFile(installedManifest, "utf8"));
+      older.apiVersion = 99;
+      await writeFile(installedManifest, JSON.stringify(older));
+      await bumpExampleSeed(f, "9.0.0");
+      const next = await reopened(f, f.registry.root);
+      try {
+        const example = next.list()[0]!;
+        assert.equal(example.manifest.version, "9.0.0");
+        assert.equal(example.error, undefined);
+        assert.equal(example.enabled, enabled, "the refusal's off is not the person's");
+      } finally {
+        next.cancel();
+      }
+    } finally {
+      await f.close();
+    }
+  });
+
+test("an update left waiting when Studio closed never replaces this build's newer seed", async () => {
+  const f = await fixture();
+  try {
+    f.registry.lease();
+    await bumpExampleSeed(f, "2.0.0");
+    const manifest = JSON.parse(await readFile(path.join(f.seeds, "example", "plugin.json"), "utf8"));
+    await f.registry.restore("example", manifest.capabilities);
+    assert.equal(f.registry.list()[0]!.pendingVersion, "2.0.0");
+    // Studio closes with the session still holding its lease: pending.json keeps 2.0.0.
+    f.registry.cancel();
+    await bumpExampleSeed(f, "3.0.0");
+    const next = await reopened(f, f.registry.root);
+    try {
+      const example = next.list()[0]!;
+      assert.equal(example.manifest.version, "3.0.0");
+      assert.equal(example.pendingVersion, undefined);
+      assert.equal(example.error, undefined);
+      assert.equal((await readdir(path.join(f.registry.root, "packages", "example"))).length, 1, "one package copy");
     } finally {
       next.cancel();
     }
@@ -2084,19 +2160,27 @@ test("re-enable and reinstall restore prior account consent once without retryin
 });
 
 /**
- * R5: an installed bundled plugin is replaced only through an offered update, and one is offered
- * only for a newer version. This build's Genex (the game's Genex cover: genex__cover, genex__cover-set
- * and the cover card) must reach a profile that still holds the last released Genex, 1.5.0.
+ * A profile that still holds an older Genex runs this build's from its next launch: the after-build
+ * cover step asks the Genex this app ships, whose cover tool takes the picture's path. The run that
+ * found it held a Genex whose cover took only an `operation`, and every call the agent made failed.
  */
-test("a profile holding the last released Genex is offered this build's Genex", async () => {
+test("a profile holding an older Genex runs this build's Genex from its next launch", async () => {
   const { makeResources } = await import("../helpers/resources.ts");
   const resources = await makeResources();
   const root = await mkdtemp(path.join(os.tmpdir(), "studio-genex-update-"));
   const released = path.join(root, "released");
   await mkdir(released);
   await cp(path.join(resources, "plugins", "genex"), path.join(released, "genex"), { recursive: true });
+  const seedManifest = JSON.parse(await readFile(path.join(resources, "plugins", "genex", "plugin.json"), "utf8"));
+  const coverOf = (m: PluginManifest) => m.tools.find((tool) => tool.name === "cover");
   const manifest = JSON.parse(await readFile(path.join(released, "genex", "plugin.json"), "utf8"));
   manifest.version = "1.5.0";
+  // The cover tool of Genex 1.10.46: an operation, no picture.
+  coverOf(manifest)!.parameters = {
+    type: "object",
+    properties: { operation: { type: "string" } },
+    required: ["operation"],
+  };
   await writeFile(path.join(released, "genex", "plugin.json"), JSON.stringify(manifest));
   const installed = path.join(root, "installed");
   const bootstrap = path.join(resources, "plugin-sdk", "backend.mjs");
@@ -2106,12 +2190,25 @@ test("a profile holding the last released Genex is offered this build's Genex", 
   } finally {
     before.cancel();
   }
+  const marker = path.join(installed, "data", "genex", "marker");
+  await mkdir(path.dirname(marker), { recursive: true });
+  await writeFile(marker, "kept");
   const after = new PluginRegistry(installed, path.join(resources, "plugins"), bootstrap, async () => null);
   try {
     await after.init();
     const genex = after.list().find((p) => p.manifest.id === "genex")!;
-    assert.equal(genex.manifest.version, "1.5.0", "the installed copy stays until the user updates");
-    assert.ok(genex.availableVersion, "an update to this build's Genex is offered");
+    // Flipped from "the installed copy stays until the user updates".
+    assert.equal(genex.manifest.version, seedManifest.version);
+    assert.deepEqual(coverOf(genex.manifest)?.parameters, coverOf(seedManifest)?.parameters);
+    assert.equal(genex.enabled, true);
+    assert.equal(genex.error, undefined);
+    const copies = await readdir(path.join(installed, "packages", "genex"));
+    assert.equal(copies.length, 1, "the older copy is gone");
+    const copied = JSON.parse(
+      await readFile(path.join(installed, "packages", "genex", copies[0]!, "plugin.json"), "utf8"),
+    );
+    assert.equal(copied.version, seedManifest.version);
+    assert.equal(await readFile(marker, "utf8"), "kept", "the plugin's data stays");
   } finally {
     after.cancel();
     await rm(root, { recursive: true, force: true });
@@ -2160,13 +2257,15 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
   try {
     await registry.init();
     const guidance = registry.guidance();
-    assert.match(guidance, /\[genex\/genex-threejs-multiplayer\] [^\n]*MANDATORY before networking code/);
+    assert.match(guidance, /\[genex\/genex-threejs-multiplayer\] The @genex-ai\/multiplayer API/);
+    assert.doesNotMatch(guidance, /MANDATORY/, "a brief line says what a skill is for, never that it must be read");
     assert.match(guidance, /genex__skill \{"name":"genex-threejs-multiplayer"\}/);
     assert.doesNotMatch(guidance, /Two rules that decide whether it feels good/, "a card's body is never in the brief");
     assert.doesNotMatch(guidance, /\[genex\/asset-workflow\]/, "the duplicate of the asset tool's description is gone");
-    // The Genex cover: an inline skill every brief carries, beside the card read on demand.
-    assert.match(guidance, /\[genex\/cover\]\n[^\n]*set_game_cover[^\n]*genex-cover/);
-    assert.match(guidance, /\[genex\/genex-cover\] [^\n]*genex__skill \{"name":"genex-cover"\}/);
+    // The Genex cover: read on demand like the card beside it, never carried whole in a brief.
+    assert.match(guidance, /\[genex\/cover\] [^\n]*genex__skill \{"name":"cover"\}/);
+    assert.doesNotMatch(guidance, /set_game_cover/, "the cover skill's body is not in the brief");
+    assert.doesNotMatch(guidance, /\[genex\/genex-cover\]/, "how to compose a cover is genex-recommendations' advice");
     const tools = registry.tools().filter((t) => t.name.startsWith("genex__"));
     for (const text of [guidance, ...tools.map((t) => t.description)]) assert.doesNotMatch(text, /npx genex/);
     const names = tools.map((t) => t.name);
@@ -2179,11 +2278,12 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
       "genex__cover-set",
     ])
       assert.ok(names.includes(name), `${name} in ${names.join(", ")}`);
-    const cover = splitVendoredSkill(await readGenexSkill(registry, "genex-cover", binding));
-    assert.equal(
-      cover.preface,
-      await readFile(path.resolve("src/plugins/genex/skills/genex-cover/PREFACE.md"), "utf8"),
-      "Studio's own way to stage, check and send the cover comes first",
+    // Read on demand as the agent reads it: the publishing-apps skill names the key a windowed Mac app sets.
+    assert.match(await readGenexSkill(registry, "publishing-apps", binding), new RegExp(WINDOWED_KEY));
+    assert.match(
+      await readGenexSkill(registry, "cover", binding),
+      /genex__cover \{"image":/,
+      "the cover skill names the requirement and the call that keeps the agent's picture",
     );
     const multiplayer = splitVendoredSkill(await readGenexSkill(registry, "genex-threejs-multiplayer", binding));
     const preface = await readFile(
@@ -2198,7 +2298,7 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
     await noAgentFiles();
     await registry.setEnabled("genex", false);
     assert.doesNotMatch(registry.guidance(), /\[genex\//);
-    assert.doesNotMatch(registry.guidance(), /genex-cover/, "a game's cover demo is Genex's only while Genex is on");
+    assert.doesNotMatch(registry.guidance(), /genex__cover/, "the cover is Genex's only while Genex is on");
     assert.ok(!registry.tools().some((t) => t.name.startsWith("genex__")));
     await assert.rejects(
       registry.tool("genex__skill", { name: "genex-threejs-multiplayer" }, binding),
@@ -2248,7 +2348,8 @@ test("a start names each part of the plugin setup as it finishes, and a first la
     first.onInitStep = record;
     await first.init();
     first.cancel();
-    assert.deepEqual(steps, ["records", "seed:example", "pending", "saved", "swept", "unlisted", "accounts"]);
+    // Flipped from seeds before pending: the last run's waiting updates apply first, so a seed is laid over them.
+    assert.deepEqual(steps, ["records", "pending", "seed:example", "saved", "swept", "unlisted", "accounts"]);
     steps.length = 0;
     const again = new PluginRegistry(path.join(f.root, "fresh"), f.seeds, f.registry.bootstrap, async () => null);
     again.onInitStep = record;

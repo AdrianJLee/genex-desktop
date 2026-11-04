@@ -95,9 +95,7 @@ export function projectBuildGraph(
   // A chat turn's workers are pool sessions: they have no worker threads named after a run.
   const runId = runIdOf(initial);
   const starts =
-    options.includeWorkers === false || !runId
-      ? []
-      : initial.facets.flatMap((facet) => firstRoundStart(events, parent, threads, runId, facet));
+    options.includeWorkers === false || !runId ? [] : firstRoundStarts(events, parent, threads, runId, initial.facets);
   const graph = starts.length ? (fold(mergeChatEvents(parent, starts), initial.runId) ?? initial) : initial;
   if (!graph.runDir && runsRoot && runId) graph.runDir = `${runsRoot}/${runId}`;
   return graph;
@@ -121,47 +119,77 @@ export function stageRunGraph(
   return projectBuildGraph(events, threadId, [], runsRoot, newestRun, { includeWorkers: false });
 }
 
-/** Single-session director workers have an explicit lifecycle, not a round loop. */
-function isSingleSessionWorker(parent: EventEnvelope[], facetId: string): boolean {
-  return parent.some((e) => {
-    const worker = customEvent(e, CustomEvent.DirectorWorker);
-    return worker !== null && worker.workerId === facetId && worker.mode === SINGLE_SESSION_MODE;
-  });
+/** What the parent log says of its parts' first rounds: who works in one session, and whose first round started. */
+interface FirstRounds {
+  singleSession: Set<string>;
+  started: Set<string>;
 }
 
 /**
- * The start of a part's first round, read off the first mirrored record in its worker thread —
- * older worker logs never wrote one. A single-session worker gets none: a synthetic first round
- * would remain "building" even after the worker's done event.
+ * Read the parent log once for every part. Single-session director workers have an explicit
+ * lifecycle, not a round loop; a part whose first round has its own start needs none made up.
  */
-function firstRoundStart(
+function firstRoundsOf(parent: EventEnvelope[]): FirstRounds {
+  const rounds: FirstRounds = { singleSession: new Set(), started: new Set() };
+  for (const event of parent) {
+    const worker = customEvent(event, CustomEvent.DirectorWorker);
+    const workerId = worker?.workerId;
+    if (worker?.mode === SINGLE_SESSION_MODE && workerId) rounds.singleSession.add(workerId);
+    const start = customEvent(event, CustomEvent.FacetBuildStarted);
+    const facetId = start?.facetId;
+    if (start?.iteration === 1 && facetId) rounds.started.add(facetId);
+  }
+  return rounds;
+}
+
+/** The first mirrored record of each of these worker threads, read in one pass. */
+function firstDelegatedRecords(events: EventEnvelope[], threadIds: ReadonlySet<string>): Map<string, EventEnvelope> {
+  const first = new Map<string, EventEnvelope>();
+  for (const event of events) {
+    if (threadIds.has(event.thread_id) && !first.has(event.thread_id) && isDelegatedRecord(event))
+      first.set(event.thread_id, event);
+  }
+  return first;
+}
+
+/**
+ * The start of each part's first round, read off the first mirrored record in its worker thread —
+ * older worker logs never wrote one. A single-session worker gets none: a synthetic first round
+ * would remain "building" even after the worker's done event. A Loop's workers are pool sessions
+ * with no threads of their own, so its log is not read again at all: reading it once per part on
+ * every batch froze the Builds tab of a long Loop.
+ */
+function firstRoundStarts(
   events: EventEnvelope[],
   parent: EventEnvelope[],
   threads: readonly Pick<ConversationRecord, "id" | "title">[],
   runId: string,
-  facet: FacetNode,
+  facets: readonly FacetNode[],
 ): EventEnvelope[] {
-  if (isSingleSessionWorker(parent, facet.facetId)) return [];
-  const started = parent.some((event) => {
-    const start = customEvent(event, CustomEvent.FacetBuildStarted);
-    return start?.facetId === facet.facetId && start.iteration === 1;
+  const children = facets.flatMap((facet) => {
+    const child = workerThreadFor(threads, runId, facet.title);
+    return child ? [{ facet, child }] : [];
   });
-  if (started) return [];
-  const child = workerThreadFor(threads, runId, facet.title);
-  if (!child) return [];
-  const first = events.find((e) => e.thread_id === child.id && isDelegatedRecord(e));
-  if (!first) return [];
-  return [
-    {
-      ...first,
-      id: `${first.id}:build-start`,
-      data: {
-        type: EventKind.Custom,
-        event_type: CustomEvent.FacetBuildStarted,
-        payload: { runId, facetId: facet.facetId, facetTitle: facet.title, iteration: 1 },
+  if (children.length === 0) return [];
+  const rounds = firstRoundsOf(parent);
+  const firstRecords = firstDelegatedRecords(events, new Set(children.map(({ child }) => child.id)));
+  return children.flatMap(({ facet, child }) => {
+    const { facetId } = facet;
+    if (rounds.singleSession.has(facetId) || rounds.started.has(facetId)) return [];
+    const first = firstRecords.get(child.id);
+    if (!first) return [];
+    return [
+      {
+        ...first,
+        id: `${first.id}:build-start`,
+        data: {
+          type: EventKind.Custom,
+          event_type: CustomEvent.FacetBuildStarted,
+          payload: { runId, facetId, facetTitle: facet.title, iteration: 1 },
+        },
       },
-    },
-  ];
+    ];
+  });
 }
 
 /** Records that open a run in the history, and records of one judged round. */
@@ -449,16 +477,6 @@ function landmarks(graph: RunGraph): Landmarks {
 function classicProgress(graph: RunGraph): Progress {
   const marks = landmarks(graph);
   if (!graph.active) return endedProgress(graph, marks);
-  const optimization = graph.nodes.find((n) => n.kind === GraphNodeKind.Optimization);
-  if (optimization?.kind === GraphNodeKind.Optimization && optimization.result.phase !== "pending") {
-    const { outcome, summary } = optimization.result;
-    return {
-      nodeId: optimization.id,
-      title: outcome ? PROGRESS_WORDS.optimizationFinished : PROGRESS_WORDS.optimization,
-      health: outcome ? summary : PROGRESS_WORDS.optimizing,
-      failedBase: marks.failedBase,
-    };
-  }
   if (marks.run?.director) return directorProgress(graph, marks);
   return loopProgress(graph, marks);
 }

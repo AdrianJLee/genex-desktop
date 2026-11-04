@@ -14,36 +14,21 @@ export const StatusLane = {
 export type StatusLane = (typeof StatusLane)[keyof typeof StatusLane];
 
 /**
- * Which loop conducts a run. Never persisted: a spec names only the unattended one (`mode:
- * "autopilot"`, the persisted `RunMode` in run-events.ts), and `chooseRunner` decides whether the
- * director (on a project of any kind) or the classic pipeline (a web game's) conducts it, or which
- * words refuse it.
+ * Which loop conducts a run. Never persisted: `chooseRunner` decides whether the lead's session (on
+ * a project of any kind) conducts it, or which words refuse it.
  */
 export const RunnerKind = {
   Director: "director",
-  Autopilot: "autopilot",
-  Gauntlet: "gauntlet",
-  /** The Unreal runner from before the one Loop (`loop/unreal/lead.ts`), only when the internal switch names it. */
-  Unreal: "unreal",
-  /** A Loop on a project that isn't a web game, on an engine that keeps no session: refused with words. */
+  /** A Loop on an engine that keeps no session: refused with a typed reason. */
   NeedsSession: "needs_session",
-  /** A run of a web game's own kind (the gauntlet) on a project that isn't one: refused with words. */
-  WebOnly: "web_only",
 } as const;
 export type RunnerKind = (typeof RunnerKind)[keyof typeof RunnerKind];
 
 /**
- * This part names the runners of a Loop on a project of any kind (`RunnerKind.NeedsSession`,
- * `RunnerKind.WebOnly`): a run reads it by namespace before it leads an open Loop.
- */
-export const SERVES_OPEN_LOOP = true;
-
-/**
- * A run this loop is conducting (or reserving), and the promise that settles when it is over —
- * its self-improvement pass included. `closed` settles, and `done` is set, as soon as the run
- * itself is over, before that pass: the chat is free from then on (live-chat.ts). A run-dispatch.ts
- * kept from before live chat sets neither, and the chat waits for `settled` as it did. `stopped` is
- * the run's own Stop (live-chat.ts `stopRun`), which its pass keeps whatever the chat does next.
+ * A run this loop is conducting (or reserving), and the promise that settles when it is over.
+ * `closed` settles, and `done` is set, as soon as the run itself is over: the chat is free from
+ * then on (live-chat.ts). `stopped` is the run's own Stop (live-chat.ts `stopRun`), which it keeps
+ * whatever the chat does next.
  * `closing` is set just before the run appends its own end (`run_finished`, `autopilot_paused`): a
  * new start here (a Resume of that pause) waits for the close as for a done run, never refused by it.
  * `stops` counts the Stops that reached the run (`stopRun`), so a start waiting for its close sees a
@@ -53,25 +38,19 @@ export interface ActiveRun {
   run: Run;
   threadId: string;
   settled: Promise<unknown>;
-  closed?: Promise<unknown>;
+  closed: Promise<unknown>;
   done?: boolean;
   closing?: boolean;
   stopped?: boolean;
   stops?: number;
 }
 
-/** A finished build reopened: the reopened run hears what was said after `after` (reopen-run.ts). */
-export interface RunReopen {
-  after: string | null;
-}
-
-/** A run to start: from the interview, the run IPC, a resumed journal, or a finished build reopened (`reopen`). */
+/** A run to start: from the chat's launch, the run IPC, or a resumed journal. */
 export type RunStart = {
   type: "run_start";
   threadId: string;
   run: RunSpec | Run;
   resume?: boolean;
-  reopen?: RunReopen;
 };
 
 /** The loop's own state, and the scoped ctx every unit of work runs with. */
@@ -84,9 +63,6 @@ export interface Studio {
    * front): their turn keeps the Stop instead of clearing it. Absent from an older main.ts.
    */
   stoppedMessages?: Set<string>;
-  // Mood boards outlive their message: the composer clears the chips the moment they are sent,
-  // but the interview spans several messages — the board rides along until a run launches.
-  moodBoards: Map<string, unknown[]>;
   /** runId → { run, threadId }, kept through the post-run self-improvement so Stop still lands. */
   activeRuns: Map<string, ActiveRun>;
   startingRuns: Map<string, ActiveRun>;

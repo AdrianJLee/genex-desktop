@@ -12,14 +12,15 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { EngineError, type Engine } from "../../src/substrate/engines/types.ts";
-import { nameFromAsk, runTurn } from "../../src/harness-seed/loop/turn-loop.ts";
+import { nameFromAsk } from "../../src/harness-seed/loop/turn-loop.ts";
 import { loadSkills } from "../../src/harness-seed/loop/skills.ts";
 import { SecretStore, plaintextBackend } from "../../src/substrate/secrets.ts";
-import { customEvents, startRig, waitForLog, type Rig } from "../helpers/studio-rig.ts";
+import { customEvents, startLearningRig, startRig, waitForLog, type Rig } from "../helpers/studio-rig.ts";
 import type { FakeReply } from "../helpers/fake-ollama.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { CustomEvent, customPayload } from "../../src/shared/custom-events.ts";
 import { EventKind, MessageUsageSource } from "../../src/shared/event-log.ts";
+import { TurnFailureCode } from "../../src/shared/engine-requests.ts";
 import { repeatedBuildUsages } from "../../src/shared/eval-lane.ts";
 
 /** The seed the rig's harness workspace is copied from, skills included. */
@@ -32,8 +33,9 @@ afterEach(async () => {
   await Promise.all(rigs.splice(0).map((rig) => rig.stop().catch(() => {})));
 });
 
-async function turnRig(replies: FakeReply[]): Promise<Rig> {
-  const rig = await startRig({
+/** A local turn loop; `learning` switches self-improvement on, which a self-edit (install_tool, write_own_file) needs. */
+async function turnRig(replies: FakeReply[], { learning = false } = {}): Promise<Rig> {
+  const rig = await (learning ? startLearningRig : startRig)({
     replies: [...replies, ...Array.from({ length: 6 }, () => ({ text: "ok" }) as FakeReply)],
   });
   rigs.push(rig);
@@ -63,15 +65,11 @@ describe("turn loop", () => {
     assert.ok(second.messages.some((m) => m.role === "assistant" && Array.isArray(m.tool_calls)));
     assert.ok(second.messages.some((m) => m.role === "tool" && m.tool_call_id === "c1"));
 
-    // The system prompt carries skill indexes, never bodies: Studio's own skills by name and
-    // description (read with read_skill), a plugin's file skills by summary (read with its
-    // `<plugin>__skill` tool).
+    // The system prompt carries skill indexes, never bodies: a plugin's file skills by summary (read
+    // with its `<plugin>__skill` tool). Flipped (Loop phase 5): the seed ships no skills of its own
+    // (no facet-decomposition, no director playbook), so there is no "Your skills" index.
     const system = String(second.messages.find((m) => m.role === "system")?.content ?? "");
-    assert.match(system, /## Your skills/);
-    // The slugs the seed actually ships. `game-contract` was named here until M4.8a retired it
-    // (it was a stale second copy of docs/CONTRACT.md that no run code read).
-    assert.match(system, /facet-decomposition/);
-    assert.match(system, /\(director\)/);
+    assert.doesNotMatch(system, /## Your skills/);
     for (const skill of await loadSkills(SEED)) {
       assert.ok(
         !system.includes(skill.body.slice(0, 200)),
@@ -121,32 +119,34 @@ describe("turn loop", () => {
     // A local model re-reads everything after the first changed token. The system prompt used to
     // be re-read every round (memory, notes, the file list, every tool's description), so one
     // fact remembered or one tool installed mid-turn made the next round re-read the whole turn.
-    const rig = await turnRig([
-      {
-        toolCalls: [
-          { id: "c1", name: "remember", arguments: { key: "favourite_genre", value: "racing games" } },
-          {
-            id: "c2",
-            name: "install_tool",
-            arguments: {
-              filename: "lap-tools.mjs",
-              reason: "I keep timing laps by hand",
-              title: "Time laps for you",
-              summary: ["I can now time the current lap myself."],
-              contents: `export const tools = [{
+    const rig = await turnRig(
+      [
+        {
+          toolCalls: [
+            {
+              id: "c2",
+              name: "install_tool",
+              arguments: {
+                filename: "lap-tools.mjs",
+                reason: "I keep timing laps by hand",
+                title: "Time laps for you",
+                summary: ["I can now time the current lap myself."],
+                contents: `export const tools = [{
                  name: "time_lap",
                  description: "time the current lap",
                  parameters: { type: "object", properties: {} },
                  async execute() { return "41.2 s"; },
                }];`,
+              },
             },
-          },
-        ],
-        text: "Noting that and adding a tool.",
-      },
-      { text: "Done." },
-    ]);
-    await rig.core.sendUserMessage("remember I like racing games and add a lap timer");
+          ],
+          text: "Adding a tool.",
+        },
+        { text: "Done." },
+      ],
+      { learning: true },
+    );
+    await rig.core.sendUserMessage("add a lap timer");
     await waitForLog(rig.core, (log) => log.some((e) => e.data.type === "turn_ended"), 45_000, "turn_ended");
 
     const completions = rig.server.requests.filter((r) => r.path.startsWith("/v1/chat/completions"));
@@ -165,20 +165,8 @@ describe("turn loop", () => {
     );
     const described = (second.tools ?? []).find((tool) => tool.function.name === "list_games")?.function.description;
     assert.ok(described && !system(1).includes(described), "a tool's description is sent once, with its schema");
-
-    // The next turn reads them afresh.
-    rig.server.pushReply({ text: "Racing it is." });
-    await rig.core.sendUserMessage("what do I like?");
-    await waitForLog(
-      rig.core,
-      (log) => log.filter((e) => e.data.type === "turn_ended").length >= 2,
-      30_000,
-      "second turn_ended",
-    );
-    const next = rig.server.requests.filter((r) => r.path.startsWith("/v1/chat/completions")).at(-1)!.body as {
-      messages: Array<{ role: string; content?: unknown }>;
-    };
-    assert.match(String(next.messages.find((m) => m.role === "system")?.content ?? ""), /racing games/);
+    // Flipped (Loop phase 5): there is no `remember` tool and no memory in the system prompt (the
+    // user's taste is archived, never injected), so no remembered fact is read back next turn.
   });
 
   it("keeps the log as the only state: a restart resumes the same conversation", async () => {
@@ -243,70 +231,77 @@ describe("turn loop", () => {
   });
 });
 
-describe("run deadline inside a turn", () => {
-  it("an already-expired deadline ends the turn cleanly without another model call", async () => {
-    // The gauntlet's wall clock used to stop at the loop head only: a build turn that started
-    // near the wire could keep buying tool rounds long past the budget. The deadline now reads
-    // between rounds, so the turn ends where the log already holds everything it did.
-    const calls: Array<{ method: string; payload: unknown }> = [];
-    const ctx = {
-      workspace: "/nonexistent",
-      cancelled: false,
-      call: async (method: string, payload?: unknown) => {
-        calls.push({ method, payload });
-        if (method === "engine.describe") {
-          return [
-            { id: "ollama", label: "Ollama", kind: "direct", status: { code: "ready" }, models: [], defaultModel: "m" },
-          ];
-        }
-        if (method === "turn.append") return {};
-        throw new Error(`unexpected substrate call: ${method}`);
-      },
-      notify: () => {},
-      setStatus: () => {},
+describe("a local model's context", () => {
+  /** The turn a message on a rig whose Ollama reports `loaded` ends with, its errors, and the completions it asked for. */
+  async function turnWith(loaded: Array<{ name: string; context_length: number }>) {
+    const rig = await startRig({ loaded, replies: [{ text: "A platformer, coming up." }] });
+    rigs.push(rig);
+    await rig.core.sendUserMessage("make a small platformer game please");
+    const log = await waitForLog(rig.core, (l) => l.some((e) => e.data.type === "turn_ended"), 30_000, "turn_ended");
+    const ended = log.find((e) => e.data.type === EventKind.TurnEnded)?.data as {
+      status: string;
+      metadata?: Record<string, unknown>;
     };
+    const errors = log.flatMap((e) => (e.data.type === EventKind.Error ? [e.data.message] : []));
+    const completions = rig.server.requests.filter((r) => r.path.startsWith("/v1/chat/completions")).length;
+    return { ended, errors, completions };
+  }
 
-    const outcome = await runTurn(ctx as never, {
-      threadId: "t1",
-      turnId: "turn1",
-      engine: "ollama",
-      deadlineMs: Date.now() - 1,
-    });
+  it("asks a model whose context Ollama has not reported yet instead of refusing on a guess", async () => {
+    // Not loaded, Ollama reports no context: the app guessed 8,192 tokens and every such turn failed
+    // in a fraction of a second before Ollama was asked, whatever context Ollama was set to.
+    const { ended, errors, completions } = await turnWith([]);
+    assert.equal(ended.status, "ok", errors.join("\n"));
+    assert.equal(completions, 1);
+  });
 
-    assert.equal((outcome as { stopped: string }).stopped, "deadline");
-    assert.ok(!calls.some((c) => c.method === "engine.complete"), "an expired clock must not buy another completion");
-    const note = calls.find((c) => c.method === "turn.append");
-    assert.match(JSON.stringify(note?.payload ?? {}), /wall clock/, "the stop leaves a note in the thread");
+  it("says a context too small for the instructions and tools is too small, how to fix it, and why it failed", async () => {
+    const { ended, errors, completions } = await turnWith([{ name: "qwen3.6:27b", context_length: 4096 }]);
+    assert.equal(ended.status, "error");
+    assert.equal(completions, 0, "nothing is sent to a model that cannot hold the turn, and nothing is compacted");
+    assert.deepEqual(ended.metadata?.harnessFailure, { code: TurnFailureCode.ContextTooSmall, name: "Error" });
+    const said = errors.join("\n");
+    assert.match(said, /Ollama runs this model with a 4,096-token context/);
+    assert.match(said, /OLLAMA_CONTEXT_LENGTH=32768/);
+  });
+
+  it("a configured context that holds the turn answers as before", async () => {
+    const { ended, completions } = await turnWith([{ name: "qwen3.6:27b", context_length: 32_768 }]);
+    assert.equal(ended.status, "ok");
+    assert.equal(completions, 1);
   });
 });
 
 describe("full self-modification (M4)", () => {
   it("installs a tool mid-turn and calls it on the next round", async () => {
-    const rig = await turnRig([
-      {
-        toolCalls: [
-          {
-            id: "c1",
-            name: "install_tool",
-            arguments: {
-              filename: "ring-tools.mjs",
-              reason: "I keep counting rings by hand",
-              title: "Count rings for you",
-              summary: ["I can now count the rings in a build myself."],
-              contents: `export const tools = [{
+    const rig = await turnRig(
+      [
+        {
+          toolCalls: [
+            {
+              id: "c1",
+              name: "install_tool",
+              arguments: {
+                filename: "ring-tools.mjs",
+                reason: "I keep counting rings by hand",
+                title: "Count rings for you",
+                summary: ["I can now count the rings in a build myself."],
+                contents: `export const tools = [{
                  name: "count_rings",
                  description: "count rings in the current build",
                  parameters: { type: "object", properties: {} },
                  async execute() { return "7 rings"; },
                }];`,
+              },
             },
-          },
-        ],
-        text: "Installing a tool for this.",
-      },
-      { toolCalls: [{ id: "c2", name: "count_rings", arguments: {} }] },
-      { text: "There are 7 rings." },
-    ]);
+          ],
+          text: "Installing a tool for this.",
+        },
+        { toolCalls: [{ id: "c2", name: "count_rings", arguments: {} }] },
+        { text: "There are 7 rings." },
+      ],
+      { learning: true },
+    );
 
     await rig.core.sendUserMessage("count the rings");
     const events = await waitForLog(
@@ -351,25 +346,28 @@ describe("full self-modification (M4)", () => {
   });
 
   it("survives a broken tool module by reporting it, not by dying", async () => {
-    const rig = await turnRig([
-      {
-        toolCalls: [
-          {
-            id: "c1",
-            name: "install_tool",
-            arguments: {
-              filename: "broken-tools.mjs",
-              reason: "oops",
-              title: "Try a new helper",
-              summary: ["I tried adding a helper."],
-              contents: "this is not valid javascript !!!",
+    const rig = await turnRig(
+      [
+        {
+          toolCalls: [
+            {
+              id: "c1",
+              name: "install_tool",
+              arguments: {
+                filename: "broken-tools.mjs",
+                reason: "oops",
+                title: "Try a new helper",
+                summary: ["I tried adding a helper."],
+                contents: "this is not valid javascript !!!",
+              },
             },
-          },
-        ],
-      },
-      { toolCalls: [{ id: "c2", name: "list_games", arguments: {} }] },
-      { text: "I broke a tool; the rest still works." },
-    ]);
+          ],
+        },
+        { toolCalls: [{ id: "c2", name: "list_games", arguments: {} }] },
+        { text: "I broke a tool; the rest still works." },
+      ],
+      { learning: true },
+    );
     await rig.core.sendUserMessage("install something broken");
     const events = await waitForLog(
       rig.core,
@@ -387,24 +385,27 @@ describe("full self-modification (M4)", () => {
   });
 
   it("records a self-edit with its reason for the diff UI", async () => {
-    const rig = await turnRig([
-      {
-        toolCalls: [
-          {
-            id: "c1",
-            name: "write_skill",
-            arguments: {
-              slug: "threejs-craft",
-              reason: "learned that flat shading reads better in screenshots",
-              title: "Use flat shading in scenes",
-              summary: ["Flat shading reads better in screenshots."],
-              contents: "---\nname: three.js craft\ndescription: updated\n---\n\n- Use flatShading.\n",
+    const rig = await turnRig(
+      [
+        {
+          toolCalls: [
+            {
+              id: "c1",
+              name: "write_skill",
+              arguments: {
+                slug: "threejs-craft",
+                reason: "learned that flat shading reads better in screenshots",
+                title: "Use flat shading in scenes",
+                summary: ["Flat shading reads better in screenshots."],
+                contents: "---\nname: three.js craft\ndescription: updated\n---\n\n- Use flatShading.\n",
+              },
             },
-          },
-        ],
-      },
-      { text: "Skill updated." },
-    ]);
+          ],
+        },
+        { text: "Skill updated." },
+      ],
+      { learning: true },
+    );
     await rig.core.sendUserMessage("write down what you learned");
     const events = await waitForLog(
       rig.core,
@@ -421,36 +422,6 @@ describe("full self-modification (M4)", () => {
     );
     const skill = await readFile(path.join(rig.core.layout.harnessWs, "skills", "threejs-craft.md"), "utf8");
     assert.match(skill, /Use flatShading/);
-  });
-});
-
-describe("memory policy", () => {
-  it("keeps durable facts and refuses transient ones", async () => {
-    const rig = await turnRig([
-      {
-        toolCalls: [
-          { id: "m1", name: "remember", arguments: { key: "taste", value: "Simeon likes fast, punchy games" } },
-        ],
-      },
-      { toolCalls: [{ id: "m2", name: "remember", arguments: { key: "current_task", value: "adding rings" } }] },
-      { text: "Noted." },
-    ]);
-    await rig.core.sendUserMessage("remember some things");
-    const events = await waitForLog(
-      rig.core,
-      (log) => log.some((e) => e.data.type === "turn_ended"),
-      30_000,
-      "turn_ended",
-    );
-    const results = events
-      .filter((e) => e.data.type === "tool_result")
-      .map((e) => (e.data as { result: { ok: boolean; content: string } }).result);
-    assert.equal(results[0]!.ok, true);
-    assert.equal(results[1]!.ok, false, "a transient key is refused by the memory policy");
-    assert.match(results[1]!.content, /durable facts/);
-
-    const memory = (await rig.core.store.readArtifact(rig.core.mainThread, "memory")) as Record<string, string>;
-    assert.deepEqual(Object.keys(memory), ["taste"]);
   });
 });
 
@@ -500,56 +471,6 @@ describe("engine fallback (M2)", () => {
     const messages = await rig.core.store.listMessages(rig.core.mainThread);
     assert.match(messages.at(-1)?.content ?? "", /throttled|didn't switch/i);
     assert.notEqual(messages.at(-1)?.content, "Local engine took over.");
-  });
-
-  it("a commissioned run still survives a throttle — falling back out loud", async () => {
-    const rig = await turnRig([{ text: "Local engine took over." }]);
-    let attempts = 0;
-    const throttled: Engine = {
-      id: "contractor",
-      label: "Contractor (throttled)",
-      kind: "direct",
-      status: async () => ({ code: "ready", detail: "ready" }),
-      models: async () => [
-        {
-          id: "big",
-          label: "big",
-          contextWindow: 131072,
-          maxTokens: 100,
-          supportsTools: true,
-          supportsVision: false,
-          supportsThinking: false,
-        },
-      ],
-      defaultModel: async () => "big",
-      complete: async () => {
-        attempts++;
-        throw new EngineError("rate_limit", "contractor", "usage limit reached; resets at 5pm", 60_000);
-      },
-    };
-    rig.core.engines.register(throttled);
-    rig.core.engines.setPreferredOrder(["ollama", "contractor"]);
-
-    await rig.core.sendUserMessage("build something", { engine: "contractor", loop: { hours: 1 } });
-    const events = await waitForLog(
-      rig.core,
-      (log) => log.some((e) => e.data.type === "turn_ended"),
-      45_000,
-      "turn_ended",
-    );
-
-    assert.equal(attempts, 1, "the throttled engine was tried once");
-    const fallbacks = customEvents(events, "engine_fallback");
-    assert.equal(fallbacks.length, 1, "the run falls back rather than dying");
-    assert.equal(fallbacks[0]!.from, "contractor");
-    assert.equal(fallbacks[0]!.to, "ollama");
-    const messages = await rig.core.store.listMessages(rig.core.mainThread);
-    // The swap is announced in the chat itself, then the local engine's reply follows.
-    assert.ok(
-      messages.some((m) => /continuing the run on ollama/i.test(m.content ?? "")),
-      "the fallback is said out loud",
-    );
-    assert.equal(messages.at(-1)?.content, "Local engine took over.");
   });
 
   it("a stopped contractor preserves work without starting preview verification", async () => {
@@ -625,8 +546,9 @@ describe("engine fallback (M2)", () => {
     assert.equal(games.length, 1);
     assert.equal(games[0]!.name, "tiny-pong");
     assert.ok(briefs[0]!.cwd.endsWith(games[0]!.name), "the contractor works inside the game workspace");
-    assert.ok(briefs[0]!.prompt.includes("Build a tiny pong game"));
-    assert.ok(briefs[0]!.prompt.includes("CLAUDE.md"), "the brief points at the workspace contract");
+    // Flipped: the brief pointed at the workspace's CLAUDE.md. The words go as written; the
+    // session finds the folder's own instructions itself.
+    assert.equal(briefs[0]!.prompt, "Build a tiny pong game", "the ask, as written");
 
     // The transcript reads like a delegate_to_contractor tool call plus a normal reply.
     const requested = events.find((e) => e.data.type === "tool_requested")!;
@@ -734,7 +656,9 @@ describe("engine fallback (M2)", () => {
     await delegate({ engine: "vendor", project: "pong", prompt: "now tweak it" });
   });
 
-  it("a delegation without a time budget gets the studio's chat ceiling, an explicit one passes through", async () => {
+  // Flipped (no clock): a delegation without a time budget got a six-hour ceiling
+  // (`DEFAULT_CHAT_DELEGATION_TIMEOUT_MS`); it has none, as a bare agent's turn has none.
+  it("a delegation without a time budget has none, an explicit one passes through", async () => {
     const rig = await turnRig([]);
     const budgets: Array<number | undefined> = [];
     const vendor: Engine = {
@@ -758,13 +682,12 @@ describe("engine fallback (M2)", () => {
       timeoutMs?: number;
     }) => Promise<unknown>;
     await delegate({ engine: "vendor", project: "pong", prompt: "build it" });
-    // Six hours: generous slack for a chat build with no commission, but never unbounded.
-    assert.equal(budgets[0], 6 * 3_600_000);
+    assert.equal(budgets[0], undefined, "no time limit of Genex's own");
     await delegate({ engine: "vendor", project: "pong", prompt: "again", timeoutMs: 123_456 });
     assert.equal(budgets[1], 123_456, "a caller's own budget is not overridden");
   });
 
-  it("a delegated engine conducts the commission interview itself over the MCP bridge", async () => {
+  it("a delegated engine is handed the Loop's start over the MCP bridge, and the launch it records runs", async () => {
     const rig = await turnRig([]);
     const requests: Array<Record<string, unknown>> = [];
     let calls = 0;
@@ -798,7 +721,7 @@ describe("engine fallback (M2)", () => {
     };
     rig.core.engines.register(vendor);
 
-    await rig.core.sendUserMessage("make a russian doomer simulator", { engine: "vendor", autopilot: { hours: 1 } });
+    await rig.core.sendUserMessage("make a russian doomer simulator", { engine: "vendor" });
     const events = await waitForLog(
       rig.core,
       (log) => log.some((e) => e.data.type === "turn_ended"),
@@ -818,10 +741,11 @@ describe("engine fallback (M2)", () => {
     );
     const tools = requests[0]!.interviewTools as Array<{ name: string }>;
     assert.equal(tools?.[0]?.name, "start_autopilot");
-    // Flipped (step 1): the Loop chat is a contractor that may launch — never an interviewer
-    // told a build is owed.
-    assert.ok(String(requests[0]!.prompt).includes("It is allowed, not required"), "Loop allows a build");
-    assert.ok(!/exactly once|NOT the builder/.test(String(requests[0]!.prompt)), "no brief that forces a launch");
+    // Flipped: the brief said when a build was allowed ("It is allowed, not required"); the tool describes itself now.
+    assert.ok(
+      !/It is allowed, not required|exactly once|NOT the builder/.test(String(requests[0]!.prompt)),
+      "no launch rule",
+    );
 
     // The recorded intake call was executed by the harness and the launch is in the story.
     const intake = events.find(
@@ -836,7 +760,7 @@ describe("engine fallback (M2)", () => {
       "the interviewer's reply reaches the chat",
     );
     assert.ok(
-      messages.some((m) => /Building (for up to|until the critics)/.test(m.content ?? "")),
+      messages.some((m) => /^Building\.$/.test(m.content ?? "")),
       "the launch is announced",
     );
     assert.ok(
@@ -847,89 +771,14 @@ describe("engine fallback (M2)", () => {
       !messages.some((m) => /conducts the build interview/.test(m.content ?? "")),
       "handoff diagnostics are not assistant prose",
     );
-    // Flipped (step 1): the handoff names the launch tool the chat had (`launch`), not `interview: true`.
     assert.ok(
-      customEvents(events, "contractor_handoff").some((e) => e.engine === "vendor" && e.launch === "start_autopilot"),
+      customEvents(events, "contractor_handoff").some((e) => e.engine === "vendor"),
       "the actual engine remains in diagnostic history",
     );
     assert.ok(
       !messages.some((m) => /Claude Code/.test(m.content ?? "")),
       "another engine must never be labelled Claude Code",
     );
-  });
-
-  it("records an intake question, waits for an explicit answer, and resumes the same provider session", async () => {
-    const rig = await turnRig([]);
-    const requests: import("../../src/substrate/engines/types.ts").DelegateRequest[] = [];
-    rig.core.engines.register({
-      id: "vendor",
-      label: "Vendor",
-      kind: "delegated",
-      status: async () => ({ code: "ready", detail: "fixture" }),
-      models: async () => [],
-      defaultModel: async () => "vendor-model",
-      delegate: async (request) => {
-        requests.push(request);
-        assert.ok(request.interviewTools?.some((tool) => tool.name === "ask_user"));
-        return {
-          ok: true,
-          engine: "vendor",
-          sessionId: "intake-question-session",
-          turns: 1,
-          usage: {},
-          summary:
-            requests.length === 1 ? "I'll keep the scene small enough to finish." : "A coast at night, understood.",
-          studioToolCalls:
-            requests.length === 1
-              ? [
-                  {
-                    name: "ask_user",
-                    args: {
-                      question: "Where should the scene take place?",
-                      options: "Ashlands (Recommended) | Open terrain\nTown street | Lanterns and buildings",
-                    },
-                  },
-                  { name: "start_autopilot", args: { goal: "A Morrowind scene", direction: "Morrowind" } },
-                ]
-              : [],
-        };
-      },
-    });
-    await rig.core.sendUserMessage("make a Morrowind scene", { engine: "vendor", autopilot: { hours: 0.25 } });
-    const first = await waitForLog(
-      rig.core,
-      (log) => log.some((e) => e.data.type === "turn_ended"),
-      30_000,
-      "question turn finished",
-    );
-    const questions = customEvents(first, "interview_question");
-    assert.equal(questions.length, 1);
-    assert.equal((questions[0]!.choices as Array<{ label: string }>)[0]!.label, "Ashlands (Recommended)");
-    assert.equal(
-      customEvents(first, "run_started").length,
-      0,
-      "asking a question never approves a simultaneous launch",
-    );
-    await rig.core.sendUserMessage("Actually, a coast at night", { engine: "vendor" });
-    const answered = await waitForLog(
-      rig.core,
-      (log) => log.filter((e) => e.data.type === "turn_ended").length === 2,
-      30_000,
-      "answer turn finished",
-    );
-    assert.ok(
-      answered
-        .filter((e) => e.data.type === "turn_ended")
-        .every((e) => e.data.type === "turn_ended" && e.data.status === "ok"),
-    );
-    assert.ok(
-      (await rig.core.store.listMessages(rig.core.mainThread)).some(
-        (message) => message.content === "A coast at night, understood.",
-      ),
-    );
-    assert.equal(requests.length, 2);
-    assert.equal(requests[1]!.resume, "intake-question-session");
-    assert.match(requests[1]!.prompt, /Actually, a coast at night/);
   });
 
   it("launches a recorded intake call even when the engine reports the interview ended badly", async () => {
@@ -965,7 +814,7 @@ describe("engine fallback (M2)", () => {
     };
     rig.core.engines.register(vendor);
 
-    await rig.core.sendUserMessage("recreate MACBA", { engine: "vendor", autopilot: { hours: 1 } });
+    await rig.core.sendUserMessage("recreate MACBA", { engine: "vendor" });
     const events = await waitForLog(
       rig.core,
       (log) => log.some((e) => e.data.type === "turn_ended"),
@@ -987,7 +836,7 @@ describe("engine fallback (M2)", () => {
       "the ending is said, and so is the launch",
     );
     assert.ok(
-      messages.some((m) => /Building (for up to|until the critics)/.test(m.content ?? "")),
+      messages.some((m) => /^Building\.$/.test(m.content ?? "")),
       "the launch is announced",
     );
     assert.ok(!messages.some((m) => /Send your answer again/.test(m.content ?? "")), "no dead-end prompt to resend");
@@ -1096,7 +945,7 @@ describe("chat intake", () => {
     }
   });
 
-  it("a short ask in a chat bound to a game is an instruction, not smalltalk", async () => {
+  it("a short ask in a chat bound to a game reaches its contractor", async () => {
     const rig = await turnRig([]);
     const briefs: string[] = [];
     const vendor: Engine = {
@@ -1124,36 +973,6 @@ describe("chat intake", () => {
 
     assert.equal(briefs.length, 1, "the short follow-up reached the contractor");
     assert.match(briefs[0]!, /add fog/);
-    const messages = await rig.core.store.listMessages(rig.core.mainThread);
-    assert.ok(
-      !messages.some((m) => m.content?.includes("What should we make?")),
-      "a bound chat must never get the smalltalk deflection",
-    );
-  });
-
-  it("a fresh unbound chat still deflects smalltalk instead of scaffolding", async () => {
-    const rig = await turnRig([]);
-    let delegations = 0;
-    const vendor: Engine = {
-      id: "vendor",
-      label: "Vendor",
-      kind: "delegated",
-      status: async () => ({ code: "ready", detail: "signed in" }),
-      models: async () => [],
-      delegate: async () => {
-        delegations++;
-        return { ok: true, engine: "vendor", summary: "done", turns: 1, usage: { input_tokens: 0, output_tokens: 0 } };
-      },
-    };
-    rig.core.engines.register(vendor);
-
-    await rig.core.sendUserMessage("hi", { engine: "vendor" });
-    await waitForLog(rig.core, (log) => log.some((e) => e.data.type === "turn_ended"), 30_000, "turn_ended");
-
-    assert.equal(delegations, 0, "'hi' is not a brief");
-    assert.equal((await rig.core.games.list()).length, 0, "'hi' must never become a project");
-    const messages = await rig.core.store.listMessages(rig.core.mainThread);
-    assert.match(messages.at(-1)?.content ?? "", /What should we make\?/);
   });
 });
 
@@ -1165,7 +984,7 @@ async function startsWeb(request: import("../../src/substrate/engines/types.ts")
   if (request.liveTools?.some((tool) => tool.name === START_WEB_GAME)) await request.onLiveTool?.(START_WEB_GAME, {});
 }
 
-describe("a Loop chat that does the work itself", () => {
+describe("a chat whose session cannot be resumed", () => {
   /** A delegated engine that answers every session with `answer(request)`. */
   function vendorAnswering(
     rig: Rig,
@@ -1182,39 +1001,12 @@ describe("a Loop chat that does the work itself", () => {
     });
   }
 
-  // The plan-only turn that started this (corner-guy) is its incident row in harness-incidents.test.ts.
-  it("checks code it changed before asking, and still waits for the answer", async () => {
+  it("starts fresh, still handed the Loop's start", async () => {
     const rig = await turnRig([]);
+    const prompts: Array<{ prompt: string; resume?: string; tools: string[] }> = [];
     vendorAnswering(rig, async (request) => {
-      await startsWeb(request);
-      await writeFile(path.join(request.cwd, "src/tweak.js"), "export const tweak = 1;\n");
-      return {
-        ok: true,
-        engine: "vendor",
-        sessionId: "loop-ask",
-        turns: 2,
-        usage: {},
-        summary: "Fixed the jab timing.",
-        studioToolCalls: [{ name: "ask_user", args: { question: "Build the full fight next?" } }],
-      };
-    });
-    await rig.core.sendUserMessage("Fix the jab timing", { engine: "vendor", autopilot: { hours: 1 } });
-    const events = await waitForLog(rig.core, (log) => log.some((e) => e.data.type === "turn_ended"), 30_000, "turn");
-    assert.equal(customEvents(events, "build_observation").length, 1, "the edit is checked in the preview");
-    assert.equal(customEvents(events, "interview_question").length, 1, "the question is recorded");
-    assert.equal(customEvents(events, "run_started").length, 0);
-    const messages = await rig.core.store.listMessages(rig.core.mainThread);
-    assert.ok(
-      messages.some((m) => (m.content ?? "").startsWith("Fixed the jab timing.\n\n")),
-      "the preview's word follows the reply",
-    );
-  });
-
-  it("a Loop chat whose session cannot be resumed starts fresh with the same rules", async () => {
-    const rig = await turnRig([]);
-    const prompts: Array<{ prompt: string; resume?: string }> = [];
-    vendorAnswering(rig, async (request) => {
-      prompts.push({ prompt: String(request.prompt), resume: request.resume });
+      const tools = (request.interviewTools ?? []).map((tool) => tool.name);
+      prompts.push({ prompt: String(request.prompt), resume: request.resume, tools });
       if (request.resume) throw new Error("session not found");
       return {
         ok: true,
@@ -1225,46 +1017,14 @@ describe("a Loop chat that does the work itself", () => {
         summary: "Answered.",
       };
     });
-    await rig.core.sendUserMessage("What engine should this use?", { engine: "vendor", autopilot: { hours: 1 } });
+    await rig.core.sendUserMessage("What engine should this use?", { engine: "vendor" });
     await waitForLog(rig.core, (log) => log.filter((e) => e.data.type === "turn_ended").length === 1, 30_000, "one");
-    await rig.core.sendUserMessage("And for the voice?", { engine: "vendor", autopilot: { hours: 1 } });
+    await rig.core.sendUserMessage("And for the voice?", { engine: "vendor" });
     await waitForLog(rig.core, (log) => log.filter((e) => e.data.type === "turn_ended").length === 2, 30_000, "two");
     assert.equal(prompts.length, 3, "first turn, the failed resume, the fresh retry");
     assert.equal(prompts[1]!.resume, "loop-1");
     assert.equal(prompts[2]!.resume, undefined);
-    assert.match(prompts[2]!.prompt, /It is allowed, not required/);
-    assert.match(prompts[2]!.prompt, /start_autopilot/);
-  });
-
-  // A Loop chat may run many turns before (or without) a build: the board used to ride along on
-  // every resumed turn, re-sending the same stills to a session that already had them.
-  it("the Loop mood board reaches a new session only, and a fresh retry gets it again", async () => {
-    const rig = await turnRig([]);
-    const calls: Array<{ resume?: string; images: string[] }> = [];
-    vendorAnswering(rig, async (request) => {
-      calls.push({ resume: request.resume, images: (request.images ?? []).map((image) => image.label) });
-      // The third message's saved session is gone: it starts afresh.
-      if (request.resume && calls.length === 3) throw new Error("session not found");
-      return { ok: true, engine: "vendor", sessionId: `board-${calls.length}`, turns: 1, usage: {}, summary: "Noted." };
-    });
-    const frames = [
-      { label: "board 1", mimeType: "image/png", data: Buffer.from("frame-one").toString("base64") },
-      { label: "board 2", mimeType: "image/png", data: Buffer.from("frame-two").toString("base64") },
-    ];
-    const ended = (count: number) => (log: Array<{ data: { type: string } }>) =>
-      log.filter((e) => e.data.type === "turn_ended").length === count;
-    await rig.core.sendUserMessage("A foggy harbour at dawn", { engine: "vendor", autopilot: { hours: 1, frames } });
-    await waitForLog(rig.core, ended(1), 30_000, "first turn");
-    // The composer clears its chips once a message is sent; the thread keeps the board.
-    await rig.core.sendUserMessage("What would the boats sound like?", { engine: "vendor", autopilot: { hours: 1 } });
-    await waitForLog(rig.core, ended(2), 30_000, "resumed turn");
-    await rig.core.sendUserMessage("And the gulls?", { engine: "vendor", autopilot: { hours: 1 } });
-    await waitForLog(rig.core, ended(3), 30_000, "fresh retry");
-    assert.equal(calls.length, 4, "new session, resumed turn, failed resume, fresh retry");
-    assert.deepEqual(calls[0], { resume: undefined, images: ["board 1", "board 2"] }, "a new session gets the board");
-    assert.deepEqual(calls[1], { resume: "board-1", images: [] }, "a resumed session already has it");
-    assert.equal(calls[2]!.resume, "board-2");
-    assert.deepEqual(calls[3], { resume: undefined, images: ["board 1", "board 2"] }, "a fresh start gets it again");
+    assert.deepEqual(prompts[2]!.tools, ["start_autopilot"]);
   });
 });
 
@@ -1317,7 +1077,8 @@ describe("delegated build observation", () => {
 
     const observation = await lastObservation(rig);
     assert.equal(observation.ok, false, "the contractor's word must not outrank the pixels");
-    assert.match(String(observation.reason), /black canvas/);
+    // Flipped (Loop phase 5): the host's own check says the frame is blank (no "black canvas").
+    assert.match(String(observation.reason), /frame is blank/);
     const detail = observation.observation as { pixels: { litFraction: number } };
     assert.equal(detail.pixels.litFraction, 0);
 
@@ -1507,11 +1268,7 @@ describe("intake launch", () => {
     await rig.core.games.scaffold("pond-life", { title: "pond life" });
     const thread = await rig.core.threadForGame("pond-life");
 
-    await rig.core.sendUserMessage("a cozy fishing game where the fish talk back", {
-      thread,
-      engine: "vendor",
-      autopilot: { hours: 1 },
-    });
+    await rig.core.sendUserMessage("a cozy fishing game where the fish talk back", { thread, engine: "vendor" });
     const events = await waitForLog(
       rig.core,
       (log) => log.some((e) => e.data.type === "custom" && e.data.event_type === "run_registered"),
@@ -1525,9 +1282,9 @@ describe("intake launch", () => {
         readiness?: { contract?: string };
       };
       assert.equal(registered.project, "pond-life", "the run builds in the chat's folder, not the interviewer's slug");
-      // What the folder needed the moment it was commissioned rides on the run (M2.6): the
-      // run's first step is installing the studio contract when the page never loads it.
-      assert.equal(registered.readiness?.contract, "loaded", "the studio's own template already loads it");
+      // Flipped (Loop phase 5): Genex asks nothing of a game's page, so no studio contract's
+      // readiness rides on the run.
+      assert.equal(registered.readiness?.contract, undefined, "no studio contract is looked for");
       const games = await rig.core.games.list();
       assert.deepEqual(
         games.map((g) => g.name),
@@ -1535,16 +1292,12 @@ describe("intake launch", () => {
         "no second folder was scaffolded for the slug",
       );
 
-      // What the user is owed before walking away: when to come back, and that a pause is survivable.
+      // Flipped: the launch promised a wall-clock end ("Building until about 9:48 PM — keep the app
+      // open"); a Loop has no end to promise but its lead's finish.
       const messages = await rig.core.store.listMessages(thread);
-      const runLedger = messages.find((m) => /Building until about \d{1,2}:\d\d/.test(m.content ?? ""));
-      assert.ok(runLedger, "the launch names a wall-clock end time");
-      assert.match(runLedger!.content ?? "", /keep the app open/i);
-      assert.match(runLedger!.content ?? "", /resumes itself|tap on Resume/);
-      assert.doesNotMatch(
-        runLedger!.content ?? "",
-        /studio's connection/,
-        "and nothing is promised about a connection this game already has",
+      assert.ok(messages.some((m) => m.content === "Building."));
+      assert.ok(
+        !messages.some((m) => /Building until about|keep the app open|studio's connection/.test(m.content ?? "")),
       );
     } finally {
       // The launched run outlives the assertions; stop it and let it write its own ending
@@ -1584,10 +1337,7 @@ describe("intake launch", () => {
     };
     rig.core.engines.register(vendor);
 
-    await rig.core.sendUserMessage("a cozy fishing game where the fish talk back", {
-      engine: "vendor",
-      autopilot: { hours: 1 },
-    });
+    await rig.core.sendUserMessage("a cozy fishing game where the fish talk back", { engine: "vendor" });
     const events = await waitForLog(
       rig.core,
       (log) => log.some((e) => e.data.type === "custom" && e.data.event_type === "run_registered"),
@@ -1605,67 +1355,6 @@ describe("intake launch", () => {
       );
       const registered = customEvents(events, "run_registered")[0] as { project?: string };
       assert.equal(registered.project, games[0]!.name);
-    } finally {
-      await rig.core.stopThread(rig.core.mainThread).catch(() => {});
-      await settleRun(rig);
-    }
-  });
-
-  // A throttled Loop chat falls back to the local engine in the folder this turn already made,
-  // and a launch recorded there is stamped with it, exactly like a delegated launch.
-  it("a Loop chat that falls back to the local engine launches in the chat's folder", async () => {
-    const ask = "a lighthouse keeper who talks to whales";
-    const rig = await turnRig([
-      {
-        toolCalls: [
-          {
-            id: "l1",
-            name: "start_autopilot",
-            arguments: { goal: ask, direction: "grey sea at dusk", project: "grey-sea-at-dusk" },
-          },
-        ],
-      },
-    ]);
-    rig.core.engines.register({
-      id: "vendor",
-      label: "Vendor",
-      kind: "delegated",
-      status: async () => ({ code: "ready", detail: "signed in" }),
-      models: async () => [],
-      defaultModel: async () => "vendor-model",
-      delegate: async () => {
-        throw new EngineError("rate_limit", "vendor", "usage limit reached; resets at 5pm", 60_000);
-      },
-    });
-    rig.core.engines.setPreferredOrder(["ollama", "vendor"]);
-
-    await rig.core.sendUserMessage(ask, { engine: "vendor", autopilot: { hours: 1 } });
-    const events = await waitForLog(
-      rig.core,
-      (log) => log.some((e) => e.data.type === "custom" && e.data.event_type === "run_registered"),
-      45_000,
-      "run_registered",
-    );
-
-    try {
-      const fallbacks = customEvents(events, "engine_fallback");
-      assert.deepEqual(
-        fallbacks.map((f) => [f.from, f.to]),
-        [["vendor", "ollama"]],
-      );
-      const messages = await rig.core.store.listMessages(rig.core.mainThread);
-      assert.ok(
-        messages.some((m) => /continuing on ollama\.$/.test(m.content ?? "")),
-        "a chat's fallback is said without promising a run",
-      );
-      const games = await rig.core.games.list();
-      assert.deepEqual(
-        games.map((g) => g.name),
-        [nameFromAsk(ask)],
-        "no second folder for the local model's slug",
-      );
-      const registered = customEvents(events, "run_registered")[0] as { project?: string };
-      assert.equal(registered.project, nameFromAsk(ask), "the run builds in the chat's folder");
     } finally {
       await rig.core.stopThread(rig.core.mainThread).catch(() => {});
       await settleRun(rig);

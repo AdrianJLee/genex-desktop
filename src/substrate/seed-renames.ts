@@ -16,31 +16,28 @@ export const RENAMED_SEED_FILES: Readonly<Record<string, string>> = {
 
 /** Names one seed module exports, or another reads off a shared object, by their old spelling. */
 export const RENAMED_SEED_NAMES: Readonly<Record<string, string>> = {
+  // A lead builds in its integration worktree: its uncommitted changes are committed as its work.
+  LEAD_SET_ASIDE: "LEAD_EDITS_COMMITTED",
+  SetAside: "LeadEdits",
+  setAsideStrays: "commitLeadEdits",
   AfterNight: "AfterLoopRun",
   Night: "LoopRun",
-  NightClock: "LoopRunClock",
   NightContract: "LoopRunContract",
   NightData: "LoopRunData",
   NightLogEntry: "LoopRunLogEntry",
   NightShape: "LoopRunShape",
   NightState: "LoopRunState",
-  SERVES_AFTER_NIGHT: "SERVES_AFTER_LOOP_RUN",
   afterLeadNight: "afterLeadLoopRun",
   afterNight: "afterLoopRun",
   afterNightGrant: "afterLoopRunGrant",
-  afterNightNote: "afterLoopRunNote",
   bindNight: "bindLoopRun",
   closeTheNight: "closeTheLoopRun",
-  finishedNight: "finishedLoopRun",
   learnedTonight: "learnedThisRun",
-  nightClock: "loopRunClock",
   nightRefusal: "loopRunRefusal",
   nightReport: "loopRunReport",
-  ownSessionAfterNight: "ownSessionAfterLoopRun",
   prepareNight: "prepareLoopRun",
   recordNight: "recordLoopRun",
   restoreNight: "restoreLoopRun",
-  servesAfterNight: "servesAfterLoopRun",
   tonight: "runLedger",
 };
 

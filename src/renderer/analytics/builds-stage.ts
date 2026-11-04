@@ -5,19 +5,21 @@
  * in from the caller.
  */
 import { errorCodeIn, isUserCancelled } from "../../shared/errors.ts";
-import { SECOND_MS } from "../../shared/duration.ts";
+import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { type EventEnvelope, EventKind } from "../../shared/event-log.ts";
 import type { LiveBehindReason } from "../../shared/live-behind.ts";
 import { PluginSourceKind } from "../../shared/plugins.ts";
 import { LiveLoadFailure, PreviewGone } from "../../shared/preview-contract.ts";
 import type { StepRow, StepsCard } from "../chat/engine-steps.ts";
 import { GraphSelection, isPartSelection } from "../panels/inspector/selection.ts";
+import { isBuildSelection } from "../run-graph-builds.ts";
 import {
   type BuildsEventProperties,
   type BuildsEvent,
   type LiveGameShownProperties,
   LiveOutcome,
   type LiveTrigger,
+  type LiveWaitSaw,
   NodeKind,
   type PlanningEnd,
   pluginRef,
@@ -30,6 +32,10 @@ import { elapsedMs, oneOf } from "./properties.ts";
 export const BLANK_AFTER_MS = 10 * SECOND_MS;
 /** A Reload this soon after the last one of the same game is a rapid one. */
 export const RAPID_RELOAD_MS = 10 * SECOND_MS;
+/** A projection of the stage's graph this long blocks the window noticeably. */
+export const SLOW_GRAPH_MS = 250;
+/** A slow projection is sent at most once in this long: the stage projects again on every batch. */
+export const SLOW_GRAPH_REPEAT_MS = 5 * MINUTE_MS;
 
 type Props<E extends BuildsEvent> = BuildsEventProperties[E];
 
@@ -72,6 +78,8 @@ export interface LiveShown {
   gameRef: string | null;
   /** Why this game's page failed or went away, as the probe or the refusal said (`loadFailure`, `gone`); unchecked. */
   failure?: { load: unknown; gone: unknown } | null;
+  /** When a probe first saw this game's page, what the last one saw, and whether main had answered the load; absent for a refused load. */
+  probes?: { pageSeenAt: number | null; saw: LiveWaitSaw; mainAnswered: boolean };
 }
 
 const timeOf = (iso: string | null): number | null => {
@@ -83,9 +91,13 @@ const timeOf = (iso: string | null): number | null => {
 export function liveShownProperties(shown: LiveShown): LiveGameShownProperties {
   const says = gameSays(shown.state);
   const created = timeOf(shown.gameCreatedAt);
+  const seenAt = shown.probes?.pageSeenAt;
   return {
     outcome: shown.outcome,
     load_ms: elapsedMs(shown.load.since, shown.now),
+    page_seen_ms: seenAt === null || seenAt === undefined ? null : elapsedMs(shown.load.since, seenAt),
+    wait_saw: shown.probes?.saw ?? null,
+    main_answered: shown.probes?.mainAnswered ?? null,
     trigger: shown.load.trigger ?? null,
     first_in_launch: shown.firstInLaunch,
     game_age_ms: created === null ? null : elapsedMs(created, shown.now),
@@ -164,11 +176,39 @@ export function planningEnded(
 
 // ── Builds ──────────────────────────────────────────────────────────────────────────────────
 
-/** What a Builds graph selection is: one of its fixed nodes, a part's row, or a step. */
+/** What a Builds graph selection is: one of its fixed nodes, a part's row, a build of a Loop's line, or a step. */
 export function nodeKindOf(id: string): GraphSelection | NodeKind {
   const fixed = oneOf(GraphSelection, id);
   if (fixed) return fixed;
+  if (isBuildSelection(id)) return NodeKind.Build;
   return isPartSelection(id) ? NodeKind.Part : NodeKind.Step;
+}
+
+/** One projection of the stage's graph: what it read and drew, and how long it took. */
+export interface GraphProjection {
+  ms: number;
+  events: number;
+  parts: number;
+  buildsShown: boolean;
+}
+
+/**
+ * What a slow projection is sent as, or null when it was quick or one was sent less than
+ * `SLOW_GRAPH_REPEAT_MS` before `now` (`lastSentAt`, null before any).
+ */
+export function slowGraphProperties(
+  projection: GraphProjection,
+  now: number,
+  lastSentAt: number | null,
+): Props<typeof BuildsEvent.BuildsGraphSlow> | null {
+  if (projection.ms < SLOW_GRAPH_MS) return null;
+  if (lastSentAt !== null && now - lastSentAt < SLOW_GRAPH_REPEAT_MS) return null;
+  return {
+    ms: Math.round(projection.ms),
+    events: projection.events,
+    parts: projection.parts,
+    builds_shown: projection.buildsShown,
+  };
 }
 
 /** How a press that ran a plugin action ended: an error the person caused by saying no is a decline. */

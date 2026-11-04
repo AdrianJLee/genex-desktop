@@ -350,9 +350,9 @@ try {
     },
   );
   await check(
-    "background Unicode, newline, Send and durable coordinator response",
+    "background Unicode, newline, Send and durable response from the chat's own session",
     "desktop",
-    "Unicode/newline input reaches coordinator without new commission",
+    "Unicode/newline input reaches the chat's own session without new commission",
     async () => {
       await op(a, "type", { selector: '[aria-label="Prompt"]', text: "Привет 🌿", replace: true });
       await op(a, "key", { surface: "desktop", key: "Enter", code: "Enter", modifiers: ["Shift"] });
@@ -361,7 +361,7 @@ try {
       await op(a, "click", { selector: 'button[aria-label="Send"]' });
       await until(
         async () => (await snapshot(a)).text.includes("Fixture response. No new build was started."),
-        "coordinator response",
+        "the chat's own session's response",
       );
       const events = (await op(a, "logs", { surface: "core", limit: 200 })).entries;
       assert.equal(events.filter((e) => e.data.type === "custom" && e.data.event_type === "run_started").length, 2);
@@ -400,7 +400,7 @@ try {
     },
   );
   await check(
-    "real Stop pointer-down aborts controlled pending coordinator",
+    "real Stop pointer-down aborts the controlled pending session",
     "desktop",
     "engine AbortSignal rejection and durable turn end",
     async () => {

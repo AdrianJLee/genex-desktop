@@ -3,11 +3,10 @@
  * transcript entries, the questions waiting on the user, the follow-ups waiting in the queue, and
  * the plan under review. Pure, so ChatPanel only draws it.
  */
-import { conversationThrough, finishRequested } from "../../shared/coordinator.ts";
+import { conversationThrough, finishRequested } from "../../shared/chat-run.ts";
 import { mergeChatEvents } from "../../shared/chat-history.ts";
 import { isPlanReviewRecord, type PlanReviewRecord } from "../../shared/composer.ts";
-import { CustomEvent, customEvent, customPayload, customRecord, delegatedPayload } from "../../shared/custom-events.ts";
-import { HOUR_MS } from "../../shared/duration.ts";
+import { CustomEvent, customEvent, customRecord, delegatedPayload } from "../../shared/custom-events.ts";
 import { EventKind, type EventEnvelope } from "../../shared/event-log.ts";
 import {
   type QueuedMessage as QueueRecord,
@@ -20,8 +19,6 @@ import {
   executionActivity,
   executionStep,
   isExecutionEvent,
-  type RecordedRunLoop,
-  recordedRunLoop,
   type RunExecution,
   type RunWorked,
   workStart,
@@ -30,7 +27,6 @@ import type { RunSummary } from "../../shared/run-summary.ts";
 import { isStudioRecord } from "../../shared/studio-activity.ts";
 import { isWorkerOfGraph, workerKeyOf } from "../../shared/run-graph-events.ts";
 import { EntryAction, EntryKind, toEntries } from "../chat-entries.ts";
-import type { LoopSetting } from "../loop-setting.ts";
 import {
   ActivityItemKind,
   conversationEntries,
@@ -259,39 +255,6 @@ export function sentImages(messages: Iterable<QueueRecord>): Map<string, { messa
     });
   }
   return byEntry;
-}
-
-/** The records that start a run and keep the budget it was given. */
-const RUN_BUDGET_EVENTS = [CustomEvent.RunRegistered, CustomEvent.RunStarted] as const;
-
-/**
- * The Loop run `runId`'s start records kept: the last one that kept any, so a restart that carries
- * no budgets (a resumed build's finalization) never erases an earlier one.
- */
-function latestRecordedLoop(threadEvents: readonly EventEnvelope[], runId: string): RecordedRunLoop | null {
-  let loop: RecordedRunLoop | null = null;
-  for (const event of threadEvents) {
-    const payload = customPayload(event.data, RUN_BUDGET_EVENTS);
-    if (!payload || payload.runId !== runId) continue;
-    loop = recordedRunLoop(payload.budgets) ?? loop;
-  }
-  return loop;
-}
-
-/** The Loop a build was given, as Mode shows it while the build runs or is paused, or null when none was kept. */
-export function runLoopSetting(threadEvents: readonly EventEnvelope[], runId: string | null): LoopSetting | null {
-  if (!runId) return null;
-  const loop = latestRecordedLoop(threadEvents, runId);
-  return loop ? { on: true, hours: loop.hours } : null;
-}
-
-/**
- * The time a running build was given (the composer's hours), in ms, as its start records kept it,
- * or null: an ∞ build has only a safety ceiling, so its row shows the elapsed clock instead.
- */
-export function runBudgetMs(threadEvents: readonly EventEnvelope[], runId: string | null): number | null {
-  const hours = runLoopSetting(threadEvents, runId)?.hours;
-  return typeof hours === "number" ? hours * HOUR_MS : null;
 }
 
 /**

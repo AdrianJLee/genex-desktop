@@ -162,38 +162,6 @@
   pointer-events: none;
   animation: onboarding-blink 1s step-end infinite;
 }
-/* Loop is on: the composer's own Mode button. Its ∞ draws itself once as the bar appears and a
-   light passes over the word once, then both rest. */
-.onboarding-loop {
-  cursor: default;
-}
-.onboarding-loop svg path:first-child {
-  stroke-opacity: 1;
-  animation: onboarding-dim-once 1.85s 0.3s linear backwards;
-}
-.onboarding-loop .a-trace {
-  stroke: var(--accent-ink);
-  stroke-dasharray: 0.23 0.77;
-  opacity: 0;
-  animation: onboarding-trace-once 1.85s 0.3s cubic-bezier(0.45, 0, 0.25, 1) backwards;
-}
-.onboarding-loop-label {
-  background:
-    linear-gradient(
-      90deg,
-      var(--ink) 0 38%,
-      var(--accent-ink) 46%,
-      color-mix(in oklab, var(--ink) 55%, white) 50%,
-      var(--accent-ink) 54%,
-      var(--ink) 62% 100%
-    )
-    0 0 / 250% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-position: -25% 0;
-  animation: onboarding-shimmer 1.85s 0.3s linear backwards;
-}
 .onboarding-letters {
   position: absolute;
   max-width: 470px;
@@ -813,32 +781,6 @@
 @keyframes onboarding-fill {
   from {
     transform: scaleX(0);
-  }
-}
-@keyframes onboarding-shimmer {
-  from {
-    background-position: 125% 0;
-  }
-  to {
-    background-position: -25% 0;
-  }
-}
-@keyframes onboarding-trace-once {
-  from {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  to {
-    stroke-dashoffset: -1;
-    opacity: 0;
-  }
-}
-@keyframes onboarding-dim-once {
-  from {
-    stroke-opacity: 0.4;
   }
 }
 @keyframes onboarding-blink {

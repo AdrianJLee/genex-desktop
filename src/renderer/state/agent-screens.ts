@@ -5,7 +5,7 @@
  * list is kept sorted by label.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { AgentScreenFrame, AgentScreenRole } from "../../shared/agent-screen.ts";
+import type { AgentScreenFrame } from "../../shared/agent-screen.ts";
 
 /** How many frames a window's trail keeps, the newest included: what a selected node's card steps through. */
 export const TRAIL_FRAMES = 6;
@@ -59,9 +59,6 @@ export function screensLoaded(state: AgentScreensState, frames: AgentScreenFrame
   return { frames, trails };
 }
 
-/** The lead's own screen is the one a running build's status and its node show. */
-const DIRECTOR: AgentScreenRole = "director";
-
 /** The newest frame that matches, or undefined: a frame the store holds, so a selector's answer is stable. */
 function newestFrame(
   state: AgentScreensState,
@@ -76,20 +73,9 @@ function newestFrame(
 }
 
 /**
- * The newest frame of a run's lead, or undefined. A selector: it returns a frame the store holds,
+ * The newest frame of the agent working on one part of a run — its worker — or undefined. The graph
+ * joins a step to its screen on the run and the part. A selector: it returns a frame the store holds,
  * so a component re-renders only when that frame changes, not on every other worker's frame.
- */
-export function leadFrameOf(
-  state: AgentScreensState,
-  project: string | null,
-  runId: string | null,
-): AgentScreenFrame | undefined {
-  return newestFrame(state, (frame) => frame.project === project && frame.runId === runId && frame.role === DIRECTOR);
-}
-
-/**
- * The newest frame of the agent working on one part of a run — its builder, or the playtester
- * checking it — or undefined. The graph joins a step to its screen on the run and the part.
  */
 export function partFrameOf(
   state: AgentScreensState,
@@ -97,10 +83,7 @@ export function partFrameOf(
   runId: string | null,
   facetId: string,
 ): AgentScreenFrame | undefined {
-  return newestFrame(state, (frame) => {
-    const ofPart = frame.runId === runId && frame.facetId === facetId;
-    return ofPart && frame.project === project && frame.role !== DIRECTOR;
-  });
+  return newestFrame(state, (frame) => frame.runId === runId && frame.facetId === facetId && frame.project === project);
 }
 
 /** A window's recent frames, oldest first; the same array until a new frame arrives. */

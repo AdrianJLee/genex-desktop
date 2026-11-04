@@ -53,6 +53,27 @@ export function withRecent(list: readonly PlayRecentEntry[], game: PlayRecentEnt
   return [game, ...list.filter((entry) => entry.slug !== game.slug)].slice(0, RECENT_MAX);
 }
 
+/**
+ * Recent with each game's title and cover as `games` (cards or pages just read) show them, so a game
+ * played before it had a cover gets it; a read with no cover keeps the one Recent has. The same list
+ * when nothing changes.
+ */
+export function withReadCovers(
+  list: PlayRecentEntry[],
+  games: readonly Pick<PlayRecentEntry, "slug" | "title" | "coverUrl">[],
+): PlayRecentEntry[] {
+  const read = new Map(games.map((game) => [game.slug, game]));
+  let changed = false;
+  const next = list.map((entry) => {
+    const game = read.get(entry.slug);
+    const coverUrl = game?.coverUrl ?? entry.coverUrl;
+    if (!game || (game.title === entry.title && coverUrl === entry.coverUrl)) return entry;
+    changed = true;
+    return { ...entry, title: game.title, coverUrl };
+  });
+  return changed ? next : list;
+}
+
 const isRecentEntry = (value: unknown): value is PlayRecentEntry => {
   if (typeof value !== "object" || value === null) return false;
   const entry = value as Record<string, unknown>;
@@ -412,6 +433,19 @@ export function noteOn(
   if (!note || NOTE_PLACE[note].control !== control) return null;
   return { note, look: NOTE_PLACE[note].look };
 }
+
+/** A like as a game page shows it: whether the person likes the game, and how many do. */
+export interface LikeShown {
+  liked: boolean;
+  likes: number;
+}
+
+/**
+ * The like a game page shows the moment it is pressed, before genex.games answers: the heart turns
+ * and the count moves by one, never below none (a count can lag the person's own like).
+ */
+export const likeFlipped = ({ liked, likes }: LikeShown): LikeShown =>
+  liked ? { liked: false, likes: Math.max(0, likes - 1) } : { liked: true, likes: likes + 1 };
 
 /** Whether the header just went from not liked to liked: the player's own like, worth a burst. */
 export const justLiked = (before: PlayBarState | null | undefined, after: PlayBarState | null | undefined): boolean =>

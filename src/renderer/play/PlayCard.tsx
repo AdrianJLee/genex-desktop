@@ -19,6 +19,7 @@ import { claimHoverClip, releaseHoverClip } from "./clip-playback.ts";
 import { CoverClip } from "./CoverClip.tsx";
 import { CardBadge, cardBadge } from "./native-model.ts";
 import { CardNativeBadge } from "./NativeBadge.tsx";
+import { NoCover } from "./NoCover.tsx";
 import { createShownCovers, formatCount } from "./play-model.ts";
 
 const WORDS = PLAY_WORDS;
@@ -35,12 +36,12 @@ const shownBefore = (src: string | null): boolean => src !== null && SHOWN_COVER
 
 /**
  * The cover: the picture fades in once loaded, or shows at once when this window has shown it
- * before; a missing or broken one leaves the plain tile. It loads as soon as its card is made, not
- * when it nears the screen, so a page's covers are there before they are scrolled to.
+ * before; a missing or broken one shows the no-cover drawing. It loads as soon as its card is made,
+ * not when it nears the screen, so a page's covers are there before they are scrolled to.
  */
-function Cover({ src, onShown }: { src: string | null; onShown: () => void }): JSX.Element | null {
+function Cover({ src, onShown }: { src: string | null; onShown: () => void }): JSX.Element {
   const [state, setState] = useState<CoverState>(() => (shownBefore(src) ? CoverState.Shown : CoverState.Loading));
-  if (!src || state === CoverState.Failed) return null;
+  if (!src || state === CoverState.Failed) return <NoCover />;
   return (
     <img
       className="play-card-image"
@@ -132,7 +133,7 @@ function Author({ author }: { author: PlayGame["author"] }): JSX.Element {
 }
 
 /** The card menu the signed-in account gets on `game`: its owner's items, an admin's, or none. */
-function useCardMenu(game: PlayGame) {
+export function useCardMenu(game: PlayGame) {
   const accountId = usePeople((s) => s.me?.id ?? null);
   const isAdmin = usePeople((s) => s.me?.isAdmin === true);
   // A search's card carries no curation to read its menu from, so it gets none.

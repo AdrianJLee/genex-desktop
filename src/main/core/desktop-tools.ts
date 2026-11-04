@@ -33,9 +33,20 @@ export const DesktopQuestion = {
 } as const;
 export type DesktopQuestion = (typeof DesktopQuestion)[keyof typeof DesktopQuestion];
 
+/** How the person's card ended: a yes, a no, or nobody answering before it expired. */
+export const DesktopAnswer = {
+  Yes: "yes",
+  No: "no",
+  /** The card expired with nobody at it: no answer, so nothing is kept and the next call asks again. */
+  Unanswered: "unanswered",
+} as const;
+export type DesktopAnswer = (typeof DesktopAnswer)[keyof typeof DesktopAnswer];
+
 /** What the model reads when the desktop cannot be used. */
 const MESSAGE = {
   declined: "the person did not allow computer control this session — ask them in words what to do instead",
+  unanswered:
+    "nobody answered the question about computer control before it expired — nothing moved; tell the person you asked, and call again when they say so (they are asked again)",
   noDriver: (why: string) => `computer control is not available: ${why}`,
   stopped: `the person stopped computer control (Stop, or ${desktopStopShortcut(process.platform).words}) — nothing more moved; ask before using it again`,
   off: "computer control is off in Settings — nothing moved; the person can turn it on under Settings → Permissions",
@@ -49,7 +60,7 @@ export interface DesktopToolsDeps {
   /** Start the driver: cua-driver on this computer, or the computer server inside a VM. Throws when it cannot. */
   connect: () => Promise<DesktopDriver>;
   /** Ask the person, in the chat, and wait for their answer. */
-  ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<boolean>;
+  ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<DesktopAnswer>;
   /** Whether an app is the studio itself, which no agent ever drives. */
   ownApp: (app: DesktopApp) => boolean;
   /** The engine-app guard: why this app is refused now (an engine's editor outside its assist), or null. */
@@ -110,9 +121,11 @@ function appAllowance(deps: DesktopToolsDeps) {
     const key = app.bundleId ?? app.name;
     if (allowed.has(key)) return true;
     if (declined.has(key)) return false;
-    const yes = await deps.ask(DesktopQuestion.App, app);
-    (yes ? allowed : declined).add(key);
-    return yes;
+    const answer = await deps.ask(DesktopQuestion.App, app);
+    // An app nobody answered for is not kept: the next action in it asks again.
+    if (answer === DesktopAnswer.Unanswered) return false;
+    (answer === DesktopAnswer.Yes ? allowed : declined).add(key);
+    return answer === DesktopAnswer.Yes;
   };
 }
 
@@ -135,8 +148,8 @@ async function raiseKept(deps: DesktopToolsDeps, driver: DesktopDriver, fresh: b
 function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { release(): Promise<void> } {
   let driver: DesktopDriver | null = null;
   let target: DesktopTarget | null = null;
-  // The session question is asked once: a yes stands while a connection fails and is retried.
-  let session: boolean | null = null;
+  // The session question is asked until answered: a yes stands while a connection fails and is retried.
+  let session: DesktopAnswer | null = null;
   // Counts stops, so a call that waited across one knows it was stopped.
   let stops = 0;
   const allowApp = appAllowance(deps);
@@ -165,8 +178,9 @@ function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { 
       const answer = session ?? (await deps.ask(DesktopQuestion.Session));
       // Stopped while the card waited: that yes ends with the stop, and the next call asks again.
       if (stops !== ticket) return unusable(MESSAGE.stopped);
+      if (answer === DesktopAnswer.Unanswered) return unusable(MESSAGE.unanswered);
       session = answer;
-      if (!session) return unusable(MESSAGE.declined);
+      if (session === DesktopAnswer.No) return unusable(MESSAGE.declined);
       // Turned off while the card waited: the yes connects nothing.
       if (turnedOff(deps)) return unusable(MESSAGE.off);
       const connected = await connect(ticket);

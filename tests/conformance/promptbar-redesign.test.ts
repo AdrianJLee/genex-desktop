@@ -21,16 +21,13 @@ function fixture() {
   };
   return { records, sent, host, controller: new PlanReviewController(host) };
 }
-for (const loop of [false, true])
-  test(`manual plan approval gates ${loop ? "Loop" : "Auto"}, persists across restart and dispatches once`, async (t) => {
+for (const roled of [false, true])
+  test(`manual plan approval gates a send${roled ? " with roles" : ""}, persists across restart and dispatches once`, async (t) => {
     const f = fixture();
+    const roles = { planner: "p", builder: "w", judge: "j", efforts: { builder: "high" } };
     await f.controller.request("chat", "Make a game", {
       reviewPlan: true,
-      ...(loop
-        ? {
-            autopilot: { hours: 0.25, roles: { planner: "p", builder: "w", judge: "j", efforts: { builder: "high" } } },
-          }
-        : {}),
+      ...(roled ? { roles } : {}),
       preferences: { fast: true },
       engine: "codex",
     });
@@ -51,7 +48,7 @@ for (const loop of [false, true])
     assert.equal(f.sent.length, 1);
     assert.match(f.sent[0]!.text, /User-approved implementation plan/);
     assert.equal(f.sent[0]!.options.reviewPlan, false);
-    assert.equal(f.sent[0]!.options.autopilot?.hours, loop ? 0.25 : undefined);
+    assert.deepEqual(f.sent[0]!.options.roles, roled ? roles : undefined);
     assert.deepEqual(f.sent[0]!.options.preferences, { fast: true });
     assert.equal(f.records.get("chat")!.state, "approved");
   });
@@ -219,7 +216,7 @@ test("Codex plan limits come from the account read: windows by length, plan name
   );
 });
 
-test("the real host stores approval before dispatch and keeps 15-minute Loop settings intact", async (t) => {
+test("the real host stores approval before dispatch and keeps the send's settings intact", async (t) => {
   const { StudioCore } = await import("../../src/main/studio-core.ts");
   const { fixtureEngines } = await import("../../src/main/dev/fixtures.ts");
   const { makeResources } = await import("../helpers/studio-rig.ts");
@@ -230,7 +227,6 @@ test("the real host stores approval before dispatch and keeps 15-minute Loop set
   const core = new StudioCore({
     paths: { userData: root, resources: await makeResources() },
     engines: fixtureEngines(),
-    executionPolicy: { runBackgroundImprovement: false },
   });
   t.after(async () => {
     await core.stop();
@@ -247,7 +243,6 @@ test("the real host stores approval before dispatch and keeps 15-minute Loop set
     engine: "codex",
     model: "fixture-v1",
     reviewPlan: true,
-    autopilot: { hours: 0.25 },
     preferences: { fast: true },
   });
   const pending = (await core.store.getRecord(thread)).metadata?.planReview as PlanReview;
@@ -258,12 +253,8 @@ test("the real host stores approval before dispatch and keeps 15-minute Loop set
   assert.equal(await core.answerPlan(thread, pending.id, true), false);
   const revised = (await core.store.getRecord(thread)).metadata?.planReview as PlanReview;
   assert.equal(await core.answerPlan(thread, revised.id, true), true);
-  const action = dispatched[0] as {
-    autopilot: { hours: number; reviewPlan: boolean };
-    preferences: { fast: boolean };
-  };
-  assert.equal(action.autopilot.hours, 0.25);
-  assert.equal(action.autopilot.reviewPlan, false);
+  const action = dispatched[0] as { preferences: { fast: boolean } } & Record<string, unknown>;
+  assert.equal("autopilot" in action, false);
   assert.equal(action.preferences.fast, true);
 });
 
@@ -278,7 +269,6 @@ test("each provider plans with current plugin capabilities without executable to
   const core = new StudioCore({
     paths: { userData: root, resources: await makeResources() },
     engines: fixtureEngines(),
-    executionPolicy: { runBackgroundImprovement: false },
   });
   t.after(async () => {
     await core.stop();
@@ -329,15 +319,10 @@ test("retrying an unavailable plan retains the request and changes the provider 
     },
   };
   const controller = new PlanReviewController(host);
-  await controller.request("chat", "Make a football game", {
-    engine: "claude-code",
-    reviewPlan: true,
-    autopilot: { hours: 1 },
-  });
+  await controller.request("chat", "Make a football game", { engine: "claude-code", reviewPlan: true });
   assert.equal(f.records.get("chat")!.state, "failed");
   await controller.request("chat", "Make a football game", { engine: "codex", reviewPlan: true });
   assert.equal(f.records.get("chat")!.options.engine, "codex");
-  assert.equal(f.records.get("chat")!.options.autopilot?.hours, 1);
   assert.equal(f.records.get("chat")!.state, "waiting");
   assert.equal(f.sent.length, 0);
 });

@@ -35,69 +35,29 @@ export function interviewQuestion(args: AnyRecord = {}): {
   return { question, ...(recap ? { recap } : {}), choices };
 }
 
-/** The next user reply inherits the question's commission, including after a restart.
- * A later message or a registered run clears it; progress updates never grant launch authority. */
-export function interviewForReply(events: readonly AnyRecord[] = []): string | null {
-  let pending: string | null = null,
-    reply: string | null = null;
-  for (const event of events) {
-    const data = event.data ?? event;
-    if (
-      data.type === EventKind.Messages &&
-      data.messages.some((message: { role?: string }) => message.role === "user")
-    ) {
-      reply = pending;
-      pending = null;
-    } else if (data.type === EventKind.Custom && data.event_type === RunEvent.InterviewQuestion)
-      pending = data.payload.intakeId ?? null;
-    else if (data.type === EventKind.Custom && [RunEvent.RunRegistered, RunEvent.RunStarted].includes(data.event_type))
-      pending = reply = null;
-  }
-  return reply;
-}
-
-/** The run this interview is commissioning, kept beside the question: autopilot or loop options. */
-function commissionOf(ctx: ToolCtx): AnyRecord | null {
-  if (ctx.autopilot) return { autopilot: ctx.autopilot };
-  if (ctx.loop) return { loop: ctx.loop };
-  return null;
-}
-
+/** Record the question on the turn: the chat shows its card, and the answer comes as the next message. */
 export async function recordInterviewQuestion(ctx: ToolCtx, args: AnyRecord): Promise<void> {
   const question = interviewQuestion(args);
-  const intake = commissionOf(ctx);
-  const intakeId = intake ? `interview_${ctx.turnId}` : null;
-  // Reference images and commissioning options stay out of the paged chat payload.
-  if (intakeId)
-    await ctx.call(HostMethod.ArtifactWrite, { threadId: ctx.threadId, artifactId: intakeId, value: intake });
   await ctx.call(HostMethod.TurnAppend, {
     turnId: ctx.turnId!,
-    batch: [
-      {
-        type: EventKind.Custom,
-        event_type: RunEvent.InterviewQuestion,
-        payload: { ...question, ...(intakeId ? { intakeId } : {}) },
-      },
-    ],
+    batch: [{ type: EventKind.Custom, event_type: RunEvent.InterviewQuestion, payload: question }],
   });
 }
 
 export const askUser: HarnessTool = {
   name: "ask_user",
   description:
-    "Ask one necessary question in the chat's answer panel. Offer up to 3 concise choices, recommended first. The user can also type a different answer. End your reply after calling this; wait for the next user message before starting a run. Before a build, ask it when you do not know what the game is or how it should look. Never use this for progress updates, permission to do work already requested, or a reply to a greeting or small talk (answer that in words).",
+    "Ask one necessary question in the chat's answer panel. Offer up to 3 concise choices, recommended first. The user can also type a different answer. End your reply after calling this; wait for the next user message before starting a run. Never use this for progress updates, permission to do work already requested, or a reply to a greeting or small talk (answer that in words).",
   parameters: {
     type: "object",
     properties: {
       recap: {
         type: "string",
-        description:
-          "Optional: one short sentence on what you found or just did, shown above the question (for example: The road, two cars and the lap timer are in.).",
+        description: "Optional: one short sentence on what you found or just did, shown above the question.",
       },
       question: {
         type: "string",
-        description:
-          "One short question whose answer changes what you do next (for example: what the player does or how the game should look, before a build; or a build versus research and a plan first).",
+        description: "One short question whose answer changes what you do next.",
       },
       options: {
         type: "string",

@@ -104,9 +104,9 @@ async function closeRunsOrphanedByCrash(studio: Studio, runIds: string[] | null 
 }
 
 /**
- * Is this loop running the run again itself (a Resume or a reopen taken as it woke)? The host names a
- * run in flight at every later crash of the app's session, so the name can be stale: the run is
- * this loop's, never one to close under it.
+ * Is this loop running the run again itself (a Resume taken as it woke)? The host names a run in
+ * flight at every later crash of the app's session, so the name can be stale: the run is this
+ * loop's, never one to close under it.
  */
 function runsItAgain(studio: Studio, runId: string): boolean {
   return Boolean(studio.activeRuns?.has(runId) || studio.startingRuns?.has(runId));
@@ -121,8 +121,7 @@ function runsIn(events: readonly HarnessEvent[]): { started: Map<string, AnyReco
     if (d?.type !== EventKind.Custom || !d.payload?.runId) continue;
     // A director's run registers as "autopilot" and then starts as "director"; the last
     // word wins here exactly as it does in the app's own boot repair, so both agree. A run
-    // started again (a Resume, a finished build reopened) is open again: an earlier session's
-    // close is not this one's.
+    // started again (a Resume) is open again: an earlier session's close is not this one's.
     if (d.event_type === RunEvent.RunStarted || d.event_type === RunEvent.RunRegistered) {
       started.set(d.payload.runId, d.payload);
       closed.delete(d.payload.runId);

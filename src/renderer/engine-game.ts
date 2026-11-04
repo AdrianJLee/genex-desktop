@@ -1,9 +1,8 @@
 /**
  * What the app reads of a game linked to any engine (`shared/game-engine.ts`): the engine as its
- * plugin declares it (`GameProject.linkedEngine`), whether its project lies in the game folder,
- * the Loop's wait for an engine whose save points need it there, and Rewind's note when they can't
- * hold it. Unreal's own card, editor and words stay in `unreal-game.ts`. Pure, so each rule is
- * tested without a DOM.
+ * plugin declares it (`GameProject.linkedEngine`), whether its project lies in the game folder, and
+ * Rewind's note when an engine whose save points need it there finds it elsewhere. Unreal's own card,
+ * editor and words stay in `unreal-game.ts`. Pure, so each rule is tested without a DOM.
  */
 import {
   engineOf,
@@ -29,8 +28,8 @@ const UNREAL_AS_DECLARED: LinkedEngine = {
 /**
  * The engine a game is linked to, as its plugin declares it; null for a web game (or no game). A
  * descriptor that carries no declaration reads Unreal as Unreal declares itself, and any other
- * engine by its id, needing its project in the folder: the Loop waits and Rewind's note errs toward
- * saying what Rewind can't undo.
+ * engine by its id, needing its project in the folder: Rewind's note errs toward saying what Rewind
+ * can't undo.
  */
 export function linkedEngineOf(game: EngineGame | null | undefined): LinkedEngine | null {
   const kind = engineOf(game?.engine);
@@ -50,16 +49,7 @@ export function under(file: string, folder: string): boolean {
   return SEPARATOR.test(file.charAt(base.length));
 }
 
-/** How many folders above the project's own the Loop's caption names: "Documents › Unreal Projects". */
-const PLACE_FOLDERS = 2;
-
-/** Where a project's folder sits, as the panel names places: the folders above it, joined by ›. */
-function placeOf(project: string): string {
-  const folders = project.split(SEPARATOR).filter(Boolean).slice(0, -2);
-  return folders.slice(-PLACE_FOLDERS).join(" › ");
-}
-
-/** The engine a game is linked to, when its Loop needs its project inside the game folder. */
+/** The engine a game is linked to, when its save points need its project inside the game folder. */
 function folderBound(game: EngineGame | null | undefined): { engine: LinkedEngine; project: string } | null {
   const engine = linkedEngineOf(game);
   const project = game?.engine?.project;
@@ -73,15 +63,6 @@ export function engineProjectInFolder(game: EngineGame | null | undefined): bool
 }
 
 /**
- * Whether the composer may start a Loop in this game: a web game runs the Loop, and so does an
- * engine game, unless its engine needs the project inside the game folder (each part's undo point
- * holds it there) and it lies elsewhere. No game (a draft chat) is a web game.
- */
-export function engineLoopAvailable(game: EngineGame | null | undefined): boolean {
-  return !folderBound(game) || engineProjectInFolder(game);
-}
-
-/**
  * What Rewind adds for a game whose engine needs its project in the game folder and finds it
  * elsewhere: its checkpoints hold only that folder, so what was changed in the engine stays. Null
  * for a web game, an engine whose save points hold its project wherever it is, and a project inside
@@ -92,17 +73,6 @@ export function engineRewindNote(game: EngineGame | null | undefined): string | 
   const bound = folderBound(game);
   if (!bound || engineProjectInFolder(game)) return null;
   return ENGINE_GAME_WORDS.rewindNote(bound.engine.label, nameOf(bound.project, bound.engine));
-}
-
-/**
- * Why Mode has no Loop for a game whose engine needs its project in the game folder: Rewind can't
- * undo what a Loop changes elsewhere, where the project is, and the two ways to a Loop.
- */
-export function engineLoopGate(game: EngineGame | null | undefined): string {
-  const engine = linkedEngineOf(game) ?? UNREAL_AS_DECLARED;
-  const project = game?.engine?.project;
-  if (!project) return ENGINE_GAME_WORDS.loopUnavailable(engine.label, null, "");
-  return ENGINE_GAME_WORDS.loopUnavailable(engine.label, nameOf(project, engine), placeOf(project));
 }
 
 /** A project's name as its engine shows it, by the engine's own project files (Unreal's when none are said). */

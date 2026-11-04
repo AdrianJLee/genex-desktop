@@ -10,14 +10,21 @@ and the project's default game mode `state['default_mode']` (a class path).
 The play world is flat floors (`state['floors']`, each a Floor) that line traces hit, the pawns
 and volumes in `state['actors']`, the player's pawn and its camera manager; every line trace is
 appended to `state['traces']`, so a test can assert that refused input never even looked.
+The player controller's view is `state['control_rotation']`; the nav mesh's path is `state['nav_path']`
+(None: the level has none), every query appended to `state['nav_queries']`.
 
 A console command is recorded, then handed to `state['on_console']` when a test sets it (a fake
 UBT for `Module Recompile`); the editor's log folder is the project's Saved/Logs.
 
 The play world's game clock is `state['game_seconds']` and its last frame's delta
-`state['world_delta']`; a test advances them itself. Slate post-tick callbacks are kept in
+`state['world_delta']`, its real-time clock (which runs on while the game is paused)
+`state['real_seconds']`; a test advances them itself. Slate post-tick callbacks are kept in
 `state['ticks']` (handle: callback), so a test runs a frame by calling each. The valid key names
 are `state['keys']`.
+
+A shot written to disk is a Picture in `state['pictures']` (by file), which a texture imported from
+that file samples when a canvas draws it into a render target; the play view's size is
+`state['viewport_size']`.
 
 Geometry Script, material and spline calls build plain records: a DynamicMesh's `vertices`, a
 Material's `expressions`, a SplineComponent's `points`. Like Unreal's, functions with out-params
@@ -26,6 +33,7 @@ add_new_subobject), so the helper must pick its value by type.
 """
 
 import math
+import os
 import types
 
 calls: list[tuple] = []
@@ -40,8 +48,10 @@ def reset(project_dir: str) -> None:
                   'create_fails': False, 'selected': [], 'floors': [], 'traces': [], 'player': None,
                   'camera': None, 'cvars': {}, 'registry': [], 'classes': {},
                   'mode_override': None, 'default_mode': '', 'dirty': [], 'imports': {}, 'loaded': {},
-                  'import_tasks': [], 'game_seconds': 0.0, 'world_delta': 0.0, 'ticks': {},
-                  'keys': {'W', 'A', 'S', 'D', 'SpaceBar', 'Gamepad_LeftX'}})
+                  'import_tasks': [], 'game_seconds': 0.0, 'real_seconds': 0.0, 'world_delta': 0.0, 'ticks': {},
+                  'control_rotation': Rotator(), 'nav_path': None, 'nav_queries': [],
+                  'keys': {'W', 'A', 'S', 'D', 'SpaceBar', 'Gamepad_LeftX'}, 'pictures': {},
+                  'viewport_size': (1280, 720)})
 
 
 def _record(*call) -> None:
@@ -200,6 +210,9 @@ class Actor(Object):
     def get_components_by_class(self, cls) -> list:
         return [c for c in self.components if isinstance(c, cls)]
 
+    def get_owner(self):
+        return vars(self).get('props', {}).get('owner')
+
     def get_attached_actors(self) -> list:
         return list(self.attached)
 
@@ -214,7 +227,12 @@ class Actor(Object):
         self.scale = new_scale3d
 
     def get_actor_bounds(self, only_colliding_components: bool = False, include_from_child_actors: bool = False):
-        corners = [corner for c in self.components if isinstance(c, SceneComponent) for corner in c.corners()]
+        parts = [c for c in self.components if isinstance(c, SceneComponent)]
+        if only_colliding_components:
+            parts = [c for c in parts if c.collides]
+        corners = [corner for c in parts for corner in c.corners()]
+        if not corners and only_colliding_components:
+            return Vector(), Vector()
         return _box_of(corners or [(self.location.x, self.location.y, self.location.z)])
 
 
@@ -232,6 +250,8 @@ class SceneComponent(ActorComponent):
         self.rotation = rotation or Rotator()
         self.scale = scale or Vector(1.0, 1.0, 1.0)
         self.visible = visible
+        # Whether it collides: an editor-only arrow or a label doesn't, and only-colliding bounds leave it out.
+        self.collides = props.pop('collides', True)
         self.props = props
 
     def get_name(self) -> str:
@@ -541,6 +561,15 @@ class SkeletalMeshComponent(MeshComponent):
     def get_socket_location(self, name: str) -> Vector:
         return self.bones[str(name)]
 
+    def get_anim_instance(self):
+        return self.props.get('anim_instance')
+
+    def is_simulating_physics(self, bone_name: str = 'None') -> bool:
+        return bool(self.props.get('simulating', False))
+
+    def get_path_name(self) -> str:
+        return f'/Game/Meshes/{self.name}'
+
     def corners(self) -> list[tuple]:
         if self.bounds:
             return [(v.x, v.y, v.z) for v in self.bounds]
@@ -667,12 +696,39 @@ class PlayerController(Object):
     def get_controlled_pawn(self) -> Actor | None:
         return state['player']
 
+    def get_control_rotation(self) -> Rotator:
+        return state['control_rotation']
+
+
+class NavigationPath(Object):
+    """A path the nav mesh found: its points from the start, and whether it reaches the end."""
+
+    def __init__(self, points: list, partial: bool = False) -> None:
+        self.path_points = list(points)
+        self._partial = partial
+
+    def is_valid(self) -> bool:
+        return len(self.path_points) >= 2
+
+    def is_partial(self) -> bool:
+        return self._partial
+
+
+class NavigationSystemV1(Object):
+    @staticmethod
+    def find_path_to_location_synchronously(world_context_object, path_start: Vector, path_end: Vector, *rest):
+        """`state['nav_path']` (a NavigationPath, or a function of start and end), or None: a level without a nav mesh."""
+        state['nav_queries'].append(((path_start.x, path_start.y, path_start.z), (path_end.x, path_end.y, path_end.z)))
+        found = state['nav_path']
+        return found(path_start, path_end) if callable(found) else found
+
 
 class Floor:
-    """A flat floor at height z, of `owner` (an actor or None), over the rectangle (x0, y0, x1, y1) or everywhere."""
+    """A flat floor at height z, of `owner` (an actor or None), over the rectangle (x0, y0, x1, y1) or everywhere;
+    `sight` False is a floor that lets the sight channel through (solid to object traces all the same)."""
 
-    def __init__(self, z: float, owner: Actor | None = None, rect: tuple | None = None) -> None:
-        self.z, self.owner, self.rect = z, owner, rect
+    def __init__(self, z: float, owner: Actor | None = None, rect: tuple | None = None, sight: bool = True) -> None:
+        self.z, self.owner, self.rect, self.sight = z, owner, rect, sight
 
     def under(self, x: float, y: float) -> bool:
         return self.rect is None or (self.rect[0] <= x <= self.rect[2] and self.rect[1] <= y <= self.rect[3])
@@ -690,6 +746,11 @@ class HitResult(Object):
 
 class TraceTypeQuery:
     TRACE_TYPE_QUERY1 = 'TraceTypeQuery1'
+
+
+class ObjectTypeQuery:
+    OBJECT_TYPE_QUERY1 = 'ObjectTypeQuery1'
+    OBJECT_TYPE_QUERY2 = 'ObjectTypeQuery2'
 
 
 class DrawDebugTrace:
@@ -869,7 +930,54 @@ class UserWidget(Object):
 
 
 class AnimInstance(Object):
-    pass
+    """An animation instance and the montage it plays: `montage`, at `position` montage seconds, at `rate`."""
+
+    def __init__(self, montage=None, position: float = 0.0, rate: float = 1.0, section: str = 'Default') -> None:
+        self.montage, self.position, self.rate, self.section = montage, position, rate, section
+
+    def get_current_active_montage(self):
+        return self.montage
+
+    def montage_get_position(self, montage) -> float:
+        return self.position if montage is self.montage else 0.0
+
+    def montage_get_play_rate(self, montage) -> float:
+        return self.rate if montage is self.montage else 0.0
+
+    def montage_get_current_section(self, montage) -> Name:
+        return Name(self.section)
+
+
+class AnimNotifyEvent(Object):
+    """A notify on a clip: its name and trigger time."""
+
+    def __init__(self, name: str, seconds: float) -> None:
+        self.props = {'notify_name': Name(name)}
+        self.seconds = seconds
+
+    def get_editor_property(self, name: str):
+        return self.props[name]
+
+
+class AnimMontage(AnimSequenceBase):
+    """A montage with its notifies as (montage seconds, name)."""
+
+    def __init__(self, path: str = '/Game/AM_Attack', seconds: float = 2.0, notifies=()) -> None:
+        super().__init__(path, seconds)
+        self.notifies = [AnimNotifyEvent(name, at) for at, name in notifies]
+
+    def get_name(self) -> str:
+        return _leaf(self.path)
+
+
+class AnimationLibrary:
+    @staticmethod
+    def get_animation_notify_events(animation_sequence_base) -> list:
+        return list(getattr(animation_sequence_base, 'notifies', []))
+
+    @staticmethod
+    def get_anim_notify_event_trigger_time(notify_event) -> float:
+        return notify_event.seconds
 
 
 def uclass():
@@ -1198,16 +1306,39 @@ class SystemLibrary:
     @staticmethod
     def line_trace_single(world_context_object, start: Vector, end: Vector, trace_channel, trace_complex: bool,
                           actors_to_ignore: list, draw_debug_type, ignore_self: bool, *rest):
-        """The highest floor under start, between start and end, of no ignored actor; a straight-down trace."""
+        """The highest floor under start, between start and end, of no ignored actor; a straight-down trace.
+        A trace across the level hits the first of state['sight_blockers'] it crosses, if any (one that
+        blocks the sight channel: `sight` not False, of no ignored actor)."""
         state['traces'].append((start.z, end.z))
         ignored = list(actors_to_ignore) + ([world_context_object] if ignore_self else [])
-        low, high = min(start.z, end.z), max(start.z, end.z)
-        floors = [f for f in state['floors'] if low <= f.z <= high and f.under(start.x, start.y)
-                  and not any(f.owner is actor for actor in ignored)]
-        if not floors:
-            return None
-        floor = max(floors, key=lambda f: f.z)
-        return HitResult(Vector(start.x, start.y, floor.z), floor.owner, start, end)
+        return _trace(start, end, ignored, sight_only=True)
+
+    @staticmethod
+    def line_trace_single_for_objects(world_context_object, start: Vector, end: Vector, object_types: list,
+                                      trace_complex: bool, actors_to_ignore: list, draw_debug_type,
+                                      ignore_self: bool, *rest):
+        """As line_trace_single, but whatever channels a floor or blocker lets through: anything solid hits."""
+        ignored = list(actors_to_ignore) + ([world_context_object] if ignore_self else [])
+        return _trace(start, end, ignored, sight_only=False)
+
+
+def _trace(start: Vector, end: Vector, ignored: list, sight_only: bool):
+    """The stub world's traces: across the level, the first sight blocker crossed; straight down, the highest floor."""
+    def kept(thing) -> bool:
+        return not any(thing.owner is actor for actor in ignored) and (getattr(thing, 'sight', True) or not sight_only)
+
+    if (start.x, start.y) != (end.x, end.y):
+        for blocker in state.get('sight_blockers', []):
+            point = blocker.crossed(start, end) if kept(blocker) else None
+            if point is not None:
+                return HitResult(point, blocker.owner, start, end)
+        return None
+    low, high = min(start.z, end.z), max(start.z, end.z)
+    floors = [f for f in state['floors'] if low <= f.z <= high and f.under(start.x, start.y) and kept(f)]
+    if not floors:
+        return None
+    floor = max(floors, key=lambda f: f.z)
+    return HitResult(Vector(start.x, start.y, floor.z), floor.owner, start, end)
 
 
 class GameplayStatics:
@@ -1231,6 +1362,10 @@ class GameplayStatics:
     @staticmethod
     def get_time_seconds(world_context_object) -> float:
         return state['game_seconds']
+
+    @staticmethod
+    def get_real_time_seconds(world_context_object) -> float:
+        return state['real_seconds']
 
     @staticmethod
     def set_game_paused(world_context_object, paused: bool) -> bool:
@@ -1306,6 +1441,38 @@ class InputAction(Object):
 
     def get_editor_property(self, name: str):
         return {'value_type': self.value_type}[name]
+
+
+class EnhancedActionKeyMapping(Object):
+    """One mapping of an input mapping context: an action and the key that drives it."""
+
+    def __init__(self, action, key_name: str) -> None:
+        self.action, self.key = action, Key()
+        self.key.key_name = key_name
+
+    def get_editor_property(self, name: str):
+        return {'action': self.action, 'key': self.key}[name]
+
+
+class _Mappings(Object):
+    def __init__(self, mappings: list) -> None:
+        self.mappings = mappings
+
+    def get_editor_property(self, name: str):
+        return {'mappings': self.mappings}[name]
+
+
+class InputMappingContext(Object):
+    """An input mapping context asset: its default key mappings."""
+
+    def __init__(self, name: str, mappings: list) -> None:
+        self.name, self.default_key_mappings = name, _Mappings(mappings)
+
+    def get_name(self) -> str:
+        return self.name
+
+    def get_editor_property(self, name: str):
+        return {'default_key_mappings': self.default_key_mappings}[name]
 
 
 class Key:
@@ -1429,6 +1596,188 @@ def _transform(pose: tuple) -> Transform:
 
 class Array(list):
     """unreal.Array: what Unreal hands back for a TArray (not a Python list in the editor)."""
+
+
+class Vector2D:
+    def __init__(self, x: float = 0.0, y: float = 0.0) -> None:
+        self.x, self.y = x, y
+
+
+class Color:
+    def __init__(self, r: int = 0, g: int = 0, b: int = 0, a: int = 255) -> None:
+        self.r, self.g, self.b, self.a = r, g, b, a
+
+
+class Picture:
+    """A picture a shot wrote to disk, as `import_file_as_texture2d` reads it: its size and its
+    pixel at (x, y) as (r, g, b). Tests put them in `state['pictures']` by file."""
+
+    def __init__(self, width: int, height: int, pixel) -> None:
+        self.width, self.height, self.pixel = width, height, pixel
+
+
+class TextureRenderTargetFormat:
+    RTF_RGBA8 = _EnumValue('RTF_RGBA8')
+    RTF_RGBA8_SRGB = _EnumValue('RTF_RGBA8_SRGB')
+
+
+class BlendMode:
+    BLEND_OPAQUE = _EnumValue('BLEND_OPAQUE')
+
+
+class TextureRenderTarget2D(Object):
+    """A render target: the last texture drawn into it, and the part of it (uv, uv_size) drawn."""
+
+    def __init__(self, width: int, height: int) -> None:
+        self.width, self.height = width, height
+        self.drawn = None
+
+
+class DrawToRenderTargetContext(Object):
+    pass
+
+
+class Canvas(Object):
+    def __init__(self, target: TextureRenderTarget2D) -> None:
+        self.target = target
+
+    def draw_texture(self, texture, screen_position, screen_size, coordinate_position, coordinate_size,
+                     render_color=None, blend_mode=None, *rest) -> None:
+        self.target.drawn = (texture, (coordinate_position.x, coordinate_position.y),
+                             (coordinate_size.x, coordinate_size.y))
+
+
+class WidgetLayoutLibrary:
+    @staticmethod
+    def get_viewport_size(world_context_object) -> Vector2D:
+        return Vector2D(*state['viewport_size'])
+
+
+class Widget(Object):
+    """A UMG widget: its name, the panel it sits in, whether it is visible, and the user widget that owns it."""
+
+    def __init__(self, name: str, owner=None, parent=None, visible: bool = True) -> None:
+        self.name, self.owner, self.parent, self.visible = name, owner, parent, visible
+        state.setdefault('widgets', []).append(self)
+
+    def get_name(self) -> str:
+        return self.name
+
+    def get_parent(self):
+        return self.parent
+
+    def is_visible(self) -> bool:
+        return self.visible
+
+    def get_typed_outer(self, cls):
+        return self.owner
+
+    def get_cached_geometry(self):
+        raise RuntimeError('no geometry before layout')
+
+
+class UserWidget(Widget):
+    def __init__(self, name: str, in_viewport: bool = True, visible: bool = True) -> None:
+        super().__init__(name, None, None, visible)
+        self.in_viewport = in_viewport
+
+    def is_in_viewport(self) -> bool:
+        return self.in_viewport
+
+
+class TextBlock(Widget):
+    def __init__(self, name: str, text: str, owner=None, parent=None, visible: bool = True) -> None:
+        super().__init__(name, owner, parent, visible)
+        self.text = text
+
+    def get_text(self) -> str:
+        return self.text
+
+
+class _Clicked:
+    def __init__(self) -> None:
+        self.count = 0
+
+    def broadcast(self) -> None:
+        self.count += 1
+
+
+class Button(Widget):
+    def __init__(self, name: str, owner=None, parent=None, visible: bool = True, enabled: bool = True) -> None:
+        super().__init__(name, owner, parent, visible)
+        self.enabled, self.on_clicked = enabled, _Clicked()
+
+    def get_is_enabled(self) -> bool:
+        return self.enabled
+
+
+class WidgetLibrary:
+    @staticmethod
+    def get_all_widgets_of_class(world_context_object, widget_class, top_level_only: bool) -> list:
+        return [w for w in state.get('widgets', []) if isinstance(w, widget_class) and (not top_level_only or w.owner is None)]
+
+
+class ObjectIterator:
+    """Every live object of a class (here, the widgets the test made)."""
+
+    def __init__(self, cls) -> None:
+        self.found = [w for w in state.get('widgets', []) if isinstance(w, cls)]
+
+    def __iter__(self):
+        return iter(self.found)
+
+
+class SlateLibrary:
+    @staticmethod
+    def get_local_size(geometry):
+        raise RuntimeError('no geometry')
+
+    @staticmethod
+    def local_to_viewport(world_context_object, geometry, local_coordinate):
+        raise RuntimeError('no geometry')
+
+
+class RenderingLibrary:
+    """Pictures as textures, drawn into render targets by a canvas and read back by sampling them."""
+
+    @staticmethod
+    def import_file_as_texture2d(world_context_object, filename: str):
+        picture = state['pictures'][filename]
+        texture = Texture2D(picture.width, picture.height)
+        texture.picture = picture
+        return texture
+
+    @staticmethod
+    def create_render_target2d(world_context_object, width: int, height: int, format=None, *rest):
+        return TextureRenderTarget2D(width, height)
+
+    @staticmethod
+    def begin_draw_canvas_to_render_target(world_context_object, texture_render_target):
+        size = Vector2D(texture_render_target.width, texture_render_target.height)
+        return Canvas(texture_render_target), size, DrawToRenderTargetContext()
+
+    @staticmethod
+    def end_draw_canvas_to_render_target(world_context_object, context) -> None:
+        pass
+
+    @staticmethod
+    def read_render_target(world_context_object, texture_render_target, normalize: bool = True) -> list:
+        texture, (u0, v0), (us, vs) = texture_render_target.drawn
+        w, h, picture = texture_render_target.width, texture_render_target.height, texture.picture
+        colors = []
+        for j in range(h):
+            py = int((v0 + (j + 0.5) / h * vs) * picture.height)
+            for i in range(w):
+                px = int((u0 + (i + 0.5) / w * us) * picture.width)
+                colors.append(Color(*picture.pixel(px, py)))
+        return colors
+
+    @staticmethod
+    def export_render_target(world_context_object, texture_render_target, file_path: str, file_name: str) -> None:
+        texture, uv, uv_size = texture_render_target.drawn
+        _record('export_render_target', file_name, uv, uv_size, texture_render_target.width, texture_render_target.height)
+        with open(os.path.join(file_path, file_name), 'wb') as file:
+            file.write(b'png')
 
 
 class LinearColor:

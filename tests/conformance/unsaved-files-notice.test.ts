@@ -1,6 +1,6 @@
 /**
- * Files too large to save, which Rewind cannot bring back, are named to the lead: at the head of
- * its thread's next delegated prompt, until a session of that thread has read them and answered.
+ * Files too large to save, which Rewind cannot bring back, are named to the lead: a Genex notice
+ * beside its thread's next delegated prompt, until a session of that thread has read them and answered.
  */
 import assert from "node:assert/strict";
 import { truncate, writeFile } from "node:fs/promises";
@@ -17,8 +17,9 @@ import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 
 type Api = Record<string, (input: unknown) => Promise<unknown>>;
 
+/** Genex's notice of the files Rewind can't bring back: the fact alone. */
 const NOTICE =
-  /^Studio notice: Rewind cannot bring back these files, which are too large to save: big\.bin \(50 MB\)\./;
+  /^Genex couldn't save these files at its checkpoint \(too large\), so Rewind can't bring them back: big\.bin \(50 MB\)\.$/m;
 /** What the test's engine notes ahead of a compaction's own prompt. */
 const COMPACTED = "(compacted)";
 const MB = 1024 ** 2;
@@ -60,7 +61,9 @@ describe("files Rewind cannot bring back, named to the lead", () => {
       status: async () => ({ code: "ready", detail: "fixture" }),
       models: async () => [],
       delegate: async (request: DelegateRequest) => {
-        prompts.push(request.compact ? `${COMPACTED}\n${request.prompt}` : request.prompt);
+        // What the session reads: Genex's notices, then the prompt (flipped: once glued into it).
+        const read = [...(request.notices ?? []), request.prompt].join("\n\n");
+        prompts.push(request.compact ? `${COMPACTED}\n${request.prompt}` : read);
         const ok = !failNext;
         failNext = false;
         return { ok, engine: "claude-code", summary: "fixture", turns: 1, usage: {}, sessionId: "s1" };
@@ -110,12 +113,12 @@ describe("files Rewind cannot bring back, named to the lead", () => {
     await delegate();
     await delegate();
     assert.ok(prompts[0]?.startsWith(COMPACTED), "the first session was the compaction");
-    assert.doesNotMatch(prompts[0] ?? "", /Rewind cannot bring back/, "a compaction reads no notice");
-    assert.doesNotMatch(prompts[1] ?? "", /Rewind cannot bring back/, "another thread's prompt is not told");
+    assert.doesNotMatch(prompts[0] ?? "", /Rewind can't bring them back/, "a compaction reads no notice");
+    assert.doesNotMatch(prompts[1] ?? "", /Rewind can't bring them back/, "another thread's prompt is not told");
     assert.match(prompts[2] ?? "", NOTICE, "the session that failed was told");
     assert.match(prompts[3] ?? "", NOTICE, "the next session that works still reads it");
     assert.ok((prompts[3] ?? "").indexOf("Build it") > 0, "the notice heads the prompt");
-    assert.doesNotMatch(prompts[4] ?? "", /Rewind cannot bring back/, "and once a session settled, it is used up");
+    assert.doesNotMatch(prompts[4] ?? "", /Rewind can't bring them back/, "and once a session settled, it is used up");
   });
 
   it("the chat's record lists the fifty largest files, the count of all and the limits", async () => {
@@ -168,7 +171,7 @@ describe("files Rewind cannot bring back, named to the lead", () => {
     );
     const told = prompts.length;
     await delegate(otherThread, other);
-    assert.doesNotMatch(prompts[told] ?? "", /Rewind cannot bring back/);
+    assert.doesNotMatch(prompts[told] ?? "", /Rewind can't bring them back/);
     const records = (await lite.core.store.listEvents(otherThread)).filter((event) =>
       customEvent(event, CustomEvent.CheckpointSkipped),
     );
@@ -216,5 +219,6 @@ it("the notice names each file with its size, and says nothing for none", () => 
     { file: "audio/theme.wav", bytes: 64 * MB },
   ]);
   assert.ok(notice.includes("Content/Hero.uasset (120 MB), audio/theme.wav (64 MB)."), notice);
-  assert.match(notice, /change one only when the person asked for it/);
+  // Flipped: it also said to change one only when the person asked for it. A fact, never an instruction.
+  assert.doesNotMatch(notice, /change one only|say so in your reply/);
 });

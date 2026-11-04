@@ -28,6 +28,7 @@ import path from "node:path";
 import type { ComposerSendOptions } from "../../shared/composer.ts";
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
+import { MessageFrom } from "../../shared/engine-requests.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
 import {
@@ -48,6 +49,8 @@ import type { StudioCore } from "../studio-core.ts";
 
 /** The longest an assist's grant lasts when the host cannot see its turn end (a resumed turn, the harness's own loop). */
 export const ASSIST_GRANT_MAX_MS = 20 * MINUTE_MS;
+/** A no to the computer-control card a chat's agent asked for holds this long: the card is not asked again meanwhile. */
+export const CONTROL_DECLINE_HOLD_MS = 30 * MINUTE_MS;
 
 /**
  * What the person reads: the task's card, the setting's card, and the turn's message. The cards'
@@ -62,6 +65,7 @@ const MESSAGE = {
   settingNote: computerSettingNote,
   settingDescription: "turning on computer control for every chat",
   asks: (plugin: string, task: string) => `${plugin} asks: ${task}`,
+  controlOn: (task: string) => `Computer control is on now. ${task}`,
 } as const;
 
 /** The cards an assist may ask. */
@@ -346,8 +350,42 @@ export interface AssistHost {
   /** Start a turn in the chat with this message, under this queue id. */
   post(threadId: string, project: string, text: string, messageId: string): Promise<void>;
   grants: AssistGrants;
+  /** The chats whose person said no to the computer-control card lately (`game.computer.control`). */
+  controlDeclines: ControlDeclines;
   /** A new queue id for the task's message. */
   messageId(): string;
+}
+
+/** The chats whose person said no to the computer-control card, each held for {@link CONTROL_DECLINE_HOLD_MS}. */
+export class ControlDeclines {
+  readonly #at = new Map<string, number>();
+  readonly #now: () => number;
+
+  constructor(now: () => number = Date.now) {
+    this.#now = now;
+  }
+
+  /** Whether `threadId`'s person said no within the hold. */
+  held(threadId: string): boolean {
+    const at = this.#at.get(threadId);
+    return at !== undefined && this.#now() - at < CONTROL_DECLINE_HOLD_MS;
+  }
+
+  /** Remembers `threadId`'s no. */
+  hold(threadId: string): void {
+    this.#at.set(threadId, this.#now());
+  }
+}
+
+const DECLINES = new WeakMap<object, ControlDeclines>();
+
+/** The core's remembered noes to the computer-control card, made once per core. */
+export function controlDeclines(core: object): ControlDeclines {
+  const known = DECLINES.get(core);
+  if (known) return known;
+  const made = new ControlDeclines();
+  DECLINES.set(core, made);
+  return made;
 }
 
 /** One assist: the plugin that asks, the game it was called for, its task and the call's signal. */
@@ -493,9 +531,47 @@ export function coreAssistHost(core: StudioCore): AssistHost {
     },
     post: async (threadId, project, text, messageId) => {
       const choice = await chatChoice(core, threadId);
-      await core.sendUserMessage(text, { thread: threadId, project, clientId: messageId, ...choice });
+      // The plugin's words, shown in the chat: the agent reads them as Genex's, never as the person's.
+      await core.sendUserMessage(text, {
+        thread: threadId,
+        project,
+        clientId: messageId,
+        from: MessageFrom.Genex,
+        ...choice,
+      });
     },
     grants: assistGrants(core),
+    controlDeclines: controlDeclines(core),
     messageId: () => `msg_${shortId("assist")}`,
   };
+}
+
+/**
+ * Computer control for a game's chat whose agent needs it (`game.computer.control`): when it is off,
+ * the setting's card, then macOS's own grants, then the chat's next turn with the task (this turn
+ * has no desktop tool to click with). When it is on, `already-on` and nothing is posted. No app is
+ * granted: the desktop tool's own rules and each app's card still apply. A plugin that did not come
+ * with Genex reaches it only on the person's own call. A no on the card changes nothing and is held
+ * for the chat ({@link CONTROL_DECLINE_HOLD_MS}): asked again meanwhile, it answers `declined` with no
+ * card. A refusal of macOS's grants after a yes leaves the setting on, as the person turned it on.
+ */
+export async function computerControlAssist(host: AssistHost, request: AssistRequest): Promise<EngineAssistAnswer> {
+  const { pluginId, binding, task, signal } = request;
+  if (!binding) return refused(EngineAssistRefusal.NoChat);
+  const plugin = host.plugin(pluginId);
+  if (!plugin) return refused(EngineAssistRefusal.Unavailable);
+  if (!request.asked && !plugin.bundled) return refused(EngineAssistRefusal.NotPerson);
+  if (!(await host.desktopAvailable())) return refused(EngineAssistRefusal.Unavailable);
+  if (host.computerControlOn()) return refused(EngineAssistRefusal.AlreadyOn);
+  const threadId = binding.threadId ?? (await host.gameChat(binding.project));
+  if (host.controlDeclines.held(threadId)) return refused(EngineAssistRefusal.Declined);
+  const asked = { ...binding, threadId };
+  if (!(await host.ask({ kind: AssistCardKind.ComputerSetting }, asked, signal))) {
+    host.controlDeclines.hold(threadId);
+    return refused(EngineAssistRefusal.Declined);
+  }
+  await host.turnOnComputerControl();
+  if (!(await host.grantsReady(signal))) return refused(EngineAssistRefusal.Declined);
+  await host.post(threadId, binding.project, MESSAGE.controlOn(task), host.messageId());
+  return { started: true };
 }

@@ -100,40 +100,19 @@ describe("eval app build", () => {
 });
 
 describe("product default", () => {
-  it("reads this checkout's own default commission and permission mode from its pure modules", async () => {
+  it("reads this checkout's own default permission mode from its pure module", async () => {
     const defaults = await productDefaults(repo);
     assert.equal(defaults.permissionMode, DEFAULT_PERMISSION_MODE);
-    assert.deepEqual(defaults.commission, { autopilot: {} });
   });
 
   const answer =
     (value: unknown): CommandRunner =>
     async () => ({ code: 0, stdout: JSON.stringify(value), stderr: "" });
 
-  it("takes the build's own send options when it exports them, else the legacy composer rule", async () => {
-    const extras = { autopilot: { hours: null, frames: [] } };
-    const own = await productDefaults(
-      repo,
-      answer({ extras, send: { hours: 3 }, permissionMode: "auto", addedGlobals: [] }),
-    );
-    assert.deepEqual(own.commission, { autopilot: { hours: 3 } });
-    const older = { extras: { autopilot: { hours: 2, frames: [] } }, permissionMode: "auto", addedGlobals: [] };
-    assert.deepEqual((await productDefaults(repo, answer(older))).commission, { autopilot: { hours: 2 } });
-  });
-
   const hostile: Array<[string, CommandRunner]> = [
-    [
-      "send options with a key no fresh send carries",
-      answer({ extras: { autopilot: {} }, send: { loop: {} }, permissionMode: "auto", addedGlobals: [] }),
-    ],
-    [
-      "send options with hours that are not a number",
-      answer({ extras: { autopilot: {} }, send: { hours: "2" }, permissionMode: "auto", addedGlobals: [] }),
-    ],
-    ["a module that added a global", answer({ extras: {}, permissionMode: "auto", addedGlobals: ["window"] })],
-    ["a bypass permission mode", answer({ extras: {}, permissionMode: PermissionMode.Bypass, addedGlobals: [] })],
-    ["an unknown permission mode", answer({ extras: {}, permissionMode: "yolo", addedGlobals: [] })],
-    ["no commission", answer({ permissionMode: "auto", addedGlobals: [] })],
+    ["a module that added a global", answer({ permissionMode: "auto", addedGlobals: ["window"] })],
+    ["a bypass permission mode", answer({ permissionMode: PermissionMode.Bypass, addedGlobals: [] })],
+    ["an unknown permission mode", answer({ permissionMode: "yolo", addedGlobals: [] })],
     ["a failed import", async () => ({ code: 1, stdout: "", stderr: "ERR_MODULE_NOT_FOUND" })],
   ];
   for (const [name, run] of hostile)

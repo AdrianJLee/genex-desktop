@@ -64,6 +64,7 @@ function never(signal?: AbortSignal | null): Promise<never> {
 /** The Genex editor helper's tool that names the project the editor has open. */
 const PROJECT_FILE = "project_file";
 const isIdentity = (body: any) => body?.params?.arguments?.tool_name === PROJECT_FILE;
+const LOOP_TOOLSET_NAME = "genex_loop.tools.GenexLoopTools";
 
 /** Marks a stand-in editor's answer as a JSON-RPC error it sends back, in place of a tool result. */
 const RPC_ERROR = Symbol("json-rpc error");
@@ -1281,6 +1282,46 @@ test("the bundled Unreal manifest runs one bridge per game from the plugin's sto
   assert.deepEqual(manifest.capabilities, ["game-engine"], "it links games to their Unreal project");
 });
 
+test("the host's calls to a project's editor share one session: its connect and the helper's identity call happen once", async () => {
+  // Each request waits for one of the editor's frames: five per call (connect, identity, call, end)
+  // made every computer action several times slower than its one call.
+  const stand = editor(() => ({ returnValue: { ok: true } }));
+  const call = { toolset: LOOP_TOOLSET_NAME, tool: "play_state", args: {} };
+  const project = { ...DRIFT, project: "/Games/Shared/Shared.uproject" };
+  const shared = editor(() => ({ returnValue: { ok: true } }), project.project);
+  for (let i = 0; i < 3; i += 1) assert.deepEqual(await callProjectTool(project, call, shared.fetchImpl), { ok: true });
+  const initializes = shared.seen.filter((s) => s.body?.method === "initialize").length;
+  const identities = shared.seen.filter((s) => isIdentity(s.body)).length;
+  assert.deepEqual([initializes, identities, toolCalls(shared).length], [1, 1, 3]);
+  assert.equal(stand.seen.length, 0);
+});
+
+test("a kept session the editor forgot (it restarted) is opened and checked again, and the call is made once", async () => {
+  const project = { ...DRIFT, project: "/Games/Restarted/Restarted.uproject" };
+  let ran = 0;
+  const stand = editor(() => {
+    ran += 1;
+    return { returnValue: { ok: true } };
+  }, project.project);
+  const call = { toolset: LOOP_TOOLSET_NAME, tool: "play_state", args: {} };
+  await callProjectTool(project, call, stand.fetchImpl);
+  stand.restart();
+  assert.deepEqual(await callProjectTool(project, call, stand.fetchImpl), { ok: true });
+  const identities = stand.seen.filter((s) => isIdentity(s.body)).length;
+  assert.deepEqual([identities, ran], [2, 2], "checked again, and no call run twice");
+});
+
+test("a kept session whose call failed is not used again", async () => {
+  const project = { ...DRIFT, project: "/Games/Failing/Failing.uproject" };
+  let fail = true;
+  const stand = editor((_params, signal) => (fail ? never(signal) : { returnValue: { ok: true } }), project.project);
+  const slow = { toolset: LOOP_TOOLSET_NAME, tool: "play_state", args: {}, timeoutMs: 50 };
+  await assert.rejects(callProjectTool(project, slow, stand.fetchImpl), /timed out/i);
+  fail = false;
+  assert.deepEqual(await callProjectTool(project, { ...slow, timeoutMs: 5_000 }, stand.fetchImpl), { ok: true });
+  assert.equal(stand.seen.filter((s) => s.body?.method === "initialize").length, 2, "a new session");
+});
+
 test("a project call that names its own timeout fails once that passes, not at the bridge's five minutes", async () => {
   const stand = editor((_params, signal) => never(signal));
   const started = Date.now();
@@ -1311,7 +1352,7 @@ test("a project call that names its own timeout keeps its whole session within i
 });
 
 /** The Genex editor helper's Loop toolset, which only Genex's own editor queue calls. */
-const LOOP_TOOLSET = "genex_loop.tools.GenexLoopTools";
+const LOOP_TOOLSET = LOOP_TOOLSET_NAME;
 
 test("an agent's call to the Genex Loop toolset is refused however it is spelled, and nothing reaches the editor", async () => {
   const hostile: Array<[string, Record<string, unknown>]> = [

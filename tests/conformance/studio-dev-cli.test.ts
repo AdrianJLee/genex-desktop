@@ -5,31 +5,27 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseStudioDevArgs, parseOperation } from "../../scripts/studio-dev/args.ts";
-import { FIXTURE_NAMES, installOlderPlugins } from "../../src/main/dev/fixtures.ts";
-import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
-import { devBuildArgs, devLaunchCommand, launchEnv, main } from "../../scripts/studio-dev.ts";
+import { FIXTURE_NAMES } from "../../src/main/dev/fixtures.ts";
+import { devBuildArgs, devLaunchCommand, launchEnv, launchLogPaths, main } from "../../scripts/studio-dev.ts";
 import { gamesRootWarnings, liveEnvStripped, StudioDevWarning } from "../../scripts/studio-dev/live-env.ts";
 import { fixtureElectronEnv } from "../../scripts/electron-runtime.mjs";
 import { freshMachineEnv } from "../../scripts/studio-dev/fresh-machine.ts";
 import { strippedEnv } from "../../scripts/evals/lanes/common.ts";
-import { makeResources } from "../helpers/resources.ts";
-import { tmpDir } from "../helpers/tmp.ts";
 
 test("fixtures lists the one exported fixture list without a profile or app", async () => {
-  // Flipped from 33: items-store joined the list (from 31: data-folder and data-missing, 30: native-games, 29: agents-start-failed, 28: asset-library, 27: genex-terms, 26: roblox-game, 25: building-card, 24: paused-build, 23: plugin-updates, 22: open-projects, 21: stills-game).
-  assert.equal(FIXTURE_NAMES.length, 34);
+  // Flipped from 34: lead-graph left the list with the Unreal runner's drawing. Flipped from 35: plugin-updates left the list, since a bundled plugin updates with Genex at launch (from 34: build-timeline joined, 33: items-store, 31: data-folder and data-missing, 30: native-games, 29: agents-start-failed, 28: asset-library, 27: genex-terms, 26: roblox-game, 25: building-card, 24: paused-build, 23: plugin-updates, 22: open-projects, 21: stills-game).
+  assert.equal(FIXTURE_NAMES.length, 33);
   for (const added of [
+    "build-timeline",
     "first-launch",
     "notifications",
     "build-graph",
-    "lead-graph",
     "sandbox-setup",
     "update-ready",
     "chat-workers",
     "finish-check",
     "stills-game",
     "open-projects",
-    "plugin-updates",
     "paused-build",
     "building-card",
     "roblox-game",
@@ -48,67 +44,6 @@ test("fixtures lists the one exported fixture list without a profile or app", as
     main(["start", "--profile", "cli-test-never-created", "--fixture", "nope"]),
     /unknown named fixture; one of app-basics/,
   );
-});
-
-test("the plugin-updates fixture leaves every bundled plugin one version behind this build's, in its own profile", async () => {
-  const resources = await makeResources({ tsc: false });
-  const seeds = path.join(resources, "plugins");
-  const engineHomes = path.join(await tmpDir("plugin-updates-"), "core", "engine-homes");
-  const shippedManifests = () =>
-    fs.readdirSync(seeds).map((name) => fs.readFileSync(path.join(seeds, name, "plugin.json"), "utf8"));
-  const shipped = shippedManifests();
-  const versions = new Map(shipped.map((text) => [JSON.parse(text).id as string, JSON.parse(text).version as string]));
-  assert.deepEqual([...versions.keys()].sort(), ["blender", "genex", "godot", "roblox", "unity", "unreal"]);
-  /** What the app's own registry says of the profile's plugins, as the core starts it. */
-  const installed = async () => {
-    const registry = new PluginRegistry(
-      path.join(engineHomes, "plugins"),
-      seeds,
-      path.join(resources, "plugin-sdk/backend.mjs"),
-      async () => null,
-    );
-    try {
-      await registry.init();
-      return registry.list().map((p) => ({
-        id: p.manifest.id,
-        version: p.manifest.version,
-        availableVersion: p.availableVersion,
-        enabled: p.enabled,
-        error: p.error,
-      }));
-    } finally {
-      registry.cancel();
-    }
-  };
-
-  await installOlderPlugins(engineHomes, resources);
-  // Only the profile's plugin store is left behind, and the build's own seeds are as shipped.
-  assert.deepEqual(fs.readdirSync(path.dirname(engineHomes)), ["engine-homes"]);
-  assert.deepEqual(fs.readdirSync(engineHomes), ["plugins"]);
-  assert.deepEqual(shippedManifests(), shipped);
-  /** The installed copies of each plugin, by folder name. */
-  const copies = () =>
-    [...versions.keys()].map((id) => fs.readdirSync(path.join(engineHomes, "plugins", "packages", id)));
-  const copyVersion = (id: string, copy: string): string =>
-    JSON.parse(fs.readFileSync(path.join(engineHomes, "plugins", "packages", id, copy, "plugin.json"), "utf8")).version;
-  const first = await installed();
-  assert.equal(first.length, versions.size);
-  for (const plugin of first) {
-    const seed = versions.get(plugin.id);
-    assert.equal(plugin.availableVersion, seed, `${plugin.id} is offered this build's version`);
-    assert.notEqual(plugin.version, seed, `${plugin.id} is installed below it`);
-    assert.equal(plugin.enabled, true, plugin.id);
-    assert.equal(plugin.error, undefined, plugin.id);
-    const [copy, ...others] = fs.readdirSync(path.join(engineHomes, "plugins", "packages", plugin.id));
-    assert.deepEqual(others, [], `${plugin.id} has one installed copy`);
-    assert.equal(copyVersion(plugin.id, copy ?? ""), plugin.version, `${plugin.id}'s copy says its record's version`);
-  }
-  // A reused profile keeps the plugins it has: the same copies, still one version behind.
-  const kept = copies();
-  await installOlderPlugins(engineHomes, resources);
-  assert.deepEqual(copies(), kept);
-  assert.deepEqual(fs.readdirSync(engineHomes), ["plugins"]);
-  assert.deepEqual(await installed(), first);
 });
 
 test("lifecycle commands keep their flags; missing profile and unknown commands fail before any work", () => {
@@ -395,4 +330,28 @@ test("a live profile on a Mac starts through macOS's launcher, so Electron holds
   );
   for (const platform of ["win32", "linux"] as const)
     assert.deepEqual(devLaunchCommand({ owner: live, platform, executable, args, env, logs }), direct, platform);
+});
+
+test("a live Mac launch hands `open` log files of its own: macOS's launcher refuses one that already exists", () => {
+  // `open --stdout <file>` fails with LaunchServices error -10810 when <file> exists, and the
+  // launcher creates its own stdio files before spawning, so the two must never be the same file.
+  const root = "/repo/.studio-dev/evidence/launch-b-1";
+  const live = launchLogPaths(root, { owner: { providers: "live" }, platform: "darwin" });
+  const created = [live.spawn.stdout, live.spawn.stderr];
+  assert.ok(
+    !created.includes(live.app.stdout) && !created.includes(live.app.stderr),
+    "open writes files it creates itself",
+  );
+  assert.notEqual(live.app.stdout, live.app.stderr);
+  for (const file of [...created, live.app.stdout, live.app.stderr]) assert.equal(path.dirname(file), root, file);
+  // Everywhere else the spawned process is the app, so its stdio files are the app's logs.
+  for (const [owner, platform] of [
+    [{ providers: "fixture" }, "darwin"],
+    [{ providers: "live", freshMachine: true }, "darwin"],
+    [{ providers: "live" }, "win32"],
+    [{ providers: "live" }, "linux"],
+  ] as const) {
+    const direct = launchLogPaths(root, { owner, platform });
+    assert.deepEqual(direct.app, direct.spawn, `${owner.providers} on ${platform}`);
+  }
 });

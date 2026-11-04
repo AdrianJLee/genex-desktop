@@ -137,7 +137,8 @@ export interface JobRecord {
   exitCode?: number | null;
   signal?: string | null;
   stoppedBy?: JobStopper;
-  deadlineAt: string;
+  /** When its own time limit ends it, when its starter set one. */
+  deadlineAt?: string;
   pid?: number;
   /** The process's start time as `ps -o lstart=` prints it: a left group is killed only when it matches. */
   procStart?: string;
@@ -209,7 +210,8 @@ export interface JobStartedPayload {
   runId?: string;
   /** The chat turn it belongs to or was started in, when it is no run's. */
   turn?: string;
-  deadlineAt: string;
+  /** When its own time limit ends it, when its starter set one. */
+  deadlineAt?: string;
 }
 
 /** A job ended (`job_ended`, a host record in its chat), with the last lines of its log. */

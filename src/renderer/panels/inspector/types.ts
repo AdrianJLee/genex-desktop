@@ -1,18 +1,17 @@
 /** The props every inspector panel shares, and the lightbox's picture. */
 import type { KeepBuildingTap } from "../../keep-building.ts";
-import type { AgentScreenFrame } from "../../../shared/agent-screen.ts";
 import type { RunSummary } from "../../../shared/run-summary.ts";
 import type {
   AssetInfo,
   AssetsNode,
   BaseNode,
   BlenderNode,
-  OptimizationNode,
   RunGraph as RunGraphModel,
   RunNode,
 } from "../../run-graph.ts";
 import type { NoteTarget } from "../../reply-about.ts";
 import type { PartRow, Step } from "../../run-steps.ts";
+import type { BuildTimeline } from "../../run-graph-builds.ts";
 import type { Notify } from "../../state/toasts.ts";
 import type { ReferenceFrame } from "../run-stills.ts";
 
@@ -45,7 +44,6 @@ export interface InspectorProps {
   base: BaseNode | null;
   blender: BlenderNode | null;
   assets: AssetsNode | null;
-  optimization: OptimizationNode | null;
   project: string | null;
   references: ReferenceFrame[];
   baseSrc: string | null;
@@ -53,8 +51,10 @@ export interface InspectorProps {
   resultPath: string | null;
   /** the result's picture is a part's, lent while the new build is being tried */
   resultBorrowed: boolean;
-  /** the lead's newest view of the game, while it has the run */
-  leadFrame: AgentScreenFrame | null;
+  /** the result's picture was taken as the starting one was (the final capture): only then are they compared */
+  resultPairsWithBase: boolean;
+  /** a Loop's build history, when the graph draws one */
+  timeline: BuildTimeline | null;
   onClose: () => void;
   onSelect: (id: string) => void;
   onPrev: () => void;

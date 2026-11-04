@@ -16,7 +16,7 @@ import { JobStopper } from "./contract.ts";
 export const JOB_POLL_MS = 5 * SECOND_MS;
 
 /** One job of the run that ended, as the host told it. */
-export type JobEnd = JobView;
+type JobEnd = JobView;
 
 /** The run a watcher reads: its game, and the run whose jobs (its lead's and its workers') it hears. */
 export type JobWatchScope = { project: string; runId: string };

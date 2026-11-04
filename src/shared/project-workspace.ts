@@ -11,6 +11,7 @@
 import { assetExtension, listsModels, MEDIA_FORMATS, MODEL_COMPANION_FORMATS } from "./game-assets.ts";
 import {
   CoreFact,
+  engineWebFolderOf,
   type FactRef,
   type GameKind,
   globMatches,
@@ -389,13 +390,25 @@ function reachedFolders(plugin: PluginWorkspace, facts: readonly FactRef[]): Ass
   return facts.filter((fact) => plugin.facts.includes(fact.id)).flatMap((fact) => pluginFolders(fact.path, assets));
 }
 
+/** Facts that say nothing about how a game is played: its web game's own, and a folder of .blend files. */
+const NOT_AN_ENGINE: ReadonlySet<string> = new Set([CoreFact.WebGame, CoreFact.BlenderAssets]);
+
+/** Whether a game holds an engine's project (Unreal, Unity, Godot, Roblox, a plugin's kind), which plays as its engine builds it. */
+const holdsEngineProject = (game: GameKind): boolean => game.facts.some((fact) => !NOT_AN_ENGINE.has(fact.id));
+
 /**
- * The folder of a game's web game when it has none at its root: the first web game in a folder of
- * the game (a Godot game's web export in `web/`), which Live plays and Publish puts online in the
- * root's place; null for a game served as a web game at its root, or with none.
+ * The folder of a game's web game when it has none at its root, which Live plays and Publish puts
+ * online in the root's place: an engine's game's own web export (a Unity or Godot game's `web/`,
+ * `engineWebFolderOf`), or, for a game of no engine, the first web game in a folder of it. A page
+ * anyone else left in an engine's game (an agent's design mockups, a plugin's help) is never its web
+ * game, and an Unreal game has none. Null for a game served as a web game at its root, or with none.
  */
 export function webFolderOf(game: GameKind): string | null {
   if (servedAsWebGame(game)) return null;
+  if (holdsEngineProject(game)) {
+    const exported = engineWebFolderOf(game);
+    return exported !== null && isPlaceableBase(exported) ? exported : null;
+  }
   const inFolder = game.facts.find(
     (fact) => fact.id === CoreFact.WebGame && fact.path !== ROOT && isPlaceableBase(fact.path),
   );

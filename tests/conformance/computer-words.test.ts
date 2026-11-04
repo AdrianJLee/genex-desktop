@@ -4,16 +4,9 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mainAgentReachNote } from "../../src/main/core/delegation-prompts.ts";
 import { type AutoModeSeat, autoModeRules } from "../../src/substrate/engines/claude-auto-mode.ts";
 
 describe("the computer an agent is told it works on", () => {
-  it("is a Windows PC on Windows and a Mac on a Mac, in the main agent's reach", () => {
-    assert.match(mainAgentReachNote("win32"), /the user's own Windows PC/);
-    assert.doesNotMatch(mainAgentReachNote("win32"), /\bMac\b/);
-    assert.match(mainAgentReachNote("darwin"), /the user's own Mac/);
-  });
-
   it("is a Windows PC on Windows and a Mac on a Mac, in Auto mode's environment, for every seat", () => {
     const cwd = "C:\\Games\\Valley";
     const seats: AutoModeSeat[] = [

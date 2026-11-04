@@ -14,16 +14,15 @@ import {
   PermissionMode,
   planContinuations,
 } from "../../shared/permissions.ts";
-import { EngineId } from "../../shared/providers.ts";
+import { runsClaudeCode } from "../../shared/providers.ts";
 import { parseModelKey } from "../model-key.ts";
-import { type Notify, ToastTone } from "../state/toasts.ts";
+import { type Notify, notifyProblem } from "../state/toasts.ts";
 import type { ComposerPermissions } from "../ui/PromptBar.tsx";
 import { usePermissionSettings } from "../use-permission-settings.ts";
-import { problemWords } from "../words.ts";
 import { ModeVia } from "../analytics/chat-vocabulary.ts";
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
-import { errorCode, errorCodeIn } from "../../shared/errors.ts";
+import { errorCodeIn } from "../../shared/errors.ts";
 
 export interface ChatPermissionMode {
   /** The composer's pill, or null in Studio's own chat. */
@@ -69,7 +68,7 @@ export function usePermissionMode(input: {
   useEffect(() => setPick(null), [recorded, threadId]);
   const { engine, model } = parseModelKey(selected);
   // Auto's gate is Claude Code's: another engine's model of the same name says nothing about it.
-  const autoUnavailable = engine === EngineId.ClaudeCode && Boolean(settings?.autoUnavailable.includes(model));
+  const autoUnavailable = runsClaudeCode(engine) && Boolean(settings?.autoUnavailable.includes(model));
   const planModes = planModesFor(engine, autoUnavailable);
   if (studio) return { bar: null, planModes };
   const picked = pick?.thread === threadId ? pick?.mode : undefined;
@@ -94,7 +93,7 @@ export function usePermissionMode(input: {
       .catch((error) => {
         setPick(null);
         changed(true, error);
-        onNotice(problemWords(error), ToastTone.Error, errorCode(error));
+        notifyProblem(onNotice)(error);
       });
   };
   return { bar: { mode, onMode, autoUnavailable, engine }, planModes };

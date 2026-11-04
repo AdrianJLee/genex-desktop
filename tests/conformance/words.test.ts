@@ -8,6 +8,7 @@
  * translation of its own. That is what stops the vocabulary drifting back into the panels.
  */
 import assert from "node:assert/strict";
+import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,6 +64,7 @@ import {
   withoutIds,
 } from "../../src/renderer/words.ts";
 import { morningWords } from "../../src/renderer/morning-words.ts";
+import { LoopRefusal } from "../../src/shared/custom-events.ts";
 import { LeadFace, leadAbout } from "../../src/renderer/run-tree.ts";
 import { endedWords } from "../../src/renderer/round-status.ts";
 import { toEntries } from "../../src/renderer/chat-entries.ts";
@@ -200,7 +202,6 @@ describe("the finish check's words", () => {
     const words = [
       FINISH_CHECK_WORDS.name,
       ...Object.values(FINISH_CHECK_WORDS.state),
-      FINISH_CHECK_WORDS.placeholder,
       FINISH_CHECK_WORDS.about,
       FINISH_CHECK_WORDS.checking,
       FINISH_CHECK_WORDS.doneWord,
@@ -324,10 +325,6 @@ describe("statusWords", () => {
     assert.doesNotMatch(words.line, /iteration/i);
     // The run's two first steps, said as what they are for (M1.3, M2.6) — never as a stage name.
     assert.equal(statusWords("run run_x · building the starting point").short, "Starting point");
-    assert.deepEqual(statusWords("run run_x · making the game judgeable"), {
-      line: "Connecting your game to the studio",
-      short: "Connecting",
-    });
     const verifying = statusWords("run run_x · Dirt: mud — tyre dust — verifying");
     assert.equal(verifying.line, "Dirt: mud — tyre dust · checking the round");
     // A phase this module does not know is dropped rather than printed raw.
@@ -336,7 +333,8 @@ describe("statusWords", () => {
 
   it("carries no identifier for any status the harness can emit", () => {
     const statuses = emittedStatuses();
-    assert.ok(statuses.length >= 20, `expected the seed's setStatus calls, found ${statuses.length}`);
+    // Lowered from 20: the reopen and the Studio chat's build answer, three statuses, are gone with the Loop button.
+    assert.ok(statuses.length >= 15, `expected the seed's setStatus calls, found ${statuses.length}`);
     for (const status of statuses) {
       const words = statusWords(status);
       assert.doesNotMatch(words.line, RUN_ID, status);
@@ -393,6 +391,21 @@ describe("how a run reads when it is over", () => {
       assert.doesNotMatch(words.because, /\.\.$/);
     }
     assert.match(loopRunWords({ rounds: 0, landed: null, stoppedBecause: "Is it done?" }).because, /done\?$/);
+  });
+
+  it("a paused Loop refused on Resume reads as whole sentences, its ref left to the chat's session", () => {
+    const ref = "refs/studio/runs/run_abc123/integration";
+    const cases: Array<[string, RegExp]> = [
+      [OPEN_LOOP_REFUSAL.webLoopBefore(ref), /Its work is kept in git: ask here to bring it into the game\. Every/],
+      [OPEN_LOOP_REFUSAL.journalUnreadable, /Resume tries again\. Every/],
+    ];
+    for (const [stoppedBecause, reads] of cases) {
+      const { because } = loopRunWords({ rounds: 3, landed: false, paused: true, stoppedBecause });
+      assert.match(because, reads, because);
+      assert.doesNotMatch(because, /\.\.|\s[:.]|refs\/|run_abc123/, because);
+    }
+    // The words the run's status hands the chat's session still name where the work is.
+    assert.ok(OPEN_LOOP_REFUSAL.webLoopBefore(ref).includes(ref));
   });
 
   it("promises a playable build only when there is one", () => {
@@ -512,6 +525,21 @@ describe("the morning card", () => {
       ...over,
     });
 
+  it("says a Loop was not started on an engine that keeps no session, in the app's words", () => {
+    const words = loopRun({
+      rounds: 0,
+      kept: 0,
+      undone: 0,
+      hasBuild: false,
+      refusal: LoopRefusal.NeedsSession,
+      stoppedBecause: "A Loop needs an engine that keeps a session of its own; Ollama doesn't.",
+    });
+    assert.equal(words.headline, "Loop not started");
+    assert.match(words.because, /needs an engine that keeps a session of its own/);
+    assert.match(words.because, /The chat still answers here/);
+    assert.deepEqual(words.actions, []);
+  });
+
   it("offers Play it, and says the run's own report, when the build is live", () => {
     const words = loopRun({
       landed: true,
@@ -616,7 +644,8 @@ describe("verdicts", () => {
     assert.equal(verdictWords({ winner: "challenger", satisfied: true }).word, "done");
     assert.equal(
       verdictWords({ winner: "incumbent", source: "taste-veto" }).because,
-      "the reviewer preferred the round before",
+      "it was not clearly better than the round before",
+      "a verdict the Loop no longer writes reads as the plain fallback, not as a reviewer's pick",
     );
     assert.equal(verdictWords({ winner: "incumbent", source: "invisible" }).because, "nothing visible changed");
     assert.equal(verdictWords({ winner: "incumbent", source: "unfixed" }).because, "the must-fix was not fixed");
@@ -675,15 +704,16 @@ describe("verdicts", () => {
   it("says what the side-by-side judge did with the round", () => {
     assert.equal(sideBySideWords({ status: "building", satisfied: false, source: null }), "");
     assert.equal(
-      sideBySideWords({ status: "rolled", satisfied: false, source: "taste-veto" }),
-      "The reviewer preferred the round before.",
-    );
-    assert.equal(
       sideBySideWords({ status: "rolled", satisfied: false, source: "checks" }),
       "Not needed — the round was undone on the checks.",
     );
     assert.equal(
       sideBySideWords({ status: "accepted", satisfied: false, source: "checks" }),
+      "No objection to the new build.",
+    );
+    // A round kept because nothing regressed: the reviewer named no regression, whatever it picked.
+    assert.equal(
+      sideBySideWords({ status: "accepted", satisfied: false, source: "no-regression" }),
       "No objection to the new build.",
     );
     assert.equal(
@@ -960,14 +990,12 @@ describe("what the run says as it goes", () => {
   });
 
   it("says what the run is, before it says how it is split", () => {
-    assert.match(runStartWords({ name: "Dirt 5", kind: "direction" }), /Dirt 5/);
-    // No reference: the rule still reaches the user, without a bar literally named "unnamed".
-    assert.doesNotMatch(runStartWords({ name: "unnamed", kind: "bar" }), /unnamed/);
-    assert.match(runStartWords(null), /beat the one before/);
-    // Which model judges is part of what the run IS: a saved preference could make the
-    // orchestrator's model answer every crop question with no screen saying so (M3.10).
-    assert.match(runStartWords(null, "Opus"), /Opus, reviewing without being told which build is which/);
-    assert.match(runStartWords(null, "default"), /a reviewer that cannot see which is which/);
+    assert.equal(runStartWords({ name: "Dirt 5", kind: "direction" }), 'heading in the direction of "Dirt 5"');
+    assert.equal(runStartWords({ name: "Dirt 5", kind: "bar" }), 'the bar for this build is "Dirt 5"');
+    // No reference: nothing to say, and never a bar literally named "unnamed". The old rule that
+    // each round has to beat the one before, judged by a reviewer, is not taught.
+    assert.equal(runStartWords({ name: "unnamed", kind: "bar" }), "");
+    assert.equal(runStartWords(null), "");
     const lead = autopilotStartWords({ director: true, maxParallel: 2, facets: [] });
     assert.match(lead, /the lead/);
     assert.doesNotMatch(lead, /window|facet|integrat/i);
@@ -1039,7 +1067,7 @@ describe("tools", () => {
 
   it("names the lead's and the chat's run tools, never 'used …'", () => {
     const names = [
-      ...Object.values(DirectorTool).filter((name) => name !== DirectorTool.ResolveRoot),
+      ...Object.values(DirectorTool),
       // Every lead's and the chat's worker tools, the same six everywhere.
       ...Object.values(WorkerTool),
       // The background-work tools and the look-only app tool the chat, leads and workers share.
@@ -1330,8 +1358,8 @@ describe("the vocabulary lives in one file", () => {
     // The harness's ids go in, and only the owner's words come out.
     assert.equal(isKept("challenger"), true);
     assert.equal(isKept("incumbent"), false);
-    const reasons = ["taste-veto", "no-move", "unfixed", "invisible"].map((source) => undoneBecause(source));
-    assert.equal(new Set(reasons).size, 4, "each harness reason has a sentence of its own");
+    const reasons = ["no-move", "unfixed", "invisible"].map((source) => undoneBecause(source));
+    assert.equal(new Set(reasons).size, 3, "each harness reason has a sentence of its own");
     for (const reason of reasons)
       assert.doesNotMatch(reason, /taste-veto|no-move|unfixed|invisible|not clearly better/, reason);
     assert.equal(toolWords("mcp__studio__computer").label, "looked at the game");

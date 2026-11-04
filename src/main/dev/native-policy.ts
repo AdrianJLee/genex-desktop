@@ -21,8 +21,12 @@ const NATIVE_CHANNELS = [
   // Publish from Studio's dialog uploads the game to Genex with the user's real account.
   "studio:plugins.genex-publish",
   "studio:plugins.genex-publish-apps",
+  "studio:plugins.genex-cloud-build",
   "studio:subscription.signin",
   "studio:subscription.forget-studio-login",
+  // Building with Genex opens genex.games's build page in the person's browser, where it signs the
+  // app in to their real account and they pick Pro or a credit pack.
+  "studio:genex-account.build",
   // A subscription's accounts: listing asks each account's CLI for its email; choosing one changes
   // the account every run signs in with.
   "studio:subscription.accounts",
@@ -41,6 +45,10 @@ const NATIVE_CHANNELS = [
   // deletes it there. A fixture profile has no key and no network.
   "studio:openrouter.key.save",
   "studio:openrouter.key.clear",
+  // Saving checks the TypeSafe key with TypeSafe and writes it to the OS secret store; forgetting
+  // it deletes it there. A fixture profile has no key and no network.
+  "studio:typesafe.key.save",
+  "studio:typesafe.key.clear",
   // The browser sign-in opens OpenRouter in the person's browser, listens on a loopback port and
   // redeems the code with OpenRouter; opening its page again is the browser too.
   "studio:openrouter.signin",
@@ -215,6 +223,8 @@ const FIXTURE_SAFE = [
   "studio:game.asset.still",
   "studio:engines",
   "studio:engines.recheck",
+  // Reads whether a TypeSafe key is saved in the profile's own store; it never reaches TypeSafe.
+  "studio:typesafe.key.status",
   "studio:hardware",
   "studio:model-install.status",
   "studio:cli-install.status",
@@ -246,17 +256,12 @@ const FIXTURE_SAFE = [
   "studio:run.feedback",
   "studio:run.summary",
   "studio:run.review",
-  "studio:run.start",
   "studio:run.stop",
   "studio:run.finish",
   "studio:review.play",
   "studio:autopilot.resume",
-  "studio:skillopt.start",
-  "studio:skillopt.accept",
-  "studio:skillopt.discard",
   "studio:selfchanges",
   "studio:selfchange.undo",
-  "studio:staged",
   "studio:settings",
   "studio:settings.set",
   // Reads the profile's own log and engine statuses; the renderer does the copying.

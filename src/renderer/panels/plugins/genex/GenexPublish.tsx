@@ -70,6 +70,7 @@ import {
   makesApps,
   nothingToPublish,
   onlyApps,
+  replacesAppsPage,
 } from "./publish-platforms-view.ts";
 import type { PublishPlatform } from "../../../../shared/publish-platforms.ts";
 import { PublishShareLine } from "./PublishShare.tsx";
@@ -745,27 +746,28 @@ export function GenexPublishDialog({
 function useAppsPublish(
   project: string,
   native: GenexNativeRecord | undefined,
+  hostedWeb: boolean | undefined,
 ): {
   platforms: PublishPlatform[] | null;
-  behind: boolean;
   apps: string | null;
   waiting: boolean;
   /** Every app Publish would send is on Genex already: the press has nothing new to do. */
   upToDate: boolean;
   /** Its apps wait for Genex's review: nothing reached players yet. */
   inReview: boolean;
+  /** The line above the press says this web build takes the place of the apps' page: the press agrees to it. */
+  replacesApps: boolean;
 } {
   const read = usePublishPlatforms(project);
-  // An app goes only through a Genex plugin that can send it: an older one is updated first.
-  const { platforms, behind } = read ? gateByPlugin(read, native) : { platforms: null, behind: false };
+  const platforms = read ? gateByPlugin(read, native) : null;
   return {
     platforms,
-    behind,
     apps: platforms && onlyApps(platforms) ? appsLabel(platforms) : null,
     // A game made in an engine with nothing to send yet: the rows say why, and the press waits.
     waiting: platforms !== null && nothingToPublish(platforms),
     upToDate: platforms !== null && appsUpToDate(platforms, native),
     inReview: platforms !== null && appsInReview(platforms, native),
+    replacesApps: platforms !== null && replacesAppsPage(platforms, native, hostedWeb),
   };
 }
 
@@ -843,7 +845,11 @@ function PublishBody({
   const [title, setTitle] = useState<string | null>(null);
   const name = title ?? offeredTitle(record.state, gameTitle, project);
   const publishing = record.pressing === Pressing.Publish || view.running;
-  const { platforms, behind, apps, waiting, upToDate, inReview } = useAppsPublish(project, record.state?.native);
+  const { platforms, apps, waiting, upToDate, inReview, replacesApps } = useAppsPublish(
+    project,
+    record.state?.native,
+    record.state?.hostedWeb,
+  );
   const celebrate = useCelebration(view, publishing, inReview);
   const share = useShareWhenLive(project, celebrate);
   // A name changed after it went live is listed again by Publish update ("Save name" while celebrating).
@@ -881,9 +887,11 @@ function PublishBody({
         <PublishPlatforms
           project={project}
           platforms={platforms}
-          behind={behind}
           shown={!celebrate}
           native={record.state?.native}
+          onGenex={Boolean(record.state?.slug)}
+          hostedWeb={record.state?.hostedWeb}
+          onRemoveWeb={() => void record.act(GenexAction.PublishRemoveWeb)}
         />
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
@@ -904,6 +912,7 @@ function PublishBody({
             apps={apps !== null}
             waiting={waiting}
             remix={remix.allowed}
+            replacesApps={replacesApps}
           />
         )}
         {remixLineShown(pressShown, publishing, view, waiting) && (
@@ -1044,6 +1053,7 @@ function Presses({
   apps = false,
   waiting = false,
   remix,
+  replacesApps = false,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
@@ -1058,6 +1068,8 @@ function Presses({
   apps?: boolean;
   /** Nothing to send yet (a game made in an engine with no app it can send): the press waits. */
   waiting?: boolean;
+  /** The dialog said this web build replaces a page that shows only the game's apps (`replacesAppsPage`). */
+  replacesApps?: boolean;
 }): JSX.Element {
   if (view.terms) {
     const terms = view.terms;
@@ -1083,7 +1095,7 @@ function Presses({
       aria-label={apps && label ? label : view.primary.ariaLabel}
       aria-busy={publishing || undefined}
       disabled={publishing || waiting || !view.canPublish || record.pressing !== Pressing.None}
-      onClick={() => void (apps ? record.publishApps(name, remix) : record.publish(name, remix))}
+      onClick={() => void (apps ? record.publishApps(name, remix) : record.publish(name, remix, replacesApps))}
     >
       {publishing ? <BusyLabel view={view} /> : (label ?? view.primary.label)}
     </Button>

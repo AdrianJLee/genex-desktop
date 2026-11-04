@@ -3,11 +3,11 @@
  * turn, stopping and rewinding. Every value is one of the app's own vocabularies, a switch, a count
  * or a duration: never the words, a name, a path or an id (they are paired in `chat-memory.ts`).
  */
-import type { PlanReviewState, SendFailure, SendRefusal } from "../../../shared/composer.ts";
+import type { PlanReviewState, SendFailure } from "../../../shared/composer.ts";
 import type { ChatActivityPhase } from "../../../shared/chat-activity.ts";
 import type { FilesStay } from "../../../shared/chat-rewind.ts";
 import type { EngineKind } from "../../../shared/engine-descriptor.ts";
-import type { EngineFailureKind, LimitKind } from "../../../shared/engine-requests.ts";
+import type { EngineFailureKind, LimitKind, TurnErrorName, TurnFailureCode } from "../../../shared/engine-requests.ts";
 import type { ToolCategory } from "../../../shared/eval-lane.ts";
 import type { SteerDelivery } from "../../../shared/message-queue.ts";
 import type { ReasoningEffort } from "../../../shared/model-preferences.ts";
@@ -30,9 +30,7 @@ import type {
   ComposerRoom,
   CompactTrigger,
   ContextBucket,
-  HoursBucket,
   LeftTo,
-  LoopVia,
   ModelMenuFrom,
   ModelReplaced,
   ModelSetting,
@@ -92,7 +90,6 @@ export const ChatEvent = {
   ModelPicked: "model_picked",
   ModelSettingsChanged: "model_settings_changed",
   ModelPickReplaced: "model_pick_replaced",
-  LoopModeChanged: "loop_mode_changed",
   ChatSignInNeeded: "chat_sign_in_needed",
   SignInCardAction: "sign_in_card_action",
   EngineFellBack: "engine_fell_back",
@@ -122,8 +119,6 @@ export type MessageSentProperties = {
   engine_kind?: EngineKind;
   model: ModelRef;
   effort?: ReasoningEffort;
-  loop_on: boolean;
-  loop_hours_bucket: HoursBucket;
   plan_review: boolean;
   pictures: number;
   files: number;
@@ -155,19 +150,24 @@ export type ChatTurnEndedProperties = {
   stream_failed: boolean;
   /** How its engine failed: a direct engine's call, or main's word on a delegated one. */
   failure_kind?: EngineFailureKind;
+  /**
+   * Why a turn the harness ran threw (`turn_ended`'s `harnessFailure`): its code, the host call
+   * that failed and the error's type. A direct engine's turn that died before its model was asked
+   * has no `failure_kind`, only these.
+   */
+  failure_code?: TurnFailureCode;
+  failure_method?: string;
+  error_name?: TurnErrorName;
   /** The provider's limit it ended on, and how long the provider said to wait. */
   limit_kind?: LimitKind;
   retry_after_bucket?: RetryAfterBucket;
   launched_build: boolean;
 };
 
-/**
- * A message that did not go: its send rejected (`rejected`, with the send's facts) or its chat
- * refusing what it commissions (`refused`, heard from main), with the code of either.
- */
+/** A message that did not go: its send rejected (`rejected`, with the send's facts and its code). */
 export type MessageSendFailedProperties = {
   stage: SendFailStage;
-  code: SendFailure | SendRefusal | null;
+  code: SendFailure | null;
   route?: SendRoute;
   ack_ms?: number;
   pictures?: number;
@@ -289,7 +289,6 @@ export type ChatEventProperties = {
   };
   [ChatEvent.ModelSettingsChanged]: { setting: ModelSetting; effort?: string };
   [ChatEvent.ModelPickReplaced]: { engine: EngineRef; reason: ModelReplaced };
-  [ChatEvent.LoopModeChanged]: { on: boolean; hours_bucket: HoursBucket; via: LoopVia };
   [ChatEvent.ChatSignInNeeded]: { engine: EngineRef; from: SignInFrom };
   [ChatEvent.SignInCardAction]: { action: SignInAction; engine: EngineRef };
   [ChatEvent.EngineFellBack]: { from: EngineRef; to: EngineRef; kind?: EngineFailureKind };

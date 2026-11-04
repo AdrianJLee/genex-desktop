@@ -1,6 +1,7 @@
 /**
- * The finish check of a Loop: when the lead claims the goal is reached, a reviewer that did none of
- * the work reads the proof and the captures and answers yes or no. Each step of a check is one
+ * The finish check of a Loop, a second opinion on the lead's claim: when the lead claims the goal is
+ * reached, a reviewer that did none of the work reads the proof and the captures and answers yes or
+ * no, which goes back to the lead to weigh. Each step of a check is one
  * `finish_check` record of the run, written by the app alone (`main/core/finish-review.ts`, from the
  * reviewer session it seated: the harness asks and settles, never records); the Builds graph and
  * the chat read them. The seed keeps copies of these names (`loop/finish-contract.ts`), held equal
@@ -9,7 +10,6 @@
  * Renderer-safe: no Node.
  */
 import type { RunScope } from "./custom-events.ts";
-import { MINUTE_MS } from "./duration.ts";
 
 /** Where one round of a finish check stands (`finish_check.step`). Persisted: never rename a value. */
 export const FinishCheckStep = {
@@ -28,7 +28,7 @@ export type FinishCheckStep = (typeof FinishCheckStep)[keyof typeof FinishCheckS
 export const StopWhy = {
   /** Its hours ran out. */
   Time: "time",
-  /** The reviewer's no's in a row stopped it. */
+  /** The reviewer's no's in a row stopped it: older runs only — a reviewer's no stops no Loop now. */
   Stuck: "stuck",
   /** The person stopped it. */
   Person: "person",
@@ -59,17 +59,15 @@ const FINISH_CHECK_STEPS: ReadonlySet<unknown> = new Set(Object.values(FinishChe
 /** Whether a record's `step` is one Genex knows; a reader ignores a record with any other. */
 export const isFinishCheckStep = (value: unknown): value is FinishCheckStep => FINISH_CHECK_STEPS.has(value);
 
-/** The reviewer's no's in a row that stop a Loop; an unanswered check neither counts nor breaks the row. */
+/**
+ * The row of no's an older Loop stopped at. The app stops no Loop on a reviewer's no now; the value
+ * stays because the seed's copy is held to it (`seed-contracts.test.ts`) and older records name it.
+ */
 export const MAX_FINISH_REJECTIONS = 3;
 /** The reasons a reviewer's answer keeps at most. */
 export const MAX_FINISH_REASONS = 6;
 /** How long one reason (or why a check got no answer) reads, in characters. */
 export const FINISH_REASON_CHARS = 300;
-/**
- * With more of a timed Loop's working time left than this, no row of the reviewer's no's stops it:
- * its lead keeps working on what isn't done. An ∞ Loop names no time left, and its no's stop it.
- */
-export const FINISH_TIME_LEFT_MS = 20 * MINUTE_MS;
 /** A clip ends at the last space within its cap, when that space leaves at least this share of the cap. */
 const CLIP_AT_WORD_SHARE = 0.8;
 /** How many `{` of a reply the verdict reader tries as an answer's start, and how many stray `}` after one it skips. */
@@ -103,8 +101,6 @@ export interface FinishCheckPayload extends RunScope {
   rejections?: number;
   /** This no was the last one the Loop takes: it stops. */
   stopped?: boolean;
-  /** On a no: the timed Loop had more than `FINISH_TIME_LEFT_MS` left, so no row of no's stopped it. */
-  timeLeft?: boolean;
   /** Why the reviewer could not answer. */
   why?: string;
   reviewer?: { engine: string; model?: string };
@@ -124,8 +120,6 @@ export interface FinishRecord {
   done: string[];
   why: string | null;
   stopped: boolean;
-  /** A no the Loop had time left at: it went on whatever the row of no's. */
-  timeLeft: boolean;
   rejections: number | null;
 }
 
@@ -174,7 +168,6 @@ export function finishRecordOf(payload: Record<string, unknown>): FinishRecord |
     done: reasonsOf(payload.done) ?? [],
     why: textOrNull(payload.why),
     stopped: payload.stopped === true,
-    timeLeft: payload.timeLeft === true,
     rejections: isCount(payload.rejections) ? payload.rejections : null,
   };
 }

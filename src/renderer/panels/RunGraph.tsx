@@ -25,19 +25,15 @@ import {
   Gate,
   type GatePoint,
   isJudgedTry,
-  lastSavePoint,
   resultStatus,
   rowMeta,
   START_WORDS,
   StepState,
   statusLine,
 } from "../run-steps.ts";
-import type { AgentScreenFrame } from "../../shared/agent-screen.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { t } from "../../shared/i18n.ts";
 import type { HistoryEntry } from "../build-progress.ts";
-import { leadFrameOf } from "../state/agent-screens.ts";
-import { useAgentScreens } from "../state/hooks.ts";
 import { GraphSelection, isPartSelection, partOf, partSelection } from "./inspector/selection.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { keyTakenElsewhere } from "./keyboard.ts";
@@ -46,14 +42,17 @@ import { BuildStatus, type BuildTabs, PlayButton, ZoomPill } from "./run-graph/c
 import { GateButton, GateTip, gateWords } from "./run-graph/gates.tsx";
 import {
   AssetsTile,
+  BuildNode,
   FinishCheckNode,
+  FoldCard,
   JobsTile,
   LeadNode,
-  OptimizationTile,
   ResultNode,
   StartNode,
   StepNode,
 } from "./run-graph/nodes.tsx";
+import { foldId } from "../run-graph-builds.ts";
+import { leadRest } from "../run-tree.ts";
 import { useBuildsModel, useNow, useRunStills } from "./run-graph/use-builds-model.ts";
 import { GLIDE_MS, useGraphCamera } from "./run-graph/use-graph-camera.ts";
 import { Inspector, Lightbox, type LightItem, type Reply } from "./RunInspector.tsx";
@@ -311,8 +310,6 @@ export const RunGraph = memo(function RunGraph({
   const { graph, rows } = model;
   const references = useReferenceFrames(project, graph.runId);
   const stills = useRunStills(model);
-  // The lead's own newest view of the game: the picture on its node while it has the run.
-  const leadFrame = useAgentScreens((s) => leadFrameOf(s, project, graph.runId)) ?? null;
   const overlays = useOverlays(model.selectable);
   const { selected } = overlays;
   const camera = useGraphCamera({
@@ -356,7 +353,6 @@ export const RunGraph = memo(function RunGraph({
               camera={camera}
               project={project}
               stills={stills}
-              leadFrame={leadFrame}
               selected={selected}
               tip={overlays.tip}
               onSelect={actions.select}
@@ -382,7 +378,6 @@ export const RunGraph = memo(function RunGraph({
               project={project}
               references={references}
               stills={stills}
-              leadFrame={leadFrame}
               onStep={step}
               onOpenJob={openJob}
               onReply={onReply}
@@ -407,7 +402,6 @@ function SelectedPanel({
   project,
   references,
   stills,
-  leadFrame,
   onStep,
   onOpenJob,
   onReply,
@@ -421,7 +415,6 @@ function SelectedPanel({
   project: string | null;
   references: ReferenceFrame[];
   stills: Stills;
-  leadFrame: AgentScreenFrame | null;
   onStep: (dir: number) => void;
   onOpenJob: (job: AssetInfo) => void;
   onReply: Props["onReply"];
@@ -439,14 +432,14 @@ function SelectedPanel({
       base={model.base}
       blender={model.blender}
       assets={model.assets}
-      optimization={model.optimization}
       project={project}
       references={references}
       baseSrc={stills.baseSrc}
       resultSrc={stills.resultSrc}
       resultPath={stills.resultPath}
       resultBorrowed={stills.borrowed}
-      leadFrame={leadFrame}
+      resultPairsWithBase={stills.pairsWithBase}
+      timeline={model.timeline}
       onClose={() => overlays.setSelectedId(null)}
       onSelect={(id) => overlays.setSelectedId(id)}
       onPrev={() => onStep(-1)}
@@ -505,7 +498,6 @@ function GraphCanvas({
   camera,
   project,
   stills,
-  leadFrame,
   selected,
   tip,
   onSelect,
@@ -517,7 +509,6 @@ function GraphCanvas({
   camera: ReturnType<typeof useGraphCamera>;
   project: string | null;
   stills: Stills;
-  leadFrame: AgentScreenFrame | null;
   selected: string | null;
   tip: GatePoint | null;
   onSelect: (id: string) => void;
@@ -574,14 +565,7 @@ function GraphCanvas({
         </svg>
 
         <RowLabels model={model} selected={selected} onSelect={onSelect} />
-        <GraphNodes
-          model={model}
-          project={project}
-          stills={stills}
-          leadFrame={leadFrame}
-          selected={selected}
-          onSelect={onSelect}
-        />
+        <GraphNodes model={model} project={project} stills={stills} selected={selected} onSelect={onSelect} />
 
         {layout.gates.map((gate) => (
           <GateButton
@@ -646,19 +630,20 @@ const GraphNodes = memo(function GraphNodes({
   model,
   project,
   stills,
-  leadFrame,
   selected,
   onSelect,
 }: {
   model: BuildsModel;
   project: string | null;
   stills: Stills;
-  leadFrame: AgentScreenFrame | null;
   selected: string | null;
   onSelect: (id: string) => void;
 }): JSX.Element {
-  const { graph, layout, optimization, leadNode, finishCheck } = model;
-  const lastSave = useMemo(() => lastSavePoint(model.rows), [model.rows]);
+  const { graph, layout, leadNode, finishCheck } = model;
+  const rest = useMemo(
+    () => (model.face ? leadRest(model.graph, model.rows, model.face) : null),
+    [model.graph, model.rows, model.face],
+  );
   const jobsRect = layout.rects[GraphSelection.Jobs];
   const finishRect = layout.rects[GraphSelection.FinishCheck];
   return (
@@ -683,27 +668,24 @@ const GraphNodes = memo(function GraphNodes({
           onSelect={() => onSelect(GraphSelection.Assets)}
         />
       ) : null}
-      {model.steps.map((node) => (
-        <StepNode
-          key={node.id}
-          project={project}
-          runId={graph.runId}
-          active={graph.active}
-          step={node}
-          rect={layout.rects[node.id]}
-          ghost={layout.ghosts.has(node.id)}
-          selected={selected === node.id}
-          onSelect={onSelect}
-        />
-      ))}
-      {optimization && layout.rects.optimization ? (
-        <OptimizationTile
-          node={optimization}
-          rect={layout.rects.optimization}
-          selected={selected === GraphSelection.Optimization}
-          onSelect={() => onSelect(GraphSelection.Optimization)}
-        />
-      ) : null}
+      {model.steps.map((node) => {
+        const place = model.timeline?.places.get(node.id);
+        return (
+          <StepNode
+            key={node.id}
+            project={project}
+            runId={graph.runId}
+            active={graph.active}
+            step={node}
+            rect={layout.rects[node.id]}
+            ghost={layout.ghosts.has(node.id)}
+            selected={selected === node.id}
+            onSelect={onSelect}
+            place={place ?? null}
+          />
+        );
+      })}
+      <BuildLine model={model} selected={selected} onSelect={onSelect} />
       <ResultNode
         active={graph.active}
         status={stills.result}
@@ -716,9 +698,8 @@ const GraphNodes = memo(function GraphNodes({
       {layout.rects.lead ? (
         <LeadNode
           rect={layout.rects.lead}
-          frame={leadFrame}
           face={model.face ?? undefined}
-          lastSave={lastSave}
+          rest={rest}
           selected={selected === GraphSelection.Lead}
           onSelect={() => onSelect(GraphSelection.Lead)}
         />
@@ -742,6 +723,43 @@ const GraphNodes = memo(function GraphNodes({
     </>
   );
 });
+
+/** A Loop's builds on their line, and the cards that fold a build's finished workers. */
+function BuildLine({
+  model,
+  selected,
+  onSelect,
+}: {
+  model: BuildsModel;
+  selected: string | null;
+  onSelect: (id: string) => void;
+}): JSX.Element | null {
+  const { timeline, layout, toggleFold } = model;
+  if (!timeline) return null;
+  return (
+    <>
+      {timeline.builds.map((build) => (
+        <BuildNode
+          key={build.id}
+          build={build}
+          rect={layout.rects[build.id]}
+          selected={selected === build.id}
+          onSelect={onSelect}
+        />
+      ))}
+      {timeline.hangers.map((hangers) =>
+        hangers.folded ? (
+          <FoldCard
+            key={hangers.build}
+            hangers={hangers}
+            rect={layout.rects[foldId(hangers.build)]}
+            onToggle={toggleFold}
+          />
+        ) : null,
+      )}
+    </>
+  );
+}
 
 /** Opening the only build there is does nothing. */
 const STAY = (): void => {};

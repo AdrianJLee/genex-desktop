@@ -31,8 +31,7 @@ import { track } from "../analytics/client.ts";
 import { WorkspaceEvent } from "../analytics/events/workspace.ts";
 import { gameRef } from "../analytics/game-ref.ts";
 import { gameCreatedProperties, launchFailedProperties } from "../analytics/workspace-properties.ts";
-import { noteStageSwitch } from "../analytics/workspace-trackers.ts";
-import { GameCreatedFrom, LaunchFailReason, LaunchStage, StageSwitchVia } from "../analytics/workspace-vocabulary.ts";
+import { GameCreatedFrom, LaunchFailReason, LaunchStage } from "../analytics/workspace-vocabulary.ts";
 import { shouldWelcome } from "../onboarding/state.ts";
 import {
   browserStorage,
@@ -46,7 +45,6 @@ import {
 import { parseModelKey } from "../model-key.ts";
 import { rememberChatEffort, rememberChatModel } from "../stored-model.ts";
 import type { ComposerExtras } from "../ui/PromptBar.tsx";
-import { problemWords } from "../words.ts";
 import {
   createAgentScreensStore,
   frameReceived,
@@ -70,17 +68,10 @@ import {
   returnTaken,
   type LaunchStore,
 } from "./launch.ts";
-import { createLayoutStore, stageViewChosen, type LayoutStore } from "./layout.ts";
+import { createLayoutStore, type LayoutStore } from "./layout.ts";
 import { createModelPickerStore, type ModelPickerStore } from "./model-picker.ts";
 import { createProviderUsageStore, type ProviderUsageStore, usageReported } from "./provider-usage.ts";
-import {
-  createLibraryStore,
-  delegationChanged,
-  gameAdded,
-  libraryBootstrapped,
-  stagedCounted,
-  type LibraryStore,
-} from "./library.ts";
+import { createLibraryStore, delegationChanged, gameAdded, libraryBootstrapped, type LibraryStore } from "./library.ts";
 import { createPluginsStore, PLUGIN_INDEX_POLL_MS, type PluginsStore } from "./plugins.ts";
 import {
   createPlayStore,
@@ -128,7 +119,6 @@ import { createToastsStore, type Notify, notifyProblem, ToastTone, type ToastsSt
 import { uiEventReads } from "./ui-event-routes.ts";
 import { createUpdateStore, updateDownloaded, type UpdateStore } from "./update.ts";
 import { agentsFailed, agentsStarted, type AgentsStartStore, createAgentsStartStore } from "./agents-start.ts";
-import { errorCode } from "../../shared/errors.ts";
 
 /** The log is the source of truth; this poll is the safety net for anything the stream missed. */
 export const EVENT_POLL_MS = 3 * SECOND_MS;
@@ -427,9 +417,6 @@ function bootstrapper(
       update.setState((state) => updateDownloaded(state, ready), true);
       // Agents that would not start before this window opened, or before a reload, still say so.
       void agentsStart.refresh();
-      const staged = await api.staged().catch(() => []);
-      if (superseded()) return;
-      library.setState((state) => stagedCounted(state, staged.length), true);
       const screens = await api.agentScreens().catch(() => []);
       if (superseded()) return;
       agentScreens.setState((state) => screensLoaded(state, screens), true);
@@ -493,13 +480,6 @@ function applyUiEvent(
     case UiEvent.PersonFirst:
       threads.setState((state) => personFirstReported(state, event.payload), true);
       break;
-    case UiEvent.StageShow:
-      // The chat put a build on screen for the game on the stage: that is Live, so Live shows.
-      if (event.payload.project === projectOf(threads.getState())) {
-        noteStageSwitch(StageSwitchVia.ChatStageShow);
-        layout.setState((state) => stageViewChosen(state, event.payload.view), true);
-      }
-      break;
     case UiEvent.UpdateReady:
       update.setState((state) => updateDownloaded(state, event.payload), true);
       break;
@@ -536,7 +516,6 @@ function refreshAfter(stores: Stores, event: UiEvent): void {
   if (reads.threads) void stores.threads.refresh();
   if (reads.events) void stores.eventLog.refresh();
   if (reads.games) void stores.library.refreshGames();
-  if (reads.staged) void stores.library.refreshStaged();
   if (reads.engines) void stores.engines.refresh();
   if (reads.plugins) {
     void stores.plugins.refresh();
@@ -566,7 +545,7 @@ async function enterProject(
   try {
     record = await api.threadForGame(name);
   } catch (error) {
-    notify(problemWords(error), ToastTone.Error, errorCode(error));
+    notifyProblem(notify)(error);
     return null;
   }
   stores.threads.setState((state) => threadAdded(state, record), true);
@@ -687,7 +666,7 @@ async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void>
     }
     launch.setState((state) => launchOpened(state, id, { project: game.name, threadId: record.id }), true);
   } catch (error) {
-    notify(problemWords(error), ToastTone.Error, errorCode(error));
+    notifyProblem(notify)(error);
     launch.setState((state) => launchFailed(state, id), true);
     // A game made and then lost on the way to its chat failed opening; otherwise main refused making it.
     if (made) stopped(LaunchStage.Opening, LaunchFailReason.OpenRefused, error);
@@ -765,7 +744,8 @@ export function createStudio(
   const visibility = options.visibility ?? browserVisibility;
   const stores = createStores(api, storage, timers, visibility);
   const { session, threads, library } = stores;
-  const notify: Notify = (text, tone = ToastTone.Info, code = null) => stores.toasts.notify(text, tone, code);
+  const notify: Notify = (text, tone = ToastTone.Info, code = null, channel = null) =>
+    stores.toasts.notify(text, tone, code, channel);
   const selectThread = (threadId: string): void => {
     threads.setState((state) => threadSelected(state, threadId), true);
     writeText(STORAGE_KEYS.activeThread, threadId, storage);

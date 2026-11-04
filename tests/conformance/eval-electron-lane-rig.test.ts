@@ -42,6 +42,8 @@ import { makeResources } from "../helpers/studio-rig.ts";
 import { closeBeforeCleanup, tmpDir } from "../helpers/tmp.ts";
 
 /** A real clock whose waits are short, so a poll costs the test a moment rather than a second. */
+/** A bundled engine plugin: on, a new game's chat asks which kind it is. */
+const GODOT_PLUGIN = "godot";
 const QUICK_CLOCK: EvalLaneClock = { now: () => Date.now(), sleep: (ms) => sleep(Math.min(ms, 100)) };
 
 /** A clock that advances by each wait it is asked for, and lets real time run briefly between polls. */
@@ -66,7 +68,7 @@ function laneSpec(work: string, patch: Partial<EvalLaneSpec> = {}): EvalLaneSpec
     effort: "high",
     brief: "Make a tiny synthetic arena game.",
     suffix: "You have about 1 minutes. Nobody will answer questions; make reasonable assumptions and continue.",
-    commission: { autopilot: {} },
+    commission: {},
     permissionMode: PermissionMode.AcceptEdits,
     deadlineMs: 90_000,
     graceMs: 5_000,
@@ -187,6 +189,8 @@ async function userWords(core: StudioCore, threadId: string): Promise<string[]> 
 describe("eval lane on a real core", () => {
   it("sends the brief in the spec's mode, answers the typed question, and reports the chat finished", async () => {
     const { core, spec, deps } = await laneCore();
+    // An engine plugin on: the new game has no kind yet, so its chat is handed the question card.
+    await core.plugins.setEnabled(GODOT_PLUGIN, true);
     const { lane, calls } = recording(core);
     // The seeded game's digest, taken beside the lane's at the same moment: when the chat is bound.
     let seeded: Promise<string> | null = null;

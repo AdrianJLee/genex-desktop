@@ -7,8 +7,9 @@
  * with nothing to notice it. Every call now has a class, and a class with a deadline is answered
  * with `RpcDeadline` once it passes; the watchdog sees the harness's own silence again after that.
  *
- * Engine work, runs, snapshots and plugin calls bound themselves (the engines' timeouts, consent
- * windows, the director's tool timeout) and some legitimately take hours, so their class has none.
+ * Engine work, runs, snapshots and plugin calls bound themselves (an engine's timeout when its caller
+ * names one, consent windows, the director's tool timeout) and some legitimately take hours: a user's
+ * work has no hour cap, so their class has none.
  */
 import { MINUTE_MS } from "../shared/duration.ts";
 import type { HarnessHostMethod } from "../shared/harness-api.ts";
@@ -36,15 +37,12 @@ const CLASS_DEADLINE_MS: Record<RpcClass, number | null> = {
 
 /** Every host method's class. A new method must be classified here, or the typecheck fails. */
 export const RPC_CLASSES = {
-  "assets.inventory": RpcClass.Work,
-  "assets.checkpoint": RpcClass.Work,
   "events.append": RpcClass.Record,
   "events.list": RpcClass.Record,
   "events.head": RpcClass.Record,
   "events.messages": RpcClass.Record,
   "events.inbox": RpcClass.Record,
   "thread.main": RpcClass.Record,
-  "thread.create": RpcClass.Record,
   "thread.list": RpcClass.Record,
   "thread.fork": RpcClass.Record,
   "artifact.read": RpcClass.Record,
@@ -52,12 +50,6 @@ export const RPC_CLASSES = {
   "turn.begin": RpcClass.Record,
   "turn.append": RpcClass.Record,
   "turn.end": RpcClass.Record,
-  "optimization.baseline": RpcClass.Work,
-  "optimization.open": RpcClass.Work,
-  "optimization.freeze": RpcClass.Work,
-  "optimization.promote": RpcClass.Work,
-  "optimization.reconcile": RpcClass.Work,
-  "optimization.close": RpcClass.Work,
   "snapshot.create": RpcClass.Work,
   "snapshot.restore": RpcClass.Work,
   "snapshot.list": RpcClass.Record,
@@ -70,8 +62,6 @@ export const RPC_CLASSES = {
   "jobs.list": RpcClass.Record,
   "plugins.find": RpcClass.Record,
   "plugins.suggest": RpcClass.Record,
-  "plugins.preflightMultiplayer": RpcClass.Work,
-  "capabilities.describe": RpcClass.Record,
   "plugins.invoke": RpcClass.Work,
   "mcp.tools": RpcClass.Work,
   "mcp.invoke": RpcClass.Work,
@@ -85,7 +75,6 @@ export const RPC_CLASSES = {
   "studio.context": RpcClass.Record,
   "studio.language": RpcClass.Record,
   "context.policy": RpcClass.Record,
-  "learning.enabled": RpcClass.Record,
   "engine.complete": RpcClass.Work,
   "engine.abort": RpcClass.Work,
   "engine.interrupt": RpcClass.Work,
@@ -93,7 +82,7 @@ export const RPC_CLASSES = {
   "finish.review": RpcClass.Work,
   "finish.settle": RpcClass.Record,
   "engine.steer": RpcClass.Work,
-  "coordinator.tool": RpcClass.Work,
+  "run.control": RpcClass.Work,
   "engine.delegations": RpcClass.Record,
   "engine.hardware": RpcClass.Record,
   "game.list": RpcClass.Record,
@@ -104,43 +93,25 @@ export const RPC_CLASSES = {
   "game.scaffold": RpcClass.Work,
   "game.start": RpcClass.Work,
   "game.validate": RpcClass.Work,
-  "game.attached": RpcClass.Record,
-  "game.upgradeContract": RpcClass.Work,
   "game.read": RpcClass.Record,
   "game.write": RpcClass.Record,
   "game.tree": RpcClass.Record,
   "game.export": RpcClass.Work,
   "game.references": RpcClass.Record,
   "preview.load": RpcClass.PageLoad,
-  "preview.profile": RpcClass.PageLoad,
   "preview.reload": RpcClass.PageLoad,
   "preview.screenshot": RpcClass.Page,
-  "preview.pageUi": RpcClass.Page,
-  "preview.state": RpcClass.Page,
-  "preview.call": RpcClass.Page,
-  "preview.evaluate": RpcClass.Page,
   "preview.crop": RpcClass.Page,
-  "preview.diff": RpcClass.Page,
   "preview.input": RpcClass.Page,
-  // Its first call loads the build into the window, and a wait may run five minutes.
-  "preview.computer": RpcClass.PageLoad,
   // The person may take minutes to answer the consent card; the card's own timeout bounds it.
   "desktop.computer": RpcClass.Work,
-  // A judge plays for minutes; the host's own dispatch timeout (`judge-play-tool.ts`) bounds it.
-  "judge.play": RpcClass.Work,
   "preview.console": RpcClass.Page,
   "preview.gpuErrors": RpcClass.Page,
   "preview.status": RpcClass.Page,
   "preview.ready": RpcClass.PageLoad,
-  "preview.gesture": RpcClass.Page,
-  "preview.showing": RpcClass.Page,
   "preview.observe": RpcClass.PageLoad,
   "preview.acquire": RpcClass.PageLoad,
   "preview.release": RpcClass.Page,
-  "preview.viewport": RpcClass.Page,
-  "preview.statsOf": RpcClass.Page,
-  "preview.pair": RpcClass.Page,
-  "preview.screens": RpcClass.Page,
   "preview.capacity": RpcClass.Page,
   "run.artifact": RpcClass.Record,
   "guardian.rebuild_and_restart": RpcClass.Work,

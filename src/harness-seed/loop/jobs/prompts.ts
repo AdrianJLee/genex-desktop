@@ -1,6 +1,6 @@
 /**
  * The words a lead reads about its run's jobs: one line per job that ended, naming it, who
- * started it, how it ended, after how long, and how to read its output.
+ * started it, how it ended and after how long. A fact: `job_tail` reads its output by its id.
  */
 import type { JobView } from "../../types/host-api.d.ts";
 import { CLIP_QUOTE, clipMarked } from "../text.ts";
@@ -31,13 +31,11 @@ function howItEnded(job: Pick<JobView, "state" | "exitCode" | "stoppedBy">): str
 }
 
 /**
- * One job of the run that ended, for its lead: "Unreal build (`make`, started by worker Scene
- * builder) failed (exit 2) after 4 min; read it with job_tail <id>." A job the person stopped stays
- * stopped unless they ask.
+ * One job of the run that ended, for its lead: 'job j1 "Unreal build" (`make`, started by worker w2)
+ * failed (exit 2) after 4 min.'
  */
 export function jobEndLine(job: JobView): string {
   const ran = typeof job.durationMs === "number" ? ` after ${minutes(job.durationMs)} min` : "";
   const command = clipMarked(job.command, CLIP_QUOTE);
-  const keepStopped = job.stoppedBy === JobStopper.Person ? " Do not start it again unless the person asks." : "";
-  return `${job.title} (\`${command}\`, ${starter(job)}) ${howItEnded(job)}${ran}; read it with job_tail ${job.id}.${keepStopped}`;
+  return `job ${job.id} "${job.title}" (\`${command}\`, ${starter(job)}) ${howItEnded(job)}${ran}.`;
 }

@@ -230,10 +230,12 @@ it("a worker record's fields are read only from their own words: a hostile one r
 });
 
 it("the line is never folded into the activity row", () => {
+  // A run narrates its start only when it names a reference, so these two do (a run that names none says nothing).
+  const reference = { name: "Dirt 5", kind: "direction" };
   const entries = toEntries([
-    custom(1, CustomEvent.RunStarted, { runId: RUN }),
+    custom(1, CustomEvent.RunStarted, { runId: RUN, reference }),
     started(2, "pool.w1", "Study the web game", inTurn, { isolation: "read" }),
-    custom(3, CustomEvent.RunStarted, { runId: "r-next" }),
+    custom(3, CustomEvent.RunStarted, { runId: "r-next", reference }),
     finished(4, "pool.w1", "Study the web game", inTurn, { state: "done" }),
   ]);
   const folded = entries.flatMap((entry) => (entry.kind === EntryKind.Activity ? entry.rows.map((r) => r.text) : []));
@@ -514,8 +516,7 @@ it("work in the game reads added on its card's row once its worker is over, howe
       conflict: false,
     });
   const rowOf = (...events: EventEnvelope[]) =>
-    buildChecklist({ summary: summarizeRun(events, "valley", RUN), plan: [], finishing: false, now: Date.now() })
-      ?.rows[0];
+    buildChecklist(summarizeRun(events, "valley", RUN), Date.now())?.rows[0];
   const begun = [
     custom(1, CustomEvent.RunStarted, { runId: RUN, project: "valley", mode: "director" }),
     started(2, "land", "Raise the land", inRun),
@@ -529,4 +530,37 @@ it("work in the game reads added on its card's row once its worker is over, howe
     ["failed", { state: "failed", stopCode: "error" }],
   ] as const)
     assert.equal(rowOf(...begun, finished(4, "land", "Raise the land", inRun, end))?.mark, PartMark.Added, name);
+});
+
+it("a worker the lead redirects is a line of its own: the worker's task and what it was told, never a folded tool call", () => {
+  // The owner's live check: the person's message reached the lead mid-build and it redirected both
+  // workers in seconds, but the chat folded that into "Running a tool", so it read as ignored.
+  const steer = (id: number, worker: string, text: string) =>
+    custom(id, "delegated.claude-code", {
+      runId: RUN,
+      delegationId: "lead-1",
+      kind: "assistant",
+      data: {
+        parts: [{ type: "tool_use", id: `s${id}`, name: "mcp__studio__worker_steer", input: { id: worker, text } }],
+      },
+    });
+  const entries = toEntries([
+    started(1, "pool.w2", "Three levels and level flow", inRun),
+    steer(
+      2,
+      "w2",
+      "Change from the person: make the ball red. In drawBall use a red body gradient (#ffffff to #e0302f).",
+    ),
+    steer(3, "w9", "Stop and wait for the new street grid."),
+  ]);
+  const said = entries.flatMap((entry) =>
+    entry.kind === EntryKind.Action && entry.action === EntryAction.Told ? [entry.text] : [],
+  );
+  assert.deepEqual(said, [
+    "Told “Three levels and level flow”: Change from the person: make the ball red.",
+    "Told a worker: Stop and wait for the new street grid.",
+  ]);
+  const folded = entries.flatMap((entry) => (entry.kind === EntryKind.Tools ? entry.rows : []));
+  assert.deepEqual(folded, [], "no tool row beside the line");
+  assert.ok(!entries.some((entry) => entry.kind === EntryKind.Activity), "never folded into the activity row");
 });

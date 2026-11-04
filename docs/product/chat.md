@@ -9,7 +9,7 @@ Dropped pictures stay pictures; other files become links. @ tags (max 5): local 
 Genex ones in `.studio/refs/`, assets `src/assets/`.
 
 Chat work shows its status and clock; waiting is static. A running build is one card that holds
-still: parts counted, their checklist, Open in Builds. Run workers get no lines.
+still: steps counted, their list, Open in Builds. Run workers get no lines.
 
 Neighboring tools group under **Worked on N steps** (or **Worked in Unreal**);
 failures stay visible. Play views and assets sit under their work. Build updates use a short
@@ -19,8 +19,8 @@ and Studio. A build that taught nothing adds no learned line. Exact values:
 
 ## Questions and plans
 
-Replies get current plugin, account, MCP and template facts; asking about plugins never
-resumes a build. A reply may start workers in the chat's mode (Plan holds writers), stopping
+Messages reach agents verbatim. Replies get current plugin, account and MCP facts;
+asking about plugins never resumes a build. A reply may start workers in the chat's mode (Plan holds writers), stopping
 with it; each is one line opening its work on Builds. Background work is one line with Stop until Genex
 quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any mode.
 
@@ -42,10 +42,10 @@ quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any m
 ## Sending, waiting and history
 
 A sent message shows at once: idle, as the next bubble, **Sending** until saved.
-While the chat works it reaches that work at its next step (else waits below, removable): **Sending…** until
-read, then sits there. A changed Mode, model or effort applies from there; workers carry over
-or finish. A build's lead hears it, wrap-up included.
-During work a sendable draft shows Send, else Stop; Stopping shows until done; a second press
+While the chat works it reaches that work at its next step (else waits below with **Send now**,
+**Edit**, **Remove**): **Sending…** until read, then sits there. A changed model or effort applies
+from there; workers carry over or finish. A build's lead hears it, wrap-up included.
+During work a sendable draft shows Send, else Stop; Stopping shows until done; a repeat
 within 5 s is ignored. The stopped build shows its result, else Stopped once, with Resume. A
 message a quit cut off is retried once, then left to resend.
 
@@ -64,4 +64,4 @@ History is paged; scrolling up stops following.
 [ChatPanel](../../src/renderer/panels/ChatPanel.tsx) feeds the transcript,
 [chat components](../../src/renderer/chat) draw it,
 [PromptBar](../../src/renderer/ui/PromptBar.tsx) writes.
-Queue and session internals: [conversation coordinator](../conversation-coordinator.md).
+Queue and session internals: [conversation lifecycle](../conversation-lifecycle.md).

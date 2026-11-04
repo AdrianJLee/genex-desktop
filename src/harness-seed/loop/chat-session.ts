@@ -1,72 +1,16 @@
 /**
- * One chat = one folder + one contractor session (the Cursor/Codex shape).
- *
- * Follow-ups, including "keep going", continue THAT conversation. The contractor is never
- * re-briefed from the last line alone, and a chat never guesses a different game folder.
+ * One chat = one folder + one contractor session (the Cursor/Codex shape), and what that session
+ * knows of Genex for its whole life: its context, said once in its system text (`chatContext`).
+ * The person's words reach it as they wrote them; a chat never guesses a different game folder.
  */
-import { launchRules, RESUME_LOOP_CHAT, type LaunchGrant } from "./launch-prompts.ts";
-import { autoLoopRule } from "./auto-loop-prompts.ts";
-import { UNTIL_DONE_WORDS } from "./until-done-prompts.ts";
-import { type EngineId, GameEngine } from "./game-engine.ts";
-import { handoverSection } from "./session-compact-prompts.ts";
-import { toolCall } from "./model-roles.ts";
-import { EventKind, InterviewMode, RunEvent } from "./run-events.ts";
-import { engineChoiceRule, unrealRules, unrealWorkHere, unrealWorkspaceRule } from "./unreal-prompts.ts";
-import { TRANSCRIPT_CHARS, TRANSCRIPT_MESSAGES } from "./brief-window.ts";
-import {
-  CoreFact,
-  type FactRef,
-  FolderHolds,
-  factsOfEngine,
-  hasFact,
-  kindPending,
-  kindUnknown,
-  type LoopProfile,
-  loopProfileOf,
-  servedAsWeb,
-} from "./folder-facts.ts";
-import {
-  appIdentity,
-  factPrefix,
-  ownKindRules,
-  pendingKindRule,
-  unknownKindRules,
-  unrealWithoutPlugin,
-} from "./project-prompts.ts";
-import { WORKERS_BRIEF_LINE } from "./workers/prompts.ts";
+import { EventKind, RunEvent } from "./run-events.ts";
+import { appIdentity } from "./project-prompts.ts";
 import type { AppLanguage } from "./app-language.ts";
 import { languageRule } from "./language-prompts.ts";
-import { godotWorkHere, godotWorkspaceRule } from "./linked-project-prompts.ts";
-import { pluginWebBuilds, webBuildLine } from "./web-build.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
-import type { PluginKindOffer } from "../types/host-api.d.ts";
 
 /** How many content words of the ask a folder name keeps. */
 const NAME_WORDS = 3;
-/** How much of the original ask a contractor's brief quotes. */
-const ORIGINAL_ASK_CHARS = 4_000;
-/** A game's shape as a brief reads it: its page, its entry module and its build. */
-export interface BriefShape {
-  entry?: string;
-  main?: string;
-  build?: string | null;
-}
-
-/** A message as a brief quotes it. */
-export interface BriefMessage {
-  role?: string;
-  content?: string;
-}
-
-/** "Keep going" / "continue" — resume the same dialogue, don't start a new unattended Loop. */
-export function isContinueAsk(text: unknown): boolean {
-  const ask = String(text ?? "")
-    .trim()
-    .toLowerCase();
-  if (!ask) return false;
-  if (/^(continue|resume|go on)\b/.test(ask)) return true;
-  return /\bk+e+p\s+going\b/.test(ask);
-}
 
 /**
  * The workspace this chat is allowed to touch. Never the preview, never "the newest game" —
@@ -199,23 +143,12 @@ export function nameFromAsk(ask: string): string {
   return slug || FALLBACK_NAME;
 }
 
-/** First real user ask in this chat — not "keep going", not empty. */
-export function originalAsk(messages: readonly BriefMessage[] | undefined): string {
-  for (const message of messages ?? []) {
-    if (message?.role !== "user") continue;
-    const text = String(message.content ?? "").trim();
-    if (!text || isContinueAsk(text)) continue;
-    return text;
-  }
-  return "";
-}
-
 /**
  * The contractor session this chat already has, walking the log newest-last.
  * `contractor_session` is the durable bookmark, and the chat's own delegations always write it;
  * `delegation_incomplete` and a mirrored init event are fallbacks for chats that started before
- * the bookmark existed. A later one of those never outranks a bookmark: a coordinator, worker or
- * reviewer that ran in this thread leaves them too, and its session is not the chat's.
+ * the bookmark existed. A later one of those never outranks a bookmark: a worker or reviewer that
+ * ran in this thread leaves them too, and its session is not the chat's.
  */
 export function lastContractorSession(
   events: readonly AnyRecord[] | undefined,
@@ -278,547 +211,40 @@ export function isResumeFailure(err: any): boolean {
 }
 
 /**
- * The rule that describes the game itself. The studio's own template is an empty project with
- * no build, no package manager and no network, and this sentence says so. A folder the user
- * brought is none of those things — see `ownShapeRules` — and telling its contractor otherwise
- * would have it move a real game's DOM UI into a HUD it never had.
+ * Who the person is, ahead of every fact about the game: they read every word. A "Hello" in a new
+ * game once came back as seven tool steps and a report on the workspace and its inspection hooks.
  */
-const TEMPLATE_RULE =
-  "When you build, follow CLAUDE.md in the workspace root: keep window.__studio (seed/start/pause/step/state/debugCamera) working, keep gameplay deterministic (rng from reset(seed), never Math.random), assets come from procedural code, imports, or the currently enabled plugin tools. Follow the selected tool’s returned file paths and verification guidance.";
-
-/** The web starter's rule as a folder with no kind yet hears it: for its web answer only, never an engine's. */
-const PENDING_TEMPLATE_RULE = `For a game that plays in Genex (the web answer): ${TEMPLATE_RULE.charAt(0).toLowerCase()}${TEMPLATE_RULE.slice(1)}`;
+const TALK =
+  "The person may not be a programmer: talk with them about their game, never about the workspace, files, worktrees, hooks or Genex's own machinery.";
 
 /**
- * …and the same rule for a game that came with its own shape: what it already is stays, the
- * contract is installed into its own entry, and its build is run before the turn ends. The
- * wording mirrors the run's own briefs (facet-loop.ts `facetPrompt`) so a chat build and a
- * run's builder are told the same thing about the same folder.
+ * The person's words sent while the session works reach it mid-turn. "You can use blender if needed"
+ * changed nothing yet, so the session went on with no word back, and the person read it as ignored.
  */
-function ownShapeRules(shape: BriefShape | null | undefined, contractMissing = false): string[] {
-  const main = shape?.main ?? "src/main.js";
-  const entry = shape?.entry ?? "index.html";
-  const build = shape?.build ?? null;
-  return [
-    // The game cannot be judged, checked or compared until its page loads the contract, and a
-    // chat build is the fastest way somebody gets that done (M2.6): the run's own first step
-    // is the same job in the same words (director.ts `contractBrief`). Said first, because a
-    // turn that spends itself on the ask and never wires it leaves the folder unjudgeable.
-    ...(contractMissing
-      ? [
-          `FIRST, BEFORE THE ASK: nothing on this game's page installs the studio contract and the studio could not attach to it on its own, so nothing here can be looked at, checked or compared — not by you, not by a build's judges. Two lines fix it, in ${main} (or a module it imports): \`import { installStudio } from "./studio.js"\` — the contract module the studio keeps in src/, types in src/studio.d.ts beside it — and \`installStudio({ renderer, player })\` with this game's real renderer and a player() locator, once the renderer exists. That is the whole ask: the studio's own code is already on the page and finds the scene, the camera and the frames from what the game draws. Change nothing else about the game while you do it${build ? `, and run \`${build}\` afterwards` : ""}. Then do what was asked.`,
-        ]
-      : []),
-    `This game came with its own shape — the studio did not write it. Its entry is ${main}${build ? `, it is built with \`${build}\`` : " and it runs as written"} and the studio serves ${entry}. Follow CLAUDE.md in the workspace root. Keep its structure, its screen and its input handling as they are: its UI is its own (no __studio.hud overlays, no second input path), and whatever it already loads at run time keeps loading. Keep window.__studio working: the studio attaches its own code to every page it serves, and the two lines that make the attachment exact are \`import { installStudio } from "./studio.js"\` and \`installStudio({ renderer, player })\` in ${main}. Do not remove them, and do not replace this game's randomness or its clock with the template's — this is the user's own code, not the studio's scaffold.`,
-    ...(build
-      ? [
-          `Run \`${build}\` before you finish and fix what it reports: the studio runs the same build before every preview, so a build that fails is a black screen for the user. If the compiler rejects ./studio.js, use the types in src/studio.d.ts beside it — never drop the import.`,
-        ]
-      : []),
-  ];
-}
+const ANSWER_WHILE_WORKING =
+  "When the person writes while you work, answer them in a line before you go on, even when it changes nothing yet: they wait to see that you read it.";
 
-/**
- * How the chat talks, ahead of every rule about building: the user reads every word. A "Hello" in
- * a new game once came back as seven tool steps and a report on the workspace, its renderer and
- * the studio's inspection hooks.
- */
-const CONVERSATION_RULE =
-  "Talk with the user like a person. A greeting, thanks or small talk gets a short, friendly reply and no tools; when they have not said what to make or change yet, ask them. Talk about their game, never about the workspace, files, hooks, the renderer, panels or the studio's own machinery.";
-
-/** The fence a command for the user to run goes in: the chat offers Run under a one-line block of it. */
+/** The fence a command for the person to run goes in: the chat offers Run under a one-line block of it. */
 const USER_COMMAND_FENCE = "bash";
 
-/** Where a web game's work happens: this workspace, and no other copy or game. */
-const WORKSPACE_RULE =
-  "The game's work happens in this workspace: never in another copy of this game or in another game's folder, and a path the user named is a stills folder to look at, not a parent to walk. When the user asks about something elsewhere on their computer (another folder, their Downloads, their disk), that is the ask: what you may reach is your session's permissions, not this brief.";
+/** What a one-line command block in a reply becomes in Genex's chat, and which commands earn one. */
+const RUN_BUTTON = `A one-line \`\`\`${USER_COMMAND_FENCE} block in your reply shows the person a Run button: offer one only for a step your sandbox blocks that only their own computer can do (an install that needs the network, a system tool, a sign-in), never one you can run yourself, sudo, or a pipe into a shell.`;
 
 /**
- * What a brief knows about the game: what its folder holds (`facts`; `[]`: none, and then `holds`
- * says whether that is no kind yet), the Unreal project file it is linked to, and whether the Unreal
- * plugin is off. `legacy`: the caller named the engine, not the facts (a kept older caller), and the
- * facts stand for that engine.
+ * Genex's context for the chat's own session, said once in its system text: who runs it and the
+ * game's folder (`appIdentity`), who the person is, the language they read and the chat's Run button.
+ * Only what holds for the session's whole life, the same text on every turn, the lead's included
+ * (director.ts): a resumed Claude Code or Codex session keeps the system text it started with. So
+ * what the folder holds, which a turn can change, is never in it: a turn that changes it tells the
+ * session in Genex's line (delegated-turn.ts `continueOnNewFacts`), and the Loop, workers, checkpoint,
+ * kind choice and every other setting reach the session as its tools and its engine's options.
  */
-interface GameBuild {
-  gameEngine: EngineId;
-  /** Each fact with its source when the caller said it (a plugin's detect, a scaffold's record). */
-  facts: SourcedFact[];
-  /** With no facts, what the folder holds (`game.list`'s `holds`); null: not said, read as nothing. */
-  holds: FolderHolds | null;
-  engineProject: string | null;
-  /** Where an Unreal project found in the folder (not linked) is; undefined when linked or unknown. */
-  unrealFound: string | undefined;
-  pluginsOff: boolean;
-  legacy: boolean;
-}
-
-/** A web game's folder as a brief reads it: brought by the user in its own shape, and whether its page lacks the contract. */
-interface FolderShape {
-  ownShape: boolean;
-  shape: BriefShape | null;
-  contractMissing: boolean;
-}
-
-/** A fact as a brief reads it: what, where and, when the caller said it, where it came from. */
-type SourcedFact = FactRef & { source?: string };
-
-/** A fact's what, where and source, nothing else of it. */
-const sourcedFact = ({ id, path, source }: SourcedFact): SourcedFact =>
-  typeof source === "string" ? { id, path, source } : { id, path };
-
-/** The game as a brief reads it, from the facts when the caller has them and from its engine when not. */
-function gameBuild(
-  facts: readonly SourcedFact[] | null | undefined,
-  {
-    gameEngine,
-    engineProject,
-    pluginsOff,
-    holds,
-  }: { gameEngine: EngineId; engineProject: string | null; pluginsOff: boolean; holds: FolderHolds | null },
-): GameBuild {
-  const legacy = !Array.isArray(facts);
-  const known: SourcedFact[] = legacy ? factsOfEngine(gameEngine) : facts.map(sourcedFact);
-  const unreal = known.find((fact) => fact.id === CoreFact.UnrealProject);
-  const unrealFound = legacy || engineProject ? undefined : unreal?.path;
-  return { gameEngine, facts: known, holds, engineProject, unrealFound, pluginsOff, legacy };
-}
-
-/**
- * The Loop the game gets, as the launch words name it: the engine whose goal words apply (an Unreal
- * project's look first, by its fact) and the Loop's profile (the one Loop in place, unless it is a
- * web game).
- */
-function loopOfGame(game: GameBuild): [EngineId, LoopProfile] {
-  const engine = hasFact(game.facts, CoreFact.UnrealProject) ? GameEngine.Unreal : game.gameEngine;
-  return [engine, loopProfileOf(game)];
-}
-
-/** The game is worked on in its Unreal project, through the Unreal tools: it holds one, is no web game at its root, and the plugin is on. */
-const inUnreal = (game: GameBuild) =>
-  !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject) && !game.pluginsOff;
-
-/**
- * The rules of one kind the folder holds: the web template's or the game's own shape, Unreal's, or a
- * line for any other, which a plugin that is on and makes that kind (`made`) already covers.
- */
-function rulesOfFact(
-  engine: string | undefined,
-  fact: SourcedFact,
-  game: GameBuild,
-  folder: FolderShape,
-  made: ReadonlySet<string>,
-): string[] {
-  if (fact.id === CoreFact.WebGame)
-    return folder.ownShape ? ownShapeRules(folder.shape, folder.contractMissing) : [TEMPLATE_RULE];
-  if (fact.id !== CoreFact.UnrealProject) return ownKindRules(engine, fact, made.has(fact.id));
-  if (game.pluginsOff) return unrealWithoutPlugin(engine);
-  const found = game.unrealFound;
-  return unrealRules(engine, game.engineProject, { found, ownFiles: found !== undefined });
-}
-
-/**
- * The rules that describe the game itself, one block per kind the folder holds, each named by its
- * folder when there are several. A folder with no kind yet is told how its request picks one
- * (`offered`: the kinds engine plugins on offer make; `asked`: the question card offers them), then
- * the web template's rule its web answer builds on; one of a kind Genex can't name is looked through first.
- */
-function factRules(
-  engine: string | undefined,
-  game: GameBuild,
-  folder: FolderShape,
-  { offered, asked }: { offered: readonly PluginKindOffer[]; asked: boolean },
-): string[] {
-  if (kindUnknown(game)) return unknownKindRules(engine, game.holds);
-  if (kindPending(game)) return [...pendingKindRule(engine, offered, null, game.holds, asked), PENDING_TEMPLATE_RULE];
-  const several = game.facts.length > 1;
-  // The kinds the plugins that are on make: their plugin is on already, nothing to look for.
-  const made = new Set(offered.flatMap((kind) => (Array.isArray(kind.makes) ? kind.makes : [])));
-  // A plugin's web build is said once, by its own line, and gets no web game's rules.
-  const builds = pluginWebBuilds(game.facts);
-  return game.facts.flatMap((fact) => {
-    if (builds.has(fact.path)) return fact.id === CoreFact.WebGame ? [webBuildLine(fact.path)] : [];
-    const rules = rulesOfFact(engine, fact, game, folder, made);
-    const prefix = several ? factPrefix(fact) : "";
-    return rules.map((rule) => `${prefix}${rule}`);
-  });
-}
-
-/** Where the game's work happens: its Unreal project, its linked Godot project, or this workspace. */
-function workspaceRule(game: GameBuild): string {
-  if (!servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject))
-    return unrealWorkspaceRule(game.engineProject, game.unrealFound);
-  const godot = linkedGodotProject(game);
-  return godot ? godotWorkspaceRule(godot) : WORKSPACE_RULE;
-}
-
-/** The `project.godot` a game is linked to, or null when it isn't linked to a Godot project. */
-const linkedGodotProject = (game: GameBuild): string | null =>
-  game.gameEngine === GameEngine.Godot ? game.engineProject : null;
-
-/**
- * The rules every chat build follows after the game's own, in the voice of the engine that reads
- * them: a tool is named once, spelled the way this session can actually call it (M4.8b). The first
- * is the person's language, with Genex's own as the fallback (`language-prompts.ts`).
- */
-function contractorRules(engine: string | undefined, game: GameBuild, app: AppLanguage | null): string[] {
-  return [
-    languageRule(app),
-    "Helper scripts of your own (an inspector, a syntax check, a probe) go under .studio/ (gitignored); source scripts for generated assets live under assets/src/.",
-    "Render a video's frames (a trailer, a flythrough) into your temporary folder (TMPDIR) or .studio/, never elsewhere in the game folder, and keep only the finished video in the game.",
-    "Before you build or change how the game looks, if the folder has a references/ or ref/ directory with stills, look at those pictures — they are the visual bar, not files to load as textures.",
-    workspaceRule(game),
-    "When your shell is sandboxed, it rejects commands it cannot statically analyze — avoid $-expansions, escaped whitespace, heredocs and long && chains; run one simple command at a time, and put multi-step logic in a script file you then run with node.",
-    `When a sandbox blocks a step only the user's own computer can do (an install or download that needs the network, such as brew, winget or pip, a system tool, a sign-in), do not work around it: end your reply with that one command on a single line in a \`\`\`${USER_COMMAND_FENCE} block and one plain sentence on why. The chat shows it with a Run button; how it went comes back as the user's next message. Never offer a command you can run yourself, sudo, or anything piped into a shell.`,
-    "When the user named a tool, app or plugin to use (Blender, an engine, a package) and its status or a call says it can't run here, never carry on without it in silence: say so in your reply, in plain words, with the fix its answer names, before a long build starts. A plugin's own install tool (its name ends in __install) asks the user on a card: call it when its status says to.",
-    // The Reload a checkpoint lights is the web preview's: any other kind is seen in its own app.
-    ...(servedAsWeb(game)
-      ? [
-          `The moment the game first runs end-to-end, and after each substantial feature lands, call ${toolCall(engine, "checkpoint")} with a one-line note — the studio lights the user's Reload with your note, so they see your progress when they press it.`,
-        ]
-      : []),
-    "Keep NOTES.md in the workspace root current as you build — the game's pitch (what the user asked for, in their words: not a wish list), the key decisions so far and why, and its current state (features, known issues). Update it when something lands, not only at the end. A newcomer should understand the game from NOTES.md alone.",
-  ];
-}
-
-function stillsBlock(extraReads: unknown): string {
-  if (!Array.isArray(extraReads) || extraReads.length === 0) return "";
-  return [
-    "Stills the user named — read these paths directly; do not walk their parent folders:",
-    ...extraReads.map((dir) => `- ${dir}`),
-  ].join("\n");
-}
-
-/**
- * This brief tells the chat's own session after a lead's run that the build is over
- * (`afterLoopRun`): chat-dispatch.ts asks before it sends the chat there (after-loop-run.ts
- * `servesAfterLoopRun`), since a kept copy from before would tell it to pick up where it left off.
- */
-export const SERVES_AFTER_LOOP_RUN = true;
-
-/** How a resumed build is told to go on; a Loop chat reads the message instead (`RESUME_LOOP_CHAT`). */
-const RESUME_BUILD =
-  "You are resuming your own session in this workspace — your context is restored. Pick up exactly where you left off and finish the remaining work.";
-
-/**
- * What the contractor is actually told. Resume = short pickup (its own context is restored).
- * No session = the chat's original ask plus the latest instruction, so "keep going" cannot
- * become a blank new job. `launch` = Loop is on: the chat may also start a build
- * (launch-prompts.ts), and still answers, researches and edits itself. `afterLoopRun` = the build
- * this chat's session led is over (after-loop-run-prompts.ts): its note replaces the pickup of a
- * resumed session, and follows the rules of a fresh one.
- *
- * @param {{
- *   ask?: string,
- *   messages?: Array<{ role?: string, content?: string }>,
- *   resume?: boolean,
- *   extraReads?: string[],
- *   folderLabel?: string,
- *   scaffolded?: boolean,
- *   shape?: { entry?: string, main?: string, build?: string | null } | null,
- *   ownShape?: boolean,
- *   contractMissing?: boolean,
- *   engine?: string,
- *   gameEngine?: EngineId,
- *   engineProject?: string | null,
- *   launch?: LaunchGrant | null,
- *   afterLoopRun?: string | null,
- *   engineChoice?: boolean,
- *   unrealEngine?: unknown,
- *   compacted?: string | null,
- *   fresh?: boolean,
- *   facts?: FactRef[] | null,
- *   kinds?: PluginKindOffer[],
- *   pluginsOff?: boolean,
- *   holds?: FolderHolds | null,
- *   workers?: boolean,
- * }} [opts]
- */
-export function buildContractorBrief({
-  ask,
-  messages = [],
-  resume = false,
-  extraReads = [],
-  folderLabel = "",
-  scaffolded = false,
-  shape = null,
-  ownShape = false,
-  contractMissing = false,
-  /** Which engine reads this: the one thing in the brief that is spelled per engine. */
-  engine = undefined,
-  /** Which engine the GAME builds in (game-engine.ts `engineOfGame`): a game in any engine is no web page. */
-  gameEngine = GameEngine.Web,
-  /** The Unreal project file an Unreal game is linked to, which its work lands in. */
-  engineProject = null,
-  /** Loop is on: this chat may also launch a build. */
-  launch = null,
-  /** Loop is off: the launch tool this chat may call for a Loop the user asks for in words. */
-  autoLoop = null,
-  /** The build this chat's session led is over: what it is told of it (after-loop-run-prompts.ts). */
-  afterLoopRun = null,
-  /** A new game while the Unreal plugin is on: the user picks the web or Unreal first (unreal-prompts.ts). */
-  engineChoice = false,
-  /** The handover the session before this one wrote when the chat was compacted (session-compact.ts). */
-  compacted = null,
-  /** Nothing has been made in this game yet: the studio's template, as it was made. */
-  fresh = false,
-  /** What the game's folder holds (`game.list`'s `facts`; `[]`: no kind yet). Absent: read from `gameEngine`. */
-  facts = null,
-  /** The kinds the question card offers a folder with no kind yet (`plugins.tools`'s `kinds`). */
-  kinds = [],
-  /** The folder holds an Unreal project and the Unreal plugin is off: no Unreal tools reach it. */
-  pluginsOff = false,
-  /** With no facts, what the folder holds (`game.list`'s `holds`): nothing or notes (no kind yet), or files of its own. */
-  holds = null,
-  /** This turn's session may start workers (workers/chat-workers.ts): its brief says so in one line. */
-  workers = false,
-  /** The language Genex speaks (`studio.language`): the agent's fallback for Genex's own messages. */
-  appLanguage = null,
+export function chatContext({
+  folderLabel,
+  appLanguage,
 }: {
-  ask?: string;
-  messages?: readonly BriefMessage[];
-  resume?: boolean;
-  extraReads?: unknown;
-  folderLabel?: string;
-  scaffolded?: boolean;
-  shape?: BriefShape | null;
-  ownShape?: boolean;
-  contractMissing?: boolean;
-  engine?: string;
-  gameEngine?: EngineId;
-  engineProject?: string | null;
-  launch?: LaunchGrant | null;
-  autoLoop?: string | null;
-  afterLoopRun?: string | null;
-  engineChoice?: boolean;
-  /** Read no more, kept for a caller kept from before: each kind's readiness comes with the kinds (`ready`, `note`). */
-  unrealEngine?: unknown;
-  compacted?: string | null;
-  fresh?: boolean;
-  facts?: readonly SourcedFact[] | null;
-  kinds?: readonly PluginKindOffer[];
-  pluginsOff?: boolean;
-  holds?: FolderHolds | null;
-  workers?: boolean;
-  appLanguage?: AppLanguage | null;
-} = {}): string {
-  const game = gameBuild(facts, { gameEngine, engineProject, pluginsOff, holds });
-  const identity = appIdentity({ folderLabel, facts: game.facts, holds: game.holds });
-  const workHere = workHereLine(game, folderLabel);
-  const stills = stillsBlock(extraReads);
-  const launchBlock = [
-    ...(launch?.toolName ? launchRules(engine, launch, ...loopOfGame(game)) : []),
-    ...(autoLoop ? [autoLoopRule(engine, autoLoop)] : []),
-  ];
-  const workersLine = workers ? WORKERS_BRIEF_LINE : "";
-
-  // A folder with no kind yet hears how its request picks one on every message, a resumed session's
-  // too: a plugin turned on from the chat's card resumes the session that asked for it.
-  const kindRule = !game.legacy && kindPending(game) ? pendingKindRule(engine, kinds, null, game.holds, false) : [];
-  // A resumed session was told the rules in its first brief; the language comes again, since the
-  // resume's own words are Genex's, in English, and the app's language may have changed since.
-  if (resume)
-    return [
-      ask,
-      "",
-      identity,
-      ...kindRule,
-      resumePickup(afterLoopRun, launch),
-      ...launchBlock,
-      workersLine,
-      workHere,
-      stills,
-      languageRule(appLanguage),
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-  // The rules a build follows depend on whose game this is — every run brief already carries
-  // the shape (autopilot.ts, director.ts, facet-loop.ts); a chat build used to carry none.
-  // A folder with no kind yet hears of the kinds on offer on every message; the card only when bridged.
-  const choice = { offered: kinds, asked: engineChoice };
-  const rules = [
-    ...engineQuestion(engine, game, engineChoice, kinds),
-    ...factRules(engine, game, { ownShape, shape, contractMissing }, choice),
-    ...contractorRules(engine, game, appLanguage),
-  ];
-  const { head, followUp } = briefHead(ask, messages, {
-    compacted,
-    fresh: fresh || scaffolded,
-    pending: !game.legacy && kindPending(game),
-    notes: game.holds === FolderHolds.Notes,
-  });
-
-  const recent = messages
-    .filter((m) => m.role === "user" || m.role === "assistant")
-    .slice(-TRANSCRIPT_MESSAGES)
-    .map((m) => `${m.role}: ${m.content ?? ""}`)
-    .join("\n")
-    .slice(-TRANSCRIPT_CHARS);
-  return [
-    ...head,
-    identity,
-    ...(compacted ? [`\n${handoverSection(compacted)}`] : []),
-    ...(followUp && recent ? [`\nRecent conversation (retain decisions and completed work):\n${recent}`] : []),
-    "",
-    CONVERSATION_RULE,
-    ...rules,
-    ...launchBlock,
-    ...(afterLoopRun ? [afterLoopRun] : []),
-    workersLine,
-    workHere,
-    stills,
-  ]
-    .filter((line) => line !== "")
-    .join("\n");
-}
-
-/**
- * The engine question, first, for a new web game of a caller that names the engine and not the
- * facts, offering the kinds on offer (none: no question); nothing otherwise (a folder with no kind
- * yet is asked by its facts' rules).
- */
-function engineQuestion(
-  engine: string | undefined,
-  game: GameBuild,
-  engineChoice: boolean,
-  kinds: readonly PluginKindOffer[],
-): string[] {
-  const asks = engineChoice && game.legacy && game.gameEngine === GameEngine.Web;
-  return asks ? [engineChoiceRule(engine, null, kinds)] : [];
-}
-
-/**
- * Where the game's work goes, never what else the session may reach: that is its permissions'.
- * An Unreal game's lands in its project, and a resumed session is told so too.
- */
-function workHereLine(game: GameBuild, folderLabel: string): string {
-  if (inUnreal(game)) return unrealWorkHere(game.engineProject, folderLabel, game.unrealFound);
-  const godot = linkedGodotProject(game);
-  if (godot) return godotWorkHere(godot, folderLabel);
-  return folderLabel
-    ? `The game's work stays in this workspace (folder \`${folderLabel}\`).`
-    : "The game's work stays in this workspace.";
-}
-
-/**
- * A fresh brief's opening: for a follow-up, the same chat's original request and its latest
- * instruction; else the ask and where the game stands. After a compaction the first kept
- * message is not the original request (the handover says it), so only the latest is quoted.
- * A game nothing has been made in is a blank page: "continue from the existing code" would send
- * a "Hello" off to inspect an empty template.
- */
-function briefHead(
-  ask: string | undefined,
-  messages: readonly BriefMessage[],
-  start: { compacted: string | null; fresh: boolean; pending: boolean; notes: boolean },
-): { head: Array<string | undefined>; followUp: boolean } {
-  const { compacted } = start;
-  const original = compacted ? "" : originalAsk(messages);
-  const followUp = Boolean(compacted) || Boolean(original && original !== ask);
-  if (!followUp) return { head: [ask, "", firstOrigin(start)], followUp };
-  return {
-    head: [
-      "This is the same chat, not a new job. Continue from the code already in this workspace. Do not start over, and do not go looking through other projects for it.",
-      "",
-      original ? `Original request:\n${original.slice(0, ORIGINAL_ASK_CHARS)}` : "",
-      original !== ask ? `\nLatest instruction:\n${ask}` : "",
-    ],
-    followUp,
-  };
-}
-
-/**
- * Where a first brief's game stands: a folder with no kind yet (empty, or notes only), the studio's
- * template as made, or code to continue.
- */
-function firstOrigin({ fresh, pending, notes }: { fresh: boolean; pending: boolean; notes: boolean }): string {
-  if (pending && notes)
-    return "This project is brand new: its folder holds notes but no game yet, so read the notes before you start.";
-  if (pending) return "This project is brand new and its folder is empty: there is nothing to inspect yet.";
-  if (fresh)
-    return "This game is brand new: nothing has been built in it yet, so there is nothing to inspect. It starts from the studio's empty template.";
-  return "Continue from the existing code in this workspace.";
-}
-
-/** How a resumed session goes on: after a run it led, that run's note; else a build's or a Loop chat's pickup. */
-function resumePickup(afterLoopRun: string | null, launch: LaunchGrant | null): string {
-  if (afterLoopRun) return afterLoopRun;
-  return launch ? RESUME_LOOP_CHAT : RESUME_BUILD;
-}
-
-/** What the interview tells the model about the run's clock. */
-function budgetLine(mode: string | undefined, hours: number | null | undefined): string {
-  if (mode === InterviewMode.Loop) return `The user committed ${hours ?? "?"} hours of unattended building.`;
-  if (hours) return `The run is capped at ${hours} hours.`;
-  return `The run goes ${UNTIL_DONE_WORDS} (24h safety ceiling).`;
-}
-
-/**
- * The write-less commission interview of harnesses before Loop chats became contractors. The
- * current turn briefs a Loop chat with `buildContractorBrief({ launch })`; this stays exported
- * because a seed upgrade keeps a `delegated-turn.ts` the in-app agent edited, and that copy
- * still imports it (`tests/fixtures/seed-exports-2e-pre.json`).
- *
- * @param {{
- *   ask?: string,
- *   messages?: Array<{ role?: string, content?: string }>,
- *   resume?: boolean,
- *   folderLabel?: string,
- *   project?: string,
- *   mode?: InterviewMode,
- *   toolName?: string,
- *   hours?: number | null,
- *   frameCount?: number,
- * }} [opts]
- */
-export function buildInterviewBrief({
-  ask,
-  messages = [],
-  resume = false,
-  folderLabel = "",
-  project = "",
-  mode = InterviewMode.Autopilot,
-  toolName = "start_autopilot",
-  hours = null,
-  frameCount = 0,
-}: {
-  ask?: string;
-  messages?: readonly BriefMessage[];
-  resume?: boolean;
-  folderLabel?: string;
-  project?: string;
-  mode?: string;
-  toolName?: string;
-  hours?: number | null;
-  frameCount?: number;
-} = {}): string {
-  const modeLabel = mode === InterviewMode.Autopilot ? "Autopilot" : "Loop";
-  const rules = [
-    `You are the studio's intake interviewer for an ${modeLabel} run — NOT the builder. Do not write or edit any game code in this session; the run you commission does the building with its own contractors.`,
-    "Everything you write goes straight to the user in the studio chat — write to them, briefly and warmly.",
-    "Ask AT MOST one short question per reply, and only what genuinely changes how the run is set up (what you actually do in the game, the feeling to hit). Offer a recommended answer they can just accept. Never ask more than two questions across the whole interview.",
-    "Use the ask_user tool for that question so it appears in the answer panel. Supply concise choices, recommended first; the user can type another answer in the composer. Do not repeat the question or choices in prose. After ask_user, end the reply and wait for the next user message. Never call the launch tool in the same reply as ask_user. Progress updates are not questions.",
-    `Reference stills, if any, are in references/ inside this folder — Read them before asking about visuals. ${frameCount > 0 ? `The user attached ${frameCount} still(s) to this commission; they reach the run's critics automatically.` : "If references/ is empty and the ask is visual, ask once for a game/film to use as the bar."}`,
-    budgetLine(mode, hours),
-    `When you know enough (usually after one answered question), recap the plan in one short paragraph and call the ${toolName} tool exactly once. The run launches the moment your reply ends.`,
-    project
-      ? `This chat is bound to the project folder "${project}" — pass exactly that as the tool's "project" argument.`
-      : "",
-    folderLabel ? `Stay inside this workspace (folder \`${folderLabel}\`). Do not list or read sibling folders.` : "",
-  ].filter(Boolean);
-
-  if (resume) {
-    return [
-      `The user replied:\n${ask}`,
-      "",
-      "You are resuming your own interview session — your context is restored. If this answers what you needed, recap and call the tool now; otherwise ask your one remaining question.",
-      ...rules,
-    ].join("\n");
-  }
-  const original = originalAsk(messages);
-  return [
-    `The user's ask:\n${(original && original !== ask ? `${original}\n\nLatest message:\n` : "") + ask}`,
-    "",
-    ...rules,
-  ].join("\n");
+  folderLabel: string;
+  appLanguage: AppLanguage | null;
+}): string {
+  return [appIdentity({ folderLabel }), TALK, ANSWER_WHILE_WORKING, languageRule(appLanguage), RUN_BUTTON].join("\n");
 }

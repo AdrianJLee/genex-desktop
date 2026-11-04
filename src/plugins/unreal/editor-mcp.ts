@@ -31,7 +31,7 @@
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
@@ -78,6 +78,11 @@ const BRIDGE_VERSION = "0.1.0";
 const CONNECT_TIMEOUT_MS = 10 * SECOND_MS;
 /** Calls run on the editor's game thread: a PIE start with warmup or an asset render takes a while. */
 const CALL_TIMEOUT_MS = 5 * MINUTE_MS;
+/** A session the host keeps with a project's editor ends after this long without a call. */
+const KEPT_IDLE_MS = 30 * SECOND_MS;
+/** What Epic's server answers a request in a session it doesn't know. */
+const HTTP_NOT_FOUND = 404;
+const HTTP_BAD_REQUEST = 400;
 /** How often a pending call's editor log is read for a crash: a crashed editor's call answers within about this. */
 const CRASH_POLL_MS = SECOND_MS;
 /** How often a call asks again for an editor Genex is starting. */
@@ -142,6 +147,7 @@ const MESSAGE = {
   Redirected: "Unreal MCP redirected the connection.",
   NotUnreal: "the server there is not Unreal's MCP server",
   OtherProject: "the editor there has another project open",
+  SessionDropped: "the session with the editor ended",
   UnknownTool: (name: string) =>
     `Unknown Unreal Editor tool ${JSON.stringify(name)}. Use ${Object.values(EditorTool).join(", ")}.`,
   NoProject:
@@ -161,7 +167,7 @@ const MESSAGE = {
     `Unreal crashed while this call ran${detail ? ` (${detail})` : ""}, so whether it took effect is unknown. Call unreal__open-editor to reopen it; once it answers, look before you repeat the call.`,
   ImageAttached: (n: number) => `[image ${n} attached]`,
   ImageOmitted: `[image omitted: at most ${MAX_IMAGES} per answer]`,
-  LoopToolset: `${LOOP_TOOLSET} is Genex's own Unreal Loop toolset, which agents can't call. Build with genex_build.tools.GenexBuildTools and play with genex_play.tools.GenexPlayTools.`,
+  LoopToolset: `${LOOP_TOOLSET} is Genex's own Unreal Loop toolset, which agents can't call. Build with genex_build.tools.GenexBuildTools; play with Genex's computer tool (genex_play.tools.GenexPlayTools suits a quick look).`,
 } as const;
 
 /** Epic's meta-tools as Studio lists them, so they are there before the editor is open. */
@@ -169,7 +175,7 @@ const TOOLS = [
   {
     name: EditorTool.ListToolsets,
     description:
-      "List the Unreal Editor's toolsets (actors, assets, Blueprints, materials, play-in-editor, captures…).",
+      "List the Unreal Editor's toolsets (actors, assets, Blueprints, materials, play-in-editor, captures…). To playtest the game (minutes of play, a bug hunt, a fight) use Genex's computer tool instead (load it first when only its name is listed): it plays every frame and runs pilots; these toolsets suit building and a quick look.",
     inputSchema: { type: "object" as const, properties: {} },
   },
   {
@@ -188,7 +194,7 @@ const TOOLS = [
   {
     name: EditorTool.CallTool,
     description:
-      "Call one Unreal Editor tool by toolset_name and tool_name with arguments matching its schema from describe_toolset. Changes land in the user's open editor.",
+      "Call one Unreal Editor tool by toolset_name and tool_name with arguments matching its schema from describe_toolset. Changes land in the user's open editor. Playtesting goes through Genex's computer tool, not single calls here.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -280,8 +286,11 @@ type CallResult = Awaited<ReturnType<Client["callTool"]>>;
  */
 type EditorSession = {
   endpoint: URL;
-  /** Calls a tool; it fails once `timeoutMs` passes without an answer (default {@link CALL_TIMEOUT_MS}). */
-  call: (params: CallParams, timeoutMs?: number) => Promise<CallResult>;
+  /**
+   * Calls a tool; it fails once `timeoutMs` passes without an answer (default {@link CALL_TIMEOUT_MS})
+   * or `signal` aborts (default: the session's own).
+   */
+  call: (params: CallParams, timeoutMs?: number, signal?: AbortSignal) => Promise<CallResult>;
   end: () => Promise<void>;
   abandon: () => Promise<void>;
 };
@@ -376,8 +385,8 @@ async function openSession(endpoint: URL, fetchImpl: typeof fetch, signal: Abort
     await end();
     throw new Error(MESSAGE.NotUnreal);
   }
-  const call = (params: CallParams, timeoutMs = CALL_TIMEOUT_MS) =>
-    client.callTool(params, undefined, { timeout: timeoutMs, signal });
+  const call = (params: CallParams, timeoutMs = CALL_TIMEOUT_MS, callSignal: AbortSignal = signal) =>
+    client.callTool(params, undefined, { timeout: timeoutMs, signal: callSignal });
   return { endpoint, call, end, abandon };
 }
 
@@ -395,7 +404,7 @@ async function openProjectSession(
 ): Promise<EditorSession> {
   const session = await openSession(endpointOf(project), fetchImpl, signal);
   const asked = toolsetCall(HELPER_TOOLSET, PROJECT_FILE_TOOL, {});
-  const named = await session.call(asked).then(returnValue, () => undefined);
+  const named = await session.call(asked, CONNECT_TIMEOUT_MS).then(returnValue, () => undefined);
   if (typeof named === "string" && (await sameProject(named, project.project))) return session;
   await session.end();
   throw new Error(MESSAGE.OtherProject);
@@ -539,9 +548,103 @@ function answerText(result: CallResult): string {
 }
 
 /**
+ * A session the host keeps with a project's editor between its calls, when it goes idle, and what
+ * ends it (its opening too: an editor that never names its project holds no wait past the drop).
+ */
+type Kept = { session: Promise<EditorSession>; idle?: NodeJS.Timeout; closing: AbortController };
+
+/** The host's kept sessions, by the fetch they go through and the project's endpoint and file. */
+const keptSessions = new WeakMap<typeof fetch, Map<string, Kept>>();
+
+/** An editor's answer to a call: the tool refused it, which says nothing against the session. */
+class ToolRefusal extends Error {}
+
+const keptKey = (project: EditorProject) => `${endpointOf(project).href} ${project.project}`;
+
+function keptFor(fetchImpl: typeof fetch): Map<string, Kept> {
+  let kept = keptSessions.get(fetchImpl);
+  if (!kept) {
+    kept = new Map();
+    keptSessions.set(fetchImpl, kept);
+  }
+  return kept;
+}
+
+/** Ends a kept session and forgets it, unless another has taken its place. */
+function dropKept(kept: Map<string, Kept>, key: string, entry: Kept): void {
+  if (kept.get(key) !== entry) return;
+  kept.delete(key);
+  if (entry.idle) clearTimeout(entry.idle);
+  entry.session.then(
+    (session) => session.end(),
+    () => undefined,
+  );
+  entry.closing.abort(new Error(MESSAGE.SessionDropped));
+}
+
+/**
+ * The kept session with a project's editor, opened (and its project checked) when there is none;
+ * it ends after {@link KEPT_IDLE_MS} without a call.
+ */
+function keptSession(
+  project: EditorProject,
+  fetchImpl: typeof fetch,
+): { kept: Map<string, Kept>; key: string; entry: Kept } {
+  const kept = keptFor(fetchImpl);
+  const key = keptKey(project);
+  let entry = kept.get(key);
+  if (!entry) {
+    const closing = new AbortController();
+    const opened: Kept = { session: openProjectSession(project, fetchImpl, closing.signal), closing };
+    opened.session.catch(() => dropKept(kept, key, opened));
+    kept.set(key, opened);
+    entry = opened;
+  }
+  const current = entry;
+  if (current.idle) clearTimeout(current.idle);
+  current.idle = setTimeout(() => dropKept(kept, key, current), KEPT_IDLE_MS);
+  current.idle.unref();
+  return { kept, key, entry: current };
+}
+
+/** Settles as `promise` does, or rejects with `signal`'s reason once it aborts. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return Promise.race([promise, ended(signal).then(() => Promise.reject(signal.reason))]);
+}
+
+/** Whether the editor answered that it doesn't know the session (it restarted): the call never ran. */
+const forgotSession = (error: unknown) =>
+  error instanceof StreamableHTTPError && (error.code === HTTP_NOT_FOUND || error.code === HTTP_BAD_REQUEST);
+
+/** One call on the kept session; a session the editor forgot is opened anew and the call made once. */
+async function callKept(
+  project: EditorProject,
+  call: { toolset: string; tool: string; args: Record<string, unknown>; timeoutMs?: number },
+  fetchImpl: typeof fetch,
+  signal: AbortSignal,
+  again: boolean,
+): Promise<unknown> {
+  const { kept, key, entry } = keptSession(project, fetchImpl);
+  try {
+    const session = await untilAborted(entry.session, signal);
+    const result = await session.call(toolsetCall(call.toolset, call.tool, call.args), call.timeoutMs, signal);
+    if (result.isError) throw new ToolRefusal(answerText(result) || MESSAGE.NotUnreal);
+    return returnValue(result);
+  } catch (error) {
+    if (error instanceof ToolRefusal) throw new Error(error.message);
+    dropKept(kept, key, entry);
+    if (again && forgotSession(error)) return callKept(project, call, fetchImpl, signal, false);
+    throw error;
+  }
+}
+
+/**
  * Calls one tool on a project's own editor, once the Genex editor helper there names that project,
  * and answers its return value. For the editor queue and the Unreal Loop's own steps, which call
- * the editor themselves rather than through an agent's bridge. A call that blocks the editor
+ * the editor themselves rather than through an agent's bridge. The session (and its project's
+ * check) is kept between calls: each request waits for one of the editor's frames, and opening a
+ * session for every call made each of them several requests long. A call that blocks the editor
  * longer than most (a hot reload) names its own `timeoutMs`.
  */
 export async function callProjectTool(
@@ -550,21 +653,14 @@ export async function callProjectTool(
   fetchImpl: typeof fetch = fetch,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<unknown> {
-  // A call with a limit of its own keeps its whole session within it: the connect, the helper's
-  // identity call, the call itself and the session's end.
+  // A call with a limit of its own keeps its whole wait within it: the session's opening, the
+  // helper's identity call and the call itself.
   const limit = new AbortController();
   const ms = call.timeoutMs;
   const timer = ms === undefined ? null : setTimeout(() => limit.abort(new Error(MESSAGE.CallTimedOut(ms))), ms);
   const limited = AbortSignal.any([signal, limit.signal]);
   try {
-    const session = await openProjectSession(project, fetchImpl, limited);
-    try {
-      const result = await session.call(toolsetCall(call.toolset, call.tool, call.args), call.timeoutMs);
-      if (result.isError) throw new Error(answerText(result) || MESSAGE.NotUnreal);
-      return returnValue(result);
-    } finally {
-      await session.end();
-    }
+    return await callKept(project, call, fetchImpl, limited, true);
   } catch (error) {
     throw limit.signal.aborted ? limit.signal.reason : error;
   } finally {

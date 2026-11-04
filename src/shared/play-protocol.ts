@@ -85,6 +85,17 @@ export const PlayActionState = {
 } as const;
 export type PlayActionState = (typeof PlayActionState)[keyof typeof PlayActionState];
 
+/**
+ * The fields of `state` the protocol itself names: a `checksum` that changes only with the
+ * simulation, what a replay does not reproduce (`volatile`), and the echo of the input received.
+ */
+export const PlayStateField = {
+  Checksum: "checksum",
+  Volatile: "volatile",
+  Input: "input",
+} as const;
+export type PlayStateField = (typeof PlayStateField)[keyof typeof PlayStateField];
+
 /** A pointer button by name, as `pointer` takes it. */
 export const PlayButton = {
   Left: "left",

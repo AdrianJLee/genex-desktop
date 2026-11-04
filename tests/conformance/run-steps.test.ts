@@ -10,9 +10,7 @@ import { buildRunGraph, IterationStatus, rectsOverlap } from "../../src/renderer
 import { TRY_WORD } from "../../src/renderer/round-status.ts";
 import {
   askedRest,
-  budgetWords,
   buildReview,
-  capWords,
   checkingBuild,
   foldTries,
   frontier,
@@ -445,19 +443,7 @@ it("no word the Builds tab shows for a try or a step says 'never judged' — the
   );
 });
 
-describe("the time a run was given", () => {
-  it("says how far into it the run is, in minutes and then hours", () => {
-    assert.equal(budgetWords(9.5 * 60_000, 30 * 60_000), "9 of 30 min");
-    assert.equal(budgetWords(20_000, 30 * 60_000), "0 of 30 min");
-    assert.equal(budgetWords(65 * 60_000, 2 * 3_600_000), "1 h 5 min of 2 h");
-  });
-
-  it("is a cap on the chat's build card, never a target the build must reach", () => {
-    assert.equal(capWords(30 * 60_000), "up to 30m");
-    assert.equal(capWords(10 * 3_600_000), "up to 10h");
-    assert.equal(capWords(90 * 60_000), "up to 1h 30m");
-  });
-
+describe("the time a run worked", () => {
   it("says how long a finished build worked in the card's short units", () => {
     const took = (ms: number) => workedShortWords({ ms, since: null });
     assert.equal(took((5 * 60 + 17) * 60_000 + 20_000), "5h 17m");
@@ -467,7 +453,8 @@ describe("the time a run was given", () => {
     assert.equal(workedShortWords(undefined), null, "a build whose start is unknown");
   });
 
-  it("puts it in the status line instead of the bare elapsed time", () => {
+  // Flipped: the line said the time against the build's hours ("38 min of 1 h"); it says the time worked alone.
+  it("puts it in the status line instead of the bare elapsed time, whatever hours its start record kept", () => {
     const events = loopRun({ finished: false });
     (events[0]!.data as { payload: Record<string, unknown> }).payload.budgets = { wallClockMs: 3_600_000 };
     events.push(
@@ -481,7 +468,7 @@ describe("the time a run was given", () => {
       }),
     );
     const { graph, summary, rows } = rowsOf(events);
-    assert.equal(statusLine(graph, summary, rows, START + 39 * 60_000).strong, "Checking · 38 min of 1 h");
+    assert.equal(statusLine(graph, summary, rows, START + 39 * 60_000).strong, "Checking · 38 min");
   });
 });
 
@@ -510,17 +497,18 @@ describe("the clock counts the time a build worked", () => {
     return events;
   }
 
-  it("says how long a paused build has worked, against the time it was given", () => {
+  // Flipped: the line said the time against the time the build was given ("1 h of 8 h"); it says the time worked alone.
+  it("says how long a paused build has worked", () => {
     const { graph, summary, rows } = rowsOf(interrupted());
     const line = statusLine(graph, summary, rows, START + 12 * HOUR * 60_000);
-    assert.equal(line.strong, "Paused · 1 h of 8 h");
+    assert.equal(line.strong, "Paused · 1 h");
   });
 
   it("goes on from the time worked: neither the pause nor the closed app counts", () => {
     const events = resumed();
     const { graph, summary, rows } = rowsOf(events);
     const resumedAt = Date.parse(events.at(-2)?.created_at ?? "");
-    assert.equal(statusLine(graph, summary, rows, resumedAt + 5 * 60_000).strong, "Building · 1 h 5 min of 8 h");
+    assert.equal(statusLine(graph, summary, rows, resumedAt + 5 * 60_000).strong, "Building · 1 h 5 min");
   });
 
   it("names the time on every closed build", () => {
@@ -543,7 +531,7 @@ describe("a finished run reopened", () => {
     events.push(reopen, event("run_started", { goal: "A sword in ice", resumed: true }));
     const { graph, summary, rows } = rowsOf(events);
     const reopenedAt = Date.parse(reopen.created_at);
-    assert.match(statusLine(graph, summary, rows, reopenedAt + 5 * 60_000).strong, / · 5 of 30 min$/);
+    assert.match(statusLine(graph, summary, rows, reopenedAt + 5 * 60_000).strong, / · 5 min$/);
     assert.equal(resultStatus(graph, summary).word, "Ready to play", "its build stands, but nothing is live yet");
   });
 });

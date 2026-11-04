@@ -1,24 +1,22 @@
 /**
- * The user's side of a thread: a message sent (answered directly, delegated, or queued to a running
- * build's coordinator), the coordinator's tools, wrapping up a run, and Stop. Composed by
- * `StudioCore`; its state stays in the core.
+ * The user's side of a thread: a message sent, the run's host controls, wrapping up a run, and Stop.
+ * Composed by `StudioCore`; its state stays in the core.
  */
-import { PlanReviewState, type ComposerSendOptions, type PlanReview, SendRefusal } from "../../shared/composer.ts";
+import { PlanReviewState, type ComposerSendOptions, type PlanReview } from "../../shared/composer.ts";
 import path from "node:path";
 import {
-  CoordinatorTool,
+  BuildLaunch,
+  type ChatRun,
   finishRequested,
-  isCoordinatorTool,
-  isRunControl,
+  isHostRunTool,
   latestRun,
   RunControlAction,
   runSnapshot,
-  type CoordinatorRun,
-} from "../../shared/coordinator.ts";
+} from "../../shared/chat-run.ts";
 import { CustomEvent, customEventData, customRecord, type AnyCustomPayload } from "../../shared/custom-events.ts";
+import { MessageFrom } from "../../shared/engine-requests.ts";
 import { EventKind, ThreadKind, type ConversationRecord, type EventEnvelope } from "../../shared/event-log.ts";
 import { t } from "../../shared/i18n.ts";
-import { crossesCompletionEngine } from "../../shared/model-roles.ts";
 import { ToolPermissionBy } from "../../shared/permissions.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { SteerDelivery } from "../../shared/message-queue.ts";
@@ -40,7 +38,6 @@ import { NEW_CHAT_TITLE, NEW_GAME_TITLE } from "./game-threads.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { settleWithin } from "../app-lifecycle.ts";
 import { threadOr } from "./main-thread.ts";
-import { CapabilityAudience } from "../planning-capabilities.ts";
 import { isQueueMessageId } from "./rewind.ts";
 import { forgetChatComputerYes } from "./desktop-session.ts";
 import {
@@ -70,18 +67,6 @@ const OFFLINE_SOURCES: MentionSources = {
   addFromLibrary: () => Promise.reject(new Error("offline")),
 };
 
-/** Which build `show_build` and `land_build` mean when the coordinator names none: the run's own. */
-const INTEGRATION_BUILD = "integration";
-/** A show while Live holds another game: nothing was shown, and nothing waits for its Reload. */
-const OTHER_GAME_IN_LIVE =
-  "Another game is open in Live, so it was left as it is and nothing was shown. Opening a game does not start it: tell the user to open this game and press Play on its stage, then ask again.";
-
-/** The build `show_build` means by the game folder as it is. */
-const LIVE_BUILD = "live";
-/** A commit hash, full or abbreviated, as a build name. */
-const COMMIT_HASH = /^[0-9a-f]{7,40}$/i;
-/** Characters of a commit hash quoted back to the model. */
-const SHORT_COMMIT = 10;
 /** Stop must reach providers even when the editable harness cannot acknowledge the queue hold. */
 const STOP_DISPATCH_TIMEOUT_MS = 5 * SECOND_MS;
 /**
@@ -97,77 +82,27 @@ const OPEN_PLAN_REVIEW: readonly string[] = [
   PlanReviewState.Failed,
 ];
 
-/**
- * The coordinator's tools that start, go on with or land a build: while the chat is in Plan none
- * runs, whether the run's coordinator or the chat's own run controls call it. Reading, showing and
- * wrapping up still work.
- */
-const BUILD_CHANGES: ReadonlySet<CoordinatorTool> = new Set<CoordinatorTool>([
-  CoordinatorTool.ContinueBuild,
-  CoordinatorTool.ResumeRun,
-  CoordinatorTool.LandBuild,
-]);
-/** May continue_build go on after a run in this state: a finished one, or a paused one for a contained change? */
-function continuesAfter(state: string, contained: boolean): boolean {
-  return state === RunState.Finished || (contained && state === RunState.Paused);
-}
 /** Titles a thread has before its first message names it. */
 const PLACEHOLDER_TITLES: readonly string[] = [NEW_GAME_TITLE, NEW_CHAT_TITLE];
 /** Characters of a first message kept as the thread's title. */
 const THREAD_TITLE_CHARS = 56;
 
 /**
- * User-facing copy of this module, and what the coordinator reads when a tool call is refused.
- * The tag line and the commission refusals (the chat's error, kept in its log) are said to the
- * person in their language; the tag retry line is the agent's, and the rest are tool results.
+ * User-facing copy of this module, and what the chat's session reads when a run control is refused.
+ * The tag line is said to the person in their language; the tag retry line is the agent's, and the
+ * rest are tool results.
  */
 const MESSAGE = {
   tagNoGame: () => t("Tags belong to a game's chat"),
   tagRetried: (handle: string) => `@${handle} did not arrive with my last message; it is attached now.`,
-  autopilotOutdated: () =>
-    t(
-      "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's harness-seed/loop needs to be merged into it, or the seed copies restored so the next launch upgrades them.)",
-    ),
-  localRolesOutdated: () =>
-    t(
-      "This build's workers or reviewers run on a local model, which the studio's own loop code doesn't support yet — your brief is saved above. Pick every job on one kind of engine and send it again, or ask the studio to merge the seed's harness-seed/loop into its own loop code (or restore the seed copies) so the next launch upgrades them.",
-    ),
-  loopOutdated: () =>
-    t(
-      "Loop can't start: the studio's own loop code predates the composer's Loop feature, so it doesn't know how to run a timed build. To fix it, ask the studio in chat to merge the seed's Loop handling (harness-seed/loop) into its own loop code and restart itself — or restore the seed copies so the next launch upgrades them. Your brief is saved above; send it again once the loop code is current.",
-    ),
-  unknownTool: (name: string) => `unknown coordinator tool: ${name}`,
+  unknownTool: (name: string) => `unknown run control: ${name}`,
   inPlan:
-    "The chat is in Plan mode, so this did not run: starting, continuing, resuming or landing a build waits until the plan is approved. Put it in your plan instead.",
+    "The chat is in Plan mode, so this did not run: resuming a build waits until the plan is approved. Put it in your plan instead.",
   runChanged: "The run changed. This message cannot control another run; read the current state.",
   onlyPausedResumes: "Only a paused run from this conversation can be resumed. No new run was started.",
-  continueWhichRun:
-    "Continue the active run with steer_run. A paused run goes on with resume_run; a contained change after it is continue_build with build false.",
-  continueNeedsText: "Continued work needs a message and an instruction.",
-  noProjectFolder: "This run has no project folder to show.",
-  noIntegrationToShow: "This run has no integration branch to show yet.",
-  unknownBuild: (build: string) => `"${build}" is neither live, integration nor a commit hash.`,
-  stillRunning: "The run is still running; finish_run lands its work when the workers are done.",
-  noIntegrationToLand: "This run has no integration branch to land.",
-  notCommitHash: (build: string) => `"${build}" is not a commit hash.`,
-  notSteerable: (state: string) =>
-    `The run is ${state}; no worker was restarted. Resume a paused run before steering it.`,
-  emptyGuidance: "Worker guidance cannot be empty",
-  unknownFacet: (facetId: string) => `Unknown facet: ${facetId}`,
   nothingToFinish: (known: boolean) =>
     `That build is ${known ? "no longer running" : "not in this conversation"}; nothing was asked to finish.`,
-  nothingToStop: (state: string) => `That build is ${state}, not running; nothing was stopped.`,
-  stops: "The build stops when your reply ends: its workers stop, what it built is kept, and it pauses.",
-  stopsThenRestarts:
-    "The build stops when your reply ends, what it built is kept, and it goes on again as soon as it has stopped, with the instruction you gave.",
 } as const;
-
-/** What the chat says for each commission refusal. */
-const REFUSAL_WORDS: Record<SendRefusal, () => string> = {
-  [SendRefusal.AutopilotOutdated]: MESSAGE.autopilotOutdated,
-  [SendRefusal.LoopOutdated]: MESSAGE.loopOutdated,
-  [SendRefusal.LocalRolesOutdated]: MESSAGE.localRolesOutdated,
-};
 
 type ThreadMeta = { kind?: string; project?: string | null } | undefined;
 
@@ -189,17 +124,17 @@ interface MessageTarget {
   studioThread: boolean;
 }
 
-/** What a coordinator tool call works on. */
-interface CoordinatorCall {
+/** What a run control works on. */
+interface RunCall {
   threadId: string;
   runId: string;
   args: Record<string, unknown>;
   messageId: string | undefined;
   events: EventEnvelope[];
-  run: CoordinatorRun;
+  run: ChatRun;
   /**
-   * The chat's own session asking, when a run control is its (`runControl`): its own hold on the
-   * game folder is not a contractor building there, nor one of the run's workers.
+   * The chat's own session asking: its own hold on the game folder is not a contractor building
+   * there, nor one of the run's workers.
    */
   asker?: AbortController;
 }
@@ -220,19 +155,18 @@ function chatSteers(events: readonly EventEnvelope[]): AnyCustomPayload[] {
   return payloadsOf(events, CustomEvent.RunSteering).filter((steer) => steer.how !== SteerDelivery.Lead);
 }
 
-/** A message's pictures as saved in its game: every file they are, and the ones it added. */
+/** A message's pictures as saved in its game: the files it added. */
 interface SavedPictures {
-  files: string[];
   added: string[];
 }
 
 /** No pictures saved: none sent, no game to save them in, or the save failed. */
-const NO_PICTURES: SavedPictures = Object.freeze({ files: [], added: [] }) as SavedPictures;
+const NO_PICTURES: SavedPictures = Object.freeze({ added: [] }) as SavedPictures;
 
 /** Does a game thread's next message go to a plan review first? */
 function needsPlanReview(options: ComposerSendOptions, waiting: PlanReview | undefined): boolean {
   const reviewOpen = Boolean(waiting && OPEN_PLAN_REVIEW.includes(waiting.state));
-  return Boolean(options.reviewPlan || options.autopilot?.reviewPlan || reviewOpen);
+  return Boolean(options.reviewPlan || reviewOpen);
 }
 
 /** Did this send change the provider, model or effort the thread remembers? */
@@ -246,12 +180,6 @@ function choiceChanged(metadata: ContractorMeta, options: ComposerSendOptions): 
 function hasPlaceholderTitle(record: ConversationRecord, meta: ThreadMeta): boolean {
   if (!record.title || PLACEHOLDER_TITLES.includes(record.title)) return true;
   return meta?.project != null && record.title === meta.project;
-}
-
-/** The commit a build name means: the run's integration head, or a commit named by hash. */
-function commitFor(build: string, integrationHead: string | null): string | null {
-  if (build === INTEGRATION_BUILD) return integrationHead;
-  return COMMIT_HASH.test(build) ? build : null;
 }
 
 /**
@@ -313,7 +241,6 @@ export class ConversationService {
 
   async #send(text: string, options: ComposerSendOptions): Promise<void> {
     const sentAt = Date.now();
-    this.#x.selfImprovement.touchActivity();
     if (await this.#requestPlanReview(text, options, sentAt)) return;
     const target = await this.#messageTarget(text, options);
     const tags = await this.#resolveTags(target, options);
@@ -328,30 +255,14 @@ export class ConversationService {
       await this.#core.games.ensureCover(target.project);
       this.#core.emit(UiEvent.GameChanged, { project: target.project });
     }
-    const pictures = await this.#saveMoodBoard(target.project, sendOptions);
+    const pictures = await this.#savePictures(target.project, sendOptions);
     // The agent reads the tags' lines after the person's words; the chat shows the words alone.
     const action = this.#userMessageAction(text + tags.context, target, sendOptions, {
       resume,
       extraReads,
       stills,
       references: pictures.added,
-      pictureFiles: pictures.files,
     });
-    const refusal = this.#commissionRefusal(sendOptions);
-    if (refusal) {
-      const message = REFUSAL_WORDS[refusal]();
-      // The renderer already cleared the composer — the brief must survive in the log, ahead of
-      // the refusal that explains it.
-      await this.#core.append(
-        [
-          { type: EventKind.Messages, messages: [{ role: "user", content: text }] },
-          { type: EventKind.Error, message },
-        ],
-        target.threadId,
-      );
-      this.#core.emit(UiEvent.ChatError, { threadId: target.threadId, message, refusal });
-      return;
-    }
     // The person sent this, on this thread: a session answering it answers them (chat-permissions.ts).
     const messageId = action.type === DispatchActionType.UserMessage ? action.messageId : undefined;
     if (!target.studioThread) this.#x.permissions.notePersonMessage(target.threadId, messageId);
@@ -436,23 +347,19 @@ export class ConversationService {
   }
 
   /**
-   * The mood board becomes durable project data the moment it commissions a run — the next
-   * interview finds it in <project>/references/ even if the chat is long gone. Returns, relative to
-   * the game, every file the pictures are saved as (`files`: a run's lead reads them there, a picture
-   * sent before included) and the files this message added (`added`), which rewinding it takes back.
+   * A message's pictures become durable project data as it is sent — a later turn or run finds them
+   * in <project>/references/ even if the chat is long gone. Returns, relative to the game, the files
+   * this message added (`added`), which rewinding it takes back.
    */
-  async #saveMoodBoard(project: string | undefined, options: ComposerSendOptions): Promise<SavedPictures> {
-    const frames = options.frames ?? options.autopilot?.frames;
+  async #savePictures(project: string | undefined, options: ComposerSendOptions): Promise<SavedPictures> {
+    const { frames } = options;
     if (!frames?.length || !project) return NO_PICTURES;
     const dir = this.#core.games.dirFor(project);
     try {
       const saved = await this.#core.saveReferenceFrames(project, frames);
       const relative = (file: string) => toPosixRelative(path.relative(dir, file));
-      return {
-        files: saved.map((entry) => relative(entry.file)),
-        // Only files this message added: a picture sent before is the game's already.
-        added: saved.filter((entry) => entry.created).map((entry) => relative(entry.file)),
-      };
+      // Only files this message added: a picture sent before is the game's already.
+      return { added: saved.filter((entry) => entry.created).map((entry) => relative(entry.file)) };
     } catch (err) {
       this.#core.options.onLog?.(`[core] mood board save failed: ${errorMessage(err)}`, "stderr");
       return NO_PICTURES;
@@ -581,8 +488,6 @@ export class ConversationService {
       extraReads: string[];
       stills: ReferenceFrame[] | undefined;
       references: string[];
-      /** Every file its pictures are saved as in the game, new or already there: a run's lead reads them. */
-      pictureFiles: string[];
     },
   ): DispatchAction {
     const { project, newProject, studioThread } = target;
@@ -598,13 +503,13 @@ export class ConversationService {
       ...(newProject ? { newProject: true } : {}),
       ...(studioThread ? { studioThread: true } : {}),
       ...(resume ? { resume } : {}),
-      ...(options.loop ? { loop: options.loop } : {}),
-      ...(options.autopilot ? { autopilot: options.autopilot } : {}),
+      ...(options.roles ? { roles: options.roles } : {}),
       ...(projectDir ? { projectDir } : {}),
       ...(extraReads.length ? { extraReads } : {}),
       ...(stills?.length ? { stills } : {}),
-      ...(context.pictureFiles.length ? { pictureFiles: context.pictureFiles } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
+      // Words the chat wrote itself, or a plugin's ask it shows: the agent reads them as Genex's.
+      ...(options.origin || options.from === MessageFrom.Genex ? { from: MessageFrom.Genex } : {}),
     };
   }
 
@@ -634,27 +539,11 @@ export class ConversationService {
   }
 
   /**
-   * An Autopilot or Loop commission to a harness whose loop code predates the feature must be
-   * refused loudly, never silently downgraded to a plain chat message: a Loop commission is a
-   * promise of an unattended run, and the user would wake to nothing. Gated on "ready" only: a
-   * starting/restarting harness has not claimed anything yet.
+   * One of the run's host controls (`run.control`): the run's controls the chat's own session keeps
+   * after a closed Loop run (its status), answered live, and the resume it recorded, for
+   * the session asking (`asker`). Recorded in the chat as a tool call and its result.
    */
-  #commissionRefusal(options: ComposerSendOptions): SendRefusal | null {
-    const host = this.#core.host;
-    if (host.state !== HarnessState.Ready) return null;
-    if (options.autopilot && !host.hasCapability(HarnessCapability.Autopilot)) return SendRefusal.AutopilotOutdated;
-    if (options.loop && !host.hasCapability(HarnessCapability.Loop)) return SendRefusal.LoopOutdated;
-    const localRoles = crossesCompletionEngine(options.engine ?? "", options.autopilot?.roles);
-    if (localRoles && !host.hasCapability(HarnessCapability.LocalRoles)) return SendRefusal.LocalRolesOutdated;
-    return null;
-  }
-
-  /**
-   * Chat entry point. The active thread decides where a message lands: a game thread carries
-   * its project (an unbound draft means "scaffold a fresh one"), and the studio thread never
-   * builds — the flag lets the harness answer instead of guessing a workspace.
-   */
-  async coordinatorTool(
+  async runControl(
     threadId: string,
     runId: string,
     name: string,
@@ -662,13 +551,13 @@ export class ConversationService {
     messageId?: string,
     asker?: AbortController,
   ): Promise<string> {
-    const id = shortId("coord");
+    const id = shortId("ctl");
     await this.#core.append(
       [{ type: EventKind.ToolRequested, tool_call_id: id, request: { name, arguments: { runId, ...args } } }],
       threadId,
     );
     try {
-      const content = await this.applyCoordinatorTool(threadId, runId, name, args, messageId, asker);
+      const content = await this.#applyRunControl(threadId, runId, name, args, messageId, asker);
       await this.#core.append(
         [{ type: EventKind.ToolResult, tool_call_id: id, result: { ok: true, content } }],
         threadId,
@@ -683,22 +572,7 @@ export class ConversationService {
     }
   }
 
-  /**
-   * The run's controls the chat's own session keeps after a run it led (`runControls`: status,
-   * show and land), answered as the coordinator's tools are, for the session asking (`asker`).
-   */
-  async runControl(
-    threadId: string,
-    grant: { runId: string; messageId?: string },
-    name: string,
-    args: Record<string, unknown>,
-    asker: AbortController,
-  ): Promise<string> {
-    if (!isRunControl(name)) throw new Error(MESSAGE.unknownTool(name));
-    return this.coordinatorTool(threadId, grant.runId, name, args, grant.messageId, asker);
-  }
-
-  async applyCoordinatorTool(
+  async #applyRunControl(
     threadId: string,
     runId: string,
     name: string,
@@ -706,64 +580,41 @@ export class ConversationService {
     messageId?: string,
     asker?: AbortController,
   ): Promise<string> {
-    if (!isCoordinatorTool(name)) throw new Error(MESSAGE.unknownTool(name));
-    if (BUILD_CHANGES.has(name) && (await this.#x.planning(threadId))) return MESSAGE.inPlan;
+    if (!isHostRunTool(name)) throw new Error(MESSAGE.unknownTool(name));
+    // Going on with a build waits while the chat is in Plan; reading its status does not.
+    const resumes = name === BuildLaunch.ResumeRun;
+    if (resumes && (await this.#x.planning(threadId))) return MESSAGE.inPlan;
     // The chat as its routing reads it (`events.list`): a build a rewind withdrew is not its run.
     const events = await this.#x.rewind.harnessView(threadId, await this.#core.store.listEvents(threadId));
     const run = latestRun(events);
     if (!run || run.runId !== runId) throw new Error(MESSAGE.runChanged);
-    const call: CoordinatorCall = { threadId, runId, args, messageId, events, run, ...(asker ? { asker } : {}) };
-    switch (name) {
-      case CoordinatorTool.RunStatus:
-        return this.#runStatus(call);
-      case CoordinatorTool.ResumeRun:
-        return this.#resumeRun(call);
-      case CoordinatorTool.ContinueBuild:
-        return this.#continueBuild(call);
-      // Seeing and landing a build are for any run — finished, paused or running. A user who
-      // asks "run the project" after a run must get the game, not "the run is finished".
-      case CoordinatorTool.ShowBuild:
-        return this.#showBuild(call);
-      case CoordinatorTool.LandBuild:
-        return this.#landBuild(call);
-      case CoordinatorTool.FinishRun:
-        this.#assertSteerable(call);
-        return this.#core.requestRunFinish(threadId, runId);
-      case CoordinatorTool.StopRun:
-        return this.#stopRun(call);
-      case CoordinatorTool.SteerRun:
-        this.#assertSteerable(call);
-        return this.#steerRun(call);
-    }
+    const call: RunCall = { threadId, runId, args, messageId, events, run, ...(asker ? { asker } : {}) };
+    return resumes ? this.#resumeRun(call) : this.#runStatus(call);
   }
 
-  async #runStatus({ threadId, runId, events, run, asker }: CoordinatorCall): Promise<string> {
-    const coordinators = path.join(this.#core.layout.scratch, "coordinators") + path.sep;
+  #runStatus({ runId, events, run, asker }: RunCall): string {
     return JSON.stringify({
       ...runSnapshot(events, runId),
-      toolCapabilities: (await this.#x.capabilityFacts(threadId, run.project, CapabilityAudience.Conversation)).text,
       activeWorkers: [...this.#x.activeDelegations.entries()]
-        .filter(([cwd, d]) => d.project === run.project && !cwd.startsWith(coordinators) && d.abort !== asker)
+        .filter(([, d]) => d.project === run.project && d.abort !== asker)
         .map(([cwd, d]) => ({ workspace: path.basename(cwd), engine: d.engine, startedAt: d.startedAt })),
     });
   }
 
-  async #resumeRun({ threadId, runId, args, messageId, events }: CoordinatorCall): Promise<string> {
-    const targetRunId = typeof args.runId === "string" && args.runId ? args.runId : runId;
-    const targetRun = latestRun(events, targetRunId);
-    if (targetRun?.state === RunState.Running && this.#x.activeRunIds.has(targetRunId))
+  async #resumeRun({ threadId, runId, args, messageId, events, run }: RunCall): Promise<string> {
+    if (run.state === RunState.Running && this.#x.activeRunIds.has(runId))
       return "This run is already active; it was not restarted.";
-    if (targetRun?.state !== RunState.Paused) throw new Error(MESSAGE.onlyPausedResumes);
+    if (run.state !== RunState.Paused) throw new Error(MESSAGE.onlyPausedResumes);
     const text = textArg(args.text);
     // Once per message and text: a replayed turn does not record it twice, a restated one is kept.
     const alreadySaved = chatSteers(events).some(
-      (steer) => steer.sourceMessageId === messageId && steer.runId === targetRunId && steer.text === text,
+      (steer) => steer.sourceMessageId === messageId && steer.runId === runId && steer.text === text,
     );
     if (text && !alreadySaved) {
       await this.#core.append(
         [
           customEventData(CustomEvent.RunSteering, {
-            runId: targetRunId,
+            runId,
             text,
             sourceMessageId: messageId,
             at: new Date().toISOString(),
@@ -774,212 +625,21 @@ export class ConversationService {
     }
     // Dispatch is intentionally nonblocking; this resumes the existing journal, not intake.
     void this.#core.host
-      .dispatch({ type: DispatchActionType.AutopilotResume, threadId, runId: targetRunId })
+      .dispatch({ type: DispatchActionType.AutopilotResume, threadId, runId })
       .catch((err) =>
-        this.#core.append(
-          [{ type: EventKind.Error, message: `Could not resume ${targetRunId}: ${String(err)}` }],
-          threadId,
-        ),
+        this.#core.append([{ type: EventKind.Error, message: `Could not resume ${runId}: ${String(err)}` }], threadId),
       );
-    // A lead's build goes on with the working time it had left (the harness's journal.ts `loopRunClock`).
-    return "Resume requested for the same run. Its saved plan and completed work will be retained; a lead's build goes on with the working time it had left, and time spent paused does not count.";
-  }
-
-  async #continueBuild({ threadId, runId, args, messageId, events, run }: CoordinatorCall): Promise<string> {
-    // A contained change goes to one builder turn even when a Loop came with the message.
-    const contained = args.build === false;
-    // A finished run is over for the chat, though the harness holds it through the learning pass
-    // that follows (it stays in `activeRunIds` until `run.settled`): that pass never holds the chat.
-    // After a paused one, a contained change is made in the chat and the build stays paused: other
-    // work is not that build's to resume.
-    if (!continuesAfter(run.state, contained)) throw new Error(MESSAGE.continueWhichRun);
-    const text = textArg(args.text);
-    if (!text || !messageId) throw new Error(MESSAGE.continueNeedsText);
-    // Once per message, unless the request changed (a message steered into this turn restated it):
-    // the builder takes the latest.
-    const previous = payloadsOf(events, CustomEvent.RunFollowupRequested)
-      .filter((followup) => followup.sourceMessageId === messageId)
-      .at(-1);
-    if (previous?.text !== text || (previous?.build === false) !== contained) {
-      const followup = { runId, sourceMessageId: messageId, text, ...(contained ? { build: false } : {}) };
-      await this.#core.append([customEventData(CustomEvent.RunFollowupRequested, followup)], threadId);
-    }
-    // Neutral on purpose: with a Loop on the message the harness goes on as the same build, reopened
-    // with the Loop's time, and tells its coordinator so; without one a builder takes it in the chat.
-    return "The requested work will continue in this game after your reply, using the saved plan and conversation.";
-  }
-
-  /** The build a show or land names, the game it is in, and the commit it means (none for live or an unknown name). */
-  async #namedBuild({
-    threadId,
-    runId,
-    args,
-    run,
-  }: CoordinatorCall): Promise<{ build: string; project: string; commit: string | null }> {
-    const build = textArg(args.build ?? INTEGRATION_BUILD) || INTEGRATION_BUILD;
-    const project = String(run.project ?? "");
-    if (!project) throw new Error(MESSAGE.noProjectFolder);
-    const integrationHead =
-      typeof run.integrationHead === "string" ? run.integrationHead : await this.#journalHead(threadId, runId);
-    return { build, project, commit: commitFor(build, integrationHead) };
-  }
-
-  /** The integration head the run's journal recorded, when its close did not carry one. */
-  async #journalHead(threadId: string, runId: string): Promise<string | null> {
-    const journal = (await this.#core.store.readArtifact(threadId, `autopilot_${runId}`).catch(() => null)) as {
-      director?: { integrationHead?: string };
-    } | null;
-    return journal?.director?.integrationHead ?? null;
+    return "Resume requested for the same run. Its saved plan and completed work will be retained.";
   }
 
   /**
-   * Whether this show or land may load Live itself: it answers a message the person sent on this
-   * thread that is still unanswered, by the host's own note (`awaitsAnswer`), whatever message id
-   * the harness named, and Live is out of their sight. Such a message cannot tell "show me" from
-   * "change the title", so while they watch Live it only offers the change; Reload brings it in.
+   * Wrap up, Builds' Wrap up (`studio:run.finish`). The ask is a durable flag for the run's
+   * current session: a resume registers the run again, and a session ignores asks written before
+   * its `run_registered` (`finishRequested`), so an ask made before a Resume is written again, and
+   * one already made this session is not. A run that is finished or paused is never asked: nothing
+   * is running to wrap up.
    */
-  #loadsLive({ threadId, messageId }: CoordinatorCall, project: string): boolean {
-    const asked = messageId !== undefined && this.#x.permissions.awaitsAnswer(threadId, messageId);
-    return asked && this.#x.previews.liveOutOfSight(project);
-  }
-
-  async #showBuild(call: CoordinatorCall): Promise<string> {
-    const { build, project, commit } = await this.#namedBuild(call);
-    const loads = this.#loadsLive(call, project);
-    // The person's ask from the game open on their stage may take Live from another game out of sight.
-    const elsewhere = !loads && this.#x.previews.liveHoldsAnother(project);
-    if (build === LIVE_BUILD) {
-      if (elsewhere) return OTHER_GAME_IN_LIVE;
-      if (!loads) {
-        await this.#core.offerLive({ project, root: null });
-        return "Live was left as the person has it; if the game folder changed since it loaded, the Reload button on the stage now offers it.";
-      }
-      await this.#x.previews.loadPreview({ project });
-      this.#core.emit(UiEvent.StageShow, { project, view: "live" });
-      return "Live, on the right of the chat, now shows the game folder as it is.";
-    }
-    if (!commit) {
-      if (build === INTEGRATION_BUILD) throw new Error(MESSAGE.noIntegrationToShow);
-      throw new Error(MESSAGE.unknownBuild(build));
-    }
-    if (elsewhere) return OTHER_GAME_IN_LIVE;
-    if (!loads) {
-      const offered = await this.#core.offerBuild(project, commit);
-      return `Live was left as the person has it: the Reload button on the stage now offers this build (${offered.slice(0, SHORT_COMMIT)}) and plays it when they press it. The game folder is unchanged. Tell the user it is ready to play with Reload.`;
-    }
-    const shown = await this.#core.showBuild(project, commit);
-    this.#core.emit(UiEvent.StageShow, { project, view: "live" });
-    const what = build === INTEGRATION_BUILD ? "the run's build" : `commit ${commit.slice(0, SHORT_COMMIT)}`;
-    const notLanded =
-      (call.run as { landed?: boolean }).landed === false
-        ? "; this build is not in it yet, and land_build puts it there"
-        : "";
-    return `Live, on the right of the chat, now shows ${what} (${shown.commit.slice(0, SHORT_COMMIT)}). The game folder is unchanged${notLanded}. Tell the user it is open in Live.`;
-  }
-
-  async #landBuild(call: CoordinatorCall): Promise<string> {
-    const { build, project, commit } = await this.#namedBuild(call);
-    if (this.#x.activeRunIds.has(call.runId) && call.run.state === RunState.Running)
-      throw new Error(MESSAGE.stillRunning);
-    if (!commit) {
-      if (build === INTEGRATION_BUILD) throw new Error(MESSAGE.noIntegrationToLand);
-      throw new Error(MESSAGE.notCommitHash(build));
-    }
-    const loads = this.#loadsLive(call, project);
-    const landed = await this.#core.landBuild(project, commit, {
-      ...(call.asker ? { asker: call.asker } : {}),
-      offerLive: !loads,
-    });
-    const landing = `Landed ${commit.slice(0, SHORT_COMMIT)} in the game folder (${landed.how})`;
-    if (this.#x.previews.liveHoldsAnother(project))
-      return `${landing}; another game is open in Live, so this one shows it when the user opens it and presses Play.`;
-    if (!loads)
-      return `${landing}; Live was left as the person has it, and the Reload button on the stage now offers it.`;
-    this.#core.emit(UiEvent.StageShow, { project, view: "live" });
-    return `${landing}; Live now shows it.`;
-  }
-
-  /** Steering and finishing need the run running here and now; nothing restarts a stopped one. */
-  #assertSteerable({ runId, run }: CoordinatorCall): void {
-    if (this.#x.activeRunIds.has(runId) && run.state === RunState.Running) return;
-    const state = run.state === RunState.Running ? "inactive" : run.state;
-    throw new Error(MESSAGE.notSteerable(state));
-  }
-
-  /**
-   * The coordinator's stop, recorded for its message: the harness does it once the reply has ended
-   * (stopping now would cut that reply short) and, with `restart`, resumes the build once it has
-   * stopped, with the instruction given (`loop/chat-stop.ts`).
-   */
-  async #stopRun({ threadId, runId, args, messageId, run }: CoordinatorCall): Promise<string> {
-    if (run.state !== RunState.Running) throw new Error(MESSAGE.nothingToStop(run.state));
-    const restart = args.restart === true;
-    const text = restart ? textArg(args.text) : "";
-    await this.#core.append(
-      [
-        customEventData(CustomEvent.RunControl, {
-          runId,
-          action: RunControlAction.Stop,
-          ...(messageId ? { sourceMessageId: messageId } : {}),
-          ...(restart ? { restart: true } : {}),
-          ...(text ? { text } : {}),
-          at: new Date().toISOString(),
-        }),
-      ],
-      threadId,
-    );
-    return restart ? MESSAGE.stopsThenRestarts : MESSAGE.stops;
-  }
-
-  async #steerRun({ threadId, runId, args, messageId, events }: CoordinatorCall): Promise<string> {
-    const text = textArg(args.text);
-    if (!text) throw new Error(MESSAGE.emptyGuidance);
-    const facetId = typeof args.facetId === "string" && args.facetId.trim() ? args.facetId.trim() : undefined;
-    if (facetId) await this.#assertFacet(threadId, runId, facetId);
-    const duplicate =
-      messageId &&
-      chatSteers(events).some(
-        (steer) =>
-          steer.runId === runId &&
-          steer.sourceMessageId === messageId &&
-          steer.text === text &&
-          steer.facetId === facetId,
-      );
-    if (duplicate) return "This guidance was already saved for this message; no duplicate was sent.";
-    await this.#core.append(
-      [
-        customEventData(CustomEvent.RunSteering, {
-          runId,
-          text,
-          ...(messageId ? { sourceMessageId: messageId } : {}),
-          ...(facetId ? { facetId } : {}),
-          at: new Date().toISOString(),
-        }),
-      ],
-      threadId,
-    );
-    // An addressed steer no longer waits: the harness hands it to the worker it names and
-    // interrupts that build turn (run-inbox `addressed`, director `routeUserSteers`).
-    if (facetId)
-      return `Guidance saved for ${facetId} and delivered as soon as the run reads its inbox: that worker's current turn is interrupted and the instruction goes in front of everything. Nothing was restarted, and no other worker was touched.`;
-    return "Guidance saved for the existing workers' next iteration boundary. It has not yet been applied; no work was restarted.";
-  }
-
-  async #assertFacet(threadId: string, runId: string, facetId: string): Promise<void> {
-    const journal = (await this.#core.store.readArtifact(threadId, `autopilot_${runId}`)) as {
-      plan?: { facets?: Array<{ id: string }> };
-    } | null;
-    if (!journal?.plan?.facets?.some((f) => f.id === facetId)) throw new Error(MESSAGE.unknownFacet(facetId));
-  }
-
-  /**
-   * Wrap up, from either door — the coordinator's `finish_run` tool and the Stop sheet. The ask
-   * is a durable flag for the run's current session: a resume registers the run again, and a
-   * session ignores asks written before its `run_registered` (`finishRequested`), so an ask made
-   * before a Resume is written again, and one already made this session is not. A run that is
-   * finished or paused is never asked: nothing is running to wrap up. One rule, both doors.
-   */
-  async requestRunFinish(threadId: string, runId: string): Promise<string> {
+  async requestRunFinish(threadId: string, runId: string): Promise<void> {
     const events = await this.#core.store.listEvents(threadId);
     const run = latestRun(events, runId);
     if (run?.state !== RunState.Running) throw new Error(MESSAGE.nothingToFinish(Boolean(run)));
@@ -995,7 +655,6 @@ export class ConversationService {
         threadId,
       );
     }
-    return "Finishing requested: current worker attempts can complete, then accepted work is integrated, checked, and shown live. The run, plan, clock and worktrees are unchanged.";
   }
 
   /**
@@ -1005,7 +664,6 @@ export class ConversationService {
    * way but keeps the queue held (`resumeQueue: false`): what waits there leaves with the rewind.
    */
   async stopThread(threadId: string, options: { resumeQueue?: boolean } = {}): Promise<void> {
-    this.#x.selfImprovement.touchActivity();
     // A plan being written is a send still on its way: cancel it first, or waiting for sends below
     // would wait for the whole plan. A Stop pressed while its message was still sending is for that
     // message: let it reach the chat's queue first, or the harness would answer it after the Stop

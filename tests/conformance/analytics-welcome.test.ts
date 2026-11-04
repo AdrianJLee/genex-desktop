@@ -364,6 +364,37 @@ describe("usage analytics: presses and the sign-ins they start", () => {
     assert.equal(ended.finished?.phase_at_end, "waiting");
   });
 
+  // Codex sign-ins that ran out their 10 minutes said only "timed out, waiting": not whether the
+  // CLI ever printed a link, nor whether its window was ever shown.
+  it("says what a Codex sign-in that timed out got to: a link, its window, the CLI's lines", () => {
+    const memory = createProviderMemory();
+    const pairing = createStreamPairing();
+    providerPressed(
+      memory,
+      { engine: EngineId.Codex, action: ProviderAction.Connect, surface: ProviderSurface.Onboarding },
+      T0,
+    );
+    const see = (state: CodexLoginState, at: number) =>
+      loginSeen(memory, pairing, { engine: EngineId.Codex, state }, at);
+    const quiet = { ...codex(1, "starting"), visible: false, lines: ["Starting Codex sign-in…"] };
+    see(quiet, T0 + 5);
+    see({ ...quiet, revision: 2, phase: "waiting" }, T0 + 10);
+    see({ ...quiet, revision: 3, phase: "waiting", hasBrowserUrl: true, lines: [...quiet.lines, "a", "b"] }, T0 + 20);
+    const ended = see({ ...quiet, revision: 4, phase: "failed", visible: true, problem: "timed_out" }, T0 + 600_000);
+    assert.deepEqual(
+      [ended.finished?.link_seen, ended.finished?.card_shown, ended.finished?.output_lines],
+      [true, true, 2],
+      "a link was printed within the same step, and the failure opened the window",
+    );
+
+    see({ ...quiet, revision: 5 }, T0 + 700_000);
+    const silent = see({ ...quiet, revision: 6, phase: "cancelled" }, T0 + 710_000);
+    assert.deepEqual(
+      [silent.finished?.link_seen, silent.finished?.card_shown, silent.finished?.output_lines],
+      [false, false, 0],
+    );
+  });
+
   it("does not follow a sign-in that never started", () => {
     const memory = createProviderMemory();
     const refused = signInStarted(memory, { engine: EngineId.ClaudeCode, started: false, missingCli: true }, T0);

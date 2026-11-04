@@ -8,7 +8,6 @@ import { mkdir, mkdtemp, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { leadToolsNote, mainAgentReachNote } from "../../src/main/core/delegation-prompts.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import { ThreadKind } from "../../src/shared/event-log.ts";
 import { engineMode, PermissionMode, type ToolPermissionEvent } from "../../src/shared/permissions.ts";
@@ -79,7 +78,7 @@ async function inPlaceWorld() {
   const announced: string[] = [];
   const lite = await coreLite({
     gamesRoot: path.join(root, "games"),
-    executionPolicy: { allowedProjectRoot: root, runBackgroundImprovement: false },
+    executionPolicy: { allowedProjectRoot: root },
     consentTimeoutMs: CONSENT_WAIT_MS,
     onUiEvent: (event) => {
       announced.push(event.type);
@@ -101,7 +100,9 @@ async function inPlaceWorld() {
       id,
       label: "fixture",
       kind,
-      supportsSessions: true,
+      // Flipped (Loop phase 3): every engine that keeps a session carries a worker's seat now, so
+      // the engine Genex does not seat is one that keeps none of its own.
+      supportsSessions: kind === "delegated",
       permissionPrompts,
       status: async () => ({ code: "ready", detail: "fixture" }),
       models: async () => [],
@@ -290,65 +291,72 @@ describe("a Loop's lead in place has its run's tools on the game folder", () => 
       assert.ok(request.leadAsks, "the chat's lead, in place");
       assert.deepEqual(heard, ["delivered", "found"], "its editor call needed no card: the run covers it");
       assert.deepEqual(bindings, [{ tool: PLUGIN_TOOL.name, directory: valley.dir }], "its plugin acts on the game");
-      assert.equal(request.prompt.includes(leadToolsNote()), false, "no note about a build it leads elsewhere");
       assert.equal(request.onCheckpoint, undefined, "Genex's save points are its, never the chat's checkpoint");
     },
   );
 });
 
 describe("a Loop's lead's window and seat", () => {
-  it("only a web Loop's lead is lent the preview window", TEST_TIMEOUT, async () => {
-    const { core, godot, threadId, delegate } = await inPlaceWorld();
-    const pond = await core.games.scaffold("pond");
-    const pondChat = await core.threadForGame(pond.name);
-    // A web Loop's lead: read-only in the game folder, leading its run's integration worktree.
-    const worktree = path.join(core.layout.scratch, "autopilot", "run_web", "integration");
-    await mkdir(path.dirname(worktree), { recursive: true });
-    core.snapshots.register({ name: pond.name, dir: pond.dir });
-    await core.snapshots.worktreeAt(pond.name, "HEAD", worktree);
-    await recordRun(core, pond.name, "run_web", pondChat);
-    const webBrief = {
-      chatTurn: { messageId: "run_web" },
-      readOnly: true,
-      director: {
-        runId: "run_web",
-        threadId: pondChat,
-        project: pond.name,
-        root: worktree,
-        setup: null,
-        tools: [],
-        chatSession: true,
-      },
-    };
-    const web = await delegate("web-lead", webBrief, { thread: pondChat, game: pond.name });
-    const names = (request: DelegateRequest) => (request.liveTools ?? []).map((tool) => tool.name);
-    assert.ok(names(web).includes("look"), `the web lead looks through its window: ${names(web).join(", ")}`);
-    await recordRun(core, godot.name, RUN_ID, threadId);
-    const open = await delegate("open-lead", inPlaceBrief(threadId, godot.name, godot.dir));
-    assert.ok(open.leadAsks, "the open lead is seated in place");
-    for (const name of ["look", "computer"])
-      assert.equal(names(open).includes(name), false, `the open lead has no ${name}: ${names(open).join(", ")}`);
-    // The window follows the run's own profile, never the folder's facts read at the turn.
-    const kindOf = core.games.kindOf.bind(core.games);
-    core.games.kindOf = (async () => {
-      throw new Error("the folder can't be read just now");
-    }) as never;
-    const unread = await delegate(
-      "web-lead-unread",
-      { ...webBrief, chatTurn: { messageId: "run_web" } },
-      {
+  // Flipped (one Loop): a web Loop's lead, read-only in the game folder and leading its run's
+  // integration worktree, was lent the preview window (`look`, the computer). Every lead works in its
+  // game folder now, a web game's too; a seat on a worktree is never granted. Flipped again: "the web
+  // lead has no computer". The lead is the chat's own session, and on a web game its turn carries the
+  // chat's capture grant (director.ts `delegateTurn`), so it has the window its chat's turns have.
+  it(
+    "a web game's lead has its chat's window and no look, a Godot game's neither, and a worktree seat is dropped",
+    TEST_TIMEOUT,
+    async () => {
+      const { core, godot, threadId, delegate } = await inPlaceWorld();
+      const pond = await core.games.scaffold("pond");
+      const pondChat = await core.threadForGame(pond.name);
+      const names = (request: DelegateRequest) => (request.liveTools ?? []).map((tool) => tool.name);
+      await recordRun(core, pond.name, "run_web", pondChat);
+      const eyes = { selfCapture: { project: pond.name, root: pond.dir, label: pond.name } };
+      const web = await delegate("web-lead", inPlaceBrief(pondChat, pond.name, pond.dir, "run_web", eyes), {
         thread: pondChat,
         game: pond.name,
-      },
-    );
-    assert.ok(names(unread).includes("look"), "a web lead whose folder can't be read keeps its window");
-    core.games.kindOf = (async () => ({ facts: [{ id: "web-game", path: "." }] })) as never;
-    const nowWeb = await delegate("open-lead-web", inPlaceBrief(threadId, godot.name, godot.dir));
-    assert.ok(nowWeb.leadAsks, "still seated in place");
-    assert.equal(names(nowWeb).includes("look"), false, "an open Loop's folder that reads as web lends no window");
-    core.games.kindOf = kindOf;
-  });
-
+      });
+      assert.ok(web.leadAsks, "a web game's lead is seated in place");
+      await recordRun(core, godot.name, RUN_ID, threadId);
+      const open = await delegate("open-lead", inPlaceBrief(threadId, godot.name, godot.dir));
+      assert.ok(open.leadAsks, "a Godot game's lead is seated in place");
+      assert.ok(names(web).includes("computer"), `the web lead has its chat's computer: ${names(web).join(", ")}`);
+      assert.equal(typeof web.onCapture, "function", "and its capture");
+      for (const [label, request, absent] of [
+        ["web", web, ["look"]],
+        ["godot", open, ["look", "computer"]],
+      ] as const)
+        for (const name of absent)
+          assert.equal(
+            names(request).includes(name),
+            false,
+            `the ${label} lead has no ${name}: ${names(request).join(", ")}`,
+          );
+      // A web Loop's lead as an earlier Genex briefed it: read-only, leading its run's integration worktree.
+      const worktree = path.join(core.layout.scratch, "autopilot", "run_web", "integration");
+      await mkdir(path.dirname(worktree), { recursive: true });
+      core.snapshots.register({ name: pond.name, dir: pond.dir });
+      await core.snapshots.worktreeAt(pond.name, "HEAD", worktree);
+      const older = await delegate(
+        "worktree-lead",
+        {
+          chatTurn: { messageId: "run_web" },
+          readOnly: true,
+          director: {
+            runId: "run_web",
+            threadId: pondChat,
+            project: pond.name,
+            root: worktree,
+            tools: [],
+            chatSession: true,
+          },
+        },
+        { thread: pondChat, game: pond.name },
+      );
+      assert.equal(older.director, undefined, "a lead that would build in a copy is no lead");
+      assert.equal(names(older).includes("look"), false, "and no window is lent it");
+    },
+  );
   it("drops an in-place seat it cannot place, leaving the session unattended", TEST_TIMEOUT, async () => {
     const world = await inPlaceWorld();
     const { core, godot, threadId, delegate, bookmark } = world;
@@ -486,7 +494,6 @@ describe("a Loop's lead in place on an engine that cannot ask about every call",
           (request.denyReads ?? []).map((dir) => path.resolve(dir)).includes(path.resolve(other.dir)),
           `${label} is denied the other game`,
         );
-        assert.equal(request.prompt.includes(mainAgentReachNote()), false, `${label} is not told it reaches the Mac`);
       }
     },
   );
@@ -728,6 +735,51 @@ describe("Genex's pause of an open Loop reaches only its lead", () => {
       await delegate("lead-1", inPlaceBrief(threadId, godot.name, godot.dir));
       assert.deepEqual(answers.at(-1), { aborted: 1 }, "the run's lead in place is");
       assert.equal(signals.at(-1)?.aborted, true);
+    },
+  );
+});
+
+describe("a Loop's lead in place while its chat plans", () => {
+  // Moved from delegation-unreal-live.test.ts, which pinned the deleted Unreal runner's lead. Flipped:
+  // a director's `integrate` and a `finish` that lands were held for the plan too; the one Loop has
+  // no `integrate`, and its `finish` closes in place, landing nothing.
+  it(
+    "holds a writer's start and a merge for the plan's approval; a reader, a rejection and finish go on",
+    TEST_TIMEOUT,
+    async () => {
+      const { core, godot, threadId, state, delegate } = await inPlaceWorld();
+      const dispatched: string[] = [];
+      Object.defineProperty(core.host, "hasCapability", { configurable: true, value: () => true });
+      core.host.dispatch = async (action) => {
+        const name = String((action as { name?: unknown }).name);
+        dispatched.push(name);
+        return `answered ${name}`;
+      };
+      await recordRun(core, godot.name, RUN_ID, threadId);
+      await core.setPermissionMode(threadId, PermissionMode.Plan);
+      const calls: Array<[string, Record<string, unknown>]> = [
+        ["worker_start", { title: "Sky", task: "x", isolation: "copy" }],
+        ["worker_mark", { id: "w1", verdict: "used" }],
+        ["worker_start", { title: "Look around", task: "x", isolation: "read" }],
+        ["worker_mark", { id: "w1", verdict: "rejected" }],
+        ["finish", { summary: "done" }],
+      ];
+      const answers: string[] = [];
+      state.during = async (request) => {
+        for (const [name, args] of calls) answers.push(text(await request.onLiveTool!(name, args)));
+      };
+      const tools = calls.map(([name]) => ({
+        name,
+        description: name,
+        parameters: { type: "object", properties: {} },
+      }));
+      const brief = inPlaceBrief(threadId, godot.name, godot.dir);
+      const request = await delegate("lead-plan", { ...brief, director: { ...brief.director, tools } });
+      assert.ok(request.director, "the lead is seated in place");
+      assert.match(answers[0] ?? "", /writers start once the person approves your plan/);
+      assert.match(answers[1] ?? "", /a worker's work is merged once the person approves/);
+      assert.deepEqual(answers.slice(2), ["answered worker_start", "answered worker_mark", "answered finish"]);
+      assert.deepEqual(dispatched, ["worker_start", "worker_mark", "finish"], "no snapshot, copy or merge");
     },
   );
 });

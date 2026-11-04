@@ -12,8 +12,6 @@ import {
   autoChoice,
   withoutFreeWord,
 } from "../../src/renderer/model-choices.ts";
-import { sendKey } from "../../src/renderer/chat/send-route.ts";
-import type { ComposerModel } from "../../src/renderer/chat/use-composer-model.ts";
 import type { EngineDescriptor } from "../../src/renderer/types.ts";
 import { MODEL_PICKER_WORDS } from "../../src/renderer/words.ts";
 const model = (id: string, label = id, efforts = ["low", "medium", "high"], defaultEffort = "medium") => ({
@@ -315,7 +313,7 @@ test("an unset pick shows the provider's default and runs it; roles name it too"
   assert.equal(view.effort, "high");
   assert.equal(view.roles?.planner, "opus");
   assert.equal(view.roles?.builder, "opus");
-  const sent = composerSendOptions({ ...view, preferences: {} }, view.selected, { autopilot: false });
+  const sent = composerSendOptions({ ...view, preferences: {} }, view.selected);
   assert.equal(sent.model, "opus");
 });
 
@@ -586,12 +584,8 @@ test("OpenCode with no provider signed in lists its first three free models, mar
 });
 
 test("with nothing picked, a free model is chosen only when it is all there is to choose", () => {
-  const timed = { autopilot: { hours: 1 } } as unknown as Parameters<typeof sendKey>[1];
-  const composer = (all: ReturnType<typeof toChoices>) =>
-    ({ selected: null, choices: all }) as unknown as ComposerModel;
   const alone = toChoices([openCodeFreeOnly]);
   assert.equal(resolveChoice(alone, null)?.key, "opencode::opencode/big-pickle");
-  assert.equal(sendKey(composer(alone), timed), "opencode::opencode/big-pickle", "a timed build can start on it");
   assert.equal(
     resolveChoice(toChoices([openCodeFreeOnly, claude]), null)?.key,
     "claude-code::claude-opus-5-5",
@@ -615,15 +609,6 @@ test("with nothing picked, the picker never chooses a paid or hidden model on th
   const twoModels = { ...claude, models: [model("claude-opus-4-8", "Opus 4.8"), ...claude.models] };
   const choices = toChoices([twoModels], { "claude-code": { "claude-opus-4-8": false } });
   assert.equal(autoChoice(choices)?.key, "claude-code::claude-opus-5-5", "a model switched off is never the fallback");
-  const composer = (all: ReturnType<typeof toChoices>) =>
-    ({ selected: null, choices: all }) as unknown as ComposerModel;
-  const timed = { autopilot: { hours: 1 } } as unknown as Parameters<typeof sendKey>[1];
-  assert.equal(
-    sendKey(composer(toChoices([openRouter(ready)])), timed),
-    null,
-    "a timed build never starts on a paid model",
-  );
-  assert.equal(sendKey(composer(toChoices([openRouter(ready), claude])), timed), "claude-code::claude-opus-5-5");
 });
 
 test("a free model's own trailing Free gives way to its tag", () => {

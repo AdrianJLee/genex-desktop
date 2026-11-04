@@ -1,6 +1,6 @@
 /**
  * The records a worker leaves on its chat's log, whichever lead started it (a chat turn's pool, a
- * run's pool, the director's builders, the Unreal lead's typed workers): `worker_started` when it
+ * run's pool, the director's builders): `worker_started` when it
  * starts, `worker_finished` when it ends, and a second `worker_finished` with the lead's verdict.
  * A run's worker is stamped with its run; a chat turn's names its turn and the person's request.
  * Every record is a courtesy to the log: a write that fails is logged, never the lead's.

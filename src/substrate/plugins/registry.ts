@@ -79,12 +79,11 @@ import {
   validateManifest,
 } from "./manifest.ts";
 import { fileSkillIndexLine } from "./skill-prompts.ts";
-import { readJudgeBrief } from "./judge-manifest.ts";
 import { pluginWorkspaces } from "./workspace-manifest.ts";
 import { pluginFolderPaths, pluginWorkerTypes, workerTypeOffered } from "./worker-manifest.ts";
 import type { WorkerType } from "../../shared/workers.ts";
 import type { PluginWorkspace } from "../../shared/project-workspace.ts";
-import { canonicalSourceRepo } from "./marketplace.ts";
+import { canonicalSourceRepo, isNewerVersion } from "./marketplace.ts";
 import { containedReal } from "../paths.ts";
 import { SessionCredentials } from "../session-credentials.ts";
 import { PluginCallCutOff, type PluginHostEnv, type PluginInvocation, PluginProcess } from "./process.ts";
@@ -261,6 +260,7 @@ const MESSAGE = {
   AccountPlugin: (name: string) =>
     t("{name} holds your account, so it can't be removed: turn it off instead", { name }),
   OnlyLocalWatch: () => t("Only plugins loaded from a local folder can be watched"),
+  UnderHood: "This plugin works under another plugin's switch; it is never switched or removed by itself",
   UnlockRequired: "Explicit account unlock required",
   ConnectionRequired: "Explicit account connection required",
   DisconnectRequired: "Explicit disconnect required",
@@ -269,7 +269,6 @@ const MESSAGE = {
   SandboxUnavailable: "Sandbox jobs unavailable",
   UnknownTool: "Unknown plugin tool",
   UnknownSkill: (id: string, name: string) => `Plugin ${id} has no skill named ${JSON.stringify(name)}`,
-  UnknownJudge: (id: string, judge: string) => `Plugin ${id} has no judge named ${JSON.stringify(judge)}`,
   UndeclaredSkillFile: "Read a skill's own file or one of the references it lists, exactly as listed",
   InvalidSkillOffset: "offset must be a whole number within the file: the nextOffset of the previous read",
   HostToolBundledOnly: "A host tool runs only for a bundled plugin that ships with Studio",
@@ -335,6 +334,7 @@ const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineAssist,
   PluginService.GameEngineCanAssist,
   PluginService.GameEngineAssisting,
+  PluginService.GameComputerControl,
 ]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([
@@ -436,10 +436,10 @@ interface PluginPart {
 /**
  * Every tool one plugin gives a session: its declared tools that reach the game, but those only the
  * harness calls (it reaches them by name through `tool`), then its skill tool while a file skill
- * reaches.
+ * reaches, naming only the skills that do.
  */
 function agentTools({ manifest, reach }: PluginPart): PluginTool[] {
-  const skillTool = reach.skillTool ? pluginSkillTool(manifest) : undefined;
+  const skillTool = pluginSkillTool({ ...manifest, skills: reach.skills });
   return [...reach.tools.map((t) => agentTool(manifest.id, t)), ...(skillTool ? [skillTool] : [])];
 }
 /**
@@ -466,16 +466,9 @@ function skillGuidance({ manifest, reach }: PluginPart, game: GameKind): string[
     return isFileSkill(s) ? fileSkillIndexLine(manifest.id, s, where) : `[${manifest.id}/${s.name}]${where}\n${s.text}`;
   });
 }
-/** One reaching kind tool as the snapshot offers it (with whether it answers its readiness). */
+/** One reaching kind tool as the snapshot offers it. */
 function kindOffer(manifest: PluginManifest, t: PluginManifestTool): PluginKindOffer {
-  const tool = `${manifest.id}__${t.name}`;
-  return {
-    plugin: manifest.id,
-    name: manifest.name,
-    tool,
-    makes: [...(t.makes ?? [])],
-    ...(t.ready ? { asksReady: true } : {}),
-  };
+  return { plugin: manifest.id, name: manifest.name, tool: `${manifest.id}__${t.name}`, makes: [...(t.makes ?? [])] };
 }
 /**
  * The kinds one plugin's reaching tools make, as the snapshot lists them: one offer per scaffold
@@ -609,15 +602,11 @@ interface Unlisted {
  * server gets the bare token from `credential()` instead.
  */
 const CREDENTIAL_FILE_VARIABLE = "GENEX_TOKEN";
-const newerVersion = (next: string | undefined, current: string) =>
-  !!next &&
-  next
-    .split(".")
-    .some(
-      (part, i, parts) =>
-        Number(part) > Number(current.split(".")[i]) &&
-        parts.slice(0, i).every((n, j) => Number(n) === Number(current.split(".")[j])),
-    );
+/** Whether this build's seed replaces an installed copy: an older version of a bundled plugin the person did not remove. */
+const seedSupersedes = (seed: PluginManifest, installed: Installed): boolean =>
+  installed.source === PluginSourceKind.Bundled &&
+  !installed.removed &&
+  isNewerVersion(seed.version, installed.manifest.version);
 /**
  * What the host needs to launch one plugin's MCP servers. Everything here is a function: the
  * storage root, the settings and above all the credential are read at launch, so a disabled
@@ -696,10 +685,10 @@ function withoutSeedDependencies(seed: string): (source: string) => boolean {
 export const PluginInitStep = {
   /** The saved install records read and checked. */
   Records: "records",
-  /** One bundled seed copied into the profile (a first launch, or a lost copy); named with its plugin. */
-  Seed: "seed",
   /** Updates that waited for a lease applied. */
   Pending: "pending",
+  /** One bundled seed copied into the profile (a first launch, a lost copy, or an older one); named with its plugin. */
+  Seed: "seed",
   /** The records written back. */
   Saved: "saved",
   /** Copies no record names removed. */
@@ -872,6 +861,13 @@ export class PluginRegistry {
     | undefined;
   seedEnabled: Record<string, boolean> = {};
   /**
+   * Bundled plugins that work under the hood, each by the plugin whose switch it follows: one is on
+   * exactly while that plugin is, whatever an older profile recorded, is never switched or removed
+   * by itself, and stays out of what a person or an agent picks plugins from (`shown`). The host
+   * sets it before `init`.
+   */
+  underHood: ReadonlyMap<string, string> = new Map();
+  /**
    * The plugin whose account is the app's own (Genex) and the actions it answers while off: its
    * sign-in and Publish belong to the person, not to the agent. Turned off, it loses its tools,
    * servers, skills, hooks and toolbar but keeps its account signed in and serves these actions;
@@ -1022,41 +1018,79 @@ export class PluginRegistry {
       this.#refuse(id, p, e);
     }
   }
-  /** Record every bundled seed's manifest, and install a copy of any seed this profile does not have yet. */
+  /**
+   * Record every bundled seed's manifest, and install a copy of the seed where the profile has no
+   * copy, lost its copy, or holds an older version the person did not remove: a bundled plugin runs
+   * as the build that ships it; a removed one stays removed, except a plugin under the hood, which
+   * is installed again and is always on.
+   */
   async #installSeeds() {
     const bundled: PluginSource = { kind: PluginSourceKind.Bundled };
     for (const name of await readdir(this.seeds).catch(() => [])) {
       const directory = path.join(this.seeds, name);
       const manifest = validateManifest(JSON.parse(await readFile(path.join(directory, "plugin.json"), "utf8")));
-      this.#seedManifests.set(manifest.id, manifest);
-      this.#seedDirectories.set(manifest.id, directory);
-      if (this.#installed.has(manifest.id)) continue;
+      const id = manifest.id;
+      this.#seedManifests.set(id, manifest);
+      this.#seedDirectories.set(id, directory);
+      const installed = this.#installed.get(id);
+      const previous = installed ?? this.#lostSeedCopies.get(id);
+      this.#lostSeedCopies.delete(id);
+      if (installed && !this.#seedReplaces(manifest, installed)) continue;
       await inspectPackage(directory);
-      const installed = path.join(this.#packages(), manifest.id, `${manifest.version}-${randomUUID()}`);
-      await mkdir(path.dirname(installed), { recursive: true });
+      const copy = path.join(this.#packages(), id, `${manifest.version}-${randomUUID()}`);
+      await mkdir(path.dirname(copy), { recursive: true });
       // A clone where the disk can (APFS): every profile installs every seed, and a copy is written only once edited.
-      await cp(directory, installed, {
+      await cp(directory, copy, {
         recursive: true,
         filter: withoutSeedDependencies(directory),
         mode: constants.COPYFILE_FICLONE,
       });
-      this.onInitStep?.(PluginInitStep.Seed, manifest.id);
-      const lost = this.#lostSeedCopies.get(manifest.id);
-      this.#lostSeedCopies.delete(manifest.id);
-      this.#installed.set(manifest.id, {
-        rememberAccount: lost?.rememberAccount,
-        directory: installed,
+      this.onInitStep?.(PluginInitStep.Seed, id);
+      // A copy that failed to load was switched off by its refusal (`#refuse`), not by the person.
+      const switched = this.#errors.has(id) ? undefined : previous;
+      this.#errors.delete(id);
+      const p: Installed = {
+        rememberAccount: previous?.rememberAccount,
+        directory: copy,
         manifest,
         source: PluginSourceKind.Bundled,
-        enabled: lost ? lost.enabled : this.seedEnabled[manifest.id] !== false,
+        enabled: this.#seedStartsOn(id, previous, switched),
         removed: false,
         origin: { kind: PluginSourceKind.Bundled },
         identity: pluginIdentity(manifest, bundled),
-      });
+      };
+      if (previous?.turnedOff && !this.underHood.has(id)) p.turnedOff = true;
+      // A seed laid over an older copy is an update: the Plugins page says which skills it changed.
+      p.lastSkillChange = previous ? pluginSkillChange(previous, p) : undefined;
+      this.#installed.set(id, p);
     }
     // A lost copy of a plugin Studio no longer ships has nothing to be copied from.
     for (const [id, p] of this.#lostSeedCopies) this.#refuse(id, p, new Error(MESSAGE.PackageMissing()));
     this.#lostSeedCopies.clear();
+    this.#wakeUnderHood();
+  }
+  /** Whether this build's seed is laid over `installed`: an update, or a plugin under the hood that was removed. */
+  #seedReplaces(manifest: PluginManifest, installed: Installed): boolean {
+    if (seedSupersedes(manifest, installed)) return true;
+    return installed.removed && this.underHood.has(manifest.id);
+  }
+  /**
+   * Whether a seed's fresh copy starts on: a plugin under the hood always; another as the person
+   * left it (`switched`), else on unless they turned it off or the host ships it off.
+   */
+  #seedStartsOn(id: string, previous: Installed | undefined, switched: Installed | undefined): boolean {
+    if (this.underHood.has(id)) return true;
+    if (switched) return switched.enabled;
+    return !previous?.turnedOff && this.seedEnabled[id] !== false;
+  }
+  /** Every installed plugin under the hood on, whatever an older profile recorded for it. */
+  #wakeUnderHood() {
+    for (const id of this.underHood.keys()) {
+      const p = this.#installed.get(id);
+      if (!p || p.removed) continue;
+      p.enabled = true;
+      delete p.turnedOff;
+    }
   }
   /**
    * Updates that waited for a lease when Studio closed take effect now, unless the plugin was
@@ -1081,10 +1115,11 @@ export class PluginRegistry {
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     for (const [id, p] of Object.entries(await this.#readRecords("installed.json"))) await this.#loadInstalled(id, p);
     step(PluginInitStep.Records);
-    await this.#installSeeds();
+    // The last run's waiting updates first, so this build's seed is laid over whatever they leave.
     await this.#applyPending();
     await atomicWriteJson(path.join(this.root, "pending.json"), {});
     step(PluginInitStep.Pending);
+    await this.#installSeeds();
     await this.#save();
     step(PluginInitStep.Saved);
     await this.#sweep();
@@ -1208,24 +1243,17 @@ export class PluginRegistry {
     if (this.#processes.has(id)) return PluginHealth.Ready;
     return isLive(p) ? PluginHealth.Idle : PluginHealth.Stopped;
   }
-  /** A newer bundled seed a bundled plugin could update to. */
-  #availableVersion(id: string, p: Installed): string | undefined {
-    if (p.source !== PluginSourceKind.Bundled || p.removed) return undefined;
-    const seed = this.#seedManifests.get(id)?.version;
-    return newerVersion(seed, p.manifest.version) ? seed : undefined;
-  }
   list(): PluginInfo[] {
     const installed = [...this.#installed].map(
       ([id, p]): PluginInfo => ({
         manifest: p.manifest,
         source: p.source,
-        enabled: p.enabled,
+        enabled: p.enabled && this.#leaderOn(id),
         removed: p.removed,
         health: this.#health(id, p),
         error: this.#errors.get(id),
         pendingVersion: this.#pending.get(id)?.manifest.version,
-        availableVersion: this.#availableVersion(id, p),
-        state: isLive(p) ? "enabled" : "disabled",
+        state: this.#isOn(id, p) ? "enabled" : "disabled",
         origin: p.origin,
         scan: p.scan,
         watching: this.#watchers.has(id),
@@ -1250,14 +1278,18 @@ export class PluginRegistry {
     );
     return [...installed, ...unlisted];
   }
+  /** The plugins as {@link list} gives them, less those under the hood: what a person or an agent picks from. */
+  shown(): PluginInfo[] {
+    return this.list().filter((info) => !this.underHood.has(info.manifest.id));
+  }
   /**
-   * The plugins as {@link list} gives them, each manifest's texts a person reads in `locale` (the
+   * The plugins as {@link shown} gives them, each manifest's texts a person reads in `locale` (the
    * app's language by default) from the plugin's own catalog: what the window shows. Every other
    * field, of the manifest too, is the one `list` gives; the manifests the registry runs on stay English.
    */
   async displayList(locale: Locale = currentLocale()): Promise<PluginInfo[]> {
     return Promise.all(
-      this.list().map(async (info) => {
+      this.shown().map(async (info) => {
         const found = info.unlisted ? this.#unlisted.get(info.manifest.id) : this.#installed.get(info.manifest.id);
         return found ? { ...info, manifest: await this.#words.manifest(info.manifest, found.directory, locale) } : info;
       }),
@@ -1367,7 +1399,16 @@ export class PluginRegistry {
     return this.#running(id);
   }
   enabled(id: string) {
-    return isLive(this.#installed.get(id));
+    return this.#isOn(id, this.#installed.get(id));
+  }
+  /** Whether the plugin `id` follows under the hood is on; true for a plugin that follows none. */
+  #leaderOn(id: string): boolean {
+    const leader = this.underHood.get(id);
+    return leader === undefined || isLive(this.#installed.get(leader));
+  }
+  /** Whether `p` is on now: by its own switch, and a plugin under the hood by the one it follows too. */
+  #isOn(id: string, p: Installed | undefined): boolean {
+    return isLive(p) && this.#leaderOn(id);
   }
   /**
    * The engines the installed plugins declare (`engine` in a `game-engine` plugin's manifest), on or
@@ -1541,11 +1582,8 @@ export class PluginRegistry {
    */
   locksFor(game: GameKind): Array<{ plugin: string; lock: PluginLock }> {
     return this.#live().flatMap(({ manifest }) => {
-      const needed = new Set(
-        [...manifest.tools.filter(isAgentTool), ...(manifest.mcpServers ?? [])]
-          .filter((part) => scopeReaches(part.facts, game))
-          .flatMap((part) => part.needs ?? []),
-      );
+      const servers = (manifest.mcpServers ?? []).filter((server) => scopeReaches(server.facts, game));
+      const needed = new Set([...pluginReach(manifest, game).tools, ...servers].flatMap((part) => part.needs ?? []));
       return locksNamed(manifest, [...needed]).filter(({ lock }) => lock.per === LockScope.Project);
     });
   }
@@ -1634,6 +1672,7 @@ export class PluginRegistry {
   }
   async setEnabled(id: string, enabled: boolean) {
     return this.#serial(async () => {
+      this.#refuseUnderHood(id);
       const p = this.#installed.get(id);
       if (!p || p.removed) throw new CodedError(PluginStateRefusal.InstallFirst, MESSAGE.InstallFirst());
       const wasEnabled = p.enabled;
@@ -1650,6 +1689,10 @@ export class PluginRegistry {
       await this.#mcpSync(id);
       this.#fire({ id, reason: enabled ? PluginChangeReason.Enabled : PluginChangeReason.Disabled });
     });
+  }
+  /** A plugin under the hood follows another's switch: nobody switches or removes it by itself. */
+  #refuseUnderHood(id: string) {
+    if (this.underHood.has(id)) throw new CodedError(PluginStateRefusal.UnderHood, MESSAGE.UnderHood);
   }
   /**
    * What turning a plugin off stops: its tools' grants, its account, its folder's watch and its
@@ -1682,6 +1725,7 @@ export class PluginRegistry {
   }
   async remove(id: string) {
     return this.#serial(async () => {
+      this.#refuseUnderHood(id);
       const p = this.#installed.get(id);
       if (!p) throw new CodedError(PluginInstallProblem.NotFound, MESSAGE.UnknownPlugin);
       if (this.#keepsAccount(p))
@@ -2315,17 +2359,6 @@ export class PluginRegistry {
     if (isFileSkill(skill)) return (await readSkillFile(p.directory, declaredSkillFile(skill, file))).toString("utf8");
     if (file !== undefined) throw new Error(MESSAGE.UndeclaredSkillFile);
     return skill.text;
-  }
-  /**
-   * A judge's brief (`PluginJudge.brief`), read from the plugin's package through a checked handle:
-   * any installed plugin's, as a judge's session is briefed. Refused for a judge it does not declare.
-   */
-  async judgeBrief(id: string, judgeId: string): Promise<string> {
-    const p = this.#installed.get(id);
-    if (!p || p.removed) throw new Error(MESSAGE.UnknownPlugin);
-    const judge = p.manifest.judges?.find((entry) => entry.id === judgeId);
-    if (!judge) throw new Error(MESSAGE.UnknownJudge(id, judgeId));
-    return readJudgeBrief(p.directory, judge.brief);
   }
   #connecting = new Map<string, Promise<any>>();
   async action(id: string, name: string, args: unknown, binding?: PluginBinding) {

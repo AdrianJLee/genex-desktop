@@ -86,7 +86,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:activity": "studioActivity",
   "studio:run.summary": "runSummary",
   "studio:run.review": "runReview",
-  "studio:staged": "staged",
   "studio:settings": "settings",
   "studio:settings.set": "setSettings",
   "studio:diagnostics": "diagnostics",
@@ -115,6 +114,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.genex-publish-platforms": "genexPublishPlatforms",
   "studio:plugins.genex-publish": "genexPublish",
   "studio:plugins.genex-publish-apps": "genexPublishApps",
+  "studio:plugins.genex-cloud-build": "genexCloudBuild",
   "studio:plugins.index": "pluginsIndex",
   "studio:plugins.install-github": "pluginInstallGithub",
   "studio:plugins.lookup-github": "pluginLookupGithub",
@@ -156,6 +156,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:cursor.signout": "cursorSignOut",
   "studio:openrouter.key.save": "openRouterKeySave",
   "studio:openrouter.key.clear": "openRouterKeyClear",
+  "studio:typesafe.key.status": "typeSafeKeyStatus",
+  "studio:typesafe.key.save": "typeSafeKeySave",
+  "studio:typesafe.key.clear": "typeSafeKeyClear",
   "studio:openrouter.signin": "openRouterSignIn",
   "studio:openrouter.signin.reopen": "openRouterSignInReopen",
   "studio:openrouter.signin.cancel": "openRouterSignInCancel",
@@ -257,6 +260,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
   "studio:genex-account.sign-out": "genexSignOut",
+  "studio:genex-account.build": "genexBuild",
   "studio:notify": "notify",
   "studio:badge": "setBadge",
   "studio:rollback": "rollback",
@@ -288,13 +292,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:preview.cover-still": "previewCoverStill",
   "studio:build.problem": "buildProblem",
   "studio:packages.install": "installPackages",
-  "studio:run.start": "startRun",
   "studio:run.stop": "stopRun",
   "studio:run.finish": "finishRun",
   "studio:autopilot.resume": "resumeAutopilot",
-  "studio:skillopt.start": "startSkillOpt",
-  "studio:skillopt.accept": "acceptProposal",
-  "studio:skillopt.discard": "discardProposal",
   "studio:export": "exportGame",
   "studio:cancel-model-download": "cancelModelDownload",
   "studio:model-install.status": "modelInstallStatus",
@@ -316,6 +316,20 @@ export const STUDIO_INVOKE_CHANNELS = {
 } as const satisfies Record<`studio:${string}`, keyof StudioApi>;
 
 export type StudioInvokeChannel = keyof typeof STUDIO_INVOKE_CHANNELS;
+
+/** Is `value` one of the app's invoke channels? */
+export const isInvokeChannel = (value: unknown): value is StudioInvokeChannel =>
+  typeof value === "string" && Object.hasOwn(STUDIO_INVOKE_CHANNELS, value);
+
+/**
+ * The invoke channel a failed call was on, as the preload stamps it on the error it throws; null for
+ * any other thrown value or for a `channel` that is not one of the app's.
+ */
+export function failedChannel(error: unknown): StudioInvokeChannel | null {
+  if (error === null || typeof error !== "object") return null;
+  const channel: unknown = Reflect.get(error, "channel");
+  return isInvokeChannel(channel) ? channel : null;
+}
 
 /** What the preload sends on each invoke channel; `undefined` when it sends nothing. */
 export interface StudioInvokePayloads {
@@ -378,7 +392,6 @@ export interface StudioInvokePayloads {
   "studio:activity": undefined;
   "studio:run.summary": { project: string; runId: string; graphFrom?: NonNullable<Arg<"runSummary", 2>> };
   "studio:run.review": { project: string; runId?: string };
-  "studio:staged": undefined;
   "studio:settings": undefined;
   "studio:settings.set": Arg<"setSettings", 0>;
   "studio:diagnostics": undefined;
@@ -405,8 +418,15 @@ export interface StudioInvokePayloads {
   "studio:plugins.choose-file": { id: string; request: Arg<"pluginChooseFile", 1> };
   "studio:plugins.genex-publish-review": { project: string };
   "studio:plugins.genex-publish-platforms": { project: string };
-  "studio:plugins.genex-publish": { project: string; review: ExportReview; title?: string; remix?: boolean };
+  "studio:plugins.genex-publish": {
+    project: string;
+    review: ExportReview;
+    title?: string;
+    remix?: boolean;
+    replaceNativePage?: boolean;
+  };
   "studio:plugins.genex-publish-apps": { project: string; title?: string; remix?: boolean };
+  "studio:plugins.genex-cloud-build": { project: string; platform: string };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };
   "studio:plugins.lookup-github": { link: string; version?: GithubVersion };
@@ -449,6 +469,9 @@ export interface StudioInvokePayloads {
   "studio:cursor.signout": undefined;
   "studio:openrouter.key.save": { key: string };
   "studio:openrouter.key.clear": undefined;
+  "studio:typesafe.key.status": undefined;
+  "studio:typesafe.key.save": { key: string };
+  "studio:typesafe.key.clear": undefined;
   "studio:openrouter.signin": undefined;
   "studio:openrouter.signin.reopen": undefined;
   "studio:openrouter.signin.cancel": undefined;
@@ -543,6 +566,7 @@ export interface StudioInvokePayloads {
   "studio:genex-account.sign-in": undefined;
   "studio:genex-account.cancel": undefined;
   "studio:genex-account.sign-out": undefined;
+  "studio:genex-account.build": { idea?: string };
   "studio:notify": Arg<"notify", 0>;
   "studio:badge": { count: number };
   "studio:rollback": { snapshotId: string };
@@ -581,13 +605,9 @@ export interface StudioInvokePayloads {
   "studio:preview.cover-still": undefined;
   "studio:build.problem": { project: string };
   "studio:packages.install": { project: string; scripts?: boolean };
-  "studio:run.start": Arg<"startRun", 0>;
   "studio:run.stop": { runId: string };
   "studio:run.finish": { runId: string; threadId: string };
   "studio:autopilot.resume": { runId: string };
-  "studio:skillopt.start": undefined;
-  "studio:skillopt.accept": { index: number } & NonNullable<Arg<"acceptProposal", 1>>;
-  "studio:skillopt.discard": { index: number; reason?: string } & NonNullable<Arg<"discardProposal", 2>>;
   "studio:export": { project: string };
   "studio:cancel-model-download": Record<string, never>;
   "studio:model-install.status": undefined;

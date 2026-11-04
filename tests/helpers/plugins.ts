@@ -8,6 +8,8 @@ import path from "node:path";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { PluginServices } from "../../src/substrate/plugins/services.ts";
 import { type PluginManifest, type PluginSource, PluginSourceKind } from "../../src/shared/plugins.ts";
+import type { StudioCore } from "../../src/main/studio-core.ts";
+import type { CompleteRequest } from "../../src/substrate/engines/types.ts";
 
 const repo = path.resolve(import.meta.dirname, "../..");
 /** The bundled example plugin's source folder. */
@@ -188,4 +190,29 @@ export async function accountFixture() {
       await rm(base, { recursive: true, force: true });
     },
   };
+}
+
+/** The engine `capabilityFactsOf` asks for a plan: it only writes plans. */
+const FACTS_PLANNER = "facts-planner";
+
+/**
+ * The capability facts a plan for `project` reads, as the app hands them: the section its request
+ * opens with (plan-drafts.ts `planRequest`), for a reviewed message in a new chat of that game.
+ */
+export async function capabilityFactsOf(core: StudioCore, project: string): Promise<string> {
+  let asked = "";
+  core.engines.register({
+    id: FACTS_PLANNER,
+    label: "Planner",
+    kind: "direct",
+    status: async () => ({ code: "ready", detail: "fixture" }),
+    models: async () => [],
+    complete: async (request: CompleteRequest) => {
+      asked = String(request.messages[0]?.content ?? "");
+      return { message: { role: "assistant", content: "A plan" }, usage: {}, model: "fixture", engine: FACTS_PLANNER };
+    },
+  } as never);
+  const thread = await core.createGameThread(project);
+  await core.sendUserMessage("Plan it", { thread, project, engine: FACTS_PLANNER, reviewPlan: true });
+  return asked.split("Original request:")[0] ?? "";
 }

@@ -3,23 +3,24 @@
  * engine limit paused resumes once the limit resets; one a provider outage paused is tried again
  * after a wait; one the loop's crash paused resumes once the loop runs again. A build paused on a
  * lost sign-in (an expired login, an account whose access was taken away) waits for the user, who
- * has to fix it. Bounded: at most AUTO_RESUMES_MAX times a run, never after the user's Stop or
- * Finish, never with too little working time or memory left, and only while Settings → Harness
- * "Resume builds automatically" is on. A cold start (the app itself died) stays the user's click.
+ * has to fix it. A limit's pause is resumed at every reset; a crash's or an outage's at most
+ * AUTO_RESUMES_MAX times a run. Never after the user's Stop or Finish, never with too little memory
+ * left, and only while Settings → Harness "Resume builds automatically" is on. A cold start (the app
+ * itself died) stays the user's click.
  *
  * It lives on the host, not in the harness seed, so a kept older seed cannot shadow it, and it
  * decides from typed fields only: the close's `limit`, the host's own record of a crash, the run's
  * `run_control` and `run_auto_resumed` records — never from the words a close is written in.
  */
 import { AutoResumeCause, CustomEvent, customRecord, type RunAutoResumedPayload } from "../../shared/custom-events.ts";
-import { RunControlAction } from "../../shared/coordinator.ts";
+import { RunControlAction } from "../../shared/chat-run.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { EngineFailureKind } from "../../shared/engine-requests.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import type { EventEnvelope } from "../../shared/event-log.ts";
 import { RUN_START_EVENTS, RunState, runExecution, runExecutions } from "../../shared/run-state.ts";
 
-/** The most times the studio resumes one run on its own; after that it is the user's. */
+/** The most times the studio resumes one run on its own after a crash or an outage; after that it is the user's. */
 export const AUTO_RESUMES_MAX = 2;
 /** How long after a limit's reset the resume waits, so the first call does not meet the old limit. */
 export const LIMIT_RESET_MARGIN_MS = 2 * MINUTE_MS;
@@ -30,8 +31,6 @@ export const LIMIT_RESET_MARGIN_MS = 2 * MINUTE_MS;
 export const OUTAGE_RESUME_AFTER_MS = 15 * MINUTE_MS;
 /** A reset further away than this is the user's to wait for (a weekly cap, say). */
 export const AUTO_RESUME_HORIZON_MS = 12 * HOUR_MS;
-/** Less working time left than this is not worth a resume. */
-export const AUTO_RESUME_MIN_WORK_MS = 10 * MINUTE_MS;
 /** The free memory a resumed build needs (the seed's director budgets keep the same floor). */
 export const AUTO_RESUME_MIN_FREE_MB = 1_024;
 /** How long past its time a resume waits for the loop or for memory before giving up. */
@@ -80,7 +79,6 @@ export const AutoResumeSkip = {
   Spent: "spent",
   /** The user moved on: a newer run started in the conversation, or another run is running. */
   Superseded: "superseded",
-  NoTimeLeft: "no-time-left",
   ResetTooFar: "reset-too-far",
   HarnessDown: "harness-down",
   LowMemory: "low-memory",
@@ -113,32 +111,37 @@ const RESETTING_LIMITS: ReadonlySet<unknown> = new Set([EngineFailureKind.RateLi
 const none = (skip: AutoResumeSkip): AutoResumePlan => ({ action: AutoResumeAction.None, skip });
 const waitUntil = (at: number, hold: AutoResumeHold): AutoResumePlan => ({ action: AutoResumeAction.Wait, at, hold });
 
+const record = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
 /** A finite positive number of ms, or null: a limit's fields come from editable harness code. */
 const positiveMs = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 
-const record = (value: unknown): Record<string, unknown> | null =>
-  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-
-/** The run's own records since it last started, its last start, and how many times it was auto-resumed. */
+/**
+ * The run's own records since it last started, its last start, how many times it was auto-resumed,
+ * and how many of those spend AUTO_RESUMES_MAX: every one but a limit's reset.
+ */
 interface RunStretch {
   startAt: number;
   sinceStart: { event_type: string; payload: Record<string, unknown>; at: number }[];
-  budgets: Record<string, unknown> | null;
   autoResumes: number;
+  spent: number;
 }
 
 function runStretch(events: readonly EventEnvelope[], runId: string): RunStretch {
-  const stretch: RunStretch = { startAt: Number.NEGATIVE_INFINITY, sinceStart: [], budgets: null, autoResumes: 0 };
+  const stretch: RunStretch = { startAt: Number.NEGATIVE_INFINITY, sinceStart: [], autoResumes: 0, spent: 0 };
   for (const event of events) {
     const custom = customRecord(event.data);
     if (custom?.payload.runId !== runId) continue;
     const at = Date.parse(event.created_at);
-    if (custom.event_type === CustomEvent.RunAutoResumed) stretch.autoResumes++;
+    if (custom.event_type === CustomEvent.RunAutoResumed) {
+      stretch.autoResumes++;
+      if (custom.payload.cause !== AutoResumeCause.LimitReset) stretch.spent++;
+    }
     if (RUN_START_EVENTS.has(custom.event_type)) {
       stretch.startAt = at;
       stretch.sinceStart = [];
-      stretch.budgets = record(custom.payload.budgets) ?? stretch.budgets;
       continue;
     }
     stretch.sinceStart.push({ event_type: custom.event_type, payload: custom.payload, at });
@@ -181,14 +184,6 @@ function superseded(events: readonly EventEnvelope[], runId: string): boolean {
   return false;
 }
 
-/** Is less working time left than a resume is worth? A run until satisfied has no clock to run out. */
-function tooLittleTime(events: readonly EventEnvelope[], stretch: RunStretch, runId: string): boolean {
-  const budget = positiveMs(stretch.budgets?.wallClockMs);
-  if (budget === null || stretch.budgets?.untilSatisfied === true) return false;
-  const worked = runExecution(events, runId)?.worked.ms ?? 0;
-  return budget - worked < AUTO_RESUME_MIN_WORK_MS;
-}
-
 /** Why the user's own word holds this run back, if it does: a Stop or a Finish since it last started. */
 function userHeld(stretch: RunStretch, facts: AutoResumeFacts): AutoResumeSkip | null {
   if (facts.stoppedAt !== null && facts.stoppedAt >= stretch.startAt) return AutoResumeSkip.UserStopped;
@@ -223,10 +218,10 @@ export function autoResumePlan(events: readonly EventEnvelope[], now: number, fa
   const held = userHeld(stretch, facts);
   if (held) return none(held);
   if (superseded(events, facts.runId)) return none(AutoResumeSkip.Superseded);
-  if (stretch.autoResumes >= AUTO_RESUMES_MAX) return none(AutoResumeSkip.Spent);
-  if (tooLittleTime(events, stretch, facts.runId)) return none(AutoResumeSkip.NoTimeLeft);
   const due = dueResume(close, stretch, facts);
   if (typeof due === "string") return none(due);
+  // A limit resets on its own, so every one is waited out: only a crash's or an outage's resumes are bounded.
+  if (due.cause !== AutoResumeCause.LimitReset && stretch.spent >= AUTO_RESUMES_MAX) return none(AutoResumeSkip.Spent);
   if (due.at - now > AUTO_RESUME_HORIZON_MS) return none(AutoResumeSkip.ResetTooFar);
   if (now < due.at) return waitUntil(due.at, holdFor(due.cause));
   return (

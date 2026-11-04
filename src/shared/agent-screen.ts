@@ -2,15 +2,11 @@
  * An agent's screen — the hidden preview window one worker is driving with the computer
  * tool, as the studio window shows it: the last frame, where the cursor is, what the agent
  * just did. Main emits `preview.screen` (opened/closed) and `preview.frame` (a new picture);
- * the Builds graph shows each on the node of the part it works on, the lead's on the lead's.
+ * the Builds graph shows each on the node of the part it works on.
  */
 /** Who holds a window: the agent behind an agent screen, in its wire spelling. */
 export const ScreenRole = {
   Builder: "builder",
-  Playtester: "playtester",
-  Scout: "scout",
-  Judge: "judge",
-  Director: "director",
   /** An agent at the person's desktop or a VM, with their consent (`desktop-target.ts`). */
   Operator: "operator",
 } as const;
@@ -43,7 +39,7 @@ export interface ScreenAct {
 export interface AgentScreen {
   /** The preview-pool handle — the card's identity for the life of the session. */
   handle: string;
-  /** Who is at the keyboard: the facet's title or id, "playtester", "scout", "director". */
+  /** Who is at the keyboard: the worker's title or id, or the game's name for the chat's own session. */
   label: string;
   project: string;
   runId: string | null;

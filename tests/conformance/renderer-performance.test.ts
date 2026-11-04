@@ -117,6 +117,42 @@ it("a thousand-step graph folds once when workers add no missing lifecycle", asy
   assert.equal(folds, ceilings.foldsWithHiddenWorkers);
 });
 
+it("the Builds graph reads a Loop's log a bounded number of times however many workers it started", async () => {
+  const { projectBuildGraph } = await import("../../src/renderer/build-progress.ts");
+  const { CustomEvent } = await import("../../src/shared/custom-events.ts");
+  const { poolWorkerId, WorkerEnd, WorkerIsolation } = await import("../../src/shared/workers.ts");
+  const runId = "loop-run";
+  const custom = (n: number, eventType: string, payload: Record<string, unknown>): EventEnvelope => ({
+    ...event(String(n).padStart(8, "0")),
+    data: { type: EventKind.Custom, event_type: eventType, payload: { runId, ...payload } },
+  });
+  // A Loop in place: its workers are pool sessions in the lead's own log, with no threads of their own.
+  const log = [
+    custom(0, CustomEvent.RunStarted, { goal: "Make it", project: "game", mode: "director" }),
+    custom(1, CustomEvent.AutopilotStarted, { facets: [], director: true, workerRecords: true, profile: "open" }),
+  ];
+  for (let n = 0; n < 300; n++) {
+    const worker = { workerId: poolWorkerId(`w${n}`), title: `Piece ${n}` };
+    log.push(
+      custom(log.length, CustomEvent.WorkerStarted, { ...worker, isolation: WorkerIsolation.Copy, task: "Make it" }),
+    );
+    log.push(custom(log.length, CustomEvent.WorkerFinished, { ...worker, state: WorkerEnd.Done, summary: "Made it" }));
+  }
+  let reads = 0;
+  for (const item of log) {
+    const data = item.data;
+    Object.defineProperty(item, "data", {
+      get: () => {
+        reads++;
+        return data;
+      },
+    });
+  }
+  const graph = projectBuildGraph(log, "lead", [], null, null, { includeWorkers: true });
+  assert.equal(graph?.facets.length, 300);
+  assert.ok(reads / log.length <= ceilings.loopLogReadsPerEvent, `log reads per event: ${reads / log.length}`);
+});
+
 it("Live's pictures project each finished or paused earlier run once, however many batches arrive", async () => {
   const { picturesGraph, settledGraphOf, settledKeys } = await import("../../src/renderer/live-views.ts");
   const { buildHistory } = await import("../../src/renderer/build-progress.ts");

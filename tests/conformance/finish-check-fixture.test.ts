@@ -72,15 +72,16 @@ it("seeds four Loops whose finish checks stand at each of the four looks", async
   const notYet = states.find((node) => node.state === FinishCheckState.NotYet);
   assert.deepEqual([notYet?.round, notYet?.reasons.length], [1, 2], "Not yet after its first no, with two reasons");
   const stopped = states.find((node) => node.state === FinishCheckState.Stopped);
+  // Flipped (no clock): a round's `timeLeft` (a timed Loop's no with time left) is read no more.
   assert.deepEqual(
-    stopped?.rounds.map((round) => [round.timeLeft, round.stopped, round.notDone.length > 0]),
+    stopped?.rounds.map((round) => [round.stopped, round.notDone.length > 0]),
     [
-      [true, false, true],
-      [true, false, true],
-      [true, false, true],
-      [false, true, true],
+      [false, true],
+      [false, true],
+      [false, true],
+      [true, true],
     ],
-    "the timed Loop went on past its no's with time left, and the next stopped it",
+    "the older timed Loop went on past its no's, and the next stopped it",
   );
   assert.equal(
     finishCheckFace(stopped as FinishCheckNode).word,

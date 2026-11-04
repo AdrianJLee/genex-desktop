@@ -26,6 +26,10 @@ export const GenexAction = {
   PublishGallery: "publish-gallery",
   /** Publish a game that has only apps, no web build: send them and list the game (`genex native publish --gallery`). */
   PublishApps: "publish-apps",
+  /** Ask Genex to build an app this computer can't make, on its own computers (`genex native build`). */
+  CloudBuild: "cloud-build",
+  /** Take the game's web version off Genex, keeping its apps: its page shows them again. */
+  PublishRemoveWeb: "publish-remove-web",
   PublishAllowUpload: "publish-allow-upload",
   PublishOpen: "publish-open",
   PublishBadge: "publish-badge",
@@ -51,6 +55,8 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
   GenexAction.PublishDraft,
   GenexAction.PublishGallery,
   GenexAction.PublishApps,
+  GenexAction.CloudBuild,
+  GenexAction.PublishRemoveWeb,
   GenexAction.PublishAllowUpload,
   GenexAction.PublishOpen,
   GenexAction.PublishBadge,
@@ -445,7 +451,11 @@ export function withoutGenexSources<T extends Output>(files: readonly T[]): T[] 
   return files.filter((file) => !(isSource(file) && finished.has(file.generationId)));
 }
 
-/** What genex__cover does: photograph the genex-cover demo and keep it, record the genex-clip demo, or report. */
+/**
+ * What older genex__cover calls did (photograph the genex-cover demo, record the genex-clip demo, or
+ * report), as a recorded call's arguments name it. genex__cover now keeps the picture and clip the
+ * agent hands it (`{ image, clip? }`) and takes no operation.
+ */
 export const GenexCoverOperation = { Shoot: "shoot", Status: "status", Clip: "clip" } as const;
 export type GenexCoverOperation = (typeof GenexCoverOperation)[keyof typeof GenexCoverOperation];
 
@@ -477,20 +487,21 @@ export interface GenexCoverShot {
   height: number;
   mimeType: StillMimeType;
   bytes: number;
-  source: CaptureSource;
+  /** How Studio's capture read the frame; absent for a picture the game's agent made and handed genex__cover. */
+  source?: CaptureSource;
   stats: StillExposure;
   takenAt: string;
-  /** Who staged the frame: the game's genex-cover demo, or Studio's plain frame of a game with none. Absent: the demo. */
+  /** Who made the frame: the game's own (its agent's picture), or Studio's plain frame of a game with none. Absent: the game's own. */
   origin?: GenexCoverOrigin;
-  /** The person picked this frame among the candidates: Studio and a publish shoot no new one over it. */
+  /** The person picked this frame among the candidates: Studio takes no new frame over it. */
   pinned?: boolean;
 }
 
 /** Who staged a kept cover frame (`GenexCoverShot.origin`). Persisted: never rename one. */
 export const GenexCoverOrigin = {
-  /** The game's own `genex-cover` demo. */
+  /** The game's own picture: the one its agent handed genex__cover (once, its `genex-cover` demo). */
   Demo: "demo",
-  /** Studio's plain frame of the game as it loads, for a game with no genex-cover demo yet. */
+  /** Studio's plain frame of the game as it loads, for a game whose agent made no cover yet. */
   Studio: "studio",
 } as const;
 export type GenexCoverOrigin = (typeof GenexCoverOrigin)[keyof typeof GenexCoverOrigin];
@@ -539,27 +550,27 @@ export interface GenexCoverRecord {
   last: GenexCoverSent | null;
   /** A send is running for this game right now. */
   sending: boolean;
-  /** The recent frames the person can flip between, newest first, the kept shot among them. Absent from older plugins. */
-  candidates?: GenexCoverShot[];
-  /** The kept genex-clip recording, or null; absent from a plugin older than clips. */
-  clip?: GenexCoverClip | null;
+  /** The recent frames the person can flip between, newest first, the kept shot among them. */
+  candidates: GenexCoverShot[];
+  /** The kept cover clip, or null. */
+  clip: GenexCoverClip | null;
   /** How the last clip send went; null before any. */
   clipLast?: GenexCoverSent | null;
-  /** When the agent itself last kept a shot and a clip; absent from a plugin older than this. */
-  agentTook?: GenexCoverAgentTook;
+  /** When the agent itself last kept a shot and a clip (covers/<project>/agent.json). */
+  agentTook: GenexCoverAgentTook;
 }
 
 /**
- * When the agent itself last kept the game's cover shot and clip (`genex__cover` shoot and clip),
- * ISO; a kind it never took is absent. Studio's own takes and a publish's shot leave it, so Publish
- * knows a frame the person asked the agent for has come (`covers/<project>/agent.json`).
+ * When the agent itself last kept the game's cover picture and clip (`genex__cover`), ISO; a kind it
+ * never kept is absent. Studio's own frames leave it, so Publish knows a cover the person asked the
+ * agent for has come (`covers/<project>/agent.json`).
  */
 export interface GenexCoverAgentTook {
   shot?: string;
   clip?: string;
 }
 
-/** The game's kept cover clip (`covers/<project>/clip.json`), beside its video: five seconds of real play. */
+/** The game's kept cover clip (`covers/<project>/clip.json`), beside its video: at least five seconds of play. */
 export interface GenexCoverClip {
   sha256: string;
   mimeType: string;
@@ -567,8 +578,8 @@ export interface GenexCoverClip {
   width: number;
   height: number;
   durationMs: number;
-  /** Share of sampled frame pairs that differ: a frozen recording is near 0. */
-  motion: number;
+  /** Share of sampled frame pairs that differ (a frozen recording is near 0); absent for a clip the agent made, which Studio does not decode. */
+  motion?: number;
   takenAt: string;
 }
 
@@ -594,22 +605,34 @@ export interface GenexPublishState {
   /** Non-blocking conditions: reported, never a refusal. Missing git or git-lfs is a refusal, not one of these. */
   warnings?: string[];
   job?: GenexPublishJob;
-  /**
-   * The game's Genex cover, which publish-status answers beside the record and never stores in it.
-   * Absent from a Genex plugin older than covers.
-   */
+  /** The game's Genex cover, which publish-status answers beside the record and never stores in it. */
   cover?: GenexCoverRecord;
-  /**
-   * The game's Mac, Windows and Linux apps as its last publish sent them, answered beside the record like
-   * the cover. Absent from a Genex plugin older than native builds.
-   */
+  /** The game's Mac, Windows and Linux apps as its last publish sent them, answered beside the record like the cover. */
   native?: GenexNativeRecord;
   /**
-   * The game's project as remixers get it, answered beside the record like the cover. Absent from a
-   * Genex plugin older than remixing from the app.
+   * Whether Genex plays a web version of the game on its page (its public build), as Genex last
+   * answered; absent while unknown (not on Genex, signed out, Genex unreachable). A game with apps
+   * and a web version shows the web version, so its page shows the apps only once this is false.
    */
+  hostedWeb?: boolean;
+  /** The game's project as remixers get it, answered beside the record like the cover. */
   remix?: GenexRemixRecord;
 }
+
+/**
+ * Why Genex refused a change to a game's web version (the answer's `error`). Wire values: never
+ * rename one. `NoNativeBuild`: the web version is all the game has, so it stays; `GameTakenDown`:
+ * a taken-down game keeps its build for the appeal; `RemovalIncomplete`: Genex stopped partway and
+ * the same Remove finishes it; `NativePageWouldBeReplaced`: a web build would replace a page that
+ * shows only the game's apps, and the publish did not say it may.
+ */
+export const GenexWebRefusal = {
+  NoNativeBuild: "no_native_build",
+  GameTakenDown: "game_taken_down",
+  RemovalIncomplete: "web_removal_incomplete",
+  NativePageWouldBeReplaced: "native_page_would_be_replaced",
+} as const;
+export type GenexWebRefusal = (typeof GenexWebRefusal)[keyof typeof GenexWebRefusal];
 
 /** Where Genex's review of an app someone other than an admin sent stands. Wire values: never rename one. */
 export const GenexBuildReview = { Pending: "pending", Approved: "approved", Rejected: "rejected" } as const;
@@ -624,11 +647,39 @@ export interface GenexNativeSent {
   /** The archive's sha256 as Genex keeps it: the build a clip of a game with only apps names. */
   sha256?: string;
   publishedAt: string;
+  /** A Mac app signed and notarized under the creator's own Apple Developer ID before it went. */
+  notarized?: true;
+  /** Why a Mac app the creator asked to notarize went without it (as built, ad hoc). */
+  notarizeFailure?: MacNotarizeFailure;
   /** Genex's review of it; absent when Genex did not review it (an admin's app, a Genex before review). */
   review?: GenexBuildReview;
   /** Why Genex turned it down, when it did and said why. */
   reviewReason?: string;
 }
+
+/**
+ * Why a creator's Mac app was not notarized under their Apple Developer ID, by code. Wire values:
+ * kept in `native.json`; never rename one.
+ */
+export const MacNotarizeFailure = {
+  /** The target is not a Mac app bundle in a plain folder. */
+  NotAnApp: "not-an-app",
+  /** No Developer ID Application identity in the keychain (or not the one the settings name). */
+  NoIdentity: "no-identity",
+  /** More than one identity, and the settings name none. */
+  ManyIdentities: "many-identities",
+  /** codesign refused a program or the app. */
+  Sign: "sign",
+  /** Apple's notary could not be asked: no stored profile, no network, or an answer that isn't Apple's. */
+  Submit: "submit",
+  /** Apple's notary answered Invalid or Rejected. */
+  Rejected: "rejected",
+  /** The ticket could not be stapled to the app. */
+  Staple: "staple",
+  /** Stopped before it ended. */
+  Stopped: "stopped",
+} as const;
+export type MacNotarizeFailure = (typeof MacNotarizeFailure)[keyof typeof MacNotarizeFailure];
 
 /** One app a publish could not send, and Genex's or the CLI's words for why. */
 export interface GenexNativeFailure {
@@ -696,4 +747,63 @@ export interface GenexNativeRecord {
   failed: GenexNativeFailure[];
   /** A game with only apps is listed with its first app that goes: Genex's answer. */
   listing?: GenexNativeListing;
+  /** The apps Genex builds on its own computers; absent from a Genex plugin older than them. */
+  cloud?: GenexCloudRecord;
+}
+
+/** Where an app Genex builds on its own computers stands (`genex native build`). Wire values: never rename one. */
+export const CloudBuildState = {
+  /** Asked for, waiting for a computer. */
+  Queued: "queued",
+  Building: "building",
+  /** Built and checked: Genex is putting it on the game's page. */
+  Publishing: "publishing",
+  /** On the game's page for its players. */
+  Done: "done",
+  Failed: "failed",
+} as const;
+export type CloudBuildState = (typeof CloudBuildState)[keyof typeof CloudBuildState];
+
+/** Why a build on Genex's computers failed, by code: callers act on it, never on words. Wire values: never rename one. */
+export const CloudBuildFailure = {
+  /** Genex has no computer with the game's Unreal version. */
+  EngineUnsupported: "engine-unsupported",
+  /** The game's own code did not compile. */
+  Compile: "compile",
+  /** Unreal could not cook the game's content. */
+  Cook: "cook",
+  /** The build ran past its time. */
+  Timeout: "timeout",
+  /** The account has used its builds for now: trying again can't help. */
+  Quota: "quota",
+  /** The project is bigger than Genex builds. */
+  SourceTooBig: "source-too-big",
+  /** The game has no page on Genex for the app to go on. */
+  NotOnGenex: "not-on-genex",
+  /** Anything else, or a code this Studio does not know. */
+  Failed: "failed",
+} as const;
+export type CloudBuildFailure = (typeof CloudBuildFailure)[keyof typeof CloudBuildFailure];
+
+/** One app Genex builds, or built, on its own computers from the game's project. */
+export interface GenexCloudBuild {
+  /** The system the app is for (`windows`). */
+  platform: string;
+  jobId: string;
+  state: CloudBuildState;
+  startedAt: string;
+  /** When it went on the game's page or failed; absent while it runs. */
+  finishedAt?: string;
+  failure?: CloudBuildFailure;
+}
+
+/**
+ * The apps Genex builds on its own computers for a game: a Windows app of an Unreal game made on a
+ * Mac, which Unreal can't package there. `supported` is false while Studio's pinned CLI cannot ask
+ * Genex for one: the row then says where it is packaged, as before.
+ */
+export interface GenexCloudRecord {
+  supported: boolean;
+  /** Oldest first, at most a few per platform. */
+  builds: GenexCloudBuild[];
 }

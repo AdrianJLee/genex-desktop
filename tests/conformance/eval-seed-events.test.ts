@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it, type TestContext } from "node:test";
-import { JUDGE_PIN_FILE, readJudgePin, readJudgeJson } from "../../src/harness-seed/loop/judge-provenance.ts";
+import { JUDGE_PIN_FILE, readJudgePin } from "../../src/harness-seed/loop/judge-provenance.ts";
 import { CompletionRole, CustomEvent, customEvent } from "../../src/shared/custom-events.ts";
 import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
@@ -91,14 +91,14 @@ describe("completion_call", () => {
           threadId: core.mainThread,
           stream: false,
           messages: [],
-          provenance: { role: CompletionRole.Playtester },
+          provenance: { role: CompletionRole.Judge },
         }),
       /throttled/,
     );
     const [call] = await completionCalls(core, core.mainThread);
     assert.deepEqual(
       [call?.ok, call?.failure, call?.latencyMs, call?.model, call?.usage, call?.role],
-      [false, EngineFailureKind.RateLimit, 40, null, null, CompletionRole.Playtester],
+      [false, EngineFailureKind.RateLimit, 40, null, null, CompletionRole.Judge],
     );
   });
 
@@ -169,21 +169,4 @@ describe("the judge pin an eval profile writes (judge/pin.json)", () => {
     assert.equal(await readJudgePin(missing), null);
     await assert.rejects(() => stat(missing), "reading a pin makes no folder");
   });
-});
-
-describe("reading a judge's answer", () => {
-  const ANSWERS: Array<[string, unknown]> = [
-    ['{"pick":"A"}', { pick: "A" }],
-    ['```json\n{"pick":"B"}\n```', { pick: "B" }],
-    ['sure: {"pick":"tie"} — hope that helps', { pick: "tie" }],
-    ["I think A is nicer, honestly", null],
-    ['{"pick":"A"', null],
-    ["[1, 2]", null],
-    ["", null],
-  ];
-  for (const [text, expected] of ANSWERS) {
-    it(`reads ${JSON.stringify(text).slice(0, 40)}`, () => {
-      assert.deepEqual(readJudgeJson(text), expected);
-    });
-  }
 });

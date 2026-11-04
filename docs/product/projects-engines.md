@@ -6,15 +6,15 @@ A project is any folder, several kinds at once: web, Unreal game or plugin, Robl
 Blender assets or a plugin's kind. Facts suggest; the first message or you decide. The
 sidebar names a non-game's kind.
 
-New game makes an empty folder; the first message picks its kind. A vague ask builds a web game;
-with an engine plugin on, a kindless game asks which engine. A port snapshots first, keeping
-the web files as reference.
+New game makes an empty folder; the first message picks its kind. A vague ask builds a web game,
+a blank page owing Genex nothing. With an engine plugin on, a kindless game asks which engine. A port snapshots first, keeping
+web files as reference.
 
 ## Plugins on or off
 
-Engine buttons show only on their games. Asking for an engine whose plugin is off, or opening its
-project, shows its card (**Turn on Unity** or **Install…**; × hides it); a click turns it on and
-chat goes on. A missing engine gets a setup card. Told to, agents go on without: jobs, `app_look`, docs.
+Engine buttons and tools show only on their games. Asking for an engine whose plugin is off, or
+opening its project, shows its card (**Turn on Unity** or **Install…**; × hides it); a click turns
+it on; chat goes on. A missing engine gets a setup card. Told to, agents go on without: jobs, `app_look`, docs.
 
 A plugin from a folder on this Mac starts off, runs with your access, and asks before each tool;
 Always allow lists it under **Runs without asking** until new code or turning it off; its steps at
@@ -22,17 +22,17 @@ Genex's moments never ask.
 
 ## Loops in place
 
-Except for web games at the folder's root (Blender files allowed), the chat leads the Loop in
-place (Claude Code, Codex or OpenCode). It keeps save points, starts workers, pauses if blocked,
-claims finish; a reviewer checks (no's stop it, timed Loops only late). Plugins add steps, reviewer
+The chat leads every Loop in place, a web game's too (Claude Code, Codex or OpenCode). It keeps
+save points, starts workers, pauses if blocked, finishes on its word (a reviewer reads it only if
+asked; a web game's page is checked first). Plugins add steps, reviewer
 pictures and editor locks: while you use an editor, agents wait. A linked engine game is no web
-game; Unreal and Godot projects outside it get no Loop or Rewind.
+game; an Unreal or Godot project outside it is not held by save points or Rewind.
 
 ## Unreal
 
 The lead works in the open editor through Genex's helper, one holder at a time; while you play
 the chat reads “Waiting for you to finish in Unreal”. Rewind saves, closes and reopens Unreal.
-Agents and blind judges play it. Mac games skip hardware ray tracing. Agents set up linked projects;
+Agents play it. Mac games skip hardware ray tracing. Agents set up linked projects;
 Undo reverts both. Agents package its apps. An **Unreal plugin** project
 is a host project with the plugin in `Plugins/`; its tools build, test and package it.
 

@@ -14,6 +14,7 @@ import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
+import { MessageOrigin } from "../../src/shared/protocol.ts";
 import type { DelegateRequest, DelegateResult, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import { copyProject, Project, TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/project-fixtures.ts";
 import { reviewerAnswer } from "../helpers/reviewer.ts";
@@ -85,10 +86,15 @@ type Script = (
   call: (name: string, args: Record<string, unknown>) => Promise<string>,
 ) => Promise<void>;
 
-/** The fake delegated engine: the chat starts the Loop, the reviewer says yes, the rest follows `scripts`. */
+/**
+ * The fake delegated engine: the chat starts the Loop, the reviewer says yes, the rest follows
+ * `scripts`. `leadsAnswered` settles once every lead turn so far has returned, its tools' answers in.
+ */
 function loopEngine(rig: Rig, scripts: { lead: Script[]; worker: Script }) {
   const requests: Array<{ seat: Seat; request: DelegateRequest }> = [];
+  const leadTurnsRun: Promise<unknown>[] = [];
   let leadTurns = 0;
+  let chatTurns = 0;
   rig.core.engines.register({
     id: ENGINE,
     label: ENGINE,
@@ -111,7 +117,12 @@ function loopEngine(rig: Rig, scripts: { lead: Script[]; worker: Script }) {
         if (!onLiveTool) throw new Error(`no live tools on this ${seat} turn`);
         return text(await onLiveTool(name, args));
       };
-      if (seat === Seat.Lead) await scripts.lead[leadTurns++]?.(request, call);
+      if (seat === Seat.Lead) {
+        const turn = Promise.resolve(scripts.lead[leadTurns++]?.(request, call));
+        leadTurnsRun.push(turn.catch(() => {}));
+        await turn;
+      }
+      if (seat === Seat.Chat) chatTurns++;
       if (seat === Seat.Worker) await scripts.worker(request, call);
       const sessionId = request.resume ?? (seat === Seat.Worker ? `worker-${requests.length}` : "chat-session");
       return {
@@ -121,13 +132,18 @@ function loopEngine(rig: Rig, scripts: { lead: Script[]; worker: Script }) {
         usage: {},
         sessionId,
         summary: `${seat} done`,
-        ...(seat === Seat.Chat
+        // Only the person's message starts the Loop; the cover step after it starts none.
+        ...(seat === Seat.Chat && chatTurns === 1
           ? { studioToolCalls: [{ name: "start_autopilot", args: { goal: "a garden with a pond" } }] }
           : {}),
       };
     },
   } as never);
-  return { requests, seat: (seat: Seat) => requests.filter((r) => r.seat === seat).map((r) => r.request) };
+  return {
+    requests,
+    seat: (seat: Seat) => requests.filter((r) => r.seat === seat).map((r) => r.request),
+    leadsAnswered: () => Promise.all(leadTurnsRun),
+  };
 }
 
 /** A rig whose game is a copy of one project fixture, opened as the person opens a folder, with its chat. */
@@ -149,15 +165,15 @@ async function openedProject(project: Project, plugin?: string) {
   return { rig, game, threadId };
 }
 
-/** Send the message with Loop on and no hours (∞), and wait for the Loop's close. */
-async function loopUntilClosed(rig: Rig, threadId: string) {
-  await rig.core.sendUserMessage("make a garden with a pond", { thread: threadId, engine: ENGINE, autopilot: {} });
-  const events = await waitForLog(
-    rig.core,
-    (log) => customEvents(log, "run_finished").length >= 1,
-    CLOSE_WAIT_MS,
-    "the Loop's close",
-  );
+/**
+ * Send the message the chat starts a Loop for, and wait for the Loop's close and for every lead turn
+ * to have returned: a finish's close is written inside its call, before the call answers the lead.
+ */
+async function loopUntilClosed(rig: Rig, threadId: string, engine: { leadsAnswered: () => Promise<unknown> }) {
+  await rig.core.sendUserMessage("make a garden with a pond", { thread: threadId, engine: ENGINE });
+  await waitForLog(rig.core, (log) => customEvents(log, "run_finished").length >= 1, CLOSE_WAIT_MS, "the Loop's close");
+  await engine.leadsAnswered();
+  const events = await rig.core.listAllEvents();
   return { events, finished: customEvents(events, "run_finished") };
 }
 
@@ -168,6 +184,21 @@ async function untilCalled(calls: PluginCall[], matches: (call: PluginCall) => b
     await sleep(END_POLL_MS);
   }
   return false;
+}
+
+/** Once the landed build's cover step, the chat's own message after the close, is answered. */
+async function coverAnswered(rig: Rig) {
+  await waitForLog(
+    rig.core,
+    (log) => {
+      const cover = customEvents(log, "coordinator_message_queued").find(
+        (queued) => (queued.action as { origin?: string } | undefined)?.origin === MessageOrigin.CoverStep,
+      );
+      return customEvents(log, "coordinator_message_handled").some((handled) => handled.messageId === cover?.messageId);
+    },
+    CLOSE_WAIT_MS,
+    "the cover step's answer",
+  );
 }
 
 /** Whether a file exists. */
@@ -192,7 +223,6 @@ async function renamedToyPlugin(): Promise<{ dir: string; id: string; rename: (t
   for (const lock of manifest.locks) lock.personFirst = rename(lock.personFirst);
   for (const skill of manifest.skills) skill.tools = skill.tools.map(rename);
   for (const type of manifest.workerTypes) type.tools = type.tools.map(rename);
-  for (const judge of manifest.judges) if (judge.probe) judge.probe = rename(judge.probe);
   await writeFile(path.join(dir, "plugin.json"), JSON.stringify(manifest, null, 2));
   return { dir, id: manifest.id, rename };
 }
@@ -216,7 +246,11 @@ function toyLead(answers: Record<string, string>): Script[] {
     async (_request, call) => {
       answers.waited = await call("worker_wait", { seconds: "60" });
       answers.marked = await call("worker_mark", { id: "w1", verdict: "used" });
-      answers.finish = await call("finish", { summary: "The garden has a pond.", proof: "scenes/pond.toyscene" });
+      answers.finish = await call("finish", {
+        summary: "The garden has a pond.",
+        proof: "scenes/pond.toyscene",
+        review: "yes",
+      });
     },
   ];
 }
@@ -254,12 +288,13 @@ async function toyLoop(plugin: { dir: string; id: string; rename: (tool: string)
   const calls = recordPluginCalls(rig);
   const answers: Record<string, string> = {};
   const engine = loopEngine(rig, { lead: toyLead(answers), worker: pondWorker });
-  const { events, finished } = await loopUntilClosed(rig, threadId);
+  const { events, finished } = await loopUntilClosed(rig, threadId, engine);
   assert.equal(finished.length, 1, "the Loop closed once");
   assert.equal(finished[0]?.victory, true, `${String(finished[0]?.stoppedBecause)} ${JSON.stringify(answers)}`);
   const name = plugin.rename;
   const ended = await untilCalled(calls, (call) => call.moment === "run.end");
   assert.ok(ended, "the run's end moment fired");
+  await coverAnswered(rig);
   const { steps: trail, health } = trailOf(calls, plugin.id);
   // The person's message that started the Loop took its own checkpoints first, with the one step
   // the plugin opts in to for chat messages, before its answer and (flipped: also) after it; the
@@ -278,7 +313,14 @@ async function toyLoop(plugin: { dir: string; id: string; rename: (tool: string)
   ];
   assert.ok(!inOrder(steps, want).includes(-1), `the plugin's steps in order: ${steps.join(", ")}`);
   assert.equal(steps[0], want[0], "the run's start comes first");
-  assert.equal(steps.at(-1), want.at(-1), "and its end last");
+  // The landed build's cover step is a chat message of its own after the close: its message
+  // checkpoints follow the run's end (flipped: the end was the plugin's last step).
+  const afterEnd = steps.slice(steps.lastIndexOf(want.at(-1) ?? "") + 1);
+  assert.ok(afterEnd.length > 0, `the cover step's checkpoint follows the end: ${steps.join(", ")}`);
+  assert.ok(
+    afterEnd.every((step) => step === message),
+    `only a message's checkpoint after the end: ${steps.join(", ")}`,
+  );
   assert.ok(health.length > 0, "the app's health was polled");
   assert.ok(health.every((tool) => tool === `${plugin.id}__${name("editor-state")}`));
   // The save point kept the garden, and the rewind put the folder back to it.
@@ -337,12 +379,16 @@ describe("a Loop on a project with no plugin, through the real studio", () => {
         },
         async (_request, call) => {
           answers.waited = await call("worker_wait", { seconds: "60" });
-          answers.finish = await call("finish", { summary: "The door is in.", proof: "scenes/door.tscn" });
+          answers.finish = await call("finish", {
+            summary: "The door is in.",
+            proof: "scenes/door.tscn",
+            review: "yes",
+          });
         },
       ],
       worker: async () => {},
     });
-    const { events, finished } = await loopUntilClosed(rig, threadId);
+    const { events, finished } = await loopUntilClosed(rig, threadId, engine);
     assert.equal(finished.length, 1);
     assert.equal(finished[0]?.victory, true, `${String(finished[0]?.stoppedBecause)} ${JSON.stringify(answers)}`);
     assert.deepEqual(

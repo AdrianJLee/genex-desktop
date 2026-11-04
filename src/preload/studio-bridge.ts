@@ -55,7 +55,7 @@ export function createStudioBridge(
   ): Promise<StudioInvokeResult<C>> {
     // Main answers every invoke with `IpcResult` (`main/ipc-handle.ts`), typed by the same map.
     const result = (await ipc.invoke(channel, args[0])) as IpcResult<StudioInvokeResult<C>>;
-    if (!result.ok) throw failure(result);
+    if (!result.ok) throw failure(result, channel);
     return result.value;
   }
   function subscribe<C extends StudioPushChannel>(
@@ -91,10 +91,14 @@ export function createStudioBridge(
   };
 }
 
-/** A failed invoke as the renderer catches it: its words, and its code when it is one of the app's. */
-function failure(result: Extract<IpcResult, { ok: false }>): Error {
+/**
+ * A failed invoke as the renderer catches it: its words, its code when it is one of the app's, and
+ * the channel it failed on (`failedChannel`).
+ */
+function failure(result: Extract<IpcResult, { ok: false }>, channel: StudioInvokeChannel): Error {
   const code = errorCode(result);
-  return code ? new CodedError(code, result.error) : new Error(result.error);
+  const error = code ? new CodedError(code, result.error) : new Error(result.error);
+  return Object.assign(error, { channel });
 }
 
 /** What every group of calls is built from: the raw IPC, and the typed invoke and subscribe over it. */
@@ -213,7 +217,6 @@ function runCalls(bridge: BridgeCalls) {
     showBuild: (project, commit) => invoke("studio:build.show", { project, commit }),
     landBuild: (project, commit) => invoke("studio:build.land", { project, commit }),
     buildProblem: (project) => invoke("studio:build.problem", { project }),
-    startRun: (spec) => invoke("studio:run.start", spec),
     stopRun: (runId) => invoke("studio:run.stop", { runId }),
     finishRun: (runId, threadId) => invoke("studio:run.finish", { runId, threadId }),
     resumeAutopilot: (runId) => invoke("studio:autopilot.resume", { runId }),
@@ -322,7 +325,6 @@ function studioCalls(bridge: BridgeCalls) {
     engines: () => invoke("studio:engines"),
     providerUsage: () => invoke("studio:provider-usage"),
     hardware: () => invoke("studio:hardware"),
-    staged: () => invoke("studio:staged"),
     settings: () => invoke("studio:settings"),
     setSettings: (patch) => invoke("studio:settings.set", patch),
     diagnostics: () => invoke("studio:diagnostics"),
@@ -339,9 +341,6 @@ function studioCalls(bridge: BridgeCalls) {
     contextSettings: (engine, model, threadId) => invoke("studio:context.get", { engine, model, threadId }),
     setContextPolicy: (engine, model, policy, threadId) =>
       invoke("studio:context.set", { engine, model, policy, threadId }),
-    startSkillOpt: () => invoke("studio:skillopt.start"),
-    acceptProposal: (index, key) => invoke("studio:skillopt.accept", { index, ...key }),
-    discardProposal: (index, reason, key) => invoke("studio:skillopt.discard", { index, reason, ...key }),
     cancelModelDownload: () => invoke("studio:cancel-model-download", {}),
     modelInstallStatus: () => invoke("studio:model-install.status"),
     refreshModels: (provider) => invoke("studio:models.refresh", { provider }),
@@ -355,6 +354,7 @@ function studioCalls(bridge: BridgeCalls) {
     genexAccount: () => invoke("studio:genex-account.read"),
     genexSignIn: () => invoke("studio:genex-account.sign-in"),
     genexCancelSignIn: () => invoke("studio:genex-account.cancel"),
+    genexBuild: (idea) => invoke("studio:genex-account.build", idea ? { idea } : {}),
     genexSignOut: () => invoke("studio:genex-account.sign-out"),
     notify: (note) => invoke("studio:notify", note),
     setBadge: (count) => invoke("studio:badge", { count }),
@@ -379,9 +379,10 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginChooseFile: (id, request) => invoke("studio:plugins.choose-file", { id, request }),
     genexPublishReview: (project) => invoke("studio:plugins.genex-publish-review", { project }),
     genexPublishPlatforms: (project) => invoke("studio:plugins.genex-publish-platforms", { project }),
-    genexPublish: (project, review, title, remix) =>
-      invoke("studio:plugins.genex-publish", { project, review, title, remix }),
+    genexPublish: (project, review, title, remix, replaceNativePage) =>
+      invoke("studio:plugins.genex-publish", { project, review, title, remix, replaceNativePage }),
     genexPublishApps: (project, title, remix) => invoke("studio:plugins.genex-publish-apps", { project, title, remix }),
+    genexCloudBuild: (project, platform) => invoke("studio:plugins.genex-cloud-build", { project, platform }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),
     pluginInstallGithub: (spec) => invoke("studio:plugins.install-github", { spec }),
     pluginLookupGithub: (link, version) => invoke("studio:plugins.lookup-github", { link, version }),
@@ -437,6 +438,9 @@ function accountCalls(bridge: BridgeCalls) {
     cursorSignOut: () => invoke("studio:cursor.signout"),
     openRouterKeySave: (key) => invoke("studio:openrouter.key.save", { key }),
     openRouterKeyClear: () => invoke("studio:openrouter.key.clear"),
+    typeSafeKeyStatus: () => invoke("studio:typesafe.key.status"),
+    typeSafeKeySave: (key) => invoke("studio:typesafe.key.save", { key }),
+    typeSafeKeyClear: () => invoke("studio:typesafe.key.clear"),
     openRouterSignIn: () => invoke("studio:openrouter.signin"),
     openRouterSignInReopen: () => invoke("studio:openrouter.signin.reopen"),
     openRouterSignInCancel: () => invoke("studio:openrouter.signin.cancel"),

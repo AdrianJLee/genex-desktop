@@ -58,6 +58,7 @@ import { scanPackage } from "../substrate/plugins/scan.ts";
 import {
   createReloadPolicy,
   installProcessHandlers,
+  installQuitSignals,
   PageRecovery,
   pageRecovery,
   QuitQuestion,
@@ -92,7 +93,6 @@ import {
   FIXTURE_UPDATE_RELEASE,
   FixtureName,
   fixtureEngines,
-  installOlderPlugins,
   isChatFixture,
   prepareFixture,
 } from "./dev/fixtures.ts";
@@ -128,6 +128,7 @@ import { registerCliInstallIpc } from "./ipc/cli-install.ts";
 import { createCliInstalls } from "./cli-install.ts";
 import { registerMcpIpc } from "./ipc/mcp.ts";
 import { registerModelsIpc } from "./ipc/models.ts";
+import { hardwareReport } from "./core/hardware-report.ts";
 import { registerNotificationsIpc } from "./ipc/notifications.ts";
 import { registerPermissionsIpc } from "./ipc/permissions.ts";
 import { registerPluginsIpc } from "./ipc/plugins.ts";
@@ -194,6 +195,7 @@ import { nativePlays } from "./play/native-plays.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
 import { linuxGameWindows } from "./play/native-windows-linux.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
+import { unrealGameProgram } from "./play/unreal-launcher.ts";
 import { spawnLinuxGame } from "../substrate/plugins/linux-game.ts";
 import { windowsGames } from "../substrate/plugins/windows-game.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
@@ -301,7 +303,7 @@ import { errorMessage } from "../shared/errors.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { CustomEvent, customEventData } from "../shared/custom-events.ts";
 import { EVAL_LANE_EXIT } from "../shared/eval-lane.ts";
-import { EngineId, SUBSCRIPTION_ENGINES } from "../shared/providers.ts";
+import { EngineId, providerInfo, SUBSCRIPTION_ENGINES } from "../shared/providers.ts";
 import { TerminalKind } from "../shared/terminal.ts";
 import {
   flagValue,
@@ -529,6 +531,9 @@ installProcessHandlers(
   },
   (kind, reason) => appDiagnostics.fault(kind, reason),
 );
+// SIGTERM and SIGINT quit through `before-quit`, as Chromium's own handler would have, had the
+// process sandbox's runtime not taken both for its clean-up (`installQuitSignals`).
+installQuitSignals(process, { quit: () => app.quit(), exit: () => app.exit(0) });
 // Native crash dumps stay on this Mac, beside the log in this launch's own data; nothing is uploaded.
 app.setPath("crashDumps", path.join(userDataRoot, "Crashpad"));
 crashReporter.start({ uploadToServer: false });
@@ -738,6 +743,8 @@ const { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin } = creat
   openExternal: (url) => shell.openExternal(url),
   subscription,
   pushUiEvent,
+  // Each step a sign-in reaches, so a log a person sends says where a sign-in that hung stopped.
+  log: (line) => studioLog.write("main", line),
   onOpenCodeSignedIn: async () => {
     if (core?.engines.has(EngineId.OpenCode)) await core.engines.get(EngineId.OpenCode).refreshModels?.(true);
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenCode } });
@@ -777,16 +784,23 @@ function reviveCrashedWindow(): void {
   if (window && !window.isDestroyed() && window.webContents.isCrashed()) window.webContents.reload();
 }
 
+/**
+ * A subscription's engine: Claude Code's or Codex's. Genex runs Claude Code's engine too, but on
+ * genex.games's sign-in, not a plan's.
+ */
 function subscription(id: string): SubscriptionEngine | null {
-  if (!core?.engines.has(id)) return null;
+  if (providerInfo(id)?.subscription !== true || !core?.engines.has(id)) return null;
   const engine = core.engines.get(id);
   if (engine instanceof ClaudeCodeEngine || engine instanceof CodexEngine) return engine;
   return null;
 }
 
-/** The subscriptions' plan limits, one live state the renderer is pushed (`core/provider-usage.ts`). */
+/**
+ * The subscriptions' plan limits and a Genex Pro member's monthly credits, one live state the
+ * renderer is pushed (`core/provider-usage.ts`).
+ */
 const providerUsage = createProviderUsage({
-  engines: SUBSCRIPTION_ENGINES,
+  engines: [...SUBSCRIPTION_ENGINES, EngineId.Genex],
   source: (id) => {
     if (!core?.engines.has(id)) return null;
     return engineUsageSource(core.engines.get(id), subscription(id)?.accounts ?? null);
@@ -879,10 +893,7 @@ function launchCoreOptions(): Partial<ConstructorParameters<typeof StudioCore>[0
     const chatFixture = isChatFixture(dev.fixture);
     return {
       gamesRoot: dev.games,
-      executionPolicy: {
-        allowedProjectRoot: dev.games,
-        ...(fixtureProviders ? { runBackgroundImprovement: false } : {}),
-      },
+      executionPolicy: { allowedProjectRoot: dev.games },
       ...(fixtureProviders
         ? {
             engines: fixtureEngines(
@@ -901,7 +912,6 @@ function launchCoreOptions(): Partial<ConstructorParameters<typeof StudioCore>[0
         new OllamaEngine({ ...(ollamaHost ? { host: ollamaHost } : {}) }),
         ...fixtureEngines().filter((e) => e.id !== EngineId.Ollama),
       ],
-      executionPolicy: { runBackgroundImprovement: false },
     };
   // Games live in a plain visible folder, not buried in Library — Finder should show them.
   return { gamesRoot: normalGamesFolder(app.getPath("home")) };
@@ -963,6 +973,17 @@ async function createCore(userData: string): Promise<StudioCore> {
     // A development profile on a stand: the Genex host tools' CLI and the Genex plugin (its publish)
     // go to the stand as the account it signed in to.
     ...optionalStand(launchStand(stand, () => genexAccountFor(studio).token())),
+    // Building with Genex: Claude Code on the account's credits, through genex.games (or its stand).
+    // A fixture launch has its own engines and never reaches the network.
+    ...(fixtureNativePolicy
+      ? {}
+      : {
+          genexBuild: {
+            api: playOrigin.api,
+            token: () => genexAccountFor(studio).token(),
+            refused: (token) => genexAccountFor(studio).refused(token),
+          },
+        }),
     // A game's local item drafts after its publish: Put on sale as the app's account; a fixture
     // launch uploads them to its own store in place of the CLI.
     localItems: {
@@ -1001,9 +1022,6 @@ async function createCore(userData: string): Promise<StudioCore> {
       harnessLogBatch.push(line, stream);
     },
   });
-  // The plugin-updates fixture's profile holds older plugins before the core reads its plugin store.
-  if (fixtureProviders && dev?.fixture === FixtureName.PluginUpdates)
-    await installOlderPlugins(studio.layout.engineHomes, resources);
   performanceRecorder.mark("core-start");
   await studio.init();
   performanceRecorder.mark("core-ready");
@@ -1082,6 +1100,8 @@ function studioWindowOptions(): Electron.BrowserWindowConstructorOptions {
     show: false,
     // Fixed-size acceptance must not depend on the current display's work-area height.
     ...(isSmoke ? { enableLargerThanScreen: true } : {}),
+    // Windows mismeasures the resize frame offscreen; fixture viewports need exact client bounds.
+    ...(isSmoke && process.platform === StudioPlatform.Windows ? { thickFrame: false } : {}),
     ...parkedWindowOptions(),
     ...windowTitle(),
     webPreferences: {
@@ -1161,7 +1181,7 @@ function attachPreviews(studio: StudioCore, win: BrowserWindow): void {
   preview = view;
   studio.options.preview = view;
   // Pooled observation ports for parallel Autopilot facets. Captures are page-side
-  // (__studio.capture() renders straight from the canvas), so the window needs no compositor
+  // (the shim's __studioCapture reads straight from the canvas), so the window needs no compositor
   // surface and stays genuinely hidden. The previous shown-but-parked windows (x=-4400)
   // resurfaced whenever macOS reshuffled displays or Mission Control ran — four ghost windows
   // on the user's desktop mid-run. Rendering is offscreen: a hidden window with a
@@ -1290,9 +1310,12 @@ function watchNativeUpdates(studio: StudioCore): void {
 const GAME_HOST_FOLDER = "game-host";
 
 /** How this system starts a native game, sees its window, brings it forward and asks it to quit. */
-function gameLauncher(): Pick<NativeSessionsDeps, "spawn" | "hasWindow" | "show" | "kill"> {
+function gameLauncher(): Pick<NativeSessionsDeps, "spawn" | "hasWindow" | "show" | "kill" | "program"> {
   // Windows runs a game in an AppContainer through Genex's game host, which says when its window is up.
-  if (process.platform === StudioPlatform.Windows) return windowsGames(path.join(userDataRoot, GAME_HOST_FOLDER));
+  // An Unreal game whose binary carries the Visual C++ runtime starts past Unreal's launcher, which
+  // would ask to install a runtime the game already has (unreal-launcher.ts).
+  if (process.platform === StudioPlatform.Windows)
+    return { ...windowsGames(path.join(userDataRoot, GAME_HOST_FOLDER)), program: unrealGameProgram };
   const kill = (pid: number, signal: NodeJS.Signals) => process.kill(pid, signal);
   // Linux runs a game in bubblewrap and has no window list to read; the Mac in Seatbelt.
   if (process.platform === StudioPlatform.Linux) return { spawn: spawnLinuxGame, ...linuxGameWindows(), kill };
@@ -1740,7 +1763,7 @@ function createFacetPreview(studio: StudioCore, index: number, released: () => v
     vendorDir: path.join(resources, "vendor"),
     partition: `game-preview-facet-${index}`,
     offscreen: true,
-    // Builders, playtesters, reviewers and the lead all play the game here; only Live is heard.
+    // Workers, reviewers and the lead all play the game here; only Live is heard.
     muted: true,
     resolveRoot: (name) => studio.games.dirFor(name),
   });
@@ -2146,6 +2169,11 @@ function threadsIpcDeps(studio: StudioCore, engines: EngineBoot): ThreadsIpcDeps
     playWeb: playOrigin.web,
     analytics,
     launchFacts: handLaunchFacts,
+    agentsProblem: () => {
+      const boot = bootGate.state();
+      return boot.phase === BootPhase.Ready ? (boot.failureCode ?? null) : null;
+    },
+    log: (line) => studioLog.write("main", line),
   };
 }
 
@@ -2172,19 +2200,22 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });
   registerStorageIpc(handle, { core: studio });
   registerJobsIpc(handle, { core: studio, openExternal: (url) => shell.openExternal(url) });
-  registerModelsIpc(handle, { core: studio, subscription, pushUiEvent, openRouterLogin, usage: providerUsage });
+  registerModelsIpc(handle, {
+    core: studio,
+    subscription,
+    pushUiEvent,
+    openRouterLogin,
+    usage: providerUsage,
+    readHardware: isSmoke ? async () => smokeReads.hardware ?? hardwareReport() : undefined,
+  });
   registerPreviewIpc(handle, {
     core: studio,
     preview: () => preview,
     previewBoundsSeen,
     fullScreen: { enter: () => gameScreen?.enter(), active: () => gameScreen?.active() ?? false },
   });
-  registerRunsIpc(handle, { core: studio, runSummaryReader, keepAwake, pushUiEvent, appendErrorDurably });
-  registerLearningIpc(handle, {
-    core: studio,
-    scriptedImprovementPass: fixtureProviders && dev?.fixture === FixtureName.StudioActivity,
-    pushUiEvent,
-  });
+  registerRunsIpc(handle, { core: studio, runSummaryReader, keepAwake });
+  registerLearningIpc(handle, { core: studio });
   registerSettingsIpc(handle, {
     core: studio,
     diagnostics: () => diagnosticsReport(studio),
@@ -2219,7 +2250,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   registerCliInstallIpc(handle, cliInstalls(studio));
   registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel, web: playOrigin.web });
   registerDataFolderIpc(handle, dataFolderIpc(studio));
-  registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
+  registerGenexAccountIpc(handle, { account: genexAccountFor(studio), web: playOrigin.web });
   registerPlayIpc(handle, playIpcDeps(studio));
   registerStoreIpc(handle, { ...storeFor(studio), coin: plateCoinFor(studio), local: studio.localItems });
   const { library } = playAccountFor(studio);

@@ -10,8 +10,6 @@
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
-import { MESSAGE as OPEN_END } from "../../src/harness-seed/loop/director/open/finish.ts";
-import { TIME_CAP_WORDS } from "../../src/harness-seed/loop/time-cap-prompts.ts";
 import {
   OPEN_PROJECTS,
   openLoopWaitNotice,
@@ -33,13 +31,16 @@ import { CoreFact, LoopProfile } from "../../src/shared/project-facts.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { PluginOffer } from "../../src/shared/project-tools.ts";
 import { ToolPermissionState } from "../../src/shared/permissions.ts";
-import { HOUR_MS } from "../../src/shared/duration.ts";
 import { AppLookAccessKind } from "../../src/shared/jobs.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 
 const GAME = "fixture-game";
-/** The in-place Loop's close when its time ran out with no reviewer's yes, as the seed writes it. */
-const OPEN_TIME_UP = OPEN_END.timeUpNoClaim;
+/**
+ * The in-place Loop's close when its time ran out with no reviewer's yes, and what its report listed,
+ * as an earlier seed wrote them: the fixture's record is an old chat's history (a Loop has no clock now).
+ */
+const OPEN_TIME_UP = "the Loop's time ran out; here is where it stands";
+const NOT_CHECKED = "The time ran out.";
 
 describe("the open-projects dev fixture", () => {
   let lite: CoreLite;
@@ -115,19 +116,16 @@ describe("the open-projects dev fixture", () => {
     });
     assert.equal(closes.length, 1);
     assert.equal(closes[0]?.profile, LoopProfile.Open);
-    assert.deepEqual(closes[0]?.notDone, [TIME_CAP_WORDS.notChecked]);
+    assert.deepEqual(closes[0]?.notDone, [NOT_CHECKED]);
     const result = toEntries(await chat(OPEN_PROJECTS.godot)).find((entry) => entry.kind === EntryKind.Morning);
     assert.ok(result?.kind === EntryKind.Morning);
-    assert.ok(result.summary?.includes(TIME_CAP_WORDS.notChecked), "the result card says no reviewer read a claim");
+    assert.ok(result.summary?.includes(NOT_CHECKED), "the result card says no reviewer read a claim");
     // As the in-place Loop writes it: timed in `budgets`, closed in its own words with its lead's row.
     assert.equal(closes[0]?.stoppedBecause, OPEN_TIME_UP);
     assert.deepEqual(Object.keys((closes[0] as { facets?: object } | undefined)?.facets ?? {}), ["lead"]);
-    const graph = buildRunGraph(await chat(OPEN_PROJECTS.godot), String(closes[0]?.runId));
-    const run = graph?.nodes.find((node) => node.kind === GraphNodeKind.Run);
-    assert.equal(run?.kind === GraphNodeKind.Run ? run.durationMs : undefined, HOUR_MS, "the graph reads it as timed");
   });
 
-  it("the Godot game's Loop going in place draws its worker and the finish check, and the worker's question waits", async () => {
+  it("the Godot game's Loop going in place draws its worker and no final look nobody asked for, and the worker's question waits", async () => {
     const events = await chat(OPEN_PROJECTS.godot);
     const graph = buildRunGraph(events);
     assert.ok(graph);
@@ -140,9 +138,12 @@ describe("the open-projects dev fixture", () => {
       partRows(graph, null).some((row) => row.facet.title === OPEN_PROJECTS.askingWorker),
       "the worker's row",
     );
-    const check = graph.nodes.find((node) => node.kind === GraphNodeKind.FinishCheck);
-    assert.ok(check?.kind === GraphNodeKind.FinishCheck);
-    assert.equal(check.state, FinishCheckState.NotYet);
+    // Flipped: its lead asked no reviewer yet, so no check waits at the Loop's end.
+    assert.equal(
+      graph.nodes.some((node) => node.kind === GraphNodeKind.FinishCheck),
+      false,
+      "no final look its lead never asked for",
+    );
     const asks = toEntries(events).filter(
       (entry) => entry.kind === EntryKind.Action && entry.action === EntryAction.Permission && entry.pending,
     );

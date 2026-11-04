@@ -9,15 +9,15 @@
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SECOND_MS } from "../../../shared/duration.ts";
-import { isUserCancelled, errorCode } from "../../../shared/errors.ts";
+import { isUserCancelled } from "../../../shared/errors.ts";
 import { type PluginStageButton, type PluginStageCard, stageCardFrom } from "../../../shared/plugin-stage-card.ts";
 import { type PluginInfo, PluginSourceKind } from "../../../shared/plugins.ts";
 import { runPluginAction } from "../../plugin-actions.ts";
 import { openPluginSetup } from "../../plugin-setup.ts";
 import { type StatusPoll, startStatusPoll } from "../../status-poll.ts";
-import { type Notify, ToastTone } from "../../state/toasts.ts";
+import { type Notify, notifyProblem } from "../../state/toasts.ts";
 import { Button } from "../../ui/Button.tsx";
-import { PLUGIN_CARD_WORDS, problemWords } from "../../words.ts";
+import { PLUGIN_CARD_WORDS } from "../../words.ts";
 
 /** How often the card asks the plugin where the game stands; the Unreal card asks as often. */
 const STATUS_POLL_MS = 3 * SECOND_MS;
@@ -103,7 +103,7 @@ export function PluginCardStage({
     try {
       await press(source, step, game.name);
     } catch (err) {
-      if (!isUserCancelled(err)) onNotice(problemWords(err), ToastTone.Error, errorCode(err));
+      if (!isUserCancelled(err)) notifyProblem(onNotice)(err);
     } finally {
       setBusy(false);
       await refresh();

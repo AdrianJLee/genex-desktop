@@ -35,7 +35,7 @@ import type { LoopRun } from "../loop-run.ts";
 import { closeUnderWay, finishUnderWay } from "../close-latch.ts";
 import { NoteKind } from "../wake-schedule.ts";
 import { HEALTH_POLL_MS, MAX_REOPENS, OPEN_CLOSE_MS, type OpenLoop, type OpenSavePoint } from "./contract.ts";
-import { appLostWords, backHeldWords, crashHeldWords } from "./hold-words.ts";
+import { appLostWords, backHeldWords, crashHeldWords } from "../held-words.ts";
 import { OPEN_NEWS } from "./prompts.ts";
 import { stopWritersInPlace } from "./writers.ts";
 
@@ -57,7 +57,7 @@ const over = (loopRun: LoopRun): boolean =>
   closeUnderWay(loopRun.state) ||
   finishUnderWay(loopRun.state) ||
   loopRun.ctx.cancelled === true ||
-  Boolean(loopRun.open?.refused || loopRun.open?.betweenTurns);
+  Boolean(loopRun.open.betweenTurns);
 
 /** How long the Loop's teardown waits for a recovery under way to stop, before its run ends anyway. */
 const RECOVERY_SETTLE_MS = OPEN_CLOSE_MS / 2;
@@ -65,13 +65,9 @@ const RECOVERY_SETTLE_MS = OPEN_CLOSE_MS / 2;
 /** Whether the Loop began to close, or closed: a recovery under way stops at its next step, and says nothing. */
 const closing = (loopRun: LoopRun): boolean => closeUnderWay(loopRun.state) || loopRun.state.finished;
 
-/** Until when a reopened app may take to answer: `REOPEN_WAIT_MS` from now, within the run. */
-const reopenUntil = (loopRun: LoopRun, open: OpenLoop): number =>
-  Math.min(open.clock.now() + REOPEN_WAIT_MS, loopRun.finalDeadline);
-
 /** Waits until the project's app answers again; why it didn't, or null once it does (or the run was stopped). */
 async function answersAgain(loopRun: LoopRun, open: OpenLoop): Promise<Failed | null> {
-  const until = reopenUntil(loopRun, open);
+  const until = open.clock.now() + REOPEN_WAIT_MS;
   const stopped = () => closing(loopRun);
   const ready = await waitReady(loopRun.ctx, loopRun.game, runScope(loopRun), open.clock, until, stopped);
   if (ready.ok || loopRun.ctx.cancelled || closing(loopRun)) return null;
@@ -153,7 +149,7 @@ async function halt(loopRun: LoopRun, open: OpenLoop, words: string): Promise<vo
 /**
  * Ends the lead's session under way in the folder, addressed to the session the host seated as this
  * run's lead in place: a call the host has not seated yet is missed, so the turn's watch says it
- * again while the Loop stays paused (`news.ts`).
+ * again while the Loop stays paused (`../news.ts`).
  */
 export async function abortLead(loopRun: LoopRun): Promise<void> {
   const lead = { cwd: loopRun.projectDir, lead: loopRun.run.runId };
@@ -197,11 +193,9 @@ async function recover(loopRun: LoopRun, open: OpenLoop, reason: string): Promis
   const stopped = await stopWritersInPlace(open, OPEN_NEWS.writerStoppedWhy);
   // Its stop may take a while: a close or a Stop meanwhile leaves the folder as it is.
   if (givesUp(loopRun)) return;
-  const restoresBefore = open.restores;
   const back = await backTo(loopRun, open, last, stopped);
   if (loopRun.ctx.cancelled || !back) return;
-  // Back, though the app still doesn't answer: the Resume's first message tells the lead the folder went back.
-  if (open.restores > restoresBefore && !closing(loopRun)) open.journal.carried.push(wentBackLine(last.label, stopped));
+  // Back, though the app still doesn't answer: the line `backTo` wrote tells the lead with the Resume's first message.
   await halt(loopRun, open, backHeldWords(back) ?? appLostWords(back.why));
 }
 
@@ -228,8 +222,8 @@ export function recoverApp(loopRun: LoopRun, open: OpenLoop, reason: string): Pr
  */
 export async function settleRecovery(loopRun: LoopRun): Promise<void> {
   const open = loopRun.open;
-  const under = [open?.healthLook, open?.recovering].filter((one): one is Promise<void> => Boolean(one));
-  if (!open || !under.length) return;
+  const under = [open.healthLook, open.recovering].filter((one): one is Promise<void> => Boolean(one));
+  if (!under.length) return;
   await Promise.race([Promise.all(under), open.clock.sleep(RECOVERY_SETTLE_MS)]);
 }
 

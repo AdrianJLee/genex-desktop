@@ -1,36 +1,24 @@
 /**
- * One session: a waking run's lead IS its chat's own contractor session.
+ * One session: a waking run's lead IS its chat's own contractor session, and there is one session
+ * per chat.
  *
- * Before this, launching a build from a chat handed the run to a second mind: a director session
- * of its own, opened in the run's integration worktree beside the chat's contractor session, which
- * knew nothing of the conversation the build came from and wrote a memory file to survive its own
- * compactions. Now the chat's own session leads: the run resumes the session the chat's bookmark
- * names (`contractor_session`), in the game folder where that session lives, read-only while the
- * build runs — workers write, and the lead reads the integration worktree it leads. After the close
- * the chat goes on in the same session, before, during and after the build one conversation.
+ * The run resumes the session the chat's bookmark names (`contractor_session`), in the game folder
+ * where that session lives, and it builds there with its own hands, beside its workers — never
+ * read-only, limited only by the chat's permission mode. A lead model of its own on that engine is the session's model option. After the
+ * close the chat goes on in the same session, before, during and after the build one conversation.
  *
- * When the chat has no session this lead can continue — its bookmark names another engine or
- * model, or it cannot be resumed — the lead starts a fresh one in the game folder with the brief,
- * the chat's latest messages and the digest (`freshChat`). A fresh session on the chat's own engine
- * and model becomes the chat's bookmark; one on another leaves the chat's bookmark alone.
- *
- * The long turn (`run.directorLoop: "turn"`), the classic pipeline and a kept older director.ts
- * keep the separate director in its integration worktree.
+ * When the chat has no session this lead can continue — none yet, its bookmark names another
+ * engine, or it cannot be resumed — the lead starts a fresh one in the game folder, told the chat's
+ * latest messages beside its first message (`freshChat`), and it becomes the chat's bookmark.
  */
 import { lastContractorSession } from "../chat-session.ts";
-import { GIT, gitAt, resetClean, updateRef } from "../git.ts";
 import { HostMethod } from "../host-methods.ts";
 import { plannerModel } from "../model-roles.ts";
-import { runRef } from "../repo.ts";
 import { EventKind, RunEvent } from "../run-events.ts";
 import { compactedSummary } from "../compaction-log.ts";
 import { handoverSection } from "../session-compact-prompts.ts";
-import { chatSoFar, LEAD_SET_ASIDE } from "./lead-session-prompts.ts";
+import { chatSoFar } from "./lead-session-prompts.ts";
 import type { AnyRecord, HarnessCtx, HarnessEvent, Run } from "../../types/harness.d.ts";
-import type { LoopRun } from "./loop-run.ts";
-
-/** The model a session was opened on when the chat named none: the engine's own default. */
-const DEFAULT_MODEL = "default";
 
 /**
  * Why the host refused a delegation before any engine ran (the error's `code`). The app's copy is
@@ -47,23 +35,11 @@ export function folderBusy(err: unknown): boolean {
   return (err as AnyRecord | null)?.code === DelegationRefusal.FolderBusy;
 }
 
-/**
- * Does every part of the run a lead depends on serve one (`SERVES_LEAD`): its words and its hands
- * for a lead that writes nothing are there? A seed upgrade keeps a part the agent edited before one
- * session, which never exported it — and would tell a lead in the game folder to edit and commit in
- * its worktree. Such a run seats no lead: a director with its own hands leads, as it did before.
- */
-export function servesLead(parts: readonly Readonly<Record<string, unknown>>[]): boolean {
-  return parts.every((part) => part.SERVES_LEAD === true);
-}
-
 /** Where a waking run's lead sits and whose session it is (`run.lead`). */
 export interface LeadSeat {
   /** The game folder its session sits in: the live folder the user sees. */
   folder: string;
-  /** Its session is the chat's own: the chat's bookmark follows it (`bookmarkLead`). */
-  chatSession: boolean;
-  /** The session its first turn resumes: the chat's, or its own from before a pause; null opens a fresh one. */
+  /** The session its first turn resumes: the chat's; null opens a fresh one. */
   sessionId: string | null;
   /** The session the chat's bookmark names now, so an unchanged one is not written again. */
   bookmarked: string | null;
@@ -71,89 +47,49 @@ export interface LeadSeat {
   model: string | null;
 }
 
-/** The chat's bookmark as the lead reads it: its session, engine and folder, and its model when one was recorded. */
+/** The chat's bookmark as the lead reads it: its session, engine and folder. */
 export interface ChatBookmark {
   sessionId: string;
   engine: string | undefined;
   project?: string;
-  model: string | null;
-  /** The bookmark recorded its model (bookmarks written before one session did not). */
-  modelKnown: boolean;
-}
-
-/** One custom event's type and payload, or null. */
-function customOf(event: HarnessEvent | AnyRecord | null | undefined): { type: string; payload: AnyRecord } | null {
-  const data = (event as AnyRecord)?.data ?? event;
-  if (data?.type !== EventKind.Custom) return null;
-  return { type: String(data.event_type), payload: data.payload ?? {} };
-}
-
-/** The model the newest bookmark of `sessionId` recorded, if any recorded one. */
-function recordedModel(events: readonly (HarnessEvent | AnyRecord)[], sessionId: string): AnyRecord | null {
-  let found: AnyRecord | null = null;
-  for (const event of events) {
-    const custom = customOf(event);
-    const bookmark = custom?.type === RunEvent.ContractorSession && custom.payload.sessionId === sessionId;
-    if (bookmark && custom && "model" in custom.payload) found = custom.payload;
-  }
-  return found;
 }
 
 /** The chat's current session, whatever its engine: what the chat resumes next (chat-session.ts `lastContractorSession`). */
 export function chatBookmark(events: readonly (HarnessEvent | AnyRecord)[] | undefined): ChatBookmark | null {
   const found = lastContractorSession(events ?? []);
   if (!found) return null;
-  const recorded = recordedModel(events ?? [], found.sessionId);
-  return {
-    sessionId: found.sessionId,
-    engine: found.engine,
-    ...(found.project ? { project: found.project } : {}),
-    model: recorded ? (recorded.model ?? null) : null,
-    modelKnown: recorded !== null,
-  };
+  return { sessionId: found.sessionId, engine: found.engine, ...(found.project ? { project: found.project } : {}) };
 }
 
-/** A model as a bookmark compares it: none named and the engine's default are the same model. */
-function modelKey(model: unknown): string {
-  const named = String(model ?? "").trim();
-  return named === DEFAULT_MODEL ? "" : named;
-}
-
-/** Can this run's lead continue the chat's session: the same engine, the same game and the same model? */
-export function continuesChat(bookmark: ChatBookmark, run: Run, leadModel: string | null | undefined): boolean {
+/** Can this run's lead continue the chat's session: the same engine and the same game? A model of its own goes as the model option. */
+export function continuesChat(bookmark: ChatBookmark, run: Run): boolean {
   if (!bookmark.engine || bookmark.engine !== run.engine) return false;
-  if (bookmark.project && bookmark.project !== run.project) return false;
-  // A bookmark from before one session names no model: the chat launched on its own model.
-  return !bookmark.modelKnown || modelKey(bookmark.model) === modelKey(leadModel);
+  return !bookmark.project || bookmark.project === run.project;
 }
 
 /**
- * The lead's seat for this run. The chat's session when it can continue it; a fresh one — the
- * chat's own from then on — when the chat has none; and when the chat's session is another
- * engine's or model's, a session of the lead's own (the one it had before a pause, if any) that
- * leaves the chat's bookmark alone.
+ * The lead's seat for this run: always the chat's session (one session per chat). It continues the
+ * chat's session when it can; otherwise — the chat has none, or it is another engine's — a fresh
+ * one opens, and is the chat's from then on.
  */
 export function leadSeat({
   events,
   run,
   folder,
-  priorJournal = null,
 }: {
   events: readonly (HarnessEvent | AnyRecord)[] | undefined;
   run: Run;
   folder: string;
-  priorJournal?: AnyRecord | null;
 }): LeadSeat {
-  const model = plannerModel(run) ?? null;
-  const seat = { folder, engine: run.engine, model };
   const bookmark = chatBookmark(events);
-  if (!bookmark) return { ...seat, chatSession: true, sessionId: null, bookmarked: null };
-  if (continuesChat(bookmark, run, model))
-    return { ...seat, chatSession: true, sessionId: bookmark.sessionId, bookmarked: bookmark.sessionId };
-  // A lead of its own before the pause: its session sat in this game folder too.
-  const prior = priorJournal?.director;
-  const own = prior?.lead?.chatSession === false ? (prior.sessionId ?? null) : null;
-  return { ...seat, chatSession: false, sessionId: own, bookmarked: null };
+  const sessionId = bookmark && continuesChat(bookmark, run) ? bookmark.sessionId : null;
+  return {
+    folder,
+    engine: run.engine,
+    model: plannerModel(run) ?? null,
+    sessionId,
+    bookmarked: sessionId,
+  };
 }
 
 /**
@@ -183,50 +119,13 @@ export async function bookmarkLead(
   { threadId, run, seat }: { threadId: string; run: Run; seat: LeadSeat },
   sessionId: string | null | undefined,
 ): Promise<void> {
-  if (!seat.chatSession || !sessionId || sessionId === seat.bookmarked) return;
+  if (!sessionId || sessionId === seat.bookmarked) return;
   seat.bookmarked = sessionId;
-  const payload = { project: run.project, engine: seat.engine, sessionId, model: seat.model };
+  const payload = { project: run.project, engine: seat.engine, sessionId };
   await ctx
     .call(HostMethod.EventsAppend, {
       threadId,
       batch: [{ type: EventKind.Custom, event_type: RunEvent.ContractorSession, payload }],
     })
     .catch(() => {});
-}
-
-/** What the studio set aside of a lead's integration worktree: the ref that keeps it, and its paths. */
-export interface SetAside {
-  ref: string;
-  files: string[];
-}
-
-/** A porcelain status line's path: the new name of a rename, quoted names as git wrote them. */
-function statusPath(line: string): string {
-  const named = line.slice(3).trim();
-  const renamed = named.indexOf(" -> ");
-  return renamed >= 0 ? named.slice(renamed + 4) : named;
-}
-
-/**
- * Changes in a lead's integration worktree that nobody committed — a game that builds in place, a
- * tool's cache, a lead's edit it did not commit — would hold every merge off for the rest of the run. The
- * studio keeps them instead: every change, staged, as a commit over the integration head on a ref
- * of the run (`refs/studio/runs/<run>/set-aside/<stamp>`, never the branch), and the worktree reset
- * to that head. Said on the run's log. Answers what it set aside, or null when nothing was
- * uncommitted; a git failure throws, and the worktree is left as it was found or reset.
- */
-export async function setAsideStrays(loopRun: LoopRun, label: string): Promise<SetAside | null> {
-  const { ctx, integrationWorktree: at, note, run } = loopRun;
-  const status = await gitAt(ctx, at, GIT.status, { label }).catch(() => "");
-  if (!status) return null;
-  const files = status.split("\n").map(statusPath).filter(Boolean);
-  const ref = runRef(run.runId, "set-aside", Date.now());
-  const message = `studio: set aside what no worker made in ${run.runId}'s integration worktree`;
-  // Everything, staged in the worktree's own index (the reset below clears it), as a commit on the
-  // head. A kept older git.ts has no `snapshotCommit`, and then no lead is seated (`servesLead`).
-  const commit = await gitAt(ctx, at, GIT.snapshotCommit(message), { label });
-  await updateRef(ctx, at, ref, commit, { label });
-  await resetClean(ctx, at, "HEAD", { label });
-  note(LEAD_SET_ASIDE(ref, files));
-  return { ref, files };
 }

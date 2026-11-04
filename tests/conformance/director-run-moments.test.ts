@@ -26,7 +26,7 @@ afterEach(async () => {
 });
 
 /** A run on a game whose plugin hooks the run's start and end, with a lead that records each turn it is asked for. */
-async function stagedRun(name: string, budgets: Record<string, unknown> = { wallClockMs: 15 * 60_000 }) {
+async function stagedRun(name: string, budgets: Record<string, unknown> = {}) {
   // The locks' clock moves on by itself: a wait for the person passes in no real time.
   let skew = 0;
   const rig = await startRig(
@@ -105,7 +105,9 @@ describe("a director's run at Genex's moments", () => {
     const ended = await finished();
     await running;
     assert.equal(leadTurns.length, 0, "no session opened");
-    assert.match(String(ended.stoppedBecause), /a plugin of this game held it back: The stage is being swept\./);
+    // Flipped (one Loop): a web game's start closed in the web Loop's words ("a plugin of this game");
+    // every Loop's held start closes in the Loop's own, as a Godot game's did.
+    assert.match(String(ended.stoppedBecause), /a plugin of this project held it back: The stage is being swept\./);
     assert.equal(await count(stage, "run.end:farewell"), 1, "the run's end is announced once");
   });
 
@@ -144,17 +146,7 @@ describe("a director's run at Genex's moments", () => {
     assert.equal(await count(stage, "run.end:farewell"), 1);
   });
 
-  it("a run whose lead turns a plugin keeps holding back ends saying why, never that a session failed", {
-    timeout: RIG_TIMEOUT_MS,
-  }, async () => {
-    // A run whose time is up: a held turn is not asked again, and its wrap-up is held at once.
-    const { stage, leadTurns, dispatch, finished } = await stagedRun("stage-curtain", { wallClockMs: 1_000 });
-    await stage.script({ "turn.start:curtain": { block: "The curtain is stuck." } });
-    const running = dispatch();
-    const ended = await finished();
-    await running;
-    assert.equal(leadTurns.length, 0, "no session opened");
-    assert.match(String(ended.stoppedBecause), /kept holding the lead's turns back: The curtain is stuck\./);
-    assert.doesNotMatch(String(ended.stoppedBecause), /session ended \(failed\)/);
-  });
+  // Deleted (no clock): "a run whose lead turns a plugin keeps holding back ends saying why" ran a
+  // Loop whose time was up, so its held turn gave up at once. A held turn now waits until the plugin
+  // lets it start or the person stops the run (hook-moments.test.ts, the held turn's rows).
 });

@@ -5,8 +5,7 @@
  * none), answered by the fake hook bus (`unreal-moment-bus.ts`), and `engine.delegate` split three
  * ways: the lead (a script of turns calling the run's tools through `directorTool`, as the host
  * forwards them), pool workers (sessions the test ends, writing files in their copies first), and
- * the reviewer (`reviewerAnswer`), and a judge that plays on a leased window (a delegation with a
- * `playtest` grant, answering yes to every question it is asked unless the test says otherwise). A checkpoint's pictures are kept as the plugin's observer's
+ * the reviewer (`reviewerAnswer`). A checkpoint's pictures are kept as the plugin's observer's
  * capture, as the host keeps them. A checkpoint commits the folder and a restore resets it to the
  * snapshot's commit (after a rescue commit), as the host's snapshots do; the test may put the chat in Plan mode, let the lead's turn take
  * what is steered into it, and list the run's jobs. The clock is the test's: a wait moves it and
@@ -21,7 +20,7 @@ import { promisify } from "node:util";
 import { runDirector } from "../../src/harness-seed/loop/director.ts";
 import { handleRunStart } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { directorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
-import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
+import { leadLineOf } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { type HookEvent, type HookContext, type HookedPlugin, hookEventsOf } from "../../src/shared/plugin-hooks.ts";
 import type { GameKind } from "../../src/shared/project-facts.ts";
 import type { WorkerType } from "../../src/shared/workers.ts";
@@ -31,8 +30,6 @@ import { asksReviewer, fakeFinishReview, reviewerAnswer } from "./reviewer.ts";
 import { type BusHost, checkpoint, fire, restore } from "./unreal-moment-bus.ts";
 
 const run = promisify(execFile);
-const MINUTE = 60_000;
-const HOUR = 60 * MINUTE;
 /** How long a test waits, in real time, for something it expects the Loop to do. */
 const UNTIL_MS = 15_000;
 
@@ -91,14 +88,15 @@ export type LoopHost = {
   stepAnswers: Map<string, (hook: HookContext) => unknown>;
   /** The worker sessions the pool started, in order. */
   workers: WorkerSession[];
-  /** How a judge's session answers its questions, by check id; yes to each when the test sets nothing. */
-  judging: ((params: Record<string, unknown>, ids: string[]) => Record<string, unknown> | undefined) | null;
-  /** The judges' sessions, as the Loop delegated them, in order. */
-  judged: () => Array<Record<string, unknown>>;
   /** The run's artifacts by id, as `artifact.write` keeps them (the journal is one). */
   artifacts: Map<string, unknown>;
   /** The chat's run inbox: what the person said, and whether they asked to finish. */
   inbox: { said: string[]; finishing: boolean };
+  /**
+   * The person writes in the chat while the Loop runs: their message is handed to the lead's line
+   * (live chat), as the chat's queue hands it, and kept in the run's inbox as its record.
+   */
+  say: (text: string) => Promise<void>;
   /** The chat is in Plan mode: Genex holds every writing moment and checkpoint back. */
   planning: boolean;
   /** Whether the lead's session takes what is steered into its turn (`engine.steer`); it takes nothing by default. */
@@ -129,7 +127,7 @@ export type LoopHost = {
   reviewed: () => Array<Record<string, unknown>>;
   /** Waits, in real time, until `done` holds; whether it did. */
   until: (done: () => boolean) => Promise<boolean>;
-  /** Runs the Loop: the open profile unless the test names another; resolves with its report. */
+  /** Runs the Loop on the test's clock; resolves with its report. */
   start: (options?: { resume?: boolean }) => Promise<Record<string, unknown>>;
   /**
    * Starts the run through the run's start (`handleRunStart`), as Resume or the chat's launch does:
@@ -296,23 +294,6 @@ function workerSession(host: Internals, params: Record<string, unknown>): Promis
   });
 }
 
-/** The check ids a judge's prompt asks it to answer (`- <id>: <question>`). */
-function askedIds(prompt: string): string[] {
-  const from = prompt.indexOf("QUESTIONS TO ANSWER");
-  if (from < 0) return [];
-  return [...prompt.slice(from).matchAll(/^- ([^:\s]+): /gm)].map((match) => match[1] ?? "");
-}
-
-/** A judge's session: its answers as the judge's JSON reply, yes to each question unless the test says otherwise. */
-function judgeSession(host: Internals, params: Record<string, unknown>) {
-  const ids = askedIds(String(params.prompt ?? ""));
-  const answers = Object.fromEntries(ids.map((id) => [id, { answer: "yes", note: "played it through", frames: [] }]));
-  const own = host.judging?.(params, ids);
-  const summary = JSON.stringify({ answers, ...own });
-  const trace = { path: `/runs/${host.run.runId}/judge-${host.judged().length}/trace.jsonl`, actions: 3 };
-  return { ok: true, engine: String(host.run.engine), summary, usage: {}, turns: 3, trace };
-}
-
 /** The run's events as the log keeps them: what the test seeded, then every append. */
 function append(host: Internals, params: Record<string, unknown>): { ids: string[] } {
   const batch = (params.batch ?? []) as Array<Record<string, unknown>>;
@@ -396,7 +377,6 @@ function handlers(host: Internals) {
     "plugins.workerTypes": () => [...host.workerTypes],
     "engine.delegate": (params: Record<string, unknown>) => {
       if (params.worker) return workerSession(host, params);
-      if (params.playtest) return judgeSession(host, params);
       return leadTurn(host, params, ++leadTurns);
     },
     "engine.steer": (params: Record<string, unknown>) => {
@@ -443,7 +423,6 @@ async function dispatchThrough(host: LoopHost, { resume = false }: { resume?: bo
     host: ctx,
     cancels: new Set<string>(),
     stoppedMessages: new Set<string>(),
-    moodBoards: new Map(),
     activeRuns: new Map(),
     startingRuns: new Map(),
     orphanRuns: new Map(),
@@ -492,14 +471,13 @@ export function loopHost(options: {
       mode: "autopilot",
       engine: "claude-code",
       reference: { name: "Level", shots: [] },
-      budgets: { wallClockMs: 3 * HOUR, completionPolicy: "goal" },
+      budgets: {},
       ...options.run,
     },
     turns: [...(options.turns ?? [])],
     reviews: [],
     stepAnswers: new Map(),
     workers: [],
-    judging: null,
     artifacts: new Map<string, unknown>(),
     inbox: { said: [], finishing: false },
     planning: false,
@@ -533,12 +511,14 @@ export function loopHost(options: {
     handlers: handlers(host),
     ...(options.workspace ? { workspace: options.workspace } : {}),
   });
+  // The run's inbox as the lead reads it: the person's words on record, whether they asked to finish,
+  // and none the lead took and never heard (`say` hands each to its line, which hears it).
   Object.assign(host.rec.ctx, {
     runInbox: {
       finishing: async () => host.inbox.finishing,
-      steering: async (_address?: unknown, consume?: boolean) =>
-        consume ? host.inbox.said.splice(0) : [...host.inbox.said],
-      backlog: async () => [...host.inbox.said],
+      steering: async () => [...host.inbox.said],
+      unheard: async () => [],
+      notes: async () => [],
     },
   });
   const plain = host.rec.ctx.call.bind(host.rec.ctx);
@@ -547,15 +527,19 @@ export function loopHost(options: {
     if (!["hooks.fire", "checkpoint.take", "snapshot.restore"].includes(method)) host.log.push(method);
     return plain(method, params);
   };
+  let said = 0;
+  host.say = async (text) => {
+    host.inbox.said.push(text);
+    await host.until(() => Boolean(leadLineOf(host.run.runId)));
+    leadLineOf(host.run.runId)?.hear({ threadId: host.threadId, messageId: `m-said-${++said}`, text });
+  };
   host.trail = () => [...host.log];
   host.appended = (eventType) =>
     host.events
       .map((event) => event.data as { event_type?: string; payload?: Record<string, unknown> })
       .filter((data) => data.event_type === eventType)
       .map((data) => data.payload ?? {});
-  host.leadCalls = () =>
-    host.rec.paramsOf("engine.delegate").filter((p) => !asksReviewer(p) && !p.worker && !p.playtest);
-  host.judged = () => host.rec.paramsOf("engine.delegate").filter((p) => Boolean(p.playtest));
+  host.leadCalls = () => host.rec.paramsOf("engine.delegate").filter((p) => !asksReviewer(p) && !p.worker);
   host.prompts = () => host.leadCalls().map((p) => String(p.prompt));
   host.reviewed = () => [...host.review.asked];
   host.until = async (done) => {
@@ -569,7 +553,6 @@ export function loopHost(options: {
       threadId: host.threadId,
       run: structuredClone(host.run) as never,
       resume,
-      profile: LoopProfile.Open,
       clock: { now: host.now, sleep: host.sleep },
     });
   host.dispatch = (options) => dispatchThrough(host, options);

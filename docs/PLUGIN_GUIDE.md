@@ -118,7 +118,7 @@ undeclared method is a compile error.
 | `assets.deliver` | `project.write` | Copies your output into a unique asset directory in the game; delivered files reach the host ledger |
 | `jobs.read` / `jobs.write` | `jobs` | Durable provider references. Not a credit ledger |
 | `events.emit` | `jobs` | Sanitized progress, attributed to the bound project/thread. `{kind:'toolbar', …}` updates a toolbar badge |
-| `observe` | `observe` | Loading/capture/audio evidence for authorized files in the bound worktree. API 3: with `still: { demo \| camera, width, height, maxBytes? }` and `files: []`, one named view on a hidden window at that size, as a PNG (or JPEG past `maxBytes`) with exposure numbers, or a `stillProblem` code; a picture that is still a blank or loading screen is taken again up to three times, two seconds of play apart, and the last one is answered; an older host ignores `still` and answers a plain observation (`PluginStillIgnored`), so check for each. API 3: with `clip: { demo, width, height, seconds? (2–10, 5), fps? (15–30, 30), maxBytes? (256 KiB–8 MiB, 8 MiB) }` and `files: []`, the demo stages a moment and returns, the host starts the clock and records that many seconds as MP4 or WebM with a JPEG `poster` and a 0–1 `motion` (about 0 when frozen), or a `clipProblem` with a still's codes (`PluginClipIgnored` from an older host) |
+| `observe` | `observe` | Loading/capture/audio evidence for authorized files in the bound worktree. API 3: with `still: { camera?, width, height, maxBytes? }` and `files: []`, a plain frame of the game's page on a hidden window at that size (nothing is asked of the game: `camera` may only be `default`, any other name answers `view_unknown` with `available: ["default"]`, and a `demo` is refused), as a PNG (or JPEG past `maxBytes`) with exposure numbers, or a `stillProblem` code; a picture that is still a blank or loading screen is taken again up to three times, two seconds of play apart, and the last one is answered; an older host ignores `still` and answers a plain observation (`PluginStillIgnored`), so check for each. `observe` records no clip: a call with a `clip` is refused |
 | `export.stage` | `export` | Studio writes the public export of the bound game under `storage.root/publish/<project>/dist` and returns the result |
 | `credentials.session` | `credentials`, API 3 | Reuse an explicitly unlocked host-memory lease; never opens the OS store |
 | `runtime.detect` / `runtime.installation` | `native-runtime`, API 3 | Read declared native runtime readiness and durable installation progress |
@@ -128,6 +128,7 @@ undeclared method is a compile error.
 | `game.engine.steps` | `game-engine` | Show your setup card (your `steps` action's answer, read live) in the calling chat; see [Setup in the chat](#setup-in-the-chat) |
 | `game.snapshot` | `game-engine` | `{reason}` → `{snapshotId}`: a game snapshot of the bound game, listed in Rewind under `reason` (one plain line, at most 200 characters), before you change files there |
 | `game.engine.canAssist` | `game-engine` | `true` when Do it for me (`game.engine.assist`) can run for your plugin on this computer: a desktop with its driver, and apps your `engine.apps` names here. Asks nothing; offer the click path when it is `false` |
+| `game.computer.control` | `game-engine` | Computer control for the bound game's chat, `{ task }`: when it is off, Genex asks the person on its card to turn it on (then macOS's grants) and starts the chat's next turn with the task; when on, `{ started: false, reason: "already-on" }` and nothing is posted. Grants no app (each still asks on its own card); a plugin that did not come with Genex reaches it only on the person's own call |
 | `game.engine.assisting` | `game-engine` | `true` while the bound game's chat still runs the turn your Do it for me started; `false` once that turn has ended (answered, failed or taken back) or after 20 minutes. End a progress display the agent never ended with it |
 | `game.engine.runs` | `game-engine` | `{game, title, project}[]`: the games whose run (a Loop) is going now that your plugin linked to a project, with that project file; needs no bound game. Read it before you offer to quit an editor a run may be using |
 | `game.create` | `game-engine` | `{title}` → `{project, directory}`: a new Genex game (title one plain line, at most 80 characters) for an engine project made with no game open; link it with `game.engine.link {project, game}`, which accepts only a game your plugin made, from outside any game |
@@ -161,7 +162,7 @@ inline and put a long guide in a file:
   `[my-plugin/level-kit] <summary> Read it with my-plugin__skill {"name":"level-kit"} before that
   work.` Write the summary so an agent knows *when* to read the file. Studio adds the
   `my-plugin__skill` tool itself and answers it from your package, never through your backend, so
-  do not declare a tool named `skill`.
+  do not declare a tool named `skill`. Its description lists the file skills that reach the game.
 - The file and each reference are `.md` paths inside the package: no `..`, no absolute path, no
   dot file or dot folder (packing leaves those out), no link. The agent passes a reference as
   `file` exactly as you listed it; long files come back in pages it continues with `offset`.
@@ -176,7 +177,9 @@ inline and put a long guide in a file:
   `"makes": ["toy-project"]`: it is refused while a run of the game is going, Genex snapshots the
   game before it runs, records the web game it replaced as the game's `portedFrom`, and tells the
   session to end its reply, which then goes on with your tools. A game with no kind yet is served as
-  a web game (`web-game`); a folder of a kind Genex can't name is served by no fact. The
+  a web game (`web-game`); a folder of a kind Genex can't name is served by no fact. So a tool that
+  makes a project of your kind names `"facts": ["web-game"]`: a game with no kind yet and a web game
+  get it, a game of another kind never does; scope your other tools to your own fact. The
   older `"engines": ["web"]` / `["unreal"]` still works and reads as `web-game` / `unreal-project`;
   anything that names neither reaches every game.
 - The trust dialog lists your skills, and an update marks each new or changed one and names each

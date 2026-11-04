@@ -82,7 +82,6 @@ import type { BackdropShaderRequest, BackdropShaderResult } from "./backdrop-sha
 import type { FolderInspection, GameLocation, GameName, GameNameRequest, GameProject } from "./game-project.ts";
 import type { BuildProblem, InstallResult } from "./build-problem.ts";
 import type { LoopRunReview } from "./run-review.ts";
-import type { StagedTarget } from "./self-change-files.ts";
 import type { CodexLoginState } from "./codex-login.ts";
 import type { ClaudeLoginState } from "./claude-login.ts";
 import type { ProjectAsset, ProjectAssetRead, ProjectAssets } from "./game-assets.ts";
@@ -164,22 +163,6 @@ export interface SelfChange {
   diff: string;
 }
 
-export interface StagedProposal {
-  /** What it changes (`self-change-files.ts`): a skill when absent, or the lessons every brief carries. */
-  target?: StagedTarget;
-  skill: string;
-  file: string;
-  proposedText: string;
-  currentText: string;
-  /** The blind gate's verdict on a skill edit; lessons are not gated, so they carry none. */
-  gate?: { accept: boolean; votes: string; reason: string };
-  rationale: string;
-  /** Plain-language description for the person using the app; absent on older proposals. */
-  title?: string;
-  summary?: string[];
-  at: string;
-}
-
 /** One catalog model judged against this Mac (Settings → Local Models). */
 export interface LocalModelChoice {
   model: string;
@@ -251,13 +234,22 @@ export interface StudioApi {
    * the files in `review`; `title` is the name players see; `remix` is its Allow remixing, whether the
    * game's project goes with it so others can remix it.
    */
-  genexPublish(project: string, review: ExportReview, title?: string, remix?: boolean): Promise<void>;
+  genexPublish(
+    project: string,
+    review: ExportReview,
+    title?: string,
+    remix?: boolean,
+    /** The dialog said the web build replaces a page that shows only the game's apps. */
+    replaceNativePage?: boolean,
+  ): Promise<void>;
   /**
    * Publish a game that has only apps (no web build) from Studio's Publish dialog: its ready Mac and
    * Windows apps go to Genex and the game is listed under `title`. The press, under the rows it names,
    * is the consent; `remix` is its Allow remixing, whether the game's project goes once they are live.
    */
   genexPublishApps(project: string, title?: string, remix?: boolean): Promise<void>;
+  /** Ask Genex to build the game's `platform` app on its own computers (an Unreal game's Windows app on a Mac). */
+  genexCloudBuild(project: string, platform: string): Promise<void>;
   pluginsIndex(refresh?: boolean): Promise<PluginIndexView>;
   pluginInstallGithub(spec: string): Promise<void>;
   /** What a pasted GitHub link leads to, pinned to one exact commit; nothing is installed. */
@@ -422,7 +414,7 @@ export interface StudioApi {
   updateGame(project: string, patch: import("./game-library.ts").GameUpdate): Promise<GameProject>;
   removeGame(project: string): Promise<void>;
   snapshots(): Promise<SnapshotRecord[]>;
-  selfChanges(): Promise<{ changes: SelfChange[]; staged: StagedProposal[] }>;
+  selfChanges(): Promise<{ changes: SelfChange[] }>;
   studioActivity(): Promise<import("./studio-activity.ts").StudioActivityItem[]>;
   /** With `graphFrom`, `graphEvents` holds only the events after it; `graphEventsFrom` says where they start. */
   runSummary(
@@ -436,12 +428,9 @@ export interface StudioApi {
     listener: (summary: import("./run-summary.ts").RunSummary) => void,
   ): () => void;
   runReview(project: string, runId?: string): Promise<LoopRunReview>;
-  staged(): Promise<StagedProposal[]>;
   settings(): Promise<StudioSettingsView>;
   setSettings(patch: {
     learning?: boolean;
-    selfImproving?: boolean;
-    architect?: boolean;
     buildersMax?: number;
     agentsMax?: number;
     blender?: boolean;
@@ -498,6 +487,12 @@ export interface StudioApi {
   openRouterKeySave(key: string): Promise<import("./engine-descriptor.ts").EngineStatus>;
   /** Forget the saved OpenRouter key. */
   openRouterKeyClear(): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /** Whether a TypeSafe key is saved for pilots' fast decisions (optional: pilots choose by their own order without one). */
+  typeSafeKeyStatus(): Promise<import("./fast-decisions.ts").FastDecisionKeyStatus>;
+  /** Check a pasted TypeSafe key with TypeSafe and keep it in the OS secret store when it is taken; the key never comes back. */
+  typeSafeKeySave(key: string): Promise<import("./fast-decisions.ts").FastDecisionKeyStatus>;
+  /** Forget the saved TypeSafe key. */
+  typeSafeKeyClear(): Promise<import("./fast-decisions.ts").FastDecisionKeyStatus>;
   /**
    * Connect OpenRouter in the browser: OpenRouter's page opens, and the call settles once the
    * person approved Genex there (the key is then checked and saved, never sent back), cancelled,
@@ -701,6 +696,11 @@ export interface StudioApi {
   genexCancelSignIn(): Promise<GenexAccountView>;
   /** Sign out of Genex once the person confirms in Studio's question; the account as it is after. */
   genexSignOut(): Promise<GenexAccountView>;
+  /**
+   * Building with Genex: its page on genex.games in the browser, signing in there first while the
+   * app is not, then Pro or a credit pack; `idea` is the waiting message it shows back.
+   */
+  genexBuild(idea?: string): Promise<GenexAccountView>;
   /** A macOS notification; clicking it focuses Studio and sends `notification.open` with the id. */
   notify(note: { id?: string; title: string; subtitle?: string; body: string }): Promise<boolean>;
   /** The Dock badge: how much work waits on the person. Zero clears it. */
@@ -775,21 +775,14 @@ export interface StudioApi {
   /** Merge a build into the live game folder and show it. */
   landBuild(project: string, commit: string): Promise<{ commit: string; how: "merged" | "already" }>;
   /**
-   * Where the native game view sits (zero while anything covers it), and whether the person is
-   * watching a game in Live under whatever briefly covers it (`stage.ts` `watchingLive`).
+   * Where the native game view sits (zero while anything covers it), and the window size it was
+   * measured in (main carries it through resizes).
    */
-  /** The stage slot's rectangle, and the window size it was measured in (main carries it through resizes). */
   previewBounds(bounds: {
     x: number;
     y: number;
     width: number;
     height: number;
-    watching: boolean;
-    /**
-     * The game open on the stage (absent under home, Play or Studio): a show the person asks for in
-     * its chat may load it even while Live holds another game out of sight.
-     */
-    project?: string | null;
     viewport?: { width: number; height: number };
   }): Promise<boolean>;
   /** The Live game's sound switch; main decides when Live is actually heard. */
@@ -830,30 +823,10 @@ export interface StudioApi {
    * `scripts`: the person trusts a remix's setup scripts, which then run (and from then on).
    */
   installPackages(project: string, options?: { scripts?: boolean }): Promise<InstallResult>;
-  startRun(spec: {
-    project: string;
-    goal: string;
-    reference: {
-      name: string;
-      shots: string[];
-      notes?: string;
-      kind?: "reference" | "direction";
-      frames?: Array<{ label: string; mimeType: string; data: string }>;
-    };
-    hours: number;
-    engine?: string;
-    model?: string;
-    judgeEngine?: string;
-    judgeModel?: string;
-  }): Promise<{ runId: string }>;
   stopRun(runId: string): Promise<boolean>;
   /** Wrap up: the builders finish what they are on, then the run integrates, checks and shows. */
   finishRun(runId: string, threadId: string): Promise<boolean>;
   resumeAutopilot(runId: string): Promise<boolean>;
-  startSkillOpt(): Promise<boolean>;
-  /** `key` names the suggestion the person saw; the index alone names whatever sits there now. */
-  acceptProposal(index: number, key?: { at?: string; skill?: string }): Promise<{ skill: string }>;
-  discardProposal(index: number, reason?: string, key?: { at?: string; skill?: string }): Promise<boolean>;
   exportGame(project: string): Promise<{ dir: string; files: number; included: string[]; excluded: string[] }>;
   modelInstallStatus(): Promise<import("./model-install.ts").ModelInstallJob | null>;
   /** Install Claude Code or Codex with its vendor's own installer, or join the install already running. */
@@ -920,11 +893,8 @@ export interface StudioApi {
 }
 
 export interface StudioSettingsView {
-  /** Self-improvement: off, Studio learns nothing new and changes nothing about itself. */
+  /** Self-improvement: off, Studio changes nothing about itself. */
   learning: boolean;
-  /** Apply suggestions automatically, while learning is on. */
-  selfImproving: boolean;
-  architect?: boolean;
   /** Maximum builders a run may use at once; the lead decides how many it starts. */
   buildersMax?: number;
   agentsMax?: number;

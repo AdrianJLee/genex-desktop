@@ -16,7 +16,7 @@ import {
   withdrawnId,
   withoutRewound,
 } from "../../src/shared/chat-rewind.ts";
-import { latestRun } from "../../src/shared/coordinator.ts";
+import { latestRun } from "../../src/shared/chat-run.ts";
 import { seedRewindChat } from "../../src/main/dev/fixture-chat.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 import { applyEvents } from "../../src/renderer/notifications.ts";
@@ -375,7 +375,7 @@ test("a run's mirrored session never becomes the chat's session, rewound or not"
     "legacy-1",
   );
   // Flipped: a later init no longer outranks the chat's bookmark — it may be a
-  // coordinator's, worker's or reviewer's session in this thread.
+  // worker's or reviewer's session in this thread.
   assert.equal(
     lastContractorSession(harnessView([...conversation(), legacyInit], []), "claude-code")?.sessionId,
     "ses-1",

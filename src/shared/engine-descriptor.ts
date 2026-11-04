@@ -39,6 +39,16 @@ export const EngineStatusReason = {
   /** The CLI could not be asked whether anyone is signed in. */
   CheckFailed: "check_failed",
   CliMissing: "cli_missing",
+  /** Genex: the account has to verify its email on genex.games first. */
+  VerifyEmail: "verify_email",
+  /** Genex: building with credits needs Pro or a credit pack. */
+  NeedsPlan: "needs_plan",
+  /** Genex: the account has no credits left. */
+  OutOfCredits: "out_of_credits",
+  /** Genex: building with credits is paused on genex.games for now. */
+  Paused: "paused",
+  /** Genex: this genex.games does not offer building with credits, so the app hides it. */
+  NotOffered: "not_offered",
 } as const;
 export type EngineStatusReason = (typeof EngineStatusReason)[keyof typeof EngineStatusReason];
 
@@ -84,6 +94,8 @@ export interface EngineDescriptor {
     /** The model the provider's catalog names as its default; the picker lists it for "default". */
     providerDefault?: boolean;
     contextWindow: number;
+    /** The window is the engine's guess, not a figure the provider reported (an Ollama model not loaded yet). */
+    contextEstimated?: boolean;
     supportsFast?: boolean;
     supportsTools: boolean;
     supportsVision: boolean;

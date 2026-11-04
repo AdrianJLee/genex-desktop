@@ -5,9 +5,10 @@
  * belong to the turn that started them. A call for a turn that is not the live one starts nothing.
  */
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
+import type { RunRoles } from "../../types/host-api.d.ts";
 import type { FactRef, FolderHolds } from "../folder-facts.ts";
 import type { HookedGame } from "../hooks.ts";
-import { isDelegated, modelOn, RoleKey, roleEngine, withRoles } from "../model-roles.ts";
+import { hasSessionRoles, modelOn, RoleKey, roleEngine, withRoles } from "../model-roles.ts";
 import { carriedEnd, carryPool, landWorkers, WorkersEnd } from "./carry.ts";
 import { POOL_WORDS } from "./prompts.ts";
 import { openPool, type WorkerPool } from "./pool.ts";
@@ -27,8 +28,8 @@ export interface ChatWorkersSeat {
   engine: string;
   model?: string;
   effort?: string;
-  /** A Loop's or Autopilot's commission the message carries: its Workers role picks their engine. */
-  commission?: AnyRecord | null;
+  /** The roles the message carries (the composer's roles panel): its Workers role picks their engine. */
+  roles?: RunRoles | null;
   project: string;
   gameDir: string;
   folderLabel: string;
@@ -40,7 +41,7 @@ export interface ChatWorkersSeat {
 
 /** The workers' engine and model: the message's Workers role when it carries roles, else the chat's. */
 function workersEngine(seat: ChatWorkersSeat): { engine: string; model?: string } {
-  const roles = seat.commission?.roles;
+  const { roles } = seat;
   if (!roles) return { engine: seat.engine, ...(seat.model ? { model: seat.model } : {}) };
   const run = withRoles({ engine: seat.engine, model: seat.model, roles });
   const engine = roleEngine(run, RoleKey.Builder);
@@ -66,7 +67,6 @@ export async function openChatWorkers(
     ...(seat.effort ? { effort: seat.effort } : {}),
     gameDir,
     ...(seat.game ? { game: seat.game } : {}),
-    leadFolder: { project },
     identity: { folderLabel, facts, holds: holds ?? null },
     clock,
   });
@@ -90,30 +90,13 @@ export async function closeChatWorkers(threadId: string, turn: string): Promise<
 export function rescopeChatWorkers(
   threadId: string,
   turn: string,
-  settings: Pick<ChatWorkersSeat, "engine" | "model" | "effort" | "commission">,
+  settings: Pick<ChatWorkersSeat, "engine" | "model" | "effort" | "roles">,
 ): void {
   const open = pools.get(threadId);
   if (!open || open.turn !== turn) return;
   const { scope } = open.pool.state;
   const { engine, model } = workersEngine({ ...settings, threadId, turn } as ChatWorkersSeat);
   open.pool.state.scope = { ...scope, engine, model, effort: settings.effort };
-}
-
-/** How many workers the chat's open pool for this turn has still at work (running, or waiting on the person). */
-export function runningChatWorkers(threadId: string, turn: string): number {
-  const open = pools.get(threadId);
-  if (!open || open.turn !== turn) return 0;
-  return open.pool.state.records.filter(isWorking).length;
-}
-
-/**
- * Would a Loop in the game folder take this turn's workers over as they are now (carry.ts
- * `carriedEnd`)? Not while one of them writes in the game folder itself: the launch lets it finish.
- */
-export function chatWorkersCarry(threadId: string, turn: string): boolean {
-  const open = pools.get(threadId);
-  if (!open || open.turn !== turn) return false;
-  return carriedEnd(open.pool) === WorkersEnd.Carry;
 }
 
 /** The worker grant a chat turn's delegation carries: the six tools, while its pool is open. */
@@ -140,8 +123,10 @@ export async function chatWorkerTool(action: {
  * Run a chat turn with its workers: the pool opens first (a pool that cannot open leaves the turn
  * without workers) and closes when `work` ends, however it ends — unless `endOf` says the turn
  * launched a Loop (the person switched it on while the workers worked): a Loop in the game folder
- * then takes them over, and any other lets them finish first (carry.ts). No seat, or a chat on an
- * engine that carries no worker's seat (a local model's session): `work` alone, offered no worker tools.
+ * then takes them over, and any other lets them finish first (carry.ts). Every engine that keeps a
+ * session carries a worker's seat — a delegated agent's or a local model's (Bonsai, OpenRouter) — so
+ * any model orchestrates alike. No seat, or one on an engine with no session of its own (Ollama's tool
+ * loop): `work` alone, offered no worker tools.
  */
 export async function withChatWorkers<T>(
   ctx: HarnessCtx,
@@ -150,7 +135,7 @@ export async function withChatWorkers<T>(
   endOf: (result: T) => WorkersEnd = () => WorkersEnd.Stop,
   clock: PoolClock = REAL_CLOCK,
 ): Promise<T> {
-  if (!seat || !isDelegated(seat.engine)) return work();
+  if (!seat || !hasSessionRoles(seat.engine)) return work();
   const opened = await openChatWorkers(ctx, seat, clock).catch(() => null);
   let end: WorkersEnd = WorkersEnd.Stop;
   try {

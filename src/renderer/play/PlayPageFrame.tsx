@@ -1,6 +1,8 @@
 /**
- * The frame of Play's people pages (Friends, a profile): the dashboard's page and scroller, its
- * bar holding the sidebar's toggle while the sidebar is hidden and, on a profile, Back.
+ * The frame of Play's people pages (Friends, a profile) and a game's own page: the dashboard's page
+ * and scroller, its bar holding the sidebar's toggle while the sidebar is hidden, Back, and a page's
+ * own controls at its end. A `bleed` page lays its first picture under the bar, to the window's
+ * top edge (`.play-page-bleed`).
  */
 import type { JSX, ReactNode } from "react";
 import { SIDEBAR_TOGGLE, SidebarToggle } from "../shell/use-shell-chrome.ts";
@@ -15,6 +17,8 @@ export function PlayPageFrame({
   onToggleSidebar,
   onBack,
   backLabel = PLAY_WORDS.people.back,
+  bleed = false,
+  actions,
   children,
 }: {
   label: string;
@@ -24,10 +28,14 @@ export function PlayPageFrame({
   onBack?: () => void;
   /** What Back says: the page it returns to, when that is clearer than "Back". */
   backLabel?: string;
+  /** The page's first picture runs under the bar, to the window's top edge. */
+  bleed?: boolean;
+  /** The page's own controls, at the bar's end. */
+  actions?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   return (
-    <section data-play-page aria-label={label} className="play-page">
+    <section data-play-page aria-label={label} className={`play-page ${bleed ? "play-page-bleed" : ""}`}>
       <div className="play-scroll">
         <header
           className={`play-toolbar people-toolbar titlebar-drag window-controls-end ${sidebarHidden ? "play-toolbar-inset" : ""}`}
@@ -51,6 +59,7 @@ export function PlayPageFrame({
               {backLabel}
             </Button>
           )}
+          {actions && <div className="play-toolbar-end">{actions}</div>}
         </header>
         <div className="people-content">{children}</div>
       </div>

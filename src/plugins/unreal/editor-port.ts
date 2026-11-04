@@ -54,6 +54,8 @@ const ANSWER_TIMEOUT_MS = 0.8 * SECOND_MS;
 export const ANSWER_CHECK_MS = 4 * ANSWER_TIMEOUT_MS;
 /** How long a project's last good answer stands while its editor is asked again ({@link rememberAnswers}). */
 const ANSWER_KEEP_MS = 10 * SECOND_MS;
+/** A good answer younger than this is believed without asking again: every call to the editor checks first. */
+const ANSWER_FRESH_MS = 2 * SECOND_MS;
 /** A free local port refuses a connection at once; one that hangs this long counts as held. */
 const LISTEN_TIMEOUT_MS = 0.5 * SECOND_MS;
 /** macOS's own netstat, by full path, and its listing of every TCP socket by number. */
@@ -544,7 +546,9 @@ export type AnswerCheck = (port: number, project?: string) => Promise<boolean>;
  * background: with the editor behind another app one check takes about 1.3 s, and now and then a
  * single request stalls past its limit, which flipped a connected panel to "not answering" for one
  * refresh. A failed ask is never remembered, so the next call waits for the editor and believes
- * it: a stopped editor reads as not answering one refresh later. One ask at a time per port and
+ * it: a stopped editor reads as not answering one refresh later. An answer younger than
+ * {@link ANSWER_FRESH_MS} is believed without asking: every call to the editor checks first, and at
+ * a few calls a second a check per call doubled the editor's work. One ask at a time per port and
  * project; an ask that throws counts as not answering.
  */
 export function rememberAnswers(check: AnswerCheck, now: () => number): AnswerCheck {
@@ -568,7 +572,7 @@ export function rememberAnswers(check: AnswerCheck, now: () => number): AnswerCh
     const key = JSON.stringify([port, project ?? null]);
     const at = goodAt.get(key);
     if (at === undefined || now() - at >= ANSWER_KEEP_MS) return ask(key, port, project);
-    void ask(key, port, project);
+    if (now() - at >= ANSWER_FRESH_MS) void ask(key, port, project);
     return Promise.resolve(true);
   };
 }

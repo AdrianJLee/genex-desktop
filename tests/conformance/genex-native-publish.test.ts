@@ -14,11 +14,14 @@ import { realpath } from "node:fs/promises";
 import { after } from "node:test";
 import { GenexTools } from "../../src/plugins/genex/adapter.ts";
 import { saveClip } from "../../src/plugins/genex/clip.ts";
-import { GENEX_COVERS_DIR } from "../../src/shared/genex.ts";
+import { saveShot } from "../../src/plugins/genex/cover.ts";
+import type { MacSigning, NotarizeOutcome } from "../../src/plugins/genex/mac-notarize.ts";
+import { GENEX_COVERS_DIR, MacNotarizeFailure } from "../../src/shared/genex.ts";
 import { type GenexFixtureApi, startGenexFixtureApi } from "../helpers/genex-fixture-api.ts";
 import {
   hasNativeCommand,
   nativePublishArgs,
+  takesReplaceNativePage,
   nativeUploads,
   sendNativeBuild,
   sentBuild,
@@ -38,16 +41,19 @@ const cover = (() => {
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   return Buffer.concat([signature, length, Buffer.from("IHDR"), header, Buffer.alloc(4)]);
 })();
-/** The host's still of an engine game's cover reel, as `observe` answers it. */
-const COVER_STILL_ANSWER = {
-  mimeType: "image/png",
-  width: 1920,
-  height: 1080,
-  source: "compositor",
-  view: { demo: "genex-cover" },
-  stats: { lumaMean: 0.45, lumaStdDev: 0.21, nearBlackFraction: 0.08, litFraction: 0.97 },
-  preview: Buffer.from("jpeg preview"),
-};
+/** The cover the engine game's agent kept, as genex__cover writes it into the plugin's storage. */
+const keepCover = (genex: GenexTools) =>
+  saveShot(
+    path.join(genex.root, GENEX_COVERS_DIR, "dust"),
+    {
+      image: cover,
+      mimeType: "image/png",
+      width: 1920,
+      height: 1080,
+      stats: { lumaMean: 0.45, lumaStdDev: 0.21, nearBlackFraction: 0.08, litFraction: 0.97 },
+    },
+    new Date().toISOString(),
+  );
 
 /** How `genex cover --clip --json` answers a clip Genex took, and one of a build it does not know. */
 const CLIP_APPLIED = { kind: "applied", clipUrl: "https://cdn.genex.technology/clips/dust.mp4", clipSource: "agent" };
@@ -58,6 +64,15 @@ const CLIP_STALE = {
 };
 /** The archive hash `genex native publish --json` answers for the stand-in's app. */
 const ARCHIVE_SHA256 = "3f2a9c1d0e4b".padEnd(64, "7");
+
+describe("which CLI lets a web build replace a page of apps", () => {
+  it("is release 1.36.20 or newer, which knows --replace-native-page", () => {
+    for (const version of ["1.36.20", "1.36.21-dev.1", "1.37.0"])
+      assert.equal(takesReplaceNativePage(version), true, version);
+    for (const version of ["1.36.19", "1.36.20-dev.3", "1.36.18", "1.36.13", "latest", ""])
+      assert.equal(takesReplaceNativePage(version), false, version);
+  });
+});
 
 describe("which CLI sends apps", () => {
   it("is release 1.36.11 or newer: 1.36.10 has no `genex native`, and a dev build may predate it", () => {
@@ -286,7 +301,12 @@ describe("one app sent", () => {
  * one naming "Held" or "Refused" gets that answer to its `--gallery` listing, and one naming "Review" is
  * listed with a build Genex still reviews.
  */
-async function toolsWithStandIn(sendsApps = true, api = "http://127.0.0.1:9", clipAnswer: object = CLIP_APPLIED) {
+async function toolsWithStandIn(
+  sendsApps = true,
+  api = "http://127.0.0.1:9",
+  clipAnswer: object = CLIP_APPLIED,
+  notarize?: (app: string, signing: MacSigning, signal: AbortSignal) => Promise<NotarizeOutcome>,
+) {
   const root = await realpath(await tmpDir("genex-native-tools-"));
   const log = path.join(root, "runs.jsonl");
   const standIn = path.join(root, "native-cli.mjs");
@@ -341,6 +361,7 @@ process.exit(listing?.state === "refused" ? 1 : 0);
     credentials: { get: async () => "fixture-token", set: async () => {}, clear: async () => {} },
     preload: standIn,
     sendsApps,
+    ...(notarize ? { notarize } : {}),
   });
   const runs = async () =>
     (await readFile(log, "utf8").catch(() => ""))
@@ -387,12 +408,50 @@ describe("a publish's apps sent through the CLI", () => {
     ]);
   });
 
+  it("notarizes a Mac app under the creator's own Apple ID before it goes, and sends it as built when that fails", async () => {
+    const notarized: Array<[string, unknown]> = [];
+    const { genex, runs } = await toolsWithStandIn(true, undefined, undefined, async (app, signing) => {
+      notarized.push([app, signing]);
+      return notarized.length === 1
+        ? { notarized: true, identity: "Developer ID Application: Ada Lovelace (ABCDE12345)" }
+        : { failure: MacNotarizeFailure.Rejected };
+    });
+    const signing = { identity: "", profile: "genex-notary" };
+    await genex.publishApps("dust", "job-1", [{ ...MAC_APP, sign: signing }, LINUX]);
+    assert.deepEqual(notarized, [[MAC_APP.target, signing]], "only the Mac app the creator asked for");
+    const first = (await genex.publishView("dust")).native?.sent ?? [];
+    assert.deepEqual(
+      first.map((sent) => [sent.platform, sent.notarized ?? null]),
+      [
+        ["mac", true],
+        ["linux", null],
+      ],
+    );
+    await genex.publishApps("dust", "job-2", [{ ...MAC_APP, sign: signing }]);
+    const second = (await genex.publishView("dust")).native?.sent ?? [];
+    assert.deepEqual(
+      second.map((sent) => [sent.platform, sent.notarized ?? null, sent.notarizeFailure ?? null]),
+      [["mac", null, MacNotarizeFailure.Rejected]],
+      "Apple's refusal never stops the app: it goes as built, and the record says why",
+    );
+    assert.equal((await runs()).filter((run) => run.args[1] === "publish").length, 3);
+    await genex.publishApps("dust", "job-3", [MAC_APP]);
+    assert.equal(notarized.length, 2, "a creator who chose no notarization gets none");
+  });
+
   it("sends nothing while the CLI has no `genex native`, and says so", async () => {
     const { genex, runs } = await toolsWithStandIn(false);
     await genex.publishApps("dust", "job-1", [MAC_APP]);
     assert.deepEqual(await runs(), []);
     const { native } = await genex.publishView("dust");
-    assert.deepEqual(native, { supported: false, sending: false, sent: [], failed: [] });
+    // The record also says Genex builds no app here: the pinned CLI has no `genex native build` either.
+    assert.deepEqual(native, {
+      supported: false,
+      sending: false,
+      sent: [],
+      failed: [],
+      cloud: { supported: false, builds: [] },
+    });
   });
 });
 
@@ -600,18 +659,10 @@ describe("a game with only apps, published", () => {
     assert.notEqual(state.status, "published", "its page is not found until Genex approves it");
   });
 
-  it("takes the cover again as it starts and sends it once the apps are on Genex", async () => {
+  it("sends the agent's kept cover once the apps are on Genex", async () => {
     const { genex, runs } = await toolsWithStandIn(true, await fixtureApi());
-    let shots = 0;
-    const lens = {
-      invokedAt: Date.now(),
-      shoot: async () => {
-        shots++;
-        return { still: { ...COVER_STILL_ANSWER, image: cover } };
-      },
-    };
-    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
-    assert.equal(shots, 1, "the cover is taken inside the press's own call");
+    await keepCover(genex);
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
     await genex.publishWait("dust");
     // The cover goes on its own after the job is recorded: wait for its send to be written.
     const sentCover = async () => (await runs()).some((call) => call.args[0] === "cover" && call.args[1] !== "--json");
@@ -628,11 +679,14 @@ describe("a game with only apps, published", () => {
   /** Publish a game with only apps that kept a clip, with the stand-in answering its clip `clipAnswer`. */
   async function publishWithClip(clipAnswer: typeof CLIP_APPLIED | typeof CLIP_STALE) {
     const { genex, runs } = await toolsWithStandIn(true, await fixtureApi(), clipAnswer);
-    const take = { video: Buffer.from("mp4 bytes"), mimeType: "video/mp4" as const, width: 960, height: 540 };
-    const clip = { ...take, durationMs: 5000, poster: cover, motion: 0.4 };
-    await saveClip(path.join(genex.root, GENEX_COVERS_DIR, "dust"), clip, new Date().toISOString());
-    const lens = { invokedAt: Date.now(), shoot: async () => ({ still: { ...COVER_STILL_ANSWER, image: cover } }) };
-    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
+    const clip = { video: Buffer.from("mp4 bytes"), mimeType: "video/mp4" as const, width: 960, height: 540 };
+    await saveClip(
+      path.join(genex.root, GENEX_COVERS_DIR, "dust"),
+      { ...clip, durationMs: 5500 },
+      new Date().toISOString(),
+    );
+    await keepCover(genex);
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
     const clipSend = async () => (await runs()).find((call) => call.args[0] === "cover" && call.args[1] === "--clip");
     for (let tries = 0; tries < 100 && !(await clipSend()); tries++) await sleep(50);
     for (let tries = 0; tries < 100 && !(await genex.publishWait("dust")).cover?.clipLast; tries++) await sleep(50);
@@ -655,13 +709,9 @@ describe("a game with only apps, published", () => {
     assert.equal(state.cover?.clipLast?.kind, "failed", "not settled: the next publish sends it again");
   });
 
-  it("publishes its apps with no cover sent when there is none to take", async () => {
+  it("publishes its apps with no cover sent when the agent kept none", async () => {
     const { genex, runs } = await toolsWithStandIn(true, await fixtureApi());
-    const lens = {
-      invokedAt: Date.now(),
-      shoot: async () => ({ stillProblem: { code: "view_unknown", available: [] } }),
-    };
-    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
     const state = await genex.publishWait("dust");
     assert.equal(state.job?.state, "done", JSON.stringify(state.job));
     assert.equal(state.cover?.shot, null);

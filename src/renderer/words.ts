@@ -32,12 +32,12 @@ import { DataFolderProblem } from "../shared/data-folder.ts";
 import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import { PlayCardAction, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
-import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
+import { AutoResumeCause, type CustomEvent, type CustomPayload, LoopRefusal } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
 import { computerSettingQuestion, type GithubLookupProblem } from "../shared/plugins.ts";
 import { computerControlOffered } from "../shared/computer-control.ts";
-import type { GenexPublishPhase } from "../shared/genex.ts";
+import { CloudBuildFailure, type GenexPublishPhase, MacNotarizeFailure } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayRemixRefusal, PlayShelf, RemixStep } from "../shared/play.ts";
 import {
   InstallFailure,
@@ -74,6 +74,8 @@ import { RunSharingDeleteOutcome, type RunSharingDeleteResult } from "../shared/
 import type { ProviderBuilderUse } from "../shared/provider-skills.ts";
 import type { FinishCheckState, IterationStatus } from "./run-graph.ts";
 import type { LeadFace } from "./run-tree.ts";
+import type { BuildOutcome } from "./run-graph-builds.ts";
+import type { HealthFinding } from "../shared/preview-contract.ts";
 import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
 import { formatList, intlLocale, t, tc } from "../shared/i18n.ts";
@@ -123,15 +125,18 @@ const GIT_REF = /\brefs\/[^\s)]+/gi;
  * "run_fixture123456" learns nothing — so they are removed here rather than trusted not to appear.
  */
 export function withoutIds(text: string): string {
-  return text
-    .replace(GIT_REF, "")
-    .replace(RUN_ID, "")
-    .replace(COMMIT_SHA, "")
-    .replace(/\(\s*\)/g, "")
-    .replace(/\s+/g, " ")
-    .replace(/\s*·\s*(?=·|$)/g, "")
-    .replace(/^\s*[·—-]\s*/, "")
-    .trim();
+  return (
+    text
+      .replace(GIT_REF, "")
+      .replace(RUN_ID, "")
+      .replace(COMMIT_SHA, "")
+      // The brackets a stripped id leaves, with the space before them: "in git (refs/…): ask" reads "in git: ask".
+      .replace(/\s*\(\s*\)/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*·\s*(?=·|$)/g, "")
+      .replace(/^\s*[·—-]\s*/, "")
+      .trim()
+  );
 }
 
 function clip(text: string, max: number): string {
@@ -170,8 +175,6 @@ const PHRASES: Array<[RegExp, (match: RegExpMatchArray) => StatusWords]> = [
     /^building the (?:shared base|starting point)$/i,
     () => ({ line: t("Building the starting point"), short: t("Starting point") }),
   ],
-  // The run's other first step: a game the user brought that the studio cannot see into yet.
-  [/^making the game judgeable$/i, () => ({ line: t("Connecting your game to the studio"), short: t("Connecting") })],
   [
     /^plan ready — waiting for steering$/i,
     () => ({ line: t("The plan is ready — waiting for your go-ahead"), short: t("Plan ready") }),
@@ -269,13 +272,6 @@ const PART_PHRASES: Array<[RegExp, (part: string, match: RegExpMatchArray) => St
     }),
   ],
   [
-    /^judge overloaded, retrying verification in (\d+)s$/i,
-    (part, m) => ({
-      line: t("{part} · the reviewer is busy — trying again in {seconds}s", { part, seconds: m[1] }),
-      short: t("{part} · waiting", { part }),
-    }),
-  ],
-  [
     /^waiting for its model provider \((.+)\)$/i,
     (part, m) => ({
       line: t("{part} · waiting for the model provider ({provider})", { part, provider: m[1] }),
@@ -286,7 +282,7 @@ const PART_PHRASES: Array<[RegExp, (part: string, match: RegExpMatchArray) => St
 
 /** The phases the harness hangs off a title with " — ": stripped when the title itself has a dash. */
 const PHASE_SUFFIX =
-  /\s+—\s+(iteration \d+|verifying|spike on .+|fixing review findings|reverting a regression|(?:provider|judge) overloaded.*|waiting for its model provider.*)$/i;
+  /\s+—\s+(iteration \d+|verifying|spike on .+|fixing review findings|reverting a regression|provider overloaded.*|waiting for its model provider.*)$/i;
 
 /**
  * Turn a harness status line into what the user reads. The harness prefixes almost every status
@@ -397,7 +393,6 @@ export function isKept(winner: string | null | undefined): boolean {
 
 const UNDONE_BECAUSE: Record<string, string> = {
   invisible: t("nothing visible changed"),
-  "taste-veto": t("the reviewer preferred the round before"),
   "no-move": t("the step it was asked for was not delivered"),
   unfixed: t("the must-fix was not fixed"),
   broken: t("the build was broken"),
@@ -428,12 +423,15 @@ export function wasStopped(source: string | null | undefined): boolean {
   return stoppedSource(source);
 }
 
-/** The harness's verdict source for a save point the Unreal lead made itself (its `VerdictSource.Lead`). */
+/** The harness's verdict source for a round kept because nothing regressed (its `VerdictSource.NoRegression`). */
+const KEPT_UNHARMED = "no-regression";
+
+/** The harness's verdict source for a save point the lead made itself (its `VerdictSource.Lead`). */
 const LEAD_SAVE = "lead";
 
 /**
- * A round the Unreal lead kept by saving it, after looking at its own captures: no reviewer judged
- * it and nothing compared it side by side, so it is never worded as a reviewer's verdict.
+ * A round the lead kept by saving it itself: no reviewer judged it and nothing compared it side by
+ * side, so it is never worded as a reviewer's verdict.
  */
 export function savedByLead(source: string | null | undefined): boolean {
   return source === LEAD_SAVE;
@@ -564,12 +562,11 @@ export function sideBySideWords(node: { status: IterationStatus; satisfied: bool
   if (savedByLead(node.source)) return t("Not reviewed — the lead saved it after looking at its own captures.");
   if (node.status === "unjudged") return t("Not reviewed — no verdict was recorded for this round.");
   if (node.status === "rolled") {
-    if (node.source === "taste-veto") return t("The reviewer preferred the round before.");
     if (node.source === "no-move") return t("Not asked — the step did not land.");
     return t("Not needed — the round was undone on the checks.");
   }
   if (node.satisfied) return t("The reviewer is satisfied with this part.");
-  return node.source === "checks"
+  return node.source === "checks" || node.source === KEPT_UNHARMED
     ? t("No objection to the new build.")
     : t("The reviewer preferred the new build to the round before.");
 }
@@ -811,7 +808,10 @@ export function loopRunWords(loopRun: {
   landing?: string | null;
   /** How the Loop worked on its project (`run_finished.profile`): `open` kept its work in the project's own folder. */
   profile?: string | null;
+  /** Why the Loop did not run at all (`run_finished.refusal`), when it didn't. */
+  refusal?: LoopRefusal | null;
 }): LoopRunWords {
+  if (loopRun.refusal === LoopRefusal.NeedsSession) return NEEDS_SESSION_WORDS;
   const rounds = Math.max(0, Math.trunc(loopRun.rounds || 0));
   const hasBuild = loopRun.hasBuild ?? true;
   const landing = reviewerWords(withoutIds((loopRun.landing ?? "").trim()));
@@ -860,6 +860,14 @@ export function loopRunWords(loopRun: {
   };
 }
 
+/** A Loop refused on an engine that keeps no session (`LoopRefusal.NeedsSession`): its chat stays plain chat. */
+const NEEDS_SESSION_WORDS: LoopRunWords = {
+  headline: t("Loop not started"),
+  because: t(
+    "A Loop needs an engine that keeps a session of its own, and this chat's engine doesn't, so nothing was built. The chat still answers here.",
+  ),
+};
+
 /** Text that ends a sentence: a full stop added only when it has no end of its own (a close's reason may). */
 function fullStop(text: string): string {
   return /[.!?…]$/.test(text) ? text : `${text}.`;
@@ -898,7 +906,8 @@ function pausedLoopRunWords(rounds: number, stopped: boolean, why: string): Loop
     };
   return {
     headline: t("{rounds, plural, =0 {Paused} one {Paused after # round} other {Paused after # rounds}}", { rounds }),
-    because: t("{why}. Everything built so far is kept.", { why: capitalise(why) }),
+    // A reason may end a sentence of its own: the card's full stop is the one it ends with.
+    because: t("{why}. Everything built so far is kept.", { why: capitalise(why).replace(/[.!?…]+$/, "") }),
   };
 }
 
@@ -1045,30 +1054,14 @@ export function partRoundWords(part: PartRound): string {
 }
 
 /**
- * What the run is: the reference it was given, if it was given one, and which model judges it.
- *
- * The judge is named because it is the one role a saved preference can quietly get wrong — a
- * run was judged by the orchestrator's model and nothing said so. `judge` is the model's own
- * short name (model-roles' `roleName`); "default" is not a name a person can act on, so a run
- * whose critic is whatever the engine happens to use says nothing about it.
+ * What the run is, for the records that name a reference it was given ("direction" or a bar):
+ * nothing for a run that has none, which the chat already shows as the person's own message.
  */
-export function runStartWords(
-  reference: { name?: string | null; kind?: string | null } | null | undefined,
-  judge: string | null = null,
-): string {
+export function runStartWords(reference: { name?: string | null; kind?: string | null } | null | undefined): string {
   const name = withoutIds((reference?.name ?? "").trim());
-  const named = name && name.toLowerCase() !== "unnamed" ? name : "";
-  const who = withoutIds((judge ?? "").trim());
-  const rule =
-    who && !/^(default|same)$/i.test(who)
-      ? t(
-          "each round has to beat the one before, and {reviewer}, reviewing without being told which build is which, picks the winner",
-          { reviewer: who },
-        )
-      : t("each round has to beat the one before, and a reviewer that cannot see which is which picks the winner");
-  if (reference?.kind === "direction")
-    return named ? t('heading in the direction of "{name}" — {rule}', { name: named, rule }) : rule;
-  return named ? t('the bar for this build is "{name}" — {rule}', { name: named, rule }) : rule;
+  if (!name || name.toLowerCase() === "unnamed") return "";
+  if (reference?.kind === "direction") return t('heading in the direction of "{name}"', { name });
+  return t('the bar for this build is "{name}"', { name });
 }
 
 /** How the run is organised — the first thing the user reads after pressing send. */
@@ -2100,8 +2093,6 @@ export const STILL_TO_FIX_WORDS = {
     notDone.length
       ? [t("Keep building: fix what’s left."), ...notDone.map((item) => `- ${item}`)].join("\n")
       : t("Keep building where you left off."),
-  /** Keep building in a game whose Loop can't run here: nothing was sent. */
-  noLoop: t("Loop can’t run in this game yet, so Keep building can’t start it."),
 } as const;
 
 /**
@@ -2364,27 +2355,23 @@ export const WORKER_LINE_WORDS = {
       ? `${t("{task}: didn't finish.", { task: title })} ${asSentence(WORKER_STOP_WORDS[because])}`
       : t("{task}: didn't finish.", { task: title }),
   stopped: (title: string) => t("{task}: stopped.", { task: title }),
+  /** The lead redirected a worker (`worker_steer`): the worker's task, when known, and what it was told. */
+  told: (title: string | null, said: string) =>
+    title ? t("Told “{task}”: {said}", { task: title, said }) : t("Told a worker: {said}", { said }),
 } as const;
 
 /**
- * The Building card's checklist (`chat/build-checklist.ts`): each part's status on its row, the
- * lead's last step, and the card's one line, counted from the parts.
+ * The Building card's checklist (`chat/build-checklist.ts`): each step's status on its row, and the
+ * card's one line, counted from the steps.
  */
 export const BUILD_CHECKLIST_WORDS = {
   added: t("Added"),
   working: t("Working"),
   workingFor: (minutes: number) => t("Working · ~{minutes} min", { minutes }),
   workingRound: (round: number) => t("Working · round {round}", { round }),
-  waiting: t("Waiting to start"),
   notAdded: t("Not added"),
-  notStarted: t("Not started"),
-  next: t("Next"),
-  /** The lead's own last step, after the parts. */
-  together: t("Put it together and check"),
-  caption: (added: number, total: number, working: number) =>
-    working
-      ? t("{added} of {total} parts added · {working} working", { added, total, working })
-      : t("{added} of {total} parts added", { added, total }),
+  caption: (done: number, working: number) =>
+    working ? t("{done} done · {working} working", { done, working }) : t("{done} done", { done }),
   finishing: (working: number) => (working ? t("Finishing up · {working} working", { working }) : t("Finishing up")),
   open: t("Open in Builds"),
   /** The card's toggle, as a screen reader names it. */
@@ -2451,7 +2438,6 @@ export const FINISH_CHECK_WORDS = {
     done: t("Done"),
     stopped: t("Not finished"),
   } satisfies Record<FinishCheckState, string>,
-  placeholder: t("Runs at the end"),
   about: t("Before the Loop calls it done, a second AI looks at your game."),
   /** The node's line and the card while the second AI looks. */
   checking: t("Looking at your game"),
@@ -2467,6 +2453,60 @@ export const FINISH_CHECK_WORDS = {
   /** After a no, once the Loop has ended some other way. */
   endedAfterNo: t("The Loop ended before another look."),
 } as const;
+
+/**
+ * A Loop's builds on the Builds graph (`run-graph-builds.ts`): each one's name and health check
+ * outcome, where a worker hangs, the card that folds a build's finished workers, and the compare.
+ */
+export const BUILD_LINE_WORDS = {
+  name: (n: number) => t("Build {number}", { number: n }),
+  outcome: {
+    passed: t("Passed"),
+    blank: t("Blank screen"),
+    errors: t("Errors"),
+    failed: t("Did not pass"),
+  } satisfies Record<BuildOutcome, string>,
+  /** The card's line under its outcome: what made the build. */
+  merged: (worker: string) => t("After {worker}", { worker }),
+  leadsOwn: t("The main agent's own changes"),
+  /** A merged worker's status on the build line: in that build, not yet the game. */
+  addedToBuild: t("Added to your build"),
+  /** A worker's first line on the graph: the build it hangs off, and why. */
+  mergedInto: (n: number) => t("Merged into Build {number}", { number: n }),
+  startedFrom: (n: number) => t("Started from Build {number}", { number: n }),
+  startedFirst: t("Started before the first build"),
+  /** The card that folds a build's finished workers, and what pressing it does. */
+  folded: (count: number) => t("{count, plural, one {+# worker} other {+# workers}}", { count }),
+  showAll: t("Show all"),
+  showFewer: t("Show fewer"),
+  foldLabel: (count: number) => t("{count, plural, one {Show # more worker} other {Show # more workers}}", { count }),
+  /** The compare, when the picture is the one before it, measured. */
+  unchanged: (n: number) => t("The picture did not visibly change from Build {number}.", { number: n }),
+  before: (n: number) => t("Build {number}", { number: n }),
+  problems: t("What the check found"),
+  finding: {
+    not_loaded: t("The page did not load."),
+    crashed: t("The page crashed."),
+    uncaught: t("The page threw an error it did not catch."),
+    blank: t("The screen was blank: one flat colour, nothing drawn."),
+  } satisfies Record<HealthFinding, string>,
+  /** The technical details' key for the check's own words. */
+  found: t("found"),
+} as const;
+
+/** An asset delivered again, beside the version before it on the run's Assets card. */
+export const ASSET_VERSION_WORDS = {
+  compare: t("Compare with the earlier version"),
+  earlier: t("Earlier"),
+  now: t("Now"),
+  unchanged: t("The picture did not visibly change from the earlier version."),
+} as const;
+
+/** A worker's first line on a Loop's build line: the build its work went into, or the one it started from. */
+export function workerPlaceWords(place: { build: number; merged: boolean }): string {
+  if (place.merged) return BUILD_LINE_WORDS.mergedInto(place.build);
+  return place.build ? BUILD_LINE_WORDS.startedFrom(place.build) : BUILD_LINE_WORDS.startedFirst;
+}
 
 /** A build in the stage's history, by what it was and the day it started; never a number or a count. */
 /** The Builds bar's tabs, one for each of the chat's builds. */
@@ -2708,6 +2748,9 @@ export const METERED_PROVIDER_WORDS = {
   couldNotCheck: t("Couldn't check"),
   checkAgain: t("Check again"),
   tryAgain: t("Try again"),
+  installGuide: t("Install guide"),
+  /** A CLI Genex can't install on this computer (`installsInApp`): the person follows its guide. */
+  installByGuideLine: (name: string) => t("Install {name} with its guide, then check again.", { name }),
   account: t("Account"),
   checkConnection: t("Check connection"),
   checkConnectionLine: t("Also refreshes the model list"),
@@ -2745,6 +2788,25 @@ export const METERED_PROVIDER_WORDS = {
     remove: t("Remove key"),
     cancel: t("Cancel"),
   },
+} as const;
+
+/** Settings → Model Providers: TypeSafe's key, for play-tests' fast decisions (`panels/FastDecisionsRow.tsx`). */
+export const FAST_DECISION_WORDS = {
+  name: "TypeSafe",
+  keysUrl: "https://console.typesafe.ai/keys",
+  keyLabel: t("TypeSafe API key"),
+  keyPlaceholder: t("API key"),
+  notConnectedLine: t("Optional. With a key, Unreal play-tests pick their moves with Jev, several times a second."),
+  connectedLine: t("Unreal play-tests pick their moves with Jev"),
+  refused: t("TypeSafe didn't accept that key. Check it and paste it again."),
+  key: t("Key"),
+  keyMenu: t("TypeSafe key"),
+  save: t("Save key"),
+  getKey: t("Get a key"),
+  replace: t("Replace key…"),
+  replaceLine: t("The new key is checked before it's saved"),
+  remove: t("Remove key"),
+  cancel: t("Cancel"),
 } as const;
 
 /** Settings → Model Providers: the person's own model server (`panels/LocalServerRow.tsx`). */
@@ -2857,22 +2919,9 @@ export function permissionWords(plugin: string, prompt: string | undefined): str
 
 // ── Harness activity ──────────────────────────────────────────────────────────────────────
 
-/** The suggestions card in Activity and its exact-edit view (`ui/ProposalsTable.tsx`). */
+/** The exact-edit view of a change in Activity (`ui/ProposalsTable.tsx`). */
 export const SUGGESTION_WORDS = {
-  title: (count: number) =>
-    t(
-      "{count, plural, one {Harness suggests # change to how it builds} other {Harness suggests # changes to how it builds}}",
-      { count },
-    ),
-  subtitle: t("Nothing changes until you apply."),
-  include: (title: string) => t("Include: {title}", { title }),
-  fallbackSummary: t("Suggested after reviewing your recent builds."),
-  whatChanges: t("What changes"),
   seeExactEdit: t("See the exact edit"),
-  selected: (included: number, total: number) =>
-    t("{included} of {total} selected · you can undo later", { included, total }),
-  discard: t("Discard"),
-  apply: (count: number) => t("{count, plural, one {Apply # change} other {Apply # changes}}", { count }),
 } as const;
 
 /** Activity's header and its Self-improvement switch (`panels/ReviewPanel.tsx`). */
@@ -2880,7 +2929,7 @@ export const ACTIVITY_WORDS = {
   title: t("Activity"),
   learning: t("Self-improvement"),
   learningHint: t(
-    "When off, Harness stops learning from your builds. What it already learned stays until you undo it.",
+    "When off, Harness doesn’t change its own instructions. Changes it already made stay until you undo them.",
   ),
 } as const;
 
@@ -2965,6 +3014,9 @@ export const PLUGIN_UPDATE_WORDS = {
     if (chosen < total) return t("Update {count}", { count: chosen });
     return total === 1 ? t("Update") : t("Update all");
   },
+  /** The line's own button: Update, or Update N while some are unticked in the list. */
+  updateLine: (chosen: number, total: number) =>
+    chosen < total ? t("Update {count}", { count: chosen }) : t("Update"),
   updating: t("Updating plugins…"),
   heading: t("Plugin updates"),
   /** Beside the heading while some updates are unticked. */
@@ -3076,9 +3128,6 @@ export const SETUP_SCRIPTS_WORDS = {
 
 /** The fixed titles and sentences of the Builds tab's progress line (`build-progress.ts`). */
 export const PROGRESS_WORDS = {
-  optimizationFinished: t("Optimization finished"),
-  optimization: t("Optimization"),
-  optimizing: t("The assembled game is being measured and checked for safe improvements."),
   buildingStart: t("Building the starting point"),
   startBeforeParts: t("The starting point is built and checked before the lead delegates the parts."),
   startReady: t("The starting point is ready"),
@@ -3176,7 +3225,7 @@ const STUDIO_TOOLS: Record<string, ToolWords> = {
   set_game_cover: { icon: "write", label: t("painted the game's cover") },
   checkpoint: { icon: "see", label: t("marked a moment worth seeing") },
   capture: { icon: "see", label: t("captured the game"), active: t("Capturing the game") },
-  // The lead's run tools. `wait` stays neutral: a playtester waits too.
+  // The lead's run tools. `wait` stays neutral.
   plan: { icon: "think", label: t("set out the plan"), active: t("Writing the plan") },
   goal_update: {
     icon: "think",
@@ -3737,6 +3786,33 @@ export const PUBLISH_PLATFORM_WORDS = {
     [PublishTarget.Windows]: t("Package it on a Windows PC"),
     [PublishTarget.Linux]: t("Package it on a Linux PC"),
   } satisfies Record<Exclude<PublishTarget, typeof PublishTarget.Web>, string>,
+  /** An app this computer can't make that Genex builds on its own computers, by how that goes. */
+  cloudOffer: t("Genex can build it on Windows for you"),
+  cloudPublishFirst: t("Publish the game first, then Genex can build it"),
+  /** A build on Genex still running: "Building on Genex · 5 min so far". */
+  cloudBuilding: (startedAt: string, now: number) =>
+    t("Building on Genex · {minutes} min so far", {
+      minutes: Math.max(0, Math.floor((now - Date.parse(startedAt)) / MINUTE_MS)),
+    }),
+  cloudFailed: {
+    [CloudBuildFailure.EngineUnsupported]: t("Genex can’t build this Unreal version yet"),
+    [CloudBuildFailure.Compile]: t("Genex couldn’t compile the game’s code"),
+    [CloudBuildFailure.Cook]: t("Genex couldn’t cook the game’s content"),
+    [CloudBuildFailure.Timeout]: t("The build on Genex took too long"),
+    [CloudBuildFailure.Quota]: t("You’ve used this month’s builds on Genex"),
+    [CloudBuildFailure.SourceTooBig]: t("The project is too big for Genex to build"),
+    [CloudBuildFailure.NotOnGenex]: t("Publish the game first, then Genex can build it"),
+    [CloudBuildFailure.Failed]: t("The build on Genex failed"),
+  } satisfies Record<CloudBuildFailure, string>,
+  cloudBuild: t("Build on Genex"),
+  cloudBuildLabel: (name: string) => t("Build the {app} on Genex", { app: name }),
+  cloudRetry: t("Try again"),
+  cloudRetryLabel: (name: string) => t("Build the {app} on Genex again", { app: name }),
+  /** The row's note while Genex builds it, and once its press was taken. */
+  building: t("Building…"),
+  cloudAsked: t("Asked Genex"),
+  /** A press Genex refused before building anything, in Genex's or the CLI's words. */
+  cloudRefused: (name: string, error: string) => t("Couldn’t build the {app} on Genex: {error}", { app: name, error }),
   /** A built app genex.games does not take yet: it shows, and Publish sends the web version. */
   soon: t("Coming soon"),
   soonLabel: (name: string) => t("{name}: publishing it is coming soon", { name }),
@@ -3761,6 +3837,25 @@ export const PUBLISH_PLATFORM_WORDS = {
   sending: t("Sending…"),
   sent: t("On Genex"),
   sentLabel: (name: string) => t("{name}: on Genex for desktop players", { name }),
+  /** A Mac app signed and notarized under the creator's own Apple Developer ID. */
+  notarized: t("notarized"),
+  /** Why a Mac app went without the notarizing its creator turned on, in whole sentences. */
+  notarizeFailed: {
+    [MacNotarizeFailure.NotAnApp]: t("The Mac app went without notarization: it isn’t a Mac app bundle."),
+    [MacNotarizeFailure.NoIdentity]: t(
+      "The Mac app went without notarization: no Developer ID Application certificate is in your keychain.",
+    ),
+    [MacNotarizeFailure.ManyIdentities]: t(
+      "The Mac app went without notarization: your keychain has several Developer ID certificates. Name one in Genex’s settings.",
+    ),
+    [MacNotarizeFailure.Sign]: t("The Mac app went without notarization: codesign couldn’t sign it."),
+    [MacNotarizeFailure.Submit]: t(
+      "The Mac app went without notarization: Apple’s notary couldn’t be reached with your saved notary profile.",
+    ),
+    [MacNotarizeFailure.Rejected]: t("The Mac app went without notarization: Apple’s notary rejected it."),
+    [MacNotarizeFailure.Staple]: t("The Mac app went without notarization: Apple’s ticket couldn’t be attached to it."),
+    [MacNotarizeFailure.Stopped]: t("The Mac app went without notarization: notarizing was stopped."),
+  } satisfies Record<MacNotarizeFailure, string>,
   failed: t("Not sent"),
   failedLine: (name: string, error: string) => t("Couldn’t send the {app}: {error}", { app: name, error }),
   /** An app sent by someone other than an admin: Genex reviews it before players get it. */
@@ -3783,9 +3878,14 @@ export const PUBLISH_PLATFORM_WORDS = {
   rebuildAsk: (players: string, title: string) =>
     t("Build the {players} app of {title} again so I can publish it.", { players, title }),
   rebuildFirst: (app: string) => t("The {app} is older than your last change: build it again, then publish.", { app }),
-  /** The installed Genex plugin is from before apps: its update sends them. */
-  updateGenex: t("Update the Genex plugin in Plugins to publish apps."),
   notListed: t("The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it."),
+  /** A web version on Genex the game folder no longer holds: Genex's page plays it instead of the apps. */
+  webOnGenex: t("A web version is on Genex"),
+  removeWeb: t("Remove"),
+  removeWebLabel: t("Remove the web version from Genex"),
+  webOnPage: t("The game’s page plays its web version until you remove it, so players don’t see the apps."),
+  /** A web build Publish would put on a page that shows only the game's apps. */
+  replacesApps: t("Publish makes this web version the game’s page, in place of its apps."),
 } as const;
 
 /** Each kind of space freeing deletes: its name and what it is. */
@@ -3958,6 +4058,9 @@ export const ASSET_LIBRARY_WORDS = {
   /** The tags on a card. */
   saved: t("Saved"),
   shared: t("Shared"),
+  /** A file only in the build of a run still going: it reaches the game when the run lands. */
+  building: t("In the running build"),
+  buildingTip: t("Not in your game yet. It arrives when the build lands."),
   save: t("Save"),
   saveTip: t("Save to your library"),
   unsaveTip: t("Remove from Saved"),
@@ -5825,14 +5928,16 @@ export const NATIVE_WORDS = {
   /** A profile's card for a game this computer has no build of. */
   onlyOn: (platform: string) => t("Only on {platform}", { platform }),
   // The game page.
-  stats: (plays: string, likes: string, updated: string | null) =>
+  /** "4 plays · 1 like · Updated 33 minutes ago": each count as `formatCount` wrote it, its plural by the number. */
+  stats: (plays: { n: number; shown: string }, likes: { n: number; shown: string }, updated: string | null) =>
     [
-      t("{count} plays", { count: plays }),
-      t("{count} likes", { count: likes }),
+      t("{n, plural, one {{count} play} other {{count} plays}}", { n: plays.n, count: plays.shown }),
+      t("{n, plural, one {{count} like} other {{count} likes}}", { n: likes.n, count: likes.shown }),
       updated ? t("Updated {when}", { when: updated }) : null,
     ]
       .filter(Boolean)
       .join(" · "),
+  shots: t("Shots"),
   about: tc("game page", "About"),
   install: t("Install"),
   installLabel: (title: string, size: string) => t("Install {title}, {size}", { title, size }),
@@ -5864,11 +5969,10 @@ export const NATIVE_WORDS = {
   launchFailed: LAUNCH_FAILED,
   singlePlayer: t("Single player"),
   multiplayer: t("Multiplayer"),
-  madeWith: (engine: string) => t("Made with {engine}", { engine }),
   /** Engine ids as people say them; another id is shown as it is spelled. */
   engine: { unity: "Unity", godot: "Godot", unreal: "Unreal" } as Readonly<Record<string, string>>,
-  /** The game page's systems tile; its marks say which, and its hover names them. */
-  platformsTile: t("Platforms"),
+  /** The game page's facts, each a small label over its value. */
+  facts: { runsOn: t("Runs on"), size: t("Size"), players: t("Players"), madeWith: t("Made with") },
   appleSiliconOnly: t("Apple silicon only"),
   failedToLoad: t("Couldn’t load this game."),
   // The card menu's local items.
@@ -5957,37 +6061,17 @@ export const CHECK_WORDS = {
   showLess: t("Show less"),
 } as const;
 
-/** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
-export const PLUGIN_TOOLBAR_WORDS = {
-  update: {
-    badge: tc("badge", "Update"),
-    title: (plugin: string, version: string) =>
-      t("The {plugin} plugin {version} is ready. Press to update it in Plugins.", { plugin, version }),
-  },
-} as const;
-
 /**
- * A game linked to an engine whose Loop needs its project inside the game folder, named by the
- * engine's label: Rewind's note when the project lives elsewhere, and why Mode has no Loop yet.
+ * A game linked to an engine whose save points need its project inside the game folder, named by
+ * the engine's label: Rewind's note when the project lives elsewhere.
  */
 export const ENGINE_GAME_WORDS = {
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
   rewindNote: (engine: string, project: string) =>
     t("Rewind doesn’t undo changes made in {engine}: {project} is outside the game folder.", { engine, project }),
-  /** Mode's caption for a game whose project lies outside its folder: where it is, and the two ways to a Loop. */
-  loopUnavailable: (engine: string, project: string | null, place: string) =>
-    project
-      ? t(
-          "Loops need the {engine} project inside this game’s folder, so Rewind can undo each step; {project} is in {place}. Make a new one from the {engine} button, or move {project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.",
-          { engine, project, place },
-        )
-      : t(
-          "Loops need this game’s {engine} project inside its folder, so Rewind can undo each step. A new {engine} project made from the {engine} button goes there. Until then, it does what you ask, then stops.",
-          { engine },
-        ),
 } as const;
 
-/** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */
+/** A game linked to an Unreal project: the Live tab's card and Rewind's note. */
 export const UNREAL_WORDS = {
   /** The Live tab's line under the project's name, in place of the web page. */
   stageStatus: t("Plays in the Unreal editor."),
@@ -6044,9 +6128,6 @@ export const UNREAL_WORDS = {
   playShot: (project: string) => t("{game} in play", { game: project }),
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
   rewindNote: (project: string) => ENGINE_GAME_WORDS.rewindNote(GAME_ENGINE_WORDS.unreal, project),
-  /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
-  loopUnavailable: (project: string | null, place: string) =>
-    ENGINE_GAME_WORDS.loopUnavailable(GAME_ENGINE_WORDS.unreal, project, place),
 } as const;
 
 /** The Unity plugin's words in Studio's own UI. */

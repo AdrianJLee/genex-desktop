@@ -1235,34 +1235,6 @@ describe("the plugins' asset jobs in the run graph", () => {
   });
 });
 
-it("replays Optimization once, ignores stale/unknown updates, and keeps its result on compact boot closure", () => {
-  const result = {
-    schemaVersion: 1,
-    runId: "run_x",
-    project: "game",
-    stageId: "optimization",
-    sequence: 2,
-    phase: "terminal",
-    outcome: "no_improvement",
-    summary: "No safe gain",
-    scenarios: [],
-    changedFiles: [],
-  };
-  const graph = buildRunGraph([
-    event("run_started", {}),
-    event("optimization_updated", result),
-    event("optimization_updated", { ...result, sequence: 1, summary: "stale" }),
-    event("optimization_updated", { ...result, schemaVersion: 9, sequence: 3 }),
-    event("run_finished", { stoppedBecause: "restart" }),
-  ])!;
-  const nodes = graph.nodes.filter((n) => n.kind === "optimization");
-  assert.equal(nodes.length, 1);
-  assert.equal(nodes[0]!.result.summary, "No safe gain");
-  assert.ok(graph.nodes.findIndex((n) => n.kind === "optimization") < graph.nodes.findIndex((n) => n.kind === "final"));
-  const layout = layoutSteps(partRows(graph), { optimization: graph.nodes.some((n) => n.kind === "optimization") });
-  assert.ok(layout.rects.optimization);
-});
-
 /**
  * A synthetic director run with restarted builders, 21 rounds and twelve merges.
  * It preserves the historical graph regressions without retaining a private run journal.
@@ -1541,7 +1513,6 @@ describe("a finished lead run its chat's own session reopens", () => {
     const run = graph.nodes.find((node) => node.kind === "run")!;
     assert.ok(run.kind === "run");
     assert.deepEqual([run.finishedAt, run.victory, run.stoppedBecause], [null, null, null]);
-    assert.equal(run.durationMs, 1_800_000, "the reopen's own half hour");
     assert.equal(graph.mergedHead, null, "only a merge of the reopened run is new to the stage");
     assert.equal(newBuildOffer(graph.mergedHead, null), null);
     assert.ok(
@@ -1566,18 +1537,11 @@ describe("a finished lead run its chat's own session reopens", () => {
   });
 });
 
-it("gives an ∞ build no duration, so it is never called a 24 h build", () => {
-  const graph = buildRunGraph([event("run_started", { budgets: { wallClockMs: 86_400_000, untilSatisfied: true } })]);
-  assert.ok(graph);
-  assert.equal(graph.nodes.find((node) => node.kind === "run")?.durationMs, undefined);
-});
-
 it("a director working without worker rows has a compact, connected input-to-result path", () => {
   const graph = buildRunGraph([
     event("run_started", { budgets: { wallClockMs: 3_600_000 } }),
     event("autopilot_started", { director: true, facets: [] }),
   ])!;
-  assert.equal(graph.nodes.find((node) => node.kind === "run")?.durationMs, 3_600_000);
   const layout = layoutSteps(partRows(graph)),
     start = layout.rects.start!,
     final = layout.rects.final!;

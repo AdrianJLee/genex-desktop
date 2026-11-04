@@ -1,24 +1,20 @@
 /**
- * The words of Genex's worker pool: the brief a worker starts from (Genex's identity first), the
- * one line a lead's brief says about workers, and every answer the six worker tools give the lead.
+ * The words of Genex's worker pool: the brief a worker starts from (Genex's identity first), and
+ * every answer the six worker tools give the lead.
  */
 import { CoreFact, type FactRef, type FolderHolds, ProjectTool } from "../folder-facts.ts";
 import { appIdentity } from "../project-prompts.ts";
 import { MAX_WORKERS_AT_ONCE, WorkerIsolation, WorkerTool } from "./contract.ts";
 
-/** The one line a lead's brief says about its workers, the same on every engine. */
-export const WORKERS_BRIEF_LINE =
-  "You can start workers (worker_start): readers in place, writers in their own copy that you merge with worker_mark, or one writer in place. As many at once as worker_start says; they follow this chat's permission mode.";
-
 /** What a worker may do about Genex's plugins: look, and tell the lead; the card is the lead's to show. */
 const WORKER_PLUGIN_SEARCH = `To look for a Genex plugin, call ${ProjectTool.PluginsFind} and say in your report what it found; only the lead shows the person a plugin's card.`;
 
 /**
- * What a worker of a project with a game engine's editor reads: the editor is the lead's, and
- * Genex hands a worker none of its tools.
+ * What a worker in a copy of a project with a game engine's editor reads: it has the editor's tools
+ * as its lead does, and they act on the game the editor has open, which is not its copy.
  */
-const WORKER_NO_EDITOR =
-  "The game engine's editor is the lead's alone: you have none of its tools. Change the project through its files.";
+const WORKER_EDITOR_ELSEWHERE =
+  "The game engine's editor works on the game folder the lead works in, not on your copy: change your copy through its files, and use the editor's tools for what only it can do (start or restart it, play, look, check) or for changes the lead asked you to make there.";
 
 /** The kinds of project a game engine's editor works on. */
 const ENGINE_PROJECTS: ReadonlySet<string> = new Set([
@@ -28,7 +24,7 @@ const ENGINE_PROJECTS: ReadonlySet<string> = new Set([
   CoreFact.RobloxProject,
 ]);
 
-/** Whether a project holds a game engine's project, whose editor its lead drives. */
+/** Whether a project holds a game engine's project, whose editor works on the game folder. */
 const holdsEngine = (facts: readonly FactRef[]): boolean => facts.some((fact) => ENGINE_PROJECTS.has(fact.id));
 
 /** What a worker's brief is made from. */
@@ -72,14 +68,14 @@ export function workerBrief(parts: WorkerBriefParts): string {
     `Your task:\n${parts.task}`,
     "",
     WHERE[parts.isolation],
-    ...(holdsEngine(parts.identity.facts) ? [WORKER_NO_EDITOR] : []),
+    ...(holdsEngine(parts.identity.facts) && parts.isolation === WorkerIsolation.Copy ? [WORKER_EDITOR_ELSEWHERE] : []),
     ...(parts.inputs.length ? [`Start from these files: ${parts.inputs.join(", ")}.`] : []),
     parts.research
       ? "You may search and read the web for this task."
       : "Work from the project and your own knowledge; the web is not part of this task.",
     WORKER_PLUGIN_SEARCH,
     WORKER_ONE_TURN,
-    "Never start workers of your own. Hand back by finishing: end with a report of what you did, what you found (name the files and pictures that show it) and what is left; the lead reads it in full.",
+    "Never start workers of your own. Hand back by finishing: end with a report of what you did and what is left; the lead reads it in full.",
   ];
   return lines.join("\n");
 }
@@ -119,7 +115,7 @@ export const POOL_WORDS = {
   status: (line: StatusLine) =>
     `${line.id} · ${line.title} · ${line.isolation} · ${line.state} · ${line.minutes} min${line.extra ? ` · ${line.extra}` : ""}`,
   waiting: (question: string) =>
-    `waiting for the person: ${question}. Stop it, or work around it; other workers keep going.`,
+    `waiting for the person: ${question}. Only that call waits; go on with the rest of the work, and the other workers keep going.`,
   ready: (id: string) => `its work is ready: ${WorkerTool.Mark} ${id} used to merge it, or rejected to drop it`,
   nothingChanged: "it changed nothing",
   marked: (verdict: string) => `marked ${verdict}`,
@@ -162,36 +158,10 @@ export const POOL_WORDS = {
 
 /** What a run's lead hears of its pool's workers, beside the workers of its own method. */
 export const RUN_POOL_WORDS = {
-  /** A worker of the run's pool ended: the line that wakes the lead with the rest of its news. */
-  ended: (id: string, title: string, state: string) =>
-    `worker ${id}: ${title} ${state}; ${WorkerTool.Status} ${id} says what it found.`,
+  /** A worker of the run's pool ended: Genex's line that wakes the lead. */
+  ended: (id: string, title: string, state: string) => `worker ${id} "${title}" ended: ${state}.`,
   /** The web method builds in copies: no writer works in the game folder itself. */
   noLock: `Not started: this run builds in copies, never in the game folder itself. Start it with isolation copy (the default: a builder in its own worktree), or isolation read for a reader in place.`,
   /** The heading of the run pool's workers in a status that lists every worker. */
   readers: "Workers from the shared pool:",
-  /** One of the run's own workers waits on the person: the line that wakes the lead (`worker <id>` opens it). */
-  waiting: (id: string, question: string) =>
-    `worker ${id} is waiting for the person: ${question}. Stop it (${WorkerTool.Stop}), or work around it; the other workers keep going.`,
-} as const;
-
-/** What `worker_mark` answers a director about one of its builders. */
-export const DIRECTOR_MARK_WORDS = {
-  unknown: (id: string) => `no worker "${id}"`,
-  badVerdict: `Say verdict used (integrate its last accepted commit) or rejected (its news stops).`,
-  stillRunning: (id: string) => `worker ${id} is still running: stop it first (${WorkerTool.Stop}), then reject it.`,
-  rejected: (id: string) =>
-    `Rejected ${id}: no digest or ${WorkerTool.Wait} names it again. Its commits stay on its ref.`,
-  inGameAlready: (id: string) =>
-    `worker ${id}'s work is already in the game (integrated), so it cannot be rejected. To take something of it out, change it in your worktree.`,
-  rejectedCard: (id: string, note: string | null) => `director rejected worker ${id}${note ? `: ${note}` : ""}`,
-  rejectedPlain: (title: string) => `set aside the builder's work on ${title}`,
-} as const;
-
-/**
- * A conflict worker as the chat and the Builds graph name it: the work it fits in, in plain
- * words. Its title for the lead names the git step, which the person never reads.
- */
-export const FIT_IN_WORDS = {
-  title: (title: string) => `Fit ${title} in with the rest of the game`,
-  someWork: "Fit the latest work in with the rest of the game",
 } as const;

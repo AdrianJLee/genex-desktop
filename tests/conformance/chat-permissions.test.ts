@@ -2,7 +2,7 @@
  * Claude Code permissions in a game chat, from the host's side: only the session answering a
  * message the person sent in this game's own chat is handed a mode and a way to ask; every other
  * delegation (builders, anything the harness shapes on its own) keeps the sandboxed contract, and
- * a build's lead or the run's coordinator asks from its own seat (lead-sessions-host.test.ts). A question lands in the chat as a pending card and its answer as a
+ * a build's lead asks from its own seat (lead-sessions-host.test.ts). A question lands in the chat as a pending card and its answer as a
  * settled one; a Stop, the turn's end or a restart withdraws it without anyone's click; and the
  * harness can neither forge the person's chat nor write their questions.
  */
@@ -11,7 +11,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { mainAgentReachNote } from "../../src/main/core/delegation-prompts.ts";
 import { readsAfterRewind } from "../../src/main/core/rewind.ts";
 import { RecoveryService } from "../../src/main/core/recovery.ts";
 import type { CoreInternals, StudioCore } from "../../src/main/studio-core.ts";
@@ -46,7 +45,7 @@ describe("game chat permissions", () => {
 
   before(async () => {
     // No project root policy: one test adopts a game from outside the studio's folders.
-    lite = await coreLite({ executionPolicy: { runBackgroundImprovement: false }, onUiEvent: (e) => uiEvents.push(e) });
+    lite = await coreLite({ executionPolicy: {}, onUiEvent: (e) => uiEvents.push(e) });
     core = lite.core;
     // No harness in a lite core: a dispatch reaches nothing, and a message is still the person's.
     core.host.dispatch = async () => undefined;
@@ -160,7 +159,6 @@ describe("game chat permissions", () => {
       { readOnly: true },
       { class: "improvement" },
       { ownership: { facetId: "world", owns: ["src/world"], ownsMain: false } },
-      { coordinator: { runId: "run-c" }, readOnly: true, timeoutMs: 300_000 },
     ];
     for (const extra of unattended) {
       const request = await brief(extra);
@@ -171,16 +169,18 @@ describe("game chat permissions", () => {
   });
 
   // The owner asked the chat to read their Downloads and it refused without trying, in Auto: its
-  // brief said to stay inside the game's folder. Only the host knows the session reaches the Mac.
-  it("tells the session answering the person it reaches their whole Mac, and an unattended one nothing of it", async () => {
+  // brief said to stay inside the game's folder. Flipped: the host told it in a note that it reaches
+  // the whole Mac, and told the session answering the person to reply at once. No confinement text
+  // is left to counter, Claude Code knows its own environment and mode, and words sent while it works
+  // reach it as the person's: the session asks in the chat's mode, and reads the words alone.
+  it("hands the session answering the person the chat's mode and the words alone, with no note about its reach", async () => {
     const chat = await brief({ prompt: "Read my downloads folder" });
     assert.ok(chat.permissions, "the chat's session asks");
-    assert.ok(chat.prompt.includes(mainAgentReachNote()), "told it works anywhere on the Mac");
-    assert.ok(chat.prompt.startsWith("Read my downloads folder"), "after the brief it was given");
+    assert.equal(chat.prompt, "Read my downloads folder", "the words as written");
+    assert.doesNotMatch(String(chat.system ?? ""), /main agent|not in a sandbox|may not be a programmer/);
     for (const extra of [{ timeoutMs: 60_000 }, { readOnly: true }, { class: "improvement" }]) {
       const request = await brief(extra);
       assert.equal(request.permissions, undefined, `unattended: ${Object.keys(extra).join(", ")}`);
-      assert.equal(request.prompt.includes(mainAgentReachNote()), false, `not told: ${Object.keys(extra).join(", ")}`);
     }
   });
 
@@ -242,7 +242,7 @@ describe("game chat permissions", () => {
     assert.equal((await core.store.getRecord(threadId)).metadata?.permissionMode, "bypassPermissions");
     const chat = await codexBrief();
     assert.ok(chat.denyReads?.includes(core.games.dirFor("perm-other")), "sibling games stay unreadable");
-    assert.equal(chat.prompt.includes(mainAgentReachNote()), false, "not told it reaches the whole Mac");
+    assert.doesNotMatch(chat.prompt, /main agent/, "not told it reaches the whole Mac");
     assert.equal(chat.leadAsks, undefined);
     await api["engine.delegate"]!({ engine: "codex", project, threadId, prompt: "x", timeoutMs: 60_000 });
     assert.equal(seen.at(-1)!.permissions, undefined, "unattended work on it keeps no mode");
@@ -508,17 +508,27 @@ describe("game chat permissions", () => {
     assert.equal(core.answerPermission(card.requestId, { decision: "deny" }), false, "nothing left to answer");
   });
 
-  it("a card Claude Code asks in Bypass itself is still the person's to answer after a switch away and back", async () => {
+  // Flipped: Claude Code's own safety checks still asked in Bypass, and the person who chose to be
+  // asked nothing got a card anyway. Bypass now answers them: the person confirmed it when picking it.
+  it("Bypass asks nothing: Claude Code's own question in Bypass is allowed at once, with no card", async () => {
     await core.setPermissionMode(threadId, "bypassPermissions");
-    const { card, done } = await asking({ tool: "Bash", input: { command: "rm -rf build" }, always: [] });
+    const known = new Set((await rows()).map((row) => row.requestId));
+    let answer: ToolPermissionAnswer | undefined;
+    during = async (request) => {
+      const ask = { toolUseId: "tu", tool: "Bash", input: { command: "rm -rf build" }, always: [] };
+      answer = await request.permissions!.ask(ask, new AbortController().signal);
+    };
+    await brief().finally(() => {
+      during = async () => {};
+    });
+    // The cards below are asked in Manual, as the person who left Bypass would be.
     await core.setPermissionMode(threadId, "default");
-    await core.setPermissionMode(threadId, "bypassPermissions");
+    assert.deepEqual(answer, { decision: "allow" });
     assert.deepEqual(
-      (await rows(card.requestId)).map((row) => row.state),
-      ["pending"],
+      (await rows()).filter((row) => !known.has(row.requestId)),
+      [],
+      "no card",
     );
-    assert.equal(core.answerPermission(card.requestId, { decision: "deny" }), true);
-    assert.deepEqual(await done(), { decision: "deny" });
   });
 
   it("'always' with a mode in it moves a Manual chat, and never takes a chat out of Bypass or Auto", async () => {
@@ -538,6 +548,8 @@ describe("game chat permissions", () => {
       await done();
       assert.equal((await core.store.getRecord(threadId)).metadata?.permissionMode, looser, `${looser} stays`);
     }
+    // The cards below are asked in Manual: Bypass asks nothing.
+    await core.setPermissionMode(threadId, "default");
   });
 
   it("a deny carries the person's words; a plan approval sets the chat's mode", async () => {
@@ -629,16 +641,10 @@ describe("game chat permissions", () => {
   });
 
   it("the harness cannot make a thread of its own read as the person's chat, nor write their questions", async () => {
-    // thread.create takes a title and nothing else: kind, game, id and mode are the host's.
-    const forged = String(
-      await api["thread.create"]!({
-        title: "x",
-        threadId,
-        metadata: { kind: "game", project, permissionMode: "bypassPermissions" },
-      }),
-    );
-    assert.notEqual(forged, threadId, "no thread id of the harness's choosing");
-    assert.deepEqual((await core.store.getRecord(forged)).metadata ?? {}, {});
+    // Flipped (phase 5): the harness makes no threads at all (`thread.create` is gone); a thread
+    // that is not the person's chat is the host's own.
+    assert.equal((api as Record<string, unknown>)["thread.create"], undefined, "no thread of the harness's making");
+    const forged = await core.store.createThread({ title: "x" });
     assert.equal((await core.store.getRecord(threadId)).metadata?.kind, "game", "the person's chat is untouched");
     const onForged = await personSays(forged);
     await api["engine.delegate"]!({

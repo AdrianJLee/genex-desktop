@@ -17,16 +17,11 @@ import type { Message, ToolCall, Usage } from "../types.ts";
 import { type SteerSession, steerSession } from "./claude-steer.ts";
 import { DEFAULT_COMPACTION_PERCENT, interruption } from "./common.ts";
 import { checkpointCut, type LocalCheckpoint, summarizeLocalCheckpoint } from "./local-checkpoint.ts";
-import {
-  LOCAL_NOTE,
-  localBudgetNote,
-  localSystemPrompt,
-  modeChangedNote,
-  noProgressNote,
-  progressCheckNote,
-} from "./local-session-prompts.ts";
-import { changesSomething, localMode, permitCall, sessionMode } from "./local-session-permissions.ts";
+import { LOCAL_NOTE, localBudgetNote, localSystemPrompt, progressCheckNote } from "./local-session-prompts.ts";
+import { type AutoCheck, changesSomething, permitCall, seatAsks, sessionMode } from "./local-session-permissions.ts";
+import { autoApprove } from "./auto-approver.ts";
 import { type LocalInbox, localInbox, steerUserMessage, takesSteer } from "./local-session-steer.ts";
+import { textsAsSent } from "./genex-mark-prompts.ts";
 import {
   executeLocalTool,
   INSPECTION_TOOLS,
@@ -34,9 +29,9 @@ import {
   sessionFileResolver,
   type ToolContext,
 } from "./local-session-tools.ts";
-import { lockUnowned, releaseLocks } from "./ownership-locks.ts";
-import { type CommandSandbox, commandSandbox } from "./session-commands.ts";
-import { StudioTool } from "./studio-tool-prompts.ts";
+import { neverTouchFence } from "./claude-permissions.ts";
+import { neverTouchWhole } from "./never-touch.ts";
+import { type CommandSandbox, commandSandbox, withGitMetadata } from "./session-commands.ts";
 import {
   type CompleteRequest,
   type CompleteResponse,
@@ -64,8 +59,7 @@ const LOCAL_SESSION_LIMITS = {
   /** A tool's answer as the model reads it, and as the chat previews it. */
   toolReplyChars: 40_000,
   toolPreviewChars: 2_000,
-  /** Tool rounds without a workspace change before the session stops, and the rounds that get a nudge. */
-  idleRoundLimit: 16,
+  /** The tool rounds without a workspace change that get a nudge; reading never stops a session. */
   idleNudgeRounds: [6, 10] as readonly number[],
 } as const;
 
@@ -143,8 +137,8 @@ interface LocalRun {
   workspaceStamp: string;
   /** The chat's permission mode it runs in (`local-session-permissions.ts`); null for unattended work. */
   mode: PermissionMode | null;
-  /** What the model reads at its next round about a mode the user switched to while it ran. */
-  modeNote: string;
+  /** Auto's check of a command, by the session's own model in a call of its own (auto-approver.ts). */
+  autoCheck: AutoCheck;
   /** The person's messages sent while it runs, read at the top of the next round (`local-session-steer.ts`). */
   inbox: LocalInbox;
   /** The host's steer, when it asked to steer this session: told once, and what was read. */
@@ -155,6 +149,8 @@ interface LocalRun {
 interface FileBounds {
   /** The workspace and any extra read folders, resolved. */
   readRoots: string[];
+  /** Folders it writes besides the workspace: the build a lead leads and its Git metadata, real. */
+  writeRoots: string[];
   /** Paths its tools may never read or write. */
   forbidden: string[];
   /** Paths its tools may not write. */
@@ -249,25 +245,20 @@ export class LocalSessions {
     steer: SteerSession | null,
   ): Promise<DelegateResult> {
     const run = await this.#open(request, model, cwd, id, steer);
-    const locks = request.ownership && !run.readonly ? await lockUnowned(cwd, request.ownership) : null;
     run.workspaceStamp = await stampWorkspace(cwd);
     const instructions = await run.tools
       .resolveFile("CLAUDE.md")
       .then((p) => readFile(p, "utf8"))
       .catch(() => "");
-    run.system = localSystemPrompt({
-      readonly: run.readonly,
-      ownership: request.ownership,
-      instructions,
-      mode: run.mode,
-    });
+    const system = () => localSystemPrompt({ readonly: run.readonly, instructions, mode: run.mode });
+    run.system = system();
     request.onEvent?.({ type: DelegateEventType.System, payload: { subtype: "init", session_id: id, model } });
     // The composer's picker reaches the running session: the next call is decided in the new mode,
-    // and the model reads of it at its next round.
+    // which its system prompt says from the next round on.
     request.permissions?.onControl?.({
       setMode: async (mode) => {
         run.mode = sessionMode(run.engine, mode);
-        run.modeNote = modeChangedNote(run.mode);
+        run.system = system();
       },
     });
     try {
@@ -289,7 +280,6 @@ export class LocalSessions {
       // Whatever still waits was never read: not reported, so the host queues it again.
       run.inbox.close();
       request.permissions?.onControl?.(null);
-      if (locks) await releaseLocks(cwd, locks);
       await run.tools.sandbox?.dispose();
     }
   }
@@ -314,19 +304,35 @@ export class LocalSessions {
     const budget = localBudgetNote({ maxTurns: turnLimit(request), timeoutMs: request.timeoutMs });
     const requirements = continueHistory(saved, messages, request, budget);
     const save = () => atomicWriteText(sessionFile, JSON.stringify(saved), { mode: 0o600 });
-    const { readRoots, forbidden, deniedWrites } = await this.#fileBounds(request, cwd);
+    const { readRoots, writeRoots, forbidden, deniedWrites } = await this.#fileBounds(request, cwd);
     const readonly = isReadOnlySession(request);
     const resolveFile = sessionFileResolver({
       cwd,
       readRoots,
+      writeRoots,
+      ...(request.worker ? { neverTouch: request.worker.neverTouch } : {}),
       forbidden,
       deniedWrites,
       readonly,
-      ownership: request.ownership,
     });
     const definitions = localToolDefinitions(request, readonly);
     const studioToolCalls: NonNullable<DelegateResult["studioToolCalls"]> = [];
-    const sandbox = readonly ? null : await this.#sandbox(cwd, id, forbidden, deniedWrites);
+    // A worker's commands are fenced around its own folders too, as its box is on every engine.
+    const fence = request.worker ? await neverTouchFence(request.worker.neverTouch) : { reads: [], writes: [] };
+    const sandbox = readonly
+      ? null
+      : await this.#sandbox(cwd, id, {
+          forbidden: [...forbidden, ...fence.reads],
+          deniedWrites: [...deniedWrites, ...fence.writes],
+          writeRoots,
+        });
+    // The Auto check's own calls are the session's usage too.
+    const usage: Usage = { input_tokens: 0, output_tokens: 0 };
+    const counted = async (asked: CompleteRequest): Promise<CompleteResponse> => {
+      const answer = await this.options.complete(asked);
+      addUsage(usage, answer.usage);
+      return answer;
+    };
     return {
       engine: this.engine,
       request,
@@ -354,7 +360,7 @@ export class LocalSessions {
         studioToolCalls,
       },
       system: "",
-      usage: { input_tokens: 0, output_tokens: 0 },
+      usage,
       turns: 0,
       summary: "",
       actualModel: model,
@@ -362,29 +368,29 @@ export class LocalSessions {
       idleRounds: 0,
       outputRepairs: 0,
       workspaceStamp: "",
-      mode: localMode(this.engine, request.permissions),
-      modeNote: "",
+      mode: seatAsks(this.engine, request).mode,
+      autoCheck: (ask, asked) => autoApprove({ complete: counted, model, cwd, ask, signal: asked }),
       inbox: localInbox(signal),
       steer,
     };
   }
 
-  /** The folders the session may read, the paths it may never touch, and the ones it may not write. */
+  /**
+   * The folders the session may read and write besides its own, the paths it may never touch, and
+   * the ones it may not write. A worker writes its seat's write roots, by their real paths; a worker never reaches its never-touch list's roots
+   * (whole ones here, the rest by `FileScope.neverTouch`), as on every engine.
+   */
   async #fileBounds(request: DelegateRequest, cwd: string): Promise<FileBounds> {
-    const readRoots = [
-      cwd,
-      ...(await Promise.all((request.extraReads ?? []).map((p) => realpath(p).catch(() => path.resolve(p))))),
-    ];
+    const real = (p: string) => realpath(p).catch(() => path.resolve(p));
+    const seat = request.worker;
+    const writes = seat ? seat.writeRoots : [];
+    const writeRoots = [...new Set(await Promise.all(writes.map(real)))].filter((dir) => dir !== cwd);
+    const readRoots = [cwd, ...writeRoots, ...(await Promise.all((request.extraReads ?? []).map(real)))];
     // The coding CLIs' sign-in homes, from the one shared list the sandbox and contractors use (SEC-3).
-    const forbidden = [...this.options.protectedPaths, ...credentialHomes(), ...(request.denyReads ?? [])].map((p) =>
-      path.resolve(p),
-    );
-    const deniedWrites = [
-      ...this.options.protectedPaths,
-      ...credentialHomes(),
-      ...(request.optimization?.denyWrites ?? []),
-    ];
-    return { readRoots, forbidden, deniedWrites };
+    const fenced = [...this.options.protectedPaths, ...credentialHomes(), ...(request.denyReads ?? [])];
+    const forbidden = [...fenced, ...(seat ? neverTouchWhole(seat.neverTouch) : [])].map((p) => path.resolve(p));
+    const deniedWrites = [...this.options.protectedPaths, ...credentialHomes()];
+    return { readRoots, writeRoots, forbidden, deniedWrites };
   }
 
   /** The saved session to continue, or a fresh one; a resumed session must match its workspace and model. */
@@ -405,14 +411,23 @@ export class LocalSessions {
     return saved;
   }
 
-  /** The command sandbox: the workspace and a linked worktree's Git metadata are its only writable places. */
-  #sandbox(cwd: string, id: string, forbidden: string[], deniedWrites: string[]): Promise<CommandSandbox> {
+  /**
+   * The command sandbox: the workspace, a linked worktree's Git metadata and a worker's write roots
+   * (with their own Git metadata) are its only writable places.
+   */
+  async #sandbox(
+    cwd: string,
+    id: string,
+    bounds: Pick<FileBounds, "forbidden" | "deniedWrites" | "writeRoots">,
+  ): Promise<CommandSandbox> {
     const scratchRoot = this.options.scratchRoot ?? path.join(os.tmpdir(), `studio-${this.engine}`);
+    const roots = (await Promise.all(bounds.writeRoots.map(withGitMetadata))).flat();
     return commandSandbox({
       cwd,
+      ...(roots.length ? { writableRoots: roots } : {}),
       scratchDir: path.join(scratchRoot, id),
-      secretPaths: forbidden,
-      denyWrite: deniedWrites,
+      secretPaths: bounds.forbidden,
+      denyWrite: bounds.deniedWrites,
       ...(this.options.toolPath ? { toolPath: this.options.toolPath } : {}),
     });
   }
@@ -420,10 +435,6 @@ export class LocalSessions {
   /** One model turn and the tool calls it asked for; the session's ending when this round ends it. */
   async #round(run: LocalRun): Promise<DelegateResult | null> {
     run.signal.throwIfAborted();
-    if (run.modeNote) {
-      run.messages.push({ role: "user", content: run.modeNote });
-      run.modeNote = "";
-    }
     await readSteers(run);
     const answer = await this.#completeWithCompaction(run);
     if ("ending" in answer) return answer.ending;
@@ -598,18 +609,11 @@ function turnLimit(request: DelegateRequest): number {
 }
 
 /**
- * A session that may not edit: a read-only pass (playtest, scout) or a coordinator. A chat that
- * may launch a build is still a full contractor and keeps its write tools.
+ * A session that may not edit: a read-only pass (a reviewer, a reader). A chat that may launch a
+ * build is still a full contractor and keeps its write tools.
  */
 function isReadOnlySession(request: DelegateRequest): boolean {
-  return Boolean(request.readOnly || request.coordinator);
-}
-
-/** The launch tools a Loop chat was bridged, by name (its question tool is not one). */
-function launchToolNames(request: DelegateRequest): string[] {
-  return (request.interviewTools ?? [])
-    .filter((t) => t.name !== StudioTool.AskUser && t.onlyWhenAsked !== true)
-    .map((t) => t.name);
+  return Boolean(request.readOnly);
 }
 
 /**
@@ -622,7 +626,9 @@ function continueHistory(saved: SavedSession, messages: Message[], request: Dele
   // briefs need not be concatenated at every continuation. Oversized fixed requirements
   // fail explicitly below instead of silently deleting the user's original request.
   const requirements = saved.requirements ?? [...(saved.task ? [saved.task] : [])];
-  if (requirements.at(-1) !== request.prompt) requirements.push(request.prompt);
+  // Genex's own message reads under its mark (genex-mark-prompts.ts), here and in a compaction.
+  const prompt = textsAsSent(request).join("\n\n");
+  if (requirements.at(-1) !== prompt) requirements.push(prompt);
   saved.requirements = requirements;
   delete saved.task;
   // Interrupted tool calls are never replayed: their side effects may already exist.
@@ -633,7 +639,7 @@ function continueHistory(saved: SavedSession, messages: Message[], request: Dele
         messages.push({ role: "tool", tool_call_id: call.id, content: LOCAL_NOTE.interrupted });
   messages.push({
     role: "user",
-    content: `${request.prompt}\n\n${budget}`,
+    content: `${prompt}\n\n${budget}`,
     ...(request.images?.length ? { images: request.images } : {}),
   });
   return requirements;
@@ -708,9 +714,10 @@ async function readSteers(run: LocalRun): Promise<void> {
   const messages = run.inbox.take();
   if (!messages.length) return;
   for (const message of messages) {
-    run.messages.push(steerUserMessage(message));
-    // The person's words are instructions: a compaction keeps them in order with the rest.
-    if (message.text) run.requirements.push(message.text);
+    const said = steerUserMessage(message);
+    run.messages.push(said);
+    // A compaction keeps every message in order with the rest, Genex's still under its mark.
+    if (message.text) run.requirements.push(String(said.content));
   }
   await run.save();
   for (const { id } of messages) {
@@ -742,7 +749,8 @@ async function callTool(run: LocalRun, call: ToolCall): Promise<{ answer: LiveTo
       mode,
       call,
       cwd,
-      permissions: request.permissions,
+      permissions: seatAsks(run.engine, request).asks,
+      autoCheck: run.autoCheck,
       signal,
     });
     if (refused !== null) return { answer: refused, failed: true };
@@ -753,18 +761,17 @@ async function callTool(run: LocalRun, call: ToolCall): Promise<{ answer: LiveTo
 }
 
 /**
- * Stop a builder that keeps inspecting without changing anything, after nudging it twice. Real
- * edits count, including shell and host-tool edits — not the model's claims of progress.
+ * Nudge a session that keeps reading without changing anything; reading is the model's call, so
+ * it is never stopped for it (its turns and time end it). Real edits count, including shell and
+ * host-tool edits — not the model's claims of progress.
  */
 async function checkProgress(run: LocalRun, calls: ToolCall[]): Promise<DelegateResult | null> {
   const nextStamp = await stampWorkspace(run.cwd);
   const inspecting = calls.every((c) => INSPECTION_TOOLS.has(c.name));
   run.idleRounds = inspecting && nextStamp === run.workspaceStamp ? run.idleRounds + 1 : 0;
   run.workspaceStamp = nextStamp;
-  if (run.idleRounds >= LOCAL_SESSION_LIMITS.idleRoundLimit)
-    return localResult(run, false, StopReason.NoProgress, noProgressNote(LOCAL_SESSION_LIMITS.idleRoundLimit));
   if (LOCAL_SESSION_LIMITS.idleNudgeRounds.includes(run.idleRounds)) {
-    run.progressNote = progressCheckNote(run.idleRounds, launchToolNames(run.request));
+    run.progressNote = progressCheckNote(run.idleRounds);
     run.messages.push({ role: "user", content: run.progressNote });
     run.request.onEvent?.({ type: DelegateEventType.Status, payload: { message: run.progressNote } });
   }

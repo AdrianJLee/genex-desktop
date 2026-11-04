@@ -6,7 +6,8 @@
  * build older than the game's last change says so; once the CLI sends apps, the line says Publish
  * sends the Mac app and its row says Sending…, On Genex or Not sent (with why), or In review and Not
  * approved (with why) for an app Genex reviews first; a web game with no
- * app shows no rows. Dark and
+ * app shows no rows; an Unreal game whose web version is still on Genex says so with Remove, and a
+ * Unity game's web build that would take its apps' page says so above the press. Dark and
  * light screens.
  */
 import { build } from "esbuild";
@@ -148,20 +149,52 @@ app.whenReady().then(async()=>{
   const unreal=await step('unreal','window.platformsRig.open({scene:"unreal"})');
   assert.deepEqual([unreal.rows[0].detail,unreal.rows[0].end],['Unreal games don’t run in a browser',null]);
   report.unreal=await capture('dark-unreal');
+  // On a Mac, Genex builds an Unreal game's Windows app: the row offers it, the press asks Genex (not the agent), then it builds.
+  const cloud=await step('unrealCloud','window.platformsRig.open({scene:"unrealCloud"})');
+  assert.deepEqual([cloud.rows[2].detail,cloud.rows[2].end],['Genex can build it on Windows for you','Build on Genex']);
+  assert.equal(cloud.rows[3].detail,'Package it on a Linux PC');
+  assert.equal(cloud.oneLine,true);
+  assert.equal(cloud.overflow,false);
+  report.unrealCloud=await capture('dark-unreal-cloud');
+  const asked=await step('cloudBuild','window.platformsRig.make("windows")');
+  assert.deepEqual(asked.published,[{via:'cloud:windows'}]);
+  assert.deepEqual(asked.composed,[],'nothing goes through the game chat');
+  assert.equal(asked.rows[2].end,'Asked Genex');
+  const building=await step('unrealBuilding','window.platformsRig.open({scene:"unrealBuilding",theme:"light"})');
+  assert.deepEqual([building.rows[2].detail,building.rows[2].end],['Building on Genex · 12 min so far','Building…']);
+  report.unrealBuilding=await capture('light-unreal-building');
+  // On Windows the agent packages an Unreal game's Linux app too; only the Mac app is made elsewhere.
+  const onWindows=await step('unrealWindows','window.platformsRig.open({scene:"unrealWindows",platform:"win32"})');
+  assert.deepEqual(onWindows.rows.slice(1).map((row)=>[row.detail,row.end]),[['Package it on a Mac',null],['Not made yet','Make with agent'],['Not made yet','Make with agent']]);
+  const linuxAsk=await step('makeLinux','window.platformsRig.make("linux")');
+  assert.deepEqual(linuxAsk.composed,[{project:'dust-runners',text:'Make a Linux app of Dust Runners so I can publish it for Linux players.',send:true}]);
+  report.unrealWindows=await capture('dark-unreal-windows');
+  // The incident: an Unreal game whose page plays a web version (mockups once sent as one) it no longer has.
+  const stuck=await step('unrealWebOnGenex','window.platformsRig.open({scene:"unrealWebOnGenex"})');
+  assert.deepEqual([stuck.rows[0].detail,stuck.rows[0].end],['A web version is on Genex','Remove']);
+  assert.equal(stuck.reach,'The game’s page plays its web version until you remove it, so players don’t see the apps.');
+  assert.equal(stuck.overflow,false);
+  report.unrealWebOnGenex=await capture('dark-unreal-web-on-genex');
+  const removed=await step('removeWeb','window.platformsRig.removeWeb()');
+  assert.deepEqual(removed.actions,['review:publish-remove-web','publish-remove-web'],'Remove is confirmed before the plugin action runs');
+  // A Unity game whose page shows its apps: a web build takes that page only with their consent.
+  const replaces=await step('unityReplacesApps','window.platformsRig.open({scene:"unityReplacesApps"})');
+  assert.equal(replaces.replaces,'Publish makes this web version the game’s page, in place of its apps.');
+  report.unityReplacesApps=await capture('dark-unity-replaces-apps');
+  const agreed=await step('unityReplacesAppsPress','window.platformsRig.press()');
+  assert.deepEqual(agreed.published,[{via:'web',replaceNativePage:true}]);
+  const engineOnly=await step('engineNoReplace','window.platformsRig.open({scene:"engine"})');
+  assert.equal(engineOnly.replaces,null,'no line while Genex has not said its page shows only apps');
   const soon=await step('unitySoon','window.platformsRig.open({scene:"unitySoon"})');
   assert.equal(soon.primaryDisabled,true);
   assert.equal(soon.rows[1].end,'Coming soon');
   assert.equal(soon.reach,'Publishing Mac, Windows and Linux apps comes with the next Genex update.');
-  // An app Studio can send, through a Genex plugin from before apps: the line says to update it.
-  const oldPlugin=await step('unityOldPlugin','window.platformsRig.open({scene:"unityOldPlugin"})');
-  assert.equal(oldPlugin.primaryDisabled,true);
-  assert.equal(oldPlugin.reach,'Update the Genex plugin in Plugins to publish apps.');
   // A web game with no app: the dialog as it was, no rows.
   const plain=await step('web','window.platformsRig.open({scene:"web"})');
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac, Windows and Linux; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why, and asks the agent for a web version; an Unreal game says it has none; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac, Windows and Linux; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why, and asks the agent for a web version; an Unreal game says it has none, and on a Mac offers its Windows app built on Genex; Remove for a web version still on Genex; a web build that takes a page of apps says so and asks Genex with their consent; stale says so; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

@@ -718,7 +718,8 @@ describe("at Genex's moments", () => {
         { health: EditorHealth.NoProject },
         chat,
         "block",
-        /Open it from the Unreal button/,
+        // Flipped on purpose: where Unreal stands, never an errand for the person.
+        /isn't running with this game's project open\.$/,
       ],
       [
         "processes that can't be listed",
@@ -733,7 +734,8 @@ describe("at Genex's moments", () => {
         { health: EditorHealth.Gone, project: "Tower" },
         chat,
         "block",
-        /didn't finish opening Tower/,
+        // Flipped on purpose: the chat's words say where Unreal stands; the agent opens it itself.
+        /isn't running with Tower open\.$/,
       ],
     ];
     for (const [name, read, hook, field, words] of rows) {

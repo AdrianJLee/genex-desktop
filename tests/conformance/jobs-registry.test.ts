@@ -26,7 +26,6 @@ import {
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import {
   JOB_COMMAND_MAX_CHARS,
-  JOB_MAX_HOURS,
   JOB_TAIL_MAX_CHARS,
   JOB_TAIL_MAX_LINES,
   JobRefusal,
@@ -283,16 +282,29 @@ it("stops a job's whole process group, and a job past its deadline as timed out"
   assert.equal(running(childPid), false, "and so is what it started");
   assert.deepEqual(await h.service.stop(GAME, job.id, JobStopper.Person), stopped, "a second stop answers the record");
 
-  const capped = await h.service.start(startRequest(h, "true", { hours: 1000 }));
-  assert.equal(Date.parse(capped.deadlineAt) - Date.parse(capped.startedAt), JOB_MAX_HOURS * HOUR_MS);
-  await h.endOf(capped.id);
+  // Flipped (no clock): a limit above 24 h was held to 24 h; the agent's own limit stands now.
+  const long = await h.service.start(startRequest(h, "true", { hours: 100 }));
+  assert.equal(Date.parse(long.deadlineAt ?? "") - Date.parse(long.startedAt), 100 * HOUR_MS);
+  await h.endOf(long.id);
 
   const late = await h.service.start(startRequest(h, "sleep 30", { hours: 0 }));
-  assert.equal(Date.parse(late.deadlineAt) - Date.parse(late.startedAt), MINUTE_MS, "at least a minute");
+  assert.equal(Date.parse(late.deadlineAt ?? "") - Date.parse(late.startedAt), MINUTE_MS, "at least a minute");
   h.clock.advance(MINUTE_MS);
   const timedOut = await h.endOf(late.id);
   assert.equal(timedOut.state, JobState.TimedOut);
   assert.equal(running(late.pid ?? 0), false);
+});
+
+// Flipped (no clock): a job its starter set no limit on stopped after two hours (`JOB_DEFAULT_HOURS`).
+it("a job its starter set no limit on has no deadline: it runs past two hours until it ends or is stopped", async () => {
+  const h = await harness();
+  const job = await h.service.start(startRequest(h, "sleep 30"));
+  assert.equal(job.deadlineAt, undefined, "no time limit on its record");
+  h.clock.advance(48 * HOUR_MS);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(running(job.pid ?? 0), true, "still running two days on");
+  const stopped = await h.service.stop(GAME, job.id, JobStopper.Agent);
+  assert.equal(stopped?.state, JobState.Stopped);
 });
 
 it("caps the log and keeps the job running", async () => {

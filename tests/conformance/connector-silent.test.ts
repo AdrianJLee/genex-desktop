@@ -1,8 +1,8 @@
 /**
  * A connector that answers a session with no tools, or not at all (an engine's editor connection
- * whose editor isn't there yet), is no longer silent: the registry names it with why, the studio's
- * log says so, and the session's brief tells the agent its tools are missing this turn, so it
- * doesn't look for them. Real core, the echo server as the connectors.
+ * whose editor isn't there yet), is no longer silent: the registry names it with why and the
+ * studio's log says so. The session sees its tools are not there; no notice says it. Real core, the
+ * echo server as the connectors.
  */
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -46,9 +46,12 @@ describe("a connector that answers with no tools", () => {
     assert.equal(typeof silent["Toy Editor"], "string", "it failed, and says why");
   });
 
-  it("is logged, and the session's brief tells the agent its tools are missing this turn", async () => {
+  // Flipped: the session was told its tools were missing this turn, not to search for them. The
+  // tool list it is handed is what it can see; the words go alone.
+  it("is logged, and the session reads the words alone", async () => {
     const threadId = await lite.core.createGameThread(project);
     const prompts: string[] = [];
+    const notices: string[] = [];
     lite.core.engines.register({
       id: "fixture-delegate",
       label: "Fixture",
@@ -57,13 +60,14 @@ describe("a connector that answers with no tools", () => {
       models: async () => [],
       delegate: async (request: DelegateRequest) => {
         prompts.push(String(request.prompt));
+        notices.push(...(request.notices ?? []));
         return { ok: true, engine: "fixture-delegate", summary: "done", turns: 1, usage: {} };
       },
     } as never);
     const api = lite.core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
     await api[HostMethod.EngineDelegate]!({ engine: "fixture-delegate", project, threadId, prompt: "build it" });
-    assert.match(prompts[0] ?? "", /Roblox Studio connection answered with no tools this turn/);
-    assert.match(prompts[0] ?? "", /don't search for them/);
+    assert.equal(prompts[0], "build it");
+    assert.ok(!notices.some((notice) => notice.includes("Roblox Studio")), "no notice names the connector");
     assert.ok(
       logged.some((line) => line.includes("Roblox Studio") && line.includes("no tools")),
       "the studio's log says so",

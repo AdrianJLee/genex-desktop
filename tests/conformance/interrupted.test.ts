@@ -203,106 +203,6 @@ describe("every death leaves a durable trace", () => {
   });
 });
 
-it("boot persists interrupted Optimization and charges its active budget without starting a worker", async () => {
-  const { emptyOptimization } = await import("../../src/harness-seed/loop/optimization.ts");
-  const userData = path.join(await tmpDir("studio-opt-interrupted-"), "userData");
-  const before = await makeCore(userData),
-    threadId = await before.store.createThread({ title: "optimization interrupted" });
-  const run = { runId: "run_opt_lost", project: "arena" };
-  const result = emptyOptimization(run);
-  result.phase = "building_candidate";
-  result.sequence = 2;
-  await before.store.writeArtifact(threadId, `autopilot_${run.runId}`, {
-    phase: "optimization",
-    optimization: {
-      schemaVersion: 1,
-      ...run,
-      stageId: "optimization",
-      phase: "building_candidate",
-      baseline: null,
-      candidate: null,
-      adoptionIntent: null,
-      result,
-      budget: {
-        allocatedMs: 100,
-        consumedMs: 0,
-        workerAllocatedMs: 45,
-        workerConsumedMs: 0,
-        activeSegmentStartedAt: new Date(Date.now() - 1000).toISOString(),
-      },
-    },
-  });
-  await before.store.appendEvents(threadId, [
-    { type: "custom", event_type: "run_started", payload: { ...run, mode: "autopilot" } },
-  ]);
-  const reborn = await makeCore(userData);
-  bootedCores.push(reborn);
-  await reborn.start();
-  const events = await reborn.store.listEvents(threadId);
-  const updates = events.filter((e) => e.data.type === "custom" && e.data.event_type === "optimization_updated");
-  assert.equal(updates.length, 1);
-  const cp = ((await reborn.store.readArtifact(threadId, `autopilot_${run.runId}`)) as any).optimization;
-  assert.equal(cp.result.outcome, "interrupted");
-  assert.equal(cp.budget.consumedMs, 100);
-  assert.equal(cp.budget.workerConsumedMs, 45);
-  assert.ok(!events.some((e) => e.data.type === "custom" && e.data.event_type === "delegation_started"));
-  await reborn.stop();
-});
-
-it("boot finishes an interrupted Optimization adoption from what the game folder kept", async () => {
-  const { emptyOptimization } = await import("../../src/harness-seed/loop/optimization.ts");
-  const revision = { snapshotId: null, commit: "c".repeat(40), tree: "t".repeat(40) };
-  const scenarios = [
-    { retained: "candidate", outcome: "improved", adopted: true, summary: "adoption recovered after restart" },
-    { retained: "changed", outcome: "interrupted", adopted: false, summary: "they were preserved" },
-    { retained: "baseline", outcome: "interrupted", adopted: false, summary: "were not applied" },
-  ] as const;
-  for (const scenario of scenarios) {
-    const userData = path.join(await tmpDir("studio-opt-adoption-"), "userData");
-    const before = await makeCore(userData);
-    const threadId = await before.store.createThread({ title: `adoption ${scenario.retained}` });
-    const run = { runId: `run_opt_${scenario.retained}`, project: "arena" };
-    const result = emptyOptimization(run);
-    result.phase = "adopting";
-    await before.store.writeArtifact(threadId, `autopilot_${run.runId}`, {
-      phase: "optimization",
-      optimization: {
-        schemaVersion: 1,
-        ...run,
-        stageId: "optimization",
-        phase: "adopting",
-        baseline: { revision, verified: true, qualityVerdict: null, evidenceRefs: [], checkResults: null },
-        candidate: null,
-        adoptionIntent: { expectedLive: revision, verifiedCandidate: revision, validationArtifact: "v.json" },
-        result,
-        budget: {
-          allocatedMs: 100,
-          consumedMs: 10,
-          workerAllocatedMs: 45,
-          workerConsumedMs: 5,
-          activeSegmentStartedAt: null,
-        },
-      },
-    });
-    await before.store.appendEvents(threadId, [
-      { type: "custom", event_type: "run_started", payload: { ...run, mode: "autopilot" } },
-    ]);
-    const reborn = await makeCore(userData);
-    bootedCores.push(reborn);
-    reborn.candidates.reconcile = async () => ({ revision, retained: scenario.retained });
-    await reborn.start();
-    const cp = ((await reborn.store.readArtifact(threadId, `autopilot_${run.runId}`)) as any).optimization;
-    assert.equal(cp.phase, "interrupted", scenario.retained);
-    assert.equal(cp.result.outcome, scenario.outcome, scenario.retained);
-    assert.equal(cp.result.candidateAdopted, scenario.adopted, scenario.retained);
-    assert.deepEqual(cp.result.retainedRevision, revision, scenario.retained);
-    assert.ok(cp.result.summary.includes(scenario.summary), `${scenario.retained}: ${cp.result.summary}`);
-    assert.equal(cp.result.phase, "terminal", scenario.retained);
-    assert.equal(cp.budget.consumedMs, 10, `${scenario.retained}: no active segment to charge`);
-    await reborn.stop();
-  }
-});
-
 /**
  * A director's run is the default unattended path, and the repair above used to miss it
  * entirely: the run is registered as `mode: "autopilot"` and started as `mode: "director"`, and
@@ -311,7 +211,7 @@ it("boot finishes an interrupted Optimization adoption from what the game folder
  * `refs/studio/runs/<id>/integration` with nobody told they existed.
  */
 it("a director's run the app died inside is paused with the head it reached, not buried", async () => {
-  const { latestRun } = await import("../../src/shared/coordinator.ts");
+  const { latestRun } = await import("../../src/shared/chat-run.ts");
   const userData = path.join(await tmpDir("studio-director-interrupted-"), "userData");
   const runId = "run_paused";
   const base = "a".repeat(40);
@@ -449,8 +349,8 @@ it("a run that merged nothing is paused without promising a build", async () => 
  * Wrap up is a durable ask for the run's current session. A press that lands after the run is
  * over is refused: the Stop sheet stays open when the run ends under it, and there is nothing
  * running to wrap up. A resumed run registers again and ignores asks made before it
- * (`finishRequested`), so even a stale ask could not make it skip every builder. Both doors —
- * the sheet's IPC and the coordinator's `finish_run` — go through this one guard.
+ * (`finishRequested`), so even a stale ask could not make it skip every builder. Builds' Wrap up
+ * goes through this guard.
  */
 it("a wrap-up asked of a build that is already over is refused, so a Resume cannot inherit it", async () => {
   const userData = path.join(await tmpDir("studio-wrapup-"), "userData");

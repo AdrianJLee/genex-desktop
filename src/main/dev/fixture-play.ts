@@ -41,8 +41,10 @@ interface FixtureGame {
   hue: number;
   multiplayer?: boolean;
   online?: number;
-  /** No cover: the card shows its plain tile. */
+  /** No cover: the card shows its plain tile; a native game's page then has no shots or description either. */
   bare?: boolean;
+  /** A native game's page has no screenshots, as genex.games serves every page today. */
+  coverOnly?: boolean;
   private?: boolean;
   /** An asset's kind on the wire (`3d`, `image`, `sound`, `video`). */
   assetKind?: string;
@@ -101,6 +103,8 @@ const GAMES: FixtureGame[] = [
     hue: 245,
     // Its source is the author's own: no Remix.
     private: true,
+    // Published with nothing yet: no cover, no shots, no description.
+    bare: true,
     native: {
       web: false,
       engine: "unreal",
@@ -129,6 +133,7 @@ const GAMES: FixtureGame[] = [
     plays: 803,
     categories: ["games", "sports"],
     hue: 6,
+    coverOnly: true,
     native: { web: false, engine: "godot", builds: [macApp("Puck Rush", "1.3", SMALL)] },
   },
   // Only a Windows build: a Mac's tabs leave it out, and its maker's profile says so.
@@ -388,13 +393,18 @@ function world(slug: string): GalleryAnswer {
   return ok({ item: { ...game, ...facts, ...pageFacts(game.id) } });
 }
 
-/** What a native game's page adds: a longer description and screenshots, drawn in the game's hue. */
+/**
+ * What a native game's page adds: a longer description and screenshots drawn in the game's hue; a
+ * cover-only game's page adds no shots, and a bare one's neither shots nor a description.
+ */
 function pageFacts(id: string): Record<string, unknown> {
   const hue = HUES.get(id) ?? 0;
   const fixture = CATALOG.find((game, index) => baseItem(game, index).id === id);
   if (!fixture?.native) return {};
+  if (fixture.bare) return { description: "", shots: [] };
   const about = `${fixture.title} is a fixture game made in an engine. It has no web build, so it installs on this Mac and plays in its own window.`;
-  return { description: about, shots: [40, 120, 200, 280].map((shift) => cover((hue + shift) % 360)) };
+  const shots = fixture.coverOnly ? [] : [40, 120, 200, 280].map((shift) => cover((hue + shift) % 360));
+  return { description: about, shots };
 }
 
 /** The search catalog: every fixture game in its slim shape, the author a name. */

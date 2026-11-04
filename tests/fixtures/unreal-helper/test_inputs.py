@@ -30,7 +30,7 @@ class Capture(HelperCase):
         unreal.state['player'] = unreal.Character('Hero_0', unreal.Vector())
         older = self.write(os.path.join(self.project, 'Saved', 'Genex', 'captures', 'yard-1.png'), 'old')
         result = self.call('capture_play', 'yard-1', 99999, 10)
-        self.assertEqual(result, {'queued': True, 'file': older})
+        self.assertEqual(result, {'queued': True, 'file': older, 'ui': False})
         self.assertFalse(os.path.exists(older), 'the older shot is removed before the new one is queued')
         self.assertEqual(self.shots_asked(), [f'HighResShot 3840x240 filename="{older}"'])
         self.assertNotIn('screenshot', [call[0] for call in unreal.calls],

@@ -45,9 +45,6 @@ function holdStill(element: HTMLElement, still: string | null): void {
 
 type Viewport = { width: number; height: number };
 
-/** What main hears with every rectangle: whether a game in Live is watched, and the game open on the stage. */
-type StageReport = { watching: boolean; project: string | null };
-
 /**
  * Sends the slot's rectangle to main. When something comes to cover the game, the game is
  * photographed first and hidden after, so the dialog opens over the frame instead of a black slot.
@@ -75,11 +72,11 @@ async function decodedStill(still: string | null): Promise<string | null> {
   );
 }
 
-function boundsSender(element: HTMLElement, stage: StageReport) {
+function boundsSender(element: HTMLElement) {
   let covering = false;
   let cover = 0;
   const send = (bounds: Bounds, viewport: Viewport): Promise<unknown> =>
-    window.studio.previewBounds({ ...bounds, ...stage, viewport }).catch(() => false);
+    window.studio.previewBounds({ ...bounds, viewport }).catch(() => false);
   // Covering: the frame is decoded and painted under the view before the view leaves, so no
   // frame of the empty slot ever shows. Uncovering: the view comes back over the frame first,
   // and the frame goes two painted frames later. Either way the stage never blinks black.
@@ -133,8 +130,6 @@ export interface StageCover {
   stillsOnStage: boolean;
   /** The person stopped the game: its view holds a blank page, and the stage says it is stopped. */
   stopped: boolean;
-  /** The person watches a game in Live, whatever briefly covers it (`stage.ts` `watchingLive`); main tells a chat's show by it. */
-  watching: boolean;
 }
 
 /** Whether the studio window is shown: not hidden or minimized (a window merely covered by others still counts as shown). */
@@ -195,23 +190,20 @@ export function useNativeViewBounds(slot: RefObject<HTMLDivElement | null>, cove
     cardOnStage,
     pluginCardOnStage,
     stillsOnStage,
-    watching,
     stopped,
   } = cover;
   // biome-ignore lint/correctness/useExhaustiveDependencies: each cover reason re-reports the rectangle, as it always has
   useEffect(() => {
     const element = slot.current;
     if (!element) return;
-    // Main hears the game open on the stage, so a show asked in its chat may start it (`liveOutOfSight`).
-    const stage: StageReport = { watching, project: visible ? project : null };
     if (!showsGame(cover, windowShown)) {
       element.removeAttribute(NATIVE_VIEW_ATTRIBUTE);
       holdStill(element, null);
-      void window.studio.previewBounds({ ...HIDDEN_BOUNDS, ...stage });
+      void window.studio.previewBounds(HIDDEN_BOUNDS);
       return;
     }
     let lastBounds = "";
-    const sender = boundsSender(element, stage);
+    const sender = boundsSender(element);
     const report = (): void => {
       const rect = element.getBoundingClientRect();
       const panels = [...document.querySelectorAll(FLOATING_PANELS)];
@@ -252,7 +244,7 @@ export function useNativeViewBounds(slot: RefObject<HTMLDivElement | null>, cove
       reportNow.current = null;
       sender.end();
       element.removeAttribute(NATIVE_VIEW_ATTRIBUTE);
-      void window.studio.previewBounds({ ...HIDDEN_BOUNDS, watching: false });
+      void window.studio.previewBounds(HIDDEN_BOUNDS);
     };
   }, [
     project,
@@ -266,7 +258,6 @@ export function useNativeViewBounds(slot: RefObject<HTMLDivElement | null>, cove
     cardOnStage,
     pluginCardOnStage,
     stillsOnStage,
-    watching,
     stopped,
     windowShown,
   ]);

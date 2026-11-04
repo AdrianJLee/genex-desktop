@@ -39,6 +39,9 @@ import { effortRef, engineRef, modelPickedProperties } from "../analytics/chat-p
 import { track } from "../analytics/client.ts";
 import { AnalyticsEvent } from "../analytics/events.ts";
 
+/** The jobs beside the chat itself: its workers and its reviewers. */
+const HELPER_ROLES = ["builder", "judge"] as const;
+
 /**
  * What a chat opens with: its own remembered model (a fresh game chat inherits the last pick, and
  * Studio keeps its own), and its effort — for a game chat its own pick, else the effort its last
@@ -133,13 +136,43 @@ type RoleView = Pick<ComposerModelView, "choices" | "selected" | "selectedEngine
  * and set the orchestrator to the selected
  * model — each model named as the picker names it, at its own default effort.
  */
-function rolePicks(view: RoleView, roles: RoleRecord | null): RoleRecord | null {
+function rolePicks(
+  view: RoleView,
+  roles: RoleRecord | null,
+  engines: readonly EngineDescriptor[] = [],
+): RoleRecord | null {
   if (!view.rolesApply) return null;
   if (!roles || !view.selectedEngine) return null;
   const next = normalizeRoles(view.selectedEngine.id, roles);
   if (!next) return null;
   next.planner = parseModelKey(view.selected).model || undefined;
-  return withRoleEfforts(next, view.choices, view.selectedEngine.id, null);
+  const offered = withoutDroppedModels(next, view, engines);
+  return withRoleEfforts(offered, view.choices, view.selectedEngine.id, null);
+}
+
+/**
+ * A worker's or reviewer's model its provider no longer offers, known for sure (`noLongerOffered`),
+ * goes back to the preset for the chat's own pick: the chat already opened on a model that runs,
+ * and no worker or reviewer may be hired onto a model that is gone. A provider that is signed out
+ * or not listed keeps its job, where the sign-in is asked for.
+ */
+function withoutDroppedModels(roles: RoleRecord, view: RoleView, engines: readonly EngineDescriptor[]): RoleRecord {
+  const engine = view.selectedEngine?.id;
+  if (!engine) return roles;
+  const dropped = HELPER_ROLES.filter((role) => {
+    const provider = roles.engines?.[role] ?? engine;
+    const listed = engines.some((candidate) => candidate.id === provider);
+    const choice = resolveChoice(view.choices, keyOf(provider, roles[role] ?? ""));
+    return listed && noLongerOffered(choice, view.choices, engines);
+  });
+  if (!dropped.length) return roles;
+  const preset = presetRoles(engine, roles.planner, view.choices);
+  const next: RoleRecord = { ...roles };
+  for (const role of dropped) next[role] = preset[role];
+  const crossed = Object.entries(roles.engines ?? {}).filter(([role]) => !dropped.some((gone) => gone === role));
+  if (crossed.length) next.engines = Object.fromEntries(crossed);
+  else delete next.engines;
+  return next;
 }
 
 /** The roles a send carries: the picks (`rolePicks`), every role at the one effort its model accepts. */
@@ -243,7 +276,7 @@ export function resolveComposerModel(input: {
   const view: RoleView = { choices, selected, selectedEngine, rolesApply };
   // One effort for every role: the control offers the orchestrator's levels, and each worker and
   // judge model runs at the closest level it accepts.
-  const picks = rolePicks(view, input.roles ?? null);
+  const picks = rolePicks(view, input.roles ?? null, input.engines);
   const roleChoice = (role: "builder" | "judge"): ModelChoice | undefined =>
     picks && selectedEngine
       ? findChoice(choices, `${picks.engines?.[role] ?? selectedEngine.id}::${picks[role] ?? ""}`)

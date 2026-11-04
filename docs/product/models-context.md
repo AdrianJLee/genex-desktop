@@ -17,8 +17,8 @@ listing proves no access.
 
 Each chat keeps its model and effort; fresh games inherit the last picks. One effort, on the
 main agent's levels, serves every role (Workers and Reviewers at most high).
-The Workers pick also runs the chat's own workers; Reviewers
-run only in a Loop. Both survive a main-agent change. Each Ollama job takes its own model; Reviewers must see images and
+The Workers pick runs the chat's workers too; Reviewers
+run only in a Loop. Both survive a main-agent change; dropped models fall back. Each Ollama job takes its own model; Reviewers must see images and
 check a Loop's finish.
 
 Local Models (Bonsai/Ollama) downloads and deletes. Metered

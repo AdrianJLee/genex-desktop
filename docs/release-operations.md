@@ -196,6 +196,15 @@ its maintainer scripts (`build/linux/postinst`, `rpm-post`) add packages.genex.g
 key the package carries (`build/linux/genex-archive-keyring.asc`), and the system's updates bring
 the next version, so the app asks nothing (`UpdateMode.System`).
 
+When a check fails, Genex asks the same feed address itself (`probeFeed`), so the failure says
+whether the feed is out of reach (`ERR_NAME_NOT_RESOLVED` where a network blocks
+update.electronjs.org), refused, or answered while Squirrel failed (a download that never ends, after
+which every hourly check is refused as already running). From the second failure in a row
+(`OFFER_DOWNLOAD_AFTER_FAILURES`) it asks GitHub's `releases/latest` and offers a newer release's page
+as a download, as on Linux, so a copy no installer reaches still gets the fix; a downloaded update
+replaces that offer. A Windows copy without Squirrel's `Update.exe` beside it (run from a copied or
+unpacked folder), where Electron answers every check "Can not find Squirrel", asks GitHub only.
+
 The first check runs at launch, before the core starts (10 s later on a fresh Windows install's
 first launch, while Squirrel holds its lock), so a start that fails, waits on Set up or hangs still
 downloads the release that may fix it. Until the studio opens, its setup, start and start-failure

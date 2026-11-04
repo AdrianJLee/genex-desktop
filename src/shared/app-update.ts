@@ -38,6 +38,32 @@ export const UpdateFailure = {
 } as const;
 export type UpdateFailure = (typeof UpdateFailure)[keyof typeof UpdateFailure];
 
+/** What Genex's own request to the update feed found after the installer failed (`UpdateFailedNote`). */
+export const UpdateFeedState = {
+  /** The feed answered, so the failure is the installer's own (Squirrel, the install folder, the download). */
+  Reachable: "reachable",
+  /** The feed answered with an error status (`httpStatus`). */
+  Refused: "refused",
+  /** No answer: the name did not resolve, the connection or TLS failed, or it timed out (`netError`). */
+  Unreachable: "unreachable",
+} as const;
+export type UpdateFeedState = (typeof UpdateFeedState)[keyof typeof UpdateFeedState];
+
+/** An update the app looked for on its own failed (`UiEvent.UpdateFailed`), with what Genex found out. */
+export interface UpdateFailedNote {
+  stage: UpdateFailure;
+  /** What the update feed answered Genex's own request, or null when none was made. */
+  feed: UpdateFeedState | null;
+  /** Chromium's network error for an unreachable feed ("ERR_NAME_NOT_RESOLVED"), else null. */
+  netError: string | null;
+  /** The feed's status when it refused, else null. */
+  httpStatus: number | null;
+  /** Windows: Squirrel's Update.exe is beside the install; false means nothing can install in place. */
+  installer: boolean | null;
+  /** A newer release was found on GitHub and offered as a download instead (`UpdateAction.Download`). */
+  offeredDownload: boolean;
+}
+
 /** What is running, for Settings → About: the version (null in an unpackaged build), platform and architecture. */
 export interface AppAbout {
   version: string | null;

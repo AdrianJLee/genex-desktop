@@ -57,9 +57,9 @@ export interface OpenJournal {
   between: { rewind: OpenRewind | null; restart: boolean };
   crashes: number;
   /**
-   * The project's app was closed and the lead's to bring back (`OpenLoop.appDown`) when the journal was
-   * kept: a Resume whose start can't open the app is the lead's again (the person was told a Resume
-   * lets the agent try again), and one that opens it tells the lead it is back.
+   * The project's app was closed when the journal was kept: Genex was bringing it back, or it was the
+   * lead's to (`OpenLoop.appDown`). A Resume whose start can't open the app is the lead's (the person
+   * was told a Resume lets the agent try again), and one that opens it tells the lead it is back.
    */
   appLost: boolean;
 }

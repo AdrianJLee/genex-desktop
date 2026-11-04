@@ -981,6 +981,10 @@ describe("the one Loop's app the lead brings back", () => {
       assert.equal(host.rec.paramsOf("snapshot.restore").length, 2, "Genex's way back, then the lead's rewind");
       assert.equal(state.reopens, 2, "no crash step after the turn that asked for the rewind");
       assert.ok(host.prompts().some((prompt) => prompt.includes(OPEN_NEWS.rewound("One"))));
+      assert.ok(
+        host.prompts().some((prompt) => prompt.includes(OPEN_NEWS.appAnswers)),
+        "the lead heard the app is back, as its refused save point said it would",
+      );
       assert.equal(report.victory, true, String(report.stoppedBecause));
     },
   );
@@ -1005,6 +1009,42 @@ describe("the one Loop's app the lead brings back", () => {
       assert.match(String(toy.host.prompts()[1]), /asked the Loop to finish/, "the wrap-up turn");
       assert.match(String(toy.host.prompts()[1]), /couldn't open it again/, "it heard the app is closed");
       assert.equal(toy.state.reopens, 2, "no try after the last turn");
+      assert.equal(report.stoppedBecause, OPEN_END.finishAsked);
+    },
+  );
+
+  it(
+    "Genex's last try, still under way as the person's Finish starts the wrap-up, never cuts it: the Loop closes on the Finish",
+    TEST_TIMEOUT,
+    async () => {
+      const toy = await crashingToy([], { reopenFixes: false });
+      const { host, state } = toy;
+      // Each turn takes Genex's lines as they come, so each hears the app is the lead's.
+      host.steerTakes = true;
+      const aborted = () => host.rec.paramsOf("engine.abort").length > 0;
+      const handed = () => host.steered.filter((s) => /couldn't open it again/.test(s.text)).length;
+      host.turns.push(
+        async ({ host }) => {
+          state.broken = true;
+          assert.ok(await host.until(() => handed() > 0), "told");
+          return undefined;
+        },
+        ...Array.from({ length: MAX_HANDOFFS - 2 }, (): LoopTurn => async () => undefined),
+        async ({ host }) => {
+          host.inbox.finishing = true;
+          return undefined;
+        },
+        async ({ host }) => {
+          // The wrap-up: the try that turn's end started runs beside it, and fails.
+          assert.ok(await host.until(() => state.reopens >= 2 + MAX_HANDOFFS), "the last try ran");
+          const by = Date.now() + 300;
+          while (!aborted() && Date.now() < by) await delay(5);
+          return undefined;
+        },
+      );
+      const report = await host.start();
+      assert.equal(state.reopens, 2 + MAX_HANDOFFS);
+      assert.ok(!aborted(), "the wrap-up was never cut");
       assert.equal(report.stoppedBecause, OPEN_END.finishAsked);
     },
   );
@@ -3101,6 +3141,85 @@ describe("the one Loop's resume held back", () => {
       host.turns.push(async () => undefined, finishes);
       const resumed = await host.start({ resume: true });
       assert.match(String(host.prompts().at(-2)), /The toy editor didn't open/, "the lead's first turn has it");
+      assert.equal(resumed.victory, true, String(resumed.stoppedBecause));
+    },
+  );
+
+  it(
+    "a Stop while Genex reopens the stopped app leaves a Resume that still can't open it the lead's: the person never reads the build's errors",
+    TEST_TIMEOUT,
+    async () => {
+      const toy = await crashingToy(
+        [
+          async ({ host }) => {
+            toy.state.broken = true;
+            assert.ok(await host.until(() => toy.state.reopens > 0), "Genex reopens it");
+            return undefined;
+          },
+        ],
+        { reopenFixes: false },
+      );
+      const { host, state } = toy;
+      host.stepAnswers.set("reopen-editor", () => {
+        state.reopens += 1;
+        host.rec.cancel();
+        return {};
+      });
+      const stopped = await host.start();
+      assert.equal(stopped.executionStatus, "paused");
+      host.rec.ctx.cancelled = false;
+      const error = "The toy editor didn't build: Source/Foo.cpp:42: error: expected ';'";
+      let prepares = 0;
+      host.stepAnswers.set("editor-state", (hook) => {
+        if (hook.on === "run.prepare") {
+          prepares += 1;
+          if (prepares === 1) return { block: error };
+          state.broken = false;
+          return {};
+        }
+        return hook.on === "health" && state.broken ? { block: "The toy editor stopped." } : {};
+      });
+      host.stepAnswers.set("reopen-editor", () => {
+        state.reopens += 1;
+        return {};
+      });
+      host.turns.push(async () => undefined, finishes);
+      const resumed = await host.start({ resume: true });
+      assert.match(String(host.prompts().at(-2)), /Foo\.cpp:42/, "the lead reads the build's error");
+      assert.equal(prepares, 2, "Genex's try ran the start's steps again as that turn ended");
+      assert.doesNotMatch(String(resumed.stoppedBecause), /Foo\.cpp/);
+      assert.equal(resumed.victory, true, String(resumed.stoppedBecause));
+    },
+  );
+
+  it(
+    "the Resume of a Loop whose app was the lead's, held back by a step while the app answers, has that step pass before the app counts as back",
+    TEST_TIMEOUT,
+    async () => {
+      const lost = await crashingToy(
+        [
+          async ({ host }) => {
+            lost.state.broken = true;
+            assert.ok(await host.until(() => host.steered.some((s) => /couldn't open it again/.test(s.text))), "told");
+            return undefined;
+          },
+        ],
+        { reopenFixes: false },
+      );
+      const { host, state } = lost;
+      await host.start();
+      // The person opened the app; the start's steps hold back for something else at first.
+      state.broken = false;
+      let prepares = 0;
+      host.stepAnswers.set("editor-state", (hook) => {
+        if (hook.on !== "run.prepare") return {};
+        prepares += 1;
+        return prepares === 1 ? { block: "The toy helper isn't set up." } : {};
+      });
+      host.turns.push(async () => undefined, finishes);
+      const resumed = await host.start({ resume: true });
+      assert.match(String(host.prompts().at(-2)), /The toy helper isn't set up/, "the lead's first turn has it");
+      assert.equal(prepares, 2, "the start's steps ran again as that turn ended, though the app answered");
       assert.equal(resumed.victory, true, String(resumed.stoppedBecause));
     },
   );

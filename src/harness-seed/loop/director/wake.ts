@@ -146,10 +146,16 @@ async function turnFacts(
 }
 
 /** The wrap-up starts, for `cause` unless an earlier one is kept: the next message opens the run's last turn. */
-function startWrapUp(wake: WakeState, cause: WrapCause, result: Partial<DelegateResult> | null): void {
+function startWrapUp(
+  loopRun: LoopRun,
+  wake: WakeState,
+  cause: WrapCause,
+  result: Partial<DelegateResult> | null,
+): void {
   if (cause === WrapCause.Failed) wake.failed = result;
   if (!wake.wrapCause) wake.wrapCause = cause;
   wake.wrapping = true;
+  loopRun.wrapping = true;
 }
 
 /** Genex's line the wrap-up turn opens with: the person's Finish, or the turn that failed and why. */
@@ -205,7 +211,7 @@ async function sleepUntilDue(loopRun: LoopRun, wake: WakeState, kit: TurnKit): P
     await tick(loopRun, wake, line, clock.now());
     await activeWork(loopRun, clock.now());
     if (await loopRun.inbox.finishing().catch(() => false)) {
-      startWrapUp(wake, WrapCause.Finish, null);
+      startWrapUp(loopRun, wake, WrapCause.Finish, null);
       return true;
     }
     const now = clock.now();
@@ -653,7 +659,7 @@ export async function runWakeLoop(
   for (;;) {
     const verdict = afterTurn(await turnFacts(loopRun, wake, result, clock.now()));
     if (verdict.next === TurnEnd.Close) break;
-    if (verdict.next === TurnEnd.WrapUp && verdict.wrapCause) startWrapUp(wake, verdict.wrapCause, result);
+    if (verdict.next === TurnEnd.WrapUp && verdict.wrapCause) startWrapUp(loopRun, wake, verdict.wrapCause, result);
     else if (!(await restUntilDue(loopRun, wake, kit))) break;
     // A sign-in a worker or a judge lost while the lead slept pauses the run before it is woken.
     if (await pauseOnLostSignIn(loopRun, clock.now())) break;

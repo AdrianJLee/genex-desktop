@@ -331,8 +331,8 @@ function seatTools(loopRun: LoopRun): LiveToolSpec[] {
 }
 
 /**
- * Whether the lead takes a held start: the Resume of a Loop that paused while its app was the lead's
- * to bring back (`appLost`; the person was told a Resume lets the agent try again), held back by a
+ * Whether the lead takes a held start: the Resume of a Loop that paused while its app was closed,
+ * Genex bringing it back or the lead (`appLost`; a Resume lets the agent try again), held back by a
  * plugin's step (never Genex's own hold), where a plugin watches that app. Any other held start keeps
  * its plugin's words: a fresh one closes for the chat's agent to fix and start again
  * (core/held-start.ts), a resumed one stays paused for what only the person can do.

@@ -185,9 +185,8 @@ text for the chat's whole life, the lead's turns included (`director.ts` `seatTh
 session keeps the system text it started with (Claude Code 2.1.314 until a compaction, `codex exec
 resume`), so it holds only what no turn changes: Genex's identity (`appIdentity`,
 `loop/project-prompts.ts`: the folder, that Genex shows a web game in Live and what a Genex plugin
-is, never what the folder holds), that the person may not be a programmer, that words the person
-sends while it works get a line back before it goes on (`ANSWER_WHILE_WORKING`), the language rule
-and the chat's Run button. What the folder holds is the session's to see: a game's own `CLAUDE.md` names
+is, never what the folder holds), that the person may not be a programmer, the language rule and
+the chat's Run button. What the folder holds is the session's to see: a game's own `CLAUDE.md` names
 the build Genex runs before every preview, and a plugin's guidance says how its kind is built and
 linked; a turn that changes the kind tells the session in Genex's line (`factsReadyNotice`). The Loop's start,
 workers, the checkpoint, the kind tools, `start_web_game` and `plugins_find` are tools, never

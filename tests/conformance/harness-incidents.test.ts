@@ -819,7 +819,12 @@ describe("a change after a paused build (stale-pause)", () => {
     // whole making of the game now, so any work on it beyond a quick fix goes on in it.
     assert.match(words, /Go on with this chat's paused build/);
     assert.doesNotMatch(words, /new instruction after a stop is a request to continue/i);
-    assert.match(words, /A question or a quick fix needs no build/);
+    // Flipped: "A question or a quick fix needs no build" repeated what "beyond a quick fix" says.
+    assert.match(
+      words,
+      /Any work on this game beyond a quick fix goes on in it/,
+      "a question or a quick fix needs none",
+    );
   });
 });
 
@@ -1429,7 +1434,8 @@ describe("the chat's agent decides when a Loop starts (always-launch)", () => {
     assert.match(start, /as soon as you set to making the game/, "when one starts: as the work begins");
     assert.match(start, /instead of doing that work in your reply/, "never built in the reply instead");
     assert.match(start, /paused build[^.]*resume_run/, "a paused build goes on");
-    assert.match(start, /new build only when one is needed/, "a new build only when needed");
+    // Flipped: "a new build only when one is needed" said again what going on with a paused one says.
+    assert.match(start, /resume_run\) unless the person wants to start over/, "a new build only to start over");
     assert.doesNotMatch(start, /call it once, last/, "it starts the work, it does not close it");
     const paused = {
       runId: "r1",
@@ -5415,15 +5421,5 @@ describe("the person's words reach the chat's own session as they wrote them (ch
     assert.ok(lead, "the lead took a turn");
     const chat = chatContext({ folderLabel: folderLabelOf(dir, host.game.name), appLanguage: null });
     assert.equal(lead.system, chat, "the lead's system text is the chat's own");
-  });
-
-  // CB-4: "You can use blender if needed", sent while an Unreal game's session worked, reached it
-  // mid-turn and got no word back: it read the permission, changed nothing yet and went on.
-  it("CB-4. a word the person sent while the session worked got no reply: its system text, the lead's too, asks for a line back before going on", async () => {
-    const { chatContext } = await import("../../src/harness-seed/loop/chat-session.ts");
-    const system = String((await chatTurn("Make a castle game")).delegated[0]?.system);
-    assert.equal(system, chatContext({ folderLabel: "games/keep", appLanguage: null }), "the lead sends the same text");
-    assert.match(system, /writes while you work, answer them in a line/);
-    assert.match(system, /even when it changes nothing yet/, "a permission or a note is answered too");
   });
 });

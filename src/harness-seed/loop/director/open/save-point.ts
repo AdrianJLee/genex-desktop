@@ -86,6 +86,8 @@ export async function savePointTool(loopRun: LoopRun, args: AnyRecord): Promise<
   if (!("snapshot" in taken)) return OPEN_WORDS.notSaved(notKept(taken));
   const shown = picture && "image" in picture ? { rel, image: picture.image } : null;
   const point = await recordSavePoint(loopRun, { label, summary, auto: false }, taken, shown);
+  // The lead kept the app working: Genex's tries at an app it couldn't reopen count from zero again.
+  loopRun.open.handoffs = 0;
   return OPEN_WORDS.saved(point.label, point.notes, showsWords(rel, picture));
 }
 

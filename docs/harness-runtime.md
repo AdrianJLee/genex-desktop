@@ -500,14 +500,17 @@ worker's copy whose turn comes once the Loop pauses or closes lands nothing),
 else hands the app to the lead (`OpenLoop.appDown`): a line with the app's own reason (a C++ build
 error names its file and line) wakes or reaches it (`NoteKind.AppCrashed`), its turn is never cut, no
 recovery starts, `save_point` and `finish` are refused, and a turn's end that heard that line keeps
-nothing and runs the rewind the lead asked for, else `crash` once more beside the wake loop (standing for
-its `restart`); a clean `health` answer meanwhile (the lead's own Open) gives the app back. Past
-`MAX_HANDOFFS` such tries in a row it pauses the Loop in the person's words, never the app's error
+nothing and runs the rewind the lead asked for (a restore Genex held pauses in its hold's words), then
+`crash` once more beside the wake loop unless the app answers (standing for its `restart`); a clean
+`health` answer meanwhile (the lead's own Open) gives the app back. Past `MAX_HANDOFFS` such tries since
+the lead's last `save_point` (an app that answers only to stop again counts on) it pauses the Loop in
+the person's words, never the app's error
 (`held-words.ts` `appLostWords`; `OpenLoop.halted`: the lead's own session under way aborted,
 `engine.abort {cwd, lead}`, again each watch round until it ends, as after a Stop; an outage wait ends
 at its next step; no session opens, and `save_point`, `rewind`, `restart`, `finish`, `worker_start` and
-`worker_mark` are refused, as once the Loop closes; the close paused; a Resume starts over); a crash step Genex held pauses in its hold's words and
-goes back nowhere. The recovery runs beside the wake loop (`open.recovering`), counted as work at
+`worker_mark` are refused, as once the Loop closes; the close paused; a Resume starts over, and one
+whose `run.prepare` a plugin's step blocks hands the app to the lead the same way instead of pausing
+again); a crash step Genex held pauses in its hold's words and goes back nowhere. The recovery runs beside the wake loop (`open.recovering`), counted as work at
 hand (a lone lead rests until it is back): the person's words still wake the lead, `save_point` and
 `finish` are refused meanwhile, the turn's end keeps and restores nothing, and only the way back takes
 the git-write queue. Once the Loop begins to close it stops at its next step (its waits for the app

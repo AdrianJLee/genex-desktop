@@ -104,7 +104,7 @@ export const OPEN_NEWS = {
    * the app's own reason, as its plugin wrote it for agents, and how many more times Genex tries.
    */
   appDown: (why: string, tries: number) =>
-    `The project's app stopped and Genex couldn't reopen it: ${clause(why)}. It stays closed until what stops it is fixed. When this turn ends, Genex tries again on the folder as you leave it (${tries === 1 ? "a last try" : `${tries} tries left`}); after that the Loop pauses for the person.`,
+    `The project's app is closed, and Genex couldn't open it again: ${clause(why)}. It stays closed until what stops it is fixed. When this turn ends, Genex tries again on the folder as you leave it (${tries === 1 ? "a last try" : `${tries} tries left`}); after that the Loop pauses for the person.`,
   /** Genex's try at a turn's end brought the app back. */
   appReopened: "Genex reopened the project's app on the folder as you left it.",
   /** The app answers again while it was the lead's to bring back (the lead or the person opened it). */

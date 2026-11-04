@@ -19,7 +19,7 @@ import { closeInPlace } from "./director/open/close.ts";
 import { MESSAGE as END_WORDS, openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
 import { creditCapOf, OPEN_WALL_CLOCK, type OpenClock, restartsApp } from "./director/open/contract.ts";
-import { settleRecovery } from "./director/open/health.ts";
+import { appDownAtStart, settleRecovery } from "./director/open/health.ts";
 import { openTools } from "./director/open/tool-specs.ts";
 import { openHandler } from "./director/open/tools.ts";
 import { HostMethod } from "./host-methods.ts";
@@ -330,6 +330,14 @@ function seatTools(loopRun: LoopRun): LiveToolSpec[] {
   });
 }
 
+/**
+ * Whether the lead takes a held start: a resumed Loop whose app a plugin's step couldn't open (never
+ * Genex's own hold), where a plugin watches that app. A fresh start held back closes for the chat's
+ * agent to fix and start again (core/held-start.ts); a Resume is the person's ask that the lead goes on.
+ */
+const leadTakesTheStart = (loopRun: LoopRun, blocked: HeldBack): boolean =>
+  loopRun.resume && !holdOf(blocked) && hooksOn(loopRun.game, HookEvent.Health);
+
 /** A start a plugin held back closes before any turn, saying why. */
 async function closeHeldStart(loopRun: LoopRun, blocked: HeldBack): Promise<void> {
   const because = openStartHeld(blocked, loopRun.resume);
@@ -348,11 +356,12 @@ async function closeStoppedStart(loopRun: LoopRun): Promise<void> {
 async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, clock: OpenClock): Promise<void> {
   try {
     const start = await prepareTheStart(loopRun);
-    if (start.blocked) {
+    if (start.blocked && !leadTakesTheStart(loopRun, start.blocked)) {
       await line.release();
       await closeHeldStart(loopRun, start.blocked);
       return;
     }
+    if (start.blocked) await appDownAtStart(loopRun, start.blocked.reason);
     if (loopRun.ctx.cancelled) {
       await line.release();
       await closeStoppedStart(loopRun);

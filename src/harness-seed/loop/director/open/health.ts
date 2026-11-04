@@ -9,8 +9,8 @@
  * bring back (`open.appDown`): it hears the app's own reason (a build error names its file and
  * line) and works on, its turn never cut, and Genex tries the crash steps again as each turn that
  * heard it ends (`reopenAfterTurn`, beside the wake loop as a recovery), at most `MAX_HANDOFFS`
- * times in a row; then the Loop pauses for the person, in plain words, and their Resume starts
- * over. A crash step Genex itself held back (Plan mode, the person in the app) reopened nothing: the
+ * times between the lead's save points; then the Loop pauses for the person, in plain words, and
+ * their Resume starts over (a Resume whose app doesn't open is the lead's again, `appDownAtStart`). A crash step Genex itself held back (Plan mode, the person in the app) reopened nothing: the
  * Loop pauses in Genex's words, never as an app that failed to reopen, and nothing goes back. The
  * lead hears of the crash at once.
  * A recovery runs beside the wake loop, never inside its reads: the person's words, a finish request
@@ -182,16 +182,19 @@ async function told(loopRun: LoopRun, line: string, wentBack = false): Promise<v
 const wentBackLine = (label: string, stopped: readonly string[]): string =>
   [OPEN_NEWS.wentBack(label), stopped.length ? OPEN_NEWS.writersStopped(stopped) : ""].filter(Boolean).join(" ");
 
-/** The app answers again: whatever Genex handed the lead is over, and the count of handoffs starts over. */
+/**
+ * The app answers again: whatever Genex handed the lead is over. The count of handoffs goes on until
+ * the lead keeps a save point (`savePointTool`), so an app that answers only to stop again still
+ * pauses for the person.
+ */
 function appIsBack(open: OpenLoop): void {
   open.appDown = null;
-  open.handoffs = 0;
 }
 
 /**
  * Genex couldn't bring the app back: it stays closed for the lead (`open.appDown`), which hears why at
  * once, working or resting, and Genex tries again as its turn ends (`reopenAfterTurn`). Past
- * `MAX_HANDOFFS` in a row the Loop pauses for the person instead, in plain words.
+ * `MAX_HANDOFFS` since the lead's last save point the Loop pauses for the person instead, in plain words.
  */
 async function handToLead(loopRun: LoopRun, open: OpenLoop, why: string): Promise<void> {
   if (closing(loopRun)) return;
@@ -223,6 +226,12 @@ async function reopenForLead(loopRun: LoopRun, open: OpenLoop): Promise<void> {
   await (held ? halt(loopRun, open, held) : handToLead(loopRun, open, failed.why));
 }
 
+/** A try that threw: the app is still the lead's, with what went wrong, so its outcome still wakes the lead. */
+async function tryFailed(loopRun: LoopRun, open: OpenLoop, err: unknown): Promise<void> {
+  if (givesUp(loopRun)) return;
+  await handToLead(loopRun, open, err instanceof Error ? err.message : String(err));
+}
+
 /**
  * Starts Genex's try at the end of a lead's turn that heard the app stays closed for it
  * (`reopenForLead`), beside the wake loop as a recovery runs (`open.recovering`): the person's words
@@ -231,6 +240,7 @@ async function reopenForLead(loopRun: LoopRun, open: OpenLoop): Promise<void> {
 export function reopenAfterTurn(loopRun: LoopRun, open: OpenLoop): Promise<void> {
   if (open.recovering) return open.recovering;
   const running = reopenForLead(loopRun, open)
+    .catch((err: unknown) => tryFailed(loopRun, open, err))
     .catch(() => {})
     .finally(() => {
       if (open.recovering === running) open.recovering = null;
@@ -239,15 +249,31 @@ export function reopenAfterTurn(loopRun: LoopRun, open: OpenLoop): Promise<void>
   return running;
 }
 
+/** What came of the lead's rewind while the app is closed: Genex's own hold on its restore, and whether the app answers after it. */
+export type Rewound = { held: HookHeldBy | null; back: boolean };
+
 /**
- * What a rewind at the end of a lead's turn left of the stopped app (`why`: why it doesn't answer
- * after it, or null): back, the lead has it no more; still closed, the lead has it again.
+ * What a rewind at the end of a lead's turn left of the stopped app: back, the lead has it no more;
+ * a restore Genex itself held back pauses the Loop in Genex's words, as a recovery's way back does;
+ * still closed, Genex's crash steps run on the folder as the rewind left it, as after any turn.
  */
-export async function afterRewindWhileDown(loopRun: LoopRun, open: OpenLoop, why: string | null): Promise<void> {
+export async function afterRewindWhileDown(loopRun: LoopRun, open: OpenLoop, rewound: Rewound): Promise<void> {
   if (givesUp(loopRun)) return;
-  if (why === null) appIsBack(open);
-  else await handToLead(loopRun, open, why);
+  const held = rewound.held ? backHeldWords(rewound.held) : null;
+  if (held) return halt(loopRun, open, held);
+  if (rewound.back) {
+    appIsBack(open);
+    return;
+  }
+  void reopenAfterTurn(loopRun, open);
 }
+
+/**
+ * A resumed Loop whose app a plugin's step couldn't open as it prepared (a build that fails, an app
+ * that doesn't answer): the lead's to bring back, as after a crash Genex couldn't mend, so the
+ * person's Resume is the agent's next try and never the plugin's own error.
+ */
+export const appDownAtStart = (loopRun: LoopRun, why: string): Promise<void> => handToLead(loopRun, loopRun.open, why);
 
 /** The crash handled, start to end (the module's header). */
 async function recover(loopRun: LoopRun, open: OpenLoop, reason: string): Promise<void> {

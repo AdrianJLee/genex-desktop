@@ -19,8 +19,8 @@ export const HEALTH_POLL_MS = 15 * SECOND_MS;
 /** Genex reopens a stopped app at most this many times before it goes back to the last save point. */
 export const MAX_REOPENS = 2;
 /**
- * How many times in a row Genex hands a stopped app it couldn't bring back to the lead, trying again
- * after each of its turns, before the Loop pauses for the person.
+ * How many times Genex hands a stopped app it couldn't bring back to the lead between its save points,
+ * trying again after each of its turns, before the Loop pauses for the person.
  */
 export const MAX_HANDOFFS = 3;
 /** What a yes still needs of the lead's `finish` call: the workers settled and the last checkpoint. */
@@ -181,7 +181,10 @@ export interface OpenLoop {
    * a finish are refused, and each of the lead's turns ends with Genex trying again.
    */
   appDown: string | null;
-  /** How many times in a row Genex handed the stopped app to the lead: past `MAX_HANDOFFS` the Loop pauses. */
+  /**
+   * How many times Genex handed the stopped app to the lead since its last save point: past
+   * `MAX_HANDOFFS` the Loop pauses. An app that answers again counts on; the lead's save point starts it over.
+   */
   handoffs: number;
   /** The run log's line that last handed the lead the stopped app: Genex tries again after a turn that heard it. */
   appDownSeq: number;

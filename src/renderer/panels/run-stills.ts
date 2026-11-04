@@ -1,6 +1,6 @@
 /**
  * The Builds tab's pictures that are not a single read: the newest saved frame of a round still
- * being built, and the game's reference frames. Every still itself is read through `stills.ts`.
+ * being built. Every still itself is read through `stills.ts`.
  */
 import { useEffect, useMemo, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -136,37 +136,6 @@ export function useRoundStill(
     return pollWhile(read, active, LIVE_FRAME_POLL_MS);
   }, [runId, facetId, iteration, shot, active]);
   return judged ?? live;
-}
-
-export interface ReferenceFrame {
-  label: string;
-  src: string;
-}
-
-export function useReferenceFrames(project: string | null, runId: string): ReferenceFrame[] {
-  const [frames, setFrames] = useState<ReferenceFrame[]>([]);
-  useEffect(() => {
-    if (!project) {
-      setFrames([]);
-      return;
-    }
-    let cancelled = false;
-    void window.studio
-      .readReferenceStills(project)
-      .then((result) => {
-        if (cancelled) return;
-        setFrames(
-          result.frames.map((frame) => ({ label: frame.label, src: `data:${frame.mimeType};base64,${frame.data}` })),
-        );
-      })
-      .catch(() => {
-        if (!cancelled) setFrames([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [project, runId]);
-  return frames;
 }
 
 /** Each pair of frames measured so far, by its two paths: a save point's frames never change. */

@@ -270,7 +270,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:build.preview": "buildPreview",
   "studio:preview.screens": "agentScreens",
   "studio:run.still": "readRunStill",
-  "studio:game.references": "readReferenceStills",
   "studio:game.asset.preview": "previewProjectAsset",
   "studio:game.asset.present": "presentProjectAssets",
   "studio:game.asset.rigs": "projectModelRigs",
@@ -576,7 +575,6 @@ export interface StudioInvokePayloads {
   "studio:build.preview": Arg<"buildPreview", 0>;
   "studio:preview.screens": undefined;
   "studio:run.still": { file: string; maxPx?: number };
-  "studio:game.references": { project: string };
   "studio:game.asset.preview": Arg<"previewProjectAsset", 0>;
   "studio:game.asset.present": Arg<"presentProjectAssets", 0>;
   "studio:game.asset.rigs": Arg<"projectModelRigs", 0>;

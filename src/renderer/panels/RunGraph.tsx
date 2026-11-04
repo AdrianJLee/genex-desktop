@@ -56,7 +56,6 @@ import { leadRest } from "../run-tree.ts";
 import { useBuildsModel, useNow, useRunStills } from "./run-graph/use-builds-model.ts";
 import { GLIDE_MS, useGraphCamera } from "./run-graph/use-graph-camera.ts";
 import { Inspector, Lightbox, type LightItem, type Reply } from "./RunInspector.tsx";
-import { type ReferenceFrame, useReferenceFrames } from "./run-stills.ts";
 import { webBuildShown } from "../web-build-shown.ts";
 import { Pending } from "../ui/Pending.tsx";
 import { Skeleton, SkeletonLines } from "../ui/Skeleton.tsx";
@@ -308,7 +307,6 @@ export const RunGraph = memo(function RunGraph({
   useEffect(() => markPerformance(PerformanceMarkName.GraphCommit));
   const model = useBuildsModel(suppliedGraph, project);
   const { graph, rows } = model;
-  const references = useReferenceFrames(project, graph.runId);
   const stills = useRunStills(model);
   const overlays = useOverlays(model.selectable);
   const { selected } = overlays;
@@ -376,7 +374,6 @@ export const RunGraph = memo(function RunGraph({
               model={model}
               overlays={overlays}
               project={project}
-              references={references}
               stills={stills}
               onStep={step}
               onOpenJob={openJob}
@@ -400,7 +397,6 @@ function SelectedPanel({
   model,
   overlays,
   project,
-  references,
   stills,
   onStep,
   onOpenJob,
@@ -413,7 +409,6 @@ function SelectedPanel({
   model: BuildsModel;
   overlays: Overlays;
   project: string | null;
-  references: ReferenceFrame[];
   stills: Stills;
   onStep: (dir: number) => void;
   onOpenJob: (job: AssetInfo) => void;
@@ -433,7 +428,6 @@ function SelectedPanel({
       blender={model.blender}
       assets={model.assets}
       project={project}
-      references={references}
       baseSrc={stills.baseSrc}
       resultSrc={stills.resultSrc}
       resultPath={stills.resultPath}

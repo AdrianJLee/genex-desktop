@@ -585,15 +585,34 @@ export class SnapshotEngine {
   }
 
   /**
+   * Called when a game folder's first commit failed in {@link init} (an earlier start's git still
+   * holds its index.lock, the folder is gone): its owner reports it. That game's next snapshot
+   * tries the first commit again and fails on its own; the harness's failure still throws.
+   */
+  onFirstCommitFailed?: (workspace: WorkspaceSpec, error: unknown) => void;
+
+  /**
    * A repository for every workspace that has none yet; a game's rules are topped up before its
-   * first commit. `onStep` hears each first commit's git steps by workspace name.
+   * first commit. `onStep` hears each first commit's git steps by workspace name. One game's
+   * failed first commit never stops the others or the start: it goes to {@link onFirstCommitFailed}.
    */
   async init(onStep?: (workspace: string, step: FirstCommitStep) => void): Promise<void> {
     for (const [name, dir] of this.workspaces) {
-      // Only a folder about to get its first commit: init runs for every game at each start.
-      if (await needsFirstCommit(dir)) await this.#beforeCommit(name, dir);
-      await ensureRepo(dir, onStep ? { onStep: (step) => onStep(name, step) } : {});
+      const firstCommit = this.#firstCommit(name, dir, onStep);
+      if (name === HARNESS_WORKSPACE) await firstCommit;
+      else await firstCommit.catch((error: unknown) => this.onFirstCommitFailed?.({ name, dir }, error));
     }
+  }
+
+  /** One workspace's repository, made if it has none yet. */
+  async #firstCommit(
+    name: string,
+    dir: string,
+    onStep?: (workspace: string, step: FirstCommitStep) => void,
+  ): Promise<void> {
+    // Only a folder about to get its first commit: init runs for every game at each start.
+    if (await needsFirstCommit(dir)) await this.#beforeCommit(name, dir);
+    await ensureRepo(dir, onStep ? { onStep: (step) => onStep(name, step) } : {});
   }
 
   /** The `beforeCommit` hook for a game folder, keeping the lines it answers; what it throws stays with its owner. */

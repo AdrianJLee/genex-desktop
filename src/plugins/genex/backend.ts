@@ -308,7 +308,9 @@ const ACTIONS: Record<string, Action> = {
     return genex.cloudBuild(ctx.project, args.platform, ctx.directory);
   },
   [GenexAction.PublishRemoveWeb]: withProject((genex, project) => genex.publishRemoveWeb(project)),
-  [GenexAction.PublishName]: withProject((genex, project, args) => genex.publishName(project, args.title)),
+  [GenexAction.PublishName]: withProject((genex, project, args) =>
+    genex.publishName(project, args.title, args.fromStudio === true),
+  ),
   [GenexAction.PublishLink]: withProject((genex, project, args) => genex.publishLink(project, args.link)),
   [GenexAction.PublishAllowUpload]: withProject((genex, project, args) =>
     genex.publishAllowNewUpload(project, String(args.jobId ?? "")),

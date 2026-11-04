@@ -47,6 +47,8 @@ export const ManageError = {
   CoverRejected: "cover_rejected",
   /** The game has used every link change genex.games gives it. */
   RenameLimit: "rename_limit_reached",
+  /** A publish of the game holds it on genex.games: the link can move once that ends. */
+  ReleaseBusy: "release_conflict",
 } as const;
 export type ManageError = (typeof ManageError)[keyof typeof ManageError];
 
@@ -123,20 +125,28 @@ function changeCall(
     case PlayChangeKind.Players:
       return { method: "PATCH", route: ManageRoute.project(id), body: { multiplayer: change.multiplayer } };
     case PlayChangeKind.Link:
-      return { method: "POST", route: ManageRoute.rename(id), body: { name: change.slug } };
+      // keepTitle: a link is only the address; the game keeps the name it is listed under.
+      return { method: "POST", route: ManageRoute.rename(id), body: { name: change.slug, keepTitle: true } };
   }
 }
 
+/** The 409s of a link change that name why, by the error genex.games gives; any other is a taken link. */
+const LINK_CONFLICT: Partial<Record<string, typeof PlayChangeOutcome.LinkLimit | typeof PlayChangeOutcome.LinkBusy>> = {
+  [ManageError.RenameLimit]: PlayChangeOutcome.LinkLimit,
+  [ManageError.ReleaseBusy]: PlayChangeOutcome.LinkBusy,
+};
+
 /**
  * Why genex.games kept a game's old link, read from its refusal, or null for a refusal of another
- * kind: the cap on link changes, a link another game has (409), one genex.games keeps (400).
+ * kind: the cap on link changes, a publish under way, a link another game has (409), one
+ * genex.games keeps (400).
  */
 function linkKept(answer: { status: number; body: unknown }): PlayChangeResult | null {
-  if (answer.status === HTTP_CONFLICT)
-    return {
-      outcome:
-        errorOf(answer.body) === ManageError.RenameLimit ? PlayChangeOutcome.LinkLimit : PlayChangeOutcome.LinkTaken,
-    };
+  if (answer.status === HTTP_CONFLICT) {
+    const error = errorOf(answer.body);
+    const named = typeof error === "string" ? LINK_CONFLICT[error] : undefined;
+    return { outcome: named ?? PlayChangeOutcome.LinkTaken };
+  }
   return answer.status === HTTP_BAD_REQUEST ? { outcome: PlayChangeOutcome.LinkReserved } : null;
 }
 

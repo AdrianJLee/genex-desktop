@@ -45,7 +45,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { isBlankStill } from "../../shared/preview-contract.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
-import { stageRemixSource } from "./remix-source.ts";
+import { stageBuildSource } from "./remix-source.ts";
 import {
   type MacSigning,
   type NotarizeOutcome,
@@ -148,6 +148,7 @@ import {
   isGenexLink,
   MIN_POLL_INTERVAL_S,
   codeOf,
+  isTimeout,
   statusOf,
   withSignal,
 } from "./http.ts";
@@ -269,13 +270,15 @@ function ownerRead(project: unknown): HostedOwnerRead {
 }
 
 /** Genex's refusal codes for a link change that the person can act on. */
-const LinkRefusalCode = { LimitReached: "rename_limit_reached" } as const;
+const LinkRefusalCode = { LimitReached: "rename_limit_reached", ReleaseBusy: "release_conflict" } as const;
 /** HTTP 400 and 409: a link Genex keeps, or one another game holds. */
 const HTTP_BAD_REQUEST = 400;
 const HTTP_CONFLICT = 409;
 
 /** The words for a link change Genex refused, when it is one the person can act on. */
 function linkRefusal(error: unknown): string | undefined {
+  if (isTimeout(error)) return PUBLISH_MESSAGE.LinkSlow();
+  if (codeOf(error) === LinkRefusalCode.ReleaseBusy) return PUBLISH_MESSAGE.LinkBusy();
   if (codeOf(error) === LinkRefusalCode.LimitReached) return PUBLISH_MESSAGE.LinkLimit();
   if (statusOf(error) === HTTP_CONFLICT) return PUBLISH_MESSAGE.LinkTaken();
   if (statusOf(error) === HTTP_BAD_REQUEST) return PUBLISH_MESSAGE.LinkReserved();
@@ -1674,10 +1677,27 @@ export class GenexTools {
     const kept = this.#hostedWebs.get(project);
     if (this.#publishJobs.has(project)) return kept?.hosted ?? {};
     if (kept && this.#now() - kept.at < HOSTED_WEB_FRESH_MS) return kept.hosted;
-    const answer = (await this.#fetch(GenexRoute.projectBySlug(state.slug)).catch(() => null))?.project;
+    const answer = await this.#fetch(GenexRoute.projectBySlug(state.slug))
+      .then((read) => read?.project)
+      .catch((error: unknown) => (statusOf(error) === HTTP_NOT_FOUND ? this.#movedProject(project, state) : null));
     const hosted = ownerRead(answer);
     if (hosted.hostedWeb !== undefined) this.#hostedWebs.set(project, { hosted, at: this.#now() });
     return hosted;
+  }
+  /**
+   * The game under the link Genex gives it now, when the link Studio knows is gone: moved on
+   * genex.games, from another computer, or by a link change whose answer never came back (Genex
+   * finished it after Studio stopped waiting). Studio's link and the publish record follow it, and
+   * so does `state`, so the view shows the link the game has. Null when Genex names no other link.
+   */
+  async #movedProject(project: string, state: GenexPublishState): Promise<unknown> {
+    if (!state.projectId) return null;
+    const moved = (await this.#fetch(GenexRoute.project(state.projectId)).catch(() => null))?.project;
+    const slug: unknown = moved?.slug;
+    if (typeof slug !== "string" || genexSlug(slug) !== slug || slug === state.slug) return null;
+    await this.#followLink(project, { slug, playUrl: moved.playUrl });
+    mergeMeta(state, await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))));
+    return moved;
   }
   /**
    * Move the game to a new link on Genex, spelled from `link` as Genex spells links. Its old link
@@ -1694,9 +1714,10 @@ export class GenexTools {
       if (!state.projectId) throw new Error(PUBLISH_MESSAGE.NothingOnline());
       if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
       if (slug === state.slug) return this.publishView(project);
+      // keepTitle: a link is only the address; the game keeps the name it is listed under.
       const answer = await this.#fetch(GenexRoute.rename(state.projectId), {
         method: "POST",
-        body: JSON.stringify({ name: slug }),
+        body: JSON.stringify({ name: slug, keepTitle: true }),
       }).catch((error: unknown) => {
         throw new Error(linkRefusal(error) ?? errorMessage(error));
       });
@@ -1747,12 +1768,17 @@ export class GenexTools {
    * already on Genex is renamed there at once: its title alone, so nothing is uploaded and its link
    * stays. The publish record keeps the name either way, so the dialog shows it after it closes and
    * the next publish lists the game under it. Refused, it keeps the old name.
+   *
+   * `fromStudio`: the game was renamed in Studio itself, which keeps the name a first publish uses,
+   * so only a game already on Genex is renamed, and only when its record or Genex names another name
+   * (the dialog's own rename saves the record first, and is not sent twice).
    */
-  async publishName(project: string, title: unknown): Promise<GenexPublishState> {
+  async publishName(project: string, title: unknown, fromStudio = false): Promise<GenexPublishState> {
     return this.#account(async () => {
       const name = cleanGenexTitle(title);
       if (!name) throw new Error(PUBLISH_MESSAGE.NoName());
       const state = await this.publishStatus(project);
+      if (fromStudio && !(await this.#listedOtherwise(project, state, name))) return state;
       if (state.projectId) {
         if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
         await this.#fetch(GenexRoute.project(state.projectId), {
@@ -1765,6 +1791,16 @@ export class GenexTools {
       await this.#savePublishState(project, record);
       return this.publishView(project);
     });
+  }
+  /**
+   * Whether the game is on Genex under another name than `name`: in Studio's record of it, or on
+   * Genex itself (renamed there, or by a link change that also renamed it).
+   */
+  async #listedOtherwise(project: string, state: GenexPublishState, name: string): Promise<boolean> {
+    if (!state.projectId) return false;
+    if (state.title !== name) return true;
+    const { hostedTitle } = await this.#hostedOf(project, state);
+    return hostedTitle !== undefined && hostedTitle !== name;
   }
   /**
    * genex__cover: keep the picture (and the clip) the agent made, from the game folder `directory`,
@@ -1926,7 +1962,7 @@ export class GenexTools {
     for (const build of builds.filter(isRunning)) this.#watchCloud(project, build.jobId);
     return { supported: true, builds };
   }
-  /** What a build on Genex runs on: the CLI in the game's publish workspace, its project staged as remixers get it. */
+  /** What a build on Genex runs on: the CLI in the game's publish workspace, the game's Unreal project staged alone. */
   #cloudDeps(project: string): CloudBuildDeps & { read: (file: string) => Promise<unknown> } {
     const dir = this.#publishDir(project);
     return {
@@ -1936,7 +1972,7 @@ export class GenexTools {
           parse: true,
           home: path.join(dir, "home"),
         }),
-      stage: (gameDir, dest) => stageRemixSource(gameDir, dest),
+      stage: (gameDir, dest) => stageBuildSource(gameDir, dest),
       sleep: this.#cloudSleep,
       read: (file) => readJsonOr(file),
     };

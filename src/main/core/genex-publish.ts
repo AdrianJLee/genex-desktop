@@ -46,6 +46,8 @@ export class PublishRefusedError extends Error {
 
 type InstalledPlugin = ReturnType<StudioCore["plugins"]["list"]>[number];
 type DialogCore = Pick<StudioCore, "games" | "plugins" | "pluginBinding" | "publicCopyFiles" | "withApprovedExport">;
+/** What binding a game to Studio's Genex needs. */
+type BindingCore = Pick<StudioCore, "plugins" | "pluginBinding">;
 
 /**
  * Studio's own Genex, installed: the only plugin whose publish the dialog runs. On or off: Publish
@@ -93,7 +95,7 @@ const replaceArg = (replace: unknown): { replaceNativePage?: true } =>
   replace === true ? { replaceNativePage: true } : {};
 
 /** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is installed. */
-async function boundGame(core: DialogCore, project: unknown): Promise<PluginBinding> {
+async function boundGame(core: BindingCore, project: unknown): Promise<PluginBinding> {
   if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame());
   if (!core.plugins.list().some(isUsableGenex)) throw new Error(MESSAGE.GenexUnavailable());
   const binding = await core.pluginBinding(project);
@@ -180,4 +182,22 @@ export async function cloudBuildFromDialog(core: DialogCore, project: unknown, p
   if (typeof platform !== "string" || !CLOUD_PLATFORMS.has(platform)) throw new Error(MESSAGE.NoCloudPlatform());
   const binding = await boundGame(core, project);
   await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.CloudBuild, { platform }, binding);
+}
+
+/**
+ * The game's new name in Studio, given to Genex too: a game already on Genex is listed under it at
+ * once (its title alone; the link stays), as the Publish dialog's own rename does, so the game has
+ * one name everywhere. A game not on Genex is asked nothing: its first publish takes Studio's name.
+ * Best effort and never in the person's way: signed out, without Genex, or refused, the rename in
+ * Studio stands and the next publish lists the game under the new name.
+ */
+export async function renameOnGenex(core: BindingCore, project: string, title: string): Promise<void> {
+  const name = cleanGenexTitle(title);
+  if (!name) return;
+  try {
+    const binding = await boundGame(core, project);
+    await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishName, { title: name, fromStudio: true }, binding);
+  } catch {
+    // The publish record keeps its old name; the next publish relists the game under Studio's.
+  }
 }

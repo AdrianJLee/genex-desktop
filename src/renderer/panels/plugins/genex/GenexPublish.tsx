@@ -28,6 +28,7 @@ import { MakingDrawing } from "../../../making-art.ts";
 import { prefersReducedMotion } from "../../../ui/media-queries.ts";
 import { cancelGenexSignIn, signInToGenex, useGenexSignIn } from "../../../play/use-genex-sign-in.ts";
 import { useLibrary, usePeople } from "../../../state/hooks.ts";
+import { studio } from "../../../state/studio.ts";
 import { Button } from "../../../ui/Button.tsx";
 import { OPEN_PLUGINS_EVENT } from "../../../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../../../ui/dialog.tsx";
@@ -975,10 +976,10 @@ interface PublishBodyProps {
 function PublishOrRights(props: PublishBodyProps): JSX.Element {
   const [ticked, setTicked] = useState<boolean | null>(null);
   const [rights, setRights] = useState(false);
-  const gameTitle = useLibrary((s) => s.games.find((g) => g.name === props.project)?.title);
+  const game = useLibrary((s) => s.games.find((g) => g.name === props.project));
   if (rights)
     return (
-      <RemixRights title={offeredTitle(props.record.state, gameTitle, props.project)} onBack={() => setRights(false)} />
+      <RemixRights title={offeredTitle(props.record.state, game, props.project)} onBack={() => setRights(false)} />
     );
   const remix = {
     allowed: remixAllowedNow(props.record.state?.remix, ticked),
@@ -990,10 +991,12 @@ function PublishOrRights(props: PublishBodyProps): JSX.Element {
 
 /**
  * The banner's name: the one being typed until it is saved (or put back), then the record's again.
- * Saved, the record names it; refused, the old name returns and the failure line says why.
+ * Saved, the record names it and so does Studio; refused, the old name returns and the failure line
+ * says why.
  */
 function useBannerTitle(
   record: ReturnType<typeof usePublishRecord>,
+  project: string,
   saved: string,
 ): { name: string; setTitle: (title: string) => void; onTitleDone: (save: boolean) => void } {
   const [title, setTitle] = useState<string | null>(null);
@@ -1003,7 +1006,14 @@ function useBannerTitle(
       setTitle(null);
       return;
     }
-    void record.rename(typed).then(() => setTitle(null));
+    void record.rename(typed).then(async (renamed) => {
+      // Studio names the game as Genex now does, so the library, the chat and the next Publish agree.
+      if (renamed)
+        await studio()
+          .saveGame(project, { title: typed })
+          .catch(() => undefined);
+      setTitle(null);
+    });
   };
   return { name: title ?? saved, setTitle, onTitleDone };
 }
@@ -1024,8 +1034,8 @@ function PublishBody({
   /** Allow remixing: whether this publish sends the game's project, and the presses that change it. */
   remix: { allowed: boolean; onAllowed: (allowed: boolean) => void; onRights: () => void };
 }): JSX.Element {
-  const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
-  const { name, setTitle, onTitleDone } = useBannerTitle(record, offeredTitle(record.state, gameTitle, project));
+  const game = useLibrary((s) => s.games.find((g) => g.name === project));
+  const { name, setTitle, onTitleDone } = useBannerTitle(record, project, offeredTitle(record.state, game, project));
   const publishing = record.pressing === Pressing.Publish || view.running;
   const { platforms, apps, waiting, upToDate, inReview, replacesApps } = useAppsPublish(
     project,

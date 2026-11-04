@@ -4,6 +4,7 @@
  * folders, packages, agent settings, secrets and an engine's caches and builds never go; neither does
  * a link, or a path the agents wrote that leads out of the game. A project bigger than Genex keeps is
  * refused with nothing copied, and a file big enough to trip the upload limit goes to Git LFS by name.
+ * A build on Genex gets the game's Unreal project alone, and no limit of Studio's: Genex decides.
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -15,6 +16,7 @@ import {
   LFS_FILE_BYTES,
   RemixSourceError,
   SOURCE_MAX_FILES,
+  stageBuildSource,
   stageRemixSource,
 } from "../../src/plugins/genex/remix-source.ts";
 import { GenexRemixProblem } from "../../src/shared/genex.ts";
@@ -311,5 +313,55 @@ describe("a game's project staged for remixing", () => {
     assert.match(routed, /Terrain Data\.asset: filter: lfs/);
     assert.match(routed, /odd\\"name\.bin": filter: lfs/);
     assert.match(routed, /small\.asset: filter: unspecified/);
+  });
+});
+
+describe("a game's project staged for a build on Genex", () => {
+  const unrealGame = {
+    "studio.json": "{}",
+    "index.html": "<p>web</p>",
+    "docs/notes.md": "notes",
+    "unreal/Strike.uproject": "{}",
+    "unreal/Content/Maps/Arena.umap": "map",
+    "unreal/Config/DefaultGame.ini": "[x]",
+    "unreal/Saved/Logs/Strike.log": "log",
+    "unreal/Binaries/Mac/Strike": "bin",
+  };
+
+  it("sends the Unreal project alone, its .uproject at the top, without its caches or the game's other files", async () => {
+    const { game, dest } = await gameWith(unrealGame);
+    const staged = await stageBuildSource(game, dest, listing(Object.keys(unrealGame)));
+    assert.deepEqual(await filesIn(dest), ["Config/DefaultGame.ini", "Content/Maps/Arena.umap", "Strike.uproject"]);
+    assert.equal(staged.files, 3);
+    assert.equal(staged.bytes, "{}".length + "map".length + "[x]".length);
+  });
+
+  it("keeps no limit of Studio's own: a project past what remixing takes still goes, and Genex decides", async () => {
+    const many = Array.from({ length: SOURCE_MAX_FILES + 1 }, (_, n) => `unreal/Content/${n}.uasset`);
+    const files = { "unreal/Strike.uproject": "{}", ...Object.fromEntries(many.map((file) => [file, "a"])) };
+    const { game, dest } = await gameWith(files);
+    await assert.rejects(stageRemixSource(game, path.join(dest, "..", "remix"), listing(Object.keys(files))));
+    const staged = await stageBuildSource(game, dest, listing(Object.keys(files)));
+    assert.equal(staged.files, SOURCE_MAX_FILES + 2);
+  });
+
+  it("sends the whole game, as remixers get it, when it has no Unreal project or more than one", async () => {
+    const two = { ...unrealGame, "other/Other.uproject": "{}" };
+    const both = await gameWith(two);
+    await stageBuildSource(both.game, both.dest, listing(Object.keys(two)));
+    assert.ok((await filesIn(both.dest)).includes("unreal/Strike.uproject"));
+    assert.ok((await filesIn(both.dest)).includes("other/Other.uproject"));
+    const web = await gameWith({ "index.html": "x", "src/main.js": "y" });
+    await stageBuildSource(web.game, web.dest, listing(["index.html", "src/main.js"]));
+    assert.deepEqual(await filesIn(web.dest), ["index.html", "src/main.js"]);
+  });
+
+  it("refuses with nothing copied when the game has nothing of its own", async () => {
+    const { game, dest } = await gameWith({ ".env": "KEY=1", "node_modules/a.js": "x" });
+    await assert.rejects(
+      stageBuildSource(game, dest, listing([".env", "node_modules/a.js"])),
+      (error: unknown) => error instanceof RemixSourceError && error.code === GenexRemixProblem.Empty,
+    );
+    assert.deepEqual(await filesIn(dest), []);
   });
 });

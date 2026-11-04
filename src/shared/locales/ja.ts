@@ -1511,6 +1511,8 @@ export default {
   "Genex cover": "Genexカバー",
   "Genex credits": "Genexクレジット",
   "Genex decides from crash reports": "クラッシュレポートからGenexが判断します",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genexから時間内に応答がありませんでした。1分ほどしてからゲームのリンクをもう一度確認してください。",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genexは何もクリックしていません。ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
@@ -1556,6 +1558,8 @@ export default {
     "GenexがGodotをインストールしています。何もしなくて大丈夫です。",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "GenexはMITライセンスのオープンソースです。ほかのプロジェクトのソフトウェアも含まれており、それぞれ独自のライセンスに従います。",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genexはまだこのゲームを公開中です。終わってからリンクを変更してください。",
   "Genex isn't getting Roblox Studio right now.": "Genexは今、Roblox Studioを入手していません。",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genexは先に各ファイルのコピーを保存します。「セットアップを元に戻す」でこれらの変更を取り消せます。あなたが変更したGenexエディターヘルパーのファイルは、.mineコピーとして横に残ります。",

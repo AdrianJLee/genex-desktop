@@ -120,6 +120,9 @@ export const httpError = (route: string, status: number, code?: string) =>
 /** The HTTP status of a failed Genex call, when it had one. */
 export const statusOf = (error: unknown): number | undefined => (error as { status?: number } | null)?.status;
 
+/** Whether a Genex call failed for want of an answer within {@link API_REQUEST_TIMEOUT_MS} (`AbortSignal.timeout`'s error). */
+export const isTimeout = (error: unknown): boolean => (error as { name?: unknown } | null)?.name === "TimeoutError";
+
 /** The refusal code of a failed Genex call, when Genex answered one. */
 export const codeOf = (error: unknown): string | undefined => (error as { code?: string } | null)?.code;
 

@@ -108,11 +108,18 @@ export function usePublishRecord(plugin: PluginInfo, project: string | null) {
         await refresh();
       }
     },
-    /** Save the game's new name: on Genex at once when the game is there, else for its first publish. */
-    rename: (title: string): Promise<void> =>
-      run(Pressing.Name, () =>
-        runPluginAction({ plugin, name: GenexAction.PublishName, args: { title }, project, review: setReview }),
-      ),
+    /**
+     * Save the game's new name: on Genex at once when the game is there, else for its first publish.
+     * Answers whether it was saved; a refusal is the record's error line.
+     */
+    rename: async (title: string): Promise<boolean> => {
+      let saved = false;
+      await run(Pressing.Name, async () => {
+        await runPluginAction({ plugin, name: GenexAction.PublishName, args: { title }, project, review: setReview });
+        saved = true;
+      });
+      return saved;
+    },
     /**
      * Publish under `title`: the press is the consent to exactly the listed files, to the game's
      * project when `remix` (Allow remixing) is ticked, and to the web build taking the place of a page

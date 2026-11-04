@@ -85,9 +85,10 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   every call against its own admin list, so the app only decides what shows
   (`src/shared/play-manage.ts`). A change shows on every card at once. Change cover crops the
   picture to 1536×864 in the renderer and sends it through main (presigned PUT, then commit);
-  genex.games may keep the old cover and says why. Change link moves the game to a new address
-  (genex.games keeps the old one opening it, and refuses a taken or reserved link or one past the
-  game's link changes); a copy installed here moves to the new link with its saves
+  genex.games may keep the old cover and says why. Change link moves the game to a new address and
+  keeps its name (`keepTitle`; genex.games keeps the old one opening it, and refuses a taken or
+  reserved link, one past the game's link changes, or one while a publish of the game runs,
+  `LinkBusy`); a copy installed here moves to the new link with its saves
   (`NativeInstaller.follow`, also on the update check). On the page of an app-only game (no web
   build), its owner sets Players (Single player or Multiplayer) from the fact itself.
 - Friends: requests, playing now (Join), friends, sent, people search, the invite card and whether
@@ -183,7 +184,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   builds, an Unreal plugin's too, its packaged apps (`Builds/`) included; an engine game whose project
 sits in a folder of its own also leaves out `assets/` (its models, already imported) and `docs/proof/`
 screenshots (`remix-source.ts`; at most
-5 GB and 5,000 files, as genex.games keeps; every model, picture, sound, video and Unreal package, and
+15 GB and 5,000 files, all files together, as genex.games keeps; every model, picture, sound, video and Unreal package, and
 any file of 50 MB or more, goes to Git LFS, whose blobs Genex keeps in R2 rather than on the git
 server's disk), and the CLI pushes that folder as the source
   (`--source`; a game with only apps sends it with `make-remixable` once they are live). The copy

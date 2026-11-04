@@ -5827,6 +5827,7 @@ export const PLAY_CARD_MENU_WORDS = {
       [PlayChangeOutcome.LinkTaken]: t("Another game already has this link. Try another one."),
       [PlayChangeOutcome.LinkLimit]: t("This game has used all its link changes."),
       [PlayChangeOutcome.LinkReserved]: t("Genex keeps this link for itself. Try another one."),
+      [PlayChangeOutcome.LinkBusy]: t("Genex is still publishing this game. Change the link once it's done."),
     },
   },
   players: {

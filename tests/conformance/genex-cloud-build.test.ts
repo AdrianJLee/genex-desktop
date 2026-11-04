@@ -210,9 +210,10 @@ process.exit(0);
       .filter(Boolean)
       .map((line) => JSON.parse(line) as { args: string[]; cwd: string; staged: string[] | null });
   const game = path.join(root, "seyda-neen");
-  await mkdir(path.join(game, "Content"), { recursive: true });
-  await writeFile(path.join(game, "SeydaNeen.uproject"), "{}");
-  await writeFile(path.join(game, "Content", "Map.umap"), "map");
+  await mkdir(path.join(game, "unreal", "Content"), { recursive: true });
+  await writeFile(path.join(game, "unreal", "SeydaNeen.uproject"), "{}");
+  await writeFile(path.join(game, "unreal", "Content", "Map.umap"), "map");
+  await writeFile(path.join(game, "index.html"), "<p>the game's page, no part of its app</p>");
   execFileSync("git", ["init", "-q"], { cwd: game });
   execFileSync("git", ["add", "."], { cwd: game });
   const onGenex = async () => {
@@ -245,8 +246,8 @@ describe("the Genex plugin's builds on Genex", () => {
     );
     assert.deepEqual(
       calls[0]?.staged,
-      [".gitattributes", "Content", "SeydaNeen.uproject"],
-      "the game’s own files went, its models through LFS",
+      ["Content", "SeydaNeen.uproject"],
+      "the game's Unreal project alone went, its .uproject at the top",
     );
     const realWorkspace = await realpath(workspace);
     assert.ok(

@@ -1,7 +1,7 @@
 /**
  * Apps Genex builds on its own computers: Unreal packages a game only for the system it runs on, so
  * a Windows app of an Unreal game made on a Mac is built by Genex from the game's project. The
- * project is staged as it is for remixers (`stageRemixSource`) but goes privately with
+ * Unreal project alone is staged (`stageBuildSource`), with no size limit of Studio's own, and goes privately with
  * `genex native build --platform <p> --source <folder>`; Genex builds it, checks it and puts it on
  * the game's page beside the apps the game already has. The build takes a while, so its jobs are
  * kept in the publish workspace's `cloud-build.json` (apart from `native.json`, which each publish
@@ -127,7 +127,7 @@ export const pollDelayMs = (attempt: number): number =>
 export interface CloudBuildDeps {
   /** The Genex CLI in the publish workspace with `--json`: its parsed answer; throws with its words on a refusal. */
   cli(args: string[], signal: AbortSignal): Promise<unknown>;
-  /** Copy the game's own files into `dest` (`stageRemixSource`). */
+  /** Copy what Genex builds the app from into `dest` (`stageBuildSource`). */
   stage(gameDir: string, dest: string): Promise<StagedSource>;
   sleep(ms: number, signal: AbortSignal): Promise<void>;
 }

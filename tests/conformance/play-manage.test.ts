@@ -272,7 +272,7 @@ describe("a change reaching genex.games", () => {
       { kind: PlayChangeKind.Link, slug: "street-patrol" },
       "POST",
       "/api/projects/cm1/rename",
-      { name: "street-patrol" },
+      { name: "street-patrol", keepTitle: true },
       { project: { slug: "street-patrol" }, renamed: true },
     ],
   ];
@@ -321,6 +321,9 @@ describe("a change reaching genex.games", () => {
     const cases: Array<[number, unknown, PlayChangeOutcome]> = [
       [409, { error: "slug already taken" }, PlayChangeOutcome.LinkTaken],
       [409, { error: "rename_limit_reached", limit: 2 }, PlayChangeOutcome.LinkLimit],
+      [409, { error: "release_conflict" }, PlayChangeOutcome.LinkBusy],
+      // Read as data, never as a key into an object: an inherited name is a taken link like any other.
+      [409, { error: "constructor" }, PlayChangeOutcome.LinkTaken],
       [400, { error: "slug is reserved" }, PlayChangeOutcome.LinkReserved],
     ];
     for (const [status, body, outcome] of cases) {

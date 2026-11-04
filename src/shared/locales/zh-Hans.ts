@@ -1425,6 +1425,8 @@ export default {
   "Genex cover": "Genex 封面",
   "Genex credits": "Genex 积分",
   "Genex decides from crash reports": "Genex 根据崩溃报告决定",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genex 没有及时响应。请过一分钟再看看游戏的链接。",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genex 没有点击任何东西。请在启动器中自己安装 Unreal {version}：{clicks}。",
   "Genex didn't click anything. Turn it on yourself: {clicks}.": "Genex 没有点击任何内容。请自己开启：{clicks}。",
@@ -1464,6 +1466,8 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex 正在安装 Godot。你无需做任何事。",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex 以 MIT 许可证开源。它还包含其他项目的软件，各自遵循自己的许可证。",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genex 还在发布这个游戏,发布完成后再修改链接。",
   "Genex isn't getting Roblox Studio right now.": "Genex 现在没有在获取 Roblox Studio。",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genex 会先备份每个文件，“撤销设置”可以撤回这些更改。你改过的 Genex 编辑器辅助程序文件会以 .mine 副本保留在旁边。",

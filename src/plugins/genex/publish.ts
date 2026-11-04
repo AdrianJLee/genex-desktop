@@ -65,6 +65,10 @@ export const MESSAGE = {
   LinkLimit: () => t("This game has used all its link changes."),
   /** Genex keeps this word for itself. */
   LinkReserved: () => t("Genex keeps this link for itself. Try another one."),
+  /** A publish of the game holds it on Genex: the link can move once that ends. */
+  LinkBusy: () => t("Genex is still publishing this game. Change the link once it's done."),
+  /** Genex didn't answer in time: the link may have moved, and the next look at the game shows it. */
+  LinkSlow: () => t("Genex didn't answer in time. Check the game's link again in a minute."),
   /** A name with no letter or digit left once cleaned: nothing to list the game under. */
   NoName: () => t("Give the game a name with a letter or a number in it."),
   UnrecognizedLink: () => t("Unrecognized Genex page link"),

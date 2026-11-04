@@ -66,6 +66,7 @@ import {
 } from "../shared/plugins.ts";
 import { EngineHostAction, type EngineLinkUndo, type EngineUndoSetUpArgs } from "../shared/game-engine.ts";
 import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
+import { renameOnGenex } from "./core/genex-publish.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
@@ -2190,6 +2191,8 @@ export class StudioCore {
   async updateGame(project: string, patch: GameUpdate): Promise<GameProject> {
     const game = await this.games.update(project, patch);
     this.emit(UiEvent.GameChanged, { project });
+    // One name everywhere: a game already on Genex is listed under its new name too, in the background.
+    if (patch.title !== undefined) void renameOnGenex(this, project, game.title);
     return game;
   }
 

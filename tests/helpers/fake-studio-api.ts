@@ -244,7 +244,6 @@ const METHODS = [
   "buildPreview",
   "agentScreens",
   "readRunStill",
-  "readReferenceStills",
   "previewProjectAsset",
   "presentProjectAssets",
   "projectModelRigs",

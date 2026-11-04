@@ -59,7 +59,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   every start ("Access is denied"). The setup check (`windowsSetupGaps`) reads its start type with
   `sc qc seclogon`, which needs no administrator (the number decides; the word after it is
   localized), beside srt-win's two status probes, and a disabled service is a setup gap
-  (`WindowsSetupNeed.LogonService`) the setup card names in one line. Set up sets it to Manual
+  (`WindowsSetupNeed.LogonService`) the setup card names in one line. The gap also counts when
+  `sc` could not say but srt-win's `user status` reports `seclogon: "disabled"`, the field
+  `initialize` refuses on with an uncoded "Sandbox dependencies not available" error. Set up sets it to Manual
   (`sc config seclogon start= demand`, [`windows-logon-service.ts`](../src/substrate/windows-logon-service.ts))
   through Windows PowerShell's `Start-Process -Verb RunAs` before srt-win's install. srt-win's own
   typed `seclogon_disabled` maps to the same need. srt-win

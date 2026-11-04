@@ -22,9 +22,22 @@ import { canonicalManifest, inspectPackage, validateManifest } from "../../src/s
 import { RESERVED_TOOLBAR_LABELS } from "../../src/substrate/plugins/reserved-labels.ts";
 import type { PluginChange, PluginInfo, PluginManifest, PluginSource } from "../../src/shared/plugins.ts";
 import { CallCutOff } from "../../src/shared/plugins.ts";
-import { PluginCallCutOff } from "../../src/substrate/plugins/process.ts";
+import { PluginCallCutOff, PluginCallNotSent } from "../../src/substrate/plugins/process.ts";
 import { WINDOWED_KEY } from "../../src/main/play/native-unpack.ts";
 const source = EXAMPLE_PLUGIN;
+test("a quit registry starts no backend: a call that arrives after cancel() is never sent", async () => {
+  const f = await fixture();
+  try {
+    await f.registry.tool("example__greet", { name: "Ada" }, f.binding);
+    assert.equal(f.registry.list()[0]!.health, "ready", "the call started its backend");
+    // The app quits plugins before the harness stops, so a hook or observer can still call one.
+    f.registry.cancel();
+    await assert.rejects(f.registry.tool("example__greet", { name: "Ada" }, f.binding), PluginCallNotSent);
+    assert.notEqual(f.registry.list()[0]!.health, "ready", "and no backend runs after the quit");
+  } finally {
+    await f.close();
+  }
+});
 test("bundled plugin uses a real child, tools and settings share one contract; disabled fails closed", async () => {
   const f = await fixture();
   try {

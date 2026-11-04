@@ -86,7 +86,13 @@ import type { PluginWorkspace } from "../../shared/project-workspace.ts";
 import { canonicalSourceRepo, isNewerVersion } from "./marketplace.ts";
 import { containedReal } from "../paths.ts";
 import { SessionCredentials } from "../session-credentials.ts";
-import { PluginCallCutOff, type PluginHostEnv, type PluginInvocation, PluginProcess } from "./process.ts";
+import {
+  PluginCallCutOff,
+  PluginCallNotSent,
+  type PluginHostEnv,
+  type PluginInvocation,
+  PluginProcess,
+} from "./process.ts";
 import { MAX_ARTIFACT_BYTES, packageCopyFilter, unpackEnvelope } from "./pack.ts";
 import { asInstallProblem, refusedAs } from "./install-problem.ts";
 import { CodedError } from "../../shared/errors.ts";
@@ -709,6 +715,8 @@ export class PluginRegistry {
   /** Where each bundled seed lives, by plugin id: its picture outlives an installed copy made before it had one. */
   #seedDirectories = new Map<string, string>();
   #processes = new Map<string, PluginProcess>();
+  /** Set by quitting (`cancel()`): no backend starts after it, or it would outlive the app. */
+  #quit = false;
   /** Each host tool call in flight, by the controller `abortCalls` cuts it off with, and whose call it is. */
   #hostCalls = new Map<AbortController, PluginBinding>();
   #errors = new Map<string, string>();
@@ -2100,6 +2108,8 @@ export class PluginRegistry {
   }
   /** The plugin's backend child, started on first use: an agent's tool reaches it only while the plugin is on. */
   #process(id: string) {
+    // The app quits plugins before the harness stops, so a hook or observer can still call one.
+    if (this.#quit) throw new PluginCallNotSent();
     const p = this.#running(id);
     let process = this.#processes.get(id);
     if (!process) {
@@ -2551,6 +2561,7 @@ export class PluginRegistry {
       for (const process of this.#processes.values()) process.cancel(binding);
       return;
     }
+    this.#quit = true;
     for (const id of [...this.#watchers.keys()]) this.#unwatch(id);
     for (const process of this.#processes.values()) process.stop();
     this.#processes.clear();

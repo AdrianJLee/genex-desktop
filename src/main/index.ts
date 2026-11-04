@@ -101,6 +101,11 @@ import {
   UPDATE_REPO,
   UpdateMode,
   autoUpdateDecision,
+  bareFailure,
+  createUpdateRecovery,
+  probeFeed,
+  squirrelInstalled,
+  updateFeedUrl,
   firstCheckDelay,
   createUpdateAnnouncer,
   createUpdateChecker,
@@ -110,7 +115,7 @@ import {
   watchInstaller,
 } from "./auto-update.ts";
 import { RELEASE_CHECK_INTERVAL_MS, latestRelease } from "./release-check.ts";
-import { UpdateAction, UpdateCheckStatus, UpdateFailure } from "../shared/app-update.ts";
+import { UpdateAction, UpdateCheckStatus, type UpdateFailedNote, UpdateFailure } from "../shared/app-update.ts";
 import { gatedHostTool, type GenexStand, launchStand } from "./core/genex-cli.ts";
 import { normalGamesElsewhere, normalGamesFolder } from "./core/never-touch-list.ts";
 import { diagnosticsText, gatherDiagnostics } from "./diagnostics.ts";
@@ -684,6 +689,8 @@ const updates = createUpdateAnnouncer({
   quitAndInstall: relaunchIntoUpdate,
   openRelease: (url) => void shell.openExternal(url),
 });
+/** Windows: whether Squirrel's Update.exe is beside this copy; null elsewhere (./auto-update.ts). */
+const windowsInstaller = process.platform === "win32" ? squirrelInstalled(process.execPath, existsSync) : null;
 /** Whether and how this launch updates: only a released build checks (./auto-update.ts). */
 const updateDecision = autoUpdateDecision({
   enabled: AUTO_UPDATE_ENABLED,
@@ -693,9 +700,25 @@ const updateDecision = autoUpdateDecision({
   testLaunch: isSmoke || isSelfTest,
   productName: app.getName(),
   systemPackages: process.platform === "linux" && installedFromGenexRepository(process.execPath, existsSync),
+  installer: windowsInstaller ?? true,
+});
+/**
+ * The installer's failures, looked into: the feed asked directly, and after a few in a row the
+ * newest release offered as a download (./auto-update.ts).
+ */
+const updateRecovery = createUpdateRecovery({
+  probeFeed: () => probeFeed(updateFeedUrl(process.platform, process.arch, app.getVersion()), net.fetch),
+  latestRelease: () => latestRelease({ repo: UPDATE_REPO, current: app.getVersion(), fetchImpl: net.fetch }),
+  available: (release) => updates.available(release),
+  report: updateFailed,
+  log: (line) => studioLog.write("update", line),
+  installer: windowsInstaller,
 });
 /** The installer's checks, watched from launch so Check for Updates never collides with one (./auto-update.ts). */
-const installer = watchInstaller(autoUpdater, { failed: updateFailed });
+const installer = watchInstaller(autoUpdater, {
+  failed: (stage) => void updateRecovery.failed(stage),
+  answered: () => updateRecovery.answered(),
+});
 /** Check for Updates, from Settings and the app menu; Linux's periodic check runs it too. */
 const updateChecker = createUpdateChecker({
   decision: updateDecision,
@@ -1297,6 +1320,7 @@ function watchNativeUpdates(studio: StudioCore): void {
       game: (slug) => playCatalogFor(studio).game(slug),
       tell: (update) =>
         studio.append([customEventData(CustomEvent.PlayUpdateAvailable, { ...update, platform: host.platform })]),
+      follow: (from, to) => installs.follow(from, to),
     }).catch((error: unknown) => studioLog.write("main", `play updates: ${error}`));
   setTimeout(check, UPDATE_CHECK_FIRST_MS).unref();
   setInterval(check, UPDATE_CHECK_EVERY_MS).unref();
@@ -2467,7 +2491,7 @@ function checkForUpdates(): void {
     const ask = () =>
       void updateChecker.check().then((result) => {
         log(`release check: ${result.status}`);
-        if (result.status === UpdateCheckStatus.Failed) updateFailed(UpdateFailure.Check);
+        if (result.status === UpdateCheckStatus.Failed) updateFailed(bareFailure(UpdateFailure.Check));
       });
     ask();
     setInterval(ask, RELEASE_CHECK_INTERVAL_MS).unref();
@@ -2475,14 +2499,14 @@ function checkForUpdates(): void {
   }
   startAutoUpdate({ log, downloaded: (releaseName) => updates.downloaded(releaseName) }).catch((err) => {
     log(errorMessage(err));
-    updateFailed(UpdateFailure.Check);
+    updateFailed(bareFailure(UpdateFailure.Check));
   });
 }
 
-/** An update this launch looked for on its own failed at `stage`: counted for the next launch, and told to the window. */
-function updateFailed(stage: UpdateFailure): void {
+/** An update this launch looked for on its own failed: counted for the next launch, and told to the window. */
+function updateFailed(note: UpdateFailedNote): void {
   sessionMarker?.updateFailed();
-  pushUiEvent({ type: UiEvent.UpdateFailed, payload: { stage } });
+  pushUiEvent({ type: UiEvent.UpdateFailed, payload: note });
 }
 
 /** Relaunch into the downloaded update once the marker says so, so the next launch knows it was one. */

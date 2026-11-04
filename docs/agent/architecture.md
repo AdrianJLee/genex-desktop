@@ -604,7 +604,7 @@ chat keeps the game folder from before and after each answered message the same 
 `refs/studio/chat/<thread>/before|after/<message>`, for rewinding
 ([conversation lifecycle](../conversation-lifecycle.md#sending-and-rewinding)). `.studio/` is
 gitignored. Adoption writes a real `.gitignore` before
-`git init`. `checkOutNewRepo` fast-imports the installed seed as the first harness repository; `ensureRepo` finishes an interrupted first commit. Snapshots commit to the checked-out branch, hooks off, never during a merge,
+`git init`. `checkOutNewRepo` fast-imports the installed seed as the first harness repository; `ensureRepo` finishes an interrupted first commit. At a start, a game folder whose first commit fails (an earlier start's git still holds its index.lock) is logged and left for its next snapshot; only the harness's own failure stops the start. Snapshots commit to the checked-out branch, hooks off, never during a merge,
 rebase, cherry-pick or revert. `SnapshotEngine.restore` checks everything before any reset and
 refuses (`branch-changed`, `history-changed`, `operation-in-progress`, `rescue-failed`), folder
 untouched; the mandatory rescue snapshot is named on

@@ -1,6 +1,7 @@
-/** The panel of "You asked": the prompt, the user's reference pictures, and the starting point every part builds on. */
+/** The panel of "You asked": the prompt, the pictures sent with it, and the starting point every part builds on. */
 import type { JSX } from "react";
 import { t } from "../../../shared/i18n.ts";
+import type { ReferenceFrame } from "../../../shared/protocol.ts";
 import { providerInfo, SUBSCRIPTION_ENGINES } from "../../../shared/providers.ts";
 import {
   type BaseNode,
@@ -10,8 +11,8 @@ import {
   RunStillStage,
   runStillPath,
 } from "../../run-graph.ts";
+import { imageSrc, useMessageImages } from "../../chat/MessageImages.tsx";
 import { BuildCapture } from "../BuildCapture.tsx";
-import type { ReferenceFrame } from "../run-stills.ts";
 import { Details, Panel, PanelRow, Para, Row, Rows, Section } from "./chrome.tsx";
 import { formatWhen, modelLine } from "./format.ts";
 import { IMAGE_OUTLINE } from "./pictures.tsx";
@@ -39,16 +40,18 @@ function startedFromWords(base: BaseNode | null, building: boolean): string {
   return t("Checked: it loads and its cameras see it. Gameplay is reviewed step by step.");
 }
 
+/** The pictures sent with the message the build was asked in (`RunNode.asked`), and no other of the game's. */
 function References({
-  references,
+  run,
   onLight,
 }: {
-  references: ReferenceFrame[];
+  run: RunNode;
   onLight: (items: LightItem[], index: number) => void;
 }): JSX.Element | null {
+  const references: ReferenceFrame[] = useMessageImages(run.asked?.threadId, run.asked?.messageId) ?? [];
   if (!references.length) return null;
   const items = (): LightItem[] =>
-    references.map((item) => ({ path: null, src: item.src, title: t("Your reference"), caption: item.label }));
+    references.map((item) => ({ path: null, src: imageSrc(item), title: t("Your reference"), caption: item.label }));
   return (
     <Section label={t("Your references")}>
       <div className="grid grid-cols-2 gap-2">
@@ -61,7 +64,7 @@ function References({
             onClick={() => onLight(items(), index)}
           >
             <img
-              src={frame.src}
+              src={imageSrc(frame)}
               alt={frame.label}
               draggable={false}
               className="block aspect-video w-full object-cover"
@@ -142,7 +145,7 @@ function StartDetails({
 
 /** The card of what the user asked and where the run started. */
 export function StartPanel(props: InspectorProps): JSX.Element {
-  const { graph, run, base, references } = props;
+  const { graph, run, base } = props;
   const building = graph.active && base !== null && !base.done;
   return (
     <Panel
@@ -159,7 +162,7 @@ export function StartPanel(props: InspectorProps): JSX.Element {
       <p className="text-chat-sub whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
         {run.goal || t("No prompt was recorded.")}
       </p>
-      <References references={references} onLight={props.onLight} />
+      <References run={run} onLight={props.onLight} />
       <StartedFrom graph={graph} base={base} baseSrc={props.baseSrc} building={building} />
       <Rows>
         <StartDetails graph={graph} run={run} base={base} />

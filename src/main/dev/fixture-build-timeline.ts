@@ -9,6 +9,10 @@
  * - Twelve workers: a reader that started before the first save point, the three merged ones, a
  *   track the lead did not use, five paint schemes off save point 2 (not used or stopped; three fold
  *   behind "+3 workers"), and two still at work off save point 4.
+ * - The person asked with a picture of a street at dusk. After save point 2 nothing was at work, so the
+ *   Loop paused, and the chat went on with it for the person's next message and its picture of a
+ *   blue sign: You asked is that ask, with that picture alone, though the game keeps both in
+ *   `references/`.
  * - The sign and the sounds are delivered into the game folder: the Assets tab lists them in the game.
  * - Before it, a finished web Loop an earlier Genex ran, in Build history: a horn worker merged into
  *   Build 1, the lead's own Build 2 checked at the finish, landed.
@@ -29,6 +33,9 @@ import { FIXTURE_MODEL, fixtureRun, gradientShot, type Rgb } from "./fixture-kit
 
 const RUN = "fixture-timeline-run";
 const ASK = "Build a street racer with a shop to buy paint for the car.";
+/** The person's next message, sent while the Loop was paused, and the words the chat went on with it in. */
+const GO_ON = "Make the shop sign blue, like this one.";
+const WENT_ON_WITH = "Repaint the shop sign blue, as in the person's picture, and go on with the shop.";
 const DONE_RUN = "fixture-timeline-done";
 const DONE_ASK = "Give the car a horn, and a garage to park it in.";
 const DONE_HEADS = ["e5", "f6"].map((seed) => seed.repeat(20));
@@ -249,6 +256,67 @@ function firstBuilds(run: Scoped, project: string, pictures: Pictures): EventDat
   ];
 }
 
+/** A message the person sent with one picture, as a send keeps it: the picture in the game's `references/`. */
+interface SentPicture {
+  messageId: string;
+  text: string;
+  label: string;
+  from: Rgb;
+  to: Rgb;
+}
+
+const FIRST_ASK: SentPicture = {
+  messageId: "fixture-timeline-ask",
+  text: ASK,
+  label: "Street at dusk",
+  from: DUSK,
+  to: ROAD,
+};
+const GOING_ON: SentPicture = {
+  messageId: "fixture-timeline-go-on",
+  text: GO_ON,
+  label: "Blue sign",
+  from: BLUE,
+  to: CREAM,
+};
+
+/** The person's message, its picture kept for the chat and saved in the game, queued, begun and answered. */
+async function sentWithPicture(
+  core: StudioCore,
+  project: string,
+  threadId: string,
+  sent: SentPicture,
+): Promise<EventData[]> {
+  const { messageId, text } = sent;
+  const still = { label: sent.label, mimeType: "image/png", data: gradientShot(sent.from, sent.to).toString("base64") };
+  const attachmentsArtifact = `message_attachments_${messageId}`;
+  await core.store.writeArtifact(threadId, attachmentsArtifact, { stills: [still] });
+  await core.saveReferenceFrames(project, [still]);
+  return [
+    { type: EventKind.Messages, messages: [{ role: "user", content: text }] },
+    customEventData(CustomEvent.CoordinatorMessageQueued, {
+      messageId,
+      action: { text, attachmentsArtifact, imageCount: 1 },
+    }),
+    customEventData(CustomEvent.CoordinatorMessageProcessing, { messageId }),
+    // Its turn ended once it started (or went on with) the build: a restart does not answer it again.
+    customEventData(CustomEvent.CoordinatorMessageHandled, { messageId }),
+  ];
+}
+
+/**
+ * Nothing at work after save point 2: the Loop paused for the person's next word, and the chat went
+ * on with it (`resume_run`: its words on the run, then the run's start again).
+ */
+function wentOn(run: Scoped, goingOn: EventData[]): EventData[] {
+  return [
+    run(CustomEvent.RunFinished, { victory: false, landed: false, executionStatus: ExecutionStatus.Paused }),
+    ...goingOn,
+    run(CustomEvent.RunSteering, { text: WENT_ON_WITH, sourceMessageId: GOING_ON.messageId }),
+    run(CustomEvent.RunStarted, { goal: ASK, engine: EngineId.ClaudeCode, model: FIXTURE_MODEL, resumed: true }),
+  ];
+}
+
 /** Five paint schemes off save point 2, the repainted sign (save point 3), the lead's own night street (4), two at work. */
 function laterBuilds(run: Scoped, project: string, pictures: Pictures): EventData[] {
   const schemes = SCHEMES.flatMap((worker, n) =>
@@ -329,16 +397,14 @@ export async function seedBuildTimeline(core: StudioCore, project: string, threa
   const donePictures = await writeDonePictures(core.layout.runs);
   await writeGameFiles(core, project);
   const run = fixtureRun({ runId: RUN, project });
-  const asked: EventData[] = [
-    { type: EventKind.Messages, messages: [{ role: "user", content: ASK }] },
-    customEventData(CustomEvent.CoordinatorMessageQueued, { messageId: "fixture-timeline-ask", action: { text: ASK } }),
-    customEventData(CustomEvent.CoordinatorMessageProcessing, { messageId: "fixture-timeline-ask" }),
-  ];
+  const asked = await sentWithPicture(core, project, threadId, FIRST_ASK);
+  const goingOn = await sentWithPicture(core, project, threadId, GOING_ON);
   await core.append(
     [
       ...finishedLoop(project, donePictures),
       ...asked,
       ...firstBuilds(run, project, pictures),
+      ...wentOn(run, goingOn),
       ...laterBuilds(run, project, pictures),
     ],
     threadId,

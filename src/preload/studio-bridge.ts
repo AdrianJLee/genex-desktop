@@ -175,7 +175,6 @@ function gameCalls(bridge: BridgeCalls) {
     openProject: (name) => invoke("studio:project.open", { name }),
     rollback: (snapshotId) => invoke("studio:rollback", { snapshotId }),
     undoChange: (snapshotId) => invoke("studio:selfchange.undo", { snapshotId }),
-    readReferenceStills: (project) => invoke("studio:game.references", { project }),
     previewProjectAsset: (p) => invoke("studio:game.asset.preview", p),
     presentProjectAssets: (p) => invoke("studio:game.asset.present", p),
     projectModelRigs: (p) => invoke("studio:game.asset.rigs", p),

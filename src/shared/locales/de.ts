@@ -2488,6 +2488,13 @@ export default {
   "Nothing is failing.": "Nichts schlägt fehl.",
   "Nothing is installing.": "Gerade wird nichts installiert.",
   "Nothing is online for this game yet": "Für dieses Spiel ist noch nichts online",
+  "Give the link a letter or a number.": "Gib dem Link einen Buchstaben oder eine Zahl.",
+  "Another game already has this link. Try another one.":
+    "Diesen Link hat schon ein anderes Spiel. Versuch einen anderen.",
+  "This game has used all its link changes.": "Dieses Spiel hat alle Link-Änderungen aufgebraucht.",
+  "Genex keeps this link for itself. Try another one.": "Diesen Link braucht Genex selbst. Versuch einen anderen.",
+  "Give the game a name with a letter or a number in it.":
+    "Gib dem Spiel einen Namen mit einem Buchstaben oder einer Zahl.",
   "Nothing kept yet": "Noch nichts behalten",
   "Nothing made": "Nichts erstellt",
   "Nothing made yet": "Noch nichts erstellt",
@@ -3263,7 +3270,6 @@ export default {
   "Save as preset…": "Als Vorlage speichern…",
   "Save image": "Bild speichern",
   "Save key": "Schlüssel speichern",
-  "Save name": "Name speichern",
   "Save tags": "Tags speichern",
   "Save the new game in": "Neues Spiel speichern in",
   "Save to your library": "In deiner Bibliothek speichern",
@@ -6311,4 +6317,21 @@ export default {
     "Dieses Spiel wurde entfernt, deshalb behält Genex seine Web-Version vorerst.",
   "Genex couldn’t finish removing the web version. Press Remove again.":
     "Genex konnte die Web-Version nicht ganz entfernen. Drück noch mal auf Entfernen.",
+  "Change link": "Link ändern",
+  "Change the link": "Link ändern",
+  "Change the link of {title}": "Link von {title} ändern",
+  "Couldn’t change Players.": "Spieler konnte nicht geändert werden.",
+  "Couldn’t change the link.": "Der Link konnte nicht geändert werden.",
+  "Couldn’t rename the game.": "Das Spiel konnte nicht umbenannt werden.",
+  "Link saved": "Link gespeichert",
+  "New link": "Neuer Link",
+  "Rename {title}": "{title} umbenennen",
+  "Renamed to {title}": "Heißt jetzt {title}",
+  "The game is at {address} now": "Das Spiel ist jetzt unter {address}",
+  "The name players see on Play and genex.games.": "Der Name, den Spieler in Play und auf genex.games sehen.",
+  "The old link will still open the game": "Der alte Link öffnet das Spiel weiterhin",
+  "The old link will still open the game, for players who already have it too.":
+    "Der alte Link öffnet das Spiel weiterhin, auch bei allen, die ihn schon haben.",
+  "{count, plural, one {# change left} other {# changes left}}":
+    "{count, plural, one {noch # Änderung} other {noch # Änderungen}}",
 } satisfies LocaleCatalog;

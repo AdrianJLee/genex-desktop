@@ -16,6 +16,7 @@ import {
   type UpdateCheckResult,
   UpdateCheckStatus,
   UpdateFailure,
+  UpdateFeedState,
 } from "../../../shared/app-update.ts";
 import { BootFailure, type BootFailureCode, SandboxProblemCode, StartPassage } from "../../../shared/boot.ts";
 import { DAY_MS, HOUR_MS, MINUTE_MS } from "../../../shared/duration.ts";
@@ -117,7 +118,7 @@ export type LaunchEventProperties = {
   [LaunchEvent.UpdateCheckFinished]: UpdateCheckProperties;
   [LaunchEvent.ErrorToastShown]: ErrorToastProperties;
   [LaunchEvent.PreviousSessionEnded]: PreviousSessionProperties;
-  [LaunchEvent.UpdateBackgroundFailed]: { stage: UpdateFailure | null };
+  [LaunchEvent.UpdateBackgroundFailed]: UpdateFailedProperties;
   [LaunchEvent.AgentsStartFailed]: { code: BootFailureCode | null };
   [LaunchEvent.WindowUnresponsive]: { duration_ms: number | null };
 };
@@ -203,10 +204,36 @@ export function startProperties(start: unknown): StartProperties | null {
   };
 }
 
-/** `update_background_failed`: the stage an update the app looked for on its own failed at. */
-export const updateFailedProperties = (payload: unknown): { stage: UpdateFailure | null } => ({
-  stage: isRecord(payload) ? oneOf(UpdateFailure, payload.stage) : null,
-});
+/** Chromium's network error names, the only text `net_error` carries. */
+const NET_ERROR_CODE = /^ERR_[A-Z0-9_]{1,60}$/;
+
+/** `update_background_failed`'s properties: where it failed, what the feed answered, and what Genex offered. */
+export type UpdateFailedProperties = {
+  stage: UpdateFailure | null;
+  feed: UpdateFeedState | null;
+  net_error: string | null;
+  http_status: number | null;
+  installer: boolean | null;
+  offered_download: boolean;
+};
+
+/** An HTTP status, or null for anything else. */
+const httpStatus = (value: unknown): number | null =>
+  Number.isInteger(value) && Number(value) >= 100 && Number(value) <= 599 ? Number(value) : null;
+
+/** `update_background_failed`: an update the app looked for on its own failed, re-checked field by field. */
+export function updateFailedProperties(payload: unknown): UpdateFailedProperties {
+  const note = isRecord(payload) ? payload : {};
+  const netError = typeof note.netError === "string" && NET_ERROR_CODE.test(note.netError) ? note.netError : null;
+  return {
+    stage: oneOf(UpdateFailure, note.stage),
+    feed: oneOf(UpdateFeedState, note.feed),
+    net_error: netError,
+    http_status: httpStatus(note.httpStatus),
+    installer: typeof note.installer === "boolean" ? note.installer : null,
+    offered_download: note.offeredDownload === true,
+  };
+}
 
 /** `agents_start_failed`: why an open studio's agents would not start, as its code. */
 export const agentsStartFailedProperties = (payload: unknown): { code: BootFailureCode | null } => ({

@@ -361,6 +361,8 @@ process.exit(listing?.state === "refused" ? 1 : 0);
     credentials: { get: async () => "fixture-token", set: async () => {}, clear: async () => {} },
     preload: standIn,
     sendsApps,
+    // A CLI with no `genex native` has no `genex native build` either, whatever CLI the app pins.
+    buildsApps: sendsApps,
     ...(notarize ? { notarize } : {}),
   });
   const runs = async () =>
@@ -444,7 +446,7 @@ describe("a publish's apps sent through the CLI", () => {
     await genex.publishApps("dust", "job-1", [MAC_APP]);
     assert.deepEqual(await runs(), []);
     const { native } = await genex.publishView("dust");
-    // The record also says Genex builds no app here: the pinned CLI has no `genex native build` either.
+    // The record also says Genex builds no app here: this CLI has no `genex native build` either.
     assert.deepEqual(native, {
       supported: false,
       sending: false,

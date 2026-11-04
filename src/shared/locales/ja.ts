@@ -2420,6 +2420,13 @@ export default {
   "Nothing is failing.": "失敗しているものはありません。",
   "Nothing is installing.": "インストール中のものはありません。",
   "Nothing is online for this game yet": "このゲームはまだ何もオンラインにありません",
+  "Give the link a letter or a number.": "リンクに文字か数字を入れてください。",
+  "Another game already has this link. Try another one.":
+    "このリンクは別のゲームが使っています。別のものを試してください。",
+  "This game has used all its link changes.": "このゲームはリンクの変更回数を使い切りました。",
+  "Genex keeps this link for itself. Try another one.":
+    "このリンクは Genex が使うため使えません。別のものを試してください。",
+  "Give the game a name with a letter or a number in it.": "文字か数字を含む名前をゲームに付けてください。",
   "Nothing kept yet": "まだ採用なし",
   "Nothing made": "成果なし",
   "Nothing made yet": "まだ何も作られていません",
@@ -3187,7 +3194,6 @@ export default {
   "Save as preset…": "プリセットとして保存…",
   "Save image": "画像を保存",
   "Save key": "キーを保存",
-  "Save name": "名前を保存",
   "Save tags": "タグを保存",
   "Save the new game in": "新しいゲームの保存先",
   "Save to your library": "ライブラリに保存",
@@ -6162,4 +6168,20 @@ export default {
     "このゲームは公開停止中のため、Genex はウェブ版をしばらく残します。",
   "Genex couldn’t finish removing the web version. Press Remove again.":
     "Genex はウェブ版を最後まで削除できませんでした。もう一度「削除」を押してください。",
+  "Change link": "リンクを変更",
+  "Change the link": "リンクを変更",
+  "Change the link of {title}": "{title}のリンクを変更",
+  "Couldn’t change Players.": "プレイヤー設定を変更できませんでした。",
+  "Couldn’t change the link.": "リンクを変更できませんでした。",
+  "Couldn’t rename the game.": "ゲーム名を変更できませんでした。",
+  "Link saved": "リンクを保存しました",
+  "New link": "新しいリンク",
+  "Rename {title}": "{title}の名前を変更",
+  "Renamed to {title}": "{title}に名前を変更しました",
+  "The game is at {address} now": "ゲームは{address}に移りました",
+  "The name players see on Play and genex.games.": "プレイヤーがPlayとgenex.gamesで見る名前です。",
+  "The old link will still open the game": "古いリンクでも引き続きゲームが開きます",
+  "The old link will still open the game, for players who already have it too.":
+    "古いリンクでも引き続きゲームが開きます。すでに持っているプレイヤーも同じです。",
+  "{count, plural, one {# change left} other {# changes left}}": "{count, plural, other {あと#回変更できます}}",
 } satisfies LocaleCatalog;

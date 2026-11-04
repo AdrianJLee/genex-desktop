@@ -650,6 +650,10 @@ export class StudioCore {
           return [];
         },
       );
+    // A game whose first commit failed at a start is that game's problem, said in the log; its
+    // next save point tries again, and the harness and every other game start as usual.
+    this.snapshots.onFirstCommitFailed = (workspace, err) =>
+      this.options.onLog?.(`[core] first commit of ${workspace.name} failed: ${errorMessage(err)}`, "stderr");
     // A restore keeps what those rules ignore on disk, and in the restored ignore file.
     this.snapshots.keepIgnoring = (workspace, lines) =>
       ensureFactIgnoreRules(workspace.dir, lines).catch((err) => {

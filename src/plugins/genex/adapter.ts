@@ -243,6 +243,8 @@ const MIN_PUBLISH_WAIT_MS = SECOND_MS;
 const SESSION_CACHE_MS = 2 * MINUTE_MS;
 /** How long Genex's word on whether a game's page plays a web version is kept before it is asked again. */
 const HOSTED_WEB_FRESH_MS = MINUTE_MS;
+/** How many names a finished publish gives Genex when the game is renamed in Studio meanwhile. */
+const SETTLE_NAME_TRIES = 3;
 /** What the person reads when Genex refuses Remove, by its refusal code; any other failure says itself. */
 const REMOVE_WEB_REFUSAL: Readonly<Record<string, () => string>> = {
   [GenexWebRefusal.NoNativeBuild]: PUBLISH_MESSAGE.OnlyWebRefusal,
@@ -967,7 +969,7 @@ export class GenexTools {
         state: GenexPublishJobState.Running,
         phase: publishPhaseFor(meta),
         startedAt: new Date().toISOString(),
-        title: cleanGenexTitle(title) ?? state.title ?? defaultGenexTitle(project),
+        title: cleanGenexTitle(title) ?? state.renamed ?? state.title ?? defaultGenexTitle(project),
       };
       state.job = job;
       delete state.warnings;
@@ -1096,7 +1098,7 @@ export class GenexTools {
       startedAt: new Date().toISOString(),
     };
     if (kind === GenexPublishKind.Gallery)
-      job.title = cleanGenexTitle(title) ?? state.title ?? defaultGenexTitle(project);
+      job.title = cleanGenexTitle(title) ?? state.renamed ?? state.title ?? defaultGenexTitle(project);
     const connect = exportStage ? await this.#exportGame(project, state, job, dir, exportStage) : false;
     const cover = coverRides(kind, state);
     state.job = job;
@@ -1856,18 +1858,24 @@ export class GenexTools {
   /**
    * After a publish: a name given in Studio while it ran (its listing went with the name it
    * `started` with), or one that never reached Genex (`renamed`), goes to Genex now, so Studio and
-   * Genex name the game alike. Failing, it stays `renamed` for the next publish.
+   * Genex name the game alike; a name given while that is on its way is sent after it. Failing,
+   * the newest name stays `renamed` for the next publish.
    */
   async #settleName(project: string, job: GenexPublishJob, started: string | undefined): Promise<void> {
     const record = await this.#publishState(project);
-    const name = job.title;
-    const due = name !== started || record.renamed !== undefined;
-    if (job.state !== GenexPublishJobState.Done || !name || !record.projectId || !due) return;
+    const due = job.title !== started || record.renamed !== undefined;
+    if (job.state !== GenexPublishJobState.Done || !job.title || !record.projectId || !due) return;
+    const id = record.projectId;
+    let sent = "";
     try {
-      await this.#retitle(record.projectId, name);
-      await this.#recordListedName(project, name);
+      for (let tries = 0; job.title && job.title !== sent && tries < SETTLE_NAME_TRIES; tries += 1) {
+        sent = job.title;
+        await this.#retitle(id, sent);
+      }
+      if (sent === job.title) await this.#recordListedName(project, sent);
+      else await this.#keepRenamed(project, job.title ?? sent);
     } catch {
-      await this.#keepRenamed(project, name);
+      await this.#keepRenamed(project, job.title ?? sent);
     }
   }
   /**

@@ -26,6 +26,11 @@ import { createToolRegistry } from "../../src/harness-seed/tools/index.ts";
 
 const SERVER = path.resolve("tests/fixtures/mcp/echo-server.mjs");
 
+/** What a session is handed beside its tools: its system text, a new session's notices and the person's words. */
+function handed(request: DelegateRequest): string {
+  return [request.system ?? "", ...(request.notices ?? []), request.prompt].join("\n\n");
+}
+
 function connector(overrides: Partial<McpConnector> = {}): McpConnector {
   return {
     id: "echo",
@@ -206,10 +211,10 @@ it("one connector becomes the same tool on Claude Code, on Codex and in the loca
             { type: "array", items: { type: "string" }, description: "Labels to repeat." },
           );
           assert.equal(tool!.parameters.properties.tags?.type, "array");
-          // A connector is named in the prompt only as a count, never tool by tool.
-          assert.match(request.prompt, /\[CONNECTORS\]/);
-          assert.match(request.prompt, /Echo: 5 tools, named echo__\*/);
-          assert.doesNotMatch(request.prompt, /echo__echo/);
+          // A connector is named in what the session is handed only as a count, never tool by tool.
+          assert.match(handed(request), /\[CONNECTORS\]/);
+          assert.match(handed(request), /Echo: 5 tools, named echo__\*/);
+          assert.doesNotMatch(handed(request), /echo__echo/);
           assert.equal(
             await request.onLiveTool!("echo__echo", { text: "hi", tags: ["a", "b"], count: 2, mode: "a" }),
             "hi tags=a,b count=2 mode=a",

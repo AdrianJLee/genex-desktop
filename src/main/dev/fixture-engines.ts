@@ -133,6 +133,7 @@ const MESSAGE = {
   stoppedByYou: "stopped by you",
   commandReply:
     "Converting the engine recordings needs ffmpeg, and my sandbox can’t download it. Run this once, then I’ll convert them:\n\n```bash\nbrew install ffmpeg\n```",
+  commandFollowUp: "ffmpeg is in. Converting the engine recordings now.",
 } as const;
 /** The marker whose game-chat reply is long and code-heavy, streamed fast: what drawing a long reply costs. */
 const LONG_STREAM_MARKER = "fixture:stream-long";
@@ -140,6 +141,8 @@ const LONG_STREAM_MARKER = "fixture:stream-long";
 const PENDING_MARKER = "fixture:pending";
 /** The marker whose reply offers the user a command to run, as a reply the sandbox blocked does. */
 const COMMAND_MARKER = "fixture:command";
+/** The session a command reply opens; the turn that tells it how the command went resumes it. */
+const COMMAND_SESSION = "fixture-command-v1";
 
 /**
  * First launch: an empty library, Claude Code waiting for a sign-in, Codex, OpenCode, Grok Build and
@@ -393,7 +396,8 @@ async function planReply(id: EngineId, transcript: string) {
 
 async function delegateFixture(id: EngineId, request: DelegateRequest, pendingSessions: Set<string>) {
   const reads = steerReads(request);
-  if (request.prompt.includes(COMMAND_MARKER)) return reads.answer(commandReply(id));
+  if (request.resume === COMMAND_SESSION) return reads.answer(commandReply(id, MESSAGE.commandFollowUp));
+  if (request.prompt.includes(COMMAND_MARKER)) return reads.answer(commandReply(id, MESSAGE.commandReply));
   if (request.interviewTools?.some((tool) => tool.name === "ask_user"))
     return reads.answer(interviewReply(id, request));
   const stopped = await pendingSession(id, request, pendingSessions);
@@ -468,16 +472,16 @@ async function pendingSession(
   }
 }
 
-/** A reply that hands the user one command to run. */
-function commandReply(id: EngineId) {
+/** A reply in the command's session: the one that hands the user a command, or the one after it ran. */
+function commandReply(id: EngineId, summary: string) {
   return {
     ok: true,
     engine: id,
     model: FIXTURE_MODEL,
     turns: 1,
     usage: {},
-    sessionId: "fixture-command-v1",
-    summary: MESSAGE.commandReply,
+    sessionId: COMMAND_SESSION,
+    summary,
   };
 }
 

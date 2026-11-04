@@ -29,7 +29,11 @@ weights. Provider CLIs retain their own telemetry and account controls.
 
 Installed macOS and Windows release builds ask update.electronjs.org (run by the Electron
 project) hourly whether a newer release exists, sending the app version, platform and
-architecture, and download it from GitHub Releases. Installed Linux release builds ask the GitHub
+architecture, and download it from GitHub Releases. When a check fails, the app asks that address
+once more itself to tell a blocked feed from a failed install, and after two failures in a row it
+asks the GitHub API for the latest published release, as Linux builds do, to offer its download
+page. A Windows copy that Squirrel did not install (no `Update.exe` beside it) asks only GitHub,
+as Linux builds do. Installed Linux release builds ask the GitHub
 API for the latest published release every six hours (and when you choose Check for Updates),
 which sends nothing beyond the request itself; the download is yours to start. The `.deb` and
 `.rpm` add the Genex package repository (packages.genex.games, served by Cloudflare), so your

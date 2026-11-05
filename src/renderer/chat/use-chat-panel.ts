@@ -18,6 +18,7 @@ import { useComposeInChat } from "./use-compose-in-chat.ts";
 import { type LaunchHandover, useLaunchHandover } from "./use-launch-handover.ts";
 import { useEngines } from "../state/hooks.ts";
 import { useKeepBuilding } from "./use-keep-building.ts";
+import { useRunTheGame } from "./use-run-the-game.ts";
 import { type Report, type Send, useReport, useSubmit } from "./use-submit.ts";
 
 /** Whether a reply is being written on screen, as the streaming reply reports it. */
@@ -69,6 +70,7 @@ export function useChatPanel(props: ChatPanelProps) {
     await sendAnswered(text, extras, preserveDraft, source);
   };
   useKeepBuilding(chat.threadId, sendAnswered, props.onNotice);
+  useRunTheGame(chat.threadId, sendAnswered, props.onNotice);
   useComposeInChat(chat.threadId, chat.project, composer.drafts, composerRef, sendAnswered);
   const report = useReport(props, chat, composer, work);
   const enginesRead = useEngines((s) => s.list.length > 0);

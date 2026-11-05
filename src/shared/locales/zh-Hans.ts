@@ -5849,4 +5849,8 @@ export default {
   "Raise context to 16K": "将上下文提升到 16K",
   "Raising…": "正在提升…",
   "The chat now uses {model}. Send your message again.": "对话现在使用 {model}。请再发送一次消息。",
+  "Run the game": "运行游戏",
+  "The agent is packaging the game. It starts it once the package is ready.": "智能体正在打包游戏，打包好后就会启动。",
+  "Genex can’t play this game’s app on this computer.": "Genex 无法在这台电脑上运行这个游戏的应用。",
+  "Open the game’s chat to have the agent package it.": "打开游戏的聊天，让智能体来打包。",
 } satisfies LocaleCatalog;

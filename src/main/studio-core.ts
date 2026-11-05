@@ -71,6 +71,8 @@ import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
 import { coreJobWake, wakeForJob } from "./core/job-wake.ts";
+import { playsItsApp } from "./core/project-tools.ts";
+import { type LocalPlayAnswer, LocalPlayState, NativeEngine } from "../shared/play-native.ts";
 import {
   type BootNotice,
   BootReason,
@@ -389,6 +391,11 @@ export interface StudioCoreOptions {
   renderGameCover?: (surface: string, seed: number) => Promise<string>;
   /** Computer control (`desktop-control.ts`): absent where no desktop driver can be reached, and in tests. */
   desktop?: DesktopControl;
+  /**
+   * Play for a game being made: its own folder's newest app for this computer, in the game sandbox
+   * (`main/play/local-plays.ts`); absent where the app plays none, and in tests.
+   */
+  localPlays?: { play(project: string, engine: string | null): Promise<LocalPlayAnswer> };
   /** Notes each boot step as it finishes (`main/performance.ts`); a launch without diagnostics passes nothing. */
   markBoot?: (step: string) => void;
   engines?: Engine[];
@@ -2110,6 +2117,24 @@ export class StudioCore {
     } catch {
       /* first launch — defaults stand */
     }
+  }
+
+  /**
+   * Play for a game being made (the Builds and Live Play of an Unreal game, and its agent's
+   * `play_build`): the game folder's own newest app for this computer, started or brought forward,
+   * or why not. Without an app here, or with one older than the game's last change, while the
+   * game's chat waits for a package its agent started the answer is `packaging`: that package
+   * brings the next app.
+   */
+  async playGameBuild(project: string, threadId?: string): Promise<LocalPlayAnswer> {
+    const plays = this.options.localPlays;
+    if (!plays) return { state: LocalPlayState.Unsupported };
+    const kind = await this.games.kindOf(project);
+    const answer = await plays.play(project, playsItsApp(kind) ? NativeEngine.Unreal : null);
+    const awaitsApp = answer.state === LocalPlayState.NoBuild || answer.state === LocalPlayState.Stale;
+    if (!awaitsApp) return answer;
+    const chat = threadId ?? (await this.threadForGame(project));
+    return this.#pluginTools.jobWatches.watching(chat) ? { ...answer, state: LocalPlayState.Packaging } : answer;
   }
 
   // ── threads ──────────────────────────────────────────────────────────────────────────────

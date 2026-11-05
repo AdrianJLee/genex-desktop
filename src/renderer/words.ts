@@ -6120,6 +6120,15 @@ export const ENGINE_GAME_WORDS = {
 } as const;
 
 /** A game linked to an Unreal project: the Live tab's card and Rewind's note. */
+/** Play for a game being made that plays as its own app (an Unreal game): what it says and sends. */
+export const GAME_PLAY_WORDS = {
+  /** What the person's Play sends the chat when there is no app to play yet: the agent packages and starts it. */
+  runTheGame: t("Run the game"),
+  packaging: t("The agent is packaging the game. It starts it once the package is ready."),
+  unsupported: t("Genex can’t play this game’s app on this computer."),
+  noChat: t("Open the game’s chat to have the agent package it."),
+} as const;
+
 export const UNREAL_WORDS = {
   /** The Live tab's line under the project's name, in place of the web page. */
   stageStatus: t("Plays in the Unreal editor."),

@@ -6285,4 +6285,10 @@ export default {
   "Raise context to 16K": "Subir contexto a 16K",
   "Raising…": "Subiendo…",
   "The chat now uses {model}. Send your message again.": "El chat ahora usa {model}. Envía tu mensaje otra vez.",
+  "Run the game": "Ejecuta el juego",
+  "The agent is packaging the game. It starts it once the package is ready.":
+    "El agente está empaquetando el juego. Lo abrirá en cuanto el paquete esté listo.",
+  "Genex can’t play this game’s app on this computer.":
+    "Genex no puede abrir la app de este juego en esta computadora.",
+  "Open the game’s chat to have the agent package it.": "Abre el chat del juego para que el agente lo empaquete.",
 } satisfies LocaleCatalog;

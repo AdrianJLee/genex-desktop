@@ -2349,7 +2349,10 @@ session gets is its seat's (`ProjectToolSeat`): a run's lead (a web run's direct
 gets both, and its card shows in the one chat its run was started in, as the host's records say,
 never a thread the harness names; a worker the host seated gets `plugins_find` only and reports
 what it found to its lead; any other session (a reviewer, a judge) gets
-neither. Only the chat's own session gets `start_web_game`. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
+neither. Only the chat's own session gets `start_web_game`, and on an Unreal game `play_build`, the
+person's Play: Genex starts the game folder's newest app for this computer in place, in the game
+sandbox (`main/play/local-plays.ts`), or answers that there is none, that it is older than the
+game's last change (package again first) or that a package the chat started is still running. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
 the installed plugins that match (on, then off or removed; never one under the hood), then the entries of Genex's curated
 catalog not installed, and never anything from another source (`main/core/plugin-finder.ts`). A
 plugin matches when it detects, is scoped to or makes `fact`, or when a word of `text` other than a

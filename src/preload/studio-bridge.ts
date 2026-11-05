@@ -147,6 +147,8 @@ function gameCalls(bridge: BridgeCalls) {
   const { invoke } = bridge;
   return {
     archiveGame: (project) => invoke("studio:game.archive", { project }),
+    playGameBuild: (project, threadId) =>
+      invoke("studio:game.play-build", { project, ...(threadId ? { threadId } : {}) }),
     storageSpace: (project) => invoke("studio:storage", project === undefined ? {} : { project }),
     freeStorage: (project) => invoke("studio:storage.free", project === undefined ? {} : { project }),
     dataFolder: () => invoke("studio:data-folder"),

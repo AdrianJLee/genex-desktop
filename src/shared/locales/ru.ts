@@ -6238,4 +6238,10 @@ export default {
   "Raise context to 16K": "Поднять контекст до 16K",
   "Raising…": "Поднимаю…",
   "The chat now uses {model}. Send your message again.": "Теперь чат работает на {model}. Отправь сообщение ещё раз.",
+  "Run the game": "Запусти игру",
+  "The agent is packaging the game. It starts it once the package is ready.":
+    "Агент собирает игру. Запустит её, как только сборка будет готова.",
+  "Genex can’t play this game’s app on this computer.":
+    "Genex не может запустить приложение этой игры на этом компьютере.",
+  "Open the game’s chat to have the agent package it.": "Открой чат игры, чтобы агент её собрал.",
 } satisfies LocaleCatalog;

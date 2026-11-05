@@ -70,6 +70,12 @@ export interface NativeSessionsDeps {
   root: string;
   /** An installed game's record, or null. */
   record(slug: string): Promise<InstallRecord | null>;
+  /**
+   * Where a game's app and saves are: an installed game's version folder under `root`, its saves
+   * beside it, unless the launcher plays apps that live elsewhere (a game folder's own build,
+   * `local-plays.ts`).
+   */
+  place?(slug: string, record: InstallRecord): { app: string; saves: string };
   /** Start a game in its sandbox (`spawnNativeGame`). */
   spawn(request: NativeGameRequest): Promise<GameProcess>;
   /**
@@ -245,8 +251,10 @@ export class NativeSessions {
     slug: string,
     record: InstallRecord,
   ): Promise<{ child: GameProcess; scratch: string; genex: GameGenex | null }> {
-    const app = path.join(this.#deps.root, slug, record.version, record.entry);
-    const saves = path.join(this.#deps.root, slug, SAVES);
+    const { app, saves } = this.#deps.place?.(slug, record) ?? {
+      app: path.join(this.#deps.root, slug, record.version, record.entry),
+      saves: path.join(this.#deps.root, slug, SAVES),
+    };
     await mkdir(saves, { recursive: true });
     const scratch = await mkdtemp(path.join(this.#deps.root, `${SCRATCH}${slug}-`));
     const { bundleId, bundleName } = record;

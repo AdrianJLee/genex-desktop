@@ -6347,4 +6347,10 @@ export default {
   "Raising…": "Wird erhöht…",
   "The chat now uses {model}. Send your message again.":
     "Der Chat nutzt jetzt {model}. Schick deine Nachricht noch mal.",
+  "Run the game": "Starte das Spiel",
+  "The agent is packaging the game. It starts it once the package is ready.":
+    "Der Agent verpackt das Spiel. Er startet es, sobald das Paket fertig ist.",
+  "Genex can’t play this game’s app on this computer.":
+    "Genex kann die App dieses Spiels auf diesem Computer nicht starten.",
+  "Open the game’s chat to have the agent package it.": "Öffne den Chat des Spiels, damit der Agent es verpackt.",
 } satisfies LocaleCatalog;

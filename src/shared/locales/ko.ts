@@ -6056,4 +6056,9 @@ export default {
   "Raise context to 16K": "컨텍스트를 16K로 늘리기",
   "Raising…": "늘리는 중…",
   "The chat now uses {model}. Send your message again.": "이제 채팅이 {model}을 사용해요. 메시지를 다시 보내 주세요.",
+  "Run the game": "게임 실행해 줘",
+  "The agent is packaging the game. It starts it once the package is ready.":
+    "에이전트가 게임을 패키징하고 있어요. 완성되면 실행해요.",
+  "Genex can’t play this game’s app on this computer.": "Genex가 이 컴퓨터에서 이 게임의 앱을 실행할 수 없어요.",
+  "Open the game’s chat to have the agent package it.": "에이전트가 패키징하도록 게임 채팅을 열어 주세요.",
 } satisfies LocaleCatalog;

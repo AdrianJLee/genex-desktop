@@ -37,6 +37,13 @@ export function registerGamesIpc(handle: IpcHandle, { core, runSummaryReader, pu
     return true;
   });
 
+  // A game being made plays its own folder's app: the core finds it by the game's name, never a path.
+  handle("studio:game.play-build", async (payload) => {
+    if (typeof payload?.project !== "string" || !payload.project) throw new Error(MESSAGE.projectRequired);
+    const threadId = typeof payload.threadId === "string" && payload.threadId ? payload.threadId : undefined;
+    return core.playGameBuild(payload.project, threadId);
+  });
+
   // A chosen folder is the renderer's word for a path: the core checks it by its real path before
   // anything is written, as it does in `studio:game.location.pick`.
   handle("studio:game.create", async (payload) =>

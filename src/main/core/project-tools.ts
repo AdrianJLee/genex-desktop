@@ -10,7 +10,7 @@ import type { LiveToolResult, LiveToolSpec } from "../../shared/engine-requests.
 import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
 import type { GameProject } from "../../shared/game-project.ts";
 import { PluginCallBlocker, PluginSourceKind } from "../../shared/plugins.ts";
-import { type GameKind, kindPending, ProjectStarter } from "../../shared/project-facts.ts";
+import { CoreFact, type GameKind, kindPending, ProjectStarter } from "../../shared/project-facts.ts";
 import {
   type PluginsFindAnswer,
   type PluginsSuggestAnswer,
@@ -23,6 +23,8 @@ import type { CoreInternals } from "./internals.ts";
 import { findPlugins, type PluginQuery, suggestable } from "./plugin-finder.ts";
 import { checkPluginFolder } from "./plugin-check.ts";
 import {
+  PLAY_BUILD_ANSWER,
+  PLAY_BUILD_TOOL,
   PLUGIN_CHECK_TOOL,
   PLUGINS_FIND_TOOL,
   PLUGINS_SUGGEST_ANSWER,
@@ -74,8 +76,12 @@ export function projectTools(game: GameKind, seat: ProjectToolSeat): LiveToolSpe
   if (seat === ProjectToolSeat.Lead) return [PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL];
   if (seat !== ProjectToolSeat.Chat) return [];
   const start = kindPending(game) ? [START_WEB_GAME_TOOL] : [];
-  return [...start, PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, PLUGIN_CHECK_TOOL];
+  const play = playsItsApp(game) ? [PLAY_BUILD_TOOL] : [];
+  return [...start, PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, PLUGIN_CHECK_TOOL, ...play];
 }
+
+/** Whether a game plays as the app its folder holds rather than as a page: an Unreal game. */
+export const playsItsApp = (game: GameKind): boolean => game.facts.some((fact) => fact.id === CoreFact.UnrealProject);
 
 /** One of Genex's project tools as a chat's session calls it, by name. */
 export async function callProjectTool(
@@ -93,6 +99,10 @@ export async function callProjectTool(
   if (name === ProjectTool.PluginCheck)
     return JSON.stringify(await checkPluginFolder(core.games.dirFor(call.project), args, localPluginOn(core)));
   if (name === ProjectTool.StartWebGame) return startWebGame(core, x, call.project, call.threadId);
+  if (name === ProjectTool.PlayBuild) {
+    const { state, app } = await core.playGameBuild(call.project, call.threadId);
+    return PLAY_BUILD_ANSWER[state](app ?? "");
+  }
   throw new Error(MESSAGE.unknownTool(name));
 }
 

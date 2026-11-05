@@ -91,6 +91,16 @@ describe("asking Genex to build an app", () => {
       { ...BUILD, state: CloudBuildState.Failed, failure: CloudBuildFailure.Failed },
       "a reason Studio doesn't know reads as a plain failure",
     );
+    const failedBuild = { ...BUILD, state: CloudBuildState.Failed, failure: CloudBuildFailure.Compile };
+    assert.deepEqual(
+      cloudBuildOf({ build: { ...failedBuild, errors: ["Focus.cpp(79,19): error C2065", 7, "", null] } })?.errors,
+      ["Focus.cpp(79,19): error C2065"],
+      "only lines of text are kept",
+    );
+    assert.equal(cloudBuildOf({ build: { ...BUILD, errors: ["not failed"] } })?.errors, undefined);
+    assert.equal(cloudBuildOf({ build: { ...failedBuild, errors: "one string" } })?.errors, undefined);
+    const flood = cloudBuildOf({ build: { ...failedBuild, errors: Array(500).fill("x".repeat(5000)) } })?.errors ?? [];
+    assert.deepEqual([flood.length, flood[0]?.length], [60, 300], "what Genex sends is held to what it says it sends");
     const hostile: Array<[string, unknown]> = [
       ["no build", {}],
       ["not a record", { build: "windows" }],

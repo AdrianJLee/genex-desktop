@@ -43,6 +43,9 @@ const CLOUD_POLL_MS = [15 * SECOND_MS, 30 * SECOND_MS, MINUTE_MS, 2 * MINUTE_MS]
 export const CLOUD_SEND_TIMEOUT_MS = 6 * HOUR_MS;
 /** The longest reason a stopped send keeps, in the CLI's words. */
 const SEND_ERROR_CHARS = 300;
+/** The most lines of a failed build's log kept, and how long each may be: what Genex sends, no more. */
+const BUILD_ERRORS_KEPT = 60;
+const BUILD_ERROR_CHARS = 300;
 /** A job id as Genex names one: a plain word the CLI takes as an argument, never an option. */
 const JOB_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
@@ -96,14 +99,22 @@ const FAILURES: ReadonlySet<unknown> = new Set(Object.values(CloudBuildFailure))
 const failureOf = (value: unknown): CloudBuildFailure =>
   FAILURES.has(value) ? (value as CloudBuildFailure) : CloudBuildFailure.Failed;
 
+/** The error lines of `value` that are text, within what is kept; none when it is anything else. */
+function errorsOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const lines = value.filter((line): line is string => typeof line === "string" && line.trim() !== "");
+  return lines.slice(0, BUILD_ERRORS_KEPT).map((line) => line.slice(0, BUILD_ERROR_CHARS));
+}
+
 /** One build as kept or answered, or null when anything in it is off. */
 function buildOf(value: unknown): GenexCloudBuild | null {
   if (!isRecord(value)) return null;
-  const { platform, jobId, state, startedAt, finishedAt, failure } = value;
+  const { platform, jobId, state, startedAt, finishedAt, failure, errors } = value;
   const known = typeof platform === "string" && CLOUD_PLATFORMS.has(platform);
   const named = typeof jobId === "string" && JOB_ID.test(jobId);
   if (!known || !named || !STATES.has(state) || !isTime(startedAt)) return null;
   const failed = state === CloudBuildState.Failed;
+  const lines = failed ? errorsOf(errors) : [];
   return {
     platform: String(platform),
     jobId: String(jobId),
@@ -111,6 +122,7 @@ function buildOf(value: unknown): GenexCloudBuild | null {
     startedAt: String(startedAt),
     ...(isTime(finishedAt) ? { finishedAt } : {}),
     ...(failed ? { failure: failureOf(failure) } : {}),
+    ...(lines.length > 0 ? { errors: lines } : {}),
   };
 }
 

@@ -1347,6 +1347,19 @@ button.genex-publish-banner-name:hover {
   line-height: 19px;
   overflow-wrap: anywhere;
 }
+.genex-publish-cloud-errors {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.genex-publish-cloud-errors .genex-publish-platform-failure {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
 .genex-publish-reach {
   color: var(--ink-3);
   font-size: 13px;

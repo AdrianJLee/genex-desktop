@@ -6243,4 +6243,10 @@ export default {
     "Genex не может запустить приложение этой игры на этом компьютере.",
   "Open the game’s chat to have the agent package it.": "Открой чат игры, чтобы агент её собрал.",
   "Not open in Unreal": "Не открыта в Unreal",
+  "{count, plural, one {and # more error} other {and # more errors}}":
+    "{count, plural, one {и ещё # ошибка} few {и ещё # ошибки} many {и ещё # ошибок} other {и ещё # ошибки}}",
+  "Fix with agent": "Исправить с агентом",
+  "Ask the agent to fix these errors": "Попросить агента исправить эти ошибки",
+  "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
+    "Genex не смог собрать приложение {players} для «{title}». Исправь эти ошибки в коде игры, чтобы она там собиралась, и сохрани работу игры на других системах. На этом компьютере нельзя собрать для {players}, поэтому внимательно проверь каждое исправление. Потом скажи мне снова нажать Build on Genex.\n\n{errors}",
 } satisfies LocaleCatalog;

@@ -349,6 +349,7 @@ function studioCalls(bridge: BridgeCalls) {
     pullModel: (model) => invoke("studio:pull-model", { model }),
     lookupModel: (model) => invoke("studio:models.lookup", { model }),
     removeModel: (model) => invoke("studio:models.remove", { model }),
+    raiseModelContext: (model) => invoke("studio:models.raise-context", { model }),
     openUrl: (url) => invoke("studio:open-url", { url }),
     genexAccount: () => invoke("studio:genex-account.read"),
     genexSignIn: () => invoke("studio:genex-account.sign-in"),

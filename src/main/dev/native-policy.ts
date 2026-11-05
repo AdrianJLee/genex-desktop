@@ -80,6 +80,8 @@ const NATIVE_CHANNELS = [
   "studio:models.lookup",
   // Delete removes model files from this Mac, or asks the person's own Ollama to delete one.
   "studio:models.remove",
+  // Raise context writes a model copy into the person's own Ollama.
+  "studio:models.raise-context",
   // Install fetches the vendor's installer and runs it as the person: a download and a real install.
   "studio:cli-install.start",
   "studio:models.refresh",

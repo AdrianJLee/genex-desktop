@@ -43,13 +43,15 @@ export interface SetupVersions {
  * How Genex runs srt-win's install. It never makes the person's profile readable to sandboxed
  * commands: Genex grants its own folders, and the sandbox account is one per PC, so on a shared PC
  * every sandboxed session of every user could read this person's profile. It replaces only an
- * install a newer release made (srt-win refuses that without `--force`), never another
- * configuration in place, which may be another program's.
+ * install another release made (srt-win refuses that without `--force`): an older Genex's
+ * (setup version 2) opened loopback, which this one leaves closed, so Update would otherwise fail
+ * with `install_config_conflict`. A different configuration of this same release is never
+ * replaced, since it may be another program's.
  */
 export function srtInstallOptions(status: SetupVersions): { skipProfileGrant: true; force: boolean } {
   const { markerVersion, setupVersion } = status;
-  const newer = markerVersion !== undefined && setupVersion !== undefined && markerVersion > setupVersion;
-  return { skipProfileGrant: true, force: newer };
+  const otherRelease = markerVersion !== undefined && setupVersion !== undefined && markerVersion !== setupVersion;
+  return { skipProfileGrant: true, force: otherRelease };
 }
 
 /** srt-win's install: the sandbox user and its network filters; `cancelled` when the prompt was dismissed. */

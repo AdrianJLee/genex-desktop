@@ -6188,4 +6188,11 @@ export default {
   "The old link will still open the game, for players who already have it too.":
     "古いリンクでも引き続きゲームが開きます。すでに持っているプレイヤーも同じです。",
   "{count, plural, one {# change left} other {# changes left}}": "{count, plural, other {あと#回変更できます}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex は {model} をコンテキスト 16K で動くようにコピーできます。コピーは同じファイルを使うので、何もダウンロードしません。",
+  "Ollama is unavailable": "Ollama を利用できません",
+  "Raise context to 16K": "コンテキストを 16K に上げる",
+  "Raising…": "上げています…",
+  "The chat now uses {model}. Send your message again.":
+    "チャットは {model} を使うようになりました。メッセージをもう一度送ってください。",
 } satisfies LocaleCatalog;

@@ -5841,4 +5841,10 @@ export default {
   "The old link will still open the game, for players who already have it too.":
     "旧链接仍会打开这个游戏，已经有这个链接的玩家也一样。",
   "{count, plural, one {# change left} other {# changes left}}": "{count, plural, other {还可更改 # 次}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex 可以复制 {model}，让它以 16K 上下文运行。副本共用同一份文件，不会下载任何内容。",
+  "Ollama is unavailable": "Ollama 不可用",
+  "Raise context to 16K": "将上下文提升到 16K",
+  "Raising…": "正在提升…",
+  "The chat now uses {model}. Send your message again.": "对话现在使用 {model}。请再发送一次消息。",
 } satisfies LocaleCatalog;

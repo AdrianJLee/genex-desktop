@@ -526,6 +526,8 @@ export interface Engine {
   refreshModels?(force?: boolean): Promise<void>;
   /** Local engines: delete an installed model from this Mac. */
   removeModel?(id: string): Promise<void>;
+  /** A copy of a local model that runs with a larger context, and the copy's id (Ollama). */
+  raiseContext?(id: string): Promise<string>;
   /** One-shot completion. Direct engines use this for the whole tool loop; Claude Code uses it only as the isolated critic (no tools, no game folder). */
   complete?(request: CompleteRequest): Promise<CompleteResponse>;
   /** Build a game. Delegated engines (Claude Code) take a brief and work in a workspace. */

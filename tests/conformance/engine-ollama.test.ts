@@ -17,6 +17,7 @@ import {
 } from "../../src/substrate/engines/ollama.ts";
 import { EngineError } from "../../src/substrate/engines/types.ts";
 import { EngineFailureKind } from "../../src/shared/engine-requests.ts";
+import { ModelContextSource } from "../../src/substrate/engines/types.ts";
 import { isTransientProviderError } from "../../src/harness-seed/loop/outage.ts";
 import { startFakeOllama, type FakeOllama } from "../helpers/fake-ollama.ts";
 import { cliName, writeCliLauncher } from "../helpers/external-cli.ts";
@@ -159,6 +160,50 @@ describe("ollama management API", () => {
       ["gemma4:12b"],
     );
     assert.equal(await engine.defaultModel(), "gemma4:12b", "the deleted default is not offered again");
+  });
+});
+
+describe("raising an Ollama model's context", () => {
+  const QWEN = { name: "qwen3:8b", size: 5_200_000_000, capabilities: ["completion", "tools"], contextLength: 40960 };
+
+  it("reads the context a model's Modelfile sets before Ollama has loaded it", async () => {
+    const server = await fake({ models: [{ ...QWEN, name: "qwen3:8b-16k", numCtx: 16384 }, QWEN] });
+    const client = new OllamaClient(server.host);
+    const shown = await client.show("qwen3:8b-16k");
+    assert.deepEqual(await client.runtimeContext("qwen3:8b-16k", shown.contextLength, shown.configuredContext), {
+      tokens: 16384,
+      source: ModelContextSource.Configured,
+    });
+    const plain = await client.show("qwen3:8b");
+    assert.equal(plain.configuredContext, undefined, "a model that sets none keeps the estimate");
+  });
+
+  it("makes a 16K copy of a listed model and lists it with that context", async () => {
+    const server = await fake({ models: [QWEN], loaded: [{ name: "qwen3:8b", context_length: 4096 }] });
+    const engine = new OllamaEngine({ host: server.host });
+    assert.equal((await engine.models())[0]?.contextWindow, 4096, "the original runs at Ollama's default");
+    assert.equal(await engine.raiseContext("qwen3:8b"), "qwen3:8b-16k");
+    const creates = server.requests.filter((request) => request.path === "/api/create").map((r) => r.body);
+    assert.deepEqual(creates, [
+      { model: "qwen3:8b-16k", from: "qwen3:8b", parameters: { num_ctx: 16384 }, stream: false },
+    ]);
+    const copy = (await engine.models()).find((model) => model.id === "qwen3:8b-16k");
+    assert.equal(copy?.contextWindow, 16384);
+    assert.equal(copy?.contextSource, ModelContextSource.Configured);
+    assert.equal(copy?.supportsTools, true, "the copy keeps the original's tools");
+  });
+
+  it("asks Ollama to copy nothing but a model it lists", async () => {
+    const server = await fake({ models: [QWEN] });
+    const engine = new OllamaEngine({ host: server.host });
+    for (const name of ["", "missing:1b", "../qwen3:8b", "QWEN3:8B", "qwen3", "qwen3:8b\n", " qwen3:8b"]) {
+      await assert.rejects(engine.raiseContext(name), /not installed in Ollama/, JSON.stringify(name));
+    }
+    assert.deepEqual(
+      server.requests.filter((request) => request.path === "/api/create"),
+      [],
+      "a name Ollama does not list never reaches its create",
+    );
   });
 });
 

@@ -533,6 +533,28 @@ describe("at most two compiles at once", () => {
     assert.ok(results.every((r) => r.ok));
   });
 
+  it("starts each compile's clock as it takes its slot, however long finding its editor target takes", {
+    timeout: CASE_TIMEOUT_MS,
+  }, async (t) => {
+    const dir = await tmpDir("studio-ubt-slow-target-");
+    const projectFile = path.join(dir, "A.uproject");
+    await mkdir(path.join(dir, "Source"), { recursive: true });
+    await writeFile(projectFile, "{}");
+    for (const name of ["A", "AEditor", "AServer"])
+      await writeFile(
+        path.join(dir, "Source", `${name}.Target.cs`),
+        `public class ${name}Target : TargetRules\n{\n\tpublic ${name}Target(TargetInfo Target) : base(Target)\n\t{\n\t\tType = TargetType.Editor;\n\t}\n}\n`,
+      );
+    const gate = gated(t, await fixture("builder-inc.log"));
+    // A reads three target files to find its editor target; B, with no Source, reads none.
+    gate.compile("A", { projectFile });
+    gate.compile("B");
+    await gate.untilBegun(2);
+    assert.deepEqual(gate.begun, ["AEditor", "BEditor"]);
+    gate.release("A");
+    gate.release("B");
+  });
+
   it("a compile stopped while it waits leaves the queue without running, and its turn passes on", {
     timeout: CASE_TIMEOUT_MS,
   }, async (t) => {

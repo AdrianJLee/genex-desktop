@@ -9,6 +9,7 @@ import { sizeWords } from "../../../../shared/byte-size.ts";
 import {
   CloudBuildFailure,
   CloudBuildState,
+  CloudSendState,
   GenexBuildReview,
   type GenexCloudBuild,
   GenexListingState,
@@ -32,7 +33,7 @@ export const PlatformEnd = {
   Make: "make",
   /** Built before the game's last change: the agent can build it again. */
   Rebuild: "rebuild",
-  /** Publish is sending it now. */
+  /** Publish is sending it now, or its project is on its way for Genex to build it. */
   Sending: "sending",
   /** On Genex: this build is what desktop players get. */
   Sent: "sent",
@@ -219,6 +220,12 @@ function cloudWords(
 ): { detail: string; end: PlatformEnd } | null {
   if (!CLOUD_TARGETS.has(row.target) || native?.cloud?.supported !== true) return null;
   if (!onGenex) return { detail: WORDS.cloudPublishFirst, end: PlatformEnd.None };
+  const send = native.cloud.send;
+  if (send?.platform === row.target) {
+    if (send.state === CloudSendState.Sending)
+      return { detail: WORDS.cloudSending(send.startedAt, now), end: PlatformEnd.Sending };
+    return { detail: WORDS.cloudSendStopped, end: PlatformEnd.CloudRetry };
+  }
   const build = newestCloudBuild(row, native);
   if (!build) return { detail: WORDS.cloudOffer, end: PlatformEnd.CloudBuild };
   if (RUNNING_CLOUD.has(build.state))
@@ -417,7 +424,8 @@ export function failureLines(platforms: readonly PublishPlatform[], native: Gene
     .map((row) => currentSent(row, native)?.notarizeFailure)
     .filter((failure): failure is MacNotarizeFailure => failure !== undefined)
     .map((failure) => WORDS.notarizeFailed[failure]);
-  return [...unsent, ...unnotarized];
+  const sendError = native?.cloud?.send?.error;
+  return [...unsent, ...unnotarized, ...(sendError ? [WORDS.cloudSendFailedLine(sendError)] : [])];
 }
 
 /** A sent app's line when it did not reach players: not sent and why, or turned down by Genex and why. */

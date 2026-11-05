@@ -6195,4 +6195,12 @@ export default {
   "Raising…": "上げています…",
   "The chat now uses {model}. Send your message again.":
     "チャットは {model} を使うようになりました。メッセージをもう一度送ってください。",
+  "Couldn’t send the project to Genex: {error}": "プロジェクトをGenexに送れませんでした：{error}",
+  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
+    "今のところGenexがつくれるのはUnreal 5.8のゲームです。このプロジェクトにはバージョンの指定がありません。Unreal 5.8で開いて保存してから、もう一度つくってください。",
+  "Sending the project to Genex stopped": "プロジェクトのGenexへの送信が止まりました",
+  "Sending to Genex · {minutes} min so far. Keep Genex open":
+    "Genexに送信中 · {minutes}分経過。Genexは開いたままにしてください",
+  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
+    "このゲームはUnreal {version}です。今のところGenexがつくれるのはUnreal 5.8のゲームです。5.8にアップグレードしてから、もう一度つくってください。",
 } satisfies LocaleCatalog;

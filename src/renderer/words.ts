@@ -3809,6 +3809,14 @@ export const PUBLISH_PLATFORM_WORDS = {
     t("Building on Genex · {minutes} min so far", {
       minutes: Math.max(0, Math.floor((now - Date.parse(startedAt)) / MINUTE_MS)),
     }),
+  /** The game's project going up for a build: "Sending to Genex · 5 min so far. Keep Genex open". */
+  cloudSending: (startedAt: string, now: number) =>
+    t("Sending to Genex · {minutes} min so far. Keep Genex open", {
+      minutes: Math.max(0, Math.floor((now - Date.parse(startedAt)) / MINUTE_MS)),
+    }),
+  cloudSendStopped: t("Sending the project to Genex stopped"),
+  /** Why it stopped, under the rows, in Genex's or the CLI's words. */
+  cloudSendFailedLine: (error: string) => t("Couldn’t send the project to Genex: {error}", { error }),
   cloudFailed: {
     [CloudBuildFailure.EngineUnsupported]: t("Genex can’t build this Unreal version yet"),
     [CloudBuildFailure.Compile]: t("Genex couldn’t compile the game’s code"),

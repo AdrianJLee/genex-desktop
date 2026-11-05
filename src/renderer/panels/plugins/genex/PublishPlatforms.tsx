@@ -189,8 +189,8 @@ function Row({
   );
 }
 
-/** Whether Genex's answer to a row's press has come: the row says it is building, not what it offered. */
-const isAnswered = (row: PlatformRow): boolean => row.end === PlatformEnd.Building;
+/** Whether Genex's answer to a row's press has come: the row says it is sending or building, not what it offered. */
+const isAnswered = (row: PlatformRow): boolean => row.end === PlatformEnd.Building || row.end === PlatformEnd.Sending;
 
 /** What a row's press sends through the game's chat: a web version, an app, or an app built again. */
 function askText(target: PublishTarget, end: PlatformEnd, title: string): string {

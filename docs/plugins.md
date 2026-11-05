@@ -3345,7 +3345,13 @@ Genex:
   alone is staged, its `.uproject` at the top, without caches and builds as for remixing
   (`stageBuildSource`, into `cloud-source/`, removed once sent). Studio sets no size limit of its
   own: Genex takes or refuses the project by the account's limit, and its refusal says the sizes,
-  shown under the rows. It goes
+  shown under the rows. An Unreal other than the build computers' (`CLOUD_UNREAL_VERSIONS`, from the
+  `.uproject`'s `EngineAssociation`) is refused before anything goes. The press answers at once: a
+  big project takes far longer to go up than the 190 seconds a plugin call may run, so the send runs
+  behind it (`sendCloudBuild`, 6 hours, as long as Genex's signed upload links), one per game, a
+  second press joining it. `cloud-build.json` keeps it as `send` until Genex has the build; the row
+  says "Sending to Genex · N min so far", and a send that stopped says so with Try again, the CLI's
+  last words under the rows, whether it was refused, cut off or Studio closed in the middle. It goes
   privately with `genex native build --platform windows --source <folder> --json`; Genex builds it on
   its own computers and puts the app on the game's page. Each job is kept in the workspace's
   `cloud-build.json` (apart from `native.json`, which every publish writes anew) and followed with

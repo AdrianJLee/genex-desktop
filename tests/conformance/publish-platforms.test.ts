@@ -12,6 +12,7 @@ import { publishedApps, publishPlatforms } from "../../src/main/core/publish-pla
 import {
   CloudBuildFailure,
   CloudBuildState,
+  CloudSendState,
   GenexBuildReview,
   type GenexCloudBuild,
   type GenexNativeRecord,
@@ -452,6 +453,22 @@ describe("Publish's platform rows as the dialog says them", () => {
       startedAt: new Date(T0 - MINUTE_MS).toISOString(),
     });
     assert.equal(windowsRow(cloud([done, older]))[1], PlatformEnd.CloudRebuild, "the newest build speaks for the row");
+    const sending = { platform: "windows", startedAt: started, state: CloudSendState.Sending };
+    assert.deepEqual(windowsRow(record({ supported: true, builds: [done], send: sending })), [
+      "Sending to Genex · 5 min so far. Keep Genex open",
+      PlatformEnd.Sending,
+    ]);
+    const stopped = { ...sending, state: CloudSendState.Failed };
+    assert.deepEqual(
+      windowsRow(record({ supported: true, builds: [done], send: stopped })),
+      ["Sending the project to Genex stopped", PlatformEnd.CloudRetry],
+      "the newest thing asked for speaks for the row, over the build before it",
+    );
+    assert.deepEqual(failureLines([WINDOWS], record({ supported: true, builds: [], send: stopped })), []);
+    assert.deepEqual(
+      failureLines([WINDOWS], record({ supported: true, builds: [], send: { ...stopped, error: "Upload failed." } })),
+      ["Couldn’t send the project to Genex: Upload failed."],
+    );
     const otherPlatform = cloud([build({ platform: "linux" })]);
     assert.deepEqual(windowsRow(otherPlatform), ["Genex can build it on Windows for you", PlatformEnd.CloudBuild]);
     const onWindows = platformRows(

@@ -6270,4 +6270,12 @@ export default {
   "Raise context to 16K": "Aumentar contexto para 16K",
   "Raising…": "Aumentando…",
   "The chat now uses {model}. Send your message again.": "O chat agora usa {model}. Envie sua mensagem de novo.",
+  "Couldn’t send the project to Genex: {error}": "Não deu para enviar o projeto para o Genex: {error}",
+  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
+    "Por enquanto o Genex cria jogos em Unreal 5.8, e este projeto não informa versão. Abra no Unreal 5.8, salve e crie de novo.",
+  "Sending the project to Genex stopped": "O envio do projeto para o Genex parou",
+  "Sending to Genex · {minutes} min so far. Keep Genex open":
+    "Enviando para o Genex · {minutes} min até agora. Deixe o Genex aberto",
+  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
+    "Este jogo usa Unreal {version}. Por enquanto o Genex cria jogos em Unreal 5.8: atualize para 5.8 e crie de novo.",
 } satisfies LocaleCatalog;

@@ -89,6 +89,16 @@ export const MESSAGE = {
   NotOnGenexRefusal: () => t("Publish the game first, then Genex can build it"),
   /** A build on Genex asked through a CLI without `genex native build`. */
   CloudBuildsUnavailableRefusal: () => t("This version of Genex can’t build apps on Genex yet"),
+  /** A build on Genex asked of a game on an Unreal its build computers don't have. */
+  CloudEngineRefusal: (version: string) =>
+    t("This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.", {
+      version,
+    }),
+  /** {@link PUBLISH_MESSAGE.CloudEngineRefusal} for a project that names no version Genex knows. */
+  CloudNoEngineRefusal: () =>
+    t(
+      "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.",
+    ),
   /** A build on Genex asked without the game's folder to stage its project from. */
   NoGameFolderRefusal: () => t("Open the game to build its app on Genex"),
   /** A taken-down game keeps its web version on Genex for the appeal. */

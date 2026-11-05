@@ -8,7 +8,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  pinnedCliReviews,
   REVIEW_CLI,
   reviewDetailOf,
   reviewRecordOf,
@@ -68,10 +67,6 @@ describe("which CLI reads a game's review", () => {
     assert.equal(takesReviewCommand("1.39.0-dev.1"), false);
     assert.equal(takesReviewCommand("1.38.0"), false);
     assert.equal(takesReviewCommand("nonsense"), false);
-  });
-
-  it("is not the CLI this Studio pins, which stays at 1.38.0", () => {
-    assert.equal(pinnedCliReviews(), false);
   });
 });
 

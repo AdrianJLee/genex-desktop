@@ -146,27 +146,30 @@ app.whenReady().then(async()=>{
   const webAsk=await step('makeWeb','window.platformsRig.make("web")');
   assert.deepEqual(webAsk.composed,[{project:'dust-runners',text:'Make a web version of Dust Runners so I can publish it on the web.',send:true}]);
   assert.equal(webAsk.rows[0].end,'Asked the agent');
-  // An Unreal game has no web export: its web row says so and offers nothing.
+  // An Unreal game has no web export, and nothing can be done about that here: its web row is left out.
+  const row=(seen,target)=>seen.rows.find((one)=>one.target===target);
   const unreal=await step('unreal','window.platformsRig.open({scene:"unreal"})');
-  assert.deepEqual([unreal.rows[0].detail,unreal.rows[0].end],['Unreal games don’t run in a browser',null]);
+  assert.equal(row(unreal,'web'),undefined,'no web row for an Unreal game');
+  assert.deepEqual([row(unreal,'mac').detail,row(unreal,'mac').end],['Not made yet','Make with agent']);
   report.unreal=await capture('dark-unreal');
   // On a Mac, Genex builds an Unreal game's Windows app: the row offers it, the press asks Genex (not the agent), then it builds.
   const cloud=await step('unrealCloud','window.platformsRig.open({scene:"unrealCloud"})');
-  assert.deepEqual([cloud.rows[2].detail,cloud.rows[2].end],['Genex can build it on Windows for you','Build on Genex']);
-  assert.equal(cloud.rows[3].detail,'Package it on a Linux PC');
+  assert.deepEqual([row(cloud,'windows').detail,row(cloud,'windows').end],['Genex can build it on Windows for you','Build on Genex']);
+  assert.equal(row(cloud,'linux'),undefined,'a Linux app this Mac cannot package is left out');
   assert.equal(cloud.oneLine,true);
   assert.equal(cloud.overflow,false);
   report.unrealCloud=await capture('dark-unreal-cloud');
   const asked=await step('cloudBuild','window.platformsRig.make("windows")');
   assert.deepEqual(asked.published,[{via:'cloud:windows'}]);
   assert.deepEqual(asked.composed,[],'nothing goes through the game chat');
-  assert.equal(asked.rows[2].end,'Asked Genex');
+  assert.equal(row(asked,'windows').end,'Asked Genex');
   const building=await step('unrealBuilding','window.platformsRig.open({scene:"unrealBuilding",theme:"light"})');
-  assert.deepEqual([building.rows[2].detail,building.rows[2].end],['Building on Genex · 12 min so far','Building…']);
+  assert.equal(row(building,'windows').detail,'Building on Genex');
+  assert.match(row(building,'windows').end,/^Building…/,'the row clock runs beside its note');
   report.unrealBuilding=await capture('light-unreal-building');
-  // On Windows the agent packages an Unreal game's Linux app too; only the Mac app is made elsewhere.
+  // On Windows the agent packages an Unreal game's Linux app too; the Mac app, made elsewhere, is left out.
   const onWindows=await step('unrealWindows','window.platformsRig.open({scene:"unrealWindows",platform:"win32"})');
-  assert.deepEqual(onWindows.rows.slice(1).map((row)=>[row.detail,row.end]),[['Package it on a Mac',null],['Not made yet','Make with agent'],['Not made yet','Make with agent']]);
+  assert.deepEqual(onWindows.rows.map((one)=>[one.target,one.detail,one.end]),[['windows','Not made yet','Make with agent'],['linux','Not made yet','Make with agent']]);
   const linuxAsk=await step('makeLinux','window.platformsRig.make("linux")');
   assert.deepEqual(linuxAsk.composed,[{project:'dust-runners',text:'Make a Linux app of Dust Runners so I can publish it for Linux players.',send:true}]);
   report.unrealWindows=await capture('dark-unreal-windows');
@@ -284,7 +287,7 @@ app.whenReady().then(async()=>{
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac, Windows and Linux; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why, and asks the agent for a web version; an Unreal game says it has none, and on a Mac offers its Windows app built on Genex; Remove for a web version still on Genex; a web build that takes a page of apps says so and asks Genex with their consent; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac, Windows and Linux; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why, and asks the agent for a web version; an Unreal game leaves out the rows nothing can be done about, and on a Mac offers its Windows app built on Genex; Remove for a web version still on Genex; a web build that takes a page of apps says so and asks Genex with their consent; stale says so; the review card of each app and takedown state; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

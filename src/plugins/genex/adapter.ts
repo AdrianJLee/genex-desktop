@@ -2175,8 +2175,8 @@ export class GenexTools {
   }
   /**
    * The API's answer for the game's apps (when its last publish sent any) and the owner read of the
-   * game, which names its takedown. The pinned CLI's `native list --json` answers only the live
-   * builds, so the plugin asks the API itself, with the same sign-in.
+   * game, which names its takedown. CLIs before 1.38.2 answer only the live builds from `native list
+   * --json`, so the plugin asks the API itself, with the same sign-in: one read for every CLI.
    */
   async #reviewOfApi(project: string, state: GenexPublishState): Promise<GenexReviewRecord> {
     const saved = readNativeSaved(await readJsonOr(path.join(this.#publishDir(project), NATIVE_FILE)));

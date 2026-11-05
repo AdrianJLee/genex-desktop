@@ -3336,10 +3336,10 @@ Genex:
   through the plugin's `review-status` (`native-review.ts`, kept in `publish/<game>/review.json`
   with what the host last told; `#sendApps` never writes it). Web games keep today's publishing and
   check: nothing here reviews or holds one. The read is `genex review --json --no-brief` on a CLI that
-  has it (1.39.0, `REVIEW_CLI`, `pinnedCliReviews()`); the pinned CLI's `native list --json` answers
-  only `builds`, so with it the plugin reads `GET /api/games/:id/native-builds` (both `builds` and
-  `submissions`) and the owner read of the game (`takedown`, or an older API's `takedownAt`) itself,
-  over the same sign-in. An API with no `reviewDetail` reads as today: a held app is checked, a
+  has it (1.39.0, `REVIEW_CLI`, `pinnedCliReviews()`); without it the plugin reads
+  `GET /api/games/:id/native-builds` (both `builds` and `submissions`; CLIs before 1.38.2 drop
+  `submissions` from `native list --json`) and the owner read of the game (`takedown`, or an older
+  API's `takedownAt`) itself, over the same sign-in. An API with no `reviewDetail` reads as today: a held app is checked, a
   turned-down one has `reviewReason` as its one thing, and no Request human review is offered; an
   admin's build (no `review`) is live at once with no Check step. Things to fix are capped at 10
   (200 characters, `where` 120); every value is the API's, never matched as English.

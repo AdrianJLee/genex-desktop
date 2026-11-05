@@ -3808,6 +3808,15 @@ export const PUBLISH_PLATFORM_WORDS = {
   cloudBuilding: t("Building on Genex"),
   /** The game's project going up for a build; its clock is beside it. */
   cloudSending: t("Sending to Genex. Keep Genex open"),
+  /** A failed build's first error, then how many more the agent is given. */
+  cloudMoreErrors: (count: number) => t("{count, plural, one {and # more error} other {and # more errors}}", { count }),
+  cloudFix: t("Fix with agent"),
+  cloudFixLabel: t("Ask the agent to fix these errors"),
+  cloudFixAsk: (players: string, title: string, errors: string) =>
+    t(
+      "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}",
+      { players, title, errors },
+    ),
   cloudSendStopped: t("Sending the project to Genex stopped"),
   /** Why it stopped, under the rows, in Genex's or the CLI's words. */
   cloudSendFailedLine: (error: string) => t("Couldn’t send the project to Genex: {error}", { error }),

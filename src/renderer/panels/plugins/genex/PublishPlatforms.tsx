@@ -14,6 +14,7 @@
  */
 import type { JSX } from "react";
 import { useState } from "react";
+import { SECOND_MS } from "../../../../shared/duration.ts";
 import { errorMessage } from "../../../../shared/errors.ts";
 import type { GenexNativeRecord } from "../../../../shared/genex.ts";
 import { t } from "../../../../shared/i18n.ts";
@@ -37,6 +38,8 @@ import {
   replacesAppsPage,
   PlatformEnd,
   type PlatformRow,
+  cloudErrors,
+  cloudFixAsk,
   platformRows,
   shownRows,
   reachLine,
@@ -96,6 +99,9 @@ const ASK: Partial<Record<PlatformEnd, { text: string; label: (name: string) => 
   [PlatformEnd.CloudRebuild]: { text: WORDS.rebuild, label: WORDS.cloudRetryLabel },
   [PlatformEnd.CloudRetry]: { text: WORDS.cloudRetry, label: WORDS.cloudRetryLabel },
 };
+
+/** How long a press of Build on Genex says it asked: past the publish record's slowest read. */
+const CLOUD_ASK_HOLD_MS = 12 * SECOND_MS;
 
 /** The notes of work going on now, which shimmer as the chat's current work does. */
 const WORKING_ENDS: ReadonlySet<PlatformEnd> = new Set([PlatformEnd.Sending, PlatformEnd.Building]);
@@ -214,6 +220,53 @@ function askText(target: PublishTarget, end: PlatformEnd, title: string): string
   return end === PlatformEnd.Rebuild ? rebuildAsk(target, title) : makeAppAsk(target, title);
 }
 
+/** What went wrong in a build on Genex: the first error, how many more, and the agent to fix them all. */
+function CloudErrors({
+  project,
+  title,
+  platforms,
+  native,
+}: {
+  project: string;
+  title: string;
+  platforms: readonly PublishPlatform[];
+  native: GenexNativeRecord | undefined;
+}): JSX.Element | null {
+  /** The errors last handed to the agent: new ones offer it again. */
+  const [askedFix, setAskedFix] = useState<string | null>(null);
+  const fix = cloudErrors(platforms, native);
+  if (!fix) return null;
+  const key = fix.errors.join("\n");
+  const askFix = (): void => {
+    composeInChat({ project, text: cloudFixAsk(fix, title), send: true });
+    setAskedFix(key);
+  };
+  return (
+    <div className="genex-publish-cloud-errors" data-publish-cloud-errors>
+      <p className="genex-publish-platform-failure">
+        {fix.errors[0]}
+        {fix.errors.length > 1 && ` ${WORDS.cloudMoreErrors(fix.errors.length - 1)}`}
+      </p>
+      {askedFix === key ? (
+        <span className="genex-publish-platform-note" role="status">
+          {WORDS.asked}
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="genex-publish-platform-make"
+          aria-label={WORDS.cloudFixLabel}
+          data-publish-cloud-fix
+          onClick={askFix}
+        >
+          {WORDS.cloudFix}
+          <Icon name="chevron-right" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * The platform rows and who plays what, or nothing for a web game with no app. Read once while the
  * dialog is open: hidden while it celebrates, they are not read again after.
@@ -274,11 +327,17 @@ export function PublishPlatforms({
     setRefused(null);
     setCloudAsked((before) => new Map(before).set(target, builds(target)));
     const name = rows.find((row) => row.target === target)?.name ?? "";
+    const forget = (): void => setCloudAsked((before) => new Map([...before].filter(([one]) => one !== target)));
     // The row reads Genex's answer from the publish record as it comes; a refusal is said under the rows.
-    void window.studio.genexCloudBuild(project, target).catch((error: unknown) => {
-      setRefused(WORDS.cloudRefused(name, errorMessage(error)));
-      setCloudAsked((before) => new Map([...before].filter(([one]) => one !== target)));
-    });
+    // The press lets go once the record has had time to say so: Genex may answer with the build it
+    // already has, and then no new build ever ends the note.
+    void window.studio
+      .genexCloudBuild(project, target)
+      .then(() => window.setTimeout(forget, CLOUD_ASK_HOLD_MS))
+      .catch((error: unknown) => {
+        setRefused(WORDS.cloudRefused(name, errorMessage(error)));
+        forget();
+      });
   };
   return (
     <div className="genex-publish-platforms" data-genex-publish-platforms>
@@ -293,6 +352,7 @@ export function PublishPlatforms({
           />
         ))}
       </ul>
+      <CloudErrors project={project} title={title} platforms={platforms} native={native} />
       {failureLines(platforms, native).map((line) => (
         <p key={line} className="genex-publish-platform-failure">
           {line}

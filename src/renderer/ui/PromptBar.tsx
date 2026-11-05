@@ -1,7 +1,7 @@
 import { markPerformance } from "../performance.tsx";
 import { PerformanceMarkName } from "../../shared/performance.ts";
 import { t } from "../../shared/i18n.ts";
-import type { ClipboardEvent, JSX, KeyboardEvent, Ref, RefObject } from "react";
+import type { ClipboardEvent, CSSProperties, JSX, KeyboardEvent, Ref, RefObject } from "react";
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons.tsx";
 import { Shortcut } from "./Shortcut.tsx";
@@ -249,67 +249,27 @@ function backspaceTag(
   return true;
 }
 
-/**
- * Autosize up to a compact maximum — and never smaller than the placeholder, which a wrapping
- * one was: an empty textarea measures none of it, so the instruction was sliced through
- * mid-word on the one screen a new user has.
- */
-function useAutosize(inputRef: RefObject<HTMLTextAreaElement | null>, draft: string, placeholder: string): void {
-  const lastWidth = useRef(0);
+/** Each committed draft is a typing journey's end (`composer-commit`, docs/performance.md). */
+function useComposerCommitMark(draft: string): void {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the mark is taken once per new draft
   useLayoutEffect(() => {
     markPerformance(PerformanceMarkName.ComposerCommit);
-    const input = inputRef.current;
-    if (!input) return;
-    const measure = (): number => {
-      input.style.height = "0px";
-      return input.scrollHeight;
-    };
-    const fit = (): void => {
-      // Measuring collapses the text box, so its wrapper keeps its height meanwhile: a composer
-      // that shrank for the measurement made the chat above it taller, the chat's scroll was
-      // clamped to fit, and the conversation stayed lower once the box grew back (a flash on a
-      // long paste, a bounce on deleting it).
-      const release = holdHeight(input.parentElement);
-      let height = measure();
-      if (draft.length === 0 && input.placeholder) {
-        // Borrowed for the measurement and given back inside the same layout pass: nothing paints
-        // with the placeholder as the value.
-        input.value = input.placeholder;
-        height = Math.max(height, measure());
-        input.value = "";
-      }
-      input.style.height = `${Math.min(Math.max(height, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT)}px`;
-      input.style.overflowY = height > MAX_INPUT_HEIGHT ? "auto" : "hidden";
-      release();
-    };
-    fit();
-    // The chat column is draggable, so the same words wrap differently from one drag to the next.
-    let resizeFrame = 0;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      if (Math.abs(width - lastWidth.current) < 0.5) return;
-      lastWidth.current = width;
-      // Write the new height outside the observer delivery cycle.
-      cancelAnimationFrame(resizeFrame);
-      resizeFrame = requestAnimationFrame(fit);
-    });
-    observer.observe(input);
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(resizeFrame);
-    };
-  }, [draft, placeholder]);
+  }, [draft]);
 }
 
-/** Keeps an element at the height it has now until released: what changes inside it moves nothing outside. */
-function holdHeight(element: HTMLElement | null): () => void {
-  if (!element) return () => {};
-  const before = element.style.height;
-  element.style.height = getComputedStyle(element).height;
-  return () => {
-    element.style.height = before;
-  };
-}
+/**
+ * The text box sizes itself to its words (`field-sizing: content`) between a compact minimum and
+ * maximum, then scrolls. An empty box sizes to its placeholder, so a wrapping instruction is never
+ * sliced through mid-word. Measuring it by collapsing it in script made the chat above it taller
+ * for a moment: the chat's scroll was clamped to fit, and the conversation stayed lower once the
+ * box grew back (a flash on a long paste, a bounce on deleting it).
+ */
+const PROMPT_INPUT_SIZE = {
+  fieldSizing: "content",
+  minHeight: MIN_INPUT_HEIGHT,
+  maxHeight: MAX_INPUT_HEIGHT,
+  overflowY: "auto",
+} as const satisfies CSSProperties;
 
 /** The board with these pictures added after the ones already on it, each once. */
 function withFrames(current: PickedFrame[], added: PickedFrame[]): PickedFrame[] {
@@ -839,6 +799,7 @@ function PromptTextarea({
             "aria-activedescendant": list.option ?? undefined,
           }
         : {})}
+      style={PROMPT_INPUT_SIZE}
       className={`${PROMPT_INPUT_CLASS} resize-none bg-transparent text-ink outline-none placeholder:text-ink-3`}
     />
   );
@@ -964,7 +925,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   // Add's Plan mode asks for what to plan, as Codex's does, until the message goes.
   const contextual = plan.planOn ? PLAN_PLACEHOLDER : (props.placeholder ?? DEFAULT_PLACEHOLDER);
   const placeholderNow = props.about?.placeholder ?? composerPlaceholder(coordinating, contextual, props.leadListens);
-  useAutosize(inputRef, draft, placeholderNow);
+  useComposerCommitMark(draft);
   const composer = useComposerSend(props, { draft, setDraft, plan, board, inputRef, mentions });
   const held = useFileDrop(panelRef, disabled, board.addFiles);
 

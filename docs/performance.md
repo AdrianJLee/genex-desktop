@@ -77,7 +77,8 @@ counters carry the regression gates.
   and beside a stand-in game that keeps the GPU busy, and counts painted frames with a blank
   block; it also keeps a CPU profile and a trace of one fling. First it pastes a long message
   into the composer and deletes it: in every frame a following chat keeps its newest line above
-  the composer, and a chat the reader pressed in holds still. `STUDIO_CHAT_SCROLL_PASS=composer`
+  the composer, and a chat the reader pressed in holds still; an empty composer is as tall as a
+  wrapping placeholder needs. `STUDIO_CHAT_SCROLL_PASS=composer`
   runs only that, `game` only the flings beside the game.
 - Fixture messages for journeys: `fixture:stream` (a short streamed reply) and `fixture:stream-long`
   (about ten thousand characters of Markdown and code, streamed at a fast model's pace, in a game chat).

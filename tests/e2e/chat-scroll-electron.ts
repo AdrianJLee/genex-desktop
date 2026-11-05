@@ -3,8 +3,8 @@
  * was painted: every compositor frame (screencast) checked for a blank block, every main-thread
  * frame for viewport the transcript left uncovered, the main thread's cost, then a CPU profile
  * and a Chromium trace of one fling. First, a long message pasted into the composer and deleted
- * again must leave the conversation where it was in every frame. Disposable profile; no engine,
- * account or network.
+ * again must leave the conversation where it was in every frame, and an empty composer must fit
+ * a placeholder that wraps. Disposable profile; no engine, account or network.
  */
 import { app, BrowserWindow, contentTracing, nativeImage, type WebContents, WebContentsView } from "electron";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -55,6 +55,13 @@ const LONG_MESSAGE = Array.from(
 ).join("\n");
 /** Frames recorded before the paste: where the conversation was, which every later frame keeps. */
 const BEFORE_PASTE_MS = 150;
+/** A placeholder that wraps onto several lines of the composer, as a long instruction does on a narrow screen. */
+const LONG_PLACEHOLDER = Array.from(
+  { length: 3 },
+  () => "Describe the game you want to make: its world, who plays it and what makes it fun.",
+).join(" ");
+/** A press this far inside the conversation's left edge lands in its padding, beside the rows: nothing there opens. */
+const PRESS_INSET_PX = 6;
 /** Backspace, as a key the page receives. */
 const BACKSPACE = { key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8 } as const;
 /** One image pixel per CSS pixel is plenty to find an empty stretch, and keeps each frame small. */
@@ -281,26 +288,56 @@ async function press(wc: WebContents, key: typeof BACKSPACE): Promise<void> {
   await wc.debugger.sendCommand("Input.dispatchKeyEvent", { type: "keyUp", ...key });
 }
 
-/** A click in the middle of the conversation, as a reader's press on its text. */
+/** A reader's press in the conversation, in its padding beside the rows (it stops the chat following). */
 async function pressInConversation(wc: WebContents): Promise<void> {
-  const { x, y } = await page<{ x: number; y: number }>(wc, "window.scrollerBox()");
+  const { left, y } = await page<{ left: number; y: number }>(wc, "window.scrollerBox()");
+  const x = left + PRESS_INSET_PX;
   for (const type of ["mousePressed", "mouseReleased"])
     await wc.debugger.sendCommand("Input.dispatchMouseEvent", { type, x, y, button: "left", clickCount: 1 });
 }
 
-/** The page's frames while a long message is pasted into the composer, then selected and deleted. */
-async function pasteAndDelete(wc: WebContents): Promise<PageFrame[]> {
+interface PromptState {
+  length: number;
+  height: number;
+}
+
+/**
+ * The page's frames while a long message is pasted into the composer, then selected and deleted.
+ * A paste that never reached the box, or a delete that left words in it, tested nothing: it fails.
+ */
+async function pasteAndDelete(wc: WebContents, scene: string): Promise<PageFrame[]> {
   await page(wc, "window.focusPrompt()");
+  const before = await page<PromptState>(wc, "window.promptState()");
   await page(wc, "window.startSampling()");
   await sleep(BEFORE_PASTE_MS);
   await wc.debugger.sendCommand("Input.insertText", { text: LONG_MESSAGE });
   await sleep(TAIL_MS);
+  const pasted = await page<PromptState>(wc, "window.promptState()");
   wc.selectAll();
   await sleep(TAIL_MS);
   await press(wc, BACKSPACE);
   await sleep(TAIL_MS);
+  const deleted = await page<PromptState>(wc, "window.promptState()");
   const { frames } = await page<{ frames: PageFrame[] }>(wc, "window.stopSampling()");
+  const grew = pasted.length === LONG_MESSAGE.length && pasted.height > before.height;
+  if (!grew) fail(`${scene}: the paste did not fill the composer`, { before, pasted });
+  if (deleted.length) fail(`${scene}: the delete left words in the composer`, deleted);
+  if (!frames.length) fail(`${scene}: no frames were recorded`, frames);
   return frames;
+}
+
+/** An empty box is as tall as the words of its placeholder need, so a wrapping one is never cut through. */
+async function placeholderFits(wc: WebContents): Promise<{ placeholder: number; typed: number }> {
+  await page(wc, "window.focusPrompt()");
+  const placeholder = await page<number>(wc, `window.heightWithPlaceholder(${JSON.stringify(LONG_PLACEHOLDER)})`);
+  await wc.debugger.sendCommand("Input.insertText", { text: LONG_PLACEHOLDER });
+  await sleep(TAIL_MS);
+  const typed = (await page<PromptState>(wc, "window.promptState()")).height;
+  wc.selectAll();
+  await press(wc, BACKSPACE);
+  await sleep(TAIL_MS);
+  if (placeholder < typed) fail("an empty composer cut through a placeholder that wraps", { placeholder, typed });
+  return { placeholder, typed };
 }
 
 /**
@@ -311,12 +348,12 @@ async function pasteAndDelete(wc: WebContents): Promise<PageFrame[]> {
  */
 async function composerScenes(wc: WebContents): Promise<Record<string, unknown>> {
   await page(wc, "window.openChat()");
-  const following = await pasteAndDelete(wc);
+  const following = await pasteAndDelete(wc, "following");
   const dropped = following.filter((frame) => frame.belowBottom > 1);
   if (dropped.length) fail("a paste or its delete dropped the newest line under the composer", dropped.slice(0, 8));
   await page(wc, "window.openChat()");
   await pressInConversation(wc);
-  const reading = await pasteAndDelete(wc);
+  const reading = await pasteAndDelete(wc, "reading");
   const start = reading[0]?.scrollTop;
   const moved = reading.filter((frame) => frame.scrollTop !== start);
   if (moved.length)
@@ -326,7 +363,7 @@ async function composerScenes(wc: WebContents): Promise<Record<string, unknown>>
     maxBelowBottomPx: Math.max(0, ...frames.map((frame) => frame.belowBottom)),
     scrollTops: [...new Set(frames.map((frame) => frame.scrollTop))],
   });
-  const result = { following: summary(following), reading: summary(reading) };
+  const result = { following: summary(following), reading: summary(reading), placeholder: await placeholderFits(wc) };
   console.log(`composer paste and delete: ${JSON.stringify(result)}`);
   return result;
 }
@@ -378,11 +415,15 @@ async function profile(wc: WebContents): Promise<unknown> {
   return summarizeProfile(cpu, bundleModules(readFileSync(BUNDLE, "utf8")), bundle);
 }
 
-/** Every fling, alone and beside the stand-in game, gated, then the profile of one. */
-async function flings(wc: WebContents, win: BrowserWindow, report: Record<string, unknown>): Promise<void> {
+/** Every fling, alone (unless only the game's pass runs) and beside the stand-in game, gated, then the profile of one. */
+async function flings(
+  wc: WebContents,
+  win: BrowserWindow,
+  report: Record<string, unknown>,
+  besideGameOnly: boolean,
+): Promise<void> {
   const results: SceneResult[] = [];
-  if (process.env.STUDIO_CHAT_SCROLL_PASS !== "game")
-    for (const speed of SPEEDS) results.push(...(await scenes(wc, null, speed)));
+  if (!besideGameOnly) for (const speed of SPEEDS) results.push(...(await scenes(wc, null, speed)));
   const game = await startGame(win);
   for (const speed of SPEEDS) results.push(...(await scenes(wc, game, speed)));
   report.game = { load: GAME_LOAD };
@@ -438,7 +479,7 @@ async function main(): Promise<void> {
     // composer's paste (quicker looks while iterating).
     const pass = process.env.STUDIO_CHAT_SCROLL_PASS;
     if (pass !== "game") report.composer = await composerScenes(wc);
-    if (pass !== "composer") await flings(wc, win, report);
+    if (pass !== "composer") await flings(wc, win, report, pass === "game");
     writeFileSync(path.join(EVIDENCE, "chat.png"), (await wc.capturePage()).toPNG());
   } catch (error) {
     report.failure = error instanceof Error ? error.stack : String(error);

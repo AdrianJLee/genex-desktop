@@ -347,11 +347,33 @@ function stopSampling(): { frames: ScrollFrame[]; longTasks: number[] } {
   return { frames, longTasks };
 }
 
-/** Put the caret in the prompt box without a press in the conversation (a press there stops it following). */
-function focusPrompt(): void {
+const promptBox = (): HTMLTextAreaElement => {
   const input = document.querySelector<HTMLTextAreaElement>("[data-promptbar] textarea");
   if (!input) throw new Error("Missing prompt box");
-  input.focus({ preventScroll: true });
+  return input;
+};
+
+/** Put the caret in the prompt box without a press in the conversation (a press there stops it following). */
+function focusPrompt(): void {
+  promptBox().focus({ preventScroll: true });
+}
+
+/** How tall the empty prompt box is with these words as its placeholder (CSS px); its own comes back after. */
+async function heightWithPlaceholder(words: string): Promise<number> {
+  const input = promptBox();
+  const kept = input.placeholder;
+  input.placeholder = words;
+  await frame();
+  const height = Math.round(input.getBoundingClientRect().height);
+  input.placeholder = kept;
+  await frame();
+  return height;
+}
+
+/** How many characters the prompt box holds and how tall it is (CSS px). */
+function promptState(): { length: number; height: number } {
+  const input = promptBox();
+  return { length: input.value.length, height: Math.round(input.getBoundingClientRect().height) };
 }
 
 Object.assign(window, {
@@ -363,4 +385,6 @@ Object.assign(window, {
   startWork,
   stopWork,
   focusPrompt,
+  promptState,
+  heightWithPlaceholder,
 });

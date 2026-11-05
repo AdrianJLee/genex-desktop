@@ -265,6 +265,11 @@ function useAutosize(inputRef: RefObject<HTMLTextAreaElement | null>, draft: str
       return input.scrollHeight;
     };
     const fit = (): void => {
+      // Measuring collapses the text box, so its wrapper keeps its height meanwhile: a composer
+      // that shrank for the measurement made the chat above it taller, the chat's scroll was
+      // clamped to fit, and the conversation stayed lower once the box grew back (a flash on a
+      // long paste, a bounce on deleting it).
+      const release = holdHeight(input.parentElement);
       let height = measure();
       if (draft.length === 0 && input.placeholder) {
         // Borrowed for the measurement and given back inside the same layout pass: nothing paints
@@ -275,6 +280,7 @@ function useAutosize(inputRef: RefObject<HTMLTextAreaElement | null>, draft: str
       }
       input.style.height = `${Math.min(Math.max(height, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT)}px`;
       input.style.overflowY = height > MAX_INPUT_HEIGHT ? "auto" : "hidden";
+      release();
     };
     fit();
     // The chat column is draggable, so the same words wrap differently from one drag to the next.
@@ -293,6 +299,16 @@ function useAutosize(inputRef: RefObject<HTMLTextAreaElement | null>, draft: str
       cancelAnimationFrame(resizeFrame);
     };
   }, [draft, placeholder]);
+}
+
+/** Keeps an element at the height it has now until released: what changes inside it moves nothing outside. */
+function holdHeight(element: HTMLElement | null): () => void {
+  if (!element) return () => {};
+  const before = element.style.height;
+  element.style.height = getComputedStyle(element).height;
+  return () => {
+    element.style.height = before;
+  };
 }
 
 /** The board with these pictures added after the ones already on it, each once. */

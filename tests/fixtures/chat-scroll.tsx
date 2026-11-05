@@ -1,8 +1,8 @@
 /**
  * Test-owned production ChatPanel holding a long game chat (a hundred and more turns of reports,
- * lists, code and tool work), for scrolling it fast. The runner flings the scroller with real
- * input; the page samples, in every frame it draws, how much of the viewport the transcript left
- * empty. No engine, account or network.
+ * lists, code and tool work), for scrolling it fast. The runner flings the scroller and pastes into
+ * the composer with real input; the page samples, in every frame it draws, where the scroll is and
+ * how much of the viewport the transcript left empty. No engine, account or network.
  */
 import { StrictMode } from "react";
 import { flushSync } from "react-dom";
@@ -276,6 +276,8 @@ async function scrollToEdge(edge: "top" | "bottom"): Promise<number> {
 interface ScrollFrame {
   at: number;
   scrollTop: number;
+  /** How far the newest line is below the conversation's bottom edge, px (0 at the bottom). */
+  belowBottom: number;
   /** Viewport pixels inside the transcript that no mounted row covers (its placeholder space). */
   uncovered: number;
   mounted: number;
@@ -325,9 +327,11 @@ function startSampling(): void {
     const at = Math.round(performance.now() - start);
     setTimeout(() => {
       if (!sampling) return;
+      const element = scroller();
       frames.push({
         at,
-        scrollTop: Math.round(scroller().scrollTop),
+        scrollTop: Math.round(element.scrollTop),
+        belowBottom: Math.round(element.scrollHeight - element.scrollTop - element.clientHeight),
         uncovered: uncoveredPx(),
         mounted: Number(document.querySelector<HTMLElement>("[data-chat-transcript]")?.dataset.mountedEntries ?? 0),
       });
@@ -343,4 +347,20 @@ function stopSampling(): { frames: ScrollFrame[]; longTasks: number[] } {
   return { frames, longTasks };
 }
 
-Object.assign(window, { openChat, scrollerBox, scrollToEdge, startSampling, stopSampling, startWork, stopWork });
+/** Put the caret in the prompt box without a press in the conversation (a press there stops it following). */
+function focusPrompt(): void {
+  const input = document.querySelector<HTMLTextAreaElement>("[data-promptbar] textarea");
+  if (!input) throw new Error("Missing prompt box");
+  input.focus({ preventScroll: true });
+}
+
+Object.assign(window, {
+  openChat,
+  scrollerBox,
+  scrollToEdge,
+  startSampling,
+  stopSampling,
+  startWork,
+  stopWork,
+  focusPrompt,
+});

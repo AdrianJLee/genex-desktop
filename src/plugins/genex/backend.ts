@@ -318,6 +318,18 @@ const ACTIONS: Record<string, Action> = {
   [GenexAction.PublishOpen]: withProject((genex, project, args) => genex.publishLinks(project, args.target)),
   [GenexAction.CoverAuto]: withProject((genex, project, _args, _service, camera) => genex.coverAuto(project, camera)),
   [GenexAction.CoverPick]: withProject((genex, project, args) => genex.coverPick(project, args.sha256)),
+  [GenexAction.ReviewStatus]: withProject((genex, project, args) => genex.reviewStatus(project, args)),
+  [GenexAction.ReviewRequest]: async (genex, args, ctx, service) => {
+    if (!ctx.project) throw new Error(MESSAGE.OpenProject());
+    // An app Genex keeps no copy of goes again from the game folder: only real builds inside it.
+    const uploads = await appsToSend(ctx, args.native, service);
+    const { platform, arch, note } = args;
+    return genex.requestReview(ctx.project, { platform, arch, note }, uploads);
+  },
+  [GenexAction.AppsResend]: async (genex, args, ctx, service) => {
+    if (!ctx.project) throw new Error(MESSAGE.OpenProject());
+    return genex.resendApps(ctx.project, await appsToSend(ctx, args.native, service));
+  },
   [GenexAction.PublishBadge]: async (genex, args, ctx) => {
     if (!ctx.project) return {};
     return publishButtonStatus(

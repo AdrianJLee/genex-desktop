@@ -5846,4 +5846,110 @@ export default {
   "Genex can’t play this game’s app on this computer.": "Genex 无法在这台电脑上运行这个游戏的应用。",
   "Open the game’s chat to have the agent package it.": "打开游戏的聊天，让智能体来打包。",
   "Not open in Unreal": "未在 Unreal 中打开",
+  "A person at Genex already decided this build. Change it and publish it again.":
+    "Genex 的工作人员已经对这个版本做出决定。修改后再发布一次吧。",
+  "A person at Genex is already reviewing it.": "Genex 的工作人员已经在审核了。",
+  "A person at Genex is reviewing it": "Genex 的工作人员正在审核",
+  "A person at Genex reviewed it.": "Genex 的工作人员审核过了。",
+  "After the fix, Studio asks a person at Genex to look again. Usually within a day.":
+    "修复后，Studio 会请 Genex 的工作人员再看一次。通常一天内处理。",
+  "After the fix, Studio asks a person at Genex to put it back. Usually within a day.":
+    "修复后，Studio 会请 Genex 的工作人员恢复上线。通常一天内处理。",
+  "After the fix, it publishes by itself and Genex checks it again.": "修复后会自动发布，Genex 会再检查一次。",
+  "Anyone can find it on Genex.": "任何人都能在 Genex 上找到它。",
+  "Anything we should know? (optional)": "有什么想告诉我们的吗？（可选）",
+  "Checking your fixes": "正在检查你的修复",
+  "Checking your {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}":
+    "{app, select, mac {正在检查你的 Mac 应用} windows {正在检查你的 Windows 应用} linux {正在检查你的 Linux 应用} other {正在检查你的应用}}",
+  "Checking · {elapsed}": "检查中 · {elapsed}",
+  "Don't ask automatically": "不要自动申请",
+  "Don't publish it automatically": "不要自动发布",
+  "Fix again": "再修一次",
+  "Fix with agent": "让智能体修复",
+  "Fixed. Publish it, then ask a person at Genex to put it back.": "已修复。先发布，再请 Genex 的工作人员恢复上线。",
+  "For example: the coin page is our own shop, not a third party.": "例如：金币页面是我们自己的商店，不是第三方的。",
+  "Genex checks your app before players get it. Usually a few minutes.":
+    "在玩家拿到之前，Genex 会先检查你的应用。通常需要几分钟。",
+  "Genex has nothing for this game's agent to fix": "Genex 没有需要这个游戏的智能体修复的内容",
+  "Genex reads your app before players get it. Usually a few minutes.":
+    "在玩家拿到之前，Genex 会先查看你的应用。通常需要几分钟。",
+  "Genex review": "Genex 审核",
+  "Hidden from players until it's fixed and a person at Genex puts it back.":
+    "在修复完成并由 Genex 工作人员恢复上线之前，玩家看不到它。",
+  "Human review agreed with the check.": "人工审核与自动检查的结论一致。",
+  "Human review agreed with the takedown.": "人工审核维持下架决定。",
+  "Human review requested": "已申请人工审核",
+  "Human review requested. A person reviews the next {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} you send.":
+    "已申请人工审核。你下次发送的{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}会由工作人员审核。",
+  "Human review requested. Usually within a day. You can still fix it yourself.":
+    "已申请人工审核。通常一天内处理。你也可以自己修复。",
+  "If Genex ever takes it down, you'll hear it here and by email.": "如果 Genex 下架它，你会在这里和邮件中收到通知。",
+  "Keep the note under {max} characters.": "备注请不要超过 {max} 个字符。",
+  "Nothing went public. After the fix, it publishes by itself and Genex checks it again.":
+    "什么都没有公开。修复后会自动发布，Genex 会再检查一次。",
+  "Open a game": "打开一个游戏",
+  "Open on Genex": "在 Genex 上打开",
+  "Players keep the version they have. After the fix, it publishes by itself and Genex checks it again.":
+    "玩家会继续使用现有版本。修复后会自动发布，Genex 会再检查一次。",
+  "Players keep the {date} version.": "玩家继续使用 {date} 的版本。",
+  "Public again": "已重新公开",
+  Published: "已发布",
+  "Request human review": "申请人工审核",
+  "Send request": "发送申请",
+  "Sending the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again so a person can read it…":
+    "正在重新发送{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}，以便工作人员查看…",
+  "Sent for review": "已提交审核",
+  "Sent to your agent. Publish it yourself when it's ready.": "已发给你的智能体。准备好后请自己发布。",
+  "Sent to your agent. When it's done, Studio asks a person at Genex to put it back.":
+    "已发给你的智能体。完成后，Studio 会请 Genex 的工作人员恢复上线。",
+  "Sent to your agent. When it's done, Studio publishes it and Genex checks it again.":
+    "已发给你的智能体。完成后，Studio 会发布它，Genex 会再检查一次。",
+  "Show {n} more": "再显示 {n} 条",
+  "Sign in to see what to fix": "登录后查看需要修复的内容",
+  "Someone from the Genex team agreed it's fine.": "Genex 团队确认没有问题。",
+  "Taken down": "已下架",
+  "Taking longer than usual. If the check can't finish, a person at Genex reviews it.":
+    "比平时要久。如果检查无法完成，会由 Genex 的工作人员审核。",
+  "Tell us why (at least {min} characters)": "说说原因（至少 {min} 个字符）",
+  "Tell us why in at least {min} characters.": "请用至少 {min} 个字符说明原因。",
+  "That fix isn't the game's latest one": "这不是该游戏最新的一次修复",
+  "The Genex team is reviewing this game.": "Genex 团队正在审核这个游戏。",
+  "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
+    "修复还没有构建。重新构建{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}后就会发布。",
+  "There's nothing to ask about right now.": "目前没有可以申请的内容。",
+  "Think we got it wrong? Someone from the Genex team will check your app, usually within a day. Players don't get it until then.":
+    "觉得我们判断错了？Genex 团队会检查你的应用，通常一天内处理。在此之前玩家拿不到它。",
+  "Think we got it wrong? Someone from the Genex team will check your game, usually within a day. It stays taken down until then.":
+    "觉得我们判断错了？Genex 团队会检查你的游戏，通常一天内处理。在此之前它会保持下架。",
+  "This decision can't be reviewed again.": "这个决定无法再次审核。",
+  "Turned down 3 times this week, so a person at Genex reviews the next build. Usually within a day.":
+    "本周已被拒绝 3 次，下一个版本将由 Genex 的工作人员审核。通常一天内处理。",
+  "Usually within a day. You'll hear here and by email.": "通常一天内处理。你会在这里和邮件中收到通知。",
+  "Version {version} is live": "版本 {version} 已上线",
+  "Version {version} is live for {app, select, mac {Mac} windows {Windows} linux {Linux} other {desktop}} players.":
+    "版本 {version} 已面向{app, select, mac {Mac} windows {Windows} linux {Linux} other {桌面}}玩家上线。",
+  "You already asked. A person will look at it, usually within a day.":
+    "你已经申请过了。工作人员会查看，通常一天内处理。",
+  "You can close this. Studio tells you when it's done.": "可以关闭这个窗口。完成后 Studio 会告诉你。",
+  "Your agent stopped before it finished.": "你的智能体在完成前停止了。",
+  "usually a few minutes": "通常需要几分钟",
+  "{app, select, mac {Mac} windows {Windows} linux {Linux} other {Desktop}} players get it now.":
+    "{app, select, mac {Mac} windows {Windows} linux {Linux} other {桌面}}玩家现在可以获得它。",
+  "{count}/{max}": "{count}/{max}",
+  "{minutes}m {seconds}s": "{minutes}分{seconds}秒",
+  "{n, plural, one {# fix sent} other {# fixes sent}}": "{n, plural, other {已发送 # 项修复}}",
+  "{n, plural, one {Can't publish yet: # thing to fix} other {Can't publish yet: # things to fix}}":
+    "{n, plural, other {暂时无法发布：有 # 项需要修复}}",
+  "{n, plural, one {Not approved: # thing still to fix after the re-check} other {Not approved: # things still to fix after the re-check}}":
+    "{n, plural, other {未通过：再次检查后仍有 # 项需要修复}}",
+  "{n, plural, one {Not approved: # thing to fix} other {Not approved: # things to fix}}":
+    "{n, plural, other {未通过：有 # 项需要修复}}",
+  "{n, plural, one {Taken down: # thing to fix} other {Taken down: # things to fix}}":
+    "{n, plural, other {已下架：有 # 项需要修复}}",
+  "{n, plural, one {Update not approved: # thing to fix} other {Update not approved: # things to fix}}":
+    "{n, plural, other {更新未通过：有 # 项需要修复}}",
+  "{state, select, taken_down {Taken down} not_approved {Not approved} other {In review}} · reconnect to see what to fix":
+    "{state, select, taken_down {已下架} not_approved {未通过} other {审核中}} · 重新连接后查看需要修复的内容",
+  "{title} is live!": "{title} 已上线！",
+  "{title} is public again": "{title} 已重新公开",
 } satisfies LocaleCatalog;

@@ -6304,4 +6304,116 @@ export default {
   "Genex can’t play this game’s app on this computer.": "Genex ne peut pas lancer l’app de ce jeu sur cet ordinateur.",
   "Open the game’s chat to have the agent package it.": "Ouvre le chat du jeu pour que l’agent l’empaquette.",
   "Not open in Unreal": "Pas ouvert dans Unreal",
+  "A person at Genex already decided this build. Change it and publish it again.":
+    "Une personne de Genex a déjà tranché sur ce build. Modifie-le et republie-le.",
+  "A person at Genex is already reviewing it.": "Une personne de Genex l’examine déjà.",
+  "A person at Genex is reviewing it": "Une personne de Genex l’examine",
+  "A person at Genex reviewed it.": "Une personne de Genex l’a examiné.",
+  "After the fix, Studio asks a person at Genex to look again. Usually within a day.":
+    "Après la correction, Studio demande à une personne de Genex de regarder à nouveau. En général sous un jour.",
+  "After the fix, Studio asks a person at Genex to put it back. Usually within a day.":
+    "Après la correction, Studio demande à une personne de Genex de le remettre en ligne. En général sous un jour.",
+  "After the fix, it publishes by itself and Genex checks it again.":
+    "Après la correction, il se publie tout seul et Genex le vérifie à nouveau.",
+  "Anyone can find it on Genex.": "Tout le monde peut le trouver sur Genex.",
+  "Anything we should know? (optional)": "Quelque chose à savoir ? (facultatif)",
+  "Checking your fixes": "Vérification de tes corrections",
+  "Checking your {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}":
+    "Vérification de {app, select, mac {ton app Mac} windows {ton app Windows} linux {ton app Linux} other {tes apps}}",
+  "Checking · {elapsed}": "Vérification · {elapsed}",
+  "Don't ask automatically": "Ne pas demander automatiquement",
+  "Don't publish it automatically": "Ne pas publier automatiquement",
+  "Fix again": "Corriger à nouveau",
+  "Fix with agent": "Corriger avec l’agent",
+  "Fixed. Publish it, then ask a person at Genex to put it back.":
+    "Corrigé. Publie-le, puis demande à une personne de Genex de le remettre en ligne.",
+  "For example: the coin page is our own shop, not a third party.":
+    "Par exemple : la page des pièces est notre propre boutique, pas celle d’un tiers.",
+  "Genex checks your app before players get it. Usually a few minutes.":
+    "Genex vérifie ton app avant que les joueurs la reçoivent. En général quelques minutes.",
+  "Genex has nothing for this game's agent to fix": "Genex n’a rien à faire corriger par l’agent de ce jeu",
+  "Genex reads your app before players get it. Usually a few minutes.":
+    "Genex lit ton app avant que les joueurs la reçoivent. En général quelques minutes.",
+  "Genex review": "Vérification Genex",
+  "Hidden from players until it's fixed and a person at Genex puts it back.":
+    "Masqué aux joueurs jusqu’à ce qu’il soit corrigé et qu’une personne de Genex le remette en ligne.",
+  "Human review agreed with the check.": "L’examen humain a confirmé la vérification.",
+  "Human review agreed with the takedown.": "L’examen humain a confirmé le retrait.",
+  "Human review requested": "Examen humain demandé",
+  "Human review requested. A person reviews the next {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} you send.":
+    "Examen humain demandé. Une personne examinera {app, select, mac {la prochaine app Mac} windows {la prochaine app Windows} linux {la prochaine app Linux} other {les prochaines apps}} que tu enverras.",
+  "Human review requested. Usually within a day. You can still fix it yourself.":
+    "Examen humain demandé. En général sous un jour. Tu peux quand même corriger toi-même.",
+  "If Genex ever takes it down, you'll hear it here and by email.":
+    "Si Genex le retire un jour, tu l’apprendras ici et par e-mail.",
+  "Keep the note under {max} characters.": "La note doit faire moins de {max} caractères.",
+  "Nothing went public. After the fix, it publishes by itself and Genex checks it again.":
+    "Rien n’a été publié. Après la correction, il se publie tout seul et Genex le vérifie à nouveau.",
+  "Open a game": "Ouvre un jeu",
+  "Open on Genex": "Ouvrir sur Genex",
+  "Players keep the version they have. After the fix, it publishes by itself and Genex checks it again.":
+    "Les joueurs gardent leur version. Après la correction, il se publie tout seul et Genex le vérifie à nouveau.",
+  "Players keep the {date} version.": "Les joueurs gardent la version du {date}.",
+  "Public again": "De nouveau public",
+  Published: "Publié",
+  "Request human review": "Demander un examen humain",
+  "Send request": "Envoyer la demande",
+  "Sending the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again so a person can read it…":
+    "Renvoi de {app, select, mac {l’app Mac} windows {l’app Windows} linux {l’app Linux} other {tes apps}} pour qu’une personne puisse la lire…",
+  "Sent for review": "Envoyé pour vérification",
+  "Sent to your agent. Publish it yourself when it's ready.":
+    "Envoyé à ton agent. Publie-le toi-même quand il est prêt.",
+  "Sent to your agent. When it's done, Studio asks a person at Genex to put it back.":
+    "Envoyé à ton agent. Quand il aura fini, Studio demandera à une personne de Genex de le remettre en ligne.",
+  "Sent to your agent. When it's done, Studio publishes it and Genex checks it again.":
+    "Envoyé à ton agent. Quand il aura fini, Studio le publiera et Genex le vérifiera à nouveau.",
+  "Show {n} more": "Afficher {n} de plus",
+  "Sign in to see what to fix": "Connecte-toi pour voir quoi corriger",
+  "Someone from the Genex team agreed it's fine.": "Quelqu’un de l’équipe Genex a confirmé que tout va bien.",
+  "Taken down": "Retiré",
+  "Taking longer than usual. If the check can't finish, a person at Genex reviews it.":
+    "Plus long que d’habitude. Si la vérification n’aboutit pas, une personne de Genex l’examine.",
+  "Tell us why (at least {min} characters)": "Dis-nous pourquoi (au moins {min} caractères)",
+  "Tell us why in at least {min} characters.": "Dis-nous pourquoi en au moins {min} caractères.",
+  "That fix isn't the game's latest one": "Ce n’est pas la dernière correction du jeu",
+  "The Genex team is reviewing this game.": "L’équipe Genex examine ce jeu.",
+  "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
+    "La correction n’est pas encore compilée. Recompile {app, select, mac {l’app Mac} windows {l’app Windows} linux {l’app Linux} other {les apps}} et elle se publiera.",
+  "There's nothing to ask about right now.": "Il n’y a rien à demander pour l’instant.",
+  "Think we got it wrong? Someone from the Genex team will check your app, usually within a day. Players don't get it until then.":
+    "Tu penses qu’on s’est trompés ? Quelqu’un de l’équipe Genex vérifiera ton app, en général sous un jour. D’ici là, les joueurs ne la reçoivent pas.",
+  "Think we got it wrong? Someone from the Genex team will check your game, usually within a day. It stays taken down until then.":
+    "Tu penses qu’on s’est trompés ? Quelqu’un de l’équipe Genex vérifiera ton jeu, en général sous un jour. D’ici là, il reste retiré.",
+  "This decision can't be reviewed again.": "Cette décision ne peut pas être réexaminée.",
+  "Turned down 3 times this week, so a person at Genex reviews the next build. Usually within a day.":
+    "Refusé 3 fois cette semaine, donc une personne de Genex examinera le prochain build. En général sous un jour.",
+  "Usually within a day. You'll hear here and by email.": "En général sous un jour. Tu l’apprendras ici et par e-mail.",
+  "Version {version} is live": "La version {version} est en ligne",
+  "Version {version} is live for {app, select, mac {Mac} windows {Windows} linux {Linux} other {desktop}} players.":
+    "La version {version} est en ligne pour les joueurs {app, select, mac {Mac} windows {Windows} linux {Linux} other {sur ordinateur}}.",
+  "You already asked. A person will look at it, usually within a day.":
+    "Tu as déjà demandé. Une personne va regarder, en général sous un jour.",
+  "You can close this. Studio tells you when it's done.": "Tu peux fermer. Studio te prévient quand c’est fini.",
+  "Your agent stopped before it finished.": "Ton agent s’est arrêté avant d’avoir fini.",
+  "usually a few minutes": "en général quelques minutes",
+  "{app, select, mac {Mac} windows {Windows} linux {Linux} other {Desktop}} players get it now.":
+    "Les joueurs {app, select, mac {Mac} windows {Windows} linux {Linux} other {sur ordinateur}} la reçoivent maintenant.",
+  "{count}/{max}": "{count}/{max}",
+  "{minutes}m {seconds}s": "{minutes} min {seconds} s",
+  "{n, plural, one {# fix sent} other {# fixes sent}}":
+    "{n, plural, one {# correction envoyée} other {# corrections envoyées}}",
+  "{n, plural, one {Can't publish yet: # thing to fix} other {Can't publish yet: # things to fix}}":
+    "{n, plural, one {Pas encore publiable : # chose à corriger} other {Pas encore publiable : # choses à corriger}}",
+  "{n, plural, one {Not approved: # thing still to fix after the re-check} other {Not approved: # things still to fix after the re-check}}":
+    "{n, plural, one {Non approuvé : encore # chose à corriger après la nouvelle vérification} other {Non approuvé : encore # choses à corriger après la nouvelle vérification}}",
+  "{n, plural, one {Not approved: # thing to fix} other {Not approved: # things to fix}}":
+    "{n, plural, one {Non approuvé : # chose à corriger} other {Non approuvé : # choses à corriger}}",
+  "{n, plural, one {Taken down: # thing to fix} other {Taken down: # things to fix}}":
+    "{n, plural, one {Retiré : # chose à corriger} other {Retiré : # choses à corriger}}",
+  "{n, plural, one {Update not approved: # thing to fix} other {Update not approved: # things to fix}}":
+    "{n, plural, one {Mise à jour non approuvée : # chose à corriger} other {Mise à jour non approuvée : # choses à corriger}}",
+  "{state, select, taken_down {Taken down} not_approved {Not approved} other {In review}} · reconnect to see what to fix":
+    "{state, select, taken_down {Retiré} not_approved {Non approuvé} other {En vérification}} · reconnecte-toi pour voir quoi corriger",
+  "{title} is live!": "{title} est en ligne !",
+  "{title} is public again": "{title} est de nouveau public",
 } satisfies LocaleCatalog;

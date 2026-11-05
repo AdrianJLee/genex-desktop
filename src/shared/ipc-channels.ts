@@ -116,6 +116,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.genex-publish": "genexPublish",
   "studio:plugins.genex-publish-apps": "genexPublishApps",
   "studio:plugins.genex-cloud-build": "genexCloudBuild",
+  "studio:plugins.genex-review-status": "genexReviewStatus",
+  "studio:plugins.genex-fix-review": "genexFixReview",
+  "studio:plugins.genex-request-review": "genexRequestReview",
   "studio:plugins.index": "pluginsIndex",
   "studio:plugins.install-github": "pluginInstallGithub",
   "studio:plugins.lookup-github": "pluginLookupGithub",
@@ -429,6 +432,9 @@ export interface StudioInvokePayloads {
   };
   "studio:plugins.genex-publish-apps": { project: string; title?: string; remix?: boolean };
   "studio:plugins.genex-cloud-build": { project: string; platform: string };
+  "studio:plugins.genex-review-status": { project: string; refresh?: boolean };
+  "studio:plugins.genex-fix-review": { project: string; autoPublish: boolean; fixId?: string };
+  "studio:plugins.genex-request-review": { project: string; platform?: string; arch?: string; note?: string };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };
   "studio:plugins.lookup-github": { link: string; version?: GithubVersion };

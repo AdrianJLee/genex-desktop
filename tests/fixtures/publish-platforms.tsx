@@ -17,6 +17,19 @@ import { studio } from "../../src/renderer/state/studio.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
 import { CloudBuildState, GenexAction, GenexBuildReview, type GenexNativeRecord, type GenexPublishState } from "../../src/shared/genex.ts";
+import { CustomEvent as LogEvent, customEventData } from "../../src/shared/custom-events.ts";
+import type { EventEnvelope } from "../../src/shared/event-log.ts";
+import {
+  GenexAppReview,
+  GenexFixKind,
+  GenexHumanReview,
+  type GenexReviewApp,
+  GenexReviewChange,
+  GenexReviewReadProblem,
+  type GenexReviewStatus,
+  type GenexTakedown,
+  gameReviewOf,
+} from "../../src/shared/genex-review.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
 import { CoreFact } from "../../src/shared/project-facts.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
@@ -39,7 +52,12 @@ async function settle(frames = 10) {
 }
 
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
-type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "appsReview" | "appsRejected" | "unityNoApp" | "unitySoon" | "unreal" | "unrealCloud" | "unrealBuilding" | "unrealWindows" | "unrealWebOnGenex" | "unityReplacesApps";
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "appsReview" | "appsRejected" | "unityNoApp" | "unitySoon" | "unreal" | "unrealCloud" | "unrealBuilding" | "unrealWindows" | "unrealWebOnGenex" | "unityReplacesApps" | ReviewScene;
+
+/** The scenes of Genex's review of a game's Mac app, or of its takedown (spec §6.9). */
+type ReviewScene = "appsChecking" | "appsChecking20m" | "appsNotApproved1" | "appsNotApproved7" | "appsUpdateNotApproved" | "appsStill" | "appsRequested" | "appsWithPerson" | "appsPersonKept" | "appsTakenDown" | "appsTakenDownCsam" | "appsFixSent" | "appsFixStopped" | "appsNotBuilt" | "appsOffline" | "appsSignedOut";
+const REVIEW_SCENES: readonly ReviewScene[] = ["appsChecking", "appsChecking20m", "appsNotApproved1", "appsNotApproved7", "appsUpdateNotApproved", "appsStill", "appsRequested", "appsWithPerson", "appsPersonKept", "appsTakenDown", "appsTakenDownCsam", "appsFixSent", "appsFixStopped", "appsNotBuilt", "appsOffline", "appsSignedOut"];
+const isReviewScene = (of: Scene): of is ReviewScene => (REVIEW_SCENES as readonly string[]).includes(of);
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -97,7 +115,79 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   unrealWindows: () => [web(false), mac(PublishPlatformState.Missing), windows, linux()],
   unrealWebOnGenex: () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()],
   unityReplacesApps: () => [web(true), mac(PublishPlatformState.Ready, true), windows, linux()],
-};
+  ...Object.fromEntries(
+    REVIEW_SCENES.map((one) => [one, () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()]]),
+  ),
+} as Record<Scene, () => PublishPlatform[]>;
+
+const THINGS = [
+  { text: "The “Get 5,000 coins” button opens an outside payment page", where: "Garage → Get coins", rule: "Off-platform payment" },
+  { text: "Loads code from another website (unpkg.com)", where: "src/main.js:3" },
+  { text: "Sets a cookie before the player agrees", where: "index.html · on load" },
+  { text: "Shows ads from an outside ad network after each fight" },
+  { text: "Asks for the player's email before the game starts" },
+  { text: "Opens a chat with strangers with no way to block them" },
+  { text: "Sends the player's progress to a server Genex doesn't know" },
+];
+const MINER = [{ text: "Mines cryptocurrency on the player's computer", where: "vendor/worker.min.js" }];
+
+/** Genex's review of the scene's Mac app, or of its takedown, as main answers it. */
+function reviewOf(of: Scene): GenexReviewStatus | null {
+  if (!isReviewScene(of)) return null;
+  const sentAt = new Date(Date.now() - (of === "appsChecking20m" ? 20 * MINUTE : 65_000)).toISOString();
+  const decidedAt = new Date(Date.now() - 2 * MINUTE).toISOString();
+  const asked = { state: GenexHumanReview.Requested, canRequest: false };
+  const app = (state: GenexAppReview, extra: Partial<GenexReviewApp> = {}): GenexReviewApp => ({
+    platform: "mac", arch: "universal", state, version: "1.3.0", sentAt, decidedAt, decidedBy: "check",
+    things: state === GenexAppReview.NotApproved ? MINER : [],
+    humanReview: { state: GenexHumanReview.None, canRequest: state === GenexAppReview.NotApproved },
+    ...extra,
+  });
+  const takedown = (extra: Partial<GenexTakedown> = {}): GenexTakedown => ({
+    at: decidedAt, rule: "Off-platform payment", things: THINGS.slice(0, 3), appealable: true,
+    humanReview: { state: GenexHumanReview.None, canRequest: true }, ...extra,
+  });
+  const apps: Record<ReviewScene, [GenexReviewApp[], GenexTakedown | null]> = {
+    appsChecking: [[app(GenexAppReview.Checking)], null],
+    appsChecking20m: [[app(GenexAppReview.Checking)], null],
+    appsNotApproved1: [[app(GenexAppReview.NotApproved)], null],
+    appsNotApproved7: [[app(GenexAppReview.NotApproved, { things: THINGS })], null],
+    appsUpdateNotApproved: [[app(GenexAppReview.NotApproved, { players: { version: "1.2.0", since: "2026-10-25T10:03:10.000Z" } })], null],
+    appsStill: [[app(GenexAppReview.NotApproved, { things: THINGS.slice(1, 2) })], null],
+    appsRequested: [[app(GenexAppReview.NotApproved, { humanReview: asked })], null],
+    appsWithPerson: [[app(GenexAppReview.WithPerson, { decidedBy: undefined })], null],
+    appsPersonKept: [[app(GenexAppReview.NotApproved, { decidedBy: "person", reply: "The coin page sends players to a store outside Genex. Sell coins through the Genex shop instead.", humanReview: { state: GenexHumanReview.Answered, canRequest: false } })], null],
+    appsTakenDown: [[app(GenexAppReview.Live)], takedown()],
+    appsTakenDownCsam: [[app(GenexAppReview.Live)], takedown({ rule: undefined, things: [], appealable: false, humanReview: { state: GenexHumanReview.None, canRequest: false } })],
+    appsFixSent: [[app(GenexAppReview.NotApproved)], null],
+    appsFixStopped: [[app(GenexAppReview.NotApproved)], null],
+    appsNotBuilt: [[app(GenexAppReview.NotApproved)], null],
+    appsOffline: [[app(GenexAppReview.NotApproved)], null],
+    appsSignedOut: [[app(GenexAppReview.NotApproved)], null],
+  };
+  const [list, down] = apps[of];
+  const problem = of === "appsOffline" ? { problem: GenexReviewReadProblem.Offline } : of === "appsSignedOut" ? { problem: GenexReviewReadProblem.SignedOut } : {};
+  return {
+    record: { state: gameReviewOf(list, down), apps: list, takedown: down },
+    checkedAt: new Date().toISOString(), connected: of !== "appsSignedOut", ...problem,
+    open: true, fingerprint: of, told: null, publishing: false,
+  };
+}
+
+/** The scene's fix press and how it ended, as the game's chat log holds them. */
+function fixEventsOf(of: Scene): EventEnvelope[] {
+  const at = new Date(Date.now() - MINUTE).toISOString();
+  const envelope = (id: string, data: EventEnvelope["data"]): EventEnvelope => ({ id, thread_id: "t1", session_id: null, turn_id: null, created_at: at, data });
+  const press = envelope("fix", customEventData(LogEvent.GenexReviewFix, { project: GAME, fixId: "fix-1", kind: GenexFixKind.App, count: 1, autoPublish: true, at }));
+  const outcome = (change: GenexReviewChange, extra: Record<string, unknown> = {}) =>
+    envelope(`out-${change}`, customEventData(LogEvent.GenexReview, { project: GAME, change, ...extra, at }));
+  if (of === "appsFixSent") return [press];
+  if (of === "appsFixStopped") return [press, outcome(GenexReviewChange.FixStopped)];
+  if (of === "appsNotBuilt") return [press, outcome(GenexReviewChange.NotBuilt)];
+  // A fix sent again before the check turned it down once more: still to fix after the re-check.
+  if (of === "appsStill") return [{ ...press, created_at: new Date(Date.now() - 30 * MINUTE).toISOString(), data: customEventData(LogEvent.GenexReviewFix, { project: GAME, fixId: "fix-1", kind: GenexFixKind.App, count: 3, autoPublish: true, at: new Date(Date.now() - 30 * MINUTE).toISOString() }) }, outcome(GenexReviewChange.Sent, { recheck: true, at: new Date(Date.now() - 20 * MINUTE).toISOString() })];
+  return [];
+}
 
 /** Whether Genex's page plays a web version in each scene (`hostedWeb`); unknown in the rest. */
 const HOSTED_WEB: Partial<Record<Scene, boolean>> = { unrealWebOnGenex: true, unityReplacesApps: false };
@@ -131,6 +221,12 @@ function appsOf(of: Scene): GenexNativeRecord {
     const review = GenexBuildReview.Rejected;
     const reviewReason = "It opens a shell.";
     record.sent.push({ platform: "mac", arch: "universal", version: "1", sizeBytes: 1, publishedAt: at, review, reviewReason });
+  }
+  const reviewed = reviewOf(of)?.record?.apps[0];
+  if (reviewed) {
+    const review = { live: GenexBuildReview.Approved, not_approved: GenexBuildReview.Rejected }[reviewed.state as string] ?? GenexBuildReview.Pending;
+    const reviewReason = reviewed.things[0]?.text;
+    record.sent.push({ platform: "mac", arch: "universal", version: "1.3.0", sizeBytes: 1, publishedAt: at, review, ...(reviewReason ? { reviewReason } : {}) });
   }
   return record;
 }
@@ -173,6 +269,15 @@ fake.stub("genexPublish", async (_project, _review, _title, _remix, replaceNativ
   published.push({ via: "web", ...(replaceNativePage ? { replaceNativePage } : {}) });
 });
 fake.stub("genexPublishReview", async () => ({ included: ["index.html"], excluded: [] }));
+fake.stub("genexReviewStatus", async () => reviewOf(scene) ?? { record: null, checkedAt: null, connected: true, open: false, fingerprint: null, told: null, publishing: false });
+fake.stub("genexFixReview", async (_project, options) => {
+  published.push({ via: options.autoPublish ? "fix" : "fix:manual" });
+  return { fixId: "fix-1" };
+});
+fake.stub("genexRequestReview", async (_project, args) => {
+  published.push({ via: `request:${args.note ?? ""}` });
+  return { requested: [{ platform: "mac", arch: "universal", resend: false }], takedown: scene === "appsTakenDown" };
+});
 // The row that shares a game's assets on Play reads them too: this game has none.
 fake.stub("assetLibraryStates", async () => ({ project: GAME, states: [], unread: false }));
 fake.stub("projectAssets", async () => ({ project: GAME, assets: [], truncated: false, skipped: [] }));
@@ -220,11 +325,61 @@ function sample() {
       (line) => line.textContent ?? "",
     ),
     oneLine: details.every((el) => el.scrollHeight <= Math.ceil(parseFloat(getComputedStyle(el).lineHeight)) + 1),
+    review: reviewSample(content),
+    chip: document.querySelector<HTMLElement>(".genex-publish-chip")?.textContent ?? null,
+    steps: [...(content?.querySelectorAll<HTMLElement>(".step-bar [data-state]") ?? [])].map((el) => el.dataset.state ?? ""),
+    check: content?.querySelector<HTMLElement>("[data-genex-publish-check]")?.textContent ?? null,
+    text: content?.textContent ?? "",
     order,
     overflow,
     closed,
     composed: [...composed],
   };
+}
+
+/** The review card as a person reads it: which card, its words, its things and presses. */
+function reviewSample(content: HTMLElement | null | undefined) {
+  const card = content?.querySelector<HTMLElement>("[data-genex-review]");
+  if (!card) return null;
+  const all = (selector: string) => [...card.querySelectorAll<HTMLElement>(selector)].map((el) => el.textContent ?? "");
+  return {
+    kind: card.dataset.genexReview,
+    title: card.querySelector(".genex-review-title")?.textContent ?? null,
+    lines: all(".genex-review-line"),
+    quote: card.querySelector(".genex-review-quote")?.textContent ?? null,
+    things: all(".genex-review-things li"),
+    more: card.querySelector("[data-genex-review-more]")?.textContent ?? null,
+    after: all(".genex-review-after"),
+    presses: all("[data-genex-review-press]"),
+    link: card.querySelector("[data-genex-review-link]")?.textContent ?? null,
+    footer: card.querySelector(".genex-review-footer")?.textContent ?? null,
+  };
+}
+
+/** Press a review card's button or link (`press` is its `data-genex-review-press` value, or `more`). */
+async function reviewPress(which: string) {
+  const selector = which === "more" ? "[data-genex-review-more]" : `[data-genex-review-press="${which}"]`;
+  document.querySelector<HTMLButtonElement>(selector)?.click();
+  await settle();
+  if (which === "request") await new Promise((resolve) => setTimeout(resolve, 400));
+  return sample();
+}
+
+/** Type a note in Request human review and send it. */
+async function requestReview(note: string) {
+  const field = document.querySelector<HTMLTextAreaElement>('[data-testid="genex-review-request"] textarea');
+  if (field) {
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    setter?.call(field, note);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  // Let the dialog's opening animation finish, so its picture shows it as a person sees it.
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  await settle(2);
+  document.querySelector<HTMLButtonElement>("[data-genex-review-request-send]")?.click();
+  for (let i = 0; i < 100 && published.length === 0; i++) await frame();
+  await settle();
+  return { ...sample(), dialogOpen: Boolean(document.querySelector('[data-testid="genex-review-request"]')) };
 }
 
 /** A game made in Unity or Unreal, as the library knows it: its engine and the fact it was found by. */
@@ -248,6 +403,7 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene; platform
     scene === "web" ? {} : engineOf(scene.startsWith("unreal") ? CoreFact.UnrealProject : CoreFact.UnityProject);
   const game = { name: GAME, title: "Dust Runners", createdAt: AT, ...engine } as unknown as GameProject;
   studio().library.setState((library) => ({ ...library, games: [game] }), true);
+  studio().eventLog.setState((log) => ({ ...log, byThread: { t1: fixEventsOf(scene) } }), true);
   flushSync(() => root.render(null));
   await settle(2);
   flushSync(() =>
@@ -290,4 +446,4 @@ async function removeWeb() {
   return sample();
 }
 
-Object.assign(window, { platformsRig: { open, make, press, sample, removeWeb } });
+Object.assign(window, { platformsRig: { open, make, press, sample, removeWeb, reviewPress, requestReview } });

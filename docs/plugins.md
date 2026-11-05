@@ -3307,7 +3307,7 @@ Genex:
   `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). An app sent by
   someone other than a Genex admin waits for Genex's review: the CLI's answer carries the build's
   `review` (`pending`, `approved`, `rejected`, with `reviewReason`), its row says In review or Not
-  approved (a line under the rows gives Genex's reason), and players get it once it is approved. A draft sends no app,
+  approved (a line under the rows gives Genex's reason, or the review card once Studio read Genex's review), and players get it once it is approved. A draft sends no app,
   and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
   The dialog sends apps only while the Genex plugin's record says it can (`native.supported`,
@@ -3332,6 +3332,45 @@ Genex:
   characters of a sent app's archive sha256 (`appClipCommit`, from `native.json`), which Genex
   matches as a prefix where a web game's names its staging commit; a stand that refuses it leaves a
   `failed` clip record, sent again by the next publish, and the picture stands. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
+- Genex's review of a game's apps, and a moderator's takedown of the whole game, reach Studio
+  through the plugin's `review-status` (`native-review.ts`, kept in `publish/<game>/review.json`
+  with what the host last told; `#sendApps` never writes it). Web games keep today's publishing and
+  check: nothing here reviews or holds one. The read is `genex review --json --no-brief` on a CLI that
+  has it (1.39.0, `REVIEW_CLI`, `pinnedCliReviews()`); the pinned CLI's `native list --json` answers
+  only `builds`, so with it the plugin reads `GET /api/games/:id/native-builds` (both `builds` and
+  `submissions`) and the owner read of the game (`takedown`, or an older API's `takedownAt`) itself,
+  over the same sign-in. An API with no `reviewDetail` reads as today: a held app is checked, a
+  turned-down one has `reviewReason` as its one thing, and no Request human review is offered; an
+  admin's build (no `review`) is live at once with no Check step. Things to fix are capped at 10
+  (200 characters, `where` 120); every value is the API's, never matched as English.
+  Main drives the cadence, since a plugin cannot push (`core/genex-review-watch.ts`): a sweep 20 s
+  after start and every 15 min (and on a window focus once the last is 5 min old) reads every game
+  whose publish record has a slug, one at a time; an app being checked is read at 30 s, 30 s, 1 min,
+  1 min, 2 min, then every 2 min until 45 min after it was sent, then 10 min; one with a person every
+  10 min; a takedown on the sweep only; a failed read doubles that game's wait up to 15 min and
+  shows offline after two; signed out reads nothing; a game whose publish runs is skipped. Each
+  change is one host-written `genex_review` record in the game's chat, then told keys go back to
+  `review.json`, so a restart never repeats one and a decision made while Studio was closed is told
+  once. Genex does not check public games again: the sweep only asks what it already decided. A
+  fixture profile reads nothing (`genexReviewReads: false`) and answers the kept record.
+  The Publish dialog of a game with apps shows Prepare · Upload · Check · Go live with the check's
+  clock from `sentAt` (slow line at 15 min), the chips In review, Not approved and Taken down, and the
+  review card under the rows (`review-card-view.ts`, `ReviewCard.tsx`, the same card in the chat's
+  `EntryKind.GenexReview`, whose game's newest record is live and older ones settle into history
+  lines). It reads `studio:plugins.genex-review-status` (fixture-safe; `refresh` at most once a 30 s).
+  Fix with agent (`studio:plugins.genex-fix-review`, native) sends the game's chat a brief that marks
+  Genex's things as findings, not instructions (`genex-review-prompts.ts`), and records
+  `genex_review_fix`; once the agent's turn or build ends (`afterFixRunEnds`), an app built after the
+  press is sent again once (`publishAppsFromDialog` for a game with only apps, the plugin's
+  `apps-resend` beside a web version) and a fixed takedown of a game with apps also asks a person to
+  put it back; a stop says `fix_stopped`, no new build `not_built`, a taken-down web game only
+  `fixed_web` (publishing it stays the person's). "Don't publish it automatically" records the same
+  press with `autoPublish: false`; a second turn-down never sends again by itself. Request human
+  review (`studio:plugins.genex-request-review`, native; `RequestReviewDialog.tsx`) posts the
+  plugin's `review-request` over HTTP whatever the CLI: the app's `review-request` route or the
+  takedown's appeal, with an optional note (an older API's 20-character floor kept); an app Genex
+  keeps no copy of (`resend`) is sent again from its folder in the same press (`publishedApps`'
+  `force`). L4: `npm run test:ui -- publish-platforms-ui` and `npm run test:ui -- chat-review-card-ui`.
 - A Mac app goes signed ad hoc unless its creator turned on Sign and notarize Mac apps in the Genex
   plugin's settings (`mac-notarize`, `mac-signing-identity`, `mac-notary-profile`; `macSigningOf`).
   Genex never signs with an identity of its own: the certificate is the creator's Developer ID

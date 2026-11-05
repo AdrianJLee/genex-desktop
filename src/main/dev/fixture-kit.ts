@@ -100,6 +100,12 @@ export const FixtureName = {
    * the account's Snowball on Genex, its chat holding a Listing draft card for Frost Axe.
    */
   ItemsStore: "items-store",
+  /**
+   * Genex's review of a game's apps (with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`): the fixture game is
+   * Midnight Asphalt on Genex, its Mac app live and the game taken down for three things to fix, its
+   * chat's review card offering Fix with agent and Request human review.
+   */
+  NativeReview: "native-review",
 } as const;
 export type FixtureName = (typeof FixtureName)[keyof typeof FixtureName];
 

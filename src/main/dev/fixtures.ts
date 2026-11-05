@@ -35,6 +35,7 @@ import { seedAssetLibrary } from "./fixture-assets-tab.ts";
 import { seedRobloxGame } from "./fixture-roblox.ts";
 import { seedItemsStore } from "./fixture-items.ts";
 import { seedGenexTerms } from "./fixture-genex-terms.ts";
+import { seedNativeReview } from "./fixture-native-review.ts";
 import { seedUnrealGame } from "./fixture-unreal.ts";
 import { seedUnrealChat } from "./fixture-unreal-chat.ts";
 import { StopReason } from "../../shared/engine-requests.ts";
@@ -161,6 +162,7 @@ async function seedFreshFixture(game: FixtureGame): Promise<void> {
   if (id === FixtureName.GenexTerms) return seedGenexTerms(core, game.project.name, threadId);
   if (id === FixtureName.AssetLibrary) return seedAssetLibrary(game.project.dir);
   if (id === FixtureName.ItemsStore) return seedItemsStore(core, game.project.name, threadId);
+  if (id === FixtureName.NativeReview) return seedNativeReview(core, game.project.name, threadId);
 }
 
 async function seedGraphOnce(game: FixtureGame): Promise<void> {

@@ -401,7 +401,10 @@
       "name": "cover-pick",
       "label": "Use this cover"
     },
-    { "name": "review-status", "label": "Review of this game's apps" },
+    {
+      "name": "review-status",
+      "label": "Review of this game's apps"
+    },
     {
       "name": "review-request",
       "label": "Request human review",

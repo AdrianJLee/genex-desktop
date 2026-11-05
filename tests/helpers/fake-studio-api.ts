@@ -41,6 +41,7 @@ const METHODS = [
   "genexPublishApps",
   "genexCloudBuild",
   "genexReviewStatus",
+  "genexReviewLines",
   "genexFixReview",
   "genexRequestReview",
   "pluginsIndex",
@@ -410,6 +411,8 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     pluginSkillText: () => "",
     pluginsList: empty,
     pluginsCatalog: empty,
+    // No game on Genex: no sidebar line.
+    genexReviewLines: () => ({}),
     pluginsIndex: () => ({ url: "", studioVersion: "0.1.0", fetchedAt: null, stale: true, entries: [], updates: [] }),
     mcpList: empty,
     mcpTools: empty,

@@ -15,7 +15,8 @@
  *   after two in a row. Signed out, nothing is read until a sweep finds the sign-in back.
  * - Each change is told once: one `genex_review` record in the game's own chat, then what was told is
  *   kept by the plugin (`review.json`), so a restart never tells it again, and a decision that came
- *   while Studio was closed is told once at the next start.
+ *   while Studio was closed is told once at the next start. The window hears of each change
+ *   (`UiEvent.GenexReviewChanged`), a first read's too.
  *
  * Electron-free: the clock, timers, the games, the plugin call, the log and the window come in as deps.
  */
@@ -197,14 +198,17 @@ export function reviewChanges(
   return { records: shown, told: { fingerprint: reviewFingerprint(record), keys } };
 }
 
-/** Tell the records of what changed since the host last told, then keep what was told. */
+/**
+ * Tell the records of what changed since the host last told, then keep what was told. The window
+ * hears of every change, even one with no record (a first read): its sidebar line reads it.
+ */
 async function tellChanges(deps: ReviewWatchDeps, project: string, status: GenexReviewStatus): Promise<void> {
   if (!status.record || status.told?.fingerprint === status.fingerprint) return;
   const names = { project, ...(await deps.game?.(project).catch(() => ({}))) };
   const { records, told } = reviewChanges(status.told, status.record, deps.now(), names);
   if (records.length > 0) await deps.append(project, records);
   await deps.status(project, { told });
-  if (records.length > 0) deps.emit(project);
+  deps.emit(project);
 }
 
 /** How a read went, for the game's next one: signed out, its publish runs, it failed, or it came back. */

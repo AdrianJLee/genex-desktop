@@ -38,6 +38,7 @@ import { EngineError } from "../../src/substrate/engines/types.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
 import { RestartAnswer, UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
+import { GenexSidebarLine } from "../../src/shared/genex-review.ts";
 import { recommendModels, type HardwareInfo } from "../../src/substrate/hardware.ts";
 
 type Listener = (event: IpcSender, payload: unknown) => Promise<IpcResult>;
@@ -1374,6 +1375,7 @@ describe("Play's share menu", () => {
     registerPlayIpc(handle, {
       gallery: unused as PlayIpcDeps["gallery"],
       gameLinks: links,
+      localGame: async (slug) => (slug === "midnight-asphalt" ? "midnight" : null),
       remix: async () => "",
       remixReady: async () => ({}),
       viewer: () => null,
@@ -1396,8 +1398,20 @@ describe("Play's share menu", () => {
     const { invoke } = shareRig("https://genex.games", links);
     assert.deepEqual(await invoke("studio:play.take-game-link"), { ok: true, value: null });
     links.arrive("genex://game/iron-tide");
-    assert.deepEqual(await invoke("studio:play.take-game-link"), { ok: true, value: "iron-tide" });
+    assert.deepEqual(await invoke("studio:play.take-game-link"), { ok: true, value: { slug: "iron-tide" } });
     assert.deepEqual(await invoke("studio:play.take-game-link"), { ok: true, value: null });
+  });
+
+  it("hands the page the creator's own game a genex://create link names, else its page in Play", async () => {
+    const links = gameLinks();
+    const { invoke } = shareRig("https://genex.games", links);
+    links.arrive("genex://create/midnight-asphalt");
+    assert.deepEqual(await invoke("studio:play.take-game-link"), {
+      ok: true,
+      value: { slug: "midnight-asphalt", project: "midnight" },
+    });
+    links.arrive("genex://create/iron-tide");
+    assert.deepEqual(await invoke("studio:play.take-game-link"), { ok: true, value: { slug: "iron-tide" } });
   });
 
   it("names this computer even where Genex installs no native game, so a page can say why", async () => {
@@ -1460,6 +1474,10 @@ describe("a game's Genex review over IPC", () => {
         publishing: false,
       };
     });
+    handle("studio:plugins.genex-review-lines", () => {
+      reached.push("lines");
+      return { dust: { line: GenexSidebarLine.TakenDown } };
+    });
     handle("studio:plugins.genex-fix-review", (p) => {
       reached.push(`fix ${p.project}`);
       return { fixId: "f1" };
@@ -1484,6 +1502,13 @@ describe("a game's Genex review over IPC", () => {
     assert.equal(fix.ok, false, "Fix with agent sends the game's chat a message and reaches Genex");
     assert.equal(request.ok, false, "Request human review reaches Genex with the real account");
     assert.deepEqual(reached, ["status dust"], "neither press reached the core");
+  });
+
+  it("a fixture profile answers the sidebar's lines from what it kept", async () => {
+    const { invoke, reached } = reviewRig(true);
+    const lines = await invoke("studio:plugins.genex-review-lines", undefined);
+    assert.deepEqual(lines, { ok: true, value: { dust: { line: GenexSidebarLine.TakenDown } } });
+    assert.deepEqual(reached, ["lines"]);
   });
 
   it("a live profile hands every press to the core", async () => {

@@ -6354,4 +6354,24 @@ export default {
     "{state, select, taken_down {Снята} not_approved {Не одобрено} other {На проверке}} · подключись снова, чтобы увидеть, что исправить",
   "{title} is live!": "{title} опубликована!",
   "{title} is public again": "{title} снова опубликована",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Человек из Genex проверяет {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}}. Обычно в течение дня.",
+  "Checking fixes": "Проверяем исправления",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genex проверяет {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}}. Обычно несколько минут.",
+  "Human review": "Проверка человеком",
+  "Human review, usually within a day.": "Проверка человеком, обычно в течение дня.",
+  Public: "Опубликована",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, one {# исправление. Нажми, чтобы посмотреть и исправить с агентом.} few {# исправления. Нажми, чтобы посмотреть и исправить их с агентом.} many {# исправлений. Нажми, чтобы посмотреть и исправить их с агентом.} other {# исправления. Нажми, чтобы посмотреть и исправить их с агентом.}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, one {# исправление. Открой «Опубликовать», чтобы посмотреть.} few {# исправления. Открой «Опубликовать», чтобы посмотреть.} many {# исправлений. Открой «Опубликовать», чтобы посмотреть.} other {# исправления. Открой «Опубликовать», чтобы посмотреть.}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}":
+    "{n, plural, one {# исправление} few {# исправления} many {# исправлений} other {# исправления}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}":
+    "{n, plural, one {Исправляем # проблему} few {Исправляем # проблемы} many {Исправляем # проблем} other {Исправляем # проблемы}}",
+  "{title} was taken down": "{title} снята с публикации",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{title}: {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}} не одобрено",
+  "{title}: human review kept it down": "{title}: проверка человеком оставила игру снятой",
 } satisfies LocaleCatalog;

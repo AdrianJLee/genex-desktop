@@ -2228,6 +2228,7 @@ function playIpcDeps(studio: StudioCore): PlayIpcDeps {
     sessions: () => playSessionsFor(studio),
     reveal: (file) => shell.showItemInFolder(file),
     gameLinks: gameLinkQueue,
+    localGame: (slug) => studio.genexGameOfSlug(slug),
   };
 }
 

@@ -193,6 +193,12 @@ export const GenexSidebarLine = {
 } as const;
 export type GenexSidebarLine = (typeof GenexSidebarLine)[keyof typeof GenexSidebarLine];
 
+/** A game's sidebar line, and how many things its fix sends the agent while the line is `fixing`. */
+export interface GenexSidebarEntry {
+  line: GenexSidebarLine;
+  things?: number;
+}
+
 /** Why the last read of a game's review did not come back. Wire values: never rename one. */
 export const GenexReviewReadProblem = { Offline: "offline", SignedOut: "signed_out" } as const;
 export type GenexReviewReadProblem = (typeof GenexReviewReadProblem)[keyof typeof GenexReviewReadProblem];

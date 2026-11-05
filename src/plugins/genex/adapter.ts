@@ -2146,6 +2146,10 @@ export class GenexTools {
     }
     return reviewStatusOf(saved, connected, publishing);
   }
+  /** The game's review as `review.json` keeps it, read from nothing else; null before any read. */
+  async keptReview(project: string): Promise<GenexReviewRecord | null> {
+    return readReviewSaved(await readJsonOr(this.#reviewFile(project))).record;
+  }
   async #saveReview(project: string, saved: ReviewSaved): Promise<void> {
     await mkdir(this.#publishDir(project), { recursive: true, mode: 0o700 });
     await atomicWriteJson(this.#reviewFile(project), saved);

@@ -2,7 +2,9 @@
  * Test-owned chat review cards over a fake `window.studio` (mockups A2, C2, C3, C4, D2): each game's
  * live card as Genex's word now draws it (checking, checking fixes, live with its cover and link, an
  * update live, public again, not approved, taken down, a fix on its way, a fix that stopped) and the
- * settled history lines. Each scene is its own game, so each card reads its own review.
+ * settled history lines, one opened to what it said then. Each scene is its own game, so each card
+ * reads its own review. Beside them, the toast a game's review raises while another game is open
+ * (C5), made by the feed's own rules from a `genex_review` record, with its [Open].
  */
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -10,7 +12,11 @@ import { initializeAppearance, updateAppearance } from "../../src/renderer/appea
 import { AppearanceMode } from "../../src/renderer/appearance/themes.ts";
 import { EntryKind, type GenexReviewEntry } from "../../src/renderer/chat-entries.ts";
 import { GenexReviewCard } from "../../src/renderer/chat/GenexReviewCard.tsx";
+import { applyEvents, EMPTY_NOTICES, reviewToasts } from "../../src/renderer/notifications.ts";
+import { useToasts } from "../../src/renderer/state/hooks.ts";
 import { studio } from "../../src/renderer/state/studio.ts";
+import { ToastStack } from "../../src/renderer/ui/Toast.tsx";
+import { REVIEW_WORDS } from "../../src/renderer/words.ts";
 import { CustomEvent as LogEvent, customEventData } from "../../src/shared/custom-events.ts";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
@@ -108,6 +114,31 @@ window.studio = fake.api;
 document.documentElement.dataset.platform = "darwin";
 initializeAppearance();
 
+const toastOpened: string[] = [];
+
+/** The toast stack as the app draws it, over the store. */
+function Toasts() {
+  const items = useToasts((s) => s.items);
+  return <ToastStack toasts={items} onDismiss={(id) => studio().toasts.dismiss(id)} />;
+}
+
+/** Lost Cathedral is public again while Midnight Asphalt is open: the toast the feed raises for it. */
+function offerToast() {
+  for (const toast of studio().toasts.getState().items) studio().toasts.dismiss(toast.id);
+  const at = new Date().toISOString();
+  const restored: EventEnvelope = {
+    id: `toast-${Date.now()}`,
+    thread_id: "cathedral",
+    session_id: null,
+    turn_id: null,
+    created_at: at,
+    data: customEventData(LogEvent.GenexReview, { project: "cathedral", title: "Lost Cathedral", change: GenexReviewChange.Restored, at }),
+  };
+  const { arrived } = applyEvents(EMPTY_NOTICES, [restored]);
+  for (const notice of reviewToasts(arrived, { focused: true, openProject: "taken-down" }))
+    studio().toasts.offer(notice.headline ?? notice.text, { label: REVIEW_WORDS.notice.open, run: () => toastOpened.push(notice.project ?? "") });
+}
+
 /** Every card, newest of each game live and the rest as history lines. */
 async function open(options: { theme?: "dark" | "light" } = {}) {
   updateAppearance((appearance) => ({ ...appearance, mode: options.theme === "light" ? AppearanceMode.Light : AppearanceMode.Dark }));
@@ -133,9 +164,11 @@ async function open(options: { theme?: "dark" | "light" } = {}) {
             ))}
           </div>
         ))}
+        <Toasts />
       </div>,
     ),
   );
+  offerToast();
   for (let i = 0; i < 60; i++) await frame();
   return sample();
 }
@@ -151,7 +184,30 @@ function sample() {
     presses: [...scene.querySelectorAll("[data-genex-review-press], [data-genex-review-copy], [data-genex-review-open]")].map((el) => el.textContent ?? ""),
     link: scene.querySelector("[data-genex-review-link]")?.textContent ?? null,
   }));
-  return { scenes, pressed: [...pressed], text: document.body.textContent ?? "" };
+  const toasts = [...document.querySelectorAll<HTMLElement>("[role=status]")].map((toast) => ({
+    text: toast.querySelector(".font-mono")?.textContent ?? "",
+    action: toast.querySelector("[data-toast-action]")?.textContent ?? null,
+  }));
+  const settled = [...document.querySelectorAll<HTMLElement>("[data-genex-review-settled]")].map((card) => ({
+    title: card.querySelector(".genex-review-title")?.textContent ?? null,
+    lines: [...card.querySelectorAll(".genex-review-line")].map((el) => el.textContent ?? ""),
+    presses: card.querySelectorAll("button").length,
+  }));
+  return { scenes, pressed: [...pressed], toasts, toastOpened: [...toastOpened], settled, text: document.body.textContent ?? "" };
+}
+
+/** Open a scene's first history line to what it said then. */
+async function expand(scene: string) {
+  document.querySelector<HTMLButtonElement>(`[data-chat-review-scene="${scene}"] .genex-review-history-line`)?.click();
+  for (let i = 0; i < 10; i++) await frame();
+  return sample();
+}
+
+/** Press the toast's [Open]. */
+async function openToast() {
+  document.querySelector<HTMLButtonElement>("[data-toast-action]")?.click();
+  for (let i = 0; i < 10; i++) await frame();
+  return sample();
 }
 
 /** Press a scene's review button. */
@@ -161,4 +217,4 @@ async function press(scene: string, which: string) {
   return sample();
 }
 
-Object.assign(window, { chatReviewRig: { open, sample, press } });
+Object.assign(window, { chatReviewRig: { open, sample, press, expand, openToast } });

@@ -5959,4 +5959,22 @@ export default {
     "{state, select, taken_down {已下架} not_approved {未通过} other {审核中}} · 重新连接后查看需要修复的内容",
   "{title} is live!": "{title} 已上线！",
   "{title} is public again": "{title} 已重新公开",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Genex 的工作人员正在审核{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}。通常一天内完成。",
+  "Checking fixes": "正在检查修复",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genex 正在检查{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}。通常需要几分钟。",
+  "Human review": "人工审核",
+  "Human review, usually within a day.": "人工审核，通常一天内完成。",
+  Public: "已公开",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, other {有 # 项需要修复。点击查看，并让智能体修复。}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, other {有 # 项需要修复。打开“发布”查看。}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}": "{n, plural, other {有 # 项需要修复}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}": "{n, plural, other {正在修复 # 项}}",
+  "{title} was taken down": "{title} 已下架",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{title} 的{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}未通过审核",
+  "{title}: human review kept it down": "{title}：人工审核后仍保持下架",
 } satisfies LocaleCatalog;

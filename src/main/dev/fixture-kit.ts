@@ -101,9 +101,10 @@ export const FixtureName = {
    */
   ItemsStore: "items-store",
   /**
-   * Genex's review of a game's apps (with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`): the fixture game is
-   * Midnight Asphalt on Genex, its Mac app live and the game taken down for three things to fix, its
-   * chat's review card offering Fix with agent and Request human review.
+   * Genex's review of a game's apps (with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`): five games on Genex. The
+   * fixture game is Midnight Asphalt, taken down for three things to fix; Skate Dog is with a person,
+   * Stick & Steel and Lost Cathedral are public and The Long Silence is being checked. Each change
+   * arrives once the window is up: the bell, the Dock, a toast, the sidebar's lines and the Publish dot.
    */
   NativeReview: "native-review",
 } as const;

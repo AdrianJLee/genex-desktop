@@ -212,11 +212,20 @@ import {
   requestReviewFromDialog,
   settleInterruptedFix,
 } from "./core/genex-review.ts";
-import { gamesOnGenex, reviewFlowDeps, reviewStatusOf, reviewWatchDeps } from "./core/genex-review-host.ts";
+import {
+  gameOfSlug,
+  gamesOnGenex,
+  reviewFlowDeps,
+  reviewLinesDeps,
+  reviewStatusOf,
+  reviewWatchDeps,
+} from "./core/genex-review-host.ts";
+import { type ReviewLines, reviewLines } from "./core/genex-review-lines.ts";
 import {
   GenexReviewReadProblem,
   type GenexReviewRequestAnswer,
   type GenexReviewStatus,
+  type GenexSidebarEntry,
   REVIEW_NOTE_CHARS,
 } from "../shared/genex-review.ts";
 import { availableMemory } from "../substrate/hardware.ts";
@@ -653,6 +662,8 @@ export class StudioCore {
   readonly #fixSettles = new Map<string, Promise<unknown>>();
   /** When the Publish dialog last asked each game's review to be read again: at most once a 30 s. */
   readonly #reviewAskedAt = new Map<string, number>();
+  /** The sidebar's second line under each game on Genex, each kept until its review changes. */
+  readonly #reviewLines: ReviewLines = reviewLines(reviewLinesDeps(this));
 
   constructor(options: StudioCoreOptions) {
     this.options = options;
@@ -1953,6 +1964,21 @@ export class StudioCore {
     return status;
   }
 
+  /**
+   * The sidebar's second line under each game on Genex (`core/genex-review-lines.ts`): from what Studio
+   * keeps (the plugin's kept review, the chat's fix records, the publish record), never a read of Genex.
+   */
+  async genexReviewLines(): Promise<Record<string, GenexSidebarEntry>> {
+    if (!this.plugins) return {};
+    return this.#reviewLines.lines();
+  }
+
+  /** The library's game whose publish record has `slug` on Genex (a `genex://create/<slug>` link); null when none has. */
+  async genexGameOfSlug(slug: string): Promise<string | null> {
+    if (!this.plugins) return null;
+    return gameOfSlug(this, slug).catch(() => null);
+  }
+
   /** Fix with agent on `project`'s review card (`core/genex-review.ts`). */
   async genexFixReview(project: unknown, autoPublish: unknown, fixId?: unknown): Promise<{ fixId: string }> {
     if (typeof project !== "string" || !project) throw new Error(t("Open a game"));
@@ -2055,6 +2081,8 @@ export class StudioCore {
       const { project } = event.payload;
       this.#x.gameChanges.set(project, (this.#x.gameChanges.get(project) ?? 0) + 1);
     }
+    // A game's review changed: its sidebar line is read again when the window asks.
+    if (event.type === UiEvent.GenexReviewChanged) this.#reviewLines.forget(event.payload.project);
     this.options.onUiEvent?.(event);
   }
 

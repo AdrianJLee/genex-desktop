@@ -6314,4 +6314,22 @@ export default {
     "{state, select, taken_down {公開停止} not_approved {未承認} other {チェック中}} · 再接続して直す点を見る",
   "{title} is live!": "{title}を公開しました！",
   "{title} is public again": "{title}が再公開されました",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Genexのスタッフが{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}を確認中です。ふつうは1日以内です。",
+  "Checking fixes": "修正をチェック中",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genexが{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}をチェック中です。ふつうは数分です。",
+  "Human review": "スタッフが確認中",
+  "Human review, usually within a day.": "スタッフが確認中。ふつうは1日以内です。",
+  Public: "公開中",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, other {直す点が#件。クリックして確認し、エージェントで直そう。}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, other {直す点が#件。「公開」を開いて確認しよう。}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}": "{n, plural, other {直す点が#件}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}": "{n, plural, other {#件を修正中}}",
+  "{title} was taken down": "{title}は公開停止になりました",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{title}の{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}は承認されませんでした",
+  "{title}: human review kept it down": "{title}：スタッフの確認でも公開停止のままです",
 } satisfies LocaleCatalog;

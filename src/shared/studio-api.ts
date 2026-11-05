@@ -1,6 +1,7 @@
-import type { GenexReviewRequestAnswer, GenexReviewStatus } from "./genex-review.ts";
+import type { GenexReviewRequestAnswer, GenexReviewStatus, GenexSidebarEntry } from "./genex-review.ts";
 import type { AnalyticsConfig } from "./analytics.ts";
 import type {
+  GameLinkOpen,
   PlayControl,
   PlayFeedPage,
   PlayFeedRequest,
@@ -256,6 +257,11 @@ export interface StudioApi {
    * (the Publish dialog while something is open) Genex is asked again, at most once a 30 s.
    */
   genexReviewStatus(project: string, refresh?: boolean): Promise<GenexReviewStatus>;
+  /**
+   * The sidebar's second line under each game on Genex (Public, In review, Not approved, Taken down,
+   * Fixing…), by game: from what Studio keeps, never a read of Genex. A game Genex does not know has none.
+   */
+  genexReviewLines(): Promise<Record<string, GenexSidebarEntry>>;
   /**
    * Fix with agent on a game's review card: Genex's things to fix go to the game's chat as a brief, and,
    * with `autoPublish`, Studio sends the fixed app again (or asks a person to put a takedown back) once
@@ -605,8 +611,12 @@ export interface StudioApi {
   playLike(slug: string, liked: boolean): Promise<{ liked: boolean; likes: number }>;
   /** Play: close the viewer. */
   playClose(): Promise<void>;
-  /** Play: the game a `genex://game/<slug>` link asked to open, once; null when none waits. */
-  playTakeGameLink(): Promise<string | null>;
+  /**
+   * The game a `genex://` link asked to open, once; null when none waits. A `genex://game/<slug>` link
+   * opens its page in Play; a `genex://create/<slug>` link names this library's game with that link
+   * (`project`), opened with Publish, or only the slug when no game here has it.
+   */
+  playTakeGameLink(): Promise<GameLinkOpen | null>;
   /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
   playControl(control: PlayControl, at?: PlayPoint): Promise<void>;
   /** Play: whether the viewer bar's Comments is open (main lays its layer over the whole window). */

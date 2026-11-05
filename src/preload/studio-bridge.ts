@@ -386,6 +386,7 @@ function pluginCalls(bridge: BridgeCalls) {
     genexCloudBuild: (project, platform) => invoke("studio:plugins.genex-cloud-build", { project, platform }),
     genexReviewStatus: (project, refresh) =>
       invoke("studio:plugins.genex-review-status", { project, ...(refresh ? { refresh: true } : {}) }),
+    genexReviewLines: () => invoke("studio:plugins.genex-review-lines"),
     genexFixReview: (project, options) => invoke("studio:plugins.genex-fix-review", { project, ...options }),
     genexRequestReview: (project, args) => invoke("studio:plugins.genex-request-review", { project, ...args }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),

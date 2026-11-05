@@ -6389,4 +6389,24 @@ export default {
     "{state, select, taken_down {Removido} not_approved {Não aprovado} other {Em revisão}} · reconecte para ver o que corrigir",
   "{title} is live!": "{title} está no ar!",
   "{title} is public again": "{title} está público de novo",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Uma pessoa da Genex está revisando {app, select, mac {o app para Mac} windows {o app para Windows} linux {o app para Linux} other {os apps}}. Costuma levar até um dia.",
+  "Checking fixes": "Verificando correções",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "A Genex está verificando {app, select, mac {o app para Mac} windows {o app para Windows} linux {o app para Linux} other {os apps}}. Costuma levar alguns minutos.",
+  "Human review": "Revisão humana",
+  "Human review, usually within a day.": "Revisão humana, costuma levar até um dia.",
+  Public: "Público",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, one {# coisa para corrigir. Clique para ver e corrigir com seu agente.} other {# coisas para corrigir. Clique para ver e corrigir com seu agente.}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, one {# coisa para corrigir. Abra Publicar para ver.} other {# coisas para corrigir. Abra Publicar para ver.}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}":
+    "{n, plural, one {# coisa para corrigir} other {# coisas para corrigir}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}":
+    "{n, plural, one {Corrigindo # coisa} other {Corrigindo # coisas}}",
+  "{title} was taken down": "{title} foi removido",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{app, select, mac {O app para Mac} windows {O app para Windows} linux {O app para Linux} other {Os apps}} de {title} não {app, select, mac {foi aprovado} windows {foi aprovado} linux {foi aprovado} other {foram aprovados}}",
+  "{title}: human review kept it down": "{title}: a revisão humana manteve a remoção",
 } satisfies LocaleCatalog;

@@ -6169,4 +6169,22 @@ export default {
     "{state, select, taken_down {게시 중단} not_approved {승인되지 않음} other {검토 중}} · 다시 연결해서 고칠 점 보기",
   "{title} is live!": "{title} 게시 완료!",
   "{title} is public again": "{title} 다시 공개됨",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Genex 담당자가 {app, select, mac {Mac 앱} windows {Windows 앱} linux {Linux 앱} other {앱}}을 검토하고 있어요. 보통 하루 안에 끝나요.",
+  "Checking fixes": "수정 사항 확인 중",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genex가 {app, select, mac {Mac 앱} windows {Windows 앱} linux {Linux 앱} other {앱}}을 확인하고 있어요. 보통 몇 분 걸려요.",
+  "Human review": "사람 검토",
+  "Human review, usually within a day.": "사람 검토 중, 보통 하루 안에 끝나요.",
+  Public: "공개",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, other {고칠 점 #개. 클릭해서 확인하고 에이전트로 고쳐 보세요.}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, other {고칠 점 #개. 게시하기를 열어 확인하세요.}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}": "{n, plural, other {고칠 점 #개}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}": "{n, plural, other {#개 수정 중}}",
+  "{title} was taken down": "{title} 게시가 중단됐어요",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{title}의 {app, select, mac {Mac 앱} windows {Windows 앱} linux {Linux 앱} other {앱}}이 승인되지 않았어요",
+  "{title}: human review kept it down": "{title}: 사람 검토 후에도 게시 중단이 유지됐어요",
 } satisfies LocaleCatalog;

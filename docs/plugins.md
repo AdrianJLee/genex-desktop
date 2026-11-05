@@ -3371,6 +3371,24 @@ Genex:
   takedown's appeal, with an optional note (an older API's 20-character floor kept); an app Genex
   keeps no copy of (`resend`) is sent again from its folder in the same press (`publishedApps`'
   `force`). L4: `npm run test:ui -- publish-platforms-ui` and `npm run test:ui -- chat-review-card-ui`.
+  The bell reads the same records (`NoticeKind.Review`, one row per game, `noticeKey.review`):
+  `taken_down`, `not_approved` and `upheld` wait with **Fix** (`genexFixReview`, then the game's
+  chat), a `genex_review_fix` press settles the row, and `with_person`, `requested`, `live` and
+  `restored` replace it as news. macOS is told of taken down, not approved, public again and live
+  only while Studio is in the background (`systemNotes`); while it is in front with another game
+  open, taken down, not approved and public again are a toast with **Open** for 8 s
+  (`reviewToasts`). A click anywhere opens the game's chat with Publish (`openPluginSetupFor`, which
+  waits for that game's strip) and sends nothing. The sidebar's second line under a game on Genex
+(Public in green, In review, Human review, Not approved and Taken down in red, Fixing n things
+with the working dot, Checking fixes; none for a game Genex doesn't know) comes from
+  `studio:plugins.genex-review-lines` (fixture-safe; `core/genex-review-lines.ts`): the kept
+  review, the chat's newest fix press (Fixing while the agent works, Checking fixes once the app went
+  again) and the publish record (Public for any listed game), each game's review part kept until
+  `UiEvent.GenexReviewChanged`, which the watch sends on every kept change. Publish's status
+  (`publishButtonStatus`) carries a red dot for a takedown or an app turned down, and says while an
+  app is checked or with a person. `genex://create/<slug>` opens the library's game whose publish
+  record has that slug, with Publish (`linkOpening`), else what `genex://game/<slug>` does. The
+  `native-review` fixture (`STUDIO_FIXTURE_GENEX_ACCOUNT=1`) seeds five games and their news.
 - A Mac app goes signed ad hoc unless its creator turned on Sign and notarize Mac apps in the Genex
   plugin's settings (`mac-notarize`, `mac-signing-identity`, `mac-notary-profile`; `macSigningOf`).
   Genex never signs with an identity of its own: the certificate is the creator's Developer ID

@@ -6466,4 +6466,24 @@ export default {
     "{state, select, taken_down {Gesperrt} not_approved {Nicht freigegeben} other {In Prüfung}} · verbinde dich neu, um zu sehen, was zu korrigieren ist",
   "{title} is live!": "{title} ist live!",
   "{title} is public again": "{title} ist wieder öffentlich",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Jemand bei Genex prüft {app, select, mac {die Mac-App} windows {die Windows-App} linux {die Linux-App} other {die Apps}}. Meist innerhalb eines Tages.",
+  "Checking fixes": "Korrekturen werden geprüft",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genex prüft {app, select, mac {die Mac-App} windows {die Windows-App} linux {die Linux-App} other {die Apps}}. Meist ein paar Minuten.",
+  "Human review": "Prüfung durch Menschen",
+  "Human review, usually within a day.": "Prüfung durch Menschen, meist innerhalb eines Tages.",
+  Public: "Öffentlich",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, one {# Sache zu korrigieren. Klick, um sie zu sehen und mit deinem Agenten zu korrigieren.} other {# Sachen zu korrigieren. Klick, um sie zu sehen und mit deinem Agenten zu korrigieren.}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, one {# Sache zu korrigieren. Öffne Veröffentlichen, um sie zu sehen.} other {# Sachen zu korrigieren. Öffne Veröffentlichen, um sie zu sehen.}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}":
+    "{n, plural, one {# Sache zu korrigieren} other {# Sachen zu korrigieren}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}":
+    "{n, plural, one {# Sache wird korrigiert} other {# Sachen werden korrigiert}}",
+  "{title} was taken down": "{title} wurde gesperrt",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{app, select, mac {Die Mac-App} windows {Die Windows-App} linux {Die Linux-App} other {Die Apps}} von {title} {app, select, mac {wurde} windows {wurde} linux {wurde} other {wurden}} nicht freigegeben",
+  "{title}: human review kept it down": "{title}: Die Prüfung durch Menschen hat die Sperre bestätigt",
 } satisfies LocaleCatalog;

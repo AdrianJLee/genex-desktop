@@ -2128,6 +2128,11 @@ button.genex-publish-banner-name:hover {
 .genex-review-history[data-genex-review-history="restored"] .genex-review-history-ring {
   color: var(--green);
 }
+/* What an older record said, opened read only from its line: the card quieter, with no press. */
+.genex-review-settled .genex-review-title {
+  color: var(--ink-2);
+  font-weight: 500;
+}
 /* Request human review (D1). */
 .genex-review-request {
   display: grid;

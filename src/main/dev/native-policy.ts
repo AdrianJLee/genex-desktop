@@ -310,6 +310,9 @@ const FIXTURE_SAFE = [
   // A game's review as the Genex plugin keeps it: a fixture profile never has Genex read again
   // (`genexReviewReads`), so it answers the record its fixture laid down.
   "studio:plugins.genex-review-status",
+  // The sidebar's lines under the games on Genex: what Studio keeps (the plugin's kept review, the
+  // chat's fix records, the publish record), never a read of Genex.
+  "studio:plugins.genex-review-lines",
   "studio:plugins.index",
   "studio:plugins.watch",
   // A local plugin's grants live in the profile's install record; no dialog, no socket.

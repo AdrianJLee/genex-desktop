@@ -3751,7 +3751,6 @@ export const PUBLISH_REMIX_WORDS = {
   notSent: t("Its project didn’t go, so no one can remix it yet."),
 } as const;
 
-/** The Publish dialog's platform rows (`panels/plugins/genex/PublishPlatforms.tsx`). */
 /**
  * Genex's review of a game's Mac, Windows and Linux apps and of a takedown, as the Publish dialog, the
  * chat's review card and Request human review say it (spec in `shared/genex-review.ts`). `app` is
@@ -3901,8 +3900,44 @@ export const REVIEW_WORDS = {
     takenDown: t("Taken down"),
     publicAgain: t("Public again"),
   },
+  /**
+   * The bell's row, the macOS notification and the toast (C5): a headline, then what it says. A
+   * turned-down or taken-down game waits for the person; the rest is news.
+   */
+  notice: {
+    takenDown: (title: string) => t("{title} was taken down", { title }),
+    notApproved: (title: string, app: string) =>
+      t("{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved", {
+        title,
+        app,
+      }),
+    upheld: (title: string) => t("{title}: human review kept it down", { title }),
+    things: (n: number) => t("{n, plural, one {# thing to fix} other {# things to fix}}", { n }),
+    humanReview: t("Human review, usually within a day."),
+    /** A macOS notification's body for a game that waits: what to fix, and what a click does. */
+    systemThings: (n: number) =>
+      t(
+        "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}",
+        { n },
+      ),
+    /** The bell row's press for a game that waits: Fix with agent. */
+    fix: t("Fix"),
+    /** The toast's press: the game, with Publish open. */
+    open: t("Open"),
+  },
+  /** The sidebar's second line under a game's name (C1), by `GenexSidebarLine`. */
+  sidebar: {
+    public: t("Public"),
+    in_review: t("In review"),
+    human_review: t("Human review"),
+    not_approved: t("Not approved"),
+    taken_down: t("Taken down"),
+    fixing: (n: number) => t("{n, plural, one {Fixing # thing} other {Fixing # things}}", { n }),
+    checking_fixes: t("Checking fixes"),
+  },
 } as const;
 
+/** The Publish dialog's platform rows (`panels/plugins/genex/PublishPlatforms.tsx`). */
 export const PUBLISH_PLATFORM_WORDS = {
   label: t("Platforms"),
   name: {

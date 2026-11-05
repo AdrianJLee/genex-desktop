@@ -7,14 +7,16 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
-import { GENEX_PLUGIN_ID, GenexAction } from "../../shared/genex.ts";
+import { CustomEvent, customEventData, customRecord } from "../../shared/custom-events.ts";
+import type { EventData } from "../../shared/event-log.ts";
+import { GENEX_PLUGIN_ID, GenexAction, GenexHostedStatus } from "../../shared/genex.ts";
 import type { GenexReviewRequestAnswer, GenexReviewStatus, GenexReviewTold } from "../../shared/genex-review.ts";
 import { publishesAsWebGame } from "../../shared/project-workspace.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { publishAppsFromDialog } from "./genex-publish.ts";
 import type { GenexReviewDeps } from "./genex-review.ts";
+import type { ReviewLinesDeps } from "./genex-review-lines.ts";
 import type { ReviewWatchDeps } from "./genex-review-watch.ts";
 import { publishedApps } from "./publish-platforms.ts";
 
@@ -64,21 +66,40 @@ export async function reviewStatusOf(
   return answer as unknown as GenexReviewStatus;
 }
 
+/** One of the game's records in the Genex plugin's storage, as JSON; null when it is missing or not JSON. */
+async function publishRecord(
+  core: ReviewHostCore,
+  project: string,
+  file: string,
+): Promise<Record<string, unknown> | null> {
+  const dir = path.join(core.pluginServices.root(GENEX_PLUGIN_ID), "publish", project);
+  const read = await readFile(path.join(dir, file), "utf8").catch(() => "");
+  try {
+    const parsed: unknown = JSON.parse(read);
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The game's link on Genex, from its publish record or the CLI's link beside it; undefined when it has none. */
 async function slugOf(core: ReviewHostCore, project: string): Promise<string | undefined> {
-  const dir = path.join(core.pluginServices.root(GENEX_PLUGIN_ID), "publish", project);
   for (const file of ["publish.json", path.join(".genex", "project.json")]) {
-    const read = await readFile(path.join(dir, file), "utf8").catch(() => "");
-    const slug = (() => {
-      try {
-        return (JSON.parse(read) as { slug?: unknown }).slug;
-      } catch {
-        return undefined;
-      }
-    })();
+    const slug = (await publishRecord(core, project, file))?.slug;
     if (typeof slug === "string" && slug) return slug;
   }
   return undefined;
+}
+
+/** Whether the game's publish record says it is listed on Genex. */
+async function listedOnGenex(core: ReviewHostCore, project: string): Promise<boolean> {
+  return (await publishRecord(core, project, "publish.json"))?.status === GenexHostedStatus.Published;
+}
+
+/** The library's game whose publish record has `slug` on Genex; null when none has. */
+export async function gameOfSlug(core: ReviewHostCore, slug: string): Promise<string | null> {
+  for (const project of await gamesOnGenex(core)) if ((await slugOf(core, project)) === slug) return project;
+  return null;
 }
 
 /** The library's games on Genex, while the Genex plugin is on. */
@@ -95,6 +116,12 @@ async function gameOf(core: ReviewHostCore, project: string) {
   if (!game) throw new Error(MESSAGE.NoGame);
   const slug = await slugOf(core, project);
   return { title: game.title || project, ...(slug ? { slug } : {}), web: publishesAsWebGame(game) };
+}
+
+/** The games review records are about, each once. */
+function recordsProjects(records: readonly EventData[]): string[] {
+  const projects = records.map((record) => customRecord(record)?.payload.project);
+  return [...new Set(projects.filter((project): project is string => typeof project === "string" && project !== ""))];
 }
 
 /** The watch over the core. */
@@ -124,6 +151,16 @@ export function reviewWatchDeps(core: ReviewHostCore, reads: boolean): ReviewWat
   };
 }
 
+/** The sidebar's lines over the core: the kept review only, never a read of Genex. */
+export function reviewLinesDeps(core: ReviewHostCore): ReviewLinesDeps {
+  return {
+    games: () => gamesOnGenex(core),
+    status: (project) => reviewStatusOf(core, project, {}, false),
+    events: async (project) => core.store.listEvents(await core.threadForGame(project)),
+    published: (project) => listedOnGenex(core, project),
+  };
+}
+
 /** The review card's presses over the core; `refresh` reads the game's review again on the watch. */
 export function reviewFlowDeps(
   core: ReviewHostCore,
@@ -137,6 +174,8 @@ export function reviewFlowDeps(
     events: (threadId) => core.store.listEvents(threadId),
     append: async (threadId, records) => {
       await core.append(records, threadId);
+      // A press or Studio's step after it changes the game's line and its bell row: say so.
+      for (const project of recordsProjects(records)) core.emit(UiEvent.GenexReviewChanged, { project });
     },
     send: (text, options) => core.sendUserMessage(text, options),
     apps: (project, choice) => publishedApps(core, project, undefined, choice),

@@ -1,8 +1,9 @@
 /**
  * The chat's review cards (mockups A2, C2, C3, C4, D2) in a disposable Electron profile over a fake
  * `window.studio`: each game's newest record is its live card as Genex's word now draws it, every
- * older one a history line; Fix with agent presses through the native IPC. Dark and light screens.
- * No card says the check takes seconds or that Genex checks public games again.
+ * older one a history line, which opens read only to what it said then; Fix with agent presses through
+ * the native IPC; a review of another game raises a toast with [Open]. Dark and light screens. No card
+ * says the check takes seconds or that Genex checks public games again.
  */
 import { build } from "esbuild";
 import { spawn } from "node:child_process";
@@ -73,12 +74,18 @@ app.whenReady().then(async()=>{
    assert.equal(scene('fix-sent').link,"Don't ask automatically");
    assert.deepEqual(scene('fix-stopped').presses,['Fix again']);
    assert.doesNotMatch(seen.text,/few seconds|keeps checking|checks public games/i);
+   assert.deepEqual(seen.toasts,[{text:'Lost Cathedral is public again',action:'Open'}]);
+   const opened=await js('window.chatReviewRig.expand("taken-down")');
+   assert.deepEqual(opened.settled,[{title:'Midnight Asphalt is live!',lines:['Anyone can find it on Genex.'],presses:0}]);
    report[theme]=await capture(theme+'-chat-review-cards');
   }
+  const toasted=await js('window.chatReviewRig.openToast()');
+  assert.deepEqual(toasted.toastOpened,['cathedral']);
+  assert.deepEqual(toasted.toasts,[],'pressed, the toast goes');
   const fixed=await js('window.chatReviewRig.press("not-approved","fix")');
   assert.deepEqual(fixed.pressed,['fix:not-approved']);
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Chat review cards: checking, checking fixes, live with its link, an update, public again, not approved, taken down, a fix on its way and one that stopped, with history lines; Fix with agent presses through the native IPC');
+  console.log('PASS Chat review cards: checking, checking fixes, live with its link, an update, public again, not approved, taken down, a fix on its way and one that stopped, with history lines that open read only; Fix with agent presses through the native IPC; another game public again toasts with Open');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

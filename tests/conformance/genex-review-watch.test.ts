@@ -279,10 +279,11 @@ describe("what the watch tells", () => {
     const records: Record<string, GenexReviewRecord> = {
       a: recordOf([app(GenexAppReview.Live, { version: "1.2.0" })]),
     };
-    const { time, appended, start } = watchOver(records);
+    const { time, appended, emitted, start } = watchOver(records);
     const watch = start();
     await time.advance(REVIEW_FIRST_SWEEP_MS);
     assert.equal(appended.length, 0, "a build live before the watch ever read it is no news");
+    assert.deepEqual(emitted, ["a"], "but the window reads it: the sidebar says Public");
     records.a = recordOf([app(GenexAppReview.Checking)]);
     watch.refresh("a");
     await time.advance(0);

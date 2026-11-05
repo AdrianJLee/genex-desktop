@@ -18,6 +18,8 @@ import {
   ReviewPlace,
   type ReviewCardView,
   reviewCardView,
+  type SettledCardView,
+  settledCardView,
 } from "../panels/plugins/genex/review-card-view.ts";
 import { useGenexPublishState } from "../panels/plugins/genex/use-genex-publishing.ts";
 import { useGenexFix, useGenexReview } from "../panels/plugins/genex/use-genex-review.ts";
@@ -38,12 +40,40 @@ const when = (iso: string): string =>
     ? new Date(iso).toLocaleString(intlLocale(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "";
 
-/** An older record, settled into one line that opens to what it said then. */
-function HistoryLine({ entry }: { entry: GenexReviewEntry }): JSX.Element | null {
+/** What a settled card said then, read only: its title, lines, a person's words and its things, no press. */
+function SettledCard({ card }: { card: SettledCardView }): JSX.Element {
+  return (
+    <section className="genex-review-card genex-review-settled" data-tone="quiet" data-genex-review-settled>
+      <p className="genex-review-title">
+        <span>{card.title}</span>
+      </p>
+      {card.lines.map((line) => (
+        <p key={line} className="genex-review-line">
+          {line}
+        </p>
+      ))}
+      {card.quote && (
+        <blockquote className="genex-review-quote" data-analytics-mask>
+          “{card.quote}”
+        </blockquote>
+      )}
+      {card.things.length > 0 && (
+        <ul className="genex-review-things" data-analytics-mask>
+          {card.things.map((thing) => (
+            <li key={thing.text}>{thing.text}</li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** An older record, settled into one line, "{label} · {when} ›", that opens to what it said then. */
+function HistoryLine({ entry, title }: { entry: GenexReviewEntry; title: string }): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const label = entry.fix ? fixHistoryLabel(entry.fix.count ?? 0) : historyLabel(entry.review ?? {});
   if (!label) return null;
-  const things = entry.review?.things ?? [];
+  const card = open ? settledCardView(entry, title) : null;
   return (
     <div className="genex-review-history" data-genex-review-history={entry.review?.change ?? "fix"}>
       <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="genex-review-history-line">
@@ -52,13 +82,7 @@ function HistoryLine({ entry }: { entry: GenexReviewEntry }): JSX.Element | null
         <span className="genex-review-history-when">· {when(entry.review?.at ?? entry.fix?.at ?? entry.at)}</span>
         <Icon name={open ? "chevron-down" : "chevron-right"} size={12} />
       </button>
-      {open && things.length > 0 && (
-        <ul className="genex-review-things" data-analytics-mask>
-          {things.map((thing) => (
-            <li key={thing.text}>{thing.text}</li>
-          ))}
-        </ul>
-      )}
+      {card && <SettledCard card={card} />}
     </div>
   );
 }
@@ -150,6 +174,8 @@ function LiveReview({ project }: { project: string }): JSX.Element | null {
 
 export function GenexReviewCard({ entry, project }: { entry: GenexReviewEntry; project: string | null }) {
   const game = entry.project ?? project;
+  const named = useLibrary((s) => s.games.find((one) => one.name === game)?.title);
   if (!game) return null;
-  return entry.latest ? <LiveReview project={game} /> : <HistoryLine entry={entry} />;
+  const title = named || entry.review?.title || game;
+  return entry.latest ? <LiveReview project={game} /> : <HistoryLine entry={entry} title={title} />;
 }

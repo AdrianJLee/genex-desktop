@@ -152,6 +152,7 @@ export function registerPluginsIpc(handle: IpcHandle, deps: PluginsIpcDeps): voi
   );
   handle("studio:plugins.genex-cloud-build", async (p) => cloudBuildFromDialog(core, p?.project, p?.platform));
   handle("studio:plugins.genex-review-status", async (p) => core.genexReviewStatus(p?.project, p?.refresh));
+  handle("studio:plugins.genex-review-lines", async () => core.genexReviewLines());
   // A review card's Fix with agent and Request human review: the press is the consent to what it sends.
   handle("studio:plugins.genex-fix-review", async (p) => core.genexFixReview(p?.project, p?.autoPublish, p?.fixId));
   handle("studio:plugins.genex-request-review", async (p) =>

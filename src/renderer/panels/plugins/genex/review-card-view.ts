@@ -16,6 +16,7 @@ import {
   GenexPersonWhy,
   type GenexReviewApp,
   GenexReviewChange,
+  type GenexReviewFixPayload,
   type GenexReviewPayload,
   GenexReviewReadProblem,
   type GenexReviewRecord,
@@ -482,6 +483,80 @@ export function historyLabel(record: Partial<GenexReviewPayload>): string | null
 
 /** The history line of a fix press: "3 fixes sent". */
 export const fixHistoryLabel = (count: number): string => WORDS.history.fixes(count);
+
+/** What a settled card said when it was the newest, read only: its title, its lines, a person's words, its things. */
+export interface SettledCardView {
+  title: string;
+  lines: string[];
+  quote: string | null;
+  things: GenexReviewThing[];
+}
+
+/** The things a record kept that have words, at most ten, each once: an old log's shape is never trusted. */
+const keptThings = (record: Partial<GenexReviewPayload>): GenexReviewThing[] => {
+  const listed: unknown[] = Array.isArray(record.things) ? record.things : [];
+  const worded = listed.filter(
+    (thing): thing is GenexReviewThing =>
+      typeof thing === "object" && thing !== null && typeof (thing as { text?: unknown }).text === "string",
+  );
+  return thingsOf([{ things: worded }]);
+};
+
+/** A settled record's card, as it read then; null for a record that draws no line. */
+function settledReview(record: Partial<GenexReviewPayload>, title: string): SettledCardView | null {
+  const things = keptThings(record);
+  const n = typeof record.count === "number" ? record.count : things.length;
+  const quote = typeof record.reply === "string" && record.reply ? record.reply : null;
+  const card = (head: string, lines: string[] = [], keep = things): SettledCardView => ({
+    title: head,
+    lines,
+    quote,
+    things: keep,
+  });
+  const app = appNoun(record.app ? [record.app] : []);
+  switch (record.change) {
+    case GenexReviewChange.Sent:
+      return card(
+        record.recheck ? WORDS.title.checkingFixes : WORDS.title.checking(app),
+        [WORDS.line.usuallyMinutes],
+        [],
+      );
+    case GenexReviewChange.Live:
+      return record.update && record.app
+        ? card(WORDS.title.versionLive(record.app.version), [WORDS.line.platformPlayers(app)], [])
+        : card(WORDS.title.live(title), [WORDS.line.anyone], []);
+    case GenexReviewChange.NotApproved:
+      return card(WORDS.title.notApproved(n), quote ? [WORDS.line.personReviewed] : []);
+    case GenexReviewChange.WithPerson:
+      return card(WORDS.title.withPerson, [WORDS.line.withPerson], []);
+    case GenexReviewChange.Requested:
+      return card(WORDS.history.requested, [WORDS.line.requested]);
+    case GenexReviewChange.TakenDown:
+      return card(WORDS.title.takenDown(n), [WORDS.line.hidden]);
+    case GenexReviewChange.Upheld:
+      return card(WORDS.title.takenDown(n), [WORDS.line.upheld]);
+    case GenexReviewChange.Restored:
+      return card(WORDS.title.publicAgain(title), [record.requested ? WORDS.line.teamAgreed : WORDS.line.anyone], []);
+    default:
+      return null;
+  }
+}
+
+/**
+ * An older record or fix press as its history line opens it (C2, C4, D2): what it said then, read only,
+ * with no press. Null for one that draws no line.
+ */
+export function settledCardView(
+  entry: { review: Partial<GenexReviewPayload> | null; fix: Partial<GenexReviewFixPayload> | null },
+  title: string,
+): SettledCardView | null {
+  if (entry.fix) {
+    const takedown = entry.fix.kind === GenexFixKind.Takedown || entry.fix.kind === GenexFixKind.Web;
+    const sent = takedown ? WORDS.line.sentTakedown : WORDS.line.sentApp;
+    return { title: fixHistoryLabel(entry.fix.count ?? 0), lines: [sent], quote: null, things: [] };
+  }
+  return entry.review ? settledReview(entry.review, title) : null;
+}
 
 /** Whether the game's state is one the Publish dialog shows a review card for (not live, not checking). */
 export const dialogShowsCard = (view: ReviewCardView | null): view is ReviewCardView => view !== null;

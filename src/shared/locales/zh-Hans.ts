@@ -5853,4 +5853,9 @@ export default {
   "Genex can’t play this game’s app on this computer.": "Genex 无法在这台电脑上运行这个游戏的应用。",
   "Open the game’s chat to have the agent package it.": "打开游戏的聊天，让智能体来打包。",
   "Not open in Unreal": "未在 Unreal 中打开",
+  "{count, plural, one {and # more error} other {and # more errors}}": "{count, plural, other {还有 # 个错误}}",
+  "Fix with agent": "让智能体修复",
+  "Ask the agent to fix these errors": "请智能体修复这些错误",
+  "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
+    "Genex 无法构建“{title}”的 {players} 应用。请修复游戏代码中的这些错误，让它能在那里构建，并保持游戏在其他系统上的表现不变。这台电脑无法为 {players} 构建，所以请仔细检查每处修复。完成后告诉我再按一次 Build on Genex。\n\n{errors}",
 } satisfies LocaleCatalog;

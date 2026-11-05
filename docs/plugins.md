@@ -3370,7 +3370,10 @@ Genex:
   answers as `native.cloud`; the row then says "Building on Genex", its pill shimmering beside a live
   clock from when the work began (`PlatformRow.since`), "On Genex · built …"
   with Build again, or why it failed by code (`CloudBuildFailure`) with Try again (none once the
-  month's builds are used). A refused press is said under the rows. Job ids and platforms Genex
+  month's builds are used). A failed compile or cook carries the log's errors (`errors`, at most 60
+  lines): the first shows under the rows beside Fix with agent, which sends them all through the
+  game's chat (`cloudErrors`, `cloudFixAsk`). Genex answers an unchanged project that failed so with
+  that failure, without an upload, so Try again costs only the zip. A refused press is said under the rows. Job ids and platforms Genex
   answers are kept only when whole (`cloudBuildOf`). Nothing is asked while the pinned CLI is older
   than `genex native build` (1.38.0, `pinnedCliBuildsApps`): `native.cloud.supported` is false and
   the row reads as before. Genex's side of this is a draft contract.

@@ -32,6 +32,8 @@ import {
   appsMadeHere,
   appsUpToDate,
   appsLabel,
+  cloudErrors,
+  cloudFixAsk,
   failureLines,
   type PlatformRow,
   shownRows,
@@ -505,6 +507,19 @@ describe("Publish's platform rows as the dialog says them", () => {
       failureLines([WINDOWS], record({ supported: true, builds: [], send: { ...stopped, error: "Upload failed." } })),
       ["Couldn’t send the project to Genex: Upload failed."],
     );
+    const broken = build({
+      state: CloudBuildState.Failed,
+      failure: CloudBuildFailure.Compile,
+      errors: ["Focus.cpp(79,19): error C2065: 'NSWindow'", "Bomb.cpp(637,8): error C4458"],
+    });
+    const fix = cloudErrors([MAC, WINDOWS], cloud([broken]));
+    assert.deepEqual(fix, { target: PublishTarget.Windows, errors: broken.errors });
+    assert.equal(windowsRow(cloud([broken]))[1], PlatformEnd.CloudRetry, "Try again stays, for after the fix");
+    assert.ok(fix && cloudFixAsk(fix, "Dust").includes("Bomb.cpp(637,8): error C4458"), "the agent gets every line");
+    assert.equal(cloudErrors([MAC, WINDOWS], cloud([done])), null);
+    assert.equal(cloudErrors([MAC, WINDOWS], cloud([build({ state: CloudBuildState.Failed })])), null);
+    const resent = record({ supported: true, builds: [broken], send: sending });
+    assert.equal(cloudErrors([MAC, WINDOWS], resent), null, "a send under way may hold the fix");
     const otherPlatform = cloud([build({ platform: "linux" })]);
     assert.deepEqual(windowsRow(otherPlatform), ["Genex can build it on Windows for you", PlatformEnd.CloudBuild]);
     const onWindows = platformRows(

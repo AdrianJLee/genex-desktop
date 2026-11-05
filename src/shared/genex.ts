@@ -831,6 +831,8 @@ export interface GenexCloudBuild {
   /** When it went on the game's page or failed; absent while it runs. */
   finishedAt?: string;
   failure?: CloudBuildFailure;
+  /** What its log says went wrong, in the project's own paths; on a failed compile or cook only. */
+  errors?: string[];
 }
 
 /** How sending a game's project to Genex for a build stands. Kept in the publish workspace: never rename one. */

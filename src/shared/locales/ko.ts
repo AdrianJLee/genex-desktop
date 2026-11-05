@@ -6060,4 +6060,9 @@ export default {
   "Genex can’t play this game’s app on this computer.": "Genex가 이 컴퓨터에서 이 게임의 앱을 실행할 수 없어요.",
   "Open the game’s chat to have the agent package it.": "에이전트가 패키징하도록 게임 채팅을 열어 주세요.",
   "Not open in Unreal": "Unreal에서 열려 있지 않아요",
+  "{count, plural, one {and # more error} other {and # more errors}}": "{count, plural, other {외 오류 #개}}",
+  "Fix with agent": "에이전트로 고치기",
+  "Ask the agent to fix these errors": "이 오류를 고쳐 달라고 에이전트에게 요청",
+  "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
+    "Genex가 “{title}”의 {players} 앱을 만들지 못했어요. 거기서 만들어지도록 게임 코드의 오류를 고치고, 다른 시스템에서는 지금처럼 동작하게 유지해 주세요. 이 컴퓨터로는 {players}용으로 만들 수 없으니 수정마다 꼼꼼히 확인해 주세요. 끝나면 Build on Genex를 다시 누르라고 알려 주세요.\n\n{errors}",
 } satisfies LocaleCatalog;

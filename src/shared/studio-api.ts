@@ -840,6 +840,8 @@ export interface StudioApi {
   cancelModelDownload(): Promise<boolean>;
   /** Delete a downloaded local model (Bonsai or Ollama) from this Mac. */
   removeModel(model: string): Promise<boolean>;
+  /** "Raise context to 16K": a copy of an Ollama model that runs with a 16K context; its model id. */
+  raiseModelContext(model: string): Promise<string>;
   revealProject(project: string, file?: string): Promise<boolean>;
   /** A file the chat names, from that chat's game folder or its run's unlanded build. */
   readGameFile(threadId: string, path: string): Promise<GameFile>;

@@ -50,6 +50,7 @@ function useTranscriptContext(parts: ChatParts): TranscriptContext {
         if (!composer.drafts.draft) composer.drafts.setDraft(PLAN_WORDS.changePrefill);
         focusComposer();
       },
+      onUseModel: (key: string) => latest.current.composer.model.bar.onPick(key),
       onPluginTurnedOn: (name: string) => {
         const { report, props } = latest.current;
         void report(pluginTurnedOnWords(name), MessageOrigin.PluginTurnedOn).catch(notifyProblem(props.onNotice));

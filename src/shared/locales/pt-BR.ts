@@ -6264,4 +6264,10 @@ export default {
     "O link antigo continua abrindo o jogo, também para quem já o tem.",
   "{count, plural, one {# change left} other {# changes left}}":
     "{count, plural, one {resta # mudança} other {restam # mudanças}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "O Genex pode copiar {model} para rodar com um contexto de 16K. A cópia usa os mesmos arquivos, então nada é baixado.",
+  "Ollama is unavailable": "Ollama indisponível",
+  "Raise context to 16K": "Aumentar contexto para 16K",
+  "Raising…": "Aumentando…",
+  "The chat now uses {model}. Send your message again.": "O chat agora usa {model}. Envie sua mensagem de novo.",
 } satisfies LocaleCatalog;

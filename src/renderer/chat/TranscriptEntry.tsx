@@ -29,6 +29,7 @@ import { RewindLine } from "./RewindLine.tsx";
 import { JobLine } from "./JobLine.tsx";
 import { ToldLine, WorkerLine } from "./WorkerLine.tsx";
 import { AppAccessLine } from "./AppAccessLine.tsx";
+import { RaiseContextLine } from "./RaiseContextLine.tsx";
 import { WentAheadLine } from "./WentAheadLine.tsx";
 import { JudgeLine } from "./JudgeLine.tsx";
 import { PermissionOutcome } from "./PermissionRequest.tsx";
@@ -79,6 +80,8 @@ export interface TranscriptContext {
   onRewind?: (entryId: string) => void;
   /** Where a command a reply offers runs: this chat's game. Absent in Studio, whose replies offer none. */
   commands?: { threadId: string; project: string };
+  /** Switch the chat to a model (its `engine::model` key), as a pick in the composer does. */
+  onUseModel?: (key: string) => void;
 }
 
 export const TranscriptEntry = memo(function TranscriptEntry({
@@ -319,7 +322,8 @@ function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryK
 
 /**
  * The action entries that are one quiet line: an engine link, a rewind that put files back, a job,
- * a worker, what a worker was told, a missing permission, an agent that went ahead of the person, a judge's play.
+ * a worker, what a worker was told, a missing permission, an agent that went ahead of the person, a judge's play,
+ * a model whose context is too small.
  */
 function quietLine(
   entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
@@ -334,6 +338,8 @@ function quietLine(
   if (entry.action === EntryAction.Told) return <ToldLine entry={entry} />;
   if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.WentAhead) return <WentAheadLine entry={entry} />;
+  if (entry.action === EntryAction.RaiseContext)
+    return <RaiseContextLine entry={entry} onUseModel={context.onUseModel} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Judge && entry.judge) return <JudgeLine judge={entry.judge} />;
   return null;
 }

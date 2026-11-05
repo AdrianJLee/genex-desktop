@@ -6230,4 +6230,10 @@ export default {
     "Старая ссылка тоже будет открывать игру, и у тех, у кого она уже есть.",
   "{count, plural, one {# change left} other {# changes left}}":
     "{count, plural, one {осталась # смена} few {осталось # смены} many {осталось # смен} other {осталось # смены}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex может сделать копию {model} с контекстом 16K. Копия использует те же файлы, так что ничего не скачивается.",
+  "Ollama is unavailable": "Ollama недоступна",
+  "Raise context to 16K": "Поднять контекст до 16K",
+  "Raising…": "Поднимаю…",
+  "The chat now uses {model}. Send your message again.": "Теперь чат работает на {model}. Отправь сообщение ещё раз.",
 } satisfies LocaleCatalog;

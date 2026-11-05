@@ -5523,7 +5523,7 @@ export default {
   "Build on Genex": "在 Genex 上制作",
   "Build the {app} on Genex": "在 Genex 上制作{app}",
   "Build the {app} on Genex again": "在 Genex 上重新制作{app}",
-  "Building on Genex · {minutes} min so far": "正在 Genex 上制作 · 已 {minutes} 分钟",
+  "Building on Genex": "正在 Genex 上制作",
   "Building…": "制作中…",
   "Couldn’t build the {app} on Genex: {error}": "无法在 Genex 上制作{app}：{error}",
   "Genex builds only Windows apps on its own computers": "Genex 在自己的电脑上只能制作 Windows 应用",
@@ -5851,8 +5851,7 @@ export default {
   "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
     "目前 Genex 只能构建 Unreal 5.8 游戏，而这个项目没有写明版本。请在 Unreal 5.8 中打开并保存，然后再构建一次。",
   "Sending the project to Genex stopped": "项目发送到 Genex 已停止",
-  "Sending to Genex · {minutes} min so far. Keep Genex open":
-    "正在发送到 Genex · 已用 {minutes} 分钟。请保持 Genex 打开",
+  "Sending to Genex. Keep Genex open": "正在发送到 Genex。请保持 Genex 打开",
   "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
     "这个游戏使用 Unreal {version}。目前 Genex 只能构建 Unreal 5.8 游戏：请升级到 5.8，然后再构建一次。",
 } satisfies LocaleCatalog;

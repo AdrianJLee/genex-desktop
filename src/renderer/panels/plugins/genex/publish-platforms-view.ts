@@ -104,6 +104,10 @@ export interface PlatformRow {
   size: string | null;
   state: PublishPlatform["state"];
   end: PlatformEnd;
+  /** When the work the row shows began, for its clock; only Genex's own work has one. */
+  since?: string;
+  /** Nothing can be done about this row from here, so the dialog leaves it out (`shownRows`). */
+  outOfReach?: boolean;
 }
 
 type NativeTarget = Exclude<PublishTarget, typeof PublishTarget.Web>;
@@ -163,23 +167,28 @@ function nativeEnd(row: PublishPlatform, native: GenexNativeRecord | undefined):
  * The web row's second line and end: ready; with none in the folder but one Genex still plays
  * (`hostedWeb`), that one, which can be taken off; else what the game is offered for one.
  */
-function webWords(row: PublishPlatform, offer: WebOffer, hostedWeb: boolean): { detail: string; end: PlatformEnd } {
+function webWords(
+  row: PublishPlatform,
+  offer: WebOffer,
+  hostedWeb: boolean,
+): { detail: string; end: PlatformEnd; outOfReach?: boolean } {
   if (row.state === PublishPlatformState.Ready) return { detail: WORDS.webReady, end: PlatformEnd.None };
   if (hostedWeb) return { detail: WORDS.webOnGenex, end: PlatformEnd.RemoveWeb };
   if (offer === WebOffer.Make) return { detail: WORDS.missing, end: PlatformEnd.Make };
-  const detail = offer === WebOffer.Unavailable ? WORDS.webUnavailable : WORDS.webMissing;
-  return { detail, end: PlatformEnd.None };
+  if (offer === WebOffer.Unavailable) return { detail: WORDS.webUnavailable, end: PlatformEnd.None, outOfReach: true };
+  return { detail: WORDS.webMissing, end: PlatformEnd.None };
 }
 
 /** Whether a native row is an app this computer can't make (`appsMadeHere`) and has none ready to send. */
 const madeElsewhere = (row: PublishPlatform, madeHere: ReadonlySet<PublishTarget> | null): boolean =>
   madeHere !== null && !madeHere.has(row.target) && row.state !== PublishPlatformState.Ready;
 
-/** A native row this computer can't make: where it is made while missing, else why it is old; no press. */
-const elsewhereWords = (row: PublishPlatform & { target: NativeTarget }, now: number) => ({
-  detail: row.state === PublishPlatformState.Missing ? WORDS.elsewhere[row.target] : nativeDetail(row, now),
-  end: PlatformEnd.None,
-});
+/** A native row this computer can't make: out of reach while missing, else why it is old; no press. */
+function elsewhereWords(row: PublishPlatform & { target: NativeTarget }, now: number) {
+  if (row.state === PublishPlatformState.Missing)
+    return { detail: WORDS.elsewhere[row.target], end: PlatformEnd.None, outOfReach: true };
+  return { detail: nativeDetail(row, now), end: PlatformEnd.None };
+}
 
 /** The rows whose app Genex builds on its own computers when this one can't: an Unreal game's Windows app. */
 const CLOUD_TARGETS: ReadonlySet<PublishTarget> = new Set([PublishTarget.Windows]);
@@ -217,19 +226,19 @@ function cloudWords(
   native: GenexNativeRecord | undefined,
   now: number,
   onGenex: boolean,
-): { detail: string; end: PlatformEnd } | null {
+): { detail: string; end: PlatformEnd; since?: string } | null {
   if (!CLOUD_TARGETS.has(row.target) || native?.cloud?.supported !== true) return null;
   if (!onGenex) return { detail: WORDS.cloudPublishFirst, end: PlatformEnd.None };
   const send = native.cloud.send;
   if (send?.platform === row.target) {
     if (send.state === CloudSendState.Sending)
-      return { detail: WORDS.cloudSending(send.startedAt, now), end: PlatformEnd.Sending };
+      return { detail: WORDS.cloudSending, end: PlatformEnd.Sending, since: send.startedAt };
     return { detail: WORDS.cloudSendStopped, end: PlatformEnd.CloudRetry };
   }
   const build = newestCloudBuild(row, native);
   if (!build) return { detail: WORDS.cloudOffer, end: PlatformEnd.CloudBuild };
   if (RUNNING_CLOUD.has(build.state))
-    return { detail: WORDS.cloudBuilding(build.startedAt, now), end: PlatformEnd.Building };
+    return { detail: WORDS.cloudBuilding, end: PlatformEnd.Building, since: build.startedAt };
   if (build.state === CloudBuildState.Failed) return cloudFailureWords(build);
   const built = WORDS.built(build.finishedAt ?? build.startedAt, now);
   return { detail: [WORDS.sent, built].join(" · "), end: PlatformEnd.CloudRebuild };
@@ -272,6 +281,9 @@ export function platformRows(
     };
   });
 }
+
+/** The rows the dialog draws: a row nothing can be done about from here only confuses. */
+export const shownRows = (rows: readonly PlatformRow[]): PlatformRow[] => rows.filter((row) => !row.outOfReach);
 
 /**
  * Whether the dialog lists platforms: for a game made in an engine, which can be built as an app,

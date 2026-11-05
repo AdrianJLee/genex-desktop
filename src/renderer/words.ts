@@ -3804,16 +3804,10 @@ export const PUBLISH_PLATFORM_WORDS = {
   /** An app this computer can't make that Genex builds on its own computers, by how that goes. */
   cloudOffer: t("Genex can build it on Windows for you"),
   cloudPublishFirst: t("Publish the game first, then Genex can build it"),
-  /** A build on Genex still running: "Building on Genex · 5 min so far". */
-  cloudBuilding: (startedAt: string, now: number) =>
-    t("Building on Genex · {minutes} min so far", {
-      minutes: Math.max(0, Math.floor((now - Date.parse(startedAt)) / MINUTE_MS)),
-    }),
-  /** The game's project going up for a build: "Sending to Genex · 5 min so far. Keep Genex open". */
-  cloudSending: (startedAt: string, now: number) =>
-    t("Sending to Genex · {minutes} min so far. Keep Genex open", {
-      minutes: Math.max(0, Math.floor((now - Date.parse(startedAt)) / MINUTE_MS)),
-    }),
+  /** A build on Genex still running; its clock is beside it. */
+  cloudBuilding: t("Building on Genex"),
+  /** The game's project going up for a build; its clock is beside it. */
+  cloudSending: t("Sending to Genex. Keep Genex open"),
   cloudSendStopped: t("Sending the project to Genex stopped"),
   /** Why it stopped, under the rows, in Genex's or the CLI's words. */
   cloudSendFailedLine: (error: string) => t("Couldn’t send the project to Genex: {error}", { error }),

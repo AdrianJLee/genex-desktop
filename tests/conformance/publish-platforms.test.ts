@@ -33,6 +33,8 @@ import {
   appsUpToDate,
   appsLabel,
   failureLines,
+  type PlatformRow,
+  shownRows,
   gateByPlugin,
   rebuildAsk,
   makesApps,
@@ -395,6 +397,35 @@ describe("Publish's platform rows as the dialog says them", () => {
     );
   });
 
+  it("leaves out a row nothing can be done about from here, and keeps every row that says something", () => {
+    const shown = (rows: PlatformRow[]) => shownRows(rows).map((row) => row.target);
+    const cloudless: GenexNativeRecord = { supported: true, sending: false, sent: [], failed: [] };
+    const linux = { ...WINDOWS, target: PublishTarget.Linux };
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing };
+    const unreal = platformRows([noWeb, MAC, WINDOWS, linux], NOW, cloudless, WebOffer.Unavailable, ON_MAC, true);
+    assert.deepEqual(shown(unreal), [PublishTarget.Mac], "no web export, and no way to make these on this Mac");
+    const cloud = { ...cloudless, cloud: { supported: true, builds: [] } };
+    const offered = platformRows([noWeb, MAC, WINDOWS, linux], NOW, cloud, WebOffer.Unavailable, ON_MAC, true);
+    assert.deepEqual(shown(offered), [PublishTarget.Mac, PublishTarget.Windows], "what Genex builds stays offered");
+    const notOnGenex = platformRows([noWeb, MAC, WINDOWS, linux], NOW, cloud, WebOffer.Unavailable, ON_MAC, false);
+    assert.deepEqual(
+      shown(notOnGenex),
+      [PublishTarget.Mac, PublishTarget.Windows],
+      "publishing first is something to do",
+    );
+    const stale = { ...WINDOWS, state: PublishPlatformState.Stale };
+    const old = platformRows([noWeb, MAC, stale], NOW, cloudless, WebOffer.Unavailable, ON_MAC, true);
+    assert.deepEqual(
+      shown(old),
+      [PublishTarget.Mac, PublishTarget.Windows],
+      "an old app stays: it says what's on disk",
+    );
+    const webGame = platformRows([noWeb, MAC], NOW, cloudless, WebOffer.Quiet, null, true);
+    assert.deepEqual(shown(webGame), [PublishTarget.Web, PublishTarget.Mac], "other engines' rows are untouched");
+    const hosted = platformRows([noWeb, MAC], NOW, cloudless, WebOffer.Unavailable, ON_MAC, true, true);
+    assert.deepEqual(shown(hosted), [PublishTarget.Web, PublishTarget.Mac], "a web version on Genex can be taken off");
+  });
+
   it("offers a Mac's Unreal game its Windows app built on Genex, and says how that build goes", () => {
     const record = (cloud?: GenexNativeRecord["cloud"]): GenexNativeRecord => ({
       supported: true,
@@ -431,10 +462,13 @@ describe("Publish's platform rows as the dialog says them", () => {
     ]);
     assert.deepEqual(windowsRow(cloud([])), ["Genex can build it on Windows for you", PlatformEnd.CloudBuild]);
     assert.deepEqual(windowsRow(cloud([build({ state: CloudBuildState.Queued })])), [
-      "Building on Genex · 5 min so far",
+      "Building on Genex",
       PlatformEnd.Building,
     ]);
-    assert.deepEqual(windowsRow(cloud([build({})])), ["Building on Genex · 5 min so far", PlatformEnd.Building]);
+    assert.deepEqual(windowsRow(cloud([build({})])), ["Building on Genex", PlatformEnd.Building]);
+    const clockOf = (native: GenexNativeRecord) =>
+      platformRows([WEB, MAC, WINDOWS], NOW, native, WebOffer.Unavailable, ON_MAC, true)[2]?.since;
+    assert.equal(clockOf(cloud([build({})])), started, "a running build's clock starts when it did");
     const done = build({ state: CloudBuildState.Done, finishedAt: new Date(T0 + 4 * MINUTE_MS).toISOString() });
     assert.deepEqual(windowsRow(cloud([done])), ["On Genex · built 1 min ago", PlatformEnd.CloudRebuild]);
     const failed = (failure: CloudBuildFailure) => cloud([build({ state: CloudBuildState.Failed, failure })]);
@@ -455,9 +489,11 @@ describe("Publish's platform rows as the dialog says them", () => {
     assert.equal(windowsRow(cloud([done, older]))[1], PlatformEnd.CloudRebuild, "the newest build speaks for the row");
     const sending = { platform: "windows", startedAt: started, state: CloudSendState.Sending };
     assert.deepEqual(windowsRow(record({ supported: true, builds: [done], send: sending })), [
-      "Sending to Genex · 5 min so far. Keep Genex open",
+      "Sending to Genex. Keep Genex open",
       PlatformEnd.Sending,
     ]);
+    assert.equal(clockOf(record({ supported: true, builds: [], send: sending })), started, "so does a send's");
+    assert.equal(clockOf(cloud([done])), undefined, "finished work has no clock");
     const stopped = { ...sending, state: CloudSendState.Failed };
     assert.deepEqual(
       windowsRow(record({ supported: true, builds: [done], send: stopped })),

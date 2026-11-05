@@ -489,12 +489,14 @@ async function runConfined(options: CompileOptions, args: string[], signal: Abor
 /** Runs Build.sh once, within the deadline, and reads its output. */
 async function build(options: CompileOptions): Promise<CompileResult> {
   const now = options.now ?? Date.now;
+  // The clock starts as the compile takes its slot, before any file is read, so compiles that
+  // take free slots together start their clocks in the order the queue handed the slots out.
+  const started = now();
   const target = await editorTarget(options.projectFile, options.module);
   const args = [target, TARGET_PLATFORM, CONFIGURATION, `-Project=${options.projectFile}`, NO_MUTEX, NO_ACCELERATOR];
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), options.timeoutMs ?? COMPILE_TIMEOUT_MS);
   const signal = options.signal ? AbortSignal.any([options.signal, deadline.signal]) : deadline.signal;
-  const started = now();
   let outcome: RunOutcome;
   try {
     outcome = await runConfined(options, args, signal);

@@ -272,6 +272,27 @@ function unrealProjectRoot(listed: readonly string[]): string | null {
 }
 
 /**
+ * The Unreal version the game's one project names (its `.uproject`'s `EngineAssociation`, `""` when
+ * it names none), or null for a game with no such project or one that can't be read: Genex answers those.
+ */
+export async function unrealEngineOf(
+  gameDir: string,
+  deps: RemixSourceDeps = { listFiles: gitListFiles },
+): Promise<string | null> {
+  const root = await realpath(gameDir);
+  const own = await projectFiles(root, await deps.listFiles(root));
+  if (unrealProjectRoot(own.map((file) => file.file)) === null) return null;
+  const project = own.find((file) => file.file.endsWith(".uproject"));
+  try {
+    const text = await readFile(project?.at ?? "", "utf8");
+    const { EngineAssociation: engine } = JSON.parse(text.replace(/^\uFEFF/, "")) as { EngineAssociation?: unknown };
+    return typeof engine === "string" ? engine : "";
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Copy what Genex needs to build the app of the game in `gameDir` into `dest`, made afresh: for a
  * game with one Unreal project, that project alone, its `.uproject` at the top (the game's other
  * files, its web build or notes, are no part of the app); for any other game, its project as

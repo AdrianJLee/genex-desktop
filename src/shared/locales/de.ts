@@ -5980,7 +5980,7 @@ export default {
   "Build on Genex": "Auf Genex bauen",
   "Build the {app} on Genex": "{app} auf Genex bauen",
   "Build the {app} on Genex again": "{app} noch einmal auf Genex bauen",
-  "Building on Genex · {minutes} min so far": "Wird auf Genex gebaut · seit {minutes} Min.",
+  "Building on Genex": "Wird auf Genex gebaut",
   "Building…": "Wird gebaut…",
   "Couldn’t build the {app} on Genex: {error}": "{app} konnte nicht auf Genex gebaut werden: {error}",
   "Genex builds only Windows apps on its own computers": "Genex baut auf seinen eigenen Computern nur Windows-Apps",
@@ -6338,6 +6338,13 @@ export default {
   "Raising…": "Wird erhöht…",
   "The chat now uses {model}. Send your message again.":
     "Der Chat nutzt jetzt {model}. Schick deine Nachricht noch mal.",
+  "Couldn’t send the project to Genex: {error}": "Das Projekt konnte nicht an Genex gesendet werden: {error}",
+  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
+    "Genex baut vorerst Spiele mit Unreal 5.8, und dieses Projekt nennt keine Version. Öffne es in Unreal 5.8, speichere es und baue es noch mal.",
+  "Sending the project to Genex stopped": "Das Senden des Projekts an Genex wurde gestoppt",
+  "Sending to Genex. Keep Genex open": "Wird an Genex gesendet. Lass Genex offen",
+  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
+    "Dieses Spiel nutzt Unreal {version}. Genex baut vorerst Spiele mit Unreal 5.8: Aktualisiere es auf 5.8 und baue es noch mal.",
   "Run the game": "Starte das Spiel",
   "The agent is packaging the game. It starts it once the package is ready.":
     "Der Agent verpackt das Spiel. Er startet es, sobald das Paket fertig ist.",

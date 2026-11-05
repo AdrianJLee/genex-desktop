@@ -5838,7 +5838,7 @@ export default {
   "Build on Genex": "Genexでつくる",
   "Build the {app} on Genex": "{app}をGenexでつくる",
   "Build the {app} on Genex again": "{app}をもう一度Genexでつくる",
-  "Building on Genex · {minutes} min so far": "Genexでビルド中 · {minutes}分経過",
+  "Building on Genex": "Genexでビルド中",
   "Building…": "ビルド中…",
   "Couldn’t build the {app} on Genex: {error}": "{app}をGenexでつくれませんでした：{error}",
   "Genex builds only Windows apps on its own computers":
@@ -6188,6 +6188,13 @@ export default {
   "Raising…": "上げています…",
   "The chat now uses {model}. Send your message again.":
     "チャットは {model} を使うようになりました。メッセージをもう一度送ってください。",
+  "Couldn’t send the project to Genex: {error}": "プロジェクトをGenexに送れませんでした：{error}",
+  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
+    "今のところGenexがつくれるのはUnreal 5.8のゲームです。このプロジェクトにはバージョンの指定がありません。Unreal 5.8で開いて保存してから、もう一度つくってください。",
+  "Sending the project to Genex stopped": "プロジェクトのGenexへの送信が止まりました",
+  "Sending to Genex. Keep Genex open": "Genexに送信中。Genexは開いたままにしてください",
+  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
+    "このゲームはUnreal {version}です。今のところGenexがつくれるのはUnreal 5.8のゲームです。5.8にアップグレードしてから、もう一度つくってください。",
   "Run the game": "ゲームを起動して",
   "The agent is packaging the game. It starts it once the package is ready.":
     "エージェントがゲームをパッケージしています。完成したら起動します。",

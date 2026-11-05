@@ -12,7 +12,7 @@ this preface, this preface wins.
 - Other commands map onto Studio tools as the `genex` skill describes
   (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-llm/SKILL.md v1.38.0 sha256 61ca897ac8d006b6fa61abbd74583a45488150ce9fe6d91b7970a87e4cd816ea -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-llm/SKILL.md v1.38.2 sha256 aea8c0be5ca9c270a47d59b132c1774f9ae30e8f0d3df5abca832f3abcf55ae7 -->
 ---
 name: genex-tool-llm
 description: A language model running while somebody PLAYS the finished game — an NPC that answers in its own words, a quest written from what the player typed, a prompt box in the game. On Genex the player pays and approves it, so this is a platform feature, never a key on the author's meter.
@@ -28,11 +28,12 @@ model has to run for the player.
 ## What the platform does
 
 A game hosted on Genex can call a language model from inside the running game
-and get back text or JSON. **The player pays and the player approves**: coins
-from their Genex wallet, or their own Claude / ChatGPT subscription, chosen on
-an approval sheet Genex draws that the game cannot render, skin or bypass.
-Either one call at a time, or one standing budget the player approves once and
-the game then spends against without another popup. The game holds no provider
+and get back text or JSON. **The player pays and the player approves**: credits
+from their Genex account, billed as each call is used and never past the
+per-call ceiling the game declares, or their own Claude / ChatGPT subscription,
+chosen on an approval sheet Genex draws that the game cannot render, skin or
+bypass. Either one call at a time, or one standing budget the player approves
+once and the game then spends against without another popup. The game holds no provider
 key, sees no credential, and never talks to a model vendor.
 
 That is the whole reason this is a platform feature and not something you wire
@@ -65,7 +66,8 @@ Any of these means a model at PLAY time, however it is phrased:
    ask before you do if you have not already.
 3. Load `$genex-llm-in-games` — it arrives with the conversion and owns the
    build: the SDK surface, one-time calls versus a standing budget, measuring
-   the price before the game declares it, and honest handling of every refusal.
+   the per-call ceiling before the game declares it, and honest handling of
+   every refusal.
 
 **The game has to be a static browser build.** A hosted game is files served
 from the edge; there is no server of yours inside it. So the familiar pattern —

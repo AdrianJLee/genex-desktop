@@ -27,7 +27,7 @@ this preface wins.
 - `npx genex doctor` is `genex__cli {"command":"doctor"}`. Other commands map onto Studio tools as
   the `genex` skill describes (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-publish/SKILL.md v1.38.0 sha256 42daa8bcd57c7693cbd2297ea5d66c0335b58cd019dcc3a60f88b09f5510f4a1 -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-publish/SKILL.md v1.38.2 sha256 5374af3bbaca06cb48605fd67e88a252624beaa27c97c952b9bc6f03f1a4595e -->
 ---
 name: genex-tool-publish
 description: Put the game in this folder on the web with Genex — the draft page, `npx genex preview`, then `promote` / `publish`; the link you hand the user, the size limits, and what to do with the preflight lines. Installed once the folder is connected to a hosted Genex game (`npx genex init --convert`). Load it before the first preview.
@@ -109,5 +109,12 @@ anything changed since the last `preview`, preview again before promoting.
 - **`preview` says the folder is behind another machine** (`stale_source`):
   `npx genex pull` takes the newer draft, then redo the change — never
   `--force` over somebody else's work.
+- **`promote` or `publish` says the page shows the game's Mac/Windows/Linux
+  app** (`native_page_would_be_replaced`): the game ships as desktop apps, and
+  this web build would replace the page that offers them. Nothing changed. Ask
+  the user whether this folder really is the game's web version; only on a
+  clear yes, re-run the same command with `--replace-native-page`. A web
+  version that went up by mistake comes off with `npx genex web remove --yes`
+  (the apps stay).
 - **Out of credits or a lane down**: `npx genex doctor` says which; publishing
   itself costs nothing.

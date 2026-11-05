@@ -10,25 +10,25 @@ import { playGame, RUN_THE_GAME_EVENT, type RunTheGame } from "../../src/rendere
 import { GAME_PLAY_WORDS } from "../../src/renderer/words.ts";
 import { LocalPlayState } from "../../src/shared/play-native.ts";
 
-const THREAD = "t-dust";
+const GAME = "dust";
 const scope = globalThis as unknown as { window?: unknown };
 
 /** A window with only what Play reaches: its events and `studio.playGameBuild` answering `state`. */
 function windowAnswering(state: LocalPlayState, chat: "takes" | "none" = "takes") {
   const events = new EventTarget();
   const asked: string[] = [];
-  const calls: Array<[string, string | undefined]> = [];
+  const calls: string[] = [];
   if (chat === "takes")
     events.addEventListener(RUN_THE_GAME_EVENT, (event) => {
       const detail = (event as CustomEvent<RunTheGame>).detail;
       detail.taken = true;
-      asked.push(detail.threadId);
+      asked.push(detail.project);
       detail.answer(true);
     });
   scope.window = Object.assign(events, {
     studio: {
-      playGameBuild: async (project: string, threadId?: string) => {
-        calls.push([project, threadId]);
+      playGameBuild: async (project: string) => {
+        calls.push(project);
         return { state };
       },
     },
@@ -45,9 +45,9 @@ describe("Play on a game that plays as its own app", () => {
     for (const state of [LocalPlayState.NoBuild, LocalPlayState.Stale, LocalPlayState.Failed]) {
       const { asked, calls } = windowAnswering(state);
       const told: string[] = [];
-      await playGame("dust", THREAD, (text) => told.push(text));
-      assert.deepEqual(calls, [["dust", THREAD]], state);
-      assert.deepEqual(asked, [THREAD], `${state}: the chat sends "Run the game"`);
+      await playGame(GAME, (text) => told.push(text));
+      assert.deepEqual(calls, [GAME], state);
+      assert.deepEqual(asked, [GAME], `${state}: the game's open chat sends "Run the game"`);
       assert.deepEqual(told, [], state);
     }
   });
@@ -56,7 +56,7 @@ describe("Play on a game that plays as its own app", () => {
     for (const state of [LocalPlayState.Launched, LocalPlayState.Shown]) {
       const { asked } = windowAnswering(state);
       const told: string[] = [];
-      await playGame("dust", THREAD, (text) => told.push(text));
+      await playGame(GAME, (text) => told.push(text));
       assert.deepEqual([asked, told], [[], []], state);
     }
   });
@@ -69,19 +69,15 @@ describe("Play on a game that plays as its own app", () => {
     for (const [state, words] of rows) {
       const { asked } = windowAnswering(state);
       const told: string[] = [];
-      await playGame("dust", THREAD, (text) => told.push(text));
+      await playGame(GAME, (text) => told.push(text));
       assert.deepEqual([asked, told], [[], [words]], state);
     }
   });
 
-  it("with no chat open to take the ask, says to open it", async () => {
+  it("with no chat of the game open to take the ask, says to open it", async () => {
     windowAnswering(LocalPlayState.NoBuild, "none");
     const told: string[] = [];
-    await playGame("dust", THREAD, (text) => told.push(text));
+    await playGame(GAME, (text) => told.push(text));
     assert.deepEqual(told, [GAME_PLAY_WORDS.noChat]);
-    windowAnswering(LocalPlayState.NoBuild);
-    const toldWithout: string[] = [];
-    await playGame("dust", null, (text) => toldWithout.push(text));
-    assert.deepEqual(toldWithout, [GAME_PLAY_WORDS.noChat], "a Play with no chat at all");
   });
 });

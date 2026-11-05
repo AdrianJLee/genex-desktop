@@ -361,8 +361,6 @@ export default {
   "Anime cel": "애니메 셀",
   Another: "하나 더",
   "Another Bonsai download is running": "다른 Bonsai 다운로드가 진행 중이에요",
-  "Another app is using the port Genex gave {project}. Set it up again to move it to a free one.":
-    "Genex가 {project}에 준 포트를 다른 앱이 쓰고 있어요. 다시 설정해서 빈 포트로 옮기세요.",
   "Another app, such as OneDrive or an antivirus, is still reading the new project's files. Try Create and open again in a moment.":
     "OneDrive나 백신 같은 다른 앱이 아직 새 프로젝트의 파일을 읽고 있어요. 잠시 후 ‘만들고 열기’를 다시 시도하세요.",
   "Another clip": "다른 클립",
@@ -1544,10 +1542,6 @@ export default {
   "Genex runs {count, plural, one {# tool} other {# tools}} for it:":
     "Genex가 이 플러그인을 위해 {count, plural, other {도구 #개}}를 실행해요:",
   "Genex saves each change to the folder’s own Git history.": "Genex는 모든 변경을 폴더 자체의 Git 기록에 저장해요.",
-  "Genex sets it up for agents first; you confirm what changes.":
-    "Genex가 먼저 에이전트용으로 설정해요. 바뀌는 내용은 직접 확인해요.",
-  "Genex sets {project} up for agents now; you confirm what changes.":
-    "Genex가 지금 {project} 프로젝트를 에이전트용으로 설정해요. 바뀌는 내용은 직접 확인해요.",
   "Genex sign-in expired. Reconnect your account.": "Genex 로그인이 만료됐어요. 계정을 다시 연결하세요.",
   "Genex starts Git history here, so any change can be undone.":
     "Genex가 여기서 Git 기록을 시작해서 어떤 변경이든 되돌릴 수 있어요.",
@@ -2498,9 +2492,7 @@ export default {
   "Open in Godot {version}.": "Godot {version}에서 열려 있어요.",
   "Open in Unreal": "Unreal에서 열기",
   "Open in terminal": "터미널에서 열기",
-  "Open it after the Loop ends.": "Loop가 끝난 뒤에 여세요.",
   "Open it in a private window to join as another player.": "시크릿 창에서 열면 다른 플레이어로 참여할 수 있어요.",
-  "Open it once Unreal is free.": "Unreal을 쓸 수 있게 되면 여세요.",
   "Open on Play": "플레이에서 열기",
   "Open page": "페이지 열기",
   "Open pages on {domain}": "{domain}의 페이지 열기",
@@ -3222,7 +3214,6 @@ export default {
   "Set up Codex": "Codex 설치",
   "Set up OpenCode": "OpenCode 설치",
   "Set up an Unreal project for Genex.": "Unreal 프로젝트를 Genex용으로 설정하세요.",
-  "Set up and open": "설정하고 열기",
   "Set up for Genex": "Genex용으로 설정하기",
   "Set up the protected workspace": "보호된 작업 공간 설정",
   "Set up this game's Unity project": "이 게임의 Unity 프로젝트를 설정하세요",
@@ -6061,4 +6052,5 @@ export default {
     "에이전트가 게임을 패키징하고 있어요. 완성되면 실행해요.",
   "Genex can’t play this game’s app on this computer.": "Genex가 이 컴퓨터에서 이 게임의 앱을 실행할 수 없어요.",
   "Open the game’s chat to have the agent package it.": "에이전트가 패키징하도록 게임 채팅을 열어 주세요.",
+  "Not open in Unreal": "Unreal에서 열려 있지 않아요",
 } satisfies LocaleCatalog;

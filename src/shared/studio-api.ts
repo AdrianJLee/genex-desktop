@@ -377,7 +377,7 @@ export interface StudioApi {
    * Play for a game being made: its folder's newest app for this computer, started in the game
    * sandbox or brought forward, or why not (none, older than the last change, being packaged).
    */
-  playGameBuild(project: string, threadId?: string): Promise<import("./play-native.ts").LocalPlayAnswer>;
+  playGameBuild(project: string): Promise<import("./play-native.ts").LocalPlayAnswer>;
   /** What freeing space deletes now, in one game or (none named) in all of them. */
   storageSpace(project?: string): Promise<import("./storage-space.ts").StorageSpace>;
   /** Free space in one game (refused while it works) or (none named) in every game not working. */

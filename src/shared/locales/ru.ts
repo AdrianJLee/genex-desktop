@@ -388,8 +388,6 @@ export default {
   "Anime cel": "Аниме-рисовка",
   Another: "Ещё",
   "Another Bonsai download is running": "Уже идёт другая загрузка Bonsai",
-  "Another app is using the port Genex gave {project}. Set it up again to move it to a free one.":
-    "Порт, который Genex выдал проекту {project}, занят другим приложением. Настрой проект снова, чтобы перенести его на свободный порт.",
   "Another app, such as OneDrive or an antivirus, is still reading the new project's files. Try Create and open again in a moment.":
     "Другое приложение, например OneDrive или антивирус, ещё читает файлы нового проекта. Чуть позже снова нажми «Создать и открыть».",
   "Another clip": "Другой клип",
@@ -1589,10 +1587,6 @@ export default {
     "Genex запускает для него {count, plural, one {# инструмент} few {# инструмента} many {# инструментов} other {# инструмента}}:",
   "Genex saves each change to the folder’s own Git history.":
     "Genex сохраняет каждое изменение в собственную Git-историю папки.",
-  "Genex sets it up for agents first; you confirm what changes.":
-    "Сначала Genex настроит его для агентов, а ты подтвердишь изменения.",
-  "Genex sets {project} up for agents now; you confirm what changes.":
-    "Genex сейчас настроит проект {project} для агентов, а ты подтвердишь изменения.",
   "Genex sign-in expired. Reconnect your account.": "Вход в Genex истёк. Подключи аккаунт заново.",
   "Genex starts Git history here, so any change can be undone.":
     "Genex начнёт здесь Git-историю, чтобы любое изменение можно было отменить.",
@@ -2552,9 +2546,7 @@ export default {
   "Open in Godot {version}.": "Открыта в Godot {version}.",
   "Open in Unreal": "Открыть в Unreal",
   "Open in terminal": "Открыть в терминале",
-  "Open it after the Loop ends.": "Открой его, когда Loop закончится.",
   "Open it in a private window to join as another player.": "Открой её в приватном окне, чтобы зайти другим игроком.",
-  "Open it once Unreal is free.": "Открой его, когда Unreal освободится.",
   "Open on Play": "Открыть в «Играть»",
   "Open page": "Открыть страницу",
   "Open pages on {domain}": "Открытие страниц на {domain}",
@@ -3285,7 +3277,6 @@ export default {
   "Set up Codex": "Установить Codex",
   "Set up OpenCode": "Установить OpenCode",
   "Set up an Unreal project for Genex.": "Настроить проект Unreal для Genex.",
-  "Set up and open": "Настроить и открыть",
   "Set up for Genex": "Настроить для Genex",
   "Set up the protected workspace": "Настрой защищённое рабочее пространство",
   "Set up this game's Unity project": "Настрой проект Unity для этой игры",
@@ -6244,4 +6235,5 @@ export default {
   "Genex can’t play this game’s app on this computer.":
     "Genex не может запустить приложение этой игры на этом компьютере.",
   "Open the game’s chat to have the agent package it.": "Открой чат игры, чтобы агент её собрал.",
+  "Not open in Unreal": "Не открыта в Unreal",
 } satisfies LocaleCatalog;

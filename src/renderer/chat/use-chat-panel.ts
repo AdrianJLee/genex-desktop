@@ -70,7 +70,7 @@ export function useChatPanel(props: ChatPanelProps) {
     await sendAnswered(text, extras, preserveDraft, source);
   };
   useKeepBuilding(chat.threadId, sendAnswered, props.onNotice);
-  useRunTheGame(chat.threadId, sendAnswered, props.onNotice);
+  useRunTheGame(chat.project, sendAnswered, props.onNotice);
   useComposeInChat(chat.threadId, chat.project, composer.drafts, composerRef, sendAnswered);
   const report = useReport(props, chat, composer, work);
   const enginesRead = useEngines((s) => s.list.length > 0);

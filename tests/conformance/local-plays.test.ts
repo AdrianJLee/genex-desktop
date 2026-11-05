@@ -202,7 +202,7 @@ describe("the core's Play for a game being made", () => {
     }
   });
 
-  it("while the chat waits for a package its agent started, Play with no fresh app answers packaging", async () => {
+  it("while a chat of the game waits for a package its agent started, Play with no fresh app answers packaging", async () => {
     const { core, close, api } = await coreLite({
       localPlays: { play: async () => ({ state: LocalPlayState.Stale, app: APP }) },
     });
@@ -210,11 +210,11 @@ describe("the core's Play for a game being made", () => {
       await core.plugins.setEnabled("unreal", true);
       await core.games.scaffold("dust", { title: "Dust" });
       const threadId = await core.threadForGame("dust");
-      assert.equal((await core.playGameBuild("dust", threadId)).state, LocalPlayState.Stale);
+      assert.equal((await core.playGameBuild("dust")).state, LocalPlayState.Stale);
       core.plugins.tool = (async () => ({ started: true, system: "Mac" })) as never;
       const invoke = (api() as unknown as Record<string, (input: unknown) => Promise<unknown>>)["plugins.invoke"];
       await invoke?.({ project: "dust", threadId, name: "unreal__package-game", args: {} });
-      assert.deepEqual(await core.playGameBuild("dust", threadId), { state: LocalPlayState.Packaging, app: APP });
+      assert.deepEqual(await core.playGameBuild("dust"), { state: LocalPlayState.Packaging, app: APP });
     } finally {
       core.plugins.cancel();
       await close();

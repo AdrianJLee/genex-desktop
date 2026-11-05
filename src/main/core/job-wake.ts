@@ -118,9 +118,9 @@ export class PluginJobWatches {
     if (pluginJobRunning(answer) === false) this.#end(watchKey(threadId, name));
   }
 
-  /** Whether a job a chat's own agent started is being watched for that chat now. */
-  watching(threadId: string): boolean {
-    return [...this.#watches.values()].some((watch) => watch.binding.threadId === threadId);
+  /** Whether a job a chat of `project` started is being watched now. */
+  watching(project: string): boolean {
+    return [...this.#watches.values()].some((watch) => watch.binding.project === project);
   }
 
   /** Ends every watch with no message: the core stops. */

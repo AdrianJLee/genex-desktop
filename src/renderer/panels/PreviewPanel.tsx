@@ -784,13 +784,8 @@ function useStageSurface({
 }
 
 /** A game that plays as its own app (an Unreal game): its Play, in Builds and on Live, starts that app. */
-function appPlay(
-  project: string | null,
-  loaded: GameProject | null,
-  threadId: string | null,
-  onNotice: Notify,
-): (() => Promise<void>) | null {
-  return project && unrealProjectOf(loaded) ? () => playGame(project, threadId, onNotice) : null;
+function appPlay(project: string | null, loaded: GameProject | null, onNotice: Notify): (() => Promise<void>) | null {
+  return project && unrealProjectOf(loaded) ? () => playGame(project, onNotice) : null;
 }
 
 export function PreviewPanel({
@@ -850,7 +845,7 @@ export function PreviewPanel({
     onView,
     onNotice,
   });
-  const playsApp = appPlay(project, loaded, threadId, onNotice);
+  const playsApp = appPlay(project, loaded, onNotice);
 
   return (
     <div

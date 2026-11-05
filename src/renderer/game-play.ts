@@ -12,9 +12,9 @@ import { GAME_PLAY_WORDS } from "./words.ts";
 
 export const RUN_THE_GAME_EVENT = "studio:run-the-game";
 
-/** A Play that needs the agent: the chat to ask, marked `taken` by the open chat, answered once it sent. */
+/** A Play that needs the agent: the game whose open chat asks, marked `taken` by it, answered once it sent. */
 export interface RunTheGame {
-  threadId: string;
+  project: string;
   taken?: boolean;
   answer: (sent: boolean) => void;
 }
@@ -27,26 +27,25 @@ const ASKS_AGENT: ReadonlySet<LocalPlayState> = new Set([
 ]);
 
 /**
- * Ask the open chat `threadId` to send "Run the game": whether it sent it, or null when no open chat
- * took the ask (a chat that took it and sent nothing, a sign-in first, says why itself).
+ * Ask `project`'s open chat to send "Run the game": whether it sent it, or null when no open chat of
+ * the game took the ask (a chat that took it and sent nothing, a sign-in first, says why itself).
  */
-export function runTheGame(threadId: string): Promise<boolean | null> {
+export function runTheGame(project: string): Promise<boolean | null> {
   return new Promise<boolean | null>((resolve) => {
-    const detail: RunTheGame = { threadId, answer: resolve };
+    const detail: RunTheGame = { project, answer: resolve };
     window.dispatchEvent(new CustomEvent<RunTheGame>(RUN_THE_GAME_EVENT, { detail }));
     if (!detail.taken) resolve(null);
   });
 }
 
 /** Play `project`: its app, or its chat's agent asked to run the game (module comment). */
-export async function playGame(project: string, threadId: string | null, notify: Notify): Promise<void> {
+export async function playGame(project: string, notify: Notify): Promise<void> {
   try {
-    const { state } = await window.studio.playGameBuild(project, threadId ?? undefined);
+    const { state } = await window.studio.playGameBuild(project);
     if (state === LocalPlayState.Packaging) return notify(GAME_PLAY_WORDS.packaging, ToastTone.Info);
     if (state === LocalPlayState.Unsupported) return notify(GAME_PLAY_WORDS.unsupported, ToastTone.Info);
     if (!ASKS_AGENT.has(state)) return;
-    const sent = threadId ? await runTheGame(threadId) : null;
-    if (sent === null) notify(GAME_PLAY_WORDS.noChat, ToastTone.Info);
+    if ((await runTheGame(project)) === null) notify(GAME_PLAY_WORDS.noChat, ToastTone.Info);
   } catch (error) {
     notifyProblem(notify)(error);
   }

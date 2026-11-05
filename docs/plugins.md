@@ -969,7 +969,9 @@ explained once under the list (Loops and Rewind can't reach it). A pick is linke
 this game", which leads, with Open in Unreal second, for a set-up project the game doesn't use yet.
 
 `stage-status` answers the same step for the open game's own project, which the Live card turns into
-one button (`whereItStands` is shared with `status`). `status` returns the engines, the list, the
+one button (`whereItStands` is shared with `status`): Play (the game's own app, `play_build`'s, else
+"Run the game" in its chat) where the project is not set up, closed or ready, since the agent sets
+it up and opens it itself; Get Unreal, choose, switch, quit or restart otherwise. `status` returns the engines, the list, the
 shown project and `next`, the panel's one primary step
 (`PanelStep`: get-unreal, choose, quit-first, set-up, update-helper, open, starting, connected,
 switch, not-answering, port-blocked, open-when-free, crashed). The shown project is, in order: the one the panel names,

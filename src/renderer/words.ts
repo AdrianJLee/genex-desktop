@@ -6138,22 +6138,13 @@ export const UNREAL_WORDS = {
   stage: {
     getUnreal: t("Unreal Engine 5.8 isn’t on this computer yet."),
     getUnrealButton: t("Get Unreal Engine"),
-    setUpAndOpen: t("Set up and open"),
-    setUp: t("Genex sets it up for agents first; you confirm what changes."),
-    /** Set up only, while Unreal has another project open: Genex keeps one Unreal at a time. */
-    setUpButton: t("Set up"),
-    setUpBeside: (project: string) =>
-      t("Genex sets {project} up for agents now; you confirm what changes.", { project }),
-    /** What to do once what holds Unreal lets go: another project closes, or a Loop ends. */
-    openWhenFree: t("Open it once Unreal is free."),
-    openAfterLoop: t("Open it after the Loop ends."),
+    /** The card's Play: the game's own app, or the agent asked to run the game (`game-play.ts`). */
+    play: t("Play"),
+    /** The project isn't open in Unreal: nothing to do, the agent opens it when it builds. */
+    notOpen: t("Not open in Unreal"),
     openProjectWhenFree: (project: string) => t("Open {project} once Unreal is free.", { project }),
     /** Unreal has a project open that it can't name. */
     anotherOpen: t("Unreal has another project open."),
-    portTaken: (project: string) =>
-      t("Another app is using the port Genex gave {project}. Set it up again to move it to a free one.", {
-        project,
-      }),
     starting: t("Opening in Unreal…"),
     startingHint: t("The first start can take several minutes."),
     ready: t("Ready in Unreal"),

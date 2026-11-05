@@ -369,7 +369,7 @@ export interface StudioInvokePayloads {
   "studio:thread.rename": { threadId: string; title: string };
   "studio:compact": { threadId: string } & NonNullable<Arg<"compactThread", 1>>;
   "studio:game.archive": { project: string };
-  "studio:game.play-build": { project: string; threadId?: string };
+  "studio:game.play-build": { project: string };
   "studio:storage": { project?: string };
   "studio:storage.free": { project?: string };
   "studio:data-folder": undefined;

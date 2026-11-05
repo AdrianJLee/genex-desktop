@@ -100,7 +100,7 @@ export async function callProjectTool(
     return JSON.stringify(await checkPluginFolder(core.games.dirFor(call.project), args, localPluginOn(core)));
   if (name === ProjectTool.StartWebGame) return startWebGame(core, x, call.project, call.threadId);
   if (name === ProjectTool.PlayBuild) {
-    const { state, app } = await core.playGameBuild(call.project, call.threadId);
+    const { state, app } = await core.playGameBuild(call.project);
     return PLAY_BUILD_ANSWER[state](app ?? "");
   }
   throw new Error(MESSAGE.unknownTool(name));

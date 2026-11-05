@@ -28,6 +28,7 @@ import {
   unrealProjectOf,
 } from "../../unreal-game.ts";
 import { UNREAL_WORDS } from "../../words.ts";
+import { playGame } from "../../game-play.ts";
 import { openPluginSetup } from "../../plugin-setup.ts";
 import { type StatusPoll, startStatusPoll } from "../../status-poll.ts";
 import {
@@ -113,13 +114,15 @@ function useOpeningTimer({ status, at }: ReceivedStatus): string {
   return elapsed === undefined ? "" : elapsedText(elapsed + Math.max(0, now - at));
 }
 
-/** What a press needs: the plugin, the game and its project, the status refresh, and the toast channel. */
+/** What a press needs: the plugin, the game and its project, the status refresh, the toast channel and Play. */
 type PressDeps = {
   plugin: PluginInfo | null;
   game: string;
   project: string | null;
   refresh: () => Promise<void>;
   onNotice: Notify;
+  /** The game's Play (`game-play.ts`): its own app, or the agent asked to run the game. */
+  onPlay: () => Promise<void>;
 };
 
 /** Runs one of the plugin's actions for this game's project; actions here ask no in-app review (setup's is native). */
@@ -144,13 +147,14 @@ async function press(deps: PressDeps, which: StageAct): Promise<boolean> {
     openUnrealPanel();
     return false;
   }
+  if (which === StageAct.Play) {
+    await deps.onPlay();
+    return false;
+  }
   if (!plugin) {
     window.dispatchEvent(new CustomEvent(OPEN_PLUGINS_EVENT, { detail: { plugin: UNREAL_PLUGIN_ID } }));
     return false;
   }
-  if (which === StageAct.SetUpAndOpen || which === StageAct.SetUp) await act(deps, plugin, UnrealPluginAction.Setup);
-  // Beside another project Unreal has open, setup opens nothing: Genex keeps one Unreal at a time.
-  if (which === StageAct.SetUp) return false;
   const quits = which === StageAct.Quit || which === StageAct.Restart;
   if (quits) await act(deps, plugin, UnrealPluginAction.QuitEditor);
   if (quits) return which === StageAct.Restart;
@@ -167,7 +171,7 @@ const failed = (deps: PressDeps) => (err: unknown) => {
  * The card's button, busy from a press until its sequence ends. A restart opens the project once
  * the status says no editor runs any more (Unreal may first ask to save) and opening is the step,
  * or gives up after {@link QUIT_WAIT_MS}: a quit the person cancelled opens nothing, and a project
- * whose port another app now holds shows Set up again instead (`reopenStep`). Another game on the
+ * whose port another app now holds shows Play again instead (`reopenStep`). Another game on the
  * stage starts with no restart waiting and the button free, so a restart never opens the wrong game.
  */
 function usePress(deps: PressDeps, status: UnrealStageStatus | null) {
@@ -263,7 +267,9 @@ export function UnrealStage({
   const { received, refresh } = useStageStatus(plugin, game.name);
   const status = received.status;
   const timer = useOpeningTimer(received);
-  const { busy, run } = usePress({ plugin, game: game.name, project, refresh, onNotice }, status);
+  // The card's Play is the strip's: the game's own app, or its chat asked to run the game.
+  const onPlay = () => playGame(game.name, onNotice);
+  const { busy, run } = usePress({ plugin, game: game.name, project, refresh, onNotice, onPlay }, status);
   useStepMoves(game.name, status);
   const name = project ? projectName(project) : game.title;
   const view = stageView(status, name, { linked: project !== null, answered: received.at > 0 });

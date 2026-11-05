@@ -3,9 +3,11 @@
  * a Windows app of an Unreal game made on a Mac is built by Genex from the game's project. The
  * Unreal project alone is staged (`stageBuildSource`), with no size limit of Studio's own, and goes privately with
  * `genex native build --platform <p> --source <folder>`; Genex builds it, checks it and puts it on
- * the game's page beside the apps the game already has. The build takes a while, so its jobs are
- * kept in the publish workspace's `cloud-build.json` (apart from `native.json`, which each publish
- * writes anew) and followed with `genex native build-status <job>` until each one ends.
+ * the game's page beside the apps the game already has. A big project takes far longer to go up than
+ * any press may wait, so it is sent behind the press (`sendCloudBuild`) and how that goes is kept in
+ * the publish workspace's `cloud-build.json` (apart from `native.json`, which each publish writes
+ * anew). The build takes a while too: its jobs are kept there and followed with
+ * `genex native build-status <job>` until each one ends.
  *
  * The CLI and Genex's side are a draft contract: nothing is asked while Studio's pinned CLI has no
  * `genex native build` (`pinnedCliBuildsApps`), and the dialog says where the app is packaged as before.
@@ -14,8 +16,15 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 // Read at build time, as `native-publish.ts` does: the packaged app ships the CLI only in the plugin's payload.
 import cliPackage from "@genex-ai/cli-demo/package.json" with { type: "json" };
-import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
-import { CloudBuildFailure, CloudBuildState, type GenexCloudBuild } from "../../shared/genex.ts";
+import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import {
+  CloudBuildFailure,
+  CloudBuildState,
+  CloudSendState,
+  type GenexCloudBuild,
+  type GenexCloudSend,
+} from "../../shared/genex.ts";
 import { NativePlatform } from "../../shared/play-native.ts";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import type { StagedSource } from "./remix-source.ts";
@@ -30,11 +39,17 @@ export const CLOUD_SOURCE_FOLDER = "cloud-source";
 const CLOUD_BUILDS_KEPT = 8;
 /** How long to wait between status reads: soon at first, then less often, never longer than the last. */
 const CLOUD_POLL_MS = [15 * SECOND_MS, 30 * SECOND_MS, MINUTE_MS, 2 * MINUTE_MS] as const;
+/** How long a project may take to zip and go up: as long as the links Genex signs for its upload last. */
+export const CLOUD_SEND_TIMEOUT_MS = 6 * HOUR_MS;
+/** The longest reason a stopped send keeps, in the CLI's words. */
+const SEND_ERROR_CHARS = 300;
 /** A job id as Genex names one: a plain word the CLI takes as an argument, never an option. */
 const JOB_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 
 /** The systems Genex builds apps for. */
 export const CLOUD_PLATFORMS: ReadonlySet<string> = new Set([NativePlatform.Windows]);
+/** The Unreal versions Genex's build computers have (`deploy/cloud-build/image`): a `.uproject`'s `EngineAssociation`. */
+export const CLOUD_UNREAL_VERSIONS: ReadonlySet<string> = new Set(["5.8"]);
 
 const MESSAGE = {
   NotABuild: "Genex answered without the build it started",
@@ -109,10 +124,32 @@ export function readCloudBuilds(value: unknown): GenexCloudBuild[] {
   return builds.map(buildOf).filter((build): build is GenexCloudBuild => build !== null);
 }
 
+const SEND_STATES: ReadonlySet<unknown> = new Set(Object.values(CloudSendState));
+
+/** The send `cloud-build.json` keeps, or null when there is none or anything in it is off. */
+export function readCloudSend(value: unknown): GenexCloudSend | null {
+  const send = isRecord(value) ? value.send : undefined;
+  if (!isRecord(send)) return null;
+  const { platform, startedAt, state, error } = send;
+  const known = typeof platform === "string" && CLOUD_PLATFORMS.has(platform);
+  if (!known || !SEND_STATES.has(state) || !isTime(startedAt)) return null;
+  return {
+    platform: String(platform),
+    startedAt: String(startedAt),
+    state: state as CloudSendState,
+    ...(typeof error === "string" ? { error } : {}),
+  };
+}
+
 /** `builds` with `build` in place of the one with its job id, or added last; only the newest few kept. */
 export function withBuild(builds: readonly GenexCloudBuild[], build: GenexCloudBuild): GenexCloudBuild[] {
   const others = builds.filter((kept) => kept.jobId !== build.jobId);
   return [...others, build].slice(-CLOUD_BUILDS_KEPT);
+}
+
+/** Refuse a system Genex builds no app for, before anything is kept or sent. */
+export function assertCloudPlatform(platform: unknown): void {
+  if (typeof platform !== "string" || !CLOUD_PLATFORMS.has(platform)) throw new Error(MESSAGE.UnknownPlatform);
 }
 
 /** Whether a build is still going on Genex's computers. */
@@ -140,10 +177,48 @@ export async function loadCloudBuilds(
   return readCloudBuilds(await read(path.join(dir, CLOUD_BUILD_FILE)));
 }
 
-/** Keep `build` in the workspace's record of builds on Genex. */
-async function keepBuild(dir: string, build: GenexCloudBuild, read: (file: string) => Promise<unknown>) {
+/** The workspace's send to Genex, if there is one. */
+export async function loadCloudSend(
+  dir: string,
+  read: (file: string) => Promise<unknown>,
+): Promise<GenexCloudSend | null> {
+  return readCloudSend(await read(path.join(dir, CLOUD_BUILD_FILE)));
+}
+
+/** Keep `build` in the workspace's record; a send under way stays, unless this is the build it became. */
+async function keepBuild(
+  dir: string,
+  build: GenexCloudBuild,
+  read: (file: string) => Promise<unknown>,
+  arrived = false,
+) {
   const builds = withBuild(await loadCloudBuilds(dir, read), build);
-  await atomicWriteJson(path.join(dir, CLOUD_BUILD_FILE), { builds });
+  const send = arrived ? null : await loadCloudSend(dir, read);
+  await atomicWriteJson(path.join(dir, CLOUD_BUILD_FILE), { builds, ...(send ? { send } : {}) });
+}
+
+/** Keep `send` as the workspace's send, beside its builds. */
+async function keepSend(dir: string, send: GenexCloudSend, read: (file: string) => Promise<unknown>) {
+  const builds = await loadCloudBuilds(dir, read);
+  await atomicWriteJson(path.join(dir, CLOUD_BUILD_FILE), { builds, send });
+}
+
+/** Say in the record that `platform`'s project is on its way, before the press answers. */
+export async function beginCloudSend(
+  dir: string,
+  platform: string,
+  read: (file: string) => Promise<unknown>,
+  now = new Date(),
+): Promise<GenexCloudSend> {
+  const send = { platform, startedAt: now.toISOString(), state: CloudSendState.Sending };
+  await keepSend(dir, send, read);
+  return send;
+}
+
+/** The last line of a failed run: what the CLI said at the end, not its progress before that. */
+function lastLine(text: string): string {
+  const lines = text.split("\n").map((line) => line.trim());
+  return (lines.filter(Boolean).at(-1) ?? "").slice(0, SEND_ERROR_CHARS);
 }
 
 /**
@@ -158,16 +233,36 @@ export async function startCloudBuild(
   deps: CloudBuildDeps & { read: (file: string) => Promise<unknown> },
   signal: AbortSignal,
 ): Promise<GenexCloudBuild> {
-  if (!CLOUD_PLATFORMS.has(platform)) throw new Error(MESSAGE.UnknownPlatform);
+  assertCloudPlatform(platform);
   const sourceDir = path.join(dir, CLOUD_SOURCE_FOLDER);
   try {
     await deps.stage(gameDir, sourceDir);
     const build = cloudBuildOf(await deps.cli(cloudBuildArgs(platform, sourceDir), signal));
     if (!build || build.platform !== platform) throw new Error(MESSAGE.NotABuild);
-    await keepBuild(dir, build, deps.read);
+    await keepBuild(dir, build, deps.read, true);
     return build;
   } finally {
     await rm(sourceDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Run `send`'s `startCloudBuild` behind the press: answers the build Genex started, or null once the
+ * record says why it stopped. Stopped here, it says no reason: only the CLI's refusals are one.
+ */
+export async function sendCloudBuild(
+  dir: string,
+  send: GenexCloudSend,
+  gameDir: string,
+  deps: CloudBuildDeps & { read: (file: string) => Promise<unknown> },
+  signal: AbortSignal,
+): Promise<GenexCloudBuild | null> {
+  try {
+    return await startCloudBuild(dir, send.platform, gameDir, deps, signal);
+  } catch (error) {
+    const reason = signal.aborted ? "" : lastLine(errorMessage(error));
+    await keepSend(dir, { ...send, state: CloudSendState.Failed, ...(reason ? { error: reason } : {}) }, deps.read);
+    return null;
   }
 }
 

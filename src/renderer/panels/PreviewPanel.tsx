@@ -90,6 +90,8 @@ import { BuildSurface, HistoryVia, PlanningEnd } from "../analytics/events/build
 import { noteStageSwitch } from "../analytics/workspace-trackers.ts";
 import { StageSwitchVia } from "../analytics/workspace-vocabulary.ts";
 import type { LiveAbout } from "./stage/live-load.ts";
+import { playGame } from "../game-play.ts";
+import { unrealProjectOf } from "../unreal-game.ts";
 
 const EMPTY_WORKER_EVENTS: EventEnvelope[] = [];
 
@@ -520,6 +522,7 @@ function StageContents({
   onView,
   onNotice,
   onPlayBuild,
+  onPlayGame,
   onResume,
   onCloseBeside,
 }: {
@@ -539,6 +542,8 @@ function StageContents({
   onNotice: Notify;
   /** Swap a build of this run into Live, as the user asked. */
   onPlayBuild: (head: string, surface: BuildSurface) => Promise<void>;
+  /** A game that plays as its own app: Builds' Play starts it (`game-play.ts`) instead of showing Live. */
+  onPlayGame: (() => Promise<void>) | null;
   /** Play the stopped game again, or start one that waits for Play. */
   onResume: () => void;
   onCloseBeside?: () => void;
@@ -575,6 +580,7 @@ function StageContents({
           graph={graphShown}
           project={project}
           onShowLive={showLive}
+          onPlayGame={onPlayGame}
           onShowAsset={showAsset}
           onReply={reply}
           onKeepBuilding={
@@ -777,6 +783,11 @@ function useStageSurface({
   return { run, flags, pressedView: resolveStageView(view, has), shop };
 }
 
+/** A game that plays as its own app (an Unreal game): its Play, in Builds and on Live, starts that app. */
+function appPlay(project: string | null, loaded: GameProject | null, onNotice: Notify): (() => Promise<void>) | null {
+  return project && unrealProjectOf(loaded) ? () => playGame(project, onNotice) : null;
+}
+
 export function PreviewPanel({
   games,
   project,
@@ -834,6 +845,7 @@ export function PreviewPanel({
     onView,
     onNotice,
   });
+  const playsApp = appPlay(project, loaded, onNotice);
 
   return (
     <div
@@ -854,12 +866,9 @@ export function PreviewPanel({
         onTab={chooseTab}
         behind={behind}
         onReload={live.idle ? controls.run.toggle : reload}
-        run={controls.run}
-        fullScreen={controls.fullScreen}
-        sound={controls.sound}
+        controls={{ ...controls, playGame: playsApp }}
         emptyGame={flags.emptyScene}
         livePreview={Boolean(project) && preview}
-        gameControls={controls.gameControls}
         plugins={plugins}
         onNotice={onNotice}
         onToolbarOpen={setToolbarOpen}
@@ -881,6 +890,7 @@ export function PreviewPanel({
           onView={onView}
           onNotice={onNotice}
           onPlayBuild={showBuild}
+          onPlayGame={playsApp}
           onResume={controls.run.toggle}
           onCloseBeside={onCloseBeside}
         />

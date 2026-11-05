@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
@@ -19,12 +19,13 @@ import {
   isRunning,
   pollDelayMs,
   readCloudBuilds,
+  readCloudSend,
   startCloudBuild,
   watchCloudBuild,
   withBuild,
 } from "../../src/plugins/genex/cloud-build.ts";
 import { GenexTools } from "../../src/plugins/genex/adapter.ts";
-import { CloudBuildFailure, CloudBuildState, type GenexCloudBuild } from "../../src/shared/genex.ts";
+import { CloudBuildFailure, CloudBuildState, CloudSendState, type GenexCloudBuild } from "../../src/shared/genex.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const STARTED = "2026-10-23T10:00:00.000Z";
@@ -164,6 +165,30 @@ describe("a build on Genex in the publish workspace", () => {
     assert.deepEqual(await readJson(path.join(dir, CLOUD_BUILD_FILE)), { builds: [finished] });
   });
 
+  it("keeps a send on its way while an older build's status is written", async () => {
+    const dir = await tmpDir("cloud-build");
+    const send = { platform: "windows", startedAt: STARTED, state: CloudSendState.Sending };
+    await writeFile(path.join(dir, CLOUD_BUILD_FILE), JSON.stringify({ builds: [BUILD], send }));
+    const finished = { ...BUILD, state: CloudBuildState.Done };
+    await watchCloudBuild(dir, "job_1", fakeDeps([{ build: finished }]).deps, new AbortController().signal);
+    assert.deepEqual(await readJson(path.join(dir, CLOUD_BUILD_FILE)), { builds: [finished], send });
+  });
+
+  it("keeps a send only when all of it is whole", () => {
+    const send = { platform: "windows", startedAt: STARTED, state: CloudSendState.Failed, error: "no" };
+    assert.deepEqual(readCloudSend({ send }), send);
+    const hostile: unknown[] = [
+      {},
+      { send: "windows" },
+      { send: { ...send, platform: "mac" } },
+      { send: { ...send, state: "exploded" } },
+      { send: { ...send, startedAt: "yesterday" } },
+    ];
+    for (const value of hostile) assert.equal(readCloudSend(value), null);
+    const { error: _words, ...wordless } = send;
+    assert.deepEqual(readCloudSend({ send: { ...send, error: 7 } }), wordless, "words that aren't words are dropped");
+  });
+
   it("asks nothing for a job id that isn't one, and stops when told to", async () => {
     const dir = await tmpDir("cloud-build");
     const hostile = fakeDeps([]);
@@ -180,9 +205,12 @@ describe("a build on Genex in the publish workspace", () => {
 });
 
 /** A Genex plugin whose CLI is a stand-in that answers `native build` and `build-status`, every run logged. */
-async function toolsWithBuildCli(options: { buildsApps?: boolean } = {}) {
+async function toolsWithBuildCli(options: { buildsApps?: boolean; engine?: string } = {}) {
   const root = await tmpDir("cloud-build-tools");
   const log = path.join(root, "runs.jsonl");
+  /** While this file exists the send's upload hangs, as a big project's does; `fail` makes it end refused. */
+  const hold = path.join(root, "hold-send");
+  const fail = path.join(root, "fail-send");
   const standIn = path.join(root, "build-cli.mjs");
   await writeFile(
     standIn,
@@ -191,6 +219,11 @@ const args = process.argv.slice(2);
 const source = args.includes("--source") ? args[args.indexOf("--source") + 1] : null;
 const staged = source && existsSync(source) ? readdirSync(source).sort() : null;
 appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, cwd: process.cwd(), staged }) + "\\n");
+if (args[1] === "build") while (existsSync(${JSON.stringify(hold)})) await new Promise((go) => setTimeout(go, 20));
+if (args[1] === "build" && existsSync(${JSON.stringify(fail)})) {
+  process.stderr.write("Zipping the project\\nUpload failed (part 93/150).\\n");
+  process.exit(1);
+}
 const build = { platform: "windows", jobId: "job_7", startedAt: "2026-10-23T10:00:00.000Z" };
 if (args[1] === "build") process.stdout.write(JSON.stringify({ build: { ...build, state: "queued" } }));
 else process.stdout.write(JSON.stringify({ build: { ...build, state: "done", finishedAt: "2026-10-23T10:21:00.000Z" } }));
@@ -211,7 +244,10 @@ process.exit(0);
       .map((line) => JSON.parse(line) as { args: string[]; cwd: string; staged: string[] | null });
   const game = path.join(root, "seyda-neen");
   await mkdir(path.join(game, "unreal", "Content"), { recursive: true });
-  await writeFile(path.join(game, "unreal", "SeydaNeen.uproject"), "{}");
+  await writeFile(
+    path.join(game, "unreal", "SeydaNeen.uproject"),
+    JSON.stringify({ EngineAssociation: options.engine ?? "5.8" }),
+  );
   await writeFile(path.join(game, "unreal", "Content", "Map.umap"), "map");
   await writeFile(path.join(game, "index.html"), "<p>the game's page, no part of its app</p>");
   execFileSync("git", ["init", "-q"], { cwd: game });
@@ -224,7 +260,7 @@ process.exit(0);
       JSON.stringify({ version: 1, project: "seyda", connected: true, slug: "seyda-neen" }),
     );
   };
-  return { make, runs, game, onGenex, workspace: path.join(root, "host", "publish", "seyda") };
+  return { make, runs, game, onGenex, hold, fail, workspace: path.join(root, "host", "publish", "seyda") };
 }
 
 describe("the Genex plugin's builds on Genex", () => {
@@ -286,6 +322,76 @@ describe("the Genex plugin's builds on Genex", () => {
       (await runs()).map((call) => call.args[1]),
       ["build", "build-status"],
     );
+  });
+
+  it("answers the press at once and sends a big project behind it: a call lives 190 seconds, an upload doesn't", async () => {
+    // The incident: the press waited for the whole upload inside one plugin call, so the host gave
+    // up at 190 seconds and said "Stopped local plugin wait" while the project was still going up.
+    const { make, runs, game, onGenex, hold, workspace } = await toolsWithBuildCli();
+    await onGenex();
+    await writeFile(hold, "");
+    const genex = make();
+    const pressed = await genex.cloudBuild("seyda", "windows", game);
+    assert.equal(pressed.cloud?.send?.state, CloudSendState.Sending, "the press answers while the upload runs");
+    assert.equal(pressed.cloud?.send?.platform, "windows");
+    const again = await genex.cloudBuild("seyda", "windows", game);
+    assert.equal(again.cloud?.send?.state, CloudSendState.Sending, "a second press joins the send under way");
+    await rm(hold);
+    await genex.cloudSettled();
+    assert.deepEqual(
+      (await runs()).map((call) => call.args[1]),
+      ["build", "build-status"],
+      "one send, then the build is followed",
+    );
+    const { native } = await genex.publishView("seyda");
+    assert.equal(native?.cloud?.send, undefined, "a send that arrived leaves only its build");
+    assert.deepEqual(
+      native?.cloud?.builds.map((build) => build.state),
+      [CloudBuildState.Done],
+    );
+    assert.equal((await readdir(workspace)).includes(CLOUD_SOURCE_FOLDER), false, "the staged copy is gone");
+  });
+
+  it("says why a send stopped in the CLI's last words, and Try again sends it once more", async () => {
+    const { make, runs, game, onGenex, fail, workspace } = await toolsWithBuildCli();
+    await onGenex();
+    await writeFile(fail, "");
+    const genex = make();
+    await genex.cloudBuild("seyda", "windows", game);
+    await genex.cloudSettled();
+    const failed = (await genex.publishView("seyda")).native?.cloud;
+    assert.equal(failed?.send?.state, CloudSendState.Failed);
+    assert.equal(failed?.send?.error, "Upload failed (part 93/150).");
+    assert.deepEqual(failed?.builds, []);
+    assert.equal((await readdir(workspace)).includes(CLOUD_SOURCE_FOLDER), false, "nothing staged stays behind");
+    await rm(fail);
+    await genex.cloudBuild("seyda", "windows", game);
+    await genex.cloudSettled();
+    const sent = (await genex.publishView("seyda")).native?.cloud;
+    assert.equal(sent?.send, undefined, "the failure is gone once a send arrives");
+    assert.equal(sent?.builds[0]?.state, CloudBuildState.Done);
+    assert.equal((await runs()).filter((call) => call.args[1] === "build").length, 2);
+  });
+
+  it("reads a send Studio was closed in the middle of as stopped, never as still going", async () => {
+    const { make, onGenex, workspace } = await toolsWithBuildCli();
+    await onGenex();
+    const send = { platform: "windows", startedAt: STARTED, state: CloudSendState.Sending };
+    await writeFile(path.join(workspace, CLOUD_BUILD_FILE), JSON.stringify({ builds: [], send }));
+    const { native } = await make().publishView("seyda");
+    assert.deepEqual(native?.cloud?.send, { ...send, state: CloudSendState.Failed });
+  });
+
+  it("refuses an Unreal version the build computers don't have before anything is sent", async () => {
+    const versions = ["5.5", "5.7", "4.27", "", "{A1B2C3D4-0000-0000-0000-000000000000}"];
+    for (const engine of versions) {
+      const { make, runs, game, onGenex } = await toolsWithBuildCli({ engine });
+      await onGenex();
+      const genex = make();
+      await assert.rejects(genex.cloudBuild("seyda", "windows", game), /Genex builds Unreal 5\.8 games/, engine);
+      assert.deepEqual(await runs(), [], `nothing sent for "${engine}"`);
+      assert.equal((await genex.publishView("seyda")).native?.cloud?.send, undefined);
+    }
   });
 
   it("follows a build Studio left running when it next reads the record", async () => {

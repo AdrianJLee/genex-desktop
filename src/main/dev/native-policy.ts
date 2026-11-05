@@ -8,6 +8,8 @@ import type { StudioInvokeChannel } from "../../shared/ipc-channels.ts";
  */
 const NATIVE_CHANNELS = [
   "studio:terminal.open",
+  // Play for a game being made starts the app its folder holds, in the game sandbox: never in a fixture.
+  "studio:game.play-build",
   // A command a chat reply offered runs in the user's own shell, like the project terminal.
   "studio:terminal.run",
   "studio:plugins.install",

@@ -53,8 +53,12 @@ const NOT_SOURCE_FILE = /^\.|\.(md|log)$/i;
 const isSource = (name: string, at: string, builds: ReadonlySet<string>): boolean =>
   !name.startsWith(".") && !NOT_SOURCE.has(name) && !name.endsWith(".app") && !builds.has(at);
 
+/** Whether `build` is older than the game's last change (`changed`, ms since the epoch): not what players should get. */
+export const isStaleBuild = (build: Pick<FoundBuild, "builtAt">, changed: number): boolean =>
+  changed - build.builtAt > STALE_AFTER_MS;
+
 /** When the game's sources last changed, ms since the epoch, outside its builds and caches. */
-async function lastChange(root: string, builds: readonly FoundBuild[]): Promise<number> {
+export async function lastChange(root: string, builds: readonly FoundBuild[]): Promise<number> {
   // A build's own folder, and the folder its program sits in (a Mac app's holds the app's debug symbols).
   const inBuild = new Set(
     builds.flatMap((build) => [
@@ -87,7 +91,7 @@ function nativeRow(
 ): PublishPlatform {
   if (!build)
     return { target, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null, uploads: false };
-  const stale = changed - build.builtAt > STALE_AFTER_MS;
+  const stale = isStaleBuild(build, changed);
   return {
     target,
     state: stale ? PublishPlatformState.Stale : PublishPlatformState.Ready,
@@ -150,6 +154,6 @@ export async function publishedApps(
 ): Promise<string[]> {
   if (!sendsApps) return [];
   const { mac, windows, linux, changed } = await folderFacts(core, project);
-  const fresh = (build: FoundBuild | undefined) => build !== undefined && changed - build.builtAt <= STALE_AFTER_MS;
+  const fresh = (build: FoundBuild | undefined) => build !== undefined && !isStaleBuild(build, changed);
   return [mac, windows, linux].filter(fresh).map((build) => build?.entry ?? "");
 }

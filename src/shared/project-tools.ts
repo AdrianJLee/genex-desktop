@@ -12,6 +12,8 @@ export const ProjectTool = {
   PluginsSuggest: "plugins_suggest",
   /** Checks a plugin folder the agent wrote in the project, in place; installs nothing. The chat's own session's. */
   PluginCheck: "plugin_check",
+  /** Plays the game folder's own newest app for this computer, for the person (an Unreal game's). The chat's own session's. */
+  PlayBuild: "play_build",
 } as const;
 export type ProjectTool = (typeof ProjectTool)[keyof typeof ProjectTool];
 

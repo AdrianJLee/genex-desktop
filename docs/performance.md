@@ -75,7 +75,11 @@ counters carry the regression gates.
   the build is current from cached file fingerprints, so it does not stall the main process it measures.
 - `npm run test:ui -- chat-scroll-ui [--build owned]`: flings a long chat with real input, alone
   and beside a stand-in game that keeps the GPU busy, and counts painted frames with a blank
-  block; it also keeps a CPU profile and a trace of one fling.
+  block; it also keeps a CPU profile and a trace of one fling. First it pastes a long message
+  into the composer and deletes it: in every frame a following chat keeps its newest line above
+  the composer, and a chat the reader pressed in holds still; an empty composer is as tall as a
+  wrapping placeholder needs. `STUDIO_CHAT_SCROLL_PASS=composer`
+  runs only that, `game` only the flings beside the game.
 - Fixture messages for journeys: `fixture:stream` (a short streamed reply) and `fixture:stream-long`
   (about ten thousand characters of Markdown and code, streamed at a fast model's pace, in a game chat).
 - `dist/renderer/bundle-report.json`: eager renderer bytes against the budget in

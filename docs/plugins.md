@@ -27,7 +27,7 @@ exports work with no enabled plugins.
   (`toolbar requires apiVersion 2`, `network requires apiVersion 2`,
   `mcpServers requires apiVersion 2`, `tools[].confirmation requires apiVersion 2`) rather than silently ignored, so a package cannot
   claim API 1 and still ship API 2 behaviour.
-- API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills, `tools[].audience` and (bundled Genex only) `tools[].host`, and the sections that shape a project's Loop: `detect`, `facts` and `tools[].makes` ([Project facts](#project-facts)), `workspace` and `assets`, `workerTypes`, `scaffolds`, `folders`, `hooks`, `locks` (with `needs` and `tools[].ready`) and `observers`. Lower-version manifests cannot claim those declarations.
+- API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills, `tools[].audience` and (bundled Genex only) `tools[].host`, and the sections that shape a project's Loop: `detect`, `facts` and `tools[].makes` ([Project facts](#project-facts)), `workspace` and `assets`, `workerTypes`, `scaffolds`, `folders`, `hooks`, `locks` (with `needs` and `tools[].ready`), `observers` and `tools[].jobStatus`. Lower-version manifests cannot claim those declarations.
 - API 3's `observe` also takes an optional `still` (additive; no manifest field or capability of
   its own). A host older than the option ignores it and answers an ordinary observation, so a
   caller checks the answer for `still`, then `stillProblem`, and handles neither (the SDK types the
@@ -182,6 +182,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `hooks[]` | 3 | Up to 32 `{on, tool, facts?, messages?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
 | `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
 | `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`); Genex itself no longer asks it |
+| `tools[].jobStatus` | 3 | Agent tools only: the tool answers `{started: true}` and its job runs on, and this other agent tool of the manifest (no `confirmation`, `host` or `needs`) says how it stands with a boolean `jobRunning`. Genex reads it while the job runs and, once `false`, starts the next turn of the chat whose own agent started it ([harness runtime](harness-runtime.md)); the trust dialog names it among the steps Genex runs on its own |
 | `tools[].asset` | 3 | Agent tools only: `{kind, prompt?, tool?}`, the kind of asset a call makes; see [Assets being made](#assets-being-made) |
 | `icon` | any | The plugin's picture: a `.png`, `.jpg`, `.webp` or `.svg` file in the package, at most 512 KiB, square and full-bleed (Studio rounds the corners); see [Icons](#icons) |
 
@@ -968,7 +969,9 @@ explained once under the list (Loops and Rewind can't reach it). A pick is linke
 this game", which leads, with Open in Unreal second, for a set-up project the game doesn't use yet.
 
 `stage-status` answers the same step for the open game's own project, which the Live card turns into
-one button (`whereItStands` is shared with `status`). `status` returns the engines, the list, the
+one button (`whereItStands` is shared with `status`): Play (the game's own app, `play_build`'s, else
+"Run the game" in its chat) where the project is not set up, closed or ready, since the agent sets
+it up and opens it itself; Get Unreal, choose, switch, quit or restart otherwise. `status` returns the engines, the list, the
 shown project and `next`, the panel's one primary step
 (`PanelStep`: get-unreal, choose, quit-first, set-up, update-helper, open, starting, connected,
 switch, not-answering, port-blocked, open-when-free, crashed). The shown project is, in order: the one the panel names,
@@ -2348,7 +2351,10 @@ session gets is its seat's (`ProjectToolSeat`): a run's lead (a web run's direct
 gets both, and its card shows in the one chat its run was started in, as the host's records say,
 never a thread the harness names; a worker the host seated gets `plugins_find` only and reports
 what it found to its lead; any other session (a reviewer, a judge) gets
-neither. Only the chat's own session gets `start_web_game`. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
+neither. Only the chat's own session gets `start_web_game`, and on an Unreal game `play_build`, the
+person's Play: Genex starts the game folder's newest app for this computer in place, in the game
+sandbox (`main/play/local-plays.ts`), or answers that there is none, that it is older than the
+game's last change (package again first) or that a package the chat started is still running. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
 the installed plugins that match (on, then off or removed; never one under the hood), then the entries of Genex's curated
 catalog not installed, and never anything from another source (`main/core/plugin-finder.ts`). A
 plugin matches when it detects, is scoped to or makes `fact`, or when a word of `text` other than a
@@ -2546,9 +2552,12 @@ editor's derived data, Zen store and shader workers, all of which UnrealBuildToo
 On Windows `RunUAT.bat` runs through cmd.exe with every path whole in quotes (`quotedScriptLine`); a
 path with a quote, `%` or `!`, or on a network share, is refused first. `package-status` answers the
 state, the app relative to the game, the seconds and a failure's first error lines with the
-computer's paths taken out; after a restart, idle with the app found on disk (a Linux package's
-starter `<Game>.sh`). On Windows the Publish dialog's Linux row of an Unreal game offers Make with
-agent (`appsMadeHere`). Publish then finds the app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole
+computer's paths taken out, and `jobRunning`; after a restart, idle with the app found on disk (a
+Linux package's starter `<Game>.sh`). On Windows the Publish dialog's Linux row of an Unreal game
+offers Make with agent (`appsMadeHere`). `package-game`, `plugin-build`, `plugin-test`,
+`plugin-package`, `add-cpp-module` and `add-motion-matching` name their status tool as `jobStatus`,
+and each status answers `jobRunning`, so the chat that started a job is woken when it ends. Publish
+then finds the app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole
 build (no program inside a Windows build's folder is a build of its own, and Unreal's
 `UEPrereqSetup` is a helper) and never a project's own `Binaries` beside its `.uproject`, which hold
 no cooked content. A chat build of a game still with no kind, with the plugin on, is handed the
@@ -3337,21 +3346,29 @@ Genex:
   Command Line Tools leaves the app unsigned (`submit`). A failure never stops the app: it goes as built and
   the record keeps why by code (`MacNotarizeFailure`, `notarizeFailure` beside the sent app); the Mac
   row then says "notarized", or a line under the rows says why it went without.
-- An Unreal game's rows for another system say where it is packaged ("Package it on a Windows PC"),
-  except the Windows row on a Mac once Genex can build it (`cloudWords`, `CLOUD_TARGETS`): while the
+- A row nothing can be done about from here is left out (`outOfReach`, `shownRows`): an Unreal
+  game's web row, and its rows for a system this computer doesn't package, except the Windows row on
+  a Mac once Genex can build it (`cloudWords`, `CLOUD_TARGETS`): while the
   game has no page on Genex it says to publish first; then it offers Build on Genex, which runs
   `studio:plugins.genex-cloud-build` (`cloudBuildFromDialog`, Windows only) → the plugin's
   `cloud-build` (`cloudBuild`, `cloud-build.ts`). The press is the consent: the game's Unreal project
   alone is staged, its `.uproject` at the top, without caches and builds as for remixing
   (`stageBuildSource`, into `cloud-source/`, removed once sent). Studio sets no size limit of its
   own: Genex takes or refuses the project by the account's limit, and its refusal says the sizes,
-  shown under the rows. It goes
+  shown under the rows. An Unreal other than the build computers' (`CLOUD_UNREAL_VERSIONS`, from the
+  `.uproject`'s `EngineAssociation`) is refused before anything goes. The press answers at once: a
+  big project takes far longer to go up than the 190 seconds a plugin call may run, so the send runs
+  behind it (`sendCloudBuild`, 6 hours, as long as Genex's signed upload links), one per game, a
+  second press joining it. `cloud-build.json` keeps it as `send` until Genex has the build; the row
+  says "Sending to Genex. Keep Genex open", and a send that stopped says so with Try again, the CLI's
+  last words under the rows, whether it was refused, cut off or Studio closed in the middle. It goes
   privately with `genex native build --platform windows --source <folder> --json`; Genex builds it on
   its own computers and puts the app on the game's page. Each job is kept in the workspace's
   `cloud-build.json` (apart from `native.json`, which every publish writes anew) and followed with
   `genex native build-status <job> --json`, waiting 15 s, 30 s, 1 and then 2 min between reads; a job
   still running when Studio starts is followed again when the record is next read. The record
-  answers as `native.cloud`; the row then says "Building on Genex · N min so far", "On Genex · built …"
+  answers as `native.cloud`; the row then says "Building on Genex", its pill shimmering beside a live
+  clock from when the work began (`PlatformRow.since`), "On Genex · built …"
   with Build again, or why it failed by code (`CloudBuildFailure`) with Try again (none once the
   month's builds are used). A refused press is said under the rows. Job ids and platforms Genex
   answers are kept only when whole (`cloudBuildOf`). Nothing is asked while the pinned CLI is older

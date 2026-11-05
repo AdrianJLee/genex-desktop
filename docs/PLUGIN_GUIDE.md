@@ -243,7 +243,9 @@ note?, pending?, images? }`. A handler that throws blocks a moment that can be b
 git stays Genex's. A quick `checkpoint.before` save may add `"messages": true` to run before each
 chat message's checkpoint too, so a Rewind brings back what it saved ([Before each chat
 message](plugins.md#before-each-chat-message)). An agent tool that `makes` a kind
-may name a harness tool in `ready` that answers `{ ready, note }`. See
+may name a harness tool in `ready` that answers `{ ready, note }`. A tool whose job runs on after it
+answers `{ started: true }` (a build, a package) names its status tool in `jobStatus`, an agent tool
+answering `{ jobRunning, … }`: Genex reads it and wakes the chat once the job has ended. See
 [Hooks](plugins.md#hooks-genexs-moments) and [Locks](plugins.md#locks-the-person-comes-first).
 
 A plugin whose tools make more than one kind of project names each with a label:

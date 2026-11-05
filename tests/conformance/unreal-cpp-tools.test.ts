@@ -383,6 +383,7 @@ async function cppWorld(options: Options = {}) {
       platform: string;
       module: string | null;
       adding: { state: string; error?: string; seconds?: number };
+      jobRunning: boolean;
     };
   const add = () => tools.call(LoopToolName.AddCppModule, {}, context, storage);
   /** The add job's end, once it is no longer adding. */
@@ -406,6 +407,7 @@ describe("cpp-status", () => {
       platform: "darwin",
       module: null,
       adding: { state: CppAddState.Idle },
+      jobRunning: false,
     });
   });
 
@@ -463,8 +465,10 @@ describe("add-cpp-module", () => {
     const w = await cppWorld();
     assert.deepEqual(await w.add(), { started: true });
     assert.equal((await w.status()).adding.state, CppAddState.Adding);
+    assert.equal((await w.status()).jobRunning, true, "Genex reads that the job runs, to wake the chat when it ends");
     const end = await w.added();
     assert.equal(end.state, CppAddState.Done, end.error);
+    assert.equal((await w.status()).jobRunning, false);
     assert.deepEqual(w.events, [CppEditorTool.SaveAll, "quit Rush.uproject", "compile", "open Rush.uproject"]);
     assert.equal(end.seconds, Math.round(w.clock.at / 1000));
     assert.ok(w.clock.at >= QUIT_TAKES_MS + OPEN_TAKES_MS, "it waited for Unreal to close and to answer again");

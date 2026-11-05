@@ -8,17 +8,17 @@ import { t } from "../../../shared/i18n.ts";
 import { UNREAL_WORDS } from "../../words.ts";
 
 /**
- * What the card's button does: open the Unreal panel at Get Unreal (or to choose a project), set
- * up then open, set up only (Unreal has another project open), open, quit, or restart (quit, then
- * open this project: switching to it from another set-up project Unreal has open, or reopening
- * this one when Unreal has it open but it doesn't answer). Nothing quits a project Genex didn't
- * set up: the card says to open this one once Unreal is free.
+ * What the card's button does: open the Unreal panel at Get Unreal (or to choose a project), play
+ * the game (its own app, or the agent asked to run it: `game-play.ts`), open, quit, or restart
+ * (quit, then open this project: switching to it from another set-up project Unreal has open, or
+ * reopening this one when Unreal has it open but it doesn't answer). Setting a project up for
+ * agents is the agent's own step (`open-editor`), never the card's. Nothing quits a project Genex
+ * didn't set up: the card says to open this one once Unreal is free.
  */
 export const StageAct = {
   GetUnreal: "get-unreal",
   Panel: "panel",
-  SetUpAndOpen: "set-up-and-open",
-  SetUp: "set-up",
+  Play: "play",
   Open: "open",
   Quit: "quit",
   Restart: "restart",
@@ -90,18 +90,15 @@ function busyView(status: UnrealStageStatus, name: string): StageView | null {
   return said(thenSay(thenSay(state, who), WORDS.leaveOpen));
 }
 
+/** Play, the card's button wherever Unreal itself needs nothing of the person. */
+const playable = (line: string): StageView => offers(line, WORDS.play, StageAct.Play);
+
 /**
- * Set up: then open, unless Unreal has another project open (Genex keeps one Unreal, so it only
- * sets up, naming what holds Unreal); a port another app holds is why it needs setup again.
+ * A project not set up for agents yet: Play, under what holds Unreal when another project or a
+ * Loop does; the agent sets the project up itself when it opens it.
  */
-function setUpView(status: UnrealStageStatus, name: string): StageView {
-  if (status.editors > 0) {
-    const then = status.busyRun ? WORDS.openAfterLoop : WORDS.openWhenFree;
-    const line = thenSay(thenSay(holderWords(status), WORDS.setUpBeside(name)), then);
-    return offers(line, WORDS.setUpButton, StageAct.SetUp);
-  }
-  return offers(status.portTaken ? WORDS.portTaken(name) : WORDS.setUp, WORDS.setUpAndOpen, StageAct.SetUpAndOpen);
-}
+const setUpView = (status: UnrealStageStatus): StageView =>
+  playable(status.editors > 0 ? holderWords(status) : WORDS.notOpen);
 
 /** Opening, timed; a first start also says it takes minutes. */
 function startingView(status: UnrealStageStatus): StageView {
@@ -147,13 +144,13 @@ export function stageView(
     case UnrealStageStep.Choose:
       return offers(linked ? WORDS.choose(name) : WORDS.chooseFirst, WORDS.panel, StageAct.Panel);
     case UnrealStageStep.SetUp:
-      return setUpView(status, name);
+      return setUpView(status);
     case UnrealStageStep.Open:
-      return offers(UNREAL_WORDS.stageStatus, UNREAL_WORDS.open, StageAct.Open);
+      return playable(WORDS.notOpen);
     case UnrealStageStep.Starting:
       return startingView(status);
     case UnrealStageStep.Connected:
-      return said(WORDS.ready);
+      return playable(WORDS.ready);
     case UnrealStageStep.OpenWhenFree:
       return said(thenSay(holderWords(status), WORDS.openProjectWhenFree(name)));
     case UnrealStageStep.Crashed:

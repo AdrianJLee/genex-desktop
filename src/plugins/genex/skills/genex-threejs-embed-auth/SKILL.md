@@ -55,7 +55,7 @@ export const GENEX = {
 does not apply: Studio pins its Genex packages. Other commands map onto Studio tools as the
 `genex` skill describes (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-embed-auth/SKILL.md v1.38.0 sha256 758cc401b706e6620f33ed38db81a895a1839f5059d571b012fe83a85445331b -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-embed-auth/SKILL.md v1.38.2 sha256 ec5bee74f3da305399cdab46d856703ed06b0851e97e62948a6b4ccafd172a50 -->
 ---
 name: genex-threejs-embed-auth
 description: Wire up player identity AND durable game state for a Genex game via @genex-ai/embed-sdk. Every player gets an identity (signed-in account or guest); per-player saves, shared world state, and leaderboards are one-line SDK calls; multiplayer requires the SDK's token either way. Also holds the shells table: what a game may do on its Genex page, in the app and on its own link.
@@ -220,7 +220,10 @@ each shell is in [references/shells.md](references/shells.md).
 
 - `share({ text?, params? })` → `Promise<{ status, url }>`; `status` is
   `"shared" | "copied" | "dismissed" | "unavailable"`. The SDK builds the
-  link; the game supplies only its own `params`.
+  link; the game supplies only its own `params`. A link whose preview card
+  shows the player's own result needs a server of the creator's own, and only
+  when the person asks for one: "A result link with its own preview picture"
+  in [references/shells.md](references/shells.md).
 - `copyText(text)`, `keepAwake(on)`, `openExternal(url)`,
   `saveFile(blob, name)`, `setFullscreen(on)` →
   `Promise<{ ok: true } | { ok: false, error }>`; `error` is `unsupported` |

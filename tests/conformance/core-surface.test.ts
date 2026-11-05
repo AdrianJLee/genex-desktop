@@ -62,6 +62,8 @@ const METHODS = [
   "newRunId",
   "offerLive",
   "permissionSettings",
+  // Play for a game being made: its own folder's app (studio:game.play-build, play_build).
+  "playGameBuild",
   "playGameSnapshot",
   // The stage strip's Play/Stop (studio:preview.play, studio:preview.stop).
   "playLive",

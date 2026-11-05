@@ -277,6 +277,13 @@ export interface PluginManifestTool extends PluginTool {
   /** API 3, agent tools with `makes` only: the harness tool that answers whether what it makes is ready to make. */
   ready?: string;
   /**
+   * API 3, agent tools only: the tool's job outlives its call (it answers `{started: true}` at
+   * once), and this agent tool of the manifest says how it stands, answering
+   * {@link PLUGIN_JOB_RUNNING_FIELD}. Genex reads it while the job runs and, once it has ended,
+   * starts the next turn of the chat whose agent started it.
+   */
+  jobStatus?: string;
+  /**
    * API 3, agent tools only: the kind of asset a call makes. While a call runs it is a card on the
    * Assets canvas and in the chat, in the spot its files will land.
    */
@@ -295,6 +302,17 @@ export interface PluginManifestTool extends PluginTool {
    */
   timeoutMs?: number;
 }
+/** The field of a `jobStatus` tool's answer that says whether the job still runs: `true` or `false`. */
+export const PLUGIN_JOB_RUNNING_FIELD = "jobRunning";
+/** Whether a `jobStatus` tool's answer says its job still runs; null when it says neither. */
+export function pluginJobRunning(answer: unknown): boolean | null {
+  if (!answer || typeof answer !== "object") return null;
+  const running = (answer as Record<string, unknown>)[PLUGIN_JOB_RUNNING_FIELD];
+  return typeof running === "boolean" ? running : null;
+}
+/** Whether a plugin tool's answer says it started a job that outlives the call (`{started: true}`). */
+export const startedPluginJob = (answer: unknown): boolean =>
+  !!answer && typeof answer === "object" && (answer as Record<string, unknown>).started === true;
 /** Whether agents are handed a manifest tool: every one but those only the harness calls. */
 export const isAgentTool = (tool: Pick<PluginManifestTool, "audience">): boolean =>
   tool.audience !== PluginToolAudience.Harness;

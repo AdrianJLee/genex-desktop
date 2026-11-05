@@ -485,10 +485,10 @@ function consentOf(card: AssistCard) {
 type ChatChoiceMeta = { lastEngine?: string; lastModel?: string; lastEffort?: string } | undefined;
 
 /**
- * The model the task's turn runs on: the one the chat last used, or the first ready subscription
- * for a chat that has used none. A message sent without one would run on the local model.
+ * The model a turn Genex starts in the chat runs on: the one the chat last used, or the first ready
+ * subscription for a chat that has used none. A message sent without one would run on the local model.
  */
-async function chatChoice(
+export async function chatChoice(
   core: StudioCore,
   threadId: string,
 ): Promise<Pick<ComposerSendOptions, "engine" | "model" | "effort">> {

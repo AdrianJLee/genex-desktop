@@ -286,6 +286,19 @@ there and hears no end twice (`loop/jobs/watch.ts`, polled at most every 5 secon
 director is woken soon by a `job_ended` line. An end the agent itself caused (`job_stop`) wakes
 nobody.
 
+A chat's own job wakes the chat the same way, from the host (`main/core/job-wake.ts`), whatever
+its engine: a `job_start` job of the chat's own session that finished, failed or ran out of time
+starts the chat's next turn, or joins its running one, with one hidden message
+(`MessageOrigin.JobEnded`) naming it, and counts as told; one someone stopped, or one an earlier
+Genex left running, is told only by the next turn's notice. A plugin tool whose manifest names a
+`jobStatus` ([plugins](plugins.md#manifest-reference)) is watched the same way: once the chat's own session's
+call answers `{started: true}`, Genex reads the status tool every 15 seconds, with the call's
+arguments it declares, until it answers `jobRunning: false`, then sends that message naming both
+tools (an Unreal package: "read `unreal__package-status`, tell the person, then go on"). The agent's
+own read answering `false`, a new start or a stop ends the watch with no message, as do three reads
+in a row that say neither and three hours of watching. A run's lead and workers follow their jobs
+themselves.
+
 What a rollback may assume of a game folder. `snapshot.restore` on a game commits a rescue
 snapshot first and may refuse with a typed `code` (`branch-changed`, `history-changed`,
 `operation-in-progress`, `rescue-failed`, or `hook_blocked` when a plugin's `restore.before` step

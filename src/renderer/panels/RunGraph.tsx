@@ -76,6 +76,8 @@ interface Props {
   graph: RunGraphModel;
   project: string | null;
   onShowLive?: () => void;
+  /** A game that plays as its own app (an Unreal game): Play starts it (`game-play.ts`) instead of showing Live. */
+  onPlayGame?: (() => Promise<void>) | null;
   onShowAsset?: (jobId: string) => void;
   /** Follow up in chat: the composer takes a chip naming the node; null when there is no chat to reply in. */
   onReply: ((reply: Reply) => void) | null;
@@ -302,6 +304,7 @@ export const RunGraph = memo(function RunGraph({
   tabs = null,
   onNotice,
   onShowLive,
+  onPlayGame = null,
   onShowAsset,
 }: Props): JSX.Element {
   useEffect(() => markPerformance(PerformanceMarkName.GraphCommit));
@@ -324,7 +327,7 @@ export const RunGraph = memo(function RunGraph({
   useGraphKeys(overlays, camera.fitAll, step);
   const actions = useCanvasActions(overlays, camera.moved, model.graph.active === true);
   const { hasBuild, play, openJob } = useBuildActions(project, model, { onShowLive, onShowAsset, onNotice });
-  const playBar = barPlay(hasBuild, play, onShowLive);
+  const playBar = onPlayGame ?? barPlay(hasBuild, play, onShowLive);
 
   // Keep the viewport mounted for measurements/listeners while hiding non-authoritative fallback totals.
   return (

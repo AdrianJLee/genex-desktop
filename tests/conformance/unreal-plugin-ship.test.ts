@@ -289,6 +289,7 @@ async function shipWorld(options: Options = {}) {
     };
     package: { state: string; package?: string; note?: string; error?: string; line?: string };
     proof: string[];
+    jobRunning: boolean;
   };
   const status = async (args: Record<string, unknown> = {}) => (await call(ShipToolName.PluginStatus, args)) as Status;
   /** The status once `kind`'s job no longer runs. */
@@ -327,6 +328,12 @@ describe("plugin-build", () => {
   it("plugin-build saves and closes the open editor, then builds the host and its plugin as a job and opens it again", async () => {
     const w = await shipWorld();
     assert.deepEqual(await w.call(ShipToolName.PluginBuild), { started: true });
+    const now = await w.status();
+    assert.equal(
+      now.jobRunning,
+      now.build.state === ShipState.Running,
+      "Genex reads whether the build runs, to wake the chat when it ends",
+    );
     assert.deepEqual(
       w.events.slice(0, 2),
       [CppEditorTool.SaveAll, `quit ${HOST}.uproject`],
@@ -334,6 +341,7 @@ describe("plugin-build", () => {
     );
     const done = await w.settled("build");
     assert.equal(done.build.state, ShipState.Done);
+    assert.equal(done.jobRunning, false);
     assert.deepEqual(w.events, [CppEditorTool.SaveAll, `quit ${HOST}.uproject`, "compile", `open ${HOST}.uproject`]);
     const [compiled] = w.compiles;
     assert.equal(compiled?.module, HOST, "the host's editor target, which builds its plugins too");

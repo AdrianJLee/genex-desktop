@@ -355,6 +355,11 @@ export class JobService {
     for (const id of ids) await this.#mark(project, id, { toldChat: true });
   }
 
+  /** Take back `markTold`: the message that told the chat's agent never reached its chat. */
+  async markUntold(project: string, ids: readonly string[]): Promise<void> {
+    for (const id of ids) await this.#mark(project, id, { toldChat: false });
+  }
+
   /** Note that a job's end is recorded in its chat. */
   async markEndLogged(project: string, id: string): Promise<void> {
     await this.#mark(project, id, { endLogged: true });

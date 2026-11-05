@@ -418,8 +418,6 @@ export default {
   "Anime cel": "Cel de anime",
   Another: "Outra",
   "Another Bonsai download is running": "Outro download do Bonsai está em andamento",
-  "Another app is using the port Genex gave {project}. Set it up again to move it to a free one.":
-    "Outro app está usando a porta que o Genex deu para {project}. Configure de novo para mudar para uma livre.",
   "Another app, such as OneDrive or an antivirus, is still reading the new project's files. Try Create and open again in a moment.":
     "Outro app, como o OneDrive ou um antivírus, ainda está lendo os arquivos do projeto novo. Tente “Criar e abrir” de novo daqui a pouco.",
   "Another clip": "Outro clipe",
@@ -1631,10 +1629,6 @@ export default {
     "O Genex executa {count, plural, one {# ferramenta} other {# ferramentas}} para ele:",
   "Genex saves each change to the folder’s own Git history.":
     "O Genex salva cada mudança no próprio histórico do Git da pasta.",
-  "Genex sets it up for agents first; you confirm what changes.":
-    "O Genex primeiro configura para os agentes; você confirma o que muda.",
-  "Genex sets {project} up for agents now; you confirm what changes.":
-    "O Genex configura {project} para os agentes agora; você confirma o que muda.",
   "Genex sign-in expired. Reconnect your account.": "O login no Genex expirou. Reconecte sua conta.",
   "Genex starts Git history here, so any change can be undone.":
     "O Genex inicia um histórico do Git aqui, para que qualquer mudança possa ser desfeita.",
@@ -2608,10 +2602,8 @@ export default {
   "Open in Godot {version}.": "Aberto no Godot {version}.",
   "Open in Unreal": "Abrir no Unreal",
   "Open in terminal": "Abrir no terminal",
-  "Open it after the Loop ends.": "Abra depois que o Loop terminar.",
   "Open it in a private window to join as another player.":
     "Abra em uma janela anônima para entrar como outro jogador.",
-  "Open it once Unreal is free.": "Abra quando o Unreal estiver livre.",
   "Open on Play": "Abrir em Jogar",
   "Open page": "Abrir página",
   "Open pages on {domain}": "Abrir páginas de {domain}",
@@ -3351,7 +3343,6 @@ export default {
   "Set up Codex": "Instalar Codex",
   "Set up OpenCode": "Instalar OpenCode",
   "Set up an Unreal project for Genex.": "Configurar um projeto do Unreal para o Genex.",
-  "Set up and open": "Configurar e abrir",
   "Set up for Genex": "Configurar para o Genex",
   "Set up the protected workspace": "Configure o espaço de trabalho protegido",
   "Set up this game's Unity project": "Configure o projeto do Unity deste jogo",
@@ -5279,6 +5270,8 @@ export default {
   "when a turn starts": "quando um turno começa",
   "when a worker ends": "quando um ajudante termina",
   "when a worker starts": "quando um ajudante começa",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "enquanto roda um trabalho que uma das ferramentas dele iniciou, para ver se já terminou",
   "while it holds a lock, to see whether you are using it": "enquanto mantém um bloqueio, para ver se você está usando",
   wide: "arregalados",
   worker: "ajudante",
@@ -6270,4 +6263,10 @@ export default {
   "Raise context to 16K": "Aumentar contexto para 16K",
   "Raising…": "Aumentando…",
   "The chat now uses {model}. Send your message again.": "O chat agora usa {model}. Envie sua mensagem de novo.",
+  "Run the game": "Rode o jogo",
+  "The agent is packaging the game. It starts it once the package is ready.":
+    "O agente está empacotando o jogo. Ele abre o jogo assim que o pacote ficar pronto.",
+  "Genex can’t play this game’s app on this computer.": "O Genex não consegue abrir o app deste jogo neste computador.",
+  "Open the game’s chat to have the agent package it.": "Abra o chat do jogo para o agente empacotá-lo.",
+  "Not open in Unreal": "Não está aberto no Unreal",
 } satisfies LocaleCatalog;

@@ -365,8 +365,6 @@ export default {
   "Anime cel": "アニメセル",
   Another: "もう1枚",
   "Another Bonsai download is running": "別のBonsaiのダウンロードが実行中です",
-  "Another app is using the port Genex gave {project}. Set it up again to move it to a free one.":
-    "Genexが{project}に割り当てたポートを別のアプリが使っています。もう一度セットアップして空いているポートに移してください。",
   "Another app, such as OneDrive or an antivirus, is still reading the new project's files. Try Create and open again in a moment.":
     "OneDriveやウイルス対策ソフトなど、別のアプリがまだ新しいプロジェクトのファイルを読み込んでいます。少し待ってから、もう一度「作成して開く」を試してください。",
   "Another clip": "別のクリップ",
@@ -1580,10 +1578,6 @@ export default {
     "Genexがこのプラグインのために{count, plural, other {#個のツール}}を実行します：",
   "Genex saves each change to the folder’s own Git history.":
     "Genexは変更のたびに、フォルダー自身のGit履歴に保存します。",
-  "Genex sets it up for agents first; you confirm what changes.":
-    "Genexが先にエージェント用にセットアップします。変更内容はあなたが確認します。",
-  "Genex sets {project} up for agents now; you confirm what changes.":
-    "Genexが今{project}をエージェント用にセットアップします。変更内容はあなたが確認します。",
   "Genex sign-in expired. Reconnect your account.": "Genexのサインインが期限切れです。アカウントを再接続してください。",
   "Genex starts Git history here, so any change can be undone.":
     "GenexがここでGit履歴を始めるので、どの変更も元に戻せます。",
@@ -2564,10 +2558,8 @@ export default {
   "Open in Godot {version}.": "Godot {version}で開いています。",
   "Open in Unreal": "Unrealで開く",
   "Open in terminal": "ターミナルで開く",
-  "Open it after the Loop ends.": "Loopが終わったら開いてください。",
   "Open it in a private window to join as another player.":
     "プライベートウィンドウで開くと、別のプレイヤーとして参加できます。",
-  "Open it once Unreal is free.": "Unrealが空いたら開いてください。",
   "Open on Play": "「プレイ」で開く",
   "Open page": "ページを開く",
   "Open pages on {domain}": "{domain}のページを開く",
@@ -3299,7 +3291,6 @@ export default {
   "Set up Codex": "Codexをセットアップ",
   "Set up OpenCode": "OpenCodeをセットアップ",
   "Set up an Unreal project for Genex.": "UnrealプロジェクトをGenex用にセットアップします。",
-  "Set up and open": "セットアップして開く",
   "Set up for Genex": "Genex用にセットアップ",
   "Set up the protected workspace": "保護されたワークスペースをセットアップ",
   "Set up this game's Unity project": "このゲームのUnityプロジェクトをセットアップしてください",
@@ -5231,6 +5222,8 @@ export default {
   "when a turn starts": "ターンの開始時",
   "when a worker ends": "ワーカーの終了時",
   "when a worker starts": "ワーカーの開始時",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "ツールが始めたジョブの実行中、終わったかどうかを確かめるため",
   "while it holds a lock, to see whether you are using it": "ロックを持っている間、使用中かどうかを確かめるため",
   wide: "見開き",
   worker: "ワーカー",
@@ -6195,4 +6188,12 @@ export default {
   "Raising…": "上げています…",
   "The chat now uses {model}. Send your message again.":
     "チャットは {model} を使うようになりました。メッセージをもう一度送ってください。",
+  "Run the game": "ゲームを起動して",
+  "The agent is packaging the game. It starts it once the package is ready.":
+    "エージェントがゲームをパッケージしています。完成したら起動します。",
+  "Genex can’t play this game’s app on this computer.":
+    "Genex はこのコンピュータでこのゲームのアプリを起動できません。",
+  "Open the game’s chat to have the agent package it.":
+    "エージェントにパッケージしてもらうには、ゲームのチャットを開いてください。",
+  "Not open in Unreal": "Unrealで開いていません",
 } satisfies LocaleCatalog;

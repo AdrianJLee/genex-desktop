@@ -150,6 +150,30 @@ function RunButton({ run, onToggle }: { run: LiveRun; onToggle: () => void }): J
   );
 }
 
+/** The game's controls the strip shows (`useStageControls`), and Play for a game that plays as its own app. */
+export interface StripControls {
+  /** Play/Stop (`live-run.ts`). */
+  run: { state: LiveRun; toggle: () => void };
+  /** Full screen, offered while the running game is on the stage. */
+  fullScreen: { offered: boolean; enter: () => void };
+  /** The Live game's sound switch (`game-sound.ts`). */
+  sound: { on: boolean; toggle: () => void };
+  /** The game has something to run (`gameControlsShown`): only then do Play/Stop and Sound show. */
+  gameControls: boolean;
+  /** A game that plays as its own app (an Unreal game): its Play starts that app (`game-play.ts`). */
+  playGame: (() => Promise<void>) | null;
+}
+
+/** Play for a game that plays as its own app: Play's green button, a spinner while Genex looks for the app. */
+function PlayGameButton({ onPlay }: { onPlay: () => Promise<void> }): JSX.Element {
+  const [starting, setStarting] = useState(false);
+  const play = () => {
+    setStarting(true);
+    void onPlay().finally(() => setStarting(false));
+  };
+  return <RunButton run={starting ? LiveRun.Starting : LiveRun.Stopped} onToggle={play} />;
+}
+
 /** Full screen: the game over the whole screen; holding Esc, or the button in its corner, brings it back. */
 function FullScreenButton({ offered, onEnter }: { offered: boolean; onEnter: () => void }): JSX.Element {
   return (
@@ -290,7 +314,8 @@ function ViewMenu({
  * into one button, then the plugin buttons move to a second row, then Sound and Full screen join
  * them; nothing ever runs under the window's own controls. An earlier build opens from its result
  * card in the chat, not from here. An Unreal game plays in Unreal, not in a web page here, so it
- * has none of the web game's controls and no Publish: there is no web build to put online.
+ * has none of the web game's controls and no Publish (there is no web build to put online); its
+ * Play starts the app its folder holds (`game-play.ts`).
  */
 export function StageStrip({
   loaded,
@@ -304,12 +329,9 @@ export function StageStrip({
   onTab,
   behind,
   onReload,
-  run,
-  fullScreen,
-  sound,
+  controls: { run, fullScreen, sound, gameControls, playGame },
   emptyGame,
   livePreview,
-  gameControls,
   plugins,
   onNotice,
   onToolbarOpen,
@@ -328,18 +350,12 @@ export function StageStrip({
   /** What waits for Live's Reload, when anything does. */
   behind: LiveBehind | null;
   onReload: () => void;
-  /** Play/Stop (`live-run.ts`). */
-  run: { state: LiveRun; toggle: () => void };
-  /** Full screen, offered while the running game is on the stage. */
-  fullScreen: { offered: boolean; enter: () => void };
-  /** The Live game's sound switch (`game-sound.ts`). */
-  sound: { on: boolean; toggle: () => void };
+  /** The game's controls (`live-run.ts`) and, for a game that plays as its own app, its Play. */
+  controls: StripControls;
   /** The game has nothing in it yet: no plugin button's action is due. */
   emptyGame: boolean;
   /** Live shows the game's web preview (`live-views.ts`): only then do Run, Reload, Sound and Full screen show. */
   livePreview: boolean;
-  /** The game has something to run (`gameControlsShown`): only then do Play/Stop and Sound show. */
-  gameControls: boolean;
   plugins: PluginInfo[];
   onNotice: Notify;
   onToolbarOpen: (open: boolean) => void;
@@ -398,6 +414,7 @@ export function StageStrip({
           />
         ) : null}
         {livePreview && gameControls ? <RunButton run={run.state} onToggle={run.toggle} /> : null}
+        {playGame && !livePreview ? <PlayGameButton onPlay={playGame} /> : null}
         {livePreview ? <ReloadButton behind={behind} onReload={onReload} /> : null}
       </div>
       <div ref={game} className="stage-strip-game flex shrink-0 items-center gap-1">

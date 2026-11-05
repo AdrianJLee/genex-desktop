@@ -482,6 +482,34 @@ const SESSION_ACTIONS: ReadonlySet<unknown> = new Set(Object.values(SessionActio
 /** Whether a value names a session action. */
 export const isSessionAction = (value: unknown): value is SessionAction => SESSION_ACTIONS.has(value);
 
+/**
+ * What Play did for a game being made (`studio:game.play-build`, `main/play/local-plays.ts`): it
+ * started the game folder's own app or brought its window forward, or why it didn't. Wire values:
+ * never rename one.
+ */
+export const LocalPlayState = {
+  Launched: "launched",
+  /** It was running already: its window came forward. */
+  Shown: "shown",
+  /** It didn't start (the launcher's log has why). */
+  Failed: "failed",
+  /** The folder holds no app for this computer. */
+  NoBuild: "no-build",
+  /** Its newest app here is older than the game's last change: it misses that change. */
+  Stale: "stale",
+  /** The chat's agent is packaging the game now: its next app comes from that. */
+  Packaging: "packaging",
+  /** Genex plays no app on this computer. */
+  Unsupported: "unsupported",
+} as const;
+export type LocalPlayState = (typeof LocalPlayState)[keyof typeof LocalPlayState];
+
+/** Play's answer for a game being made, with the app it played or found (relative to the game). */
+export interface LocalPlayAnswer {
+  state: LocalPlayState;
+  app?: string;
+}
+
 /** What the viewer's bar offers for a web game's native app (canvas board "WebFirst"). Wire values: never rename one. */
 export const NativeAppOffer = {
   /** Not on this computer: the pill installs it. */

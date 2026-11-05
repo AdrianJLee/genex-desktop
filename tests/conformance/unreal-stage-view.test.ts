@@ -39,11 +39,14 @@ describe("the Live card's Unreal step", () => {
 
   const rows: Array<[string, UnrealStageStatus, string | null]> = [
     ["no Unreal installed: get it", status(PanelStep.GetUnreal, { project: null }), StageAct.GetUnreal],
-    ["not set up: set up and open, never a bare Open", status(PanelStep.SetUp, { editors: 0 }), StageAct.SetUpAndOpen],
-    ["not set up while Unreal has another project open: only set up", status(PanelStep.SetUp), StageAct.SetUp],
-    ["set up and closed: open", status(PanelStep.Open, { editors: 0 }), StageAct.Open],
+    // Flipped from Set up and open, Set up and Open: the agent sets the project up and opens it
+    // itself, so the person's one button where Unreal needs nothing of them is Play.
+    ["not set up: play", status(PanelStep.SetUp, { editors: 0 }), StageAct.Play],
+    ["not set up while Unreal has another project open: play", status(PanelStep.SetUp), StageAct.Play],
+    ["set up and closed: play", status(PanelStep.Open, { editors: 0 }), StageAct.Play],
     ["opening: nothing to press", status(PanelStep.Starting, { opening: { at: 0, elapsedMs: 192_000 } }), null],
-    ["ready: nothing to press", status(PanelStep.Connected), null],
+    // Flipped from nothing to press: Ready in Unreal plays the game.
+    ["ready: play", status(PanelStep.Connected), StageAct.Play],
     [
       "another project open: switch to this one",
       status(PanelStep.Switch, { openProject: { name: "Harbor", file: "/h/Harbor.uproject" } }),
@@ -103,21 +106,18 @@ describe("the Live card's Unreal step", () => {
   it("says what holds Unreal while this project waits for it, when known", () => {
     const loop = { title: "Harbor Night", project: "/h/Harbor.uproject", here: false };
     const lines: Array<[string, UnrealStageStatus, string]> = [
+      // Flipped from setup's words ("Genex sets Lantern up for agents now…"): only what holds Unreal.
       [
-        "set up beside a project it names",
+        "not set up beside a project it names",
         status(PanelStep.SetUp, { holder: "Harbor" }),
-        "Unreal has Harbor open. Genex sets Lantern up for agents now; you confirm what changes. Open it once Unreal is free.",
+        "Unreal has Harbor open.",
       ],
       [
-        "set up beside a Loop",
+        "not set up beside a Loop",
         status(PanelStep.SetUp, { busyRun: loop }),
-        "A Loop in Harbor Night is using Unreal. Genex sets Lantern up for agents now; you confirm what changes. Open it after the Loop ends.",
+        "A Loop in Harbor Night is using Unreal.",
       ],
-      [
-        "set up beside a project it can't name",
-        status(PanelStep.SetUp),
-        "Unreal has another project open. Genex sets Lantern up for agents now; you confirm what changes. Open it once Unreal is free.",
-      ],
+      ["not set up beside a project it can't name", status(PanelStep.SetUp), "Unreal has another project open."],
       [
         "open beside a project it names",
         status(PanelStep.OpenWhenFree, { holder: "Harbor" }),
@@ -137,13 +137,14 @@ describe("the Live card's Unreal step", () => {
     for (const [name, row, line] of lines) {
       const view = stageView(row, NAME);
       assert.equal(view.line, line, name);
-      const act = row.next === PanelStep.SetUp ? StageAct.SetUp : null;
-      assert.equal(view.button?.act ?? null, act, `${name}: only Set up, never a quit`);
+      const act = row.next === PanelStep.SetUp ? StageAct.Play : null;
+      assert.equal(view.button?.act ?? null, act, `${name}: only Play, never a quit`);
     }
   });
 
   it("says why setup is needed again, that a first start takes minutes, and where a moved project is chosen", () => {
-    assert.match(stageView(status(PanelStep.SetUp, { portTaken: true, editors: 0 }), NAME).line, /port/);
+    // Flipped from naming the port another app took: the agent's own setup moves it to a free one.
+    assert.equal(stageView(status(PanelStep.SetUp, { portTaken: true, editors: 0 }), NAME).line, "Not open in Unreal");
     assert.equal(
       stageView(status(PanelStep.Starting, { firstStart: true }), NAME).hint,
       "The first start can take several minutes.",

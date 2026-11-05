@@ -38,6 +38,8 @@ const MESSAGE = {
     `Invalid ${where}.needs of ${name} (1-${LIMIT.Needs} lock ids this manifest declares, each once)`,
   InvalidReady: (name: string) =>
     `Invalid tools[].ready of ${name} (only on an agent tool with makes; a tool of this manifest only the harness calls, that asks nothing and runs no host program)`,
+  InvalidJobStatus: (name: string) =>
+    `Invalid tools[].jobStatus of ${name} (only on an agent tool; another agent tool of this manifest that asks nothing, runs no host program and needs no lock)`,
 } as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -189,8 +191,27 @@ function validateReady(m: PluginManifest, tools: PluginManifestTool[]): void {
   });
 }
 
+/** Whether `status` is an agent tool other than `tool` that Genex may read on its own: it asks nothing, runs no host program and holds no lock. */
+function readableJobStatus(tool: PluginManifestTool, status: PluginManifestTool | undefined): boolean {
+  if (!status || status === tool || !isAgentTool(status)) return false;
+  return status.confirmation === undefined && status.host === undefined && status.needs === undefined;
+}
+
+/** Each agent tool's `jobStatus`, copied onto its canonical form when declared. */
+function validateJobStatus(m: PluginManifest, tools: PluginManifestTool[]): void {
+  m.tools.forEach((raw, index) => {
+    const tool = tools[index];
+    if (raw.jobStatus === undefined || !tool) return;
+    if (m.apiVersion !== 3) throw new Error(MESSAGE.NeedsApi3("tools[].jobStatus"));
+    const status = tools.find((t) => t.name === raw.jobStatus);
+    if (!isAgentTool(tool) || !readableJobStatus(tool, status))
+      throw new Error(MESSAGE.InvalidJobStatus(JSON.stringify(raw.name)));
+    tool.jobStatus = raw.jobStatus;
+  });
+}
+
 /**
- * The manifest's `locks`, `hooks`, `needs` and `ready`, checked against its canonical tools and
+ * The manifest's `locks`, `hooks`, `needs`, `ready` and `jobStatus`, checked against its canonical tools and
  * connectors (already validated) and kept on `canonical` only when declared.
  */
 export function validateMomentSections(m: PluginManifest, canonical: PluginManifest): void {
@@ -199,4 +220,5 @@ export function validateMomentSections(m: PluginManifest, canonical: PluginManif
   if (canonical.locks) assertProbesFree(canonical.locks, canonical.tools);
   if (m.hooks !== undefined) canonical.hooks = validateHooks(m, canonical.tools);
   validateReady(m, canonical.tools);
+  validateJobStatus(m, canonical.tools);
 }

@@ -121,8 +121,11 @@ const MESSAGE = {
 
 /** How adding the content goes: its state, why it failed, and how long it took once done. */
 export type MotionAdding = JobRecord<MotionAddState>;
-/** `motion-status`'s answer: where the sample is on this Mac, whether the game holds its content, and the add job. */
-export type MotionStatus = { sample: string | null; inGame: boolean; adding: MotionAdding };
+/**
+ * `motion-status`'s answer: where the sample is on this Mac, whether the game holds its content, the
+ * add job, and whether that job runs now (`jobRunning`, read by Genex to wake the chat when it ends).
+ */
+export type MotionStatus = { sample: string | null; inGame: boolean; adding: MotionAdding; jobRunning: boolean };
 /** `add-motion-matching`'s answer: started in the background, or the content the game already holds. */
 export type AddMotionAnswer = { started: true; note: string } | { already: true };
 
@@ -509,6 +512,7 @@ async function motionStatus(deps: MotionToolsDeps, jobs: Jobs, storage: string, 
     sample: await findSample(projectRootsOf(deps)),
     inGame: project ? await holdsSample(project) : false,
     adding: { ...adding },
+    jobRunning: adding.state === MotionAddState.Adding,
   };
 }
 

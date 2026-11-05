@@ -196,6 +196,9 @@ import { type InstallOutcome, type NativeInstaller, nativeInstalls } from "./pla
 import { checkNativeUpdates } from "./play/native-updates.ts";
 import { runTool } from "./play/native-unpack.ts";
 import { type GameGenex, type NativeSessions, type NativeSessionsDeps, nativeSessions } from "./play/native-launch.ts";
+import { LocalPlays } from "./play/local-plays.ts";
+import { findNativeBuilds } from "./core/native-builds.ts";
+import { isStaleBuild, lastChange } from "./core/publish-platforms.ts";
 import { nativePlays } from "./play/native-plays.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
 import { linuxGameWindows } from "./play/native-windows-linux.ts";
@@ -647,6 +650,8 @@ let playStoreDeps: PlayStoreParts | null = null;
 /** Play's native installs and the games being played, made on first use (`playInstallsFor`, `playSessionsFor`). */
 let nativeInstaller: NativeInstaller | null = null;
 let nativeLauncher: NativeSessions | null = null;
+/** Play for the games being made: each one's own folder's app, made with the first core that plays one. */
+let localPlays: LocalPlays | null = null;
 /** The app's Genex account, made with the core: Play, Settings and Publish read it. */
 let genexAccount: GenexAccount | null = null;
 /** The fixture account a fixture launch is signed in to Genex as (`dev/fixture-people.ts`), if any. */
@@ -972,6 +977,10 @@ function bringStudioForward(): void {
   win.focus();
 }
 
+/** The core's local plays, where this launch plays games being made. */
+const optionalLocalPlays = (plays: StudioCoreOptions["localPlays"]): Pick<StudioCoreOptions, "localPlays"> =>
+  plays ? { localPlays: plays } : {};
+
 /** The core's stand option, when this launch has one. */
 const optionalStand = (genexStand: GenexStand | undefined): Pick<StudioCoreOptions, "genexStand"> =>
   genexStand ? { genexStand } : {};
@@ -987,6 +996,7 @@ async function createCore(userData: string): Promise<StudioCore> {
     renderGameCover,
     // Read at send time, once the core exists: Play's catalog and account hang off it.
     mentionSources: mentionSourcesFor(() => studio),
+    ...optionalLocalPlays(localPlaysFor(() => studio)),
     ...(desktop ? { desktop } : {}),
     paths: { userData, resources },
     ...appLookOptions(userData),
@@ -1332,6 +1342,8 @@ function watchNativeUpdates(studio: StudioCore): void {
  */
 /** Where Genex keeps its compiled game host on Windows, in its own data. */
 const GAME_HOST_FOLDER = "game-host";
+/** Genex's own folder for games played from their own folders: the launcher's records and each game's saves. */
+const LOCAL_PLAYS_FOLDER = "local-plays";
 
 /** How this system starts a native game, sees its window, brings it forward and asks it to quit. */
 function gameLauncher(): Pick<NativeSessionsDeps, "spawn" | "hasWindow" | "show" | "kill" | "program"> {
@@ -1367,6 +1379,41 @@ function playSessionsFor(studio: StudioCore): NativeSessions | null {
     ...(fixtureNativePolicy ? {} : { presence: playsFor(studio) }),
   });
   return nativeLauncher;
+}
+
+/**
+ * Play for a game being made (`main/play/local-plays.ts`), made on its first use: the game folder's
+ * own app in the game sandbox, offline (a game not yet on Genex has no rooms of its own there), and
+ * never in a fixture launch.
+ */
+function localPlaysFor(core: () => StudioCore): StudioCoreOptions["localPlays"] {
+  if (fixtureNativePolicy) return undefined;
+  const plays = (): LocalPlays => {
+    const studio = core();
+    localPlays ??= new LocalPlays({
+      root: path.join(studio.options.paths.userData, LOCAL_PLAYS_FOLDER),
+      host: thisComputer() ?? null,
+      gameDir: async (project) => (await studio.games.list()).find((game) => game.name === project)?.dir ?? null,
+      builds: findNativeBuilds,
+      lastChange,
+      stale: isStaleBuild,
+      sessions: (placing) =>
+        nativeSessions({
+          root: path.join(studio.options.paths.userData, LOCAL_PLAYS_FOLDER),
+          ...placing,
+          ...gameLauncher(),
+          killTree: (pid) => killProcessTree(pid),
+          probe: psProbe(),
+          clock: SYSTEM_CLOCK,
+          publish: () => {},
+          played: async () => {},
+          ended: async () => {},
+          log: (line) => studioLog.write("main", line),
+        }),
+    });
+    return localPlays;
+  };
+  return { play: (project, engine) => plays().play(project, engine) };
 }
 
 /** Where a native game's plays go: genex.games, once its window is on screen (`main/play/native-plays.ts`). */
@@ -3110,7 +3157,13 @@ let shutdownInProgress = false;
  * exits; the harness is stopped first and, failing that, killed last.
  */
 function quitSteps(): ShutdownStep[] {
-  return shutdownSteps({ keepAwake, codexLogin, claudeLogin, terminals, core, games: nativeLauncher });
+  // Every game Genex started goes with it: those from Play and those played from their own folders.
+  const games = {
+    stopAll: async () => {
+      await Promise.all([nativeLauncher?.stopAll(), localPlays?.sessions.stopAll()]);
+    },
+  };
+  return shutdownSteps({ keepAwake, codexLogin, claudeLogin, terminals, core, games });
 }
 
 // Nothing drives the person's computer once the studio is going away.

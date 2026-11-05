@@ -109,8 +109,18 @@ export type ShipOutcome = Partial<AutomationResult> & {
 };
 /** One job as `plugin-status` reads it: its state, why it failed, how long it took, and what it left. */
 export type ShipRecord = ShipOutcome & { state: ShipState; error?: string; seconds?: number };
-/** `plugin-status`'s answer: the plugin, its three jobs, and the proof a finish can name, by paths inside the game. */
-export type ShipStatus = { plugin: string; build: ShipRecord; test: ShipRecord; package: ShipRecord; proof: string[] };
+/**
+ * `plugin-status`'s answer: the plugin, its three jobs, the proof a finish can name (by paths inside
+ * the game), and whether any of the jobs runs now (`jobRunning`, read by Genex to wake the chat when it ends).
+ */
+export type ShipStatus = {
+  plugin: string;
+  build: ShipRecord;
+  test: ShipRecord;
+  package: ShipRecord;
+  proof: string[];
+  jobRunning: boolean;
+};
 
 /** What the plugin's tools need from the computer, the editor and the clock; tests stand in for every program. */
 export type ShipToolsDeps = RestartDeps & {
@@ -772,12 +782,14 @@ async function shipStatus(deps: ShipToolsDeps, jobs: Jobs, storage: string, cont
   const packaged = jobs.record(jobOf(target, ShipJob.Package));
   // A summary or note is proof only of a run that finished: none running, failed or stopped.
   const standing = [proofOf(test), proofOf(packaged), true];
+  const build = jobs.record(jobOf(target, ShipJob.Build)) ?? IDLE;
   const status: ShipStatus = {
     plugin: name,
-    build: jobs.record(jobOf(target, ShipJob.Build)) ?? IDLE,
+    build,
     test: test ?? (kept[0] ? { ...IDLE, report } : IDLE),
     package: packaged ?? (kept[1] ? { ...IDLE, note } : IDLE),
     proof: shown.filter((_, n) => kept[n] && standing[n]),
+    jobRunning: [build, test, packaged].some((record) => record?.state === ShipState.Running),
   };
   return status;
 }

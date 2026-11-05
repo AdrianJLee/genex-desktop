@@ -1643,9 +1643,10 @@ before the event is written. The chat folds the pair by `callId` into one row of
 and the Builds graph draws one asset job per call that makes something (asked for → making →
 delivered or failed), joined to the `asset_delivered` record on `jobId`: a call stamped with what
 it makes (`making`) or of Genex's `asset` tool from the start, any other call only once it
-delivers files or takes on a job, so a lookup that failed (`find-nodes`) is never a failed asset. Both are host-owned: a plugin cannot forge
-them, and cannot suppress them by staying quiet. A run's sub-agent's calls carry its run and its
-agent id (`attribution`) as `runId` and `facetId`, so they land on its own node. A tool only the
+delivers files or takes on a job, so a lookup that failed (`find-nodes`) is never a failed asset.
+Both are host-owned: a plugin cannot forge them, and cannot suppress them by staying quiet. A
+run's sub-agent's calls carry its run and its agent id (`attribution`) as `runId` and `facetId`,
+so they land on its own node. A tool only the
 harness calls (`"audience": "harness"`, such as the Unreal Loop's editor polls) is a step of the
 harness's loop, not an agent's work: it runs only as the harness's own step (`plugins.invoke` with
 `step: true`; an agent's call is refused), with no pair, or a run's polls would bury the calls the

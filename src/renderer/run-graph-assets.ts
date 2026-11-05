@@ -96,9 +96,9 @@ export function newAssetLedger(): AssetLedger {
 const madeNothing = (ledger: AssetLedger, job: AssetInfo): boolean =>
   ledger.unannounced.has(job) && job.state !== AssetCardState.Delivered && !job.files.length && job.jobId === null;
 
-/** The jobs that stay on the page: everything asked for, less what made nothing or was folded away. */
+/** The jobs that stay on the page: everything asked for, less what delivered nothing or was folded away. */
 export function keptAssetJobs(ledger: AssetLedger): AssetInfo[] {
-  return ledger.jobs.filter((job) => !ledger.dropped.has(job) && !madeNothing(ledger, job));
+  return ledger.jobs.filter((job) => !ledger.dropped.has(job));
 }
 
 /** Whether a card is still on its way: asked for, or being made. */
@@ -140,12 +140,14 @@ const sameAsset = (failed: AssetInfo, later: AssetInfo): boolean =>
   later.name === failed.name;
 
 /**
- * The ledger once its log is read. A failure the same worker retried successfully under the same
- * name folds into that success, whether the success kept a card of its own or was folded as work
- * on another asset. Once the run or chat turn that asked is over (`over`), a job still open is
+ * The ledger once its log is read. A call that never said it makes anything and made nothing (a
+ * lookup, failed or still out) is no asset. A failure the same worker retried successfully under
+ * the same name folds into that success, whether the success kept a card of its own or was folded
+ * as work on another asset. Once the run or chat turn that asked is over (`over`), a job still open is
  * not finished: nothing will deliver it now, so it is never "making" after the end.
  */
 export function settleAssetJobs(ledger: AssetLedger, over: boolean): void {
+  for (const job of ledger.jobs) if (madeNothing(ledger, job)) ledger.dropped.add(job);
   for (const job of ledger.jobs) job.picture ??= keptPictureOf(ledger, job);
   ledger.jobs.forEach((job, index) => {
     if (job.state !== AssetCardState.Failed || job.facetId === null) return;

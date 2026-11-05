@@ -507,11 +507,21 @@ describe("the Unreal Loop's tools", () => {
     await assert.rejects(w.call(LoopToolName.FindNodes, { query: "print" }), /open-editor/);
     assert.equal(exports(), 0, "a closed Unreal is never asked");
     w.state.answers = true;
-    const found = (await w.call(LoopToolName.FindNodes, { query: "print" })) as { nodes: Array<{ typeId: string }> };
+    type Found = { nodes: Array<{ typeId: string }> };
+    const [printing, car] = (await Promise.all([
+      w.call(LoopToolName.FindNodes, { query: "print" }),
+      w.call(LoopToolName.FindNodes, { query: "offroad reversing" }),
+    ])) as [Found, Found];
     assert.deepEqual(
-      found.nodes.map((n) => n.typeId),
+      printing.nodes.map((n) => n.typeId),
       ["Development|PrintString"],
     );
+    assert.deepEqual(
+      car.nodes.map((n) => n.typeId),
+      ["Class|BPVehicleAdvOffroadCar|GetIsReversing", "Class|BPVehicleAdvOffroadCar|SetIsReversing"],
+      "the first lookup already reads the template Blueprints the export wrote",
+    );
+    assert.equal(exports(), 1, "lookups at once share one export");
     await w.call(LoopToolName.FindNodes, { query: "print" });
     assert.equal(exports(), 1, "the kept reference answers every later lookup");
     assert.deepEqual((await loadReference(w.storage, "5.8"))?.common, ["Development|PrintString"]);

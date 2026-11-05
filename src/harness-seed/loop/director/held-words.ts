@@ -1,10 +1,12 @@
 /**
  * The words for what Genex's moments held back in a Loop: its start, a lead's turn the run could not
  * wait for (its wrap-up, a Stop), a save point, restore or restart (for the lead), and a pause because
- * the project's app stopped and Genex couldn't, or was held back from, bringing it back. Genex's own
- * hold (Plan mode, the person using an app a lock guards, Genex unable to tell whether they were,
- * something else at work there) is worded for the person from its typed hold and the lock's label,
- * never from its reason, which is written for agents; a plugin's step's block keeps its reason.
+ * the project's app stopped and was held back from coming back, or neither Genex nor the lead could
+ * bring it back (worded for the person, never with the app's own error, which only the lead reads).
+ * Genex's own hold (Plan mode, the person using an app a lock guards, Genex unable to tell whether
+ * they were, something else at work there) is worded for the person from its typed hold and the
+ * lock's label, never from its reason, which is written for agents; a plugin's step's block keeps its
+ * reason.
  */
 import { type HookHeldBy, HookHold, holdOf } from "../hooks.ts";
 
@@ -27,8 +29,8 @@ const MESSAGE = {
   TurnsHeld: (reason: string) => `A plugin of this game kept holding the lead's turns back: ${reason}`,
   StartHeld: (reason: string, resumed: boolean) =>
     `The Loop didn't start: a plugin of this project held it back: ${reason} ${resumed ? "Then press Resume: the Loop stays paused." : "Then start the Loop again."}`,
-  AppLost: (why: string) =>
-    `The project's app stopped and Genex couldn't bring it back (${clause(why)}). Open it, then Resume the Loop.`,
+  AppLost:
+    "The game's editor stopped and didn't open again, even after the agent worked on it. Press Resume to let the agent try again.",
 } as const;
 
 /** Why the run didn't start when Genex itself held its start back. */
@@ -126,8 +128,11 @@ export const crashHeldWords = (held: HookHeldBy): string | null => heldFor(held,
 /** Why the Loop pauses when Genex held back going to the last save point, or null for a step's own block. */
 export const backHeldWords = (held: HookHeldBy): string | null => heldFor(held, BACK_HELD);
 
-/** Why the Loop pauses when Genex couldn't bring the project's app back, in words the person can act on. */
-export const appLostWords = (why: string): string => MESSAGE.AppLost(why);
+/**
+ * Why the Loop pauses when neither Genex nor its lead could bring the project's app back, in words the
+ * person can act on: the app's own error stays the lead's, a compiler's lines never reach the person.
+ */
+export const appLostWords = (): string => MESSAGE.AppLost;
 
 /**
  * A lead's turn Genex's moments held back while the run could not wait (its wrap-up, a Stop): a

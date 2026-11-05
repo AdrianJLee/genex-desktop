@@ -10,9 +10,6 @@ import type { IpcHandle } from "./registrar.ts";
 
 /** The longest side a cover image may have, in pixels. */
 const COVER_MAX_PX = 512;
-/** The reference stills the Builds tab's prompt card shows: how many, and their long side in pixels. */
-const PROMPT_CARD_STILLS = 6;
-const PROMPT_CARD_STILL_PX = 640;
 
 /**
  * Why a game library request from the renderer is refused: the cover's words reach the person,
@@ -69,10 +66,6 @@ export function registerGamesIpc(handle: IpcHandle, { core, runSummaryReader, pu
   handle("studio:game.engine.undo", async (payload) => core.undoEngineLink(payload));
   handle("studio:games", async () => core.games.list());
   handle("studio:snapshots", async () => core.snapshotIndex.all());
-  // The reference stills the user gave a game (`<project>/references/`), small, for the Builds tab's prompt card.
-  handle("studio:game.references", async (payload) =>
-    core.referenceStills(payload.project, { max: PROMPT_CARD_STILLS, maxPx: PROMPT_CARD_STILL_PX }),
-  );
   // The Assets stage: what the game holds, joined with the project's own delivery ledger.
   handle("studio:game.asset.preview", async (payload) => core.previewProjectAsset(payload));
   handle("studio:game.asset.present", async (payload) => core.presentProjectAssets(payload));

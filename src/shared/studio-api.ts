@@ -248,6 +248,8 @@ export interface StudioApi {
    * is the consent; `remix` is its Allow remixing, whether the game's project goes once they are live.
    */
   genexPublishApps(project: string, title?: string, remix?: boolean): Promise<void>;
+  /** Ask Genex to build the game's `platform` app on its own computers (an Unreal game's Windows app on a Mac). */
+  genexCloudBuild(project: string, platform: string): Promise<void>;
   pluginsIndex(refresh?: boolean): Promise<PluginIndexView>;
   pluginInstallGithub(spec: string): Promise<void>;
   /** What a pasted GitHub link leads to, pinned to one exact commit; nothing is installed. */
@@ -719,10 +721,6 @@ export interface StudioApi {
   /** Every window a worker is driving right now, with its last frame. */
   agentScreens(): Promise<import("./agent-screen.ts").AgentScreenFrame[]>;
   readRunStill(file: string, maxPx?: number): Promise<{ mimeType: string; data: string } | null>;
-  readReferenceStills(project: string): Promise<{
-    frames: Array<{ label: string; mimeType: string; data: string }>;
-    skipped: Array<{ file: string; why: string }>;
-  }>;
   /** Everything under the game's `assets/` and `public/assets/`, with where each file came from. */
   previewProjectAsset(p: {
     project: string;
@@ -842,6 +840,8 @@ export interface StudioApi {
   cancelModelDownload(): Promise<boolean>;
   /** Delete a downloaded local model (Bonsai or Ollama) from this Mac. */
   removeModel(model: string): Promise<boolean>;
+  /** "Raise context to 16K": a copy of an Ollama model that runs with a 16K context; its model id. */
+  raiseModelContext(model: string): Promise<string>;
   revealProject(project: string, file?: string): Promise<boolean>;
   /** A file the chat names, from that chat's game folder or its run's unlanded build. */
   readGameFile(threadId: string, path: string): Promise<GameFile>;

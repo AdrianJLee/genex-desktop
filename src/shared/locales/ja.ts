@@ -1511,6 +1511,8 @@ export default {
   "Genex cover": "Genexカバー",
   "Genex credits": "Genexクレジット",
   "Genex decides from crash reports": "クラッシュレポートからGenexが判断します",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genexから時間内に応答がありませんでした。1分ほどしてからゲームのリンクをもう一度確認してください。",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genexは何もクリックしていません。ランチャーで自分でUnreal {version}をインストールしてください：{clicks}。",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
@@ -1556,6 +1558,8 @@ export default {
     "GenexがGodotをインストールしています。何もしなくて大丈夫です。",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "GenexはMITライセンスのオープンソースです。ほかのプロジェクトのソフトウェアも含まれており、それぞれ独自のライセンスに従います。",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genexはまだこのゲームを公開中です。終わってからリンクを変更してください。",
   "Genex isn't getting Roblox Studio right now.": "Genexは今、Roblox Studioを入手していません。",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genexは先に各ファイルのコピーを保存します。「セットアップを元に戻す」でこれらの変更を取り消せます。あなたが変更したGenexエディターヘルパーのファイルは、.mineコピーとして横に残ります。",
@@ -2420,6 +2424,13 @@ export default {
   "Nothing is failing.": "失敗しているものはありません。",
   "Nothing is installing.": "インストール中のものはありません。",
   "Nothing is online for this game yet": "このゲームはまだ何もオンラインにありません",
+  "Give the link a letter or a number.": "リンクに文字か数字を入れてください。",
+  "Another game already has this link. Try another one.":
+    "このリンクは別のゲームが使っています。別のものを試してください。",
+  "This game has used all its link changes.": "このゲームはリンクの変更回数を使い切りました。",
+  "Genex keeps this link for itself. Try another one.":
+    "このリンクは Genex が使うため使えません。別のものを試してください。",
+  "Give the game a name with a letter or a number in it.": "文字か数字を含む名前をゲームに付けてください。",
   "Nothing kept yet": "まだ採用なし",
   "Nothing made": "成果なし",
   "Nothing made yet": "まだ何も作られていません",
@@ -2973,6 +2984,9 @@ export default {
   "Remove plugin": "プラグインを削除",
   "Remove preset": "プリセットを削除",
   "Remove queued message": "待機中のメッセージを削除",
+  "Edit queued message": "待機中のメッセージを編集",
+  "Send now": "今すぐ送信",
+  "Stop and send now": "停止して今すぐ送信",
   "Remove tag": "タグを外す",
   "Remove the waiting messages first: this harness cannot take them back.":
     "先に待機中のメッセージを削除してください。このHarnessはそれを取り消せません。",
@@ -3184,7 +3198,6 @@ export default {
   "Save as preset…": "プリセットとして保存…",
   "Save image": "画像を保存",
   "Save key": "キーを保存",
-  "Save name": "名前を保存",
   "Save tags": "タグを保存",
   "Save the new game in": "新しいゲームの保存先",
   "Save to your library": "ライブラリに保存",
@@ -5830,6 +5843,43 @@ export default {
   "Your game is on Roblox": "ゲームがRobloxに公開されました",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "作業を続けている間に、ゲームのエージェントがRoblox Studioで公開します。",
+  "Asked Genex": "Genexに依頼済み",
+  "Build on Genex": "Genexでつくる",
+  "Build the {app} on Genex": "{app}をGenexでつくる",
+  "Build the {app} on Genex again": "{app}をもう一度Genexでつくる",
+  "Building on Genex · {minutes} min so far": "Genexでビルド中 · {minutes}分経過",
+  "Building…": "ビルド中…",
+  "Couldn’t build the {app} on Genex: {error}": "{app}をGenexでつくれませんでした：{error}",
+  "Genex builds only Windows apps on its own computers":
+    "Genexが自分のコンピューターでつくれるのはWindowsアプリだけです",
+  "Genex can build it on Windows for you": "GenexがWindowsで代わりにつくれます",
+  "Genex can’t build this Unreal version yet": "GenexはこのUnrealバージョンにまだ対応していません",
+  "Genex couldn’t compile the game’s code": "Genexがゲームのコードをコンパイルできませんでした",
+  "Genex couldn’t cook the game’s content": "Genexがゲームのコンテンツをクックできませんでした",
+  "Open the game to build its app on Genex": "ゲームを開いてからGenexでアプリをつくってください",
+  "Publish the game first, then Genex can build it": "先にゲームを公開すると、Genexがつくれます",
+  "The build on Genex failed": "Genexでのビルドに失敗しました",
+  "The build on Genex took too long": "Genexでのビルドに時間がかかりすぎました",
+  "The project is too big for Genex to build": "プロジェクトが大きすぎてGenexでつくれません",
+  "This version of Genex can’t build apps on Genex yet": "このバージョンのGenexではまだGenexでアプリをつくれません",
+  "You’ve used this month’s builds on Genex": "今月のGenexでのビルド回数を使い切りました",
+  notarized: "公証済み",
+  "The Mac app went without notarization: Apple’s notary couldn’t be reached with your saved notary profile.":
+    "Macアプリは公証なしで公開されました：保存した公証プロファイルでAppleの公証サービスに接続できませんでした。",
+  "The Mac app went without notarization: Apple’s notary rejected it.":
+    "Macアプリは公証なしで公開されました：Appleの公証サービスに却下されました。",
+  "The Mac app went without notarization: Apple’s ticket couldn’t be attached to it.":
+    "Macアプリは公証なしで公開されました：Appleのチケットを添付できませんでした。",
+  "The Mac app went without notarization: codesign couldn’t sign it.":
+    "Macアプリは公証なしで公開されました：codesignで署名できませんでした。",
+  "The Mac app went without notarization: it isn’t a Mac app bundle.":
+    "Macアプリは公証なしで公開されました：Macアプリのバンドルではありません。",
+  "The Mac app went without notarization: no Developer ID Application certificate is in your keychain.":
+    "Macアプリは公証なしで公開されました：キーチェーンにDeveloper ID Application証明書がありません。",
+  "The Mac app went without notarization: notarizing was stopped.":
+    "Macアプリは公証なしで公開されました：公証が中止されました。",
+  "The Mac app went without notarization: your keychain has several Developer ID certificates. Name one in Genex’s settings.":
+    "Macアプリは公証なしで公開されました：キーチェーンにDeveloper ID証明書が複数あります。Genexの設定で1つ指定してください。",
   "Anything else we should know? (optional)": "ほかに伝えたいことはありますか？（任意）",
   "Balance {amount}": "残高 {amount}",
   "Balance {now} → {after}": "残高 {now} → {after}",
@@ -6124,4 +6174,27 @@ export default {
     "このゲームは公開停止中のため、Genex はウェブ版をしばらく残します。",
   "Genex couldn’t finish removing the web version. Press Remove again.":
     "Genex はウェブ版を最後まで削除できませんでした。もう一度「削除」を押してください。",
+  "Change link": "リンクを変更",
+  "Change the link": "リンクを変更",
+  "Change the link of {title}": "{title}のリンクを変更",
+  "Couldn’t change Players.": "プレイヤー設定を変更できませんでした。",
+  "Couldn’t change the link.": "リンクを変更できませんでした。",
+  "Couldn’t rename the game.": "ゲーム名を変更できませんでした。",
+  "Link saved": "リンクを保存しました",
+  "New link": "新しいリンク",
+  "Rename {title}": "{title}の名前を変更",
+  "Renamed to {title}": "{title}に名前を変更しました",
+  "The game is at {address} now": "ゲームは{address}に移りました",
+  "The name players see on Play and genex.games.": "プレイヤーがPlayとgenex.gamesで見る名前です。",
+  "The old link will still open the game": "古いリンクでも引き続きゲームが開きます",
+  "The old link will still open the game, for players who already have it too.":
+    "古いリンクでも引き続きゲームが開きます。すでに持っているプレイヤーも同じです。",
+  "{count, plural, one {# change left} other {# changes left}}": "{count, plural, other {あと#回変更できます}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex は {model} をコンテキスト 16K で動くようにコピーできます。コピーは同じファイルを使うので、何もダウンロードしません。",
+  "Ollama is unavailable": "Ollama を利用できません",
+  "Raise context to 16K": "コンテキストを 16K に上げる",
+  "Raising…": "上げています…",
+  "The chat now uses {model}. Send your message again.":
+    "チャットは {model} を使うようになりました。メッセージをもう一度送ってください。",
 } satisfies LocaleCatalog;

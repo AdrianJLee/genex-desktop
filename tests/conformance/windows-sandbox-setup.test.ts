@@ -90,13 +90,14 @@ test("Set up runs the install again for a sandbox another release set up", async
   assert.deepEqual(run.ran, ["install"]);
 });
 
-test("the install leaves the profile unreadable, and replaces only a newer release's install", () => {
+test("the install leaves the profile unreadable, and replaces only another release's install", () => {
   const status = (markerVersion?: number) => ({
     setupVersion: 3,
     ...(markerVersion === undefined ? {} : { markerVersion }),
   });
   assert.deepEqual(srtInstallOptions(status()), { skipProfileGrant: true, force: false });
-  assert.deepEqual(srtInstallOptions(status(2)), { skipProfileGrant: true, force: false });
+  // An older Genex (setup version 2) installed with loopback open: Update must replace it.
+  assert.deepEqual(srtInstallOptions(status(2)), { skipProfileGrant: true, force: true });
   assert.deepEqual(srtInstallOptions(status(3)), { skipProfileGrant: true, force: false });
   assert.deepEqual(srtInstallOptions(status(4)), { skipProfileGrant: true, force: true });
   assert.deepEqual(srtInstallOptions({}), { skipProfileGrant: true, force: false });

@@ -59,7 +59,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   every start ("Access is denied"). The setup check (`windowsSetupGaps`) reads its start type with
   `sc qc seclogon`, which needs no administrator (the number decides; the word after it is
   localized), beside srt-win's two status probes, and a disabled service is a setup gap
-  (`WindowsSetupNeed.LogonService`) the setup card names in one line. Set up sets it to Manual
+  (`WindowsSetupNeed.LogonService`) the setup card names in one line. The gap also counts when
+  `sc` could not say but srt-win's `user status` reports `seclogon: "disabled"`, the field
+  `initialize` refuses on with an uncoded "Sandbox dependencies not available" error. Set up sets it to Manual
   (`sc config seclogon start= demand`, [`windows-logon-service.ts`](../src/substrate/windows-logon-service.ts))
   through Windows PowerShell's `Start-Process -Verb RunAs` before srt-win's install. srt-win's own
   typed `seclogon_disabled` maps to the same need. srt-win
@@ -91,8 +93,10 @@ the setup screen opens on `git-missing`. What differs from macOS:
   time fails the start as `SandboxLaunchCode.SrtWinTimeout`, whose words name the antivirus. Genex installs with `skipProfileGrant` (`--skip-profile-grant`):
   Genex grants its own folders, and the sandbox account is one per PC, so srt-win's read grant on
   the whole profile would let every sandboxed session of every user read this person's
-  configuration. It passes `--force` only over a newer release's install, never over another
-  configuration in place (another program's, such as a loopback mode Genex does not use).
+  configuration. It passes `--force` only over another release's install (an older Genex's,
+  setup version 2, opened loopback, which Update would otherwise refuse as
+  `install_config_conflict`), never over another configuration of the same release, which may be
+  another program's.
 - The sandbox user reads nothing in the profile unless granted, so each folder between
   `USERPROFILE` and a root gets `(S,RA)` (read attributes and synchronize, no listing) after every
   apply, since srt-win's deny stamps replace the entry. Synchronize matters before Windows 11

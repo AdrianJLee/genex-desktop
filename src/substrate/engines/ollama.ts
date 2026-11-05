@@ -38,6 +38,7 @@ import { StudioPlatform } from "../../shared/boot.ts";
 import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import { EngineFailureKind } from "../../shared/engine-requests.ts";
 import { ReasoningEffort } from "../../shared/model-preferences.ts";
+import { RAISED_CONTEXT_TOKENS, raisedContextName } from "../../shared/ollama-context.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { t } from "../../shared/i18n.ts";
 import { CompletionStop, STOPPED_BY_USER } from "./common.ts";
@@ -143,8 +144,11 @@ export class OllamaClient {
     return ((await response.json()) as { models: OllamaTag[] }).models ?? [];
   }
 
-  /** `capabilities` gates agentic use: no `"tools"`, no tool calling. */
-  async show(model: string): Promise<{ capabilities: string[]; contextLength: number }> {
+  /**
+   * `capabilities` gates agentic use: no `"tools"`, no tool calling. `configuredContext` is the
+   * context the model's Modelfile sets (`num_ctx`), which Ollama loads it with.
+   */
+  async show(model: string): Promise<{ capabilities: string[]; contextLength: number; configuredContext?: number }> {
     const response = await fetch(`${this.host}/api/show`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -154,13 +158,29 @@ export class OllamaClient {
     const body = (await response.json()) as {
       capabilities?: string[];
       model_info?: Record<string, unknown>;
+      parameters?: unknown;
     };
     const info = body.model_info ?? {};
     const contextKey = Object.keys(info).find((key) => key.endsWith(".context_length"));
+    const configuredContext = modelfileContext(body.parameters);
     return {
       capabilities: body.capabilities ?? [],
       contextLength: positiveContext(contextKey ? info[contextKey] : undefined) ?? DEFAULT_CONTEXT_TOKENS,
+      ...(configuredContext ? { configuredContext } : {}),
     };
+  }
+
+  /**
+   * A copy of `from` named `model` that runs with `contextTokens` of context. Ollama shares the
+   * weights, so only a manifest is written; a copy of that name already there is replaced.
+   */
+  async createWithContext(model: string, from: string, contextTokens: number): Promise<void> {
+    const response = await fetch(`${this.host}/api/create`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model, from, parameters: { num_ctx: contextTokens }, stream: false }),
+    });
+    if (!response.ok) throw classifyHttpFailure(EngineId.Ollama, response.status, await response.text());
   }
 
   /** Streaming NDJSON pull. Resumable; concurrent pulls of the same model share progress. */
@@ -220,11 +240,18 @@ export class OllamaClient {
     );
   }
 
-  /** Runtime capacity is distinct from a model's theoretical maximum. Unknown loads stay conservative. */
-  async runtimeContext(model: string, maximum: number): Promise<{ tokens: number; source: ModelContextSource }> {
+  /**
+   * Runtime capacity is distinct from a model's theoretical maximum: what the loaded model runs
+   * with, else what its Modelfile sets (`configured`), else a conservative estimate.
+   */
+  async runtimeContext(
+    model: string,
+    maximum: number,
+    configured?: number,
+  ): Promise<{ tokens: number; source: ModelContextSource }> {
     const loaded = await this.loaded().catch(() => []);
     const context = loaded.find((entry) => entry.name === model)?.context_length;
-    const measured = positiveContext(context);
+    const measured = positiveContext(context) ?? positiveContext(configured);
     return {
       tokens: Math.min(maximum, measured ?? DEFAULT_CONTEXT_TOKENS),
       source: measured ? ModelContextSource.Configured : ModelContextSource.Unknown,
@@ -235,6 +262,13 @@ export class OllamaClient {
 /** Only a positive integer is usable as a context capacity. */
 function positiveContext(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+/** `/api/show`'s `parameters` is the Modelfile's lines (`num_ctx   16384`): the context one sets. */
+function modelfileContext(parameters: unknown): number | undefined {
+  if (typeof parameters !== "string") return undefined;
+  const line = parameters.split("\n").find((entry) => entry.trim().split(/\s+/)[0] === "num_ctx");
+  return positiveContext(Number(line?.trim().split(/\s+/)[1]));
 }
 
 /**
@@ -374,7 +408,7 @@ export class OllamaEngine implements Engine {
       try {
         const shown = await this.client.show(tag.name);
         capabilities = shown.capabilities;
-        const runtime = await this.client.runtimeContext(tag.name, shown.contextLength);
+        const runtime = await this.client.runtimeContext(tag.name, shown.contextLength, shown.configuredContext);
         contextLength = runtime.tokens;
         contextSource = runtime.source;
       } catch {
@@ -418,6 +452,20 @@ export class OllamaEngine implements Engine {
     if (this.#defaultModel === id) this.#defaultModel = null;
   }
 
+  /**
+   * "Raise context to 16K": a copy of a model Ollama lists that runs with a 16K context, and its
+   * name (`ollama-context.ts`); any other name is refused before Ollama is asked to create.
+   */
+  async raiseContext(id: string): Promise<string> {
+    const tags = await this.client.tags();
+    if (!tags.some((tag) => tag.name === id)) throw new Error(MESSAGE.NotInstalled(id));
+    const copy = raisedContextName(id);
+    await this.client.createWithContext(copy, id, RAISED_CONTEXT_TOKENS);
+    // A copy that replaced one of the same name is read again, with its new context.
+    this.#providerModels.delete(copy);
+    return copy;
+  }
+
   /** Lazily build pi-ai's provider around this host. */
   async #ensureProvider(modelId: string): Promise<OllamaProvider> {
     const { createModels, createProvider } = await import("@earendil-works/pi-ai");
@@ -456,7 +504,7 @@ export class OllamaEngine implements Engine {
     let tools = false;
     try {
       const shown = await this.client.show(modelId);
-      contextWindow = (await this.client.runtimeContext(modelId, shown.contextLength)).tokens;
+      contextWindow = (await this.client.runtimeContext(modelId, shown.contextLength, shown.configuredContext)).tokens;
       thinking = shown.capabilities.includes("thinking");
       vision = shown.capabilities.includes("vision");
       tools = shown.capabilities.includes("tools");

@@ -120,7 +120,7 @@ export async function pluginsFind(
   const fact = queryText(args.fact, MAX_QUERY_CHARS);
   const text = queryText(args.text, MAX_QUERY_CHARS);
   const query: PluginQuery = { ...(fact ? { fact } : {}), ...(text ? { text } : {}) };
-  return findPlugins(core.plugins.list(), await core.plugins.catalog(), query, canCheck);
+  return findPlugins(core.plugins.shown(), await core.plugins.catalog(), query, canCheck);
 }
 
 /** Whether `threadId` is a chat of `project`, the only place its card may show. */
@@ -138,7 +138,7 @@ export async function pluginsSuggest(
   core: StudioCore,
   args: Record<string, unknown> & ProjectToolCall,
 ): Promise<PluginsSuggestAnswer> {
-  const plugin = suggestable(core.plugins.list(), await core.plugins.catalog(), args.plugin);
+  const plugin = suggestable(core.plugins.shown(), await core.plugins.catalog(), args.plugin);
   const named = String(args.plugin ?? "").slice(0, MAX_QUERY_CHARS);
   if (!plugin) return { shown: false, message: PLUGINS_SUGGEST_ANSWER.refused(named) };
   const { threadId } = args;

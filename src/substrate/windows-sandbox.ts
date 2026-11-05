@@ -2195,9 +2195,17 @@ export interface SrtSetupStatus {
     setupVersion?: number;
     /** Whether the sandbox user is in the sandbox users' group; absent from an srt-win that does not say. */
     inSandboxGroup?: boolean;
+    /**
+     * srt-win's own reading of the Secondary Logon service (`ok`, `disabled`, `missing`,
+     * `cannot-read`), the one `initialize` refuses on; absent from an srt-win that does not say.
+     */
+    seclogon?: string;
   };
   wfp: { state: string };
 }
+
+/** srt-win's `seclogon` for a Secondary Logon service that is there and disabled: what Set up turns on. */
+const SRT_SECLOGON_DISABLED = "disabled";
 
 /** What setup depends on: srt-win's status answers and the Secondary Logon service's start type. */
 export interface WindowsSetupStatus extends SrtSetupStatus {
@@ -2228,13 +2236,20 @@ function srtGaps({ user, wfp }: SrtSetupStatus): WindowsSetupGap[] {
 }
 
 /**
+ * Whether the Secondary Logon service is disabled, by `sc` or by srt-win: `sc` can be refused
+ * where hardening disabled the service, while srt-win's word is the one `initialize` refuses on.
+ */
+const logonServiceDisabled = (status: WindowsSetupStatus): boolean =>
+  status.logonService === ServiceStartType.Disabled || status.user.seclogon === SRT_SECLOGON_DISABLED;
+
+/**
  * What is not set up yet: what srt-win's status answers say is missing, and a disabled Secondary
  * Logon service, without which every start is refused. Empty when everything is in place, even if
  * a start failed.
  */
 export function setupGaps(status: WindowsSetupStatus): WindowsSetupGap[] {
   const gaps = srtGaps(status);
-  if (status.logonService !== ServiceStartType.Disabled) return gaps;
+  if (!logonServiceDisabled(status)) return gaps;
   return [...gaps, { need: WindowsSetupNeed.LogonService, detail: MESSAGE.LogonServiceDisabled }];
 }
 

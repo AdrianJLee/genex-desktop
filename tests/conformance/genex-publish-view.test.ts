@@ -365,14 +365,34 @@ test("the busy button's clock reads minutes and seconds", () => {
   assert.equal(clock(134), "2:14");
 });
 
-test("the name offered is the listed one, else Studio's title for the game, else its folder name as words", () => {
-  assert.equal(offeredTitle(state({ title: "Rain Circuit" }), "Racing", "racing-demo"), "Rain Circuit");
+test("the name offered is one Genex hasn't taken yet, else Genex's listed one, else Studio's (unless it waits for the game's idea), the record's, the folder's", () => {
+  const listed = state({ title: "Rain Circuit", hostedTitle: "Night Rain" });
+  assert.equal(offeredTitle(listed, { title: "Racing" }, "racing-demo"), "Night Rain", "renamed on Genex: kept");
   assert.equal(
-    offeredTitle(state(), "Hyper-Realistic Racing", "hyper-realistic-racing-demo"),
+    offeredTitle(
+      state({ title: "Rain Circuit", hostedTitle: "Rain Circuit", renamed: "Racing" }),
+      { title: "Racing" },
+      "x",
+    ),
+    "Racing",
+    "renamed in Studio while signed out: Studio's name, not the one Genex still has",
+  );
+  const asLink = state({ title: "Bodycam game", slug: "genex-strike", hostedTitle: "genex-strike" });
+  assert.equal(
+    offeredTitle(asLink, { title: "Genex strike" }, "bodycam-game"),
+    "Genex strike",
+    "a name that is only the link",
+  );
+  assert.equal(offeredTitle(asLink, { title: "New game", provisional: true }, "bodycam-game"), "Bodycam game");
+  assert.equal(offeredTitle(state({ title: "Rain Circuit" }), { title: "Racing" }, "racing-demo"), "Racing");
+  assert.equal(offeredTitle(state({ title: "Rain Circuit" }), { title: "   " }, "racing-demo"), "Rain Circuit");
+  assert.equal(
+    offeredTitle(state(), { title: "Hyper-Realistic Racing" }, "hyper-realistic-racing-demo"),
     "Hyper-Realistic Racing",
   );
+  assert.equal(offeredTitle(state(), { title: "Night Drive", provisional: true }, "night-drive"), "Night Drive");
   assert.equal(offeredTitle(null, undefined, "hyper-realistic-racing-demo"), "Hyper Realistic Racing Demo");
-  assert.equal(offeredTitle(null, "   ", "rain_circuit"), "Rain Circuit");
+  assert.equal(offeredTitle(null, { title: "   " }, "rain_circuit"), "Rain Circuit");
 });
 
 const shot: GenexCoverShot = {

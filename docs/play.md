@@ -79,13 +79,18 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   remembered; Reduce Motion, a failed clip or a refused play stops them for the session.
 - A card's ⋯ (on the cover's corner while hovered or focused, or a right-click on the card) is
   genex.games' card menu (`src/renderer/play/card-menu/`). The game's owner gets Copy link,
-  remixing off or on, Change cover, Unpublish and Delete game; an account `/api/me` names
+  remixing off or on, Rename, Change link, Change cover, Unpublish and Delete game; an account `/api/me` names
   `isAdmin` also gets, on any game, an Admin block with Mobile support and Edit tags. Anyone else
   gets no ⋯, and neither does a search's card. Featuring stays on genex.games. Its server checks
   every call against its own admin list, so the app only decides what shows
   (`src/shared/play-manage.ts`). A change shows on every card at once. Change cover crops the
   picture to 1536×864 in the renderer and sends it through main (presigned PUT, then commit);
-  genex.games may keep the old cover and says why.
+  genex.games may keep the old cover and says why. Change link moves the game to a new address and
+  keeps its name (`keepTitle`; genex.games keeps the old one opening it, and refuses a taken or
+  reserved link, one past the game's link changes, or one while a publish of the game runs,
+  `LinkBusy`); a copy installed here moves to the new link with its saves
+  (`NativeInstaller.follow`, also on the update check). On the page of an app-only game (no web
+  build), its owner sets Players (Single player or Multiplayer) from the fact itself.
 - Friends: requests, playing now (Join), friends, sent, people search, the invite card and whether
   friends see the game the account is in. The invite link (`/api/referrals/me`, on the website
   only) opens genex.games' download page with a card from the account; the card has Copy, Post on
@@ -179,7 +184,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   builds, an Unreal plugin's too, its packaged apps (`Builds/`) included; an engine game whose project
 sits in a folder of its own also leaves out `assets/` (its models, already imported) and `docs/proof/`
 screenshots (`remix-source.ts`; at most
-5 GB and 5,000 files, as genex.games keeps; every model, picture, sound, video and Unreal package, and
+15 GB and 5,000 files, all files together, as genex.games keeps; every model, picture, sound, video and Unreal package, and
 any file of 50 MB or more, goes to Git LFS, whose blobs Genex keeps in R2 rather than on the git
 server's disk), and the CLI pushes that folder as the source
   (`--source`; a game with only apps sends it with `make-remixable` once they are live). The copy
@@ -217,6 +222,8 @@ is.
   trusts (`NATIVE_BUILD_HOSTS`: `cdn.genex.technology` by exact name, so a game's own
   `<slug>.genex.technology` site never hands out an app), with no port or credentials, never
   redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
+  A Windows app Genex built from an Unreal game's project on its own computers (Publish's Build on
+  Genex, [plugins](plugins.md)) comes as any other row.
 - The build a computer installs is its platform's for its own processor, else a universal Mac app,
   else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
   (`buildFor`). Games launch on the Mac, on Linux and on Windows. Play names the computer "this Mac" on a Mac and "this
@@ -279,7 +286,11 @@ is.
   in a job killed with the host (also with no other desktops, logging off, clipboard reads or system
   settings); the host ends it when Genex's process or the host's stdin ends, says when its window
   is up (Genex counts it as on screen then), brings that window forward once, and passes Quit on as
-  `WM_CLOSE`. A game opens full screen with its engine's own argument
+  `WM_CLOSE`. An Unreal game whose binary carries Microsoft's Visual C++ runtime beside it (Build on
+  Genex ships it there) starts past Unreal's launcher: the launcher reads the runtime from the
+  registry and would ask to install one the game already has, so Play starts the binary its
+  resources name, inside the app, with their arguments (`unreal-launcher.ts`); any other app
+  starts its launcher, which offers its installer. A game opens full screen with its engine's own argument
   (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
   engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
   Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;

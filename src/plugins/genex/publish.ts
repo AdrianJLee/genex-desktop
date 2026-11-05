@@ -57,6 +57,20 @@ export const MESSAGE = {
   RevisionMismatch: "Hosted staging revision does not match this upload yet",
   NotInGallery: () => t("This game is not in the gallery yet"),
   NothingOnline: () => t("Nothing is online for this game yet"),
+  /** A link with no letter or digit in it. */
+  LinkEmpty: () => t("Give the link a letter or a number."),
+  /** Genex gives the link to another game already (or keeps it for one). */
+  LinkTaken: () => t("Another game already has this link. Try another one."),
+  /** The game used every link change Genex allows it. */
+  LinkLimit: () => t("This game has used all its link changes."),
+  /** Genex keeps this word for itself. */
+  LinkReserved: () => t("Genex keeps this link for itself. Try another one."),
+  /** A publish of the game holds it on Genex: the link can move once that ends. */
+  LinkBusy: () => t("Genex is still publishing this game. Change the link once it's done."),
+  /** Genex didn't answer in time: the link may have moved, and the next look at the game shows it. */
+  LinkSlow: () => t("Genex didn't answer in time. Check the game's link again in a minute."),
+  /** A name with no letter or digit left once cleaned: nothing to list the game under. */
+  NoName: () => t("Give the game a name with a letter or a number in it."),
   UnrecognizedLink: () => t("Unrecognized Genex page link"),
   InvalidProject: "Invalid project",
   NeedsGit: () =>
@@ -71,6 +85,12 @@ export const MESSAGE = {
   /** {@link MESSAGE.NoApps} as Publish's refusal. */
   NoAppsRefusal: () => t("This game has no Mac, Windows or Linux app ready to publish."),
   ListingRefused: "Genex did not list the game in the gallery.",
+  /** A build on Genex asked for a game with no page there, which the app would go on. */
+  NotOnGenexRefusal: () => t("Publish the game first, then Genex can build it"),
+  /** A build on Genex asked through a CLI without `genex native build`. */
+  CloudBuildsUnavailableRefusal: () => t("This version of Genex can’t build apps on Genex yet"),
+  /** A build on Genex asked without the game's folder to stage its project from. */
+  NoGameFolderRefusal: () => t("Open the game to build its app on Genex"),
   /** A taken-down game keeps its web version on Genex for the appeal. */
   TakenDownRefusal: () => t("This game was taken down, so Genex keeps its web version for now."),
   /** Genex stopped partway through taking the web version off; the same press finishes it. */

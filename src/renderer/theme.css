@@ -4941,9 +4941,9 @@ button.chat-header-title:hover {
 .chat-user-toggle:hover {
   color: var(--ink);
 }
-/* Remove under a waiting message: 24px like Rewind, under the icon button's usual control size
-   (a utility class loses to it; this rule is unlayered). */
-.chat-queued-remove {
+/* Edit and Remove under a waiting message: 24px like Rewind, under the icon button's usual
+   control size (a utility class loses to it; this rule is unlayered). */
+.chat-queued-action {
   width: 24px;
   height: 24px;
 }

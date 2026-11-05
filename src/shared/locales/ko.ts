@@ -1480,6 +1480,8 @@ export default {
   "Genex cover": "Genex 커버",
   "Genex credits": "Genex 크레딧",
   "Genex decides from crash reports": "Genex가 크래시 보고서로 판단해요",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genex가 제때 응답하지 않았어요. 1분 뒤에 게임 링크를 다시 확인해 보세요.",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genex는 아무것도 클릭하지 않았어요. 런처에서 Unreal {version}을 직접 설치하세요: {clicks}.",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
@@ -1521,6 +1523,8 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex가 Godot를 설치하고 있어요. 따로 할 일은 없어요.",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex는 MIT 라이선스로 공개된 오픈 소스예요. 다른 프로젝트의 소프트웨어도 포함되어 있고, 각각 고유한 라이선스를 따라요.",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genex가 아직 이 게임을 게시하고 있어요. 끝나면 링크를 바꿔 주세요.",
   "Genex isn't getting Roblox Studio right now.": "Genex는 지금 Roblox Studio를 받고 있지 않아요.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genex는 먼저 각 파일의 사본을 남겨 두고, ‘설정 되돌리기’로 이 변경을 되돌릴 수 있어요. 직접 수정한 Genex 에디터 도우미 파일은 옆에 .mine 사본으로 보관돼요.",
@@ -2363,6 +2367,12 @@ export default {
   "Nothing is failing.": "실패하는 게 없어요.",
   "Nothing is installing.": "설치 중인 게 없어요.",
   "Nothing is online for this game yet": "이 게임은 아직 온라인에 올라간 게 없어요",
+  "Give the link a letter or a number.": "링크에 글자나 숫자를 넣어 주세요.",
+  "Another game already has this link. Try another one.":
+    "다른 게임이 이미 이 링크를 쓰고 있어요. 다른 링크로 해 보세요.",
+  "This game has used all its link changes.": "이 게임은 링크 변경 횟수를 모두 썼어요.",
+  "Genex keeps this link for itself. Try another one.": "이 링크는 Genex가 쓰는 링크예요. 다른 링크로 해 보세요.",
+  "Give the game a name with a letter or a number in it.": "글자나 숫자가 들어간 이름을 게임에 붙여 주세요.",
   "Nothing kept yet": "아직 유지된 라운드 없음",
   "Nothing made": "만든 것 없음",
   "Nothing made yet": "아직 만든 게 없어요",
@@ -2899,6 +2909,9 @@ export default {
   "Remove plugin": "플러그인 제거",
   "Remove preset": "프리셋 삭제",
   "Remove queued message": "대기 중인 메시지 삭제",
+  "Edit queued message": "대기 중인 메시지 편집",
+  "Send now": "지금 보내기",
+  "Stop and send now": "중지하고 지금 보내기",
   "Remove tag": "태그 삭제",
   "Remove the waiting messages first: this harness cannot take them back.":
     "먼저 대기 중인 메시지를 지워 주세요. 이 Harness는 메시지를 되돌릴 수 없어요.",
@@ -3108,7 +3121,6 @@ export default {
   "Save as preset…": "프리셋으로 저장…",
   "Save image": "이미지 저장",
   "Save key": "키 저장",
-  "Save name": "이름 저장",
   "Save tags": "태그 저장",
   "Save the new game in": "새 게임 저장 위치",
   "Save to your library": "내 라이브러리에 저장",
@@ -5699,6 +5711,41 @@ export default {
   "Your game is on Roblox": "게임이 Roblox에 올라갔어요",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "작업을 계속하는 동안 게임의 에이전트가 Roblox Studio에서 게시해요.",
+  "Asked Genex": "Genex에 요청함",
+  "Build on Genex": "Genex에서 만들기",
+  "Build the {app} on Genex": "Genex에서 {app} 만들기",
+  "Build the {app} on Genex again": "Genex에서 {app} 다시 만들기",
+  "Building on Genex · {minutes} min so far": "Genex에서 만드는 중 · {minutes}분째",
+  "Building…": "만드는 중…",
+  "Couldn’t build the {app} on Genex: {error}": "Genex에서 {app}을(를) 만들지 못했어요: {error}",
+  "Genex builds only Windows apps on its own computers": "Genex는 자체 컴퓨터에서 Windows 앱만 만들어요",
+  "Genex can build it on Windows for you": "Genex가 Windows에서 대신 만들어 줄 수 있어요",
+  "Genex can’t build this Unreal version yet": "Genex는 아직 이 Unreal 버전으로 만들 수 없어요",
+  "Genex couldn’t compile the game’s code": "Genex가 게임 코드를 컴파일하지 못했어요",
+  "Genex couldn’t cook the game’s content": "Genex가 게임 콘텐츠를 쿡하지 못했어요",
+  "Open the game to build its app on Genex": "Genex에서 앱을 만들려면 게임을 열어 주세요",
+  "Publish the game first, then Genex can build it": "먼저 게임을 게시하면 Genex가 만들 수 있어요",
+  "The build on Genex failed": "Genex에서 만들기에 실패했어요",
+  "The build on Genex took too long": "Genex에서 만들기가 너무 오래 걸렸어요",
+  "The project is too big for Genex to build": "프로젝트가 너무 커서 Genex가 만들 수 없어요",
+  "This version of Genex can’t build apps on Genex yet": "이 버전의 Genex는 아직 Genex에서 앱을 만들 수 없어요",
+  "You’ve used this month’s builds on Genex": "이번 달 Genex 만들기 횟수를 다 썼어요",
+  notarized: "공증됨",
+  "The Mac app went without notarization: Apple’s notary couldn’t be reached with your saved notary profile.":
+    "Mac 앱이 공증 없이 올라갔어요: 저장한 공증 프로필로 Apple 공증 서비스에 연결하지 못했어요.",
+  "The Mac app went without notarization: Apple’s notary rejected it.":
+    "Mac 앱이 공증 없이 올라갔어요: Apple 공증 서비스가 거부했어요.",
+  "The Mac app went without notarization: Apple’s ticket couldn’t be attached to it.":
+    "Mac 앱이 공증 없이 올라갔어요: Apple 티켓을 붙이지 못했어요.",
+  "The Mac app went without notarization: codesign couldn’t sign it.":
+    "Mac 앱이 공증 없이 올라갔어요: codesign이 서명하지 못했어요.",
+  "The Mac app went without notarization: it isn’t a Mac app bundle.":
+    "Mac 앱이 공증 없이 올라갔어요: Mac 앱 번들이 아니에요.",
+  "The Mac app went without notarization: no Developer ID Application certificate is in your keychain.":
+    "Mac 앱이 공증 없이 올라갔어요: 키체인에 Developer ID Application 인증서가 없어요.",
+  "The Mac app went without notarization: notarizing was stopped.": "Mac 앱이 공증 없이 올라갔어요: 공증이 중단됐어요.",
+  "The Mac app went without notarization: your keychain has several Developer ID certificates. Name one in Genex’s settings.":
+    "Mac 앱이 공증 없이 올라갔어요: 키체인에 Developer ID 인증서가 여러 개 있어요. Genex 설정에서 하나를 지정해 주세요.",
   "Anything else we should know? (optional)": "더 알려 줄 내용이 있나요? (선택)",
   "Balance {amount}": "잔액 {amount}",
   "Balance {now} → {after}": "잔액 {now} → {after}",
@@ -5987,4 +6034,26 @@ export default {
     "이 게임은 내려진 상태라서, Genex가 웹 버전을 당분간 남겨 둬요.",
   "Genex couldn’t finish removing the web version. Press Remove again.":
     "Genex가 웹 버전을 끝까지 지우지 못했어요. 삭제를 다시 눌러 주세요.",
+  "Change link": "링크 변경",
+  "Change the link": "링크 변경",
+  "Change the link of {title}": "{title} 링크 변경",
+  "Couldn’t change Players.": "플레이어 설정을 바꾸지 못했어요.",
+  "Couldn’t change the link.": "링크를 바꾸지 못했어요.",
+  "Couldn’t rename the game.": "게임 이름을 바꾸지 못했어요.",
+  "Link saved": "링크를 저장했어요",
+  "New link": "새 링크",
+  "Rename {title}": "{title} 이름 변경",
+  "Renamed to {title}": "{title}(으)로 이름을 바꿨어요",
+  "The game is at {address} now": "이제 게임 주소는 {address}예요",
+  "The name players see on Play and genex.games.": "플레이어가 Play와 genex.games에서 보는 이름이에요.",
+  "The old link will still open the game": "예전 링크로도 계속 게임이 열려요",
+  "The old link will still open the game, for players who already have it too.":
+    "예전 링크로도 계속 게임이 열려요. 이미 가진 플레이어도 마찬가지예요.",
+  "{count, plural, one {# change left} other {# changes left}}": "{count, plural, other {#번 더 바꿀 수 있어요}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex가 {model}을 16K 컨텍스트로 실행되도록 복사할 수 있어요. 복사본은 같은 파일을 쓰니까 아무것도 내려받지 않아요.",
+  "Ollama is unavailable": "Ollama를 사용할 수 없어요",
+  "Raise context to 16K": "컨텍스트를 16K로 늘리기",
+  "Raising…": "늘리는 중…",
+  "The chat now uses {model}. Send your message again.": "이제 채팅이 {model}을 사용해요. 메시지를 다시 보내 주세요.",
 } satisfies LocaleCatalog;

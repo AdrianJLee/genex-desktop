@@ -16,7 +16,7 @@ import { GenexPublishDialog } from "../../src/renderer/panels/plugins/genex/Gene
 import { studio } from "../../src/renderer/state/studio.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
-import { GenexAction, GenexBuildReview, type GenexNativeRecord, type GenexPublishState } from "../../src/shared/genex.ts";
+import { CloudBuildState, GenexAction, GenexBuildReview, type GenexNativeRecord, type GenexPublishState } from "../../src/shared/genex.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
 import { CoreFact } from "../../src/shared/project-facts.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
@@ -39,7 +39,7 @@ async function settle(frames = 10) {
 }
 
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
-type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "appsReview" | "appsRejected" | "unityNoApp" | "unitySoon" | "unreal" | "unrealWebOnGenex" | "unityReplacesApps";
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "appsReview" | "appsRejected" | "unityNoApp" | "unitySoon" | "unreal" | "unrealCloud" | "unrealBuilding" | "unrealWindows" | "unrealWebOnGenex" | "unityReplacesApps";
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -90,6 +90,11 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   unityNoApp: () => [web(false), mac(PublishPlatformState.Missing), windows, linux()],
   unitySoon: () => [web(false), mac(PublishPlatformState.Ready), windows, linux()],
   unreal: () => [web(false), mac(PublishPlatformState.Missing), windows, linux()],
+  // A Mac's Unreal game whose Windows app Genex can build: offered, then building.
+  unrealCloud: () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()],
+  unrealBuilding: () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()],
+  // On Windows: no Mac app, and the Linux app the agent packages here with Epic's toolchain.
+  unrealWindows: () => [web(false), mac(PublishPlatformState.Missing), windows, linux()],
   unrealWebOnGenex: () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()],
   unityReplacesApps: () => [web(true), mac(PublishPlatformState.Ready, true), windows, linux()],
 };
@@ -107,6 +112,11 @@ function appsOf(of: Scene): GenexNativeRecord {
   }
   if (of === "appsFailed")
     record.failed.push({ platform: "mac", arch: "", error: "Couldn't get an upload token (HTTP 413)." });
+  if (of === "unrealCloud") record.cloud = { supported: true, builds: [] };
+  if (of === "unrealBuilding") {
+    const startedAt = new Date(Date.now() - 12 * MINUTE).toISOString();
+    record.cloud = { supported: true, builds: [{ platform: "windows", jobId: "job_1", state: CloudBuildState.Building, startedAt }] };
+  }
   if (of === "appsHeld") {
     record.sent.push({ platform: "mac", arch: "universal", version: "1", sizeBytes: 1, publishedAt: at });
     record.listing = { state: "held", detail: null };
@@ -156,6 +166,9 @@ const published: Array<{ via: string; title?: string; replaceNativePage?: boolea
 fake.stub("genexPublishApps", async (_project, title) => {
   published.push({ via: "apps", ...(title ? { title } : {}) });
 });
+fake.stub("genexCloudBuild", async (_project, platform) => {
+  published.push({ via: `cloud:${platform}` });
+});
 fake.stub("genexPublish", async (_project, _review, _title, _remix, replaceNativePage) => {
   published.push({ via: "web", ...(replaceNativePage ? { replaceNativePage } : {}) });
 });
@@ -165,6 +178,8 @@ fake.stub("assetLibraryStates", async () => ({ project: GAME, states: [], unread
 fake.stub("projectAssets", async () => ({ project: GAME, assets: [], truncated: false, skipped: [] }));
 fake.stub("assetLibrary", async () => ({ assets: [], nextCursor: null }));
 window.studio = fake.api;
+// The studio puts main's platform on the root before it mounts: these scenes are on a Mac.
+document.documentElement.dataset.platform = "darwin";
 initializeAppearance();
 const genex = { manifest, source: "bundled", enabled: true, removed: false, state: "enabled" } as unknown as PluginInfo;
 
@@ -219,7 +234,8 @@ const engineOf = (fact: CoreFact) => ({
 });
 
 /** Open the dialog in `theme` on the scene's game: made in an engine unless the scene is a web game. */
-async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
+async function open(options: { theme?: "dark" | "light"; scene?: Scene; platform?: string } = {}) {
+  document.documentElement.dataset.platform = options.platform ?? "darwin";
   const mode = options.theme === "light" ? AppearanceMode.Light : AppearanceMode.Dark;
   updateAppearance((appearance) => ({ ...appearance, mode }));
   scene = options.scene ?? "engine";
@@ -228,8 +244,8 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   published.length = 0;
   actions.length = 0;
   studio().people.setState((people) => ({ ...people, account: GenexAccountStatus.SignedIn }), true);
-  const unreal = scene === "unreal" || scene === "unrealWebOnGenex";
-  const engine = scene === "web" ? {} : engineOf(unreal ? CoreFact.UnrealProject : CoreFact.UnityProject);
+  const engine =
+    scene === "web" ? {} : engineOf(scene.startsWith("unreal") ? CoreFact.UnrealProject : CoreFact.UnityProject);
   const game = { name: GAME, title: "Dust Runners", createdAt: AT, ...engine } as unknown as GameProject;
   studio().library.setState((library) => ({ ...library, games: [game] }), true);
   flushSync(() => root.render(null));

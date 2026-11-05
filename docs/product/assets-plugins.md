@@ -22,7 +22,7 @@ Community plugins and the plugin guide ([icons](../plugins.md#icons)). Install f
 (else newest commit). Games build, preview and export without plugins. The host draws Genex's
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
 unapproved, turns Genex on and reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
-Spend: usage panel; prices: Credits. Genex's optional advice is `genex-recommendations`, off until turned on.
+Spend: usage panel; prices: Credits. Genex's advice (`genex-recommendations`) runs hidden, on with Genex.
 Generations wait for unaccepted terms (Review: sidebar, chat).
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;

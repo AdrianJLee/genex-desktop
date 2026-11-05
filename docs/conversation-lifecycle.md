@@ -25,7 +25,10 @@ project, and graph: a request to wait for the remaining workers could start a se
   itself, never the learning pass after it; other chats remain independent. The transcript
   shows follow-ups in muted bubbles below the current work, reading Sending… until they are read,
   whether handed over or waiting: there is no Queued label, and only one still waiting (not
-  handed over) offers Remove (the harness keeps edit/hold for older clients).
+  handed over) offers Send now in that label's place (the composer's Stop, offered while there is
+  work to stop: the queue then answers what waits, oldest first), Edit (removed from the queue first, then its words and
+  the pictures the composer attached go back before the draft, as a rewound message's do;
+  `renderer/chat/put-back.ts`) and Remove. The harness keeps in-place edit/hold for older clients.
   Receipt, processing, completion, edit and removal have separate append-only events. Editing
   holds dispatch until saved or cancelled; that hold survives restart. Unanswered messages replay
   on boot, including updated text and attachments. A message cut off mid-answer is retried once
@@ -48,8 +51,8 @@ project, and graph: a request to wait for the remaining workers could start a se
   ([one session](#live-chat-during-a-build)).
 - After a run its lead led, the chat goes on in that same session with its hands back
   ([after the build](#after-the-build-the-same-session)): it answers, after a finished run does
-  requested work itself or starts a new Loop for more, resumes a paused one when asked to go on with
-  it (other work it makes itself, and the build stays
+  requested work itself or starts a new Loop for more, goes on with a paused one for any work on the
+  game beyond a quick fix (a question or a quick fix it handles itself, and the build stays
   paused), and shows or
   lands the build. Questions alone do not restart builders. Sending a message needs no Keep going
   button.
@@ -99,8 +102,8 @@ Wrap up (Builds, `studio:run.finish`, `conversation.ts` `requestRunFinish`; the 
 new facet rounds, then merges, performs an integration attempt and validation, and displays
 accepted work. It does not promise the result passes all checks. Stop is explicit cancellation, the
 composer's and Builds' alone; Resume (`autopilot.resume`) goes on with a paused build.
-After a stop, `resume_run` is for going on with that build itself; other work the chat's own
-session makes itself, and the build stays paused.
+After a pause, `resume_run` goes on with that build for any work on the game beyond a quick fix; a
+question or a quick fix the chat's own session handles itself, and the build stays paused.
 `resume_run` can only resume a paused journal and cannot create a replacement run; a finished
 run is never started again: more work is a new Loop ([after the build](#after-the-build-the-same-session)).
 
@@ -580,9 +583,11 @@ bridged in as a tool it may call or not (`delegated-turn.ts` `launches`): never 
 and never on words Genex wrote itself (`from: genex`: a command's result, the cover step, a
 plugin's words in the chat), except its word after the person's held Loop. An engine without sessions is handed none: the tool lives
 outside `tools/`, so the direct engines' tool loop never lists it. The tool's description says
-what a Loop is and that it starts from the folder as the reply leaves it; when to call it is the
-agent's own decision. It answers, researches, writes plans or edits the game itself, or starts a
-Loop for more than a reply holds, and the chat never says a Loop started unless that call
+what a build is, the whole making of the game, and when one starts: as the agent sets to making the
+game or a change beyond a quick fix, instead of doing that work in its reply, going on with a paused
+build (`resume_run`) and starting a new one only when needed; it starts from the folder as the reply
+leaves it. When to call it is the agent's own decision. It answers, researches, writes plans or makes
+a quick fix itself, or starts a build, and the chat never says a Loop started unless that call
 answered. A recorded question is asked (after the preview health pass when game sources
 changed); a recorded launch starts from the folder as the session left it; a turn that records
 neither is reported as a chat build. A non-launching turn that changed game sources takes the preview health pass and a

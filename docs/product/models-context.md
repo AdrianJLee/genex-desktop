@@ -17,8 +17,8 @@ listing proves no access.
 
 Each chat keeps its model and effort; fresh games inherit the last picks. One effort, on the
 main agent's levels, serves every role (Workers and Reviewers at most high).
-The Workers pick also runs the chat's own workers; Reviewers
-run only in a Loop. Both survive a main-agent change. Each Ollama job takes its own model; Reviewers must see images and
+The Workers pick runs the chat's workers too; Reviewers
+run only in a Loop. Both survive a main-agent change; dropped models fall back. Each Ollama job takes its own model; Reviewers must see images and
 check a Loop's finish.
 
 Local Models (Bonsai/Ollama) downloads and deletes. Metered
@@ -35,8 +35,9 @@ offers Compact now (or `/compact`; Claude Code, Codex and Grok use
 included, compacts automatically. Then plan limits
 ([details](../connections-and-context.md#plan-limits)).
 
-Ollama's context is a loaded model's report, else an estimate that refuses nothing. Tools and
-images need reported capability; unsupported requests fail before inference.
+Ollama's context is a loaded model's report, else an estimate that refuses nothing; refusals
+offer a 16K copy. Tools and images need reported capability; unsupported requests fail
+before inference.
 
 Game files, instructions, reference images and enabled tools contribute through channels
 ([tool setup](assets-plugins.md)). Credentials stay in protected storage, never in messages
@@ -57,8 +58,8 @@ isolation.
 
 ## Where to work
 
-Start at [ModelsSection](../../src/renderer/panels/ModelsSection.tsx) and
-[PromptBar](../../src/renderer/ui/PromptBar.tsx); see [Local models](../local-models.md),
+[ModelsSection](../../src/renderer/panels/ModelsSection.tsx),
+[PromptBar](../../src/renderer/ui/PromptBar.tsx), [Local models](../local-models.md),
 [continuation](../conversation-lifecycle.md),
-[composer design](../agent/design.md#prompt-composer) and
+[composer design](../agent/design.md#prompt-composer),
 [judge evaluation](../judge-evaluation.md).

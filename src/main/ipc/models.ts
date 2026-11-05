@@ -64,8 +64,9 @@ const MESSAGE = {
   noKeyEngine: () => t("OpenRouter is unavailable"),
   noLocalServer: () => t("Local servers are unavailable"),
   bonsaiUnavailable: () => t("Bonsai runtime is unavailable"),
-  noModel: "Name the model to delete",
+  noModel: "Name the model",
   cannotRemove: () => t("This model cannot be deleted here"),
+  cannotRaise: () => t("Ollama is unavailable"),
 } as const;
 
 export interface ModelsIpcDeps {
@@ -130,17 +131,7 @@ export function registerModelsIpc(
     const found = await lookupOllamaModel(String(payload?.model ?? ""));
     return found.ok ? { ...found, ...fitFor(found.sizeGb, await detectHardware()) } : found;
   });
-  // Delete: Bonsai ids go to the managed runtime, every other name to Ollama, which lists what it has.
-  handle("studio:models.remove", async (payload) => {
-    const model = payload?.model;
-    if (typeof model !== "string" || !model) throw new Error(MESSAGE.noModel);
-    const id = isBonsaiModelId(model) ? EngineId.Bonsai : EngineId.Ollama;
-    const engine = core.engines.has(id) ? core.engines.get(id) : null;
-    if (!engine?.removeModel) throw new Error(MESSAGE.cannotRemove());
-    await engine.removeModel(model);
-    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: id } });
-    return true;
-  });
+  registerLocalModelIpc(handle, { core, pushUiEvent });
   handle("studio:pull-model", async (payload) => {
     const progressUpdates = modelProgress((progress) =>
       pushUiEvent({ type: UiEvent.ModelPull, payload: { model: payload.model, progress } }),
@@ -180,6 +171,34 @@ export function registerModelsIpc(
       progressUpdates.flush();
     }
     return true;
+  });
+}
+
+/** Local models already on this computer: delete one, or have Ollama copy one with a larger context. */
+function registerLocalModelIpc(
+  handle: IpcHandle,
+  { core, pushUiEvent }: Pick<ModelsIpcDeps, "core" | "pushUiEvent">,
+): void {
+  // Delete: Bonsai ids go to the managed runtime, every other name to Ollama, which lists what it has.
+  handle("studio:models.remove", async (payload) => {
+    const model = payload?.model;
+    if (typeof model !== "string" || !model) throw new Error(MESSAGE.noModel);
+    const id = isBonsaiModelId(model) ? EngineId.Bonsai : EngineId.Ollama;
+    const engine = core.engines.has(id) ? core.engines.get(id) : null;
+    if (!engine?.removeModel) throw new Error(MESSAGE.cannotRemove());
+    await engine.removeModel(model);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: id } });
+    return true;
+  });
+  // Raise context to 16K: Ollama copies a model it lists with a larger context, and the copy is offered at once.
+  handle("studio:models.raise-context", async (payload) => {
+    const model = payload?.model;
+    if (typeof model !== "string" || !model) throw new Error(MESSAGE.noModel);
+    const engine = core.engines.has(EngineId.Ollama) ? core.engines.get(EngineId.Ollama) : null;
+    if (!engine?.raiseContext) throw new Error(MESSAGE.cannotRaise());
+    const copy = await engine.raiseContext(model);
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.Ollama } });
+    return copy;
   });
 }
 

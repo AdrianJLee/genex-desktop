@@ -7,6 +7,8 @@ import { PerformanceBoundary } from "../performance.tsx";
 import { PerformanceComponent } from "../../shared/performance.ts";
 import { t } from "../../shared/i18n.ts";
 import { QueueState } from "../../shared/message-queue.ts";
+import { composerPictures } from "../../shared/chat-rewind.ts";
+import { StopVia } from "../analytics/chat-vocabulary.ts";
 import { EntryKind } from "../chat-entries.ts";
 import { QueuedMessage, SendingMessage } from "../panels/QueuedMessage.tsx";
 import { MessageOrigin } from "../../shared/protocol.ts";
@@ -19,6 +21,7 @@ import { ChatWork } from "./ChatWork.tsx";
 import { type ConversationEntry, entrySize } from "./conversation-entries.ts";
 import { JumpToLatest } from "./JumpToLatest.tsx";
 import { SendPlacement } from "./pending-sends.ts";
+import { focusPromptEnd, restorePictures, type TakenBack, takeBack } from "./put-back.ts";
 import { StreamingReply } from "./StreamingReply.tsx";
 import { StudioIntro } from "./StudioIntro.tsx";
 import { continuedEntrance } from "./transcript-motion.ts";
@@ -47,6 +50,7 @@ function useTranscriptContext(parts: ChatParts): TranscriptContext {
         if (!composer.drafts.draft) composer.drafts.setDraft(PLAN_WORDS.changePrefill);
         focusComposer();
       },
+      onUseModel: (key: string) => latest.current.composer.model.bar.onPick(key),
       onPluginTurnedOn: (name: string) => {
         const { report, props } = latest.current;
         void report(pluginTurnedOnWords(name), MessageOrigin.PluginTurnedOn).catch(notifyProblem(props.onNotice));
@@ -114,6 +118,14 @@ export function ChatConversation(parts: ChatParts): JSX.Element {
       jumpToLatest: () => latest.current.follow.jumpToLatest(),
       loadEarlier: () => latest.current.props.history.loadEarlier(),
       actOnHeld: () => latest.current.handover.act(),
+      sendNow: () => latest.current.work.stop.requestStop(StopVia.SendNow),
+      // Its words go before any draft already there, as a rewound message's do; pictures alone add none.
+      editQueued: (message: TakenBack) =>
+        takeBack(window.studio, message, (back) => {
+          if (back.text.trim()) latest.current.composer.drafts.putBack(back.threadId, back.text);
+          restorePictures(back.threadId, [back]);
+          focusPromptEnd();
+        }),
       handlers: {
         onWheel: (event: Parameters<FollowScroll["handlers"]["onWheel"]>[0]) =>
           latest.current.follow.handlers.onWheel(event),
@@ -156,6 +168,9 @@ export function ChatConversation(parts: ChatParts): JSX.Element {
     // Only while a message is held: the notice is a new object on every render.
     heldGenex: parts.handover.held ? parts.composer.gate.genex : null,
     onActOnHeld: actions.actOnHeld,
+    // A Stop already under way sends what waits once it settles: nothing more to press.
+    onSendNow: parts.work.stoppable && !parts.work.stop.stopping ? actions.sendNow : null,
+    onEditQueued: actions.editQueued,
   });
   return <ConversationContent view={view} context={context} onAsk={actions.ask} onStreaming={actions.streaming} />;
 }
@@ -192,6 +207,10 @@ type ConversationView = {
   /** The Genex notice the held message shows in place of a sign-in, while a Genex model cannot build yet. */
   heldGenex: GenexNoticeProps | null;
   onActOnHeld: () => void;
+  /** Stop the work a waiting message waits for, so it goes now; null when there is none to stop. */
+  onSendNow: (() => void) | null;
+  /** Take a waiting message off the queue and back to the composer. */
+  onEditQueued: (message: TakenBack) => Promise<void>;
 };
 
 /**
@@ -266,6 +285,8 @@ const ConversationContent = memo(function ConversationContent({
               sends={sends}
               still={loading}
               onNotice={onNotice}
+              onEdit={view.onEditQueued}
+              onSendNow={view.onSendNow}
             />
           )}
         </ChatScroll>
@@ -333,8 +354,9 @@ const savedFrom = (sends: ConversationSends, clientId: string): boolean =>
 
 /**
  * Follow-ups that wait below the current work until it reads them, then those still being sent;
- * each reads Sending… either way, and one no turn has taken yet can be removed. A waiting message
- * keeps the place of the bubble it was sent as; delivered, it closes here as it opens where it was read.
+ * each reads Sending… either way, and one no turn has taken yet can be sent now, edited or
+ * removed. A waiting message keeps the place of the bubble it was sent as; delivered, it closes
+ * here as it opens where it was read.
  */
 function WaitingFollowUps({
   threadId,
@@ -342,6 +364,8 @@ function WaitingFollowUps({
   sends,
   still,
   onNotice,
+  onEdit,
+  onSendNow,
 }: {
   threadId: string;
   transcript: ThreadTranscript;
@@ -349,6 +373,8 @@ function WaitingFollowUps({
   /** The chat is loading: its waiting messages are simply there. */
   still: boolean;
   onNotice: Notify;
+  onEdit: (message: TakenBack) => Promise<void>;
+  onSendNow: (() => void) | null;
 }): JSX.Element {
   const waiting = transcript.waitingEntries.flatMap((entry): PresenceChild[] => {
     const queued = transcript.queuedByEvent.get(entry.id);
@@ -365,6 +391,15 @@ function WaitingFollowUps({
             text={entry.text}
             {...(images ? { images: { count: images.count } } : {})}
             onNotice={onNotice}
+            onEdit={() =>
+              onEdit({
+                threadId,
+                messageId: queued.messageId,
+                text: entry.text,
+                pickedImages: composerPictures(queued),
+              })
+            }
+            {...(onSendNow ? { onSendNow } : {})}
           />
         ),
       },

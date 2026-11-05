@@ -19,7 +19,7 @@ import { closeInPlace } from "./director/open/close.ts";
 import { MESSAGE as END_WORDS, openEndWords } from "./director/open/finish.ts";
 import { openBetweenTurns } from "./director/open/between.ts";
 import { creditCapOf, OPEN_WALL_CLOCK, type OpenClock, restartsApp } from "./director/open/contract.ts";
-import { settleRecovery } from "./director/open/health.ts";
+import { appDownAtStart, appUpAtStart, settleRecovery } from "./director/open/health.ts";
 import { openTools } from "./director/open/tool-specs.ts";
 import { openHandler } from "./director/open/tools.ts";
 import { HostMethod } from "./host-methods.ts";
@@ -218,7 +218,8 @@ function sessionEndWords(loopRun: LoopRun, result: Partial<DelegateResult>): str
 /**
  * The run the lead left open — its turn ended with nothing at work, its wrap-up ended, or a lost
  * provider paused it: the harness closes it in place, as `finish` does. A run a lost provider or a
- * Stop paused keeps what it did for a Resume.
+ * Stop paused keeps what it did for a Resume, and so does one whose lead's turn ended with nothing
+ * at work: a build is the whole making of the game, so the person's next word goes on with it.
  */
 export async function closeLeftOpen(
   loopRun: LoopRun,
@@ -228,6 +229,7 @@ export async function closeLeftOpen(
   const halted = loopRun.open.halted;
   if (halted) return closeInPlace(loopRun, { victory: false, because: halted, paused: true });
   const because = openEndWords(loopRun, result, wrapCause) ?? sessionEndWords(loopRun, result);
+  if (because === END_WORDS.nothingAtWork) return closeInPlace(loopRun, { victory: false, because, paused: true });
   return closeInPlace(loopRun, { victory: false, because, notDone: [] });
 }
 
@@ -318,7 +320,7 @@ function keepTimings(loopRun: LoopRun, timings: HostTimings): void {
 /** The lead's tools, and the dispatch of them. */
 function seatTools(loopRun: LoopRun): LiveToolSpec[] {
   const types = loopRun.open.pool?.state.types ?? [];
-  loopRun.afterTurn = () => openBetweenTurns(loopRun);
+  loopRun.afterTurn = (ends) => openBetweenTurns(loopRun, ends);
   directors.set(loopRun.run.runId, openHandler(loopRun));
   return openTools(types, {
     restart: restartsApp(loopRun.game),
@@ -327,6 +329,16 @@ function seatTools(loopRun: LoopRun): LiveToolSpec[] {
     cppRestart: (loopRun.gameFacts ?? []).some((fact) => fact.id === CoreFact.UnrealProject),
   });
 }
+
+/**
+ * Whether the lead takes a held start: the Resume of a Loop that paused while its app was closed,
+ * Genex bringing it back or the lead (`appLost`; a Resume lets the agent try again), held back by a
+ * plugin's step (never Genex's own hold), where a plugin watches that app. Any other held start keeps
+ * its plugin's words: a fresh one closes for the chat's agent to fix and start again
+ * (core/held-start.ts), a resumed one stays paused for what only the person can do.
+ */
+const leadTakesTheStart = (loopRun: LoopRun, blocked: HeldBack): boolean =>
+  loopRun.resume && loopRun.open.journal.appLost && !holdOf(blocked) && hooksOn(loopRun.game, HookEvent.Health);
 
 /** A start a plugin held back closes before any turn, saying why. */
 async function closeHeldStart(loopRun: LoopRun, blocked: HeldBack): Promise<void> {
@@ -346,7 +358,7 @@ async function closeStoppedStart(loopRun: LoopRun): Promise<void> {
 async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, clock: OpenClock): Promise<void> {
   try {
     const start = await prepareTheStart(loopRun);
-    if (start.blocked) {
+    if (start.blocked && !leadTakesTheStart(loopRun, start.blocked)) {
       await line.release();
       await closeHeldStart(loopRun, start.blocked);
       return;
@@ -356,6 +368,9 @@ async function leadTheRun(loopRun: LoopRun, talk: DirectorTalk, line: LeadLine, 
       await closeStoppedStart(loopRun);
       return;
     }
+    // Read only once the start went on: a Stop's start said nothing of the app, and its journal keeps it as it was.
+    if (start.blocked) await appDownAtStart(loopRun, start.blocked.reason);
+    else appUpAtStart(loopRun);
     await wakeLoopRun(loopRun, talk, startLines(loopRun, start), line, clock);
   } catch (err: any) {
     await line.release();

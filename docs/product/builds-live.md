@@ -2,13 +2,13 @@
 
 ## From a request to a game
 
-There is no mode to set: the chat's agent answers, edits directly or starts a Loop, as the
-request needs. In a Loop the chat leads and builds beside workers
-[in the game's folder](projects-engines.md#loops-in-place). Judges answer only when the lead asks. A Loop goes on, with no clock, until its lead finishes it or a turn ends with nothing at
-work. Acceptance survives workers and restarts; external blockers pause it at its checkpoint.
-Asked to finish, the lead's last turn ends it
-([details](../harness-runtime.md#goal-completion-and-worker-approvals)). A local model's chat
-(Ollama) answers and edits; it starts no Loop.
+No mode to set: the agent answers and makes quick fixes itself; making the game is a build (a
+Loop): a paused one goes on, a new one starts only when needed. The chat
+leads it beside workers [in the game's folder](projects-engines.md#loops-in-place); judges answer
+only when asked. It has no clock: its lead finishes it, and a turn ending with nothing at work pauses
+it for the person's next word, as external blockers do. Acceptance survives restarts. Asked to
+finish, the lead's last turn ends it ([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
+Ollama's chat answers and edits, starting no Loop.
 
 An active run opens Builds once; a build shown from chat, or empty Builds, opens Live. Files and images opened from chat get closable tabs.
 
@@ -26,7 +26,7 @@ build lights Reload; hidden and not stopped, they go in at once. The
 preview's network is open, as a web page's. Other folders' views:
 [projects](projects-engines.md#lives-views).
 
-**Builds** is a graph: You asked, a row per part, Your build, then the lead while no part
+**Builds** is a graph: You asked (latest ask, its pictures), a row per part, Your build, then the lead while no part
 works. Tries at one step fold into one node; what reached the build forms the line, the rest
 hangs below. Tries a pause cut off show Paused until added. An eye opens the reviewers' notes. A
 working node shows its agent's screen; a selected one opens as a card. **Follow up in chat** notes
@@ -47,7 +47,7 @@ the Loop goes on.
 After a chat-led build, its session takes follow-ups: edits, resuming a paused run, or a
 new Loop for more work than a reply holds. **Stop** interrupts at once, keeping finished
 work: a stopped Loop shows one Stopped line with Resume. Resume refuses an earlier Genex's
-paused web Loop; its card says the work is kept in git, and its words name the ref for the chat to bring in. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
+paused web Loop; its card says the work is kept in git and names the ref for the chat to bring in. Limit, outage and crash pauses resume twice unless stopped (Settings → Harness); sign-in
 pauses wait. A crash or restart settles abandoned activity from saved state.
 
 ## Where to work

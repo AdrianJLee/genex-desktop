@@ -12,11 +12,13 @@ import { setTimeout as delay } from "node:timers/promises";
 import { EXPORT_APPROVAL_TTL_MS, ExportApprovals } from "../../src/main/core/export-approvals.ts";
 import { GenexStudioTool } from "../../src/main/core/genex-cli-prompts.ts";
 import {
+  cloudBuildFromDialog,
   PublishRefusal,
   PublishRefusedError,
   publishAppsFromDialog,
   publishFromDialog,
   publishReview,
+  renameOnGenex,
 } from "../../src/main/core/genex-publish.ts";
 import type { ExportResult } from "../../src/shared/game-project.ts";
 import { GENEX_PLUGIN_ID, GenexAction, GenexPublishKind } from "../../src/shared/genex.ts";
@@ -231,6 +233,95 @@ test("an Unreal game with a ready Mac app publishes as its app, never as a web g
     await assert.rejects(
       publishFromDialog(rig.core, UNREAL_GAME, await publishReview(rig.core, GAME)),
       refusedAsUnreal,
+    );
+  } finally {
+    await rig.close();
+  }
+});
+
+test("an Unreal game's Windows app is asked of Genex for a known system and a game Studio opens", async () => {
+  const rig = await dialogRig();
+  try {
+    const game = await addUnrealGame(rig);
+    await cloudBuildFromDialog(rig.core, UNREAL_GAME, "windows");
+    assert.deepEqual(rig.calls.at(-1), {
+      id: "genex",
+      name: GenexAction.CloudBuild,
+      args: { platform: "windows" },
+      binding: { project: UNREAL_GAME, directory: game.dir, threadId: undefined },
+    });
+    const before = rig.calls.length;
+    for (const platform of [undefined, "mac", "linux", "Windows", "../windows", 7, ["windows"]])
+      await assert.rejects(
+        cloudBuildFromDialog(rig.core, UNREAL_GAME, platform),
+        /only Windows apps/,
+        String(platform),
+      );
+    for (const project of [undefined, "", 42, `../${UNREAL_GAME}`, "no-such-game"])
+      await assert.rejects(cloudBuildFromDialog(rig.core, project, "windows"), String(project));
+    assert.equal(rig.calls.length, before, "Genex is asked nothing");
+    assert.deepEqual(rig.staged, [], "no web copy is made");
+  } finally {
+    await rig.close();
+  }
+});
+
+/** The calls made by the time `count` of them have come in, for work Studio starts in the background. */
+async function callsOnceThere(rig: Awaited<ReturnType<typeof dialogRig>>, count: number) {
+  for (let waited = 0; waited < ASK_WAIT_MS && rig.calls.length < count; waited += ASK_POLL_MS)
+    await delay(ASK_POLL_MS);
+  return rig.calls;
+}
+
+test("a game renamed in Studio is renamed on Genex too, and Studio's name stands whatever Genex answers", async () => {
+  const rig = await dialogRig();
+  try {
+    const renamed = await rig.core.updateGame(GAME, { title: "Street Patrol" });
+    assert.equal(renamed.title, "Street Patrol");
+    assert.deepEqual((await callsOnceThere(rig, 1)).at(-1), {
+      id: "genex",
+      name: GenexAction.PublishName,
+      args: { title: "Street Patrol", fromStudio: true },
+      binding: { project: GAME, directory: rig.game.dir, threadId: undefined },
+    });
+    await rig.core.updateGame(GAME, { pinned: true });
+    await delay(ASK_POLL_MS * 5);
+    assert.equal(rig.calls.length, 1, "a change that is no rename asks Genex nothing");
+    rig.core.plugins.action = async (id, name, args, bound) => {
+      rig.calls.push({ id, name, args, binding: bound });
+      throw new Error("Genex refused");
+    };
+    assert.equal((await rig.core.updateGame(GAME, { title: "Rain Circuit" })).title, "Rain Circuit");
+    assert.equal((await callsOnceThere(rig, 2)).length, 2);
+    assert.equal(
+      (await rig.core.games.presentation(GAME)).title,
+      "Rain Circuit",
+      "refused on Genex, renamed in Studio",
+    );
+  } finally {
+    await rig.close();
+  }
+});
+
+test("two quick renames in Studio reach Genex in the order they were made, so the last name is listed", async () => {
+  const rig = await dialogRig();
+  try {
+    const bind = rig.core.pluginBinding.bind(rig.core);
+    let slowFirst = true;
+    rig.core.pluginBinding = async (project) => {
+      if (slowFirst) {
+        slowFirst = false;
+        await delay(ASK_POLL_MS * 5);
+      }
+      return bind(project);
+    };
+    await Promise.all([renameOnGenex(rig.core, GAME, "Street Patrol"), renameOnGenex(rig.core, GAME, "Rain Circuit")]);
+    assert.deepEqual(
+      rig.calls.map((call) => call.args),
+      [
+        { title: "Street Patrol", fromStudio: true },
+        { title: "Rain Circuit", fromStudio: true },
+      ],
     );
   } finally {
     await rig.close();

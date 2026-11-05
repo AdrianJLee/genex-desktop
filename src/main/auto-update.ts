@@ -21,7 +21,13 @@
  * meanwhile; asked again after a download, it gets 304 for the same zip and Electron then
  * forgets the update. So Check for Updates goes through `watchInstaller`, which answers from a
  * check already running, and the periodic checks stop once a version is downloaded.
+ *
+ * A failed background check is looked into (`createUpdateRecovery`): Genex asks the feed itself,
+ * so the failure says whether the feed is blocked or the installer broke, and from the second in
+ * a row it offers the newest GitHub release as a download, as Linux does. A Windows copy without
+ * Squirrel's Update.exe never asks the installer, which would fail every check.
  */
+import { win32 as winPath } from "node:path";
 import { SECOND_MS } from "../shared/duration.ts";
 import { t } from "../shared/i18n.ts";
 import {
@@ -30,7 +36,9 @@ import {
   UpdateAction,
   type UpdateCheckResult,
   UpdateCheckStatus,
+  type UpdateFailedNote,
   UpdateFailure,
+  UpdateFeedState,
 } from "../shared/app-update.ts";
 import type { PublishedRelease, ReleaseCheck } from "./release-check.ts";
 import { ReleaseCheckKind } from "./release-check.ts";
@@ -42,6 +50,20 @@ export const AUTO_UPDATE_ENABLED = true;
  * publishes to it and `package.json` names it (`auto-update.test.ts` holds the three together).
  */
 export const UPDATE_REPO = "genex-games/genex-desktop";
+/** The service update-electron-app asks; Genex asks it too when the installer fails. */
+const UPDATE_SERVICE = "https://update.electronjs.org";
+/** How long Genex's own request to the feed may take after a failure. */
+const FEED_PROBE_TIMEOUT_MS = 15 * SECOND_MS;
+/**
+ * How many installer failures in a row before Genex offers the newest release's download page:
+ * one is often a laptop waking up offline, while a copy whose feed is blocked, or whose Squirrel
+ * is broken, fails every hour and would otherwise stay on its version for good.
+ */
+export const OFFER_DOWNLOAD_AFTER_FAILURES = 2;
+/** Chromium's name for a network failure inside `net.fetch`'s message ("net::ERR_NAME_NOT_RESOLVED"). */
+const NET_ERROR = /\bnet::(ERR_[A-Z0-9_]{1,60})\b/;
+/** The network error a feed request that ran out of time counts as, in Chromium's spelling. */
+const NET_TIMED_OUT = "ERR_TIMED_OUT";
 /** How often an installed copy asks for a newer release (the `ms` syntax the library parses). */
 const UPDATE_CHECK_INTERVAL = "1 hour";
 /**
@@ -100,6 +122,8 @@ export interface UpdateLaunch {
   productName: string;
   /** Linux: this copy is the deb or rpm install with the Genex repository configured (`installedFromGenexRepository`). */
   systemPackages: boolean;
+  /** Windows: Squirrel's Update.exe sits beside this copy (`squirrelInstalled`); elsewhere true. */
+  installer: boolean;
 }
 
 /** How a released build updates. */
@@ -151,8 +175,28 @@ export function autoUpdateDecision(launch: UpdateLaunch): UpdateDecision {
   if (launch.developerLaunch) return { start: false, reason: UpdateSkip.DeveloperLaunch };
   if (launch.testLaunch) return { start: false, reason: UpdateSkip.TestLaunch };
   if (launch.productName !== "Genex") return { start: false, reason: UpdateSkip.Identity };
-  if (UPDATE_PLATFORMS.has(launch.platform)) return { start: true, mode: UpdateMode.Install };
+  // Without Update.exe Electron fails every check ("Can not find Squirrel"): offer downloads instead.
+  if (UPDATE_PLATFORMS.has(launch.platform))
+    return { start: true, mode: launch.installer ? UpdateMode.Install : UpdateMode.Notify };
   return { start: true, mode: launch.systemPackages ? UpdateMode.System : UpdateMode.Notify };
+}
+
+/**
+ * Whether Squirrel.Windows installed this copy: its Update.exe sits one folder above the running
+ * `app-<version>` folder, where Electron's autoUpdater looks for it. A copy unpacked or moved
+ * elsewhere has none, and nothing can update it in place.
+ */
+export function squirrelInstalled(execPath: string, exists: (path: string) => boolean): boolean {
+  return exists(winPath.resolve(winPath.dirname(execPath), "..", "Update.exe"));
+}
+
+/**
+ * The address update-electron-app gives Electron's autoUpdater, and the one Genex asks itself:
+ * Squirrel.Windows reads `RELEASES` under it, Squirrel.Mac the address itself (204 when current).
+ */
+export function updateFeedUrl(platform: NodeJS.Platform, arch: string, version: string): string {
+  const feed = `${UPDATE_SERVICE}/${UPDATE_REPO}/${platform}-${arch}/${version}`;
+  return platform === "win32" ? `${feed}/RELEASES` : feed;
 }
 
 /** How long this launch waits before its first update check (`FIRST_RUN_CHECK_DELAY_MS`). */
@@ -366,13 +410,20 @@ const FAILED_STAGE = {
  */
 export function watchInstaller(
   updater: WatchableUpdater,
-  { failed, ...options }: { timeoutMs?: number; failed?: (stage: UpdateFailure) => void } = {},
+  {
+    failed,
+    answered,
+    ...options
+  }: { timeoutMs?: number; failed?: (stage: UpdateFailure) => void; answered?: () => void } = {},
 ): { ask(): Promise<InstallCheck> } {
   let phase: InstallerPhase = InstallerPhase.Idle;
   let asking = 0;
   updater.on(UpdaterEvent.Error, (error) => {
     if (asking === 0 && !refusedAsBusy(error)) failed?.(FAILED_STAGE[phase]);
   });
+  // A found update is not yet an answer: its download can still fail, every hour.
+  for (const event of [UpdaterEvent.UpdateNotAvailable, UpdaterEvent.UpdateDownloaded])
+    updater.on(event, () => answered?.());
   for (const [event, next] of INSTALLER_PHASES) {
     updater.on(event, (error) => {
       if (phase === InstallerPhase.Downloaded || refusedAsBusy(error)) return;
@@ -462,6 +513,95 @@ export function updateCheckNote(result: UpdateCheckResult): {
   if (result.update?.action === UpdateAction.Download)
     return { message: MESSAGE.available(version), detail: MESSAGE.availableDetail(), act: UpdateAction.Download };
   return { message: MESSAGE.readyToRestart(version), detail: MESSAGE.readyDetail(), act: UpdateAction.Restart };
+}
+
+/** What Genex's own request to the update feed found (`probeFeed`). */
+export type FeedProbe = Pick<UpdateFailedNote, "feed" | "netError" | "httpStatus">;
+
+/** The network error a failed `net.fetch` names, in Chromium's code; a timeout as `ERR_TIMED_OUT`. */
+function netErrorOf(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  if (error.name === "TimeoutError") return NET_TIMED_OUT;
+  return NET_ERROR.exec(error.message)?.[1] ?? null;
+}
+
+/**
+ * Ask the update feed once, as the installer would, so a failed check says whether the feed is out
+ * of reach (blocked, offline, no DNS) or answered while the installer itself failed. Never throws.
+ */
+export async function probeFeed(
+  url: string,
+  fetchImpl: (input: string, init?: RequestInit) => Promise<Response>,
+  timeoutMs = FEED_PROBE_TIMEOUT_MS,
+): Promise<FeedProbe> {
+  try {
+    const response = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs) });
+    await response.body?.cancel();
+    if (response.ok) return { feed: UpdateFeedState.Reachable, netError: null, httpStatus: null };
+    return { feed: UpdateFeedState.Refused, netError: null, httpStatus: response.status };
+  } catch (error) {
+    return { feed: UpdateFeedState.Unreachable, netError: netErrorOf(error), httpStatus: null };
+  }
+}
+
+/** What handling a failed background update needs from main. */
+export interface UpdateRecoveryDeps {
+  /** Genex's own request to the feed (`probeFeed`). */
+  probeFeed(): Promise<FeedProbe>;
+  /** The newest published release on GitHub (`latestRelease`), which reaches past the feed. */
+  latestRelease(): Promise<ReleaseCheck>;
+  /** Offer a newer release's download page (`UpdateAnnouncer.available`). */
+  available(release: PublishedRelease): void;
+  /** The failure, with what was found out, for the window and the next launch. */
+  report(note: UpdateFailedNote): void;
+  log(line: string): void;
+  /** Windows: Squirrel's Update.exe is beside the install; null elsewhere. */
+  installer: boolean | null;
+}
+
+/** A failed background update and what it found, for a caller that looked into nothing. */
+export function bareFailure(stage: UpdateFailure): UpdateFailedNote {
+  return { stage, feed: null, netError: null, httpStatus: null, installer: null, offeredDownload: false };
+}
+
+/**
+ * The installer's failures, looked into one at a time: each asks the feed itself and says what it
+ * found; from the `offerAfter`th in a row, a newer release on GitHub is offered as a download, so a
+ * copy whose feed is blocked or whose installer is broken still reaches a version that may work.
+ * An answered check (no update, or one downloaded) starts the count again.
+ */
+export function createUpdateRecovery(
+  deps: UpdateRecoveryDeps,
+  { offerAfter = OFFER_DOWNLOAD_AFTER_FAILURES }: { offerAfter?: number } = {},
+): { failed(stage: UpdateFailure): Promise<void>; answered(): void } {
+  let inARow = 0;
+  let looking = false;
+  const offer = async (): Promise<boolean> => {
+    const found = await deps.latestRelease();
+    deps.log(`release check after failed updates: ${found.kind}`);
+    if (found.kind !== ReleaseCheckKind.Newer) return false;
+    deps.available(found.release);
+    return true;
+  };
+  const failed = async (stage: UpdateFailure): Promise<void> => {
+    inARow++;
+    if (looking) return;
+    looking = true;
+    try {
+      const probe = await deps.probeFeed();
+      deps.log(`update feed after a failed ${stage}: ${probe.feed} ${probe.netError ?? probe.httpStatus ?? ""}`.trim());
+      const offeredDownload = inARow >= offerAfter && (await offer());
+      deps.report({ stage, ...probe, installer: deps.installer, offeredDownload });
+    } finally {
+      looking = false;
+    }
+  };
+  return {
+    failed,
+    answered() {
+      inARow = 0;
+    },
+  };
 }
 
 /** What starting the updater needs from main: the log, and where a finished download goes. */

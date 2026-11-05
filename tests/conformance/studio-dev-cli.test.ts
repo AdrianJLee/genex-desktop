@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseStudioDevArgs, parseOperation } from "../../scripts/studio-dev/args.ts";
 import { FIXTURE_NAMES } from "../../src/main/dev/fixtures.ts";
-import { devBuildArgs, devLaunchCommand, launchEnv, main } from "../../scripts/studio-dev.ts";
+import { devBuildArgs, devLaunchCommand, launchEnv, launchLogPaths, main } from "../../scripts/studio-dev.ts";
 import { gamesRootWarnings, liveEnvStripped, StudioDevWarning } from "../../scripts/studio-dev/live-env.ts";
 import { fixtureElectronEnv } from "../../scripts/electron-runtime.mjs";
 import { freshMachineEnv } from "../../scripts/studio-dev/fresh-machine.ts";
@@ -330,4 +330,29 @@ test("a live profile on a Mac starts through macOS's launcher, so Electron holds
   );
   for (const platform of ["win32", "linux"] as const)
     assert.deepEqual(devLaunchCommand({ owner: live, platform, executable, args, env, logs }), direct, platform);
+});
+
+test("a live Mac launch hands `open` log files of its own: macOS's launcher refuses one that already exists", () => {
+  // `open --stdout <file>` fails with LaunchServices error -10810 when <file> exists, and the
+  // launcher creates its own stdio files before spawning, so the two must never be the same file.
+  // In this platform's own separators: Windows runs this file too, and `path.dirname` answers in `\`.
+  const root = path.join(path.sep, "repo", ".studio-dev", "evidence", "launch-b-1");
+  const live = launchLogPaths(root, { owner: { providers: "live" }, platform: "darwin" });
+  const created = [live.spawn.stdout, live.spawn.stderr];
+  assert.ok(
+    !created.includes(live.app.stdout) && !created.includes(live.app.stderr),
+    "open writes files it creates itself",
+  );
+  assert.notEqual(live.app.stdout, live.app.stderr);
+  for (const file of [...created, live.app.stdout, live.app.stderr]) assert.equal(path.dirname(file), root, file);
+  // Everywhere else the spawned process is the app, so its stdio files are the app's logs.
+  for (const [owner, platform] of [
+    [{ providers: "fixture" }, "darwin"],
+    [{ providers: "live", freshMachine: true }, "darwin"],
+    [{ providers: "live" }, "win32"],
+    [{ providers: "live" }, "linux"],
+  ] as const) {
+    const direct = launchLogPaths(root, { owner, platform });
+    assert.deepEqual(direct.app, direct.spawn, `${owner.providers} on ${platform}`);
+  }
 });

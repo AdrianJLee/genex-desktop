@@ -175,7 +175,6 @@ function gameCalls(bridge: BridgeCalls) {
     openProject: (name) => invoke("studio:project.open", { name }),
     rollback: (snapshotId) => invoke("studio:rollback", { snapshotId }),
     undoChange: (snapshotId) => invoke("studio:selfchange.undo", { snapshotId }),
-    readReferenceStills: (project) => invoke("studio:game.references", { project }),
     previewProjectAsset: (p) => invoke("studio:game.asset.preview", p),
     presentProjectAssets: (p) => invoke("studio:game.asset.present", p),
     projectModelRigs: (p) => invoke("studio:game.asset.rigs", p),
@@ -350,6 +349,7 @@ function studioCalls(bridge: BridgeCalls) {
     pullModel: (model) => invoke("studio:pull-model", { model }),
     lookupModel: (model) => invoke("studio:models.lookup", { model }),
     removeModel: (model) => invoke("studio:models.remove", { model }),
+    raiseModelContext: (model) => invoke("studio:models.raise-context", { model }),
     openUrl: (url) => invoke("studio:open-url", { url }),
     genexAccount: () => invoke("studio:genex-account.read"),
     genexSignIn: () => invoke("studio:genex-account.sign-in"),
@@ -382,6 +382,7 @@ function pluginCalls(bridge: BridgeCalls) {
     genexPublish: (project, review, title, remix, replaceNativePage) =>
       invoke("studio:plugins.genex-publish", { project, review, title, remix, replaceNativePage }),
     genexPublishApps: (project, title, remix) => invoke("studio:plugins.genex-publish-apps", { project, title, remix }),
+    genexCloudBuild: (project, platform) => invoke("studio:plugins.genex-cloud-build", { project, platform }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),
     pluginInstallGithub: (spec) => invoke("studio:plugins.install-github", { spec }),
     pluginLookupGithub: (link, version) => invoke("studio:plugins.lookup-github", { link, version }),

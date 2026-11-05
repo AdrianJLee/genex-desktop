@@ -13,6 +13,7 @@ import { publishesAsWebGame } from "../../shared/project-workspace.ts";
 import { cleanGenexTitle, GENEX_PLUGIN_ID, GenexAction } from "../../shared/genex.ts";
 import { type ExportReview, type PluginBinding, PluginSourceKind } from "../../shared/plugins.ts";
 import type { StudioCore } from "../studio-core.ts";
+import { CLOUD_PLATFORMS } from "../../plugins/genex/cloud-build.ts";
 import { pinnedCliSendsApps } from "../../plugins/genex/native-publish.ts";
 import { publishedApps } from "./publish-platforms.ts";
 import { t } from "../../shared/i18n.ts";
@@ -26,6 +27,7 @@ const MESSAGE = {
     t("{title} builds in Unreal; publishing an Unreal game isn't supported yet.", { title }),
   NotWebGame: (title: string) => t("{title} isn't a web game, so Genex can't publish it yet.", { title }),
   NoApps: () => t("This game has no Mac, Windows or Linux app ready to publish"),
+  NoCloudPlatform: () => t("Genex builds only Windows apps on its own computers"),
 } as const;
 
 /** Why a game can't be published at all, by code: callers act on it, never on its words. */
@@ -44,6 +46,8 @@ export class PublishRefusedError extends Error {
 
 type InstalledPlugin = ReturnType<StudioCore["plugins"]["list"]>[number];
 type DialogCore = Pick<StudioCore, "games" | "plugins" | "pluginBinding" | "publicCopyFiles" | "withApprovedExport">;
+/** What binding a game to Studio's Genex needs. */
+type BindingCore = Pick<StudioCore, "plugins" | "pluginBinding">;
 
 /**
  * Studio's own Genex, installed: the only plugin whose publish the dialog runs. On or off: Publish
@@ -91,7 +95,7 @@ const replaceArg = (replace: unknown): { replaceNativePage?: true } =>
   replace === true ? { replaceNativePage: true } : {};
 
 /** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is installed. */
-async function boundGame(core: DialogCore, project: unknown): Promise<PluginBinding> {
+async function boundGame(core: BindingCore, project: unknown): Promise<PluginBinding> {
   if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame());
   if (!core.plugins.list().some(isUsableGenex)) throw new Error(MESSAGE.GenexUnavailable());
   const binding = await core.pluginBinding(project);
@@ -167,3 +171,46 @@ export async function publishAppsFromDialog(
     binding,
   );
 }
+
+/**
+ * Ask Genex, from the dialog, to build `project`'s `platform` app on its own computers: the app this
+ * computer can't make (an Unreal game's Windows app on a Mac). The row's press is the consent to send
+ * the game's project privately for it, as Publish's is to send its apps. Refused for a system Genex
+ * builds no app for, before Genex is asked anything.
+ */
+export async function cloudBuildFromDialog(core: DialogCore, project: unknown, platform: unknown): Promise<void> {
+  if (typeof platform !== "string" || !CLOUD_PLATFORMS.has(platform)) throw new Error(MESSAGE.NoCloudPlatform());
+  const binding = await boundGame(core, project);
+  await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.CloudBuild, { platform }, binding);
+}
+
+/**
+ * The game's new name in Studio, given to Genex too: a game already on Genex is listed under it at
+ * once (its title alone; the link stays), as the Publish dialog's own rename does, so the game has
+ * one name everywhere. A game not on Genex is asked nothing: its first publish takes Studio's name.
+ * Best effort and never in the person's way: signed out or unanswered, the rename in Studio stands,
+ * the game's publish record keeps the name Genex hasn't taken, the Publish dialog offers it and the
+ * next publish sends it.
+ */
+export function renameOnGenex(core: BindingCore, project: string, title: string): Promise<void> {
+  const name = cleanGenexTitle(title);
+  if (!name) return Promise.resolve();
+  // One game's renames reach Genex in the order they were made, so the last name is the one listed.
+  const before = renamesUnderWay.get(project) ?? Promise.resolve();
+  const sent = before.then(async () => {
+    try {
+      const binding = await boundGame(core, project);
+      await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishName, { title: name, fromStudio: true }, binding);
+    } catch {
+      // The publish record keeps its old name; the next publish relists the game under Studio's.
+    }
+  });
+  renamesUnderWay.set(project, sent);
+  void sent.then(() => {
+    if (renamesUnderWay.get(project) === sent) renamesUnderWay.delete(project);
+  });
+  return sent;
+}
+
+/** Each game's rename on its way to Genex, the newest last. */
+const renamesUnderWay = new Map<string, Promise<void>>();

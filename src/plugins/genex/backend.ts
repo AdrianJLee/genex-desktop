@@ -1,7 +1,8 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { GenexTools, type RemixChoice } from "./adapter.ts";
-import { nativeUploads } from "./native-publish.ts";
+import { macSigningOf } from "./mac-notarize.ts";
+import { type NativeUpload, nativeUploads, withMacSigning } from "./native-publish.ts";
 import { MESSAGE as PUBLISH_MESSAGE } from "./publish.ts";
 import { isEmptyStarter } from "./starter.ts";
 import { type CoverCamera, COVER_FRAME } from "./cover.ts";
@@ -292,17 +293,25 @@ const ACTIONS: Record<string, Action> = {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
     await refuseEmptyStarter(ctx);
     // The dialog names the game's apps by their place in its folder; only real builds inside it go.
-    const apps = ctx.directory ? await nativeUploads(ctx.directory, args.native) : [];
+    const apps = await appsToSend(ctx, args.native, service);
     const exportStage = () => service(PluginService.ExportStage, {});
     const replaceNativePage = args.replaceNativePage === true;
     return genex.publishGallery(ctx.project, exportStage, args.title, apps, remixChoice(args, ctx), replaceNativePage);
   },
-  [GenexAction.PublishApps]: async (genex, args, ctx) => {
+  [GenexAction.PublishApps]: async (genex, args, ctx, service) => {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
-    const apps = ctx.directory ? await nativeUploads(ctx.directory, args.native) : [];
+    const apps = await appsToSend(ctx, args.native, service);
     return genex.publishAppsOnly(ctx.project, apps, args.title, remixChoice(args, ctx));
   },
+  [GenexAction.CloudBuild]: async (genex, args, ctx) => {
+    if (!ctx.project) throw new Error(MESSAGE.OpenProject());
+    return genex.cloudBuild(ctx.project, args.platform, ctx.directory);
+  },
   [GenexAction.PublishRemoveWeb]: withProject((genex, project) => genex.publishRemoveWeb(project)),
+  [GenexAction.PublishName]: withProject((genex, project, args) =>
+    genex.publishName(project, args.title, args.fromStudio === true),
+  ),
+  [GenexAction.PublishLink]: withProject((genex, project, args) => genex.publishLink(project, args.link)),
   [GenexAction.PublishAllowUpload]: withProject((genex, project, args) =>
     genex.publishAllowNewUpload(project, String(args.jobId ?? "")),
   ),
@@ -316,6 +325,19 @@ const ACTIONS: Record<string, Action> = {
     );
   },
 };
+
+/**
+ * The apps a publish sends, by their place in the game folder (only real builds inside it), each Mac
+ * app with the creator's notarizing when they turned it on in Genex's settings.
+ */
+async function appsToSend(ctx: Invocation, entries: unknown, service: Service): Promise<NativeUpload[]> {
+  if (!ctx.directory) return [];
+  const settings = await service(PluginService.SettingsRead).catch(() => ({}));
+  const signing = macSigningOf(
+    typeof settings === "object" && settings !== null ? (settings as Record<string, unknown>) : {},
+  );
+  return withMacSigning(await nativeUploads(ctx.directory, entries), signing);
+}
 
 /** The longest API origin the host may name. */
 const HOST_API_MAX = 200;

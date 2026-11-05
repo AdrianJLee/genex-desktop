@@ -107,7 +107,8 @@ stops recording, opts out and resets the id.
   start facts (`StartPassage`, and `BootState.failureCode`, a `BootFailure` or the sandbox's code).
   Main's own uncaught errors and a window's hangs arrive as `app.diagnostic` (`app_error_caught`
   with process `main`, `window_unresponsive`), background update failures as `update.failed`
-  (`update_background_failed`), agents that would not start as `harness.start-failed`'s
+  (`update_background_failed`: the stage, what the feed answered Genex's own request, Chromium's
+  network error code, whether Squirrel's Update.exe is there and whether a download was offered), agents that would not start as `harness.start-failed`'s
   `failureCode` (`agents_start_failed`), and Relaunch to update answers a `RestartAnswer`.
 - **The welcome** keeps the step an unfinished welcome stood on (`studio.analytics.welcomeScreen`),
   so the next launch's `welcome_shown` says it resumed and where.

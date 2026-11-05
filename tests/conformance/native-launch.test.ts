@@ -16,7 +16,12 @@ import { describe, it } from "node:test";
 import { runShutdown, shutdownSteps } from "../../src/main/app-lifecycle.ts";
 import { canBuildFixtureApp, buildFixtureApp } from "../../src/main/dev/fixture-native-app.ts";
 import type { InstallRecord } from "../../src/main/play/native-installs.ts";
-import { GAME_QUIT_GRACE_MS, type GameProcess, nativeSessions } from "../../src/main/play/native-launch.ts";
+import {
+  GAME_QUIT_GRACE_MS,
+  type GameProcess,
+  type NativeSessionsDeps,
+  nativeSessions,
+} from "../../src/main/play/native-launch.ts";
 import { hasGameWindow, showGameWindow } from "../../src/main/play/native-windows.ts";
 import { psProbe, type JobClock } from "../../src/substrate/job-process.ts";
 import {
@@ -113,6 +118,8 @@ async function rig(
     genex?: "open" | "fails";
     /** The game ends as it is brought forward, and bringing it forward returns only once its end is handled. */
     endsOnShow?: boolean;
+    /** What the program to start is resolved to (Windows: Unreal's game binary past its launcher). */
+    program?: NativeSessionsDeps["program"];
   } = {},
 ) {
   const root = await realpath(await tmpDir("native-launch-"));
@@ -143,6 +150,7 @@ async function rig(
   const clock = heldClock();
   const sessions = nativeSessions({
     ...(options.genex ? { genex } : {}),
+    ...(options.program ? { program: options.program } : {}),
     root,
     record: async (slug) =>
       (options.installed ?? ["dust-runners"]).includes(slug) ? { ...record(slug), ...options.record } : null,
@@ -240,6 +248,33 @@ describe("native game sessions", () => {
       const { sessions, requests } = await rig({ record: over });
       await sessions.launch("dust-runners");
       assert.deepEqual(requests[0]?.args, args, JSON.stringify(over));
+    }
+  });
+
+  it("starts the program its resolver names, with the resolver's arguments before its own", async () => {
+    const app = (root: string) => path.join(root, "dust-runners", "1.3", "Dust Runners.app");
+    const seen: Array<[string, string]> = [];
+    const { sessions, requests, root } = await rig({
+      record: { engine: "unreal" },
+      program: async (appDir, executable) => {
+        seen.push([appDir, executable]);
+        return { binary: path.join(appDir, "Dust", "Binaries", "Win64", "Dust-Win64-Shipping.exe"), args: ["Dust"] };
+      },
+    });
+    await sessions.launch("dust-runners");
+    assert.deepEqual(seen, [[app(root), "Contents/MacOS/FixtureGame"]]);
+    assert.equal(requests[0]?.binary, path.join(app(root), "Dust", "Binaries", "Win64", "Dust-Win64-Shipping.exe"));
+    assert.deepEqual(requests[0]?.args, ["Dust", "-fullscreen"]);
+  });
+
+  it("starts the installed program when its resolver names none or fails", async () => {
+    for (const program of [async () => null, async () => Promise.reject(new Error("unreadable launcher"))]) {
+      const { sessions, requests, root, logs } = await rig({ record: { engine: "unreal" }, program });
+      await sessions.launch("dust-runners");
+      const installed = path.join(root, "dust-runners", "1.3", "Dust Runners.app", "Contents/MacOS/FixtureGame");
+      assert.equal(requests[0]?.binary, installed);
+      assert.deepEqual(requests[0]?.args, ["-fullscreen"]);
+      assert.ok(!logs.some((line) => line.includes("did not start")), "the game still started");
     }
   });
 

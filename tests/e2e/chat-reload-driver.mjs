@@ -42,6 +42,14 @@ async function click(selector) {
     clickCount: 1,
   });
 }
+/** Send a slash command to the chat of the steered message: a running turn never takes one, so it waits below it. */
+const sendWaiting = (text) =>
+  js(
+    `(async()=>{const sent=(await window.studio.events()).events.find(e=>e.data.type==='custom'&&e.data.event_type==='coordinator_message_queued'&&e.data.payload?.action?.text==='Add a purple cube');await window.studio.send(${JSON.stringify(text)},{thread:sent.thread_id});})()`,
+  );
+/** The waiting message with these words, Send now in place of Sending… and Edit and Remove, below the live status. */
+const waitsWithActions = (text) =>
+  `(()=>{const q=document.querySelector('[data-queued-message]');const status=document.querySelector('[data-chat-status]');return !!q?.textContent.includes(${JSON.stringify(text)}) && !q.querySelector('[role="status"]') && q.querySelector('[aria-label="Stop and send now"]')?.textContent === 'Send now' && !!q.querySelector('[aria-label="Remove queued message"]') && !!q.querySelector('[aria-label="Edit queued message"]') && !!status && !!(status.compareDocumentPosition(q)&Node.DOCUMENT_POSITION_FOLLOWING);})()`;
 await import(pathToFileURL(main).href);
 async function acceptance() {
   try {
@@ -104,16 +112,12 @@ async function acceptance() {
     await wc.capturePage();
     await wait(200);
     fs.writeFileSync(path.join(out, "steered-in-place.png"), (await wc.capturePage()).toPNG());
-    // A message that cannot join the turn (one for a model that holds no session, which this turn
-    // cannot go on with) waits below the work as Sending…, with Remove to withdraw it.
-    await js(
-      `(async()=>{const sent=(await window.studio.events()).events.find(e=>e.data.type==='custom'&&e.data.event_type==='coordinator_message_queued'&&e.data.payload?.action?.text==='Add a purple cube');await window.studio.send("Add a red sphere",{thread:sent.thread_id,engine:"ollama"});})()`,
-    );
+    // A message that cannot join the turn (a slash command waits for a turn of its own) waits below
+    // the work with Send now in place of Sending…, and Edit and Remove.
+    await sendWaiting("/note Add a red sphere");
     check(
-      "a follow-up the turn cannot take waits below the current work as Sending…, with Remove",
-      await until(
-        `(()=>{const q=document.querySelector('[data-queued-message]');const status=document.querySelector('[data-chat-status]');return !!q?.textContent.includes('Add a red sphere') && q.querySelector('[role="status"]')?.textContent === 'Sending…' && !!q.querySelector('[aria-label="Remove queued message"]') && !q.querySelector('[aria-label="Edit queued message"]') && !!status && !!(status.compareDocumentPosition(q)&Node.DOCUMENT_POSITION_FOLLOWING);})()`,
-      ),
+      "a follow-up the turn cannot take waits below the current work with Send now, Edit and Remove",
+      await until(waitsWithActions("Add a red sphere")),
     );
     await wc.capturePage();
     await wait(200);
@@ -126,6 +130,38 @@ async function acceptance() {
         `!document.querySelector('[data-queued-message]') && !document.querySelector('[aria-label="Conversation"]')?.textContent.includes('Add a red sphere')`,
       ),
     );
+    // Edit takes a waiting message off the queue and puts its words back in the composer.
+    await sendWaiting("/note Add a blue cone");
+    check("a second follow-up waits with its actions", await until(waitsWithActions("Add a blue cone")));
+    // A capture's pause lets the bubble finish opening, so the click lands where the button rests.
+    await wc.capturePage();
+    await wait(200);
+    fs.writeFileSync(path.join(out, "queued-actions.png"), (await wc.capturePage()).toPNG());
+    await click('[data-queued-message] [aria-label="Edit queued message"]');
+    check(
+      "an edited follow-up leaves the queue and its words come back to the composer",
+      await until(
+        `!document.querySelector('[data-queued-message]') && !document.querySelector('[aria-label="Conversation"]')?.textContent.includes('Add a blue cone') && document.querySelector('[aria-label="Prompt"]')?.value === '/note Add a blue cone'`,
+      ),
+      await js(`document.querySelector('[aria-label="Prompt"]')?.value`).catch(() => null),
+    );
+    check(
+      "the taken-back message was removed from the queue, never answered",
+      await until(
+        `(async()=>{const events=(await window.studio.events()).events.filter(e=>e.data.type==='custom'&&e.data.event_type.startsWith('coordinator_message_'));const queued=events.find(e=>e.data.event_type==='coordinator_message_queued'&&e.data.payload?.action?.text==='/note Add a blue cone');const fate=events.filter(e=>e.data.payload?.messageId===queued?.data.payload.messageId).map(e=>e.data.event_type);return fate.at(-1)==='coordinator_message_removed'&&!fate.includes('coordinator_message_processing');})()`,
+      ),
+    );
+    // Empty the composer again, so reload and Stop below start from the one turn in flight.
+    await click('[aria-label="Prompt"]');
+    await js(`document.querySelector('[aria-label="Prompt"]').select()`);
+    for (const type of ["keyDown", "keyUp"])
+      await wc.debugger.sendCommand("Input.dispatchKeyEvent", {
+        type,
+        key: "Backspace",
+        code: "Backspace",
+        windowsVirtualKeyCode: 8,
+      });
+    check("an emptied composer shows Stop again", await until(`!!document.querySelector('[aria-label="Stop"]')`));
     const before = await js("window.studio.bootstrap()");
     const active = Object.entries(before.threadStatus ?? {}).find(([, s]) => s.status !== "idle");
     check(
@@ -189,6 +225,27 @@ async function acceptance() {
       await until(
         `!!document.querySelector('[aria-label="Send"]') && !document.querySelector('[aria-label="Stop"]') && !document.querySelector('[data-chat-status]')`,
       ),
+    );
+    // Send now stops the work a waiting message waits for, and the queue answers that message next.
+    await click('[aria-label="Prompt"]');
+    await wc.debugger.sendCommand("Input.insertText", { text: "fixture:pending Keep building until I stop you." });
+    await click('[aria-label="Send"]');
+    check("a second pending turn shows Stop", await until(`!!document.querySelector('[aria-label="Stop"]')`));
+    await sendWaiting("/note Add a green ring");
+    check("a follow-up waits behind the second turn", await until(waitsWithActions("Add a green ring")));
+    await wc.capturePage();
+    await wait(200);
+    const waitingId = await js(`document.querySelector('[data-queued-message]').dataset.queuedMessage`);
+    await click('[data-queued-message] [aria-label="Stop and send now"]');
+    check(
+      "Send now stops the turn and the queue answers the waiting message next",
+      await until(
+        `(async()=>(await window.studio.events()).events.some(e=>e.data.type==='custom'&&e.data.event_type==='coordinator_message_processing'&&e.data.payload?.messageId===${JSON.stringify(waitingId)}))()`,
+      ),
+      (await js("window.studio.events()")).events
+        .filter((e) => e.data.type === "custom" && e.data.event_type.startsWith("coordinator_"))
+        .slice(-8)
+        .map((e) => [e.data.event_type, e.data.payload?.messageId]),
     );
   } catch (error) {
     checks.push({

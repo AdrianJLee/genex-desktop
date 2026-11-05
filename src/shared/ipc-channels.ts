@@ -114,6 +114,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.genex-publish-platforms": "genexPublishPlatforms",
   "studio:plugins.genex-publish": "genexPublish",
   "studio:plugins.genex-publish-apps": "genexPublishApps",
+  "studio:plugins.genex-cloud-build": "genexCloudBuild",
   "studio:plugins.index": "pluginsIndex",
   "studio:plugins.install-github": "pluginInstallGithub",
   "studio:plugins.lookup-github": "pluginLookupGithub",
@@ -269,7 +270,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:build.preview": "buildPreview",
   "studio:preview.screens": "agentScreens",
   "studio:run.still": "readRunStill",
-  "studio:game.references": "readReferenceStills",
   "studio:game.asset.preview": "previewProjectAsset",
   "studio:game.asset.present": "presentProjectAssets",
   "studio:game.asset.rigs": "projectModelRigs",
@@ -302,6 +302,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:pull-model": "pullModel",
   "studio:models.lookup": "lookupModel",
   "studio:models.remove": "removeModel",
+  "studio:models.raise-context": "raiseModelContext",
   "studio:reveal-project": "revealProject",
   "studio:game-file.read": "readGameFile",
   "studio:game-file.reveal": "revealGameFile",
@@ -425,6 +426,7 @@ export interface StudioInvokePayloads {
     replaceNativePage?: boolean;
   };
   "studio:plugins.genex-publish-apps": { project: string; title?: string; remix?: boolean };
+  "studio:plugins.genex-cloud-build": { project: string; platform: string };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };
   "studio:plugins.lookup-github": { link: string; version?: GithubVersion };
@@ -574,7 +576,6 @@ export interface StudioInvokePayloads {
   "studio:build.preview": Arg<"buildPreview", 0>;
   "studio:preview.screens": undefined;
   "studio:run.still": { file: string; maxPx?: number };
-  "studio:game.references": { project: string };
   "studio:game.asset.preview": Arg<"previewProjectAsset", 0>;
   "studio:game.asset.present": Arg<"presentProjectAssets", 0>;
   "studio:game.asset.rigs": Arg<"projectModelRigs", 0>;
@@ -614,6 +615,7 @@ export interface StudioInvokePayloads {
   "studio:pull-model": { model: string };
   "studio:models.lookup": { model: string };
   "studio:models.remove": { model: string };
+  "studio:models.raise-context": { model: string };
   "studio:reveal-project": { project: string; file?: string };
   "studio:game-file.read": { threadId: string; path: string };
   "studio:game-file.reveal": { threadId: string; path: string };

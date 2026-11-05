@@ -594,7 +594,9 @@ Resetting policy also refreshes the displayed threshold to its effective inherit
   to Ollama, which answers with its real context. A measured window too small for the instructions
   and tools alone (Ollama's 4,096-token default) fails at once with a `context_too_small`
   failure. It compacts nothing, and its message names a context length that fits and where Ollama
-  sets it.
+  sets it. Under it the chat offers Raise context to 16K (`chat/RaiseContextLine.tsx`): Ollama
+  copies the model with `num_ctx` 16384 (`/api/create`, weights shared, `shared/ollama-context.ts`)
+  and the chat switches to the copy, whose Modelfile context counts as measured before it loads.
 
 ### Compact now
 
@@ -839,7 +841,8 @@ Studio keeps a plain frame of the game as it loads (`cover-auto`, once the turns
 settle and as the Publish dialog opens), never over the agent's picture, the person's pick or the
 owner's cover. The dialog's banner flips between the last four pictures (`cover-pick` pins one) and
 its Another cover sends a request to the game's chat ([plugins](plugins.md#first-party-privileges)).
-How to compose a cover is optional advice in the `genex-recommendations` plugin, off by default.
+How to compose a cover is optional advice in the `genex-recommendations` plugin, which works under
+the hood of Genex: on while Genex is, and listed nowhere.
 
 ## Credentials
 

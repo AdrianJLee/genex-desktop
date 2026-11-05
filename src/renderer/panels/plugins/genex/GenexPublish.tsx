@@ -14,8 +14,11 @@ import { SECOND_MS } from "../../../../shared/duration.ts";
 import type { FeedbackDraft } from "../../../../shared/feedback.ts";
 import { gameCoverUrl } from "../../../../shared/game-cover.ts";
 import {
+  cleanGenexTitle,
   GENEX_PLUGIN_ID,
+  GENEX_SLUG_MAX_CHARS,
   GENEX_TITLE_MAX_CHARS,
+  genexSlug,
   GenexAction,
   type GenexNativeRecord,
   type GenexPublishState,
@@ -26,6 +29,7 @@ import { MakingDrawing } from "../../../making-art.ts";
 import { prefersReducedMotion } from "../../../ui/media-queries.ts";
 import { cancelGenexSignIn, signInToGenex, useGenexSignIn } from "../../../play/use-genex-sign-in.ts";
 import { useLibrary, usePeople } from "../../../state/hooks.ts";
+import { studio } from "../../../state/studio.ts";
 import { Button } from "../../../ui/Button.tsx";
 import { OPEN_PLUGINS_EVENT } from "../../../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../../../ui/dialog.tsx";
@@ -83,6 +87,8 @@ const ACCOUNT = GENEX_WORDS.account;
 const LinkTarget = { Gallery: "gallery" } as const;
 /** The celebration's canvas: 4 px a cell, drawn at half that on screen for sharp pixels. */
 const ROCKET_CANVAS_PX = 128;
+/** How long the link's pencil shows a ✓ once the link moved. */
+const LINK_SAVED_MS = 1.5 * SECOND_MS;
 /** The longest edge the banner's picture is read at: twice the dialog's width, for sharp pixels. */
 const BANNER_PICTURE_PX = 960;
 
@@ -163,20 +169,38 @@ function BannerLine({ name, live }: { name: JSX.Element; live: boolean }): JSX.E
   );
 }
 
-/** The name on the banner: a press to rename it, its field while renaming, plain words while publishing. */
+/**
+ * The name on the banner: a press to rename it, its field while renaming, plain words while publishing.
+ * Enter or leaving the field saves the name; Escape puts the saved one back.
+ */
 function BannerName({
   title,
   onTitle,
+  onDone,
   editable,
   live,
 }: {
   title: string;
   onTitle: (title: string) => void;
+  /** The field closed: `save` when Enter or leaving it, not after Escape. */
+  onDone: (save: boolean) => void;
   editable: boolean;
   /** It just went live: the banner says "<name> is live!". */
   live: boolean;
 }): JSX.Element {
   const [editing, setEditing] = useState(false);
+  // Enter closes the field, which can blur it as it goes: the name is saved once.
+  const open = useRef(false);
+  const start = () => {
+    open.current = true;
+    setEditing(true);
+  };
+  const finish = (save: boolean) => {
+    if (!open.current) return;
+    open.current = false;
+    setEditing(false);
+    onDone(save);
+  };
   if (!editable)
     return (
       <BannerLine
@@ -199,9 +223,14 @@ function BannerName({
         // biome-ignore lint/a11y/noAutofocus: the field replaces the name the person just pressed.
         autoFocus
         onChange={(e) => onTitle(e.target.value)}
-        onBlur={() => setEditing(false)}
+        onBlur={() => finish(true)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") setEditing(false);
+          if (e.key === "Enter") finish(true);
+          if (e.key === "Escape") {
+            // Escape puts the name back; it does not close the dialog around it.
+            e.stopPropagation();
+            finish(false);
+          }
         }}
       />
     );
@@ -214,7 +243,7 @@ function BannerName({
           className="genex-publish-banner-name"
           title={title}
           aria-label={WORDS.rename}
-          onClick={() => setEditing(true)}
+          onClick={start}
         >
           <span>{title}</span>
           <Icon name="rename" size={14} />
@@ -232,6 +261,7 @@ function Banner({
   project,
   title,
   onTitle,
+  onTitleDone,
   view,
   publishing,
   celebrate,
@@ -243,6 +273,8 @@ function Banner({
   project: string;
   title: string;
   onTitle: (title: string) => void;
+  /** The name's field closed: save the typed name, or put the saved one back. */
+  onTitleDone: (save: boolean) => void;
   view: PublishView;
   publishing: boolean;
   celebrate: boolean;
@@ -276,7 +308,9 @@ function Banner({
       )}
       {celebrate && <PublishRocket />}
       <div className="genex-publish-banner-foot">
-        {!asking && <BannerName title={title} onTitle={onTitle} editable={!publishing} live={celebrate} />}
+        {!asking && (
+          <BannerName title={title} onTitle={onTitle} onDone={onTitleDone} editable={!publishing} live={celebrate} />
+        )}
         <CoverTool
           cover={cover}
           show={show}
@@ -290,14 +324,70 @@ function Banner({
   );
 }
 
-/** The link anyone can play, labelled beside the globe, with Copy and Open. */
-function LinkField({ link, onOpen, opening }: { link: string; onOpen: () => void; opening: boolean }): JSX.Element {
+/** How the public link's pencil changes it: the changes left (null: no limit) and the move itself. */
+interface LinkChange {
+  left: number | null | undefined;
+  /** Move the game to `link`: why Genex refused, or null once it moved. */
+  save: (link: string) => Promise<string | null>;
+}
+
+/**
+ * The link anyone can play, labelled beside the globe, with Copy and Open. With `change`, the link
+ * and its pencil are one press that opens its field, like the name's on the banner; the pencil turns
+ * into a ✓ for a moment once the link moved. A game out of link changes shows no pencil.
+ */
+function LinkField({
+  link,
+  onOpen,
+  opening,
+  change,
+}: {
+  link: string;
+  onOpen: () => void;
+  opening: boolean;
+  change?: LinkChange;
+}): JSX.Element {
   const [copied, copy] = useCopy();
+  const [editing, setEditing] = useState(false);
+  const [moved, setMoved] = useState(false);
+  useEffect(() => {
+    if (!moved) return;
+    const timer = window.setTimeout(() => setMoved(false), LINK_SAVED_MS);
+    return () => window.clearTimeout(timer);
+  }, [moved]);
+  if (editing && change)
+    return (
+      <LinkEditor
+        link={link}
+        change={change}
+        onDone={(done) => {
+          setEditing(false);
+          setMoved(done);
+        }}
+      />
+    );
+  const shown = link.replace(/^https?:\/\//, "");
+  const changeable = change !== undefined && change.left !== 0;
   return (
     <div className="genex-publish-link-field" data-public>
       <Icon name="globe" size={15} />
       <span className="genex-publish-link-label">{WORDS.publicLink}</span>
-      <span title={link}>{link.replace(/^https?:\/\//, "")}</span>
+      {changeable ? (
+        <span className="genex-publish-link-address">
+          <button
+            type="button"
+            className="genex-publish-link-edit"
+            title={link}
+            aria-label={WORDS.changeLink}
+            onClick={() => setEditing(true)}
+          >
+            <span>{shown}</span>
+            <Icon name={moved ? "check" : "rename"} size={14} />
+          </button>
+        </span>
+      ) : (
+        <span title={link}>{shown}</span>
+      )}
       <Button aria-label={WORDS.copyLinkLabel} onClick={() => copy(link)}>
         <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green" : undefined} />
         {copied ? WORDS.copied : WORDS.copyLink}
@@ -309,6 +399,85 @@ function LinkField({ link, onOpen, opening }: { link: string; onOpen: () => void
     </div>
   );
 }
+
+/**
+ * The public link's field: the site fixed before it, the game's part typed as Genex spells links,
+ * Save inside it once it differs, and one line under it, the old link's promise and the changes
+ * left, or why Genex refused. Enter saves; Escape, or leaving it unchanged, closes it.
+ */
+function LinkEditor({
+  link,
+  change,
+  onDone,
+}: {
+  link: string;
+  change: LinkChange;
+  onDone: (moved: boolean) => void;
+}): JSX.Element {
+  const base = link.slice(0, link.lastIndexOf("/") + 1);
+  const current = link.slice(base.length);
+  const [value, setValue] = useState(current);
+  const [refused, setRefused] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const slug = genexSlug(value);
+  const changed = slug !== "" && slug !== current;
+  const save = async () => {
+    if (busy) return;
+    if (!changed) return onDone(false);
+    setBusy(true);
+    const why = await change.save(slug);
+    setBusy(false);
+    if (why) return setRefused(why);
+    onDone(true);
+  };
+  const left = typeof change.left === "number" ? ` · ${WORDS.changesLeft(change.left)}` : "";
+  return (
+    <div className="genex-publish-link-change">
+      <div className="genex-publish-link-field" data-public data-editing data-refused={refused ? true : undefined}>
+        <Icon name="globe" size={15} />
+        <label htmlFor="genex-publish-new-link" className="genex-publish-link-base">
+          {base.replace(/^https?:\/\//, "")}
+        </label>
+        <input
+          id="genex-publish-new-link"
+          className="genex-publish-link-input"
+          aria-label={WORDS.newLink}
+          value={value}
+          maxLength={GENEX_SLUG_MAX_CHARS}
+          spellCheck={false}
+          // biome-ignore lint/a11y/noAutofocus: the field replaces the link the person just pressed.
+          autoFocus
+          onChange={(e) => {
+            setValue(linkTyped(e.target.value));
+            setRefused(null);
+          }}
+          onBlur={() => {
+            if (!changed && !busy) onDone(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+            if (e.key === "Escape") {
+              // Escape closes the field; it does not close the dialog around it.
+              e.stopPropagation();
+              onDone(false);
+            }
+          }}
+        />
+        {changed && (
+          <Button variant="default" aria-label={WORDS.saveLink} busy={busy} onClick={() => void save()}>
+            {WORDS.saveLink}
+          </Button>
+        )}
+      </div>
+      <p className={refused ? "genex-publish-link-refused" : "genex-publish-hint"} role={refused ? "alert" : undefined}>
+        {refused ?? `${WORDS.oldLinkWorks}${left}`}
+      </p>
+    </div>
+  );
+}
+
+/** What the link's field shows as it is typed: lower case, a dash for anything a link can't hold. */
+const linkTyped = (value: string): string => value.toLowerCase().replace(/[^a-z0-9-]+/g, "-");
 
 /**
  * The tested draft players do not have yet, read-only with Copy, and one line under it: who can play
@@ -775,10 +944,6 @@ function useAppsPublish(
 const remixLineShown = (pressShown: boolean, publishing: boolean, view: PublishView, waiting: boolean): boolean =>
   pressShown && !publishing && !view.terms && !waiting;
 
-/** The main press's own words: Save name while it celebrates, a game's apps, else the view's. */
-const pressLabel = (celebrate: boolean, apps: string | null): string | undefined =>
-  celebrate ? WORDS.saveName : (apps ?? undefined);
-
 /**
  * Whether the dialog celebrates: an attempt it watched just went live; a new press ends it. A game
  * whose apps Genex still reviews has not reached players, so it is not celebrated.
@@ -812,10 +977,10 @@ interface PublishBodyProps {
 function PublishOrRights(props: PublishBodyProps): JSX.Element {
   const [ticked, setTicked] = useState<boolean | null>(null);
   const [rights, setRights] = useState(false);
-  const gameTitle = useLibrary((s) => s.games.find((g) => g.name === props.project)?.title);
+  const game = useLibrary((s) => s.games.find((g) => g.name === props.project));
   if (rights)
     return (
-      <RemixRights title={offeredTitle(props.record.state, gameTitle, props.project)} onBack={() => setRights(false)} />
+      <RemixRights title={offeredTitle(props.record.state, game, props.project)} onBack={() => setRights(false)} />
     );
   const remix = {
     allowed: remixAllowedNow(props.record.state?.remix, ticked),
@@ -823,6 +988,36 @@ function PublishOrRights(props: PublishBodyProps): JSX.Element {
     onRights: () => setRights(true),
   };
   return <PublishBody {...props} remix={remix} />;
+}
+
+/**
+ * The banner's name: the one being typed until it is saved (or put back), then the record's again.
+ * Saved, the record names it and so does Studio; refused, the old name returns and the failure line
+ * says why.
+ */
+function useBannerTitle(
+  record: ReturnType<typeof usePublishRecord>,
+  project: string,
+  saved: string,
+): { name: string; setTitle: (title: string) => void; onTitleDone: (save: boolean) => void } {
+  const [title, setTitle] = useState<string | null>(null);
+  const onTitleDone = (save: boolean) => {
+    const typed = title?.trim() ?? "";
+    if (!save || typed === "" || typed === saved) {
+      setTitle(null);
+      return;
+    }
+    void record.rename(typed).then(async (renamed) => {
+      // Studio names the game as Genex now does, so the library, the chat and the next Publish agree.
+      // The name as Genex took it, cleaned of line breaks and controls, which Studio would refuse.
+      if (renamed)
+        await studio()
+          .saveGame(project, { title: cleanGenexTitle(typed) ?? typed })
+          .catch(() => undefined);
+      setTitle(null);
+    });
+  };
+  return { name: title ?? saved, setTitle, onTitleDone };
 }
 
 /**
@@ -841,9 +1036,8 @@ function PublishBody({
   /** Allow remixing: whether this publish sends the game's project, and the presses that change it. */
   remix: { allowed: boolean; onAllowed: (allowed: boolean) => void; onRights: () => void };
 }): JSX.Element {
-  const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
-  const [title, setTitle] = useState<string | null>(null);
-  const name = title ?? offeredTitle(record.state, gameTitle, project);
+  const game = useLibrary((s) => s.games.find((g) => g.name === project));
+  const { name, setTitle, onTitleDone } = useBannerTitle(record, project, offeredTitle(record.state, game, project));
   const publishing = record.pressing === Pressing.Publish || view.running;
   const { platforms, apps, waiting, upToDate, inReview, replacesApps } = useAppsPublish(
     project,
@@ -852,13 +1046,12 @@ function PublishBody({
   );
   const celebrate = useCelebration(view, publishing, inReview);
   const share = useShareWhenLive(project, celebrate);
-  // A name changed after it went live is listed again by Publish update ("Save name" while celebrating).
-  const renamed = title !== null && title.trim() !== (record.state?.title ?? "") && view.stage === PublishStage.Public;
   const failure = record.error ? { text: record.error, details: record.error } : view.failure;
   const open = () => void record.act(GenexAction.PublishOpen, { target: LinkTarget.Gallery });
+  const change = { left: record.state?.renamesLeft, save: record.changeLink };
   const opening = record.pressing === Pressing.Action;
-  const pressShown = !celebrate || renamed;
-  const pressNeeded = pressHasWork(pressShown, view, publishing, { upToDate, renamed, inReview });
+  const pressShown = !celebrate;
+  const pressNeeded = pressHasWork(pressShown, view, publishing, { upToDate, inReview });
   return (
     <div
       className="genex-publish-body"
@@ -870,6 +1063,7 @@ function PublishBody({
         project={project}
         title={name}
         onTitle={setTitle}
+        onTitleDone={onTitleDone}
         view={view}
         publishing={publishing}
         celebrate={celebrate}
@@ -889,6 +1083,7 @@ function PublishBody({
           platforms={platforms}
           shown={!celebrate}
           native={record.state?.native}
+          onGenex={Boolean(record.state?.slug)}
           hostedWeb={record.state?.hostedWeb}
           onRemoveWeb={() => void record.act(GenexAction.PublishRemoveWeb)}
         />
@@ -899,7 +1094,7 @@ function PublishBody({
           project={project}
           shown={pressShown && saysWhoPlays(view, publishing, Boolean(cover.making), Boolean(view.testLink))}
         />
-        {!publishing && <Links view={view} project={project} onOpen={open} opening={opening} />}
+        {!publishing && <Links view={view} project={project} onOpen={open} opening={opening} change={change} />}
         {pressNeeded && (
           <Presses
             view={view}
@@ -907,7 +1102,7 @@ function PublishBody({
             name={name}
             publishing={publishing}
             project={project}
-            label={pressLabel(celebrate, apps)}
+            label={apps ?? undefined}
             apps={apps !== null}
             waiting={waiting}
             remix={remix.allowed}
@@ -937,14 +1132,14 @@ function PublishBody({
 
 /**
  * Whether the press shows and has anything to do: not on a live game whose apps are all on Genex already,
- * where its link takes the press's place, unless a new name waits to be saved.
+ * where its link takes the press's place. A new name never needs it: the name saves itself.
  */
 const pressHasWork = (
   shown: boolean,
   view: PublishView,
   publishing: boolean,
-  { upToDate, renamed, inReview }: { upToDate: boolean; renamed: boolean; inReview: boolean },
-): boolean => shown && (renamed || !upToDate || !settled(view, publishing, inReview));
+  { upToDate, inReview }: { upToDate: boolean; inReview: boolean },
+): boolean => shown && (!upToDate || !settled(view, publishing, inReview));
 
 /**
  * Whether what went is where it stays for now: live, or with Genex for review, with nothing going on
@@ -959,16 +1154,19 @@ function Links({
   project,
   onOpen,
   opening,
+  change,
 }: {
   view: PublishView;
   project: string;
   onOpen: () => void;
   opening: boolean;
+  /** The public link's pencil, for a game on Genex while nothing runs. */
+  change?: LinkChange;
 }): JSX.Element {
   const multiplayer = useLibrary((s) => s.games.find((g) => g.name === project)?.multiplayer === true);
   return (
     <>
-      {view.link && <LinkField link={view.link} onOpen={onOpen} opening={opening} />}
+      {view.link && <LinkField link={view.link} onOpen={onOpen} opening={opening} change={change} />}
       {view.testLink && (
         <TestLinkField link={view.testLink} listed={view.stage === PublishStage.Public} multiplayer={multiplayer} />
       )}
@@ -1061,7 +1259,7 @@ function Presses({
   project: string;
   /** Whether the press sends the game's project too, so others can remix it (Allow remixing). */
   remix: boolean;
-  /** The main press's words in place of the view's (Save name, for a rename right after it went live). */
+  /** The main press's words in place of the view's (a game with only apps names them). */
   label?: string;
   /** The game has only apps: the press publishes them instead of a web build. */
   apps?: boolean;

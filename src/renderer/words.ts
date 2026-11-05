@@ -31,13 +31,13 @@ import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from
 import { DataFolderProblem } from "../shared/data-folder.ts";
 import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
-import { PlayCardAction, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
+import { PlayCardAction, PlayChangeOutcome, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload, LoopRefusal } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
 import { computerSettingQuestion, type GithubLookupProblem } from "../shared/plugins.ts";
 import { computerControlOffered } from "../shared/computer-control.ts";
-import type { GenexPublishPhase } from "../shared/genex.ts";
+import { CloudBuildFailure, type GenexPublishPhase, MacNotarizeFailure } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayRemixRefusal, PlayShelf, RemixStep } from "../shared/play.ts";
 import {
   InstallFailure,
@@ -2224,6 +2224,9 @@ export const TRANSCRIPT_WORDS = {
   jobStopTitle: t("Stop this background work"),
   /** A missing macOS permission (`app_look_access`): the button opens System Settings, not Genex's own Settings. */
   openPrivacySettings: t("Open Privacy settings"),
+  /** An Ollama turn its small context refused: the button makes a 16K copy of the model and picks it. */
+  raiseContext: t("Raise context to 16K"),
+  raisingContext: t("Raising…"),
 } as const;
 
 // ── background work ───────────────────────────────────────────────────────────────────────
@@ -2545,6 +2548,18 @@ const PRIVACY_PANE_WORDS = {
 export function appAccessMissing(missing: readonly AppLookAccessKind[]): string {
   const panes = formatList(missing.map((pane) => PRIVACY_PANE_WORDS[pane]));
   return t("Genex can't see app windows yet: allow {panes} for Genex in System Settings.", { panes });
+}
+
+/** Under an Ollama turn its context refused: what Raise context to 16K does. */
+export function raiseContextOffer(model: string): string {
+  return t("Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.", {
+    model,
+  });
+}
+
+/** After Raise context: the chat now runs on the copy. */
+export function raisedContextDone(model: string): string {
+  return t("The chat now uses {model}. Send your message again.", { model });
 }
 
 /** The button for one pane when more than one is missing: "Open Accessibility settings". */
@@ -3786,6 +3801,33 @@ export const PUBLISH_PLATFORM_WORDS = {
     [PublishTarget.Windows]: t("Package it on a Windows PC"),
     [PublishTarget.Linux]: t("Package it on a Linux PC"),
   } satisfies Record<Exclude<PublishTarget, typeof PublishTarget.Web>, string>,
+  /** An app this computer can't make that Genex builds on its own computers, by how that goes. */
+  cloudOffer: t("Genex can build it on Windows for you"),
+  cloudPublishFirst: t("Publish the game first, then Genex can build it"),
+  /** A build on Genex still running: "Building on Genex · 5 min so far". */
+  cloudBuilding: (startedAt: string, now: number) =>
+    t("Building on Genex · {minutes} min so far", {
+      minutes: Math.max(0, Math.floor((now - Date.parse(startedAt)) / MINUTE_MS)),
+    }),
+  cloudFailed: {
+    [CloudBuildFailure.EngineUnsupported]: t("Genex can’t build this Unreal version yet"),
+    [CloudBuildFailure.Compile]: t("Genex couldn’t compile the game’s code"),
+    [CloudBuildFailure.Cook]: t("Genex couldn’t cook the game’s content"),
+    [CloudBuildFailure.Timeout]: t("The build on Genex took too long"),
+    [CloudBuildFailure.Quota]: t("You’ve used this month’s builds on Genex"),
+    [CloudBuildFailure.SourceTooBig]: t("The project is too big for Genex to build"),
+    [CloudBuildFailure.NotOnGenex]: t("Publish the game first, then Genex can build it"),
+    [CloudBuildFailure.Failed]: t("The build on Genex failed"),
+  } satisfies Record<CloudBuildFailure, string>,
+  cloudBuild: t("Build on Genex"),
+  cloudBuildLabel: (name: string) => t("Build the {app} on Genex", { app: name }),
+  cloudRetry: t("Try again"),
+  cloudRetryLabel: (name: string) => t("Build the {app} on Genex again", { app: name }),
+  /** The row's note while Genex builds it, and once its press was taken. */
+  building: t("Building…"),
+  cloudAsked: t("Asked Genex"),
+  /** A press Genex refused before building anything, in Genex's or the CLI's words. */
+  cloudRefused: (name: string, error: string) => t("Couldn’t build the {app} on Genex: {error}", { app: name, error }),
   /** A built app genex.games does not take yet: it shows, and Publish sends the web version. */
   soon: t("Coming soon"),
   soonLabel: (name: string) => t("{name}: publishing it is coming soon", { name }),
@@ -3810,6 +3852,25 @@ export const PUBLISH_PLATFORM_WORDS = {
   sending: t("Sending…"),
   sent: t("On Genex"),
   sentLabel: (name: string) => t("{name}: on Genex for desktop players", { name }),
+  /** A Mac app signed and notarized under the creator's own Apple Developer ID. */
+  notarized: t("notarized"),
+  /** Why a Mac app went without the notarizing its creator turned on, in whole sentences. */
+  notarizeFailed: {
+    [MacNotarizeFailure.NotAnApp]: t("The Mac app went without notarization: it isn’t a Mac app bundle."),
+    [MacNotarizeFailure.NoIdentity]: t(
+      "The Mac app went without notarization: no Developer ID Application certificate is in your keychain.",
+    ),
+    [MacNotarizeFailure.ManyIdentities]: t(
+      "The Mac app went without notarization: your keychain has several Developer ID certificates. Name one in Genex’s settings.",
+    ),
+    [MacNotarizeFailure.Sign]: t("The Mac app went without notarization: codesign couldn’t sign it."),
+    [MacNotarizeFailure.Submit]: t(
+      "The Mac app went without notarization: Apple’s notary couldn’t be reached with your saved notary profile.",
+    ),
+    [MacNotarizeFailure.Rejected]: t("The Mac app went without notarization: Apple’s notary rejected it."),
+    [MacNotarizeFailure.Staple]: t("The Mac app went without notarization: Apple’s ticket couldn’t be attached to it."),
+    [MacNotarizeFailure.Stopped]: t("The Mac app went without notarization: notarizing was stopped."),
+  } satisfies Record<MacNotarizeFailure, string>,
   failed: t("Not sent"),
   failedLine: (name: string, error: string) => t("Couldn’t send the {app}: {error}", { app: name, error }),
   /** An app sent by someone other than an admin: Genex reviews it before players get it. */
@@ -4782,6 +4843,13 @@ export const GENEX_WORDS = {
     copied: t("Copied"),
     /** The public link's label in the dialog, beside the globe. */
     publicLink: t("Public:"),
+    /** The public link's own press, its pencil: the field it opens, its Save and the line under it. */
+    changeLink: t("Change the link"),
+    newLink: t("New link"),
+    saveLink: t("Save"),
+    linkSaved: t("Link saved"),
+    oldLinkWorks: t("The old link will still open the game"),
+    changesLeft: (count: number) => t("{count, plural, one {# change left} other {# changes left}}", { count }),
     /** The tested draft, while players do not have it yet: its label, its Copy, and the line under it. */
     testLink: t("Test link:"),
     copyTestLinkLabel: t("Copy the test link"),
@@ -4795,8 +4863,6 @@ export const GENEX_WORDS = {
     slow: t("Taking longer than usual."),
     /** The banner's name, the one moment an attempt the dialog watched goes live: `<name>` is the name's own press. */
     isLive: t("<name>{title}</name> <live>is live!</live>"),
-    /** The press that lists a game renamed right after it went live under its new name. */
-    saveName: t("Save name"),
     replay: t("Play the celebration again"),
     /** The banner's cover controls: ask for another, say what it should show, flip through the recent ones. */
     anotherCover: t("Another cover"),
@@ -5685,6 +5751,8 @@ export const PLAY_CARD_MENU_WORDS = {
   item: {
     [PlayCardAction.CopyLink]: t("Copy link"),
     [PlayCardAction.Remixing]: t("Turn off remixing"),
+    [PlayCardAction.Rename]: t("Rename"),
+    [PlayCardAction.Link]: t("Change link"),
     [PlayCardAction.Cover]: t("Change cover"),
     [PlayCardAction.Mobile]: t("Mobile support"),
     [PlayCardAction.Tags]: t("Edit tags"),
@@ -5754,6 +5822,32 @@ export const PLAY_CARD_MENU_WORDS = {
     working: t("Deleting…"),
     done: (title: string) => t("{title} is deleted", { title }),
     failed: t("Couldn’t delete the game."),
+  },
+  rename: {
+    title: (title: string) => t("Rename {title}", { title }),
+    sub: t("The name players see on Play and genex.games."),
+    label: t("Name"),
+    noName: t("Give the game a name with a letter or a number in it."),
+    done: (title: string) => t("Renamed to {title}", { title }),
+    failed: t("Couldn’t rename the game."),
+  },
+  link: {
+    title: (title: string) => t("Change the link of {title}", { title }),
+    sub: t("The old link will still open the game, for players who already have it too."),
+    label: t("New link"),
+    empty: t("Give the link a letter or a number."),
+    done: (address: string) => t("The game is at {address} now", { address }),
+    failed: t("Couldn’t change the link."),
+    kept: {
+      [PlayChangeOutcome.LinkTaken]: t("Another game already has this link. Try another one."),
+      [PlayChangeOutcome.LinkLimit]: t("This game has used all its link changes."),
+      [PlayChangeOutcome.LinkReserved]: t("Genex keeps this link for itself. Try another one."),
+      [PlayChangeOutcome.LinkBusy]: t("Genex is still publishing this game. Change the link once it's done."),
+    },
+  },
+  players: {
+    label: t("Players"),
+    failed: t("Couldn’t change Players."),
   },
   remixing: {
     on: (title: string) => t("Anyone can remix {title} now", { title }),

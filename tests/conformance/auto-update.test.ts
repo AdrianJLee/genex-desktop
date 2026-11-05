@@ -10,7 +10,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { setImmediate } from "node:timers/promises";
-import { RestartAnswer, UpdateAction, UpdateCheckStatus } from "../../src/shared/app-update.ts";
+import {
+  RestartAnswer,
+  UpdateAction,
+  UpdateCheckStatus,
+  type UpdateFailedNote,
+  UpdateFailure,
+  UpdateFeedState,
+} from "../../src/shared/app-update.ts";
 import {
   AUTO_UPDATE_ENABLED,
   InstallCheck,
@@ -32,10 +39,17 @@ import {
   installedFromGenexRepository,
   releaseVersion,
   watchInstaller,
+  createUpdateRecovery,
+  type FeedProbe,
+  OFFER_DOWNLOAD_AFTER_FAILURES,
+  probeFeed,
+  squirrelInstalled,
+  type UpdateRecoveryDeps,
+  updateFeedUrl,
 } from "../../src/main/auto-update.ts";
 import { openStudioLog } from "../../src/main/logs.ts";
 
-import { ReleaseCheckKind } from "../../src/main/release-check.ts";
+import { type ReleaseCheck, ReleaseCheckKind } from "../../src/main/release-check.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const require = createRequire(import.meta.url);
@@ -48,6 +62,7 @@ const released: UpdateLaunch = {
   testLaunch: false,
   productName: "Genex",
   systemPackages: false,
+  installer: true,
 };
 
 test("the first check waits out Squirrel's hold on a fresh install, and runs at once otherwise", () => {
@@ -579,4 +594,162 @@ test("the menu's answer names the versions and offers the one next step", () => 
   for (const status of [UpdateCheckStatus.Downloading, UpdateCheckStatus.Off, UpdateCheckStatus.Failed]) {
     assert.equal(updateCheckNote({ status, current: "0.1.0", update: null }).act, null, status);
   }
+});
+
+test("a Windows copy without Squirrel's Update.exe offers downloads instead of failing every check", () => {
+  // Electron's autoUpdater answers such a copy "Can not find Squirrel", every hour, for good.
+  assert.deepEqual(autoUpdateDecision({ ...released, platform: "win32", installer: false }), {
+    start: true,
+    mode: UpdateMode.Notify,
+  });
+  const installed = (path: string) => path === "C:\\Users\\me\\AppData\\Local\\genex\\Update.exe";
+  assert.equal(squirrelInstalled("C:\\Users\\me\\AppData\\Local\\genex\\app-0.1.25\\genex.exe", installed), true);
+  assert.equal(squirrelInstalled("E:\\Games\\Genex\\genex.exe", installed), false, "a copied app folder");
+  assert.equal(squirrelInstalled("C:\\Users\\me\\Downloads\\app-0.1.25\\genex.exe", installed), false);
+});
+
+test("Genex asks the feed at the address the installer reads", () => {
+  assert.equal(
+    updateFeedUrl("win32", "x64", "0.1.25"),
+    `https://update.electronjs.org/${UPDATE_REPO}/win32-x64/0.1.25/RELEASES`,
+  );
+  assert.equal(
+    updateFeedUrl("darwin", "arm64", "0.1.25"),
+    `https://update.electronjs.org/${UPDATE_REPO}/darwin-arm64/0.1.25`,
+  );
+});
+
+test("asking the feed after a failure tells a blocked feed from a broken installer, and never throws", async () => {
+  const answering = (status: number) => async () => new Response(status === 204 ? null : "x", { status });
+  const throwing = (error: unknown) => async () => {
+    throw error;
+  };
+  const timeout = Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" });
+  const cases: [string, () => Promise<Response>, FeedProbe][] = [
+    ["RELEASES served", answering(200), { feed: UpdateFeedState.Reachable, netError: null, httpStatus: null }],
+    ["macOS: current", answering(204), { feed: UpdateFeedState.Reachable, netError: null, httpStatus: null }],
+    ["the service fails", answering(503), { feed: UpdateFeedState.Refused, netError: null, httpStatus: 503 }],
+    [
+      "no DNS for the feed",
+      throwing(new Error("net::ERR_NAME_NOT_RESOLVED")),
+      { feed: UpdateFeedState.Unreachable, netError: "ERR_NAME_NOT_RESOLVED", httpStatus: null },
+    ],
+    [
+      "no answer in time",
+      throwing(timeout),
+      { feed: UpdateFeedState.Unreachable, netError: "ERR_TIMED_OUT", httpStatus: null },
+    ],
+    [
+      "prose is not a code",
+      throwing(new Error("The remote name could not be resolved: 'update.electronjs.org'")),
+      { feed: UpdateFeedState.Unreachable, netError: null, httpStatus: null },
+    ],
+    ["not an Error", throwing("offline"), { feed: UpdateFeedState.Unreachable, netError: null, httpStatus: null }],
+  ];
+  for (const [label, fetchImpl, expected] of cases)
+    assert.deepEqual(await probeFeed("https://update.electronjs.org/x", fetchImpl, 1000), expected, label);
+});
+
+/** A recovery whose feed and GitHub answer as told, with what it reported, offered and logged. */
+function recovery(probe: FeedProbe, release: ReleaseCheck, installer: boolean | null = true) {
+  const reports: UpdateFailedNote[] = [];
+  const offered: string[] = [];
+  let probes = 0;
+  let releaseChecks = 0;
+  const deps: UpdateRecoveryDeps = {
+    probeFeed: async () => {
+      probes++;
+      return probe;
+    },
+    latestRelease: async () => {
+      releaseChecks++;
+      return release;
+    },
+    available: (found) => offered.push(found.version),
+    report: (note) => reports.push(note),
+    log: () => undefined,
+    installer,
+  };
+  return { deps, reports, offered, probes: () => probes, releaseChecks: () => releaseChecks };
+}
+
+const BLOCKED: FeedProbe = { feed: UpdateFeedState.Unreachable, netError: "ERR_NAME_NOT_RESOLVED", httpStatus: null };
+const NEWER: ReleaseCheck = {
+  kind: ReleaseCheckKind.Newer,
+  release: { version: "0.1.28", url: `https://github.com/${UPDATE_REPO}/releases/tag/v0.1.28` },
+};
+
+test("a feed blocked hour after hour still reaches the newest release, as a download", async () => {
+  const run = recovery(BLOCKED, NEWER, true);
+  const recover = createUpdateRecovery(run.deps);
+  await recover.failed(UpdateFailure.Check);
+  assert.deepEqual(run.offered, [], "one failure is often a laptop waking up offline");
+  assert.equal(run.releaseChecks(), 0);
+  for (let i = 1; i < OFFER_DOWNLOAD_AFTER_FAILURES; i++) await recover.failed(UpdateFailure.Check);
+  assert.deepEqual(run.offered, ["0.1.28"]);
+  assert.deepEqual(run.reports.at(-1), {
+    stage: UpdateFailure.Check,
+    ...BLOCKED,
+    installer: true,
+    offeredDownload: true,
+  });
+  assert.deepEqual(run.reports[0], { stage: UpdateFailure.Check, ...BLOCKED, installer: true, offeredDownload: false });
+  assert.equal(run.probes(), OFFER_DOWNLOAD_AFTER_FAILURES, "every failure says what the feed answered");
+});
+
+test("an answered check starts the count again, and a current release offers nothing", async () => {
+  const run = recovery(BLOCKED, NEWER);
+  const recover = createUpdateRecovery(run.deps, { offerAfter: 2 });
+  await recover.failed(UpdateFailure.Check);
+  recover.answered();
+  await recover.failed(UpdateFailure.Check);
+  assert.deepEqual(run.offered, []);
+  const current = recovery(BLOCKED, { kind: ReleaseCheckKind.Current });
+  const quiet = createUpdateRecovery(current.deps, { offerAfter: 1 });
+  await quiet.failed(UpdateFailure.Check);
+  assert.deepEqual(current.offered, []);
+  assert.equal(current.reports[0]?.offeredDownload, false);
+});
+
+test("failures that arrive while one is looked into are counted but looked into once", async () => {
+  const run = recovery(BLOCKED, NEWER);
+  const recover = createUpdateRecovery(run.deps, { offerAfter: 3 });
+  await Promise.all([recover.failed(UpdateFailure.Check), recover.failed(UpdateFailure.Check)]);
+  assert.equal(run.probes(), 1);
+  await recover.failed(UpdateFailure.Check);
+  assert.deepEqual(run.offered, ["0.1.28"], "the third in a row offers");
+});
+
+test("a Windows download that never ends offers the release page after the hourly checks it refuses", async () => {
+  // Squirrel.Windows' Update.exe --update hung; every hourly --checkForUpdate was refused as
+  // "already running" for 23 hours, and the copy stayed on its version.
+  const win = squirrel();
+  const run = recovery({ feed: UpdateFeedState.Reachable, netError: null, httpStatus: null }, NEWER);
+  const recover = createUpdateRecovery(run.deps);
+  watchInstaller(win.updater, {
+    timeoutMs: 1000,
+    failed: (stage) => void recover.failed(stage),
+    answered: () => recover.answered(),
+  });
+  for (let hour = 0; hour < OFFER_DOWNLOAD_AFTER_FAILURES; hour++) {
+    win.updater.checkForUpdates();
+    win.found();
+    win.end("error", new Error("AutoUpdater process with arguments --checkForUpdate,https://x is already running"));
+    await setImmediate();
+  }
+  assert.deepEqual(run.offered, ["0.1.28"]);
+  assert.equal(run.reports[0]?.stage, UpdateFailure.Download);
+});
+
+test("only an update found absent or downloaded counts as an answered check", () => {
+  const mac = squirrel();
+  let answered = 0;
+  watchInstaller(mac.updater, { answered: () => answered++ });
+  mac.updater.checkForUpdates();
+  mac.found();
+  assert.equal(answered, 0, "a found update can still fail to download");
+  mac.end("update-downloaded", {}, "", "Genex 0.1.28");
+  mac.updater.checkForUpdates();
+  mac.end("update-not-available");
+  assert.equal(answered, 2);
 });

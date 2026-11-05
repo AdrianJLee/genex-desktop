@@ -1425,6 +1425,8 @@ export default {
   "Genex cover": "Genex 封面",
   "Genex credits": "Genex 积分",
   "Genex decides from crash reports": "Genex 根据崩溃报告决定",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genex 没有及时响应。请过一分钟再看看游戏的链接。",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genex 没有点击任何东西。请在启动器中自己安装 Unreal {version}：{clicks}。",
   "Genex didn't click anything. Turn it on yourself: {clicks}.": "Genex 没有点击任何内容。请自己开启：{clicks}。",
@@ -1464,6 +1466,8 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex 正在安装 Godot。你无需做任何事。",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex 以 MIT 许可证开源。它还包含其他项目的软件，各自遵循自己的许可证。",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genex 还在发布这个游戏,发布完成后再修改链接。",
   "Genex isn't getting Roblox Studio right now.": "Genex 现在没有在获取 Roblox Studio。",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genex 会先备份每个文件，“撤销设置”可以撤回这些更改。你改过的 Genex 编辑器辅助程序文件会以 .mine 副本保留在旁边。",
@@ -2277,6 +2281,11 @@ export default {
   "Nothing is failing.": "没有失败的检查。",
   "Nothing is installing.": "当前没有正在安装的内容。",
   "Nothing is online for this game yet": "此游戏还没有任何在线内容",
+  "Give the link a letter or a number.": "链接里要有字母或数字。",
+  "Another game already has this link. Try another one.": "这个链接已被其他游戏使用,换一个试试。",
+  "This game has used all its link changes.": "这个游戏的链接修改次数已用完。",
+  "Genex keeps this link for itself. Try another one.": "这个链接由 Genex 保留,换一个试试。",
+  "Give the game a name with a letter or a number in it.": "给游戏起一个含有字母或数字的名字。",
   "Nothing kept yet": "暂未保留任何内容",
   "Nothing made": "没有产出",
   "Nothing made yet": "还没有做出任何东西",
@@ -2803,6 +2812,9 @@ export default {
   "Remove plugin": "移除插件",
   "Remove preset": "删除预设",
   "Remove queued message": "移除排队中的消息",
+  "Edit queued message": "编辑排队中的消息",
+  "Send now": "立即发送",
+  "Stop and send now": "停止并立即发送",
   "Remove tag": "移除标记",
   "Remove the waiting messages first: this harness cannot take them back.":
     "请先移除排队中的消息：这个 Harness 无法撤回它们。",
@@ -3005,7 +3017,6 @@ export default {
   "Save as preset…": "存为预设…",
   "Save image": "保存图片",
   "Save key": "保存密钥",
-  "Save name": "保存名称",
   "Save tags": "保存标签",
   "Save the new game in": "把新游戏保存到",
   "Save to your library": "保存到你的库",
@@ -5510,6 +5521,40 @@ export default {
   "Your game is on Roblox": "你的游戏已上线 Roblox",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "你继续工作时，游戏的智能体会在 Roblox Studio 中发布它。",
+  "Asked Genex": "已交给 Genex",
+  "Build on Genex": "在 Genex 上制作",
+  "Build the {app} on Genex": "在 Genex 上制作{app}",
+  "Build the {app} on Genex again": "在 Genex 上重新制作{app}",
+  "Building on Genex · {minutes} min so far": "正在 Genex 上制作 · 已 {minutes} 分钟",
+  "Building…": "制作中…",
+  "Couldn’t build the {app} on Genex: {error}": "无法在 Genex 上制作{app}：{error}",
+  "Genex builds only Windows apps on its own computers": "Genex 在自己的电脑上只能制作 Windows 应用",
+  "Genex can build it on Windows for you": "Genex 可以替你在 Windows 上制作",
+  "Genex can’t build this Unreal version yet": "Genex 暂时还不支持这个 Unreal 版本",
+  "Genex couldn’t compile the game’s code": "Genex 无法编译游戏代码",
+  "Genex couldn’t cook the game’s content": "Genex 无法烘焙游戏内容",
+  "Open the game to build its app on Genex": "先打开游戏，才能在 Genex 上制作它的应用",
+  "Publish the game first, then Genex can build it": "先发布游戏，然后 Genex 才能制作",
+  "The build on Genex failed": "在 Genex 上制作失败",
+  "The build on Genex took too long": "在 Genex 上制作用时太长",
+  "The project is too big for Genex to build": "项目太大，Genex 无法制作",
+  "This version of Genex can’t build apps on Genex yet": "这个版本的 Genex 还不能在 Genex 上制作应用",
+  "You’ve used this month’s builds on Genex": "你本月在 Genex 上的制作次数已用完",
+  notarized: "已公证",
+  "The Mac app went without notarization: Apple’s notary couldn’t be reached with your saved notary profile.":
+    "Mac 应用未经公证就发布了：无法用你保存的公证配置连接 Apple 的公证服务。",
+  "The Mac app went without notarization: Apple’s notary rejected it.":
+    "Mac 应用未经公证就发布了：Apple 的公证服务拒绝了它。",
+  "The Mac app went without notarization: Apple’s ticket couldn’t be attached to it.":
+    "Mac 应用未经公证就发布了：无法附加 Apple 的公证票据。",
+  "The Mac app went without notarization: codesign couldn’t sign it.":
+    "Mac 应用未经公证就发布了：codesign 无法为它签名。",
+  "The Mac app went without notarization: it isn’t a Mac app bundle.": "Mac 应用未经公证就发布了：它不是 Mac 应用包。",
+  "The Mac app went without notarization: no Developer ID Application certificate is in your keychain.":
+    "Mac 应用未经公证就发布了：你的钥匙串里没有 Developer ID Application 证书。",
+  "The Mac app went without notarization: notarizing was stopped.": "Mac 应用未经公证就发布了：公证被中止了。",
+  "The Mac app went without notarization: your keychain has several Developer ID certificates. Name one in Genex’s settings.":
+    "Mac 应用未经公证就发布了：你的钥匙串里有多个 Developer ID 证书。请在 Genex 设置里指定一个。",
   "Anything else we should know? (optional)": "还有什么想告诉我们的吗？（可选）",
   "Balance {amount}": "余额 {amount}",
   "Balance {now} → {after}": "余额 {now} → {after}",
@@ -5782,4 +5827,26 @@ export default {
   "This game was taken down, so Genex keeps its web version for now.":
     "这款游戏已被下架，所以 Genex 暂时保留它的网页版。",
   "Genex couldn’t finish removing the web version. Press Remove again.": "Genex 没能完成移除网页版。请再按一次“移除”。",
+  "Change link": "更改链接",
+  "Change the link": "更改链接",
+  "Change the link of {title}": "更改 {title} 的链接",
+  "Couldn’t change Players.": "无法更改玩家人数。",
+  "Couldn’t change the link.": "无法更改链接。",
+  "Couldn’t rename the game.": "无法重命名游戏。",
+  "Link saved": "链接已保存",
+  "New link": "新链接",
+  "Rename {title}": "重命名 {title}",
+  "Renamed to {title}": "已重命名为 {title}",
+  "The game is at {address} now": "游戏现在位于 {address}",
+  "The name players see on Play and genex.games.": "玩家在 Play 和 genex.games 上看到的名称。",
+  "The old link will still open the game": "旧链接仍会打开这个游戏",
+  "The old link will still open the game, for players who already have it too.":
+    "旧链接仍会打开这个游戏，已经有这个链接的玩家也一样。",
+  "{count, plural, one {# change left} other {# changes left}}": "{count, plural, other {还可更改 # 次}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex 可以复制 {model}，让它以 16K 上下文运行。副本共用同一份文件，不会下载任何内容。",
+  "Ollama is unavailable": "Ollama 不可用",
+  "Raise context to 16K": "将上下文提升到 16K",
+  "Raising…": "正在提升…",
+  "The chat now uses {model}. Send your message again.": "对话现在使用 {model}。请再发送一次消息。",
 } satisfies LocaleCatalog;

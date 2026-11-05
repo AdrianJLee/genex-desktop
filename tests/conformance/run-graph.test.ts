@@ -19,7 +19,8 @@ import {
   type Rect,
 } from "../../src/renderer/run-graph.ts";
 import { checkCounts } from "../../src/renderer/words.ts";
-import { answeredRecords } from "../../src/shared/run-graph-events.ts";
+import { customRecord } from "../../src/shared/custom-events.ts";
+import { answeredRecords, compactGraphEvents } from "../../src/shared/run-graph-events.ts";
 
 let counter = 0;
 function event(eventType: string, payload: Record<string, unknown>): EventEnvelope {
@@ -218,6 +219,82 @@ describe("buildRunGraph", () => {
       [log[2]!.id, log[4]!.id],
     );
     assert.deepEqual(answeredRecords(log, "run_other"), [], "a run with no record of its own answers nothing");
+  });
+
+  describe("a paused build the chat goes on with", () => {
+    /** A record of the chat's thread: its queue's, or the steer the chat records for a resume. */
+    const chat = (eventType: string, payload: Record<string, unknown>): EventEnvelope => {
+      const record = event(eventType, {});
+      return { ...record, thread_id: "chat", data: { type: "custom", event_type: eventType, payload } };
+    };
+    /** The person's message, as the chat queues it. */
+    const queued = (messageId: string, text: string, pictures = 0): EventEnvelope =>
+      chat("coordinator_message_queued", {
+        messageId,
+        action: pictures
+          ? { text, attachmentsArtifact: `message_attachments_${messageId}`, imageCount: pictures }
+          : { text },
+      });
+    /** The person's message, as the chat queues it and begins answering it. */
+    const said = (messageId: string, text: string, pictures = 0): EventEnvelope[] => [
+      queued(messageId, text, pictures),
+      chat("coordinator_message_processing", { messageId }),
+    ];
+    /** A start of the build: its registration and its start, both carrying the goal it began with. */
+    const start = (extra: Record<string, unknown> = {}): EventEnvelope[] => [
+      event("run_registered", { goal: "Recreate this area", ...extra }),
+      event("run_started", { goal: "Recreate this area", ...extra }),
+    ];
+    /** The lead's turn ended with nothing at work: the build pauses for the person's next word. */
+    const paused = (): EventEnvelope => event("run_finished", { paused: true, stoppedBecause: "waiting" });
+    /** The chat's `resume_run`: the words it goes on with, from the message it answers. */
+    const goingOn = (messageId: string, text: string): EventEnvelope =>
+      chat("run_steering", { runId: "run_x", text, sourceMessageId: messageId });
+    /** The first build, started from a message with two pictures, and paused. */
+    const firstBuild = (): EventEnvelope[] => [...said("m1", "Recreate this area", 2), ...start(), paused()];
+    const startOf = (graph: ReturnType<typeof buildRunGraph>) => {
+      const run = graph?.nodes.find((node) => node.kind === "run");
+      return run?.kind === "run" ? { goal: run.goal, asked: run.asked } : undefined;
+    };
+
+    it("asks it what the chat went on with, and shows that message's pictures", () => {
+      const log = [
+        ...firstBuild(),
+        ...said("m2", "now make it rain, like this", 1),
+        goingOn("m2", "Add rain over the area"),
+        ...start({ resumed: true }),
+      ];
+      const expected = {
+        goal: "Add rain over the area",
+        asked: { threadId: "chat", messageId: "m2", count: 1 },
+      };
+      assert.deepEqual(startOf(buildRunGraph(log)), expected, "the chat's own log");
+      // The run's summary hands the graph its own records and the messages it answers: the same start.
+      const own = log.filter((record) => customRecord(record.data)?.payload.runId === "run_x");
+      const summary = compactGraphEvents([...answeredRecords(log, "run_x"), ...own]);
+      assert.deepEqual(startOf(buildRunGraph(summary)), expected, "the run's summary");
+    });
+
+    it("shows no pictures when the message it went on with had none", () => {
+      const log = [...firstBuild(), ...said("m2", "add rain"), goingOn("m2", "Add rain"), ...start({ resumed: true })];
+      assert.deepEqual(startOf(buildRunGraph(log)), { goal: "Add rain", asked: null });
+    });
+
+    it("keeps the last ask when no words went on with it, and while the build works", () => {
+      const asked = { goal: "Add rain over the area", asked: { threadId: "chat", messageId: "m2", count: 1 } };
+      const resumed = [
+        ...firstBuild(),
+        ...said("m2", "now make it rain, like this", 1),
+        goingOn("m2", "Add rain over the area"),
+        ...start({ resumed: true }),
+      ];
+      // A word the lead hears while it works steers the build; it is not what the build was asked.
+      const steered = [...resumed, queued("m3", "brighter", 1), goingOn("m3", "Make it brighter")];
+      assert.deepEqual(startOf(buildRunGraph(steered)), asked, "a steer while the build works");
+      // Resume on the build's card says nothing new: the build goes on with what it was last asked.
+      const button = [...resumed, paused(), ...start({ resumed: true })];
+      assert.deepEqual(startOf(buildRunGraph(button)), asked, "a Resume with no words");
+    });
   });
 
   it("returns null for a thread with no run", () => {

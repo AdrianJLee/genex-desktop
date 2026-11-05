@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.13.0",
+  "version": "1.15.0",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -285,6 +285,24 @@
       "label": "Blender server address",
       "type": "string",
       "default": ""
+    },
+    {
+      "key": "mac-notarize",
+      "label": "Sign and notarize Mac apps with my own Apple Developer ID",
+      "type": "boolean",
+      "default": false
+    },
+    {
+      "key": "mac-signing-identity",
+      "label": "Developer ID to sign with (empty: the only one in your keychain)",
+      "type": "string",
+      "default": ""
+    },
+    {
+      "key": "mac-notary-profile",
+      "label": "Notary profile saved with xcrun notarytool store-credentials",
+      "type": "string",
+      "default": "genex-notary"
     }
   ],
   "actions": [
@@ -338,9 +356,22 @@
       "confirmation": "Upload this game's ready Mac, Windows and Linux apps from its folder to Genex and list the game in the gallery, where people playing in the Genex desktop app can install them. The first time, a hosted Genex project is created for this game under your account."
     },
     {
+      "name": "cloud-build",
+      "label": "Build an app on Genex",
+      "confirmation": "Upload this game's project privately to Genex, which builds an app of it for another system (a Windows app of an Unreal game made on a Mac) on its own computers and adds it to the game's Genex page. Only you and Genex can see the project."
+    },
+    {
       "name": "publish-remove-web",
       "label": "Remove web version",
       "confirmation": "Take this game's web version off Genex. Its page shows its Mac, Windows and Linux apps again, and the apps stay as they are. You can publish a web version again later."
+    },
+    {
+      "name": "publish-name",
+      "label": "Rename the game"
+    },
+    {
+      "name": "publish-link",
+      "label": "Change the game's link"
     },
     {
       "name": "publish-allow-upload",

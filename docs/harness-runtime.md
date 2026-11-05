@@ -476,7 +476,7 @@ counts the pool's running workers and the run's running jobs for it (`open/activ
 The open Loop's turns, as every Loop's (see [What ends a Loop](#what-ends-a-loop)): a turn has no time
 limit, and an outage is waited out on the Loop's clock. A turn that ends with nothing at work (no
 worker's run, no running job, no recovery of the project's app: `hasWorkAtHand`) and nothing to wake
-the lead for closes the Loop; with something at work the lead rests until it ends, the person speaks or
+the lead for pauses the Loop for the person's next word; with something at work the lead rests until it ends, the person speaks or
 asks to finish, or a rewind or restart it asked for has run at the turn's end (`NoteKind.AskDone`):
 nothing asks it what next. The person's finish reaching a resting lead opens its last turn. A lead whose game
 folder another chat's turn holds waits for it until it is free, outside the outage ladder
@@ -510,11 +510,28 @@ fires `crash` and waits until the app answers (`MAX_REOPENS`), then goes back to
 there was when it saw the crash (its writers in place stopped first; the lead told as the restore lands;
 a close or a Stop before the restore's turn on the git-write queue takes nothing back; a merge of a
 worker's copy whose turn comes once the Loop pauses or closes lands nothing),
-else pauses the Loop with the reason (`OpenLoop.halted`: the lead's own session under way aborted,
+else hands the app to the lead (`OpenLoop.appDown`): a line with the app's own reason (a C++ build
+error names its file and line) wakes or reaches it (`NoteKind.AppCrashed`), its turn is never cut, no
+recovery starts, `save_point` and `finish` are refused, and a turn's end that heard that line (never
+the wrap-up turn's) keeps nothing and runs the rewind the lead asked for (a restore Genex held pauses
+in its hold's words; one that brings the app back ends there, and says so), then, unless a rewind
+brought it back, Genex's try beside the wake loop (standing for its `restart`): a `health` look
+first, an app that answers or is only busy waited for and never reopened under it, else `crash` once
+more. A clean `health` answer meanwhile (the lead's own Open) gives the app back; a look no step
+answered says nothing. Past `MAX_HANDOFFS` such tries since the lead's last `save_point` (an app that
+answers only to stop again counts on) it pauses the Loop in the person's words, never the app's error,
+and never once the run's wrap-up started (`LoopRun.wrapping`: a try still under way never cuts it, and
+the close keeps the folder as it is)
+(`held-words.ts` `appLostWords`; `OpenLoop.halted`: the lead's own session under way aborted,
 `engine.abort {cwd, lead}`, again each watch round until it ends, as after a Stop; an outage wait ends
 at its next step; no session opens, and `save_point`, `rewind`, `restart`, `finish`, `worker_start` and
-`worker_mark` are refused, as once the Loop closes; the close paused); a crash step Genex held pauses in its hold's words and
-goes back nowhere. The recovery runs beside the wake loop (`open.recovering`), counted as work at
+`worker_mark` are refused, as once the Loop closes; the close paused; a Resume starts over). The
+journal keeps whether the app was closed (`OpenJournal.appLost`, from the crash until it is back, so a
+Stop or Genex's hold during the recovery keeps it too): a Resume whose `run.prepare` a plugin's step
+still blocks hands it to the lead again, its tries running `run.prepare` (even once the app answers,
+which alone doesn't give it back then), and one that opens it tells the lead; any other held Resume
+stays paused in its plugin's words. A crash step
+Genex held pauses in its hold's words and goes back nowhere. The recovery runs beside the wake loop (`open.recovering`), counted as work at
 hand (a lone lead rests until it is back): the person's words still wake the lead, `save_point` and
 `finish` are refused meanwhile, the turn's end keeps and restores nothing, and only the way back takes
 the git-write queue. Once the Loop begins to close it stops at its next step (its waits for the app
@@ -828,11 +845,13 @@ A Loop has no clock, one rule for every Loop (`director/wake.ts`, `wake-schedule
 no time limit of Genex's own ends a turn, wakes the lead or closes the run, and a lead's turn is
 delegated with no `timeoutMs`. The lead's `finish` ends it. A lead turn that ends with nothing at work
 (no worker's run, no running job of the run, no recovery of the project's app: `hasWorkAtHand`) and
-nothing to wake it for closes it, as a bare agent's turn ends: its last message is the summary, with no
-wrap-up turn after it, and the close says so ("the lead's turn ended with nothing at work"). With
+nothing to wake it for pauses it, as a bare agent's turn ends and waits for the person: a build is the
+whole making of the game, so their next word goes on with it (`director.ts` `closeLeftOpen`; the
+chat's own session holds `resume_run`). Its last message is the summary, with no wrap-up turn after
+it, and the pause says so ("the lead's turn ended with nothing at work"). With
 workers or jobs at work the lead rests, and Genex wakes it when one ends. The run's jobs are read at
 once after each turn, then every 5 seconds (`activeWork`); a read the host could not answer counts as
-work, so only one that says no job runs closes the Loop, and a job's end is read again at once before
+work, so only one that says no job runs pauses the Loop, and a job's end is read again at once before
 it does, so none is missed. The person's Finish, and a
 failed turn, give the lead its one wrap-up turn at once, opened with Genex's one line
 (`LOOP_WORDS.finishAsked`, or `turnFailed` with the failure: the Loop closes when this turn ends;
@@ -908,9 +927,12 @@ the new Loop rides on the same `run_control` record (`next-loop-record.ts`), and
 closed `handleRunStart` starts it on the same game with the run's engine, model and roles, as a
 launch from the chat would (`next-loop.ts`); a Stop pressed since starts nothing. Outside a run, the
 chat's own turn holds the Loop's start on the person's words (`loop/start-autopilot.ts`,
-`delegated-turn.ts` `launches`), after a run it led too, finished or paused; the agent decides when
-to call it, and
-every Loop it starts goes until its lead finishes it or its turn ends with nothing at work.
+`delegated-turn.ts` `launches`), after a run it led too, finished or paused. Its description says what
+a build is, the whole making of the game, and when one starts: as the agent sets to making the game
+or a change beyond a quick fix, instead of doing that work in its reply; a paused build is gone on
+with (`resume_run`), and a new one starts only when needed (the last one finished, or the person
+starts over). The agent decides, and every Loop it starts goes until its lead finishes it, paused
+whenever a turn ends with nothing at work.
 
 Worker plugin approvals are recorded in the run owner's conversation, resolved from host
 call attribution and persisted run starts. The original worker remains the cancellation

@@ -21,6 +21,7 @@ const NATIVE_CHANNELS = [
   // Publish from Studio's dialog uploads the game to Genex with the user's real account.
   "studio:plugins.genex-publish",
   "studio:plugins.genex-publish-apps",
+  "studio:plugins.genex-cloud-build",
   "studio:subscription.signin",
   "studio:subscription.forget-studio-login",
   // Building with Genex opens genex.games's build page in the person's browser, where it signs the
@@ -79,6 +80,8 @@ const NATIVE_CHANNELS = [
   "studio:models.lookup",
   // Delete removes model files from this Mac, or asks the person's own Ollama to delete one.
   "studio:models.remove",
+  // Raise context writes a model copy into the person's own Ollama.
+  "studio:models.raise-context",
   // Install fetches the vendor's installer and runs it as the person: a download and a real install.
   "studio:cli-install.start",
   "studio:models.refresh",
@@ -214,7 +217,6 @@ const FIXTURE_SAFE = [
   "studio:backdrop.make",
   "studio:game.update",
   "studio:game.remove",
-  "studio:game.references",
   "studio:game.asset.preview",
   "studio:game.asset.present",
   "studio:game.asset.rigs",

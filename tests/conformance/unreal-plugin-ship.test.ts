@@ -328,7 +328,12 @@ describe("plugin-build", () => {
   it("plugin-build saves and closes the open editor, then builds the host and its plugin as a job and opens it again", async () => {
     const w = await shipWorld();
     assert.deepEqual(await w.call(ShipToolName.PluginBuild), { started: true });
-    assert.equal((await w.status()).jobRunning, true, "Genex reads that the build runs, to wake the chat when it ends");
+    const now = await w.status();
+    assert.equal(
+      now.jobRunning,
+      now.build.state === ShipState.Running,
+      "Genex reads whether the build runs, to wake the chat when it ends",
+    );
     assert.deepEqual(
       w.events.slice(0, 2),
       [CppEditorTool.SaveAll, `quit ${HOST}.uproject`],

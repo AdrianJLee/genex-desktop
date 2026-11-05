@@ -1563,6 +1563,8 @@ export default {
   "Genex cover": "Capa Genex",
   "Genex credits": "Créditos do Genex",
   "Genex decides from crash reports": "O Genex decide pelos relatórios de falhas",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "O Genex não respondeu a tempo. Confira o link do jogo de novo daqui a um minuto.",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "O Genex não clicou em nada. Instale o Unreal {version} você mesmo no launcher: {clicks}.",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
@@ -1607,6 +1609,8 @@ export default {
     "O Genex está instalando o Godot. Você não precisa fazer nada.",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "O Genex é de código aberto sob a Licença MIT. Ele também inclui software de outros projetos, cada um com sua própria licença.",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "O Genex ainda está publicando este jogo. Troque o link quando terminar.",
   "Genex isn't getting Roblox Studio right now.": "O Genex não está baixando o Roblox Studio agora.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "O Genex guarda antes uma cópia de cada arquivo, e “Desfazer configuração” reverte essas mudanças. Um arquivo do módulo do Genex para o editor que você alterou fica ao lado do novo como cópia .mine.",
@@ -2468,6 +2472,11 @@ export default {
   "Nothing is failing.": "Nada está falhando.",
   "Nothing is installing.": "Nada está sendo instalado.",
   "Nothing is online for this game yet": "Ainda não há nada online deste jogo",
+  "Give the link a letter or a number.": "Coloque alguma letra ou número no link.",
+  "Another game already has this link. Try another one.": "Outro jogo já tem este link. Tente outro.",
+  "This game has used all its link changes.": "Este jogo já usou todas as trocas de link.",
+  "Genex keeps this link for itself. Try another one.": "O Genex reserva este link. Tente outro.",
+  "Give the game a name with a letter or a number in it.": "Dê ao jogo um nome com alguma letra ou número.",
   "Nothing kept yet": "Nada mantido ainda",
   "Nothing made": "Nada feito",
   "Nothing made yet": "Nada criado ainda",
@@ -3019,6 +3028,9 @@ export default {
   "Remove plugin": "Remover plugin",
   "Remove preset": "Remover predefinição",
   "Remove queued message": "Remover mensagem da fila",
+  "Edit queued message": "Editar mensagem da fila",
+  "Send now": "Enviar agora",
+  "Stop and send now": "Parar e enviar agora",
   "Remove tag": "Remover marcação",
   "Remove the waiting messages first: this harness cannot take them back.":
     "Primeiro remova as mensagens na fila: este Harness não consegue retirá-las.",
@@ -3233,7 +3245,6 @@ export default {
   "Save as preset…": "Salvar como predefinição…",
   "Save image": "Salvar imagem",
   "Save key": "Salvar chave",
-  "Save name": "Salvar nome",
   "Save tags": "Salvar tags",
   "Save the new game in": "Salvar o novo jogo em",
   "Save to your library": "Salvar na sua biblioteca",
@@ -5904,6 +5915,42 @@ export default {
   "Your game is on Roblox": "Seu jogo está no Roblox",
   "Your game's agent publishes it in Roblox Studio while you keep working.":
     "O agente do seu jogo o publica no Roblox Studio enquanto você continua trabalhando.",
+  "Asked Genex": "Pedido ao Genex",
+  "Build on Genex": "Criar no Genex",
+  "Build the {app} on Genex": "Criar o {app} no Genex",
+  "Build the {app} on Genex again": "Criar o {app} no Genex de novo",
+  "Building on Genex · {minutes} min so far": "Sendo criado no Genex · {minutes} min até agora",
+  "Building…": "Criando…",
+  "Couldn’t build the {app} on Genex: {error}": "Não deu para criar o {app} no Genex: {error}",
+  "Genex builds only Windows apps on its own computers": "O Genex só cria apps de Windows nos próprios computadores",
+  "Genex can build it on Windows for you": "O Genex pode criar no Windows para você",
+  "Genex can’t build this Unreal version yet": "O Genex ainda não cria com essa versão do Unreal",
+  "Genex couldn’t compile the game’s code": "O Genex não conseguiu compilar o código do jogo",
+  "Genex couldn’t cook the game’s content": "O Genex não conseguiu preparar o conteúdo do jogo",
+  "Open the game to build its app on Genex": "Abra o jogo para criar o app dele no Genex",
+  "Publish the game first, then Genex can build it": "Publique o jogo primeiro, depois o Genex pode criar",
+  "The build on Genex failed": "A criação no Genex falhou",
+  "The build on Genex took too long": "A criação no Genex demorou demais",
+  "The project is too big for Genex to build": "O projeto é grande demais para o Genex criar",
+  "This version of Genex can’t build apps on Genex yet": "Esta versão do Genex ainda não cria apps no Genex",
+  "You’ve used this month’s builds on Genex": "Você já usou as criações deste mês no Genex",
+  notarized: "notarizado",
+  "The Mac app went without notarization: Apple’s notary couldn’t be reached with your saved notary profile.":
+    "O app de Mac foi sem notarização: não deu para falar com o serviço de notarização da Apple com o seu perfil salvo.",
+  "The Mac app went without notarization: Apple’s notary rejected it.":
+    "O app de Mac foi sem notarização: o serviço de notarização da Apple recusou.",
+  "The Mac app went without notarization: Apple’s ticket couldn’t be attached to it.":
+    "O app de Mac foi sem notarização: não deu para anexar o tíquete da Apple.",
+  "The Mac app went without notarization: codesign couldn’t sign it.":
+    "O app de Mac foi sem notarização: o codesign não conseguiu assinar.",
+  "The Mac app went without notarization: it isn’t a Mac app bundle.":
+    "O app de Mac foi sem notarização: não é um pacote de app de Mac.",
+  "The Mac app went without notarization: no Developer ID Application certificate is in your keychain.":
+    "O app de Mac foi sem notarização: não há certificado Developer ID Application nas suas chaves.",
+  "The Mac app went without notarization: notarizing was stopped.":
+    "O app de Mac foi sem notarização: a notarização foi interrompida.",
+  "The Mac app went without notarization: your keychain has several Developer ID certificates. Name one in Genex’s settings.":
+    "O app de Mac foi sem notarização: suas chaves têm vários certificados Developer ID. Escolha um nas configurações do Genex.",
   "Anything else we should know? (optional)": "Mais alguma coisa que devemos saber? (opcional)",
   "Balance {amount}": "Saldo {amount}",
   "Balance {now} → {after}": "Saldo {now} → {after}",
@@ -6202,4 +6249,27 @@ export default {
     "Este jogo foi retirado, então o Genex mantém a versão web por enquanto.",
   "Genex couldn’t finish removing the web version. Press Remove again.":
     "O Genex não conseguiu terminar de remover a versão web. Toque em Remover de novo.",
+  "Change link": "Mudar link",
+  "Change the link": "Mudar o link",
+  "Change the link of {title}": "Mudar o link de {title}",
+  "Couldn’t change Players.": "Não foi possível mudar Jogadores.",
+  "Couldn’t change the link.": "Não foi possível mudar o link.",
+  "Couldn’t rename the game.": "Não foi possível renomear o jogo.",
+  "Link saved": "Link salvo",
+  "New link": "Novo link",
+  "Rename {title}": "Renomear {title}",
+  "Renamed to {title}": "Agora se chama {title}",
+  "The game is at {address} now": "O jogo agora está em {address}",
+  "The name players see on Play and genex.games.": "O nome que os jogadores veem no Play e no genex.games.",
+  "The old link will still open the game": "O link antigo continua abrindo o jogo",
+  "The old link will still open the game, for players who already have it too.":
+    "O link antigo continua abrindo o jogo, também para quem já o tem.",
+  "{count, plural, one {# change left} other {# changes left}}":
+    "{count, plural, one {resta # mudança} other {restam # mudanças}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "O Genex pode copiar {model} para rodar com um contexto de 16K. A cópia usa os mesmos arquivos, então nada é baixado.",
+  "Ollama is unavailable": "Ollama indisponível",
+  "Raise context to 16K": "Aumentar contexto para 16K",
+  "Raising…": "Aumentando…",
+  "The chat now uses {model}. Send your message again.": "O chat agora usa {model}. Envie sua mensagem de novo.",
 } satisfies LocaleCatalog;

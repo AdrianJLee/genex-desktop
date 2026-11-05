@@ -249,6 +249,24 @@ export async function ensureDir(dir: string): Promise<void> {
   await mkdir(dir, { recursive: true });
 }
 
+/**
+ * Makes each optional folder where it can and answers those that are folders now. One that cannot
+ * be made (a file stands in its place or on its way, no permission) is left out and handed to
+ * `skipped`, and nothing in its way is touched.
+ */
+export async function ensureDirsWhereMade(
+  dirs: readonly string[],
+  skipped: (dir: string, err: unknown) => void,
+): Promise<string[]> {
+  const results = await Promise.allSettled(dirs.map((dir) => mkdir(dir, { recursive: true })));
+  return dirs.filter((dir, index) => {
+    const result = results[index];
+    if (result?.status === "fulfilled") return true;
+    skipped(dir, result?.reason);
+    return false;
+  });
+}
+
 export async function pathExists(p: string): Promise<boolean> {
   try {
     await access(p, FS.F_OK);

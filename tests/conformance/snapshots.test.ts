@@ -18,6 +18,7 @@ import {
   FIRST_COMMIT_MARKER,
   git,
   gitOrNull,
+  HARNESS_WORKSPACE,
   INDEX_LOCK_WAIT_MS,
   needsFirstCommit,
   snapshotRef,
@@ -377,6 +378,42 @@ describe("snapshot engine", () => {
     const waited = clock.slept.reduce((sum, ms) => sum + ms, 0);
     assert.ok(waited >= INDEX_LOCK_WAIT_MS && waited < INDEX_LOCK_WAIT_MS + 60_000, `waited ${waited} ms`);
     assert.equal(await gitOrNull(dir, ["rev-parse", "--verify", "--quiet", "HEAD"]), null, "no commit was forced");
+  });
+
+  it("gives the harness and every other game their repositories when one game's first commit fails, and names that game", async () => {
+    // Send feedback from 0.1.23: an opened Unity project's first commit was still held by an
+    // earlier start's git, so every start failed with "harness would not start", for every game.
+    const root = await tmpDir();
+    const harness = path.join(root, "harness");
+    const game = path.join(root, "game");
+    const broken = path.join(root, "broken");
+    await mkdir(harness);
+    await writeFile(path.join(harness, "README.md"), "seed\n");
+    await mkdir(game);
+    await writeFile(path.join(game, "index.html"), "playable\n");
+    await writeFile(broken, "a file where the game's folder should be\n");
+    const engine = new SnapshotEngine([
+      { name: "broken", dir: broken },
+      { name: HARNESS_WORKSPACE, dir: harness },
+      { name: "game", dir: game },
+    ]);
+    const failed: string[] = [];
+    engine.onFirstCommitFailed = (workspace, error) => failed.push(`${workspace.name}: ${error instanceof Error}`);
+    await engine.init();
+    assert.deepEqual(failed, ["broken: true"]);
+    assert.equal(await needsFirstCommit(harness), false);
+    assert.equal(await needsFirstCommit(game), false);
+    assert.equal(await readFile(broken, "utf8"), "a file where the game's folder should be\n");
+  });
+
+  it("still fails the start when the harness's own first commit fails", async () => {
+    const harness = path.join(await tmpDir(), "harness");
+    await writeFile(harness, "not a folder\n");
+    const engine = new SnapshotEngine([{ name: HARNESS_WORKSPACE, dir: harness }]);
+    const failed: string[] = [];
+    engine.onFirstCommitFailed = (workspace) => failed.push(workspace.name);
+    await assert.rejects(engine.init());
+    assert.deepEqual(failed, []);
   });
 
   it("leaves a person's own repository that has no commits yet as it is", async () => {

@@ -94,6 +94,10 @@ export const GenexRoute = {
   /** The public price list: the cheapest price of each kind of generation. */
   Prices: "/api/credits/prices",
   Lanes: "/api/generations/lanes",
+  /** A game's own record on Genex: `PATCH { title }` renames it, moving no link. */
+  project: (id: string) => `/api/projects/${encodeURIComponent(id)}`,
+  /** Move a game to a new link (`POST { name }`): its old link keeps opening it. */
+  rename: (id: string) => `/api/projects/${encodeURIComponent(id)}/rename`,
   projectBySlug: (slug: string) => `/api/projects/by-slug/${encodeURIComponent(slug)}`,
   /** Whether a published game is open to remixers (`{ private }`), as its owner sets it on genex.games. */
   visibility: (id: string) => `/api/projects/${encodeURIComponent(id)}/visibility`,
@@ -115,6 +119,9 @@ export const httpError = (route: string, status: number, code?: string) =>
 
 /** The HTTP status of a failed Genex call, when it had one. */
 export const statusOf = (error: unknown): number | undefined => (error as { status?: number } | null)?.status;
+
+/** Whether a Genex call failed for want of an answer within {@link API_REQUEST_TIMEOUT_MS} (`AbortSignal.timeout`'s error). */
+export const isTimeout = (error: unknown): boolean => (error as { name?: unknown } | null)?.name === "TimeoutError";
 
 /** The refusal code of a failed Genex call, when Genex answered one. */
 export const codeOf = (error: unknown): string | undefined => (error as { code?: string } | null)?.code;

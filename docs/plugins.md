@@ -262,7 +262,8 @@ Each builder brief is built from one registry `snapshot(engine)`, so its tools a
 lease, and by the capability facts a session without plugin tools reads), the web's when no game
 is named. The tools are the same for every engine. A session with host tools also reads, beside the
 skill lines, one line for each plugin it is handed: its name, the prefix of its tools (`<id>__`)
-when it has any, and its description on one line, cut at 200 characters (`handedPluginsNote`). A
+when it has any, and its description on one line, cut at 200 characters (`handedPluginsNote`); a
+plugin under the hood ([First-party privileges](#first-party-privileges)) has its skill lines alone. A
 plugin that declares an `account` whose state (`PluginAccountState`) is anything but `unlocked`
 adds that it is not set up yet and the person still has to connect its account on its page. The
 list is the session's system text (`delegation-prompts.ts`), which a resumed Claude Code or Codex
@@ -735,10 +736,14 @@ one only for the harness (`PluginRegistry.tool`'s `caller`). `cpp-status` and `a
 agent tools for an `unreal-project` (`facts`), which the one Loop's lead calls; `add-cpp-module`
 asks the person first (its `confirmation`) and holds the `editor` lock. While its job restarts
 Unreal, `editor-state` reads as reopening, so Genex's health watch waits and a crash step starts no
-second editor or build (`editor-reopen.ts` `createReopenTools`). Agents manage the game's editor
+second editor or build (`editor-reopen.ts` `createReopenTools`); a reopen that failed reads as failed
+only until an editor of the game runs again (one the agent opened, still loading, reads busy). Agents manage the game's editor
 themselves and never ask the person to open, quit or restart it (`editor-control.ts`): `open-editor`
 answers `{answering}`, `{starting}` while Genex is already opening it, or `{started}` once a reopen
-job (no C++ build: Unreal's own Open builds a hot-reloaded module) ended what was left of a crashed
+job (no C++ build: Unreal's own Open builds a hot-reloaded module; while the project's last module
+build failed, such as a Loop's reopen whose build broke, the job builds it first, so the agent's fix is
+what opens and a fix that still doesn't build fails with its errors; a reopen that failed for anything
+else, such as Xcode not ready, leaves the Open as it is) ended what was left of a crashed
 editor and its crash reporter and opened the project; an editor of the game that runs without
 answering is `{busy}` and ended only with `restart: true` (or at once when its log says the port is
 blocked). `quit-editor` saves through the helper's `save_all`, then sends Unreal's normal quit and waits
@@ -2345,7 +2350,7 @@ gets both, and its card shows in the one chat its run was started in, as the hos
 never a thread the harness names; a worker the host seated gets `plugins_find` only and reports
 what it found to its lead; any other session (a reviewer, a judge) gets
 neither. Only the chat's own session gets `start_web_game`. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
-the installed plugins that match (on, then off or removed), then the entries of Genex's curated
+the installed plugins that match (on, then off or removed; never one under the hood), then the entries of Genex's curated
 catalog not installed, and never anything from another source (`main/core/plugin-finder.ts`). A
 plugin matches when it detects, is scoped to or makes `fact`, or when a word of `text` other than a
 generic one ("engine", "plugin", "editor"…) is a word, or starts a word, of its id, name, description
@@ -2521,11 +2526,18 @@ its report is a failed run, its summary naming the exit code, the counts so far 
 `unreal__plugin-status` answers each job's state and results and `proof`: the summary, the note and
 `unreal/Saved/Genex/Shots/<Plugin>-window.jpg` (kept by `app_look`'s `save`) that exist, the summary
 and note only for a run that finished, relative to the game, read from disk after a restart.
-Any Unreal game also gets `unreal__package-game {stop?}` and `unreal__package-status`
-(`game-package.ts`): the app players install, for this computer's system only (Unreal makes no app
-for another one). The person's open Unreal saves first (play ended; one that answers but can't save
-leaves nothing packaged), then `RunUAT BuildCookRun -platform=Mac|Win64 -clientconfig=Shipping -build
--cook -stage -pak -stagingdirectory=…` stages into `unreal/Builds/<Mac|Windows>/` (emptied first, never
+Any Unreal game also gets `unreal__package-game {stop?, system?}` and `unreal__package-status {system?}`
+(`game-package.ts`): the app players install, for this computer's own system, or on Windows a Linux
+one with `system: "linux"` (`PackageSystem`, `HOST_SYSTEMS`; Unreal makes a Mac app only on a Mac and a
+Windows one only on Windows; anything else is refused before anything runs). A Linux package needs
+Epic's cross-compile toolchain for the engine's version (`LINUX_TOOLCHAINS`: 5.7 and 5.8 take
+`v26_clang-20.1.8-rockylinux8`), whose installer the person runs: Genex reads `LINUX_MULTIARCH_ROOT`
+from the registry (the user's over the machine's, `readRegistryVariable`, so no restart is needed),
+takes it only as a plain local folder named for that toolchain (never a link, a share or a path
+cmd.exe can't carry), and hands it to RunUAT; without it the call refuses with the installer's link
+for the agent to give the person. One package runs per game at a time. The person's open Unreal saves first (play ended; one that answers but can't save
+leaves nothing packaged), then `RunUAT BuildCookRun -platform=Mac|Win64|Linux -clientconfig=Shipping -build
+-cook -stage -pak -stagingdirectory=…` stages into `unreal/Builds/<Mac|Windows|Linux>/` (emptied first, never
 through a link; ignored by the game's history; never `-archive`, which copies a Mac app without its
 cooked content), the cook run by the engine's `UnrealEditor-Cmd`, within 120
 minutes. A Mac needs Xcode: a template's plugins make even a Blueprint game build code there. Like
@@ -2535,11 +2547,12 @@ editor's derived data, Zen store and shader workers, all of which UnrealBuildToo
 On Windows `RunUAT.bat` runs through cmd.exe with every path whole in quotes (`quotedScriptLine`); a
 path with a quote, `%` or `!`, or on a network share, is refused first. `package-status` answers the
 state, the app relative to the game, the seconds and a failure's first error lines with the
-computer's paths taken out, and `jobRunning`; after a restart, idle with the app found on disk.
-`package-game`, `plugin-build`, `plugin-test`, `plugin-package`, `add-cpp-module` and
-`add-motion-matching` name their status tool as `jobStatus`, and each status answers `jobRunning`,
-so the chat that started a job is woken when it ends. Publish then finds the
-app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole
+computer's paths taken out, and `jobRunning`; after a restart, idle with the app found on disk (a
+Linux package's starter `<Game>.sh`). On Windows the Publish dialog's Linux row of an Unreal game
+offers Make with agent (`appsMadeHere`). `package-game`, `plugin-build`, `plugin-test`,
+`plugin-package`, `add-cpp-module` and `add-motion-matching` name their status tool as `jobStatus`,
+and each status answers `jobRunning`, so the chat that started a job is woken when it ends. Publish
+then finds the app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole
 build (no program inside a Windows build's folder is a build of its own, and Unreal's
 `UEPrereqSetup` is a helper) and never a project's own `Binaries` beside its `.uproject`, which hold
 no cooked content. A chat build of a game still with no kind, with the plugin on, is handed the
@@ -3215,6 +3228,13 @@ Genex:
   and Publish; `servesAction`); only its tools, MCP servers, skills and toolbar contributions go.
   It can't be removed. A finished sign-in turns it on unless the person turned it off themselves
   (the record's `turnedOff`, set only by `setEnabled(false)`).
+- Its advice, the bundled `genex-recommendations`, works under its hood (`PluginRegistry.underHood`,
+  set by `studio-core.ts`): it is on exactly while Genex is, whatever an older profile recorded (a
+  copy installed off, turned off or removed comes back on at the next start), and nobody switches or
+  removes it by itself (`plugin_under_hood`). Its skills reach a brief as skill lines and its skill
+  tool; it is left out of every list a person or an agent picks plugins from (`shown`): the
+  window's (`studio:plugins.list`), `plugins_find` and `plugins_suggest`, a session's handed-plugins
+  note and the planning step's capability facts.
 - `host-cli` MCP servers run Studio's own bundled Genex CLI (`@genex-ai/cli-demo`, an app
   dependency unpacked from the asar) behind `src/genex-host/preload.mjs`. A bundled seed is copied
   into the profile without its `node_modules` (Windows 11 held the CLI's 2,394 fresh files past the
@@ -3239,6 +3259,23 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
+- The dialog offers a name the game got in Studio that Genex hasn't taken yet (the record's
+  `renamed`), else the name Genex lists the game under, else the game's name in Studio unless
+  that still waits for the game's first idea (`offeredTitle`); a listed name that is only the
+  game's link (an older link change named games after their link) gives way to Studio's. A name
+  typed there is saved at once (`publish-name`: a game on Genex is renamed there, its title alone;
+  one not on Genex keeps it for its first publish) and then in Studio. A rename in Studio itself
+  (`updateGame` → `renameOnGenex`, in the background, one game's renames in order) renames a game
+  Genex lists under another name and asks nothing of one not on Genex; signed out or unanswered,
+  it is kept as `renamed`. A publish under way takes the new name, and once it is done Genex is
+  given that name, or a `renamed` one, again (its listing went with the name it started with).
+  Change link (`publish-link`) sends `keepTitle`: a link is only the address, and the game keeps
+  its name. A link change Genex finished after Studio stopped waiting (20 s,
+  `API_REQUEST_TIMEOUT_MS`) says so, and the next read of the record, or the next publish, follows
+  the link Genex gives the game (by its id, when its old link reads nothing) instead of making a
+  new game; so does a link changed on genex.games or another computer. When Genex can't say where
+  the game went, the publish fails and keeps the link, never making a second game. A publish
+  under way on Genex (`release_conflict`) is said in plain words.
 - For a game linked to an engine, or one whose folder holds a player build, the dialog lists its
   platforms above the presses (`PublishPlatforms.tsx`, `publish-platforms-view.ts`; read by
   `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app,
@@ -3290,6 +3327,40 @@ Genex:
   characters of a sent app's archive sha256 (`appClipCommit`, from `native.json`), which Genex
   matches as a prefix where a web game's names its staging commit; a stand that refuses it leaves a
   `failed` clip record, sent again by the next publish, and the picture stands. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
+- A Mac app goes signed ad hoc unless its creator turned on Sign and notarize Mac apps in the Genex
+  plugin's settings (`mac-notarize`, `mac-signing-identity`, `mac-notary-profile`; `macSigningOf`).
+  Genex never signs with an identity of its own: the certificate is the creator's Developer ID
+  Application identity in their login keychain (the only one when the setting names none), and Apple's
+  notary is asked through the keychain profile they stored with `xcrun notarytool store-credentials`
+  (`genex-notary` unless named). Before Publish sends that Mac app (`#sendApps`), `mac-notarize.ts`
+  signs every Mach-O program inside it, deepest first, then the app (hardened runtime, secure
+  timestamp, never through a link), zips it with `ditto` into a scratch folder, waits for
+  `notarytool submit --wait`, and staples the ticket. Each step runs `/usr/bin/security`, `codesign`
+  or `ditto` by full path with no shell, and `notarytool` and `stapler` from the developer folder
+  `xcode-select --print-path` names, never the `/usr/bin/xcrun` stand-in; a Mac without Xcode or its
+  Command Line Tools leaves the app unsigned (`submit`). A failure never stops the app: it goes as built and
+  the record keeps why by code (`MacNotarizeFailure`, `notarizeFailure` beside the sent app); the Mac
+  row then says "notarized", or a line under the rows says why it went without.
+- An Unreal game's rows for another system say where it is packaged ("Package it on a Windows PC"),
+  except the Windows row on a Mac once Genex can build it (`cloudWords`, `CLOUD_TARGETS`): while the
+  game has no page on Genex it says to publish first; then it offers Build on Genex, which runs
+  `studio:plugins.genex-cloud-build` (`cloudBuildFromDialog`, Windows only) → the plugin's
+  `cloud-build` (`cloudBuild`, `cloud-build.ts`). The press is the consent: the game's Unreal project
+  alone is staged, its `.uproject` at the top, without caches and builds as for remixing
+  (`stageBuildSource`, into `cloud-source/`, removed once sent). Studio sets no size limit of its
+  own: Genex takes or refuses the project by the account's limit, and its refusal says the sizes,
+  shown under the rows. It goes
+  privately with `genex native build --platform windows --source <folder> --json`; Genex builds it on
+  its own computers and puts the app on the game's page. Each job is kept in the workspace's
+  `cloud-build.json` (apart from `native.json`, which every publish writes anew) and followed with
+  `genex native build-status <job> --json`, waiting 15 s, 30 s, 1 and then 2 min between reads; a job
+  still running when Studio starts is followed again when the record is next read. The record
+  answers as `native.cloud`; the row then says "Building on Genex · N min so far", "On Genex · built …"
+  with Build again, or why it failed by code (`CloudBuildFailure`) with Try again (none once the
+  month's builds are used). A refused press is said under the rows. Job ids and platforms Genex
+  answers are kept only when whole (`cloudBuildOf`). Nothing is asked while the pinned CLI is older
+  than `genex native build` (1.38.0, `pinnedCliBuildsApps`): `native.cloud.supported` is false and
+  the row reads as before. Genex's side of this is a draft contract.
 - Genex's page for a game plays its web version whenever Genex holds one, apps or not, so a web
   version outlives the files it came from. Publish asks Genex at most once a minute (the owner read
   `projects/by-slug/<slug>`'s `commitSha`, `#hostedWebOf`) and answers `GenexPublishState.hostedWeb`;
@@ -3431,7 +3502,8 @@ Genex:
   exactly once) take Genex's design and process advice out of the vendored text, and the prefaces
   carry the API facts those passages held. That advice, reworded as optional, is the bundled
   `genex-recommendations` plugin (skills only: multiplayer patterns, cover craft, asset sources, shop
-  design, player experience, play-time models), which every new profile installs off (`seedEnabled`). Genex's currency is Nex (the cards
+  design, player experience, play-time models), which works under the hood of Genex (see
+  [First-party privileges](#first-party-privileges)). Genex's currency is Nex (the cards
   call it coin): a thing priced in Nex, or sold for real money with no currency named, is a store
   item listed with `shop add` and its picture; coins, gold or gems are the game's own currency
   unless the person says they are for real money. Dynamic payments

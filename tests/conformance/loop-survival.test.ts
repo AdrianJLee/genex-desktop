@@ -135,7 +135,8 @@ const ONE_LOOP_TRAIL = [
 // Flipped (phase 5): no fresh-eyes reminder, so no last reader is kept.
 // Flipped: the open Loop's journal carried lines for the lead's next message (`carried`); they are
 // lines of the run's log, which the director's own record keeps.
-const OPEN_JOURNAL_KEYS = ["between", "crashes", "savePoints", "version"];
+// `appLost`: whether the app was the lead's to bring back when the journal was kept (a Resume goes on from it).
+const OPEN_JOURNAL_KEYS = ["appLost", "between", "crashes", "savePoints", "version"];
 
 describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
   let host: LoopHost;
@@ -147,7 +148,7 @@ describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
       facts: [{ id: "unreal-project", path: "." }],
       manifest: unrealManifest as unknown as LoopManifest,
       // Flipped (no clock): the run named 30 minutes of working time; a Loop has none. A turn that
-      // ends with nothing at work closes it, so the person's words wake each next turn.
+      // ends with nothing at work pauses it, so the person's words wake each next turn.
       run: { runId: "run-one-loop", budgets: {} },
       turns: [
         async ({ host, tool }) => {

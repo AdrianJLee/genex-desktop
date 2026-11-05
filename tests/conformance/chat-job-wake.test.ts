@@ -325,7 +325,7 @@ describe("the core's side of a job's wake", () => {
     const { core, close } = await coreLite();
     try {
       await core.plugins.setEnabled("unreal", true);
-      assert.deepEqual(core.plugins.jobStatusOf(PACKAGE), { status: STATUS, parameters: [] });
+      assert.deepEqual(core.plugins.jobStatusOf(PACKAGE), { status: STATUS, parameters: ["system"] });
       assert.deepEqual(core.plugins.jobStatusOf("unreal__plugin-build"), {
         status: "unreal__plugin-status",
         parameters: ["plugin"],

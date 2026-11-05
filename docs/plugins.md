@@ -735,10 +735,14 @@ one only for the harness (`PluginRegistry.tool`'s `caller`). `cpp-status` and `a
 agent tools for an `unreal-project` (`facts`), which the one Loop's lead calls; `add-cpp-module`
 asks the person first (its `confirmation`) and holds the `editor` lock. While its job restarts
 Unreal, `editor-state` reads as reopening, so Genex's health watch waits and a crash step starts no
-second editor or build (`editor-reopen.ts` `createReopenTools`). Agents manage the game's editor
+second editor or build (`editor-reopen.ts` `createReopenTools`); a reopen that failed reads as failed
+only until an editor of the game runs again (one the agent opened, still loading, reads busy). Agents manage the game's editor
 themselves and never ask the person to open, quit or restart it (`editor-control.ts`): `open-editor`
 answers `{answering}`, `{starting}` while Genex is already opening it, or `{started}` once a reopen
-job (no C++ build: Unreal's own Open builds a hot-reloaded module) ended what was left of a crashed
+job (no C++ build: Unreal's own Open builds a hot-reloaded module; while the project's last module
+build failed, such as a Loop's reopen whose build broke, the job builds it first, so the agent's fix is
+what opens and a fix that still doesn't build fails with its errors; a reopen that failed for anything
+else, such as Xcode not ready, leaves the Open as it is) ended what was left of a crashed
 editor and its crash reporter and opened the project; an editor of the game that runs without
 answering is `{busy}` and ended only with `restart: true` (or at once when its log says the port is
 blocked). `quit-editor` saves through the helper's `save_all`, then sends Unreal's normal quit and waits
@@ -3251,6 +3255,23 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
+- The dialog offers a name the game got in Studio that Genex hasn't taken yet (the record's
+  `renamed`), else the name Genex lists the game under, else the game's name in Studio unless
+  that still waits for the game's first idea (`offeredTitle`); a listed name that is only the
+  game's link (an older link change named games after their link) gives way to Studio's. A name
+  typed there is saved at once (`publish-name`: a game on Genex is renamed there, its title alone;
+  one not on Genex keeps it for its first publish) and then in Studio. A rename in Studio itself
+  (`updateGame` → `renameOnGenex`, in the background, one game's renames in order) renames a game
+  Genex lists under another name and asks nothing of one not on Genex; signed out or unanswered,
+  it is kept as `renamed`. A publish under way takes the new name, and once it is done Genex is
+  given that name, or a `renamed` one, again (its listing went with the name it started with).
+  Change link (`publish-link`) sends `keepTitle`: a link is only the address, and the game keeps
+  its name. A link change Genex finished after Studio stopped waiting (20 s,
+  `API_REQUEST_TIMEOUT_MS`) says so, and the next read of the record, or the next publish, follows
+  the link Genex gives the game (by its id, when its old link reads nothing) instead of making a
+  new game; so does a link changed on genex.games or another computer. When Genex can't say where
+  the game went, the publish fails and keeps the link, never making a second game. A publish
+  under way on Genex (`release_conflict`) is said in plain words.
 - For a game linked to an engine, or one whose folder holds a player build, the dialog lists its
   platforms above the presses (`PublishPlatforms.tsx`, `publish-platforms-view.ts`; read by
   `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app,
@@ -3320,8 +3341,11 @@ Genex:
   except the Windows row on a Mac once Genex can build it (`cloudWords`, `CLOUD_TARGETS`): while the
   game has no page on Genex it says to publish first; then it offers Build on Genex, which runs
   `studio:plugins.genex-cloud-build` (`cloudBuildFromDialog`, Windows only) → the plugin's
-  `cloud-build` (`cloudBuild`, `cloud-build.ts`). The press is the consent: the game's project is
-  staged as remixers get it (`stageRemixSource`, into `cloud-source/`, removed once sent) and goes
+  `cloud-build` (`cloudBuild`, `cloud-build.ts`). The press is the consent: the game's Unreal project
+  alone is staged, its `.uproject` at the top, without caches and builds as for remixing
+  (`stageBuildSource`, into `cloud-source/`, removed once sent). Studio sets no size limit of its
+  own: Genex takes or refuses the project by the account's limit, and its refusal says the sizes,
+  shown under the rows. It goes
   privately with `genex native build --platform windows --source <folder> --json`; Genex builds it on
   its own computers and puts the app on the game's page. Each job is kept in the workspace's
   `cloud-build.json` (apart from `native.json`, which every publish writes anew) and followed with

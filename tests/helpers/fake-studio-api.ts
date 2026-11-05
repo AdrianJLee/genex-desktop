@@ -285,6 +285,7 @@ const METHODS = [
   "lookupModel",
   "cancelModelDownload",
   "removeModel",
+  "raiseModelContext",
   "revealProject",
   "readGameFile",
   "revealGameFile",

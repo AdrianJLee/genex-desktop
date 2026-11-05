@@ -1,5 +1,7 @@
 import { t, tc } from "../shared/i18n.ts";
-import { providerInfo } from "../shared/providers.ts";
+import { EngineId, providerInfo } from "../shared/providers.ts";
+import { harnessTurnFailure, TurnFailureCode } from "../shared/engine-requests.ts";
+import { isRaisedContextName } from "../shared/ollama-context.ts";
 import type { ExportReview } from "../shared/plugins.ts";
 import type { PluginSuggestedPayload } from "../shared/project-tools.ts";
 import { type ListingRecord, listingDraftOf, listingKey } from "../shared/item-draft.ts";
@@ -64,6 +66,7 @@ import {
   A_PLUGIN,
   GAME_ENGINE_WORDS,
   appAccessMissing,
+  raiseContextOffer,
   autopilotStartWords,
   checkReplanWords,
   checkpointSkippedWords,
@@ -158,6 +161,8 @@ export const EntryAction = {
   Rewound: "rewound",
   /** An agent went ahead of the person in an app a plugin's lock guards (`agent_went_ahead`): one line, with that plugin's settings. */
   WentAhead: "went-ahead",
+  /** Ollama's context refused a turn (`turn_ended`, `context_too_small`): one line, with Raise context to 16K. */
+  RaiseContext: "raise-context",
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
@@ -270,6 +275,8 @@ export type Entry =
       judge?: ChatJudgeResultPayload;
       /** action "went-ahead": the plugin whose settings the line opens, and the app it names. */
       wentAhead?: { pluginId: string; label: string };
+      /** action "raise-context": the Ollama model Raise context to 16K copies. */
+      raiseContext?: string;
     }
   /**
    * The morning: what the run amounts to, in one card. It replaces the line that read
@@ -1473,6 +1480,31 @@ function narrateAppAccess(chat: ChatDraft, event: EventEnvelope): void {
   });
 }
 
+/** The Ollama model a turn ran on, when its context refused the turn and a 16K copy could help. */
+function raisableModel(chat: ChatDraft, event: EventEnvelope): string | null {
+  const { data } = event;
+  if (data.type !== EventKind.TurnEnded || !event.turn_id) return null;
+  const failure = harnessTurnFailure(data.metadata?.harnessFailure, () => false);
+  if (failure?.code !== TurnFailureCode.ContextTooSmall) return null;
+  const turn = chat.turnModels.get(event.turn_id);
+  if (turn?.engine !== EngineId.Ollama || !turn.model) return null;
+  return isRaisedContextName(turn.model) ? null : turn.model;
+}
+
+/** Ollama's default context refused a turn: one line under the error, with Raise context to 16K. */
+function narrateRaiseContext(chat: ChatDraft, event: EventEnvelope): void {
+  const model = raisableModel(chat, event);
+  if (!model) return;
+  chat.entries.push({
+    id: event.id,
+    kind: EntryKind.Action,
+    tag: SystemTag.Engine,
+    action: EntryAction.RaiseContext,
+    text: raiseContextOffer(model),
+    raiseContext: model,
+  });
+}
+
 /** An agent went ahead of the person: one line naming the app, with its plugin's settings; a partial record draws nothing. */
 function narrateWentAhead(chat: ChatDraft, event: EventEnvelope): void {
   const payload = customPayload(event.data, CustomEvent.AgentWentAhead);
@@ -2253,6 +2285,7 @@ const NARRATORS: readonly Narrator[] = [
   narrateWorkerStarted,
   narrateWorkerFinished,
   narrateAppAccess,
+  narrateRaiseContext,
   narrateWentAhead,
   narrateChatJudge,
   narratePluginSuggested,

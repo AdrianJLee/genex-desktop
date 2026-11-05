@@ -167,12 +167,13 @@ async function closeWithinCall(loopRun: LoopRun, end: OpenEnd, started: number):
 
 /**
  * Why a claim is turned back before anything looks, or null: no summary, a recovery or an ask of the
- * lead's still under way, a worker that writes in the folder in place (the reviewer would read a
+ * lead's still under way, the project's app still closed for the lead to fix, a worker that writes in the folder in place (the reviewer would read a
  * folder that keeps changing). A finish is never refused for time, nor for what the lead says remains.
  */
 function claimRefusal(loopRun: LoopRun, args: AnyRecord): string | null {
   if (!hasText(args.summary)) return OPEN_WORDS.needsSummary;
   if (loopRun.open.recovering) return OPEN_WORDS.recovering;
+  if (loopRun.open.appDown) return OPEN_WORDS.appDown;
   // The folder the reviewer would read is not the one the lead asked for yet.
   if (asksPending(loopRun.open.journal)) return OPEN_WORDS.askFirst;
   const writers = writersInPlace(loopRun.open).map((record) => record.id);

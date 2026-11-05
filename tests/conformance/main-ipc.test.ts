@@ -1261,6 +1261,37 @@ it("deleting a model asks the local engine that owns it and announces the change
   assert.equal(events.length, 2, "and announces nothing");
 });
 
+it("raising a model's context asks Ollama for the copy, announces it and answers its id", async () => {
+  const asked: string[] = [];
+  const events: UiEvent[] = [];
+  const engines: Record<string, { raiseContext?(id: string): Promise<string> }> = {
+    ollama: { raiseContext: async (id) => (asked.push(id), `${id}-16k`) },
+  };
+  const core = {
+    engines: { has: (id: string) => id in engines, get: (id: string) => engines[id] },
+  } as unknown as ModelsIpcDeps["core"];
+  const { handle, invoke } = registrar();
+  registerModelsIpc(handle, {
+    core,
+    subscription: () => null,
+    usage: noUsage,
+    pushUiEvent: (event) => events.push(event),
+    openRouterLogin: noSignIn,
+  });
+  assert.deepEqual(await invoke("studio:models.raise-context", { model: "qwen3:8b" }), {
+    ok: true,
+    value: "qwen3:8b-16k",
+  });
+  assert.deepEqual(events, [{ type: "engines.changed", payload: { engine: "ollama" } }]);
+  for (const payload of [undefined, null, {}, { model: 7 }, { model: "" }, { model: ["qwen3:8b"] }]) {
+    assert.equal((await invoke("studio:models.raise-context", payload)).ok, false, JSON.stringify(payload));
+  }
+  delete engines.ollama;
+  assert.equal((await invoke("studio:models.raise-context", { model: "qwen3:8b" })).ok, false, "no Ollama, no copy");
+  assert.deepEqual(asked, ["qwen3:8b"], "a refused call asks no engine");
+  assert.equal(events.length, 1, "and announces nothing");
+});
+
 describe("the in-window update prompt", () => {
   /** The update channels over a recorded announcer, in a live or a fixture profile. */
   function updateRig(fixture: boolean) {

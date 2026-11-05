@@ -66,6 +66,7 @@ import {
 } from "../shared/plugins.ts";
 import { EngineHostAction, type EngineLinkUndo, type EngineUndoSetUpArgs } from "../shared/game-engine.ts";
 import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
+import { renameOnGenex } from "./core/genex-publish.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
@@ -117,7 +118,7 @@ import { FastDecisions } from "./core/fast-decisions.ts";
 import { EngineRegistry } from "../substrate/engines/registry.ts";
 import type { Engine, LiveToolResult } from "../substrate/engines/types.ts";
 import { EventStore } from "../substrate/event-store.ts";
-import { atomicWriteJson, ensureDir, readJsonIfExists } from "../substrate/fsx.ts";
+import { atomicWriteJson, ensureDir, ensureDirsWhereMade, readJsonIfExists } from "../substrate/fsx.ts";
 import type { ExportResult } from "../substrate/game-export.ts";
 import {
   GameWorkspaces,
@@ -1063,9 +1064,17 @@ export class StudioCore {
     const windows = process.platform === StudioPlatform.Windows;
     // OpenCode's, Grok Build's and Cursor's own folders too: their sessions run as the sandbox user
     // and read their sign-ins there.
-    const cliFolders = windows ? [...openCodeSessionFolders(), grokHome(), ...cursorHomes()] : [];
-    if (windows)
-      await Promise.all([this.layout.nativeRuntimes, ...cliFolders].map((dir) => mkdir(dir, { recursive: true })));
+    // They are optional: one a file stands in the way of (a `.cache` file in the home folder) is
+    // left ungranted, and only that CLI misses it, instead of the studio not starting.
+    const cliFolders = windows
+      ? await ensureDirsWhereMade([...openCodeSessionFolders(), grokHome(), ...cursorHomes()], (dir, err) =>
+          this.options.onLog?.(
+            `[core] a CLI folder could not be made, left ungranted: ${dir}: ${errorMessage(err)}`,
+            "stderr",
+          ),
+        )
+      : [];
+    if (windows) await mkdir(this.layout.nativeRuntimes, { recursive: true });
     return ProcessSandbox.create({
       writableRoots: [
         this.layout.workspaces,
@@ -2190,6 +2199,8 @@ export class StudioCore {
   async updateGame(project: string, patch: GameUpdate): Promise<GameProject> {
     const game = await this.games.update(project, patch);
     this.emit(UiEvent.GameChanged, { project });
+    // One name everywhere: a game already on Genex is listed under its new name too, in the background.
+    if (patch.title !== undefined) void renameOnGenex(this, project, game.title);
     return game;
   }
 

@@ -65,6 +65,8 @@ export const PlayChangeOutcome = {
   LinkLimit: "link-limit",
   /** genex.games keeps the new link for itself. */
   LinkReserved: "link-reserved",
+  /** A publish of the game is under way on genex.games: the link can change once it ends. */
+  LinkBusy: "link-busy",
 } as const;
 export type PlayChangeOutcome = (typeof PlayChangeOutcome)[keyof typeof PlayChangeOutcome];
 

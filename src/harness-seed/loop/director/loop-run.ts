@@ -51,6 +51,9 @@ export interface LoopRunState {
   finishAsk?: FinishAsk | null;
 }
 
+/** How a lead's turn ended, for what waits for its end: `last` when it was the run's wrap-up turn, after which none comes. */
+export type TurnEnds = { last: boolean };
+
 /** What the run knows (`prepareLoopRun`, setup.ts). */
 export interface LoopRunData {
   ctx: HarnessCtx;
@@ -76,6 +79,8 @@ export interface LoopRunData {
   toolsInFlight?: number;
   /** The wake loop drives the lead's session (wake.ts sets it as it starts). */
   waking?: boolean;
+  /** The run's wrap-up started (wake.ts `startWrapUp`): the lead's turn under way, or its next, is its last. */
+  wrapping?: boolean;
   /** The lead: its chat's own session, in the game folder (lead-session.ts). */
   lead?: LeadSeat | null;
   /** Genex's context, the lead's system text: the same as its chat's own turns send (chat-session.ts `chatContext`). */
@@ -89,8 +94,8 @@ export interface LoopRunData {
   /** How many of the run's jobs ran when they were last read (null: the host could not say), and when (`active-work.ts`). */
   jobsRunning?: number | null;
   jobsReadAt?: number | null;
-  /** What waits for the end of each of the lead's turns before the next; the wake loop awaits it. */
-  afterTurn?: () => Promise<void>;
+  /** What waits for the end of each of the lead's turns before the next (`last`: the run's wrap-up turn); the wake loop awaits it. */
+  afterTurn?: (ends: TurnEnds) => Promise<void>;
 }
 
 /** A function of the run as the run carries it: bound, so the run itself is already given. */

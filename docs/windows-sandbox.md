@@ -93,8 +93,10 @@ the setup screen opens on `git-missing`. What differs from macOS:
   time fails the start as `SandboxLaunchCode.SrtWinTimeout`, whose words name the antivirus. Genex installs with `skipProfileGrant` (`--skip-profile-grant`):
   Genex grants its own folders, and the sandbox account is one per PC, so srt-win's read grant on
   the whole profile would let every sandboxed session of every user read this person's
-  configuration. It passes `--force` only over a newer release's install, never over another
-  configuration in place (another program's, such as a loopback mode Genex does not use).
+  configuration. It passes `--force` only over another release's install (an older Genex's,
+  setup version 2, opened loopback, which Update would otherwise refuse as
+  `install_config_conflict`), never over another configuration of the same release, which may be
+  another program's.
 - The sandbox user reads nothing in the profile unless granted, so each folder between
   `USERPROFILE` and a root gets `(S,RA)` (read attributes and synchronize, no listing) after every
   apply, since srt-win's deny stamps replace the entry. Synchronize matters before Windows 11

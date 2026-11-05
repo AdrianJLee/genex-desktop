@@ -15,6 +15,7 @@ import {
   replaceFile,
   writeFileInDir,
   createFileInDir,
+  ensureDirsWhereMade,
 } from "../../src/substrate/fsx.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -248,4 +249,35 @@ it("createFileInDir makes a new file only: never over one there, never through a
     { code: "ELOOP" },
   );
   assert.deepEqual(await readdir(outside), [], "nothing made or left outside");
+});
+
+it("ensureDirsWhereMade makes the folders it can and leaves out, untouched, one a file stands in the way of", async () => {
+  // Field case (0.1.29, Windows): a file named `.cache` in the home folder failed the studio's
+  // start (ENOTDIR) while it made OpenCode's optional folders.
+  const root = await tmpDir("ensure-dirs-");
+  const cacheFile = path.join(root, ".cache");
+  const takenFile = path.join(root, "taken");
+  await writeFile(cacheFile, "a file, not a folder");
+  await writeFile(takenFile, "also a file");
+  const cases = [
+    { dir: path.join(root, ".local", "share", "opencode"), made: true },
+    { dir: path.join(cacheFile, "opencode"), made: false },
+    { dir: takenFile, made: false },
+  ];
+  const skipped: string[] = [];
+  const made = await ensureDirsWhereMade(
+    cases.map((c) => c.dir),
+    (dir) => skipped.push(dir),
+  );
+  assert.deepEqual(
+    made,
+    cases.filter((c) => c.made).map((c) => c.dir),
+  );
+  assert.deepEqual(
+    skipped,
+    cases.filter((c) => !c.made).map((c) => c.dir),
+  );
+  assert.equal((await stat(cases[0].dir)).isDirectory(), true);
+  assert.equal(await readFile(cacheFile, "utf8"), "a file, not a folder", "the file in the way is not touched");
+  assert.equal(await readFile(takenFile, "utf8"), "also a file");
 });

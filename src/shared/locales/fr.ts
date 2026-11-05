@@ -1568,6 +1568,8 @@ export default {
   "Genex cover": "Couverture Genex",
   "Genex credits": "Crédits Genex",
   "Genex decides from crash reports": "Genex décide d’après les rapports de plantage",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genex n'a pas répondu à temps. Revérifie le lien du jeu dans une minute.",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genex n’a rien cliqué. Installe Unreal {version} toi-même dans le launcher : {clicks}.",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
@@ -1613,6 +1615,8 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex installe Godot. Tu n’as rien à faire.",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex est open source sous licence MIT. Il inclut aussi des logiciels d’autres projets, chacun sous sa propre licence.",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genex est encore en train de publier ce jeu. Change le lien une fois que c'est fini.",
   "Genex isn't getting Roblox Studio right now.": "Genex n’est pas en train d’installer Roblox Studio.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genex garde d’abord une copie de chaque fichier, et « Annuler la configuration » revient sur ces changements. Un fichier du module d’éditeur Genex que tu as modifié est gardé à côté, en copie .mine.",
@@ -6295,4 +6299,10 @@ export default {
     "L’ancien lien ouvrira toujours le jeu, aussi pour ceux qui l’ont déjà.",
   "{count, plural, one {# change left} other {# changes left}}":
     "{count, plural, one {# changement restant} other {# changements restants}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex peut copier {model} pour qu'il tourne avec un contexte de 16K. La copie partage ses fichiers, donc rien n'est téléchargé.",
+  "Ollama is unavailable": "Ollama est indisponible",
+  "Raise context to 16K": "Passer le contexte à 16K",
+  "Raising…": "En cours…",
+  "The chat now uses {model}. Send your message again.": "Le chat utilise maintenant {model}. Renvoie ton message.",
 } satisfies LocaleCatalog;

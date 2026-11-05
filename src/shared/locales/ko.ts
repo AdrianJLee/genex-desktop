@@ -1480,6 +1480,8 @@ export default {
   "Genex cover": "Genex 커버",
   "Genex credits": "Genex 크레딧",
   "Genex decides from crash reports": "Genex가 크래시 보고서로 판단해요",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genex가 제때 응답하지 않았어요. 1분 뒤에 게임 링크를 다시 확인해 보세요.",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genex는 아무것도 클릭하지 않았어요. 런처에서 Unreal {version}을 직접 설치하세요: {clicks}.",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
@@ -1521,6 +1523,8 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex가 Godot를 설치하고 있어요. 따로 할 일은 없어요.",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex는 MIT 라이선스로 공개된 오픈 소스예요. 다른 프로젝트의 소프트웨어도 포함되어 있고, 각각 고유한 라이선스를 따라요.",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genex가 아직 이 게임을 게시하고 있어요. 끝나면 링크를 바꿔 주세요.",
   "Genex isn't getting Roblox Studio right now.": "Genex는 지금 Roblox Studio를 받고 있지 않아요.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Genex는 먼저 각 파일의 사본을 남겨 두고, ‘설정 되돌리기’로 이 변경을 되돌릴 수 있어요. 직접 수정한 Genex 에디터 도우미 파일은 옆에 .mine 사본으로 보관돼요.",
@@ -6044,4 +6048,10 @@ export default {
   "The old link will still open the game, for players who already have it too.":
     "예전 링크로도 계속 게임이 열려요. 이미 가진 플레이어도 마찬가지예요.",
   "{count, plural, one {# change left} other {# changes left}}": "{count, plural, other {#번 더 바꿀 수 있어요}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex가 {model}을 16K 컨텍스트로 실행되도록 복사할 수 있어요. 복사본은 같은 파일을 쓰니까 아무것도 내려받지 않아요.",
+  "Ollama is unavailable": "Ollama를 사용할 수 없어요",
+  "Raise context to 16K": "컨텍스트를 16K로 늘리기",
+  "Raising…": "늘리는 중…",
+  "The chat now uses {model}. Send your message again.": "이제 채팅이 {model}을 사용해요. 메시지를 다시 보내 주세요.",
 } satisfies LocaleCatalog;

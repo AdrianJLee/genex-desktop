@@ -9,17 +9,24 @@
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { after, describe, it } from "node:test";
+import { after, describe, it, mock } from "node:test";
 import { GenexTools } from "../../src/plugins/genex/adapter.ts";
 import { createGenexPlugin } from "../../src/plugins/genex/backend.ts";
 import { GenexAction, type GenexPublishState } from "../../src/shared/genex.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
-import { type GenexFixtureApi, type GenexRequest, startGenexFixtureApi } from "../helpers/genex-fixture-api.ts";
+import {
+  type GenexFixtureApi,
+  type GenexReply,
+  type GenexRequest,
+  startGenexFixtureApi,
+} from "../helpers/genex-fixture-api.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const PROJECT = "bodycam-game";
 const SLUG = "bodycam-game";
 const PROJECT_ID = "p-bodycam";
+/** How long a link change waits for Genex in the test that runs out of time. */
+const SLOW_ANSWER_MS = 100;
 const servers: GenexFixtureApi[] = [];
 after(async () => {
   await Promise.all(servers.map((s) => s.close()));
@@ -27,28 +34,35 @@ after(async () => {
 
 /**
  * Genex holding the game, an apps-only game (no web build) listed as "Bodycam game". `refuse` answers
- * its rename with that status instead; `link` answers its link change with that status and code.
+ * its rename with that status instead; `link` answers its link change with that status and code;
+ * `slowLink` moves the game and never answers, as a link change Studio stopped waiting for.
  */
-async function genexWith(options: { refuse?: number; link?: { status: number; error: string } } = {}) {
+async function genexWith(
+  options: { refuse?: number; link?: { status: number; error: string }; slowLink?: boolean } = {},
+) {
   const requests: GenexRequest[] = [];
   const hosted = { slug: SLUG, title: "Bodycam game", renamesLeft: 2 as number | null };
+  const read = () => ({ id: PROJECT_ID, status: "published", commitSha: null, ...hosted });
+  const playUrl = () => `https://${hosted.slug}.genex.technology/`;
+  const rename = (request: GenexRequest, reply: GenexReply) => {
+    if (options.refuse) return reply.json({ error: "Forbidden" }, options.refuse);
+    hosted.title = (JSON.parse(request.body) as { title: string }).title;
+    return reply.json({ project: { id: PROJECT_ID, ...hosted } });
+  };
+  const move = (request: GenexRequest, reply: GenexReply) => {
+    if (options.link) return reply.json({ error: options.link.error }, options.link.status);
+    hosted.slug = (JSON.parse(request.body) as { name: string }).name;
+    hosted.renamesLeft = (hosted.renamesLeft ?? 1) - 1;
+    if (options.slowLink) return request.closed;
+    return reply.json({ project: { id: PROJECT_ID, ...hosted, playUrl: playUrl() }, renamed: true });
+  };
   const server = await startGenexFixtureApi((request, reply) => {
     requests.push(request);
-    if (request.url === `/api/projects/by-slug/${hosted.slug}`) {
-      return reply.json({ project: { id: PROJECT_ID, status: "published", commitSha: null, ...hosted } });
-    }
-    if (request.url === `/api/projects/${PROJECT_ID}` && request.method === "PATCH") {
-      if (options.refuse) return reply.json({ error: "Forbidden" }, options.refuse);
-      hosted.title = (JSON.parse(request.body) as { title: string }).title;
-      return reply.json({ project: { id: PROJECT_ID, ...hosted } });
-    }
-    if (request.url === `/api/projects/${PROJECT_ID}/rename` && request.method === "POST") {
-      if (options.link) return reply.json({ error: options.link.error }, options.link.status);
-      hosted.slug = (JSON.parse(request.body) as { name: string }).name;
-      hosted.renamesLeft = (hosted.renamesLeft ?? 1) - 1;
-      const playUrl = `https://${hosted.slug}.genex.technology/`;
-      return reply.json({ project: { id: PROJECT_ID, ...hosted, playUrl }, renamed: true });
-    }
+    const route = `${request.method} ${request.url}`;
+    if (route === `GET /api/projects/by-slug/${hosted.slug}`) return reply.json({ project: read() });
+    if (route === `GET /api/projects/${PROJECT_ID}`) return reply.json({ project: { ...read(), playUrl: playUrl() } });
+    if (route === `PATCH /api/projects/${PROJECT_ID}`) return rename(request, reply);
+    if (route === `POST /api/projects/${PROJECT_ID}/rename`) return move(request, reply);
   });
   servers.push(server);
   const renames = () => requests.filter((r) => r.method === "PATCH");
@@ -136,6 +150,48 @@ describe("renaming a game from the Publish dialog", () => {
     assert.equal((await signedOut.saved()).title, "Bodycam game");
   });
 
+  it("follows a rename in Studio itself only for a game on Genex under another name", async () => {
+    const unlinked = await genexWith();
+    const notOnGenex = await tools(unlinked.server.url, { linked: false });
+    await notOnGenex.genex.publishName(PROJECT, "Street Patrol", true);
+    assert.equal(unlinked.renames().length, 0, "a game not on Genex is asked nothing");
+    assert.equal((await notOnGenex.saved()).title, "Bodycam game", "its first publish takes Studio's name");
+
+    const same = await genexWith();
+    await (await tools(same.server.url)).genex.publishName(PROJECT, "Bodycam game", true);
+    assert.equal(same.renames().length, 0, "listed under the name already: the dialog's own rename is not sent twice");
+
+    const listedOtherwise = await genexWith();
+    listedOtherwise.hosted.title = "bodycam-game";
+    const relisted = await tools(listedOtherwise.server.url);
+    await relisted.genex.publishName(PROJECT, "Bodycam game", true);
+    assert.equal(listedOtherwise.renames().length, 1, "Genex lists another name: it takes Studio's");
+    assert.equal(listedOtherwise.hosted.title, "Bodycam game");
+
+    const renamed = await genexWith();
+    const onGenex = await tools(renamed.server.url);
+    await onGenex.genex.publishName(PROJECT, "Street Patrol", true);
+    assert.deepEqual(JSON.parse(renamed.renames()[0]?.body ?? "{}"), { title: "Street Patrol" });
+    assert.equal((await onGenex.saved()).title, "Street Patrol");
+  });
+
+  it("keeps a rename in Studio that Genex didn't take, for the dialog to offer and the next publish to send", async () => {
+    const down = await genexWith({ refuse: 503 });
+    const unanswered = await tools(down.server.url);
+    await assert.rejects(unanswered.genex.publishName(PROJECT, "Street Patrol", true));
+    const kept = await unanswered.saved();
+    assert.deepEqual([kept.title, kept.renamed], ["Bodycam game", "Street Patrol"]);
+
+    const out = await genexWith();
+    const signedOut = await tools(out.server.url);
+    signedOut.signOut();
+    await assert.rejects(signedOut.genex.publishName(PROJECT, "Street Patrol", true));
+    assert.equal(out.renames().length, 0, "nothing sent while signed out");
+    assert.equal((await signedOut.saved()).renamed, "Street Patrol");
+    await signedOut.genex.publishName(PROJECT, "Bodycam game", true);
+    assert.equal((await signedOut.saved()).renamed, undefined, "named back to Genex's name: nothing waits");
+  });
+
   it("is a Publish dialog action that asks nothing first, so Enter saves", async () => {
     const manifest = validateManifest(
       JSON.parse(await readFile(path.join(process.cwd(), "src/plugins/genex/plugin.json"), "utf8")),
@@ -169,7 +225,11 @@ describe("changing a game's link from the Publish dialog", () => {
     assert.equal((await genex.publishView(PROJECT)).renamesLeft, 2, "the dialog knows the changes left");
     const after = await genex.publishLink(PROJECT, "  Street Patrol!! ");
     assert.equal(moves().length, 1);
-    assert.deepEqual(JSON.parse(moves()[0]?.body ?? "{}"), { name: "street-patrol" });
+    assert.deepEqual(
+      JSON.parse(moves()[0]?.body ?? "{}"),
+      { name: "street-patrol", keepTitle: true },
+      "a link is only the address: the game keeps its name",
+    );
     assert.equal(after.slug, "street-patrol");
     assert.equal(after.galleryUrl, "https://genex.games/street-patrol");
     assert.equal(after.renamesLeft, 1);
@@ -190,6 +250,7 @@ describe("changing a game's link from the Publish dialog", () => {
       { answer: { status: 409, error: "slug already taken" }, words: /Another game already has this link/ },
       { answer: { status: 409, error: "rename_limit_reached" }, words: /used all its link changes/ },
       { answer: { status: 400, error: "slug is reserved" }, words: /Genex keeps this link/ },
+      { answer: { status: 409, error: "release_conflict" }, words: /still publishing this game/ },
     ];
     for (const { answer, words } of cases) {
       const { server } = await genexWith({ link: answer });
@@ -198,6 +259,35 @@ describe("changing a game's link from the Publish dialog", () => {
       assert.equal((await link()).slug, SLUG);
       assert.notEqual((await saved()).slug, "street-patrol");
     }
+  });
+
+  it("says Genex didn't answer in time, and the next look at the game follows the link Genex gave it", async () => {
+    const { server, moves } = await genexWith({ slowLink: true });
+    const { genex, saved, link } = await tools(server.url);
+    assert.equal((await genex.publishView(PROJECT)).slug, SLUG, "the dialog is open, its view read");
+    const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const shortWait = mock.method(AbortSignal, "timeout", () => realTimeout(SLOW_ANSWER_MS));
+    try {
+      await assert.rejects(genex.publishLink(PROJECT, "street-patrol"), /didn't answer in time/);
+    } finally {
+      shortWait.mock.restore();
+    }
+    assert.equal(moves().length, 1);
+    assert.equal((await link()).slug, SLUG, "nothing followed yet: Studio heard no answer");
+    const view = await genex.publishView(PROJECT);
+    assert.equal(view.slug, "street-patrol");
+    assert.equal(view.hostedTitle, "Bodycam game", "the game kept its name");
+    assert.equal((await saved()).slug, "street-patrol");
+    assert.equal((await link()).slug, "street-patrol", "the next publish goes to the new link");
+    assert.equal((await link()).id, PROJECT_ID, "the same game, not a new one");
+  });
+
+  it("follows a link changed elsewhere (genex.games, another computer) when the old one is gone", async () => {
+    const { server, hosted } = await genexWith();
+    const { genex, link } = await tools(server.url);
+    hosted.slug = "moved-elsewhere";
+    assert.equal((await genex.publishView(PROJECT)).slug, "moved-elsewhere");
+    assert.equal((await link()).slug, "moved-elsewhere");
   });
 
   it("refuses a link with no letter or digit, a game not on Genex and a signed-out Studio, sending nothing", async () => {

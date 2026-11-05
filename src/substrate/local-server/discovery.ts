@@ -338,7 +338,7 @@ async function ollamaFacts(access: ServerAccess, ids: string[]): Promise<Map<str
     ids.map(async (id): Promise<[string, ModelFacts]> => {
       const shown = await client.show(id).catch(() => null);
       if (!shown) return [id, {}];
-      const context = await client.runtimeContext(id, shown.contextLength);
+      const context = await client.runtimeContext(id, shown.contextLength, shown.configuredContext);
       return [
         id,
         {

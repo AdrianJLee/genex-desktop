@@ -543,6 +543,156 @@ describe("a game with only apps, published", () => {
     }
   });
 
+  it("follows its game to the link Genex gives it now when the old one reads nothing, instead of making a new game", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      // Moved by a link change whose answer never came back, or on genex.games: the old link is gone.
+      if (req.url.startsWith("/api/projects/by-slug/new-link"))
+        return reply.json({ project: { id: "p1", slug: "new-link", status: "published", owner: { id: "u-me" } } });
+      if (req.url === "/api/projects/p1")
+        return reply.json({ project: { id: "p1", slug: "new-link", playUrl: "https://new-link.genex.technology/" } });
+    });
+    servers.push(server);
+    const { genex, runs } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "old-link", id: "p1", status: "published" });
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    await genex.publishWait("dust");
+    assert.equal(
+      (await runs()).some((call) => call.args[0] === "init"),
+      false,
+      "no new hosted project",
+    );
+    const link = JSON.parse(await readFile(path.join(workspace, ".genex", "project.json"), "utf8"));
+    assert.deepEqual([link.slug, link.id], ["new-link", "p1"], "the same game, at its new link");
+    assert.deepEqual(await readdir(path.join(workspace, ".genex")), ["project.json"], "nothing set aside");
+  });
+
+  /** Genex holding the listed game "dust-runners" (p1), keeping each title it is given. */
+  async function listedGame() {
+    const titles: string[] = [];
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/dust-runners"))
+        return reply.json({ project: { id: "p1", slug: "dust-runners", status: "published", owner: { id: "u-me" } } });
+      if (req.method === "PATCH" && req.url === "/api/projects/p1") {
+        titles.push((JSON.parse(req.body) as { title: string }).title);
+        return reply.json({ project: { id: "p1", slug: "dust-runners", title: titles.at(-1) } });
+      }
+    });
+    servers.push(server);
+    return { server, titles };
+  }
+
+  it("gives Genex the name the game got in Studio while its apps went, after the listing took the old one", async () => {
+    const { server, titles } = await listedGame();
+    let renamedInStudio: Promise<unknown> = Promise.resolve();
+    let genex: GenexTools | undefined;
+    const tooled = await toolsWithStandIn(true, server.url, CLIP_APPLIED, async () => {
+      // Renamed in Studio while the Mac app is notarized: the listing's name was fixed before.
+      renamedInStudio = genex?.publishName("dust", "Dust Kings", true) ?? renamedInStudio;
+      await renamedInStudio;
+      return { notarized: true, identity: "Developer ID Application: Ada Lovelace (ABCDE12345)" };
+    });
+    genex = tooled.genex;
+    await linkedTo(genex, { slug: "dust-runners", id: "p1", status: "published" });
+    const signed = { ...app("Dust Runners"), sign: { identity: "", profile: "genex-notary" } };
+    await genex.publishAppsOnly("dust", [signed], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    await renamedInStudio;
+    const listing = (await tooled.runs()).find((run) => run.args.includes("--gallery"))?.args ?? [];
+    assert.equal(
+      listing[listing.indexOf("--title") + 1],
+      "Dust Runners",
+      "the listing went with the name it started with",
+    );
+    assert.deepEqual(titles, ["Dust Kings", "Dust Kings"], "once when renamed, again after the listing");
+    assert.equal(state.title, "Dust Kings");
+    assert.equal(state.renamed, undefined, "nothing waits to be sent");
+  });
+
+  it("sends a name the game got in Studio that never reached Genex with its next publish", async () => {
+    const { server, titles } = await listedGame();
+    const { genex } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "dust-runners", id: "p1", status: "published" });
+    // Renamed in Studio while signed out of Genex: the record keeps the name Genex hasn't taken.
+    const record = { version: 1, project: "dust", connected: true, title: "Dust Runners", renamed: "Dust Kings" };
+    await writeFile(path.join(workspace, "publish.json"), JSON.stringify(record));
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Kings");
+    const state = await genex.publishWait("dust");
+    assert.deepEqual(titles, ["Dust Kings"]);
+    assert.equal(state.title, "Dust Kings");
+    assert.equal(state.renamed, undefined);
+  });
+
+  it("lists the game under a name Genex hasn't taken yet when the publish names none (the agent's publish)", async () => {
+    const { server, titles } = await listedGame();
+    const { genex } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "dust-runners", id: "p1", status: "published" });
+    const record = { version: 1, project: "dust", connected: true, title: "Dust Runners", renamed: "Dust Kings" };
+    await writeFile(path.join(workspace, "publish.json"), JSON.stringify(record));
+    await genex.publishAppsOnly("dust", [app("Dust Runners")]);
+    const state = await genex.publishWait("dust");
+    assert.deepEqual(titles, ["Dust Kings"], "Studio's name, never the old one");
+    assert.deepEqual([state.title, state.renamed], ["Dust Kings", undefined]);
+  });
+
+  it("gives Genex a name the game got in Studio while the publish was already giving it the one before", async () => {
+    const titles: string[] = [];
+    let genex: GenexTools | undefined;
+    let renamedInStudio: Promise<unknown> = Promise.resolve();
+    const server = await startGenexFixtureApi(async (req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/dust-runners"))
+        return reply.json({ project: { id: "p1", slug: "dust-runners", status: "published", owner: { id: "u-me" } } });
+      if (req.method === "PATCH" && req.url === "/api/projects/p1") {
+        const title = (JSON.parse(req.body) as { title: string }).title;
+        // Renamed again in Studio while the publish's own rename is on its way, which Genex
+        // applies after that newer one.
+        if (title === "Dust Kings" && titles.includes(title) && !titles.includes("Dust Lords"))
+          await genex?.publishName("dust", "Dust Lords", true);
+        titles.push(title);
+        return reply.json({ project: { id: "p1", slug: "dust-runners", title } });
+      }
+    });
+    servers.push(server);
+    const tooled = await toolsWithStandIn(true, server.url, CLIP_APPLIED, async () => {
+      renamedInStudio = genex?.publishName("dust", "Dust Kings", true) ?? renamedInStudio;
+      await renamedInStudio;
+      return { notarized: true, identity: "Developer ID Application: Ada Lovelace (ABCDE12345)" };
+    });
+    genex = tooled.genex;
+    await linkedTo(genex, { slug: "dust-runners", id: "p1", status: "published" });
+    const signed = { ...app("Dust Runners"), sign: { identity: "", profile: "genex-notary" } };
+    await genex.publishAppsOnly("dust", [signed], "Dust Runners");
+    await genex.publishWait("dust");
+    await renamedInStudio;
+    const record = await genex.publishView("dust");
+    assert.equal(titles.at(-1), "Dust Lords", "the newest name is the last Genex is given");
+    assert.deepEqual([record.title, record.renamed], ["Dust Lords", undefined]);
+  });
+
+  it("fails, keeping its link, when the old link reads nothing and Genex can't say where the game went", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      // A link moved elsewhere reads nothing; the game's own record is unreachable for now.
+      if (req.url === "/api/projects/p1") return reply.json({ error: "down" }, 503);
+    });
+    servers.push(server);
+    const { genex, runs } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "old-link", id: "p1", status: "published" });
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    assert.equal(state.job?.state, "failed", JSON.stringify(state.job));
+    assert.equal(
+      (await runs()).some((call) => call.args[0] === "init"),
+      false,
+      "no new hosted project",
+    );
+    const link = JSON.parse(await readFile(path.join(workspace, ".genex", "project.json"), "utf8"));
+    assert.deepEqual([link.slug, link.id], ["old-link", "p1"], "the link stays for the next try");
+    assert.deepEqual(await readdir(path.join(workspace, ".genex")), ["project.json"], "nothing set aside");
+  });
+
   it("keeps publishing to its hosted project while Genex says it is this account's, or can't be asked", async () => {
     const server = await startGenexFixtureApi((req, reply) => {
       if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });

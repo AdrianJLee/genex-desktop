@@ -696,6 +696,11 @@ describe("at Genex's moments", () => {
     await failed.reopened();
     const lost = (await failed.atMoment(LoopToolName.EditorState, health)) as Answer;
     assert.match(lost.block ?? "", /reopening Unreal failed: .*didn't build/);
+    // An editor of the game opened since (by the person) and still loading reads busy, never as that failure.
+    failed.rows.push({ pid: 9300, exec: EDITOR_EXEC, args: `${EDITOR_EXEC} ${failed.paths.project}` });
+    const loading = (await failed.atMoment(LoopToolName.EditorState, health)) as Answer;
+    assert.match(loading.pending ?? "", /busy/);
+    assert.equal(loading.block, undefined, "a loading editor is no crash");
   });
 
   it("editor-state's answer at health, in a run and in a chat: pending while Unreal may yet answer, blocked once it can't", () => {
@@ -862,6 +867,47 @@ describe("the agent's open-editor", () => {
       "no build: Unreal's own Open builds",
     );
     assert.ok(w.clock.at >= OPEN_TAKES_MS && w.clock.at < OPEN_TAKES_MS + 30_000, `waited ${w.clock.at} ms`);
+  });
+
+  it("after a reopen that failed, builds the game's module first: a fix that still doesn't build fails with its errors, a fix that builds opens", async () => {
+    let fixed = false;
+    // Another program runs on the Mac, so a listing without the game's editor says it isn't running.
+    const shell = { pid: 6100, exec: "/bin/zsh", args: "/bin/zsh -l" };
+    const w = await reopenWorld({ compile: () => (fixed ? BUILT : BROKEN), rows: () => [shell] });
+    await w.reopen();
+    assert.equal((await w.reopened()).reopening.state, ReopenState.Failed);
+    assert.deepEqual(await w.agentCall(EditorControlToolName.OpenEditor), { started: true });
+    const still = await w.reopened();
+    assert.equal(still.reopening.state, ReopenState.Failed);
+    assert.match(still.reopening.error ?? "", /BikeGameMode\.cpp:42/, "the agent reads what still doesn't build");
+    fixed = true;
+    assert.deepEqual(await w.agentCall(EditorControlToolName.OpenEditor), { started: true });
+    const end = await w.reopened();
+    assert.equal(end.reopening.state, ReopenState.Done, end.reopening.error);
+    assert.deepEqual(w.events, ["compile", "compile", "compile", `forget ${NAME}.uproject`, `open ${NAME}.uproject`]);
+    // The editor stops again: the good build cleared the mark, so the agent's Open is Unreal's own.
+    w.state.answering = false;
+    w.rows.splice(
+      w.rows.findIndex((row) => row.pid !== shell.pid),
+      1,
+    );
+    w.events.length = 0;
+    assert.deepEqual(await w.agentCall(EditorControlToolName.OpenEditor), { started: true });
+    assert.equal((await w.reopened()).reopening.state, ReopenState.Done);
+    assert.deepEqual(w.events, [`forget ${NAME}.uproject`, `open ${NAME}.uproject`], "no build once it built");
+  });
+
+  it("after a reopen that failed for anything but the build (Xcode not ready), opens by Unreal's own Open", async () => {
+    const shell = { pid: 6100, exec: "/bin/zsh", args: "/bin/zsh -l" };
+    const w = await reopenWorld({ xcode: XcodeState.FirstLaunch, rows: () => [shell] });
+    await w.reopen();
+    const failed = await w.reopened();
+    assert.equal(failed.reopening.state, ReopenState.Failed);
+    assert.match(failed.reopening.error ?? "", /Xcode/);
+    assert.deepEqual(await w.agentCall(EditorControlToolName.OpenEditor), { started: true });
+    const end = await w.reopened();
+    assert.equal(end.reopening.state, ReopenState.Done, end.reopening.error);
+    assert.deepEqual(w.events, [`forget ${NAME}.uproject`, `open ${NAME}.uproject`], "no build: Unreal's own Open");
   });
 
   it("leaves an editor of the game that runs without answering, and ends and reopens it only with restart: true", async () => {

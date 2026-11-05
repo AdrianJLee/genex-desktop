@@ -18,6 +18,11 @@ export type OpenTool = (typeof OpenTool)[keyof typeof OpenTool];
 export const HEALTH_POLL_MS = 15 * SECOND_MS;
 /** Genex reopens a stopped app at most this many times before it goes back to the last save point. */
 export const MAX_REOPENS = 2;
+/**
+ * How many times Genex hands a stopped app it couldn't bring back to the lead between its save points,
+ * trying again after each of its turns, before the Loop pauses for the person.
+ */
+export const MAX_HANDOFFS = 3;
 /** What a yes still needs of the lead's `finish` call: the workers settled and the last checkpoint. */
 export const OPEN_CLOSE_MS = 2 * MINUTE_MS;
 /** The longest save point label Genex keeps. */
@@ -51,6 +56,12 @@ export interface OpenJournal {
   /** What the lead asked for when its turn ends: the save point to go back to (resolved when asked), a restart. */
   between: { rewind: OpenRewind | null; restart: boolean };
   crashes: number;
+  /**
+   * The project's app was closed when the journal was kept: Genex was bringing it back, or it was the
+   * lead's to (`OpenLoop.appDown`). A Resume whose start can't open the app is the lead's (the person
+   * was told a Resume lets the agent try again), and one that opens it tells the lead it is back.
+   */
+  appLost: boolean;
 }
 
 /** Whether the lead asked for a rewind or a restart that its turn's end has not run yet. */
@@ -65,6 +76,7 @@ export function newOpenJournal(): OpenJournal {
     savePoints: [],
     between: { rewind: null, restart: false },
     crashes: 0,
+    appLost: false,
   };
 }
 
@@ -107,6 +119,7 @@ export function openJournalOf(saved: AnyRecord | null | undefined): OpenJournal 
       .filter((point): point is OpenSavePoint => point !== null),
     between: { rewind: rewindOf(between.rewind), restart: between.restart === true },
     crashes: countOf(open.crashes),
+    appLost: open.appLost === true,
   };
 }
 
@@ -170,7 +183,25 @@ export interface OpenLoop {
   wentBackSeq: number | null;
   /** A look at the project's app under way (`health.ts`): one at a time, never awaited by the wake loop's reads. */
   healthLook: Promise<void> | null;
+  /**
+   * Why the project's app is still closed once Genex couldn't bring it back and handed it to the lead
+   * (`health.ts` `handToLead`); null while it answers. Meanwhile no recovery starts, a save point and
+   * a finish are refused, and each of the lead's turns ends with Genex trying again.
+   */
+  appDown: string | null;
+  /**
+   * How many times Genex handed the stopped app to the lead since its last save point: past
+   * `MAX_HANDOFFS` the Loop pauses. An app that answers again counts on; the lead's save point starts it over.
+   */
+  handoffs: number;
+  /** The run log's line that last handed the lead the stopped app: Genex tries again after a turn that heard it. */
+  appDownSeq: number;
+  /** The moment whose steps Genex's tries for the lead run: the crash steps, or a held start's own (`appDownAtStart`). */
+  reopenAt: OpenReopenAt;
 }
+
+/** The moments whose steps bring the project's app back for the lead. */
+export type OpenReopenAt = typeof HookEvent.Crash | typeof HookEvent.RunPrepare;
 
 /** Whether a plugin of the project restarts its app (`restore.before` or `restore.after`): its lead is offered `restart`. */
 export function restartsApp(game: HookedGame): boolean {

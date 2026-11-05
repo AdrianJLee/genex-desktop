@@ -1563,6 +1563,8 @@ export default {
   "Genex cover": "Capa Genex",
   "Genex credits": "Créditos do Genex",
   "Genex decides from crash reports": "O Genex decide pelos relatórios de falhas",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "O Genex não respondeu a tempo. Confira o link do jogo de novo daqui a um minuto.",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "O Genex não clicou em nada. Instale o Unreal {version} você mesmo no launcher: {clicks}.",
   "Genex didn't click anything. Turn it on yourself: {clicks}.":
@@ -1607,6 +1609,8 @@ export default {
     "O Genex está instalando o Godot. Você não precisa fazer nada.",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "O Genex é de código aberto sob a Licença MIT. Ele também inclui software de outros projetos, cada um com sua própria licença.",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "O Genex ainda está publicando este jogo. Troque o link quando terminar.",
   "Genex isn't getting Roblox Studio right now.": "O Genex não está baixando o Roblox Studio agora.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "O Genex guarda antes uma cópia de cada arquivo, e “Desfazer configuração” reverte essas mudanças. Um arquivo do módulo do Genex para o editor que você alterou fica ao lado do novo como cópia .mine.",
@@ -6260,4 +6264,10 @@ export default {
     "O link antigo continua abrindo o jogo, também para quem já o tem.",
   "{count, plural, one {# change left} other {# changes left}}":
     "{count, plural, one {resta # mudança} other {restam # mudanças}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "O Genex pode copiar {model} para rodar com um contexto de 16K. A cópia usa os mesmos arquivos, então nada é baixado.",
+  "Ollama is unavailable": "Ollama indisponível",
+  "Raise context to 16K": "Aumentar contexto para 16K",
+  "Raising…": "Aumentando…",
+  "The chat now uses {model}. Send your message again.": "O chat agora usa {model}. Envie sua mensagem de novo.",
 } satisfies LocaleCatalog;

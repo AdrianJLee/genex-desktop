@@ -2224,6 +2224,9 @@ export const TRANSCRIPT_WORDS = {
   jobStopTitle: t("Stop this background work"),
   /** A missing macOS permission (`app_look_access`): the button opens System Settings, not Genex's own Settings. */
   openPrivacySettings: t("Open Privacy settings"),
+  /** An Ollama turn its small context refused: the button makes a 16K copy of the model and picks it. */
+  raiseContext: t("Raise context to 16K"),
+  raisingContext: t("Raising…"),
 } as const;
 
 // ── background work ───────────────────────────────────────────────────────────────────────
@@ -2545,6 +2548,18 @@ const PRIVACY_PANE_WORDS = {
 export function appAccessMissing(missing: readonly AppLookAccessKind[]): string {
   const panes = formatList(missing.map((pane) => PRIVACY_PANE_WORDS[pane]));
   return t("Genex can't see app windows yet: allow {panes} for Genex in System Settings.", { panes });
+}
+
+/** Under an Ollama turn its context refused: what Raise context to 16K does. */
+export function raiseContextOffer(model: string): string {
+  return t("Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.", {
+    model,
+  });
+}
+
+/** After Raise context: the chat now runs on the copy. */
+export function raisedContextDone(model: string): string {
+  return t("The chat now uses {model}. Send your message again.", { model });
 }
 
 /** The button for one pane when more than one is missing: "Open Accessibility settings". */
@@ -5827,6 +5842,7 @@ export const PLAY_CARD_MENU_WORDS = {
       [PlayChangeOutcome.LinkTaken]: t("Another game already has this link. Try another one."),
       [PlayChangeOutcome.LinkLimit]: t("This game has used all its link changes."),
       [PlayChangeOutcome.LinkReserved]: t("Genex keeps this link for itself. Try another one."),
+      [PlayChangeOutcome.LinkBusy]: t("Genex is still publishing this game. Change the link once it's done."),
     },
   },
   players: {

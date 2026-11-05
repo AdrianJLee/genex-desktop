@@ -1524,6 +1524,8 @@ export default {
   "Genex cover": "Обложка Genex",
   "Genex credits": "Кредиты Genex",
   "Genex decides from crash reports": "Genex решает по отчётам о сбоях",
+  "Genex didn't answer in time. Check the game's link again in a minute.":
+    "Genex не ответил вовремя. Проверь ссылку на игру ещё раз через минуту.",
   "Genex didn't click anything. Install Unreal {version} yourself in the launcher: {clicks}.":
     "Genex ничего не нажимал. Установи Unreal {version} в лаунчере сам: {clicks}.",
   "Genex didn't click anything. Turn it on yourself: {clicks}.": "Genex ничего не нажимал. Включи вручную: {clicks}.",
@@ -1565,6 +1567,8 @@ export default {
   "Genex is installing Godot. Nothing is needed from you.": "Genex устанавливает Godot. От тебя ничего не нужно.",
   "Genex is open source under the MIT License. It also includes software from other projects, each under its own license.":
     "Genex — открытый проект под лицензией MIT. В него также входят программы из других проектов, у каждой своя лицензия.",
+  "Genex is still publishing this game. Change the link once it's done.":
+    "Genex ещё публикует эту игру. Смени ссылку, когда публикация закончится.",
   "Genex isn't getting Roblox Studio right now.": "Genex сейчас не устанавливает Roblox Studio.",
   "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.":
     "Сначала Genex сохраняет копию каждого файла, а «Отменить настройку» возвращает всё как было. Изменённый тобой файл модуля Genex для редактора останется рядом как копия .mine.",
@@ -6226,4 +6230,10 @@ export default {
     "Старая ссылка тоже будет открывать игру, и у тех, у кого она уже есть.",
   "{count, plural, one {# change left} other {# changes left}}":
     "{count, plural, one {осталась # смена} few {осталось # смены} many {осталось # смен} other {осталось # смены}}",
+  "Genex can copy {model} to run with a 16K context. The copy shares its files, so nothing is downloaded.":
+    "Genex может сделать копию {model} с контекстом 16K. Копия использует те же файлы, так что ничего не скачивается.",
+  "Ollama is unavailable": "Ollama недоступна",
+  "Raise context to 16K": "Поднять контекст до 16K",
+  "Raising…": "Поднимаю…",
+  "The chat now uses {model}. Send your message again.": "Теперь чат работает на {model}. Отправь сообщение ещё раз.",
 } satisfies LocaleCatalog;

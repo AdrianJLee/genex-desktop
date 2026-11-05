@@ -497,11 +497,28 @@ fires `crash` and waits until the app answers (`MAX_REOPENS`), then goes back to
 there was when it saw the crash (its writers in place stopped first; the lead told as the restore lands;
 a close or a Stop before the restore's turn on the git-write queue takes nothing back; a merge of a
 worker's copy whose turn comes once the Loop pauses or closes lands nothing),
-else pauses the Loop with the reason (`OpenLoop.halted`: the lead's own session under way aborted,
+else hands the app to the lead (`OpenLoop.appDown`): a line with the app's own reason (a C++ build
+error names its file and line) wakes or reaches it (`NoteKind.AppCrashed`), its turn is never cut, no
+recovery starts, `save_point` and `finish` are refused, and a turn's end that heard that line (never
+the wrap-up turn's) keeps nothing and runs the rewind the lead asked for (a restore Genex held pauses
+in its hold's words; one that brings the app back ends there, and says so), then, unless a rewind
+brought it back, Genex's try beside the wake loop (standing for its `restart`): a `health` look
+first, an app that answers or is only busy waited for and never reopened under it, else `crash` once
+more. A clean `health` answer meanwhile (the lead's own Open) gives the app back; a look no step
+answered says nothing. Past `MAX_HANDOFFS` such tries since the lead's last `save_point` (an app that
+answers only to stop again counts on) it pauses the Loop in the person's words, never the app's error,
+and never once the run's wrap-up started (`LoopRun.wrapping`: a try still under way never cuts it, and
+the close keeps the folder as it is)
+(`held-words.ts` `appLostWords`; `OpenLoop.halted`: the lead's own session under way aborted,
 `engine.abort {cwd, lead}`, again each watch round until it ends, as after a Stop; an outage wait ends
 at its next step; no session opens, and `save_point`, `rewind`, `restart`, `finish`, `worker_start` and
-`worker_mark` are refused, as once the Loop closes; the close paused); a crash step Genex held pauses in its hold's words and
-goes back nowhere. The recovery runs beside the wake loop (`open.recovering`), counted as work at
+`worker_mark` are refused, as once the Loop closes; the close paused; a Resume starts over). The
+journal keeps whether the app was closed (`OpenJournal.appLost`, from the crash until it is back, so a
+Stop or Genex's hold during the recovery keeps it too): a Resume whose `run.prepare` a plugin's step
+still blocks hands it to the lead again, its tries running `run.prepare` (even once the app answers,
+which alone doesn't give it back then), and one that opens it tells the lead; any other held Resume
+stays paused in its plugin's words. A crash step
+Genex held pauses in its hold's words and goes back nowhere. The recovery runs beside the wake loop (`open.recovering`), counted as work at
 hand (a lone lead rests until it is back): the person's words still wake the lead, `save_point` and
 `finish` are refused meanwhile, the turn's end keeps and restores nothing, and only the way back takes
 the git-write queue. Once the Loop begins to close it stops at its next step (its waits for the app

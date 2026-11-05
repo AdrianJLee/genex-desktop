@@ -55,6 +55,8 @@ const LONG_MESSAGE = Array.from(
 ).join("\n");
 /** Frames recorded before the paste: where the conversation was, which every later frame keeps. */
 const BEFORE_PASTE_MS = 150;
+/** The composer's text box grows to this height (CSS px), then scrolls. */
+const MAX_COMPOSER_PX = 138;
 /** A placeholder that wraps onto several lines of the composer, as a long instruction does on a narrow screen. */
 const LONG_PLACEHOLDER = Array.from(
   { length: 3 },
@@ -329,6 +331,7 @@ async function pasteAndDelete(wc: WebContents, scene: string): Promise<PageFrame
 /** An empty box is as tall as the words of its placeholder need, so a wrapping one is never cut through. */
 async function placeholderFits(wc: WebContents): Promise<{ placeholder: number; typed: number }> {
   await page(wc, "window.focusPrompt()");
+  const empty = (await page<PromptState>(wc, "window.promptState()")).height;
   const placeholder = await page<number>(wc, `window.heightWithPlaceholder(${JSON.stringify(LONG_PLACEHOLDER)})`);
   await wc.debugger.sendCommand("Input.insertText", { text: LONG_PLACEHOLDER });
   await sleep(TAIL_MS);
@@ -336,6 +339,9 @@ async function placeholderFits(wc: WebContents): Promise<{ placeholder: number; 
   wc.selectAll();
   await press(wc, BACKSPACE);
   await sleep(TAIL_MS);
+  // Words that wrap, yet stay under the composer's maximum: else both heights match whatever happens.
+  const wraps = typed > empty && typed < MAX_COMPOSER_PX;
+  if (!wraps) fail("the placeholder's words did not wrap within the composer", { empty, typed });
   if (placeholder < typed) fail("an empty composer cut through a placeholder that wraps", { placeholder, typed });
   return { placeholder, typed };
 }
@@ -358,6 +364,9 @@ async function composerScenes(wc: WebContents): Promise<Record<string, unknown>>
   const moved = reading.filter((frame) => frame.scrollTop !== start);
   if (moved.length)
     fail("a paste or its delete moved the conversation the reader was in", { start, moved: moved.slice(0, 8) });
+  // The grown composer covers the newest line only once the chat stopped following: else the press missed.
+  if (!reading.some((frame) => frame.belowBottom > 1))
+    fail("the press in the conversation did not stop it following", {});
   const summary = (frames: PageFrame[]) => ({
     frames: frames.length,
     maxBelowBottomPx: Math.max(0, ...frames.map((frame) => frame.belowBottom)),

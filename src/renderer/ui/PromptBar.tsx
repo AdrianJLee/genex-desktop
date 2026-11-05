@@ -1,7 +1,7 @@
 import { markPerformance } from "../performance.tsx";
 import { PerformanceMarkName } from "../../shared/performance.ts";
 import { t } from "../../shared/i18n.ts";
-import type { ClipboardEvent, CSSProperties, JSX, KeyboardEvent, Ref, RefObject } from "react";
+import type { ClipboardEvent, JSX, KeyboardEvent, Ref, RefObject } from "react";
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons.tsx";
 import { Shortcut } from "./Shortcut.tsx";
@@ -122,9 +122,6 @@ export interface ComposerPermissions {
   engine: string;
 }
 
-/** The prompt grows with its text between these heights (px), then scrolls. */
-const MIN_INPUT_HEIGHT = 38;
-const MAX_INPUT_HEIGHT = 138;
 /** The send control morphs into Stop on the same click; this long after a send, Stop ignores it (ms). */
 const STOP_PAD_MS = 600;
 const DEFAULT_PLACEHOLDER = t("Write a message…");
@@ -249,27 +246,13 @@ function backspaceTag(
   return true;
 }
 
-/** Each committed draft is a typing journey's end (`composer-commit`, docs/performance.md). */
-function useComposerCommitMark(draft: string): void {
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the mark is taken once per new draft
+/** Each committed draft or placeholder is a typing journey's end (`composer-commit`, docs/performance.md). */
+function useComposerCommitMark(draft: string, placeholder: string): void {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the mark is taken once per commit of either
   useLayoutEffect(() => {
     markPerformance(PerformanceMarkName.ComposerCommit);
-  }, [draft]);
+  }, [draft, placeholder]);
 }
-
-/**
- * The text box sizes itself to its words (`field-sizing: content`) between a compact minimum and
- * maximum, then scrolls. An empty box sizes to its placeholder, so a wrapping instruction is never
- * sliced through mid-word. Measuring it by collapsing it in script made the chat above it taller
- * for a moment: the chat's scroll was clamped to fit, and the conversation stayed lower once the
- * box grew back (a flash on a long paste, a bounce on deleting it).
- */
-const PROMPT_INPUT_SIZE = {
-  fieldSizing: "content",
-  minHeight: MIN_INPUT_HEIGHT,
-  maxHeight: MAX_INPUT_HEIGHT,
-  overflowY: "auto",
-} as const satisfies CSSProperties;
 
 /** The board with these pictures added after the ones already on it, each once. */
 function withFrames(current: PickedFrame[], added: PickedFrame[]): PickedFrame[] {
@@ -799,15 +782,23 @@ function PromptTextarea({
             "aria-activedescendant": list.option ?? undefined,
           }
         : {})}
-      style={PROMPT_INPUT_SIZE}
-      className={`${PROMPT_INPUT_CLASS} resize-none bg-transparent text-ink outline-none placeholder:text-ink-3`}
+      className={`${PROMPT_INPUT_CLASS} ${PROMPT_BOX_SIZE} resize-none bg-transparent text-ink outline-none placeholder:text-ink-3`}
     />
   );
 }
 
 /** The text box's box and type, which the painted words under it share glyph for glyph. */
 const PROMPT_INPUT_CLASS =
-  "composer-input min-h-[35px] w-full min-w-0 pt-[6px] pr-2 pb-[9px] pl-[7px] text-composer [overflow-wrap:anywhere]";
+  "composer-input w-full min-w-0 pt-[6px] pr-2 pb-[9px] pl-[7px] text-composer [overflow-wrap:anywhere]";
+
+/**
+ * The text box sizes itself to its words between a compact minimum and maximum, then scrolls; an
+ * empty one sizes to its placeholder, so a wrapping instruction is never sliced through mid-word.
+ * Measured in script by collapsing it, it made the chat above it taller for a moment: the chat's
+ * scroll was clamped and the conversation stayed lower once the box grew back (a flash on a long
+ * paste, a bounce on deleting it).
+ */
+const PROMPT_BOX_SIZE = "field-sizing-content min-h-[38px] max-h-[138px] overflow-y-auto";
 
 /** The / command list in a game's composer; the Harness chat has none. */
 function CommandList({
@@ -925,7 +916,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   // Add's Plan mode asks for what to plan, as Codex's does, until the message goes.
   const contextual = plan.planOn ? PLAN_PLACEHOLDER : (props.placeholder ?? DEFAULT_PLACEHOLDER);
   const placeholderNow = props.about?.placeholder ?? composerPlaceholder(coordinating, contextual, props.leadListens);
-  useComposerCommitMark(draft);
+  useComposerCommitMark(draft, placeholderNow);
   const composer = useComposerSend(props, { draft, setDraft, plan, board, inputRef, mentions });
   const held = useFileDrop(panelRef, disabled, board.addFiles);
 

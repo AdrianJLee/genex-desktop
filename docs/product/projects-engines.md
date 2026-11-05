@@ -30,11 +30,11 @@ game; an Unreal or Godot project outside it is not held by save points or Rewind
 
 ## Unreal
 
-The lead works in the open editor through Genex's helper, one holder at a time; while you play
+The lead works in the open editor, one holder at a time; while you play
 the chat reads “Waiting for you to finish in Unreal”. Rewind saves, closes and reopens Unreal.
 Agents play it. Mac games skip hardware ray tracing. Agents set up linked projects;
-Undo reverts both. Agents package its apps. An **Unreal plugin** project
-is a host project with the plugin in `Plugins/`; its tools build, test and package it.
+Undo reverts both. Agents package its apps; Play runs the newest or asks them. An **Unreal plugin** project
+hosts the plugin in `Plugins/`; its tools build, test and package it.
 
 ## Godot, Roblox, Unity
 

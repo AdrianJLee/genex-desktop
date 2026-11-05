@@ -51,7 +51,7 @@ export const GamePackageState = {
 } as const;
 export type GamePackageState = (typeof GamePackageState)[keyof typeof GamePackageState];
 
-/** `package-status`'s answer: the state, one line, the app it left (relative to the game) and its first errors. */
+/** A package as its record keeps it: the state, one line, the app it left (relative to the game) and its first errors. */
 export type GamePackageStatus = {
   state: GamePackageState;
   /** The system the app is for: `Mac` or `Windows`. */
@@ -61,6 +61,8 @@ export type GamePackageStatus = {
   errors?: string[];
   seconds?: number;
 };
+/** `package-status`'s answer: the package's record, and whether it runs now (`jobRunning`, read by Genex to wake the chat when it ends). */
+export type GamePackageAnswer = GamePackageStatus & { jobRunning: boolean };
 
 /** How long a package may take before its process tree is ended: a first cook compiles every shader. */
 export const GAME_PACKAGE_TIMEOUT_MS = 120 * MINUTE_MS;
@@ -611,16 +613,17 @@ export function createGamePackageTools(deps: GamePackageDeps) {
    * `package-status`: the job's record for `system` (this computer's own when none); after a restart,
    * the app found in that system's build folder.
    */
-  async function status(args: Args, context: PluginContext, storage: string): Promise<GamePackageStatus> {
+  async function status(args: Args, context: PluginContext, storage: string): Promise<GamePackageAnswer> {
     const target = await targetOf(deps, storage, context, args.system);
     const record = records.get(recordKey(target));
-    if (record) return record;
+    if (record) return { ...record, jobRunning: record.state === GamePackageState.Running };
     const dir = path.join(target.projectDir, BUILDS_FOLDER, target.system.folder);
     const app = (await isPlain(dir)) ? await appIn(dir, target.system.id) : undefined;
     return {
       state: GamePackageState.Idle,
       system: target.system.folder,
       ...(app ? { app: shownIn(target.gameDir, app) } : {}),
+      jobRunning: false,
     };
   }
 

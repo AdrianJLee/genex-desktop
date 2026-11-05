@@ -3,9 +3,9 @@
  * the moment of each start (Bypass and Auto start it in the mode's box, Accept edits and Manual ask
  * on a card, Plan answers that it waits for the plan), the folder a job runs in, the never-touch
  * screen on its command in every mode, who sees and stops which job, the host records in the chat,
- * the chat's next turn told of its jobs, and what ends a job besides itself (its run's settle, its
- * chat turn's end). Real core, fake delegated engines, and each job a plain `/bin/sh -c` in its own
- * process group, its spawn request recorded.
+ * the chat woken when its own job ends by itself (or its next turn told), and what ends a job
+ * besides itself (its run's settle, its chat turn's end). Real core, fake delegated engines, and
+ * each job a plain `/bin/sh -c` in its own process group, its spawn request recorded.
  */
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -15,7 +15,7 @@ import path from "node:path";
 import { after, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
 import { customRecord } from "../../src/shared/custom-events.ts";
-import type { LiveToolResult } from "../../src/shared/engine-requests.ts";
+import { type LiveToolResult, MessageFrom } from "../../src/shared/engine-requests.ts";
 import {
   isJobTool,
   type JobEndedPayload,
@@ -28,6 +28,7 @@ import {
   type JobView,
 } from "../../src/shared/jobs.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
+import { MessageOrigin } from "../../src/shared/protocol.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import type { JobSpawn } from "../../src/substrate/jobs.ts";
@@ -134,6 +135,40 @@ async function untilJob(chat: Chat, id: string, done: (state: JobState | undefin
     await sleep(POLL_MS);
   }
   assert.fail(`job ${id} never got there`);
+}
+
+/** Genex's notices beside a session's brief, as one text. */
+const notices = (request: { notices?: readonly string[] } | undefined) => (request?.notices ?? []).join("\n");
+
+/** What Genex's job wake sent the chat: each hidden message's words and fields. */
+type Wake = { text: string; threadId: string; origin?: unknown; from?: unknown };
+
+/** Record each wake Genex sends the chat (failing it with `failure`, when given); the person's messages go on as before. */
+function recordWakes(chat: Chat, failure?: Error): Wake[] {
+  const woken: Wake[] = [];
+  const dispatch = chat.core.host.dispatch.bind(chat.core.host);
+  chat.core.host.dispatch = async (action) => {
+    const fields = action as unknown as Wake;
+    if (fields.origin !== MessageOrigin.JobEnded) return dispatch(action);
+    woken.push({ text: fields.text, threadId: fields.threadId, origin: fields.origin, from: fields.from });
+    if (failure) throw failure;
+  };
+  return woken;
+}
+
+/** Wait until Genex has sent `count` wakes. */
+async function untilWoken(woken: readonly Wake[], count: number) {
+  for (let tries = 0; tries < POLL_TRIES && woken.length < count; tries++) await sleep(POLL_MS);
+  assert.equal(woken.length, count, "the chat was woken");
+}
+
+/** Wait until the registry no longer marks a job told: its wake never reached the chat. */
+async function untilJobUntold(chat: Chat, id: string) {
+  for (let tries = 0; tries < POLL_TRIES; tries++) {
+    if ((await chat.core.jobs.get(chat.game, id))?.toldChat === false) return;
+    await sleep(POLL_MS);
+  }
+  assert.fail(`job ${id} was never marked untold`);
 }
 
 /** Wait until a job's end is recorded in its chat and the registry marks it recorded (the mark follows the row). */
@@ -622,11 +657,12 @@ describe("job tools", () => {
     }
   });
 
-  it("the chat's next turn is told which of its jobs finished, once", {
+  it("a chat's own job that ends by itself wakes the chat once, and its next turn does not tell it again", {
     ...POSIX,
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await jobChat();
+    const woken = recordWakes(chat);
     await chat.core.setPermissionMode(chat.threadId, PermissionMode.Auto);
     const first = await callsIn(chat, await ownTurn(chat), [
       [JobTool.Start, { title: "Build", command: SHORT }],
@@ -635,14 +671,41 @@ describe("job tools", () => {
     const built = startedId(first.answers[0] ?? "");
     const server = startedId(first.answers[1] ?? "");
     await untilEndRecorded(chat, built);
+    await untilWoken(woken, 1);
+    const [wake] = woken;
+    assert.equal(wake?.origin, MessageOrigin.JobEnded, "one hidden message from Genex");
+    assert.equal(wake?.from, MessageFrom.Genex);
+    assert.equal(wake?.threadId, chat.threadId);
+    assert.match(
+      wake?.text ?? "",
+      new RegExp(`Your jobs that ended: Build \\(${built}, \`echo built; exit 0\`\\) finished \\(exit 0\\)`),
+    );
+    assert.doesNotMatch(wake?.text ?? "", new RegExp(server), "a running job is job_list's to say");
+    // Flipped: the next turn's notice named the ended job; the wake that started a turn told it.
     const next = await callsIn(chat, await ownTurn(chat), []);
-    const notices = (request: { notices?: readonly string[] } | undefined) => (request?.notices ?? []).join("\n");
+    assert.doesNotMatch(notices(next.request), /Your jobs that ended/, "told once, by the wake");
+    await chat.core.jobs.stop(chat.game, server, JobStopper.Person);
+    await untilEndRecorded(chat, server);
+    assert.equal(woken.length, 1, "a job the person stopped wakes nothing");
+  });
+
+  it("a job whose wake never reached its chat is told at the chat's next turn, once", {
+    ...POSIX,
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    const chat = await jobChat();
+    const woken = recordWakes(chat, new Error("harness not running"));
+    await chat.core.setPermissionMode(chat.threadId, PermissionMode.Auto);
+    const first = await callsIn(chat, await ownTurn(chat), [[JobTool.Start, { title: "Build", command: SHORT }]]);
+    const built = startedId(first.answers[0] ?? "");
+    await untilEndRecorded(chat, built);
+    await untilWoken(woken, 1);
+    await untilJobUntold(chat, built);
+    const next = await callsIn(chat, await ownTurn(chat), []);
     assert.match(
       notices(next.request),
       new RegExp(`Your jobs that ended: Build \\(${built}, \`echo built; exit 0\`\\) finished \\(exit 0\\)`),
     );
-    // Flipped: the jobs still running were named on every turn; job_list says them.
-    assert.doesNotMatch(notices(next.request), new RegExp(server), "a running job is job_list's to say");
     const again = await callsIn(chat, await ownTurn(chat), []);
     assert.doesNotMatch(notices(again.request), /Your jobs that ended/, "told once");
   });

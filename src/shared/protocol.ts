@@ -96,6 +96,8 @@ export const MessageOrigin = {
   LoopHeld: "loop-held",
   /** A run landed its build: the agent is asked to make the game's Genex cover now (`core/cover-step.ts`). */
   CoverStep: "cover-step",
+  /** A background job the chat's agent started ended: the agent is told, to carry on (`core/job-wake.ts`). */
+  JobEnded: "job-ended",
 } as const;
 export type MessageOrigin = (typeof MessageOrigin)[keyof typeof MessageOrigin];
 const MESSAGE_ORIGINS: ReadonlySet<unknown> = new Set(Object.values(MessageOrigin));

@@ -136,6 +136,7 @@ const REPORT_SOURCE: Readonly<Record<MessageOrigin, SendSource>> = {
   [MessageOrigin.TagRetry]: SendSource.TagRetry,
   [MessageOrigin.LoopHeld]: SendSource.LoopHeld,
   [MessageOrigin.CoverStep]: SendSource.CoverStep,
+  [MessageOrigin.JobEnded]: SendSource.JobEnded,
 };
 
 /** Sends words the chat wrote itself, marked with who wrote them. */

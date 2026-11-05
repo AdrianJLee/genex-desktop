@@ -89,6 +89,7 @@ const METHODS = [
   "renameThread",
   "compactThread",
   "archiveGame",
+  "playGameBuild",
   "storageSpace",
   "freeStorage",
   "dataFolder",

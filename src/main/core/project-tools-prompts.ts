@@ -2,6 +2,7 @@
 import type { LiveToolSpec } from "../../shared/engine-requests.ts";
 import { GENEX_PLUGIN_AUTHOR_SKILL, GENEX_PLUGIN_ID } from "../../shared/genex.ts";
 import { PLUGIN_SKILL_TOOL } from "../../shared/plugins.ts";
+import { LocalPlayState } from "../../shared/play-native.ts";
 import { FindNext, ProjectTool } from "../../shared/project-tools.ts";
 
 /** `start_web_game`: the web starter, written into a folder with no kind yet. Takes no parameters. */
@@ -19,6 +20,31 @@ export const PROJECT_TOOL_ANSWER = {
   inPlan:
     "The chat is in Plan mode, so the web starter was not written: it waits until the plan is approved. Put it in your plan instead.",
 } as const;
+
+/** `play_build`: Genex starts the game folder's own newest app for the person; it writes nothing. */
+export const PLAY_BUILD_TOOL: LiveToolSpec = {
+  name: ProjectTool.PlayBuild,
+  description:
+    "Play the game for the person: Genex starts the newest app this game's folder holds for this computer (an Unreal package in unreal/Builds/), full screen in its sandbox, where the person plays it; it is the person's Play button. Call it when the person says to run or play the game, or once a package you made for them ends. An app older than the game's last change is not played: package the game again first. It changes no file.",
+  parameters: { type: "object", properties: {} },
+};
+
+/** What `play_build` answers, by what Genex did. */
+export const PLAY_BUILD_ANSWER = {
+  [LocalPlayState.Launched]: (app: string) =>
+    `Genex started ${app} full screen for the person. Tell them in one short line that the build is ready and running.`,
+  [LocalPlayState.Shown]: (app: string) =>
+    `${app || "The game"} was running already: Genex brought its window forward.`,
+  [LocalPlayState.Failed]: (app: string) =>
+    `${app || "The app"} did not start: it quit before its window appeared. Package the game again, then call play_build.`,
+  [LocalPlayState.NoBuild]: () =>
+    "The game's folder holds no app for this computer yet. Package the game (for Unreal, unreal__package-game), tell the person it is packaging and end your turn: Genex wakes you when it ends, then call play_build.",
+  [LocalPlayState.Stale]: (app: string) =>
+    `${app} was built before the game's last change, so it misses that change. Package the game again (for Unreal, unreal__package-game), tell the person it is packaging and end your turn: Genex wakes you when it ends, then call play_build.`,
+  [LocalPlayState.Packaging]: () =>
+    "A package you started is still running: end your turn, Genex wakes you when it ends, then call play_build.",
+  [LocalPlayState.Unsupported]: () => "Genex can't play the game's apps on this computer.",
+} as const satisfies Record<LocalPlayState, (app: string) => string>;
 
 /** What a Genex plugin is, told with every search: an engine's own plugins are not one. */
 const GENEX_PLUGINS =

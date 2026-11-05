@@ -62,6 +62,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:thread.rename": "renameThread",
   "studio:compact": "compactThread",
   "studio:game.archive": "archiveGame",
+  "studio:game.play-build": "playGameBuild",
   "studio:storage": "storageSpace",
   "studio:storage.free": "freeStorage",
   "studio:data-folder": "dataFolder",
@@ -368,6 +369,7 @@ export interface StudioInvokePayloads {
   "studio:thread.rename": { threadId: string; title: string };
   "studio:compact": { threadId: string } & NonNullable<Arg<"compactThread", 1>>;
   "studio:game.archive": { project: string };
+  "studio:game.play-build": { project: string };
   "studio:storage": { project?: string };
   "studio:storage.free": { project?: string };
   "studio:data-folder": undefined;

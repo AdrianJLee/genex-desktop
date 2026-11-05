@@ -99,6 +99,8 @@ export interface FoundBuild {
   entry: string;
   /** What is shipped, relative to the game folder: the bundle, or the folder the program and its data are in. */
   folder: string;
+  /** The program it starts, relative to the game folder: inside a Mac bundle, else the entry itself. */
+  program: string;
   /** The space the build takes (the bundle, or the program's folder). */
   bytes: number;
   /** When its program was last written, ms since the epoch. */
@@ -189,6 +191,21 @@ async function bundleProgram(app: string): Promise<string | null> {
   return path.join(app, "Contents", "MacOS", name);
 }
 
+/** A string key of a Mac bundle's XML Info.plist, or null (a binary plist, a missing or odd value). */
+async function plistString(app: string, key: string): Promise<string | null> {
+  const plist = await head(path.join(app, "Contents", "Info.plist"), PLIST_MAX_BYTES);
+  const found = plist
+    ? new RegExp(`<key>${key}</key>\\s*<string>([^<]{1,255})</string>`).exec(plist.toString("utf8"))
+    : null;
+  return found?.[1] ?? null;
+}
+
+/** A Mac bundle's own id and name (CFBundleIdentifier, CFBundleName), each null when its Info.plist doesn't say. */
+export async function bundleIdentity(app: string): Promise<{ id: string | null; name: string | null }> {
+  const [id, name] = await Promise.all([plistString(app, "CFBundleIdentifier"), plistString(app, "CFBundleName")]);
+  return { id, name };
+}
+
 /** Whether `file`, every link on the way followed, is still inside `dir`. */
 async function insideOf(dir: string, file: string): Promise<boolean> {
   const [base, target] = await Promise.all([realpath(dir).catch(() => null), realpath(file).catch(() => null)]);
@@ -212,6 +229,7 @@ async function macBuild(root: string, app: string): Promise<FoundBuild | null> {
     arch,
     entry,
     folder: entry,
+    program: path.relative(root, program).split(path.sep).join("/"),
     bytes: await diskBytes(app),
     builtAt: info.mtimeMs,
   };
@@ -233,6 +251,7 @@ async function windowsBuild(root: string, dir: string, names: readonly string[])
       arch,
       entry,
       folder,
+      program: entry,
       bytes: await diskBytes(dir),
       builtAt: info.mtimeMs,
     };
@@ -268,7 +287,8 @@ async function linuxBuild(root: string, dir: string, names: readonly string[]): 
     const build = linuxBuildOf(entry);
     if (!build) continue;
     const bytes = await diskBytes(path.join(root, ...build.folder.split("/")));
-    return { platform: NativePlatform.Linux, arch, entry, folder: build.folder, bytes, builtAt: info.mtimeMs };
+    const folder = build.folder;
+    return { platform: NativePlatform.Linux, arch, entry, folder, program: entry, bytes, builtAt: info.mtimeMs };
   }
   return null;
 }

@@ -122,9 +122,6 @@ export interface ComposerPermissions {
   engine: string;
 }
 
-/** The prompt grows with its text between these heights (px), then scrolls. */
-const MIN_INPUT_HEIGHT = 38;
-const MAX_INPUT_HEIGHT = 138;
 /** The send control morphs into Stop on the same click; this long after a send, Stop ignores it (ms). */
 const STOP_PAD_MS = 600;
 const DEFAULT_PLACEHOLDER = t("Write a message…");
@@ -249,49 +246,11 @@ function backspaceTag(
   return true;
 }
 
-/**
- * Autosize up to a compact maximum — and never smaller than the placeholder, which a wrapping
- * one was: an empty textarea measures none of it, so the instruction was sliced through
- * mid-word on the one screen a new user has.
- */
-function useAutosize(inputRef: RefObject<HTMLTextAreaElement | null>, draft: string, placeholder: string): void {
-  const lastWidth = useRef(0);
+/** Each committed draft or placeholder is a typing journey's end (`composer-commit`, docs/performance.md). */
+function useComposerCommitMark(draft: string, placeholder: string): void {
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the mark is taken once per commit of either
   useLayoutEffect(() => {
     markPerformance(PerformanceMarkName.ComposerCommit);
-    const input = inputRef.current;
-    if (!input) return;
-    const measure = (): number => {
-      input.style.height = "0px";
-      return input.scrollHeight;
-    };
-    const fit = (): void => {
-      let height = measure();
-      if (draft.length === 0 && input.placeholder) {
-        // Borrowed for the measurement and given back inside the same layout pass: nothing paints
-        // with the placeholder as the value.
-        input.value = input.placeholder;
-        height = Math.max(height, measure());
-        input.value = "";
-      }
-      input.style.height = `${Math.min(Math.max(height, MIN_INPUT_HEIGHT), MAX_INPUT_HEIGHT)}px`;
-      input.style.overflowY = height > MAX_INPUT_HEIGHT ? "auto" : "hidden";
-    };
-    fit();
-    // The chat column is draggable, so the same words wrap differently from one drag to the next.
-    let resizeFrame = 0;
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0;
-      if (Math.abs(width - lastWidth.current) < 0.5) return;
-      lastWidth.current = width;
-      // Write the new height outside the observer delivery cycle.
-      cancelAnimationFrame(resizeFrame);
-      resizeFrame = requestAnimationFrame(fit);
-    });
-    observer.observe(input);
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(resizeFrame);
-    };
   }, [draft, placeholder]);
 }
 
@@ -823,14 +782,23 @@ function PromptTextarea({
             "aria-activedescendant": list.option ?? undefined,
           }
         : {})}
-      className={`${PROMPT_INPUT_CLASS} resize-none bg-transparent text-ink outline-none placeholder:text-ink-3`}
+      className={`${PROMPT_INPUT_CLASS} ${PROMPT_BOX_SIZE} resize-none bg-transparent text-ink outline-none placeholder:text-ink-3`}
     />
   );
 }
 
 /** The text box's box and type, which the painted words under it share glyph for glyph. */
 const PROMPT_INPUT_CLASS =
-  "composer-input min-h-[35px] w-full min-w-0 pt-[6px] pr-2 pb-[9px] pl-[7px] text-composer [overflow-wrap:anywhere]";
+  "composer-input w-full min-w-0 pt-[6px] pr-2 pb-[9px] pl-[7px] text-composer [overflow-wrap:anywhere]";
+
+/**
+ * The text box sizes itself to its words between a compact minimum and maximum, then scrolls; an
+ * empty one sizes to its placeholder, so a wrapping instruction is never sliced through mid-word.
+ * Measured in script by collapsing it, it made the chat above it taller for a moment: the chat's
+ * scroll was clamped and the conversation stayed lower once the box grew back (a flash on a long
+ * paste, a bounce on deleting it).
+ */
+const PROMPT_BOX_SIZE = "field-sizing-content min-h-[38px] max-h-[138px] overflow-y-auto";
 
 /** The / command list in a game's composer; the Harness chat has none. */
 function CommandList({
@@ -948,7 +916,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   // Add's Plan mode asks for what to plan, as Codex's does, until the message goes.
   const contextual = plan.planOn ? PLAN_PLACEHOLDER : (props.placeholder ?? DEFAULT_PLACEHOLDER);
   const placeholderNow = props.about?.placeholder ?? composerPlaceholder(coordinating, contextual, props.leadListens);
-  useAutosize(inputRef, draft, placeholderNow);
+  useComposerCommitMark(draft, placeholderNow);
   const composer = useComposerSend(props, { draft, setDraft, plan, board, inputRef, mentions });
   const held = useFileDrop(panelRef, disabled, board.addFiles);
 

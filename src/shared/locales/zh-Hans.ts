@@ -346,8 +346,6 @@ export default {
   "Anime cel": "动画赛璐璐",
   Another: "换一张",
   "Another Bonsai download is running": "另一个 Bonsai 下载正在进行",
-  "Another app is using the port Genex gave {project}. Set it up again to move it to a free one.":
-    "另一个应用正在使用 Genex 分配给 {project} 的端口。重新设置即可换到空闲端口。",
   "Another app, such as OneDrive or an antivirus, is still reading the new project's files. Try Create and open again in a moment.":
     "另一个应用（例如 OneDrive 或杀毒软件）仍在读取新项目的文件。请稍后再试一次“创建并打开”。",
   "Another clip": "换个片段",
@@ -1485,9 +1483,6 @@ export default {
   "Genex runs {count, plural, one {# tool} other {# tools}} for it:":
     "Genex 为它运行 {count, plural, other {# 个工具}}：",
   "Genex saves each change to the folder’s own Git history.": "Genex 会把每次修改保存到这个文件夹自己的 Git 历史中。",
-  "Genex sets it up for agents first; you confirm what changes.": "Genex 会先为智能体设置好它；由你确认更改内容。",
-  "Genex sets {project} up for agents now; you confirm what changes.":
-    "Genex 现在为智能体设置 {project}；由你确认更改内容。",
   "Genex sign-in expired. Reconnect your account.": "Genex 登录已过期。请重新连接你的账号。",
   "Genex starts Git history here, so any change can be undone.": "Genex 会在这里创建 Git 历史，任何修改都可以撤销。",
   "Genex terms updated": "Genex 条款已更新",
@@ -2406,9 +2401,7 @@ export default {
   "Open in Godot {version}.": "已在 Godot {version} 中打开。",
   "Open in Unreal": "在 Unreal 中打开",
   "Open in terminal": "在终端中打开",
-  "Open it after the Loop ends.": "等 Loop 结束后再打开。",
   "Open it in a private window to join as another player.": "在无痕窗口中打开，即可作为另一名玩家加入。",
-  "Open it once Unreal is free.": "等 Unreal 空闲后再打开。",
   "Open on Play": "在“游玩”中打开",
   "Open page": "打开页面",
   "Open pages on {domain}": "打开 {domain} 上的页面",
@@ -3116,7 +3109,6 @@ export default {
   "Set up Codex": "安装 Codex",
   "Set up OpenCode": "安装 OpenCode",
   "Set up an Unreal project for Genex.": "为 Genex 设置一个 Unreal 项目。",
-  "Set up and open": "设置并打开",
   "Set up for Genex": "为 Genex 设置",
   "Set up the protected workspace": "设置受保护的工作区",
   "Set up this game's Unity project": "设置这个游戏的 Unity 项目",
@@ -4931,6 +4923,8 @@ export default {
   "when a turn starts": "回复开始时",
   "when a worker ends": "助手结束时",
   "when a worker starts": "助手启动时",
+  "while a job one of its tools started runs, to see whether it has ended":
+    "其工具启动的任务运行期间，用于查看它是否已结束",
   "while it holds a lock, to see whether you are using it": "持有锁期间，用于查看你是否正在使用",
   wide: "睁大",
   worker: "助手",
@@ -5854,4 +5848,9 @@ export default {
   "Sending to Genex. Keep Genex open": "正在发送到 Genex。请保持 Genex 打开",
   "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
     "这个游戏使用 Unreal {version}。目前 Genex 只能构建 Unreal 5.8 游戏：请升级到 5.8，然后再构建一次。",
+  "Run the game": "运行游戏",
+  "The agent is packaging the game. It starts it once the package is ready.": "智能体正在打包游戏，打包好后就会启动。",
+  "Genex can’t play this game’s app on this computer.": "Genex 无法在这台电脑上运行这个游戏的应用。",
+  "Open the game’s chat to have the agent package it.": "打开游戏的聊天，让智能体来打包。",
+  "Not open in Unreal": "未在 Unreal 中打开",
 } satisfies LocaleCatalog;

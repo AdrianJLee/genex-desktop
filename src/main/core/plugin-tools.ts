@@ -36,6 +36,7 @@ import { windowsHomeEnv } from "../../substrate/child-env.ts";
 import { type ConnectorCall, type ConnectorToolEvent, McpHealth, type McpChange } from "../../shared/mcp.ts";
 import { connectorCallFields, keepCaptures } from "./connector-record.ts";
 import { noteCutOff } from "./cut-off-calls.ts";
+import { coreJobWake, PluginJobWatches } from "./job-wake.ts";
 import { closeAssetCall, type OpenedCall, openAssetCall } from "./asset-calls.ts";
 import { type CallMaking, callMaking, genexCallMaking } from "../../shared/asset-making.ts";
 import { GENEX_ASSET_TOOL, GENEX_PLUGIN_ID } from "../../shared/genex.ts";
@@ -300,6 +301,8 @@ function pluginCallMaking(
 
 export class PluginToolService {
   readonly #core: StudioCore;
+  /** The plugin jobs the chats' own agents started, watched until they end (`job-wake.ts`). */
+  readonly jobWatches: PluginJobWatches;
   /** What each run's Genex jobs committed, against its cap. */
   readonly #credits = new RunCreditLedger();
   readonly #x: Pick<
@@ -334,6 +337,7 @@ export class PluginToolService {
   ) {
     this.#core = core;
     this.#x = x;
+    this.jobWatches = new PluginJobWatches(coreJobWake(core));
   }
 
   // ── plugin consent ───────────────────────────────────────────────────────────────────────
@@ -610,6 +614,8 @@ export class PluginToolService {
     const returned = (result as { images?: unknown } | null)?.images;
     const count = Array.isArray(returned) ? returned.length : 0;
     await this.pluginToolFinished(started, { result }, count, binding);
+    // A job the chat's own agent started is watched, so the chat hears when it ends (`job-wake.ts`).
+    if (chatsOwnCall(ctx)) this.jobWatches.called(name, args, binding, result);
     const answered = kindChange ? await afterKindChange(this.#core, kindChange, result) : result;
     const afterBudget = momentBudget(HookEvent.ToolAfter, deadline - this.#x.locks.clock.now());
     const after = await this.#ownToolMoment(HookEvent.ToolAfter, name, args, binding, signal, ctx, afterBudget);
@@ -1455,6 +1461,12 @@ function callRun(ctx: PluginCallContext): CallRun | null {
   const attributed = ctx.attribution ? { runId: ctx.attribution.runId, facetId: ctx.attribution.agentId } : null;
   const sources = [attributed, ctx.selfCapture, ctx.director].filter((s): s is CallRun => !!s);
   return sources.find((s) => typeof s.runId === "string" && s.runId) ?? null;
+}
+
+/** A call of a chat's own session: no run's, lead's or worker's, and not one of Genex's own steps. */
+function chatsOwnCall(ctx: PluginCallContext): boolean {
+  if (callRun(ctx) || ctx.lead || ctx.outlivesTurn || ctx.holder) return false;
+  return ctx.caller !== PluginToolAudience.Harness;
 }
 
 /**

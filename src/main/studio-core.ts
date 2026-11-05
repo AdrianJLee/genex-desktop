@@ -70,6 +70,9 @@ import { renameOnGenex } from "./core/genex-publish.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
+import { coreJobWake, wakeForJob } from "./core/job-wake.ts";
+import { playsItsApp } from "./core/project-tools.ts";
+import { type LocalPlayAnswer, LocalPlayState, NativeEngine } from "../shared/play-native.ts";
 import {
   type BootNotice,
   BootReason,
@@ -388,6 +391,11 @@ export interface StudioCoreOptions {
   renderGameCover?: (surface: string, seed: number) => Promise<string>;
   /** Computer control (`desktop-control.ts`): absent where no desktop driver can be reached, and in tests. */
   desktop?: DesktopControl;
+  /**
+   * Play for a game being made: its own folder's newest app for this computer, in the game sandbox
+   * (`main/play/local-plays.ts`); absent where the app plays none, and in tests.
+   */
+  localPlays?: { play(project: string, engine: string | null): Promise<LocalPlayAnswer> };
   /** Notes each boot step as it finishes (`main/performance.ts`); a launch without diagnostics passes nothing. */
   markBoot?: (step: string) => void;
   engines?: Engine[];
@@ -881,17 +889,24 @@ export class StudioCore {
 
   /** The job registry, and what an earlier app left running closed as interrupted. */
   async #openJobs(): Promise<void> {
+    // The ends an earlier app left are told at the chat's next turn; only an end heard live wakes a chat.
+    let live = false;
+    const wake = coreJobWake(this);
     this.jobs = new JobService({
       root: this.layout.jobs,
       spawn: this.options.jobSpawn ?? ((request) => this.sandbox.spawnLongLived(request)),
       probe: this.options.jobProbe,
       onLog: (line) => this.options.onLog?.(line, "stderr"),
       onStarted: (record) => recordJobStarted(this, record),
-      onEnded: (record) => recordJobEnded(this, record),
+      onEnded: async (record) => {
+        await recordJobEnded(this, record);
+        if (live) await wakeForJob(record, { ...wake, jobs: this.jobs });
+      },
     });
     await this.jobs
       .reconcile()
       .catch((error) => this.options.onLog?.(`[core] closing left jobs failed: ${errorMessage(error)}`, "stderr"));
+    live = true;
   }
 
   /** Stop a settled run's jobs, in every game; the run stays in `runJobStops` until their ends are recorded. */
@@ -1733,6 +1748,7 @@ export class StudioCore {
 
   async stop(): Promise<void> {
     this.#planReviews?.stop();
+    this.#pluginTools?.jobWatches.dispose();
     // A pause appended before `start()` may have planned a resume: it, and the hold on the Mac
     // awake that it asked for, end with the core either way.
     this.#autoResume.dispose();
@@ -2101,6 +2117,24 @@ export class StudioCore {
     } catch {
       /* first launch — defaults stand */
     }
+  }
+
+  /**
+   * Play for a game being made (the Builds and Live Play of an Unreal game, and its agent's
+   * `play_build`): the game folder's own newest app for this computer, started or brought forward,
+   * or why not. Without an app here, or with one older than the game's last change, while a chat of
+   * the game waits for a package its agent started the answer is `packaging`: that package brings
+   * the next app.
+   */
+  async playGameBuild(project: string): Promise<LocalPlayAnswer> {
+    const plays = this.options.localPlays;
+    if (!plays) return { state: LocalPlayState.Unsupported };
+    const kind = await this.games.kindOf(project);
+    const answer = await plays.play(project, playsItsApp(kind) ? NativeEngine.Unreal : null);
+    const awaitsApp = answer.state === LocalPlayState.NoBuild || answer.state === LocalPlayState.Stale;
+    if (awaitsApp && this.#pluginTools.jobWatches.watching(project))
+      return { ...answer, state: LocalPlayState.Packaging };
+    return answer;
   }
 
   // ── threads ──────────────────────────────────────────────────────────────────────────────

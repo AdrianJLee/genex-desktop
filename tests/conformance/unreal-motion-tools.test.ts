@@ -190,12 +190,19 @@ describe("add-motion-matching", () => {
     const { deps, done } = standIns(w);
     const tools = createMotionTools(deps);
     const before = await tools.status("storage", "town");
-    assert.deepEqual(before, { sample: w.sample, inGame: false, adding: { state: MotionAddState.Idle } });
+    assert.deepEqual(before, {
+      sample: w.sample,
+      inGame: false,
+      adding: { state: MotionAddState.Idle },
+      jobRunning: false,
+    });
     const answer = await tools.add("storage", "town", w.game);
     assert.ok("started" in answer);
     assert.match(answer.note, /about 10 minutes/);
+    assert.equal((await tools.status("storage", "town")).jobRunning, true, "Genex reads that it runs");
     const adding = await settled(tools, w);
     assert.equal(adding.state, MotionAddState.Done, adding.error);
+    assert.equal((await tools.status("storage", "town")).jobRunning, false);
     assert.deepEqual(done, ["quit", "open"]);
     const has = (inner: string) => existsSync(path.join(w.content, inner));
     assert.ok(has("Blueprints/SandboxCharacter_CMC.uasset"));

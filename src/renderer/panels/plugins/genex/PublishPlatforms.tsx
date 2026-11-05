@@ -220,6 +220,53 @@ function askText(target: PublishTarget, end: PlatformEnd, title: string): string
   return end === PlatformEnd.Rebuild ? rebuildAsk(target, title) : makeAppAsk(target, title);
 }
 
+/** What went wrong in a build on Genex: the first error, how many more, and the agent to fix them all. */
+function CloudErrors({
+  project,
+  title,
+  platforms,
+  native,
+}: {
+  project: string;
+  title: string;
+  platforms: readonly PublishPlatform[];
+  native: GenexNativeRecord | undefined;
+}): JSX.Element | null {
+  /** The errors last handed to the agent: new ones offer it again. */
+  const [askedFix, setAskedFix] = useState<string | null>(null);
+  const fix = cloudErrors(platforms, native);
+  if (!fix) return null;
+  const key = fix.errors.join("\n");
+  const askFix = (): void => {
+    composeInChat({ project, text: cloudFixAsk(fix, title), send: true });
+    setAskedFix(key);
+  };
+  return (
+    <div className="genex-publish-cloud-errors" data-publish-cloud-errors>
+      <p className="genex-publish-platform-failure">
+        {fix.errors[0]}
+        {fix.errors.length > 1 && ` ${WORDS.cloudMoreErrors(fix.errors.length - 1)}`}
+      </p>
+      {askedFix === key ? (
+        <span className="genex-publish-platform-note" role="status">
+          {WORDS.asked}
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="genex-publish-platform-make"
+          aria-label={WORDS.cloudFixLabel}
+          data-publish-cloud-fix
+          onClick={askFix}
+        >
+          {WORDS.cloudFix}
+          <Icon name="chevron-right" size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 /**
  * The platform rows and who plays what, or nothing for a web game with no app. Read once while the
  * dialog is open: hidden while it celebrates, they are not read again after.
@@ -254,8 +301,6 @@ export function PublishPlatforms({
   /** The rows whose app was asked of Genex, by how many builds of it Genex had then: a new one answers. */
   const [cloudAsked, setCloudAsked] = useState<ReadonlyMap<PublishTarget, number>>(() => new Map());
   const [refused, setRefused] = useState<string | null>(null);
-  /** The errors last handed to the agent: new ones offer it again. */
-  const [askedFix, setAskedFix] = useState<string | null>(null);
   if (!shown || !platforms || !listsPlatforms(platforms, engineGame)) return null;
   const webOffer = webOfferFor(facts ?? []);
   const reach = reachLine(platforms, webOffer, hostedWeb === true);
@@ -294,14 +339,6 @@ export function PublishPlatforms({
         forget();
       });
   };
-  const fix = cloudErrors(platforms, native);
-  const fixKey = fix?.errors.join("\n") ?? null;
-  const fixAsked = fixKey !== null && askedFix === fixKey;
-  const askFix = (): void => {
-    if (!fix) return;
-    composeInChat({ project, text: cloudFixAsk(fix, title), send: true });
-    setAskedFix(fixKey);
-  };
   return (
     <div className="genex-publish-platforms" data-genex-publish-platforms>
       <ul aria-label={WORDS.label}>
@@ -315,30 +352,7 @@ export function PublishPlatforms({
           />
         ))}
       </ul>
-      {fix && (
-        <div className="genex-publish-cloud-errors" data-publish-cloud-errors>
-          <p className="genex-publish-platform-failure">
-            {fix.errors[0]}
-            {fix.errors.length > 1 && ` ${WORDS.cloudMoreErrors(fix.errors.length - 1)}`}
-          </p>
-          {fixAsked ? (
-            <span className="genex-publish-platform-note" role="status">
-              {WORDS.asked}
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="genex-publish-platform-make"
-              aria-label={WORDS.cloudFixLabel}
-              data-publish-cloud-fix
-              onClick={askFix}
-            >
-              {WORDS.cloudFix}
-              <Icon name="chevron-right" size={12} />
-            </button>
-          )}
-        </div>
-      )}
+      <CloudErrors project={project} title={title} platforms={platforms} native={native} />
       {failureLines(platforms, native).map((line) => (
         <p key={line} className="genex-publish-platform-failure">
           {line}

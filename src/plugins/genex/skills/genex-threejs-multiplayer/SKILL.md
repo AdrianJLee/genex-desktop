@@ -90,7 +90,7 @@ listed: `skills/genex-threejs-multiplayer/references/realtime-patterns.md`, for 
 built from the SDK calls the card shows. Commands map onto Studio tools as the `genex` skill
 describes (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/SKILL.md v1.38.0 sha256 9e1be9fb9b87c75c58488776d2e49ac0a757a8f81e21966ed890f5e8915f0a3f -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/SKILL.md v1.38.2 sha256 3fb4e5e35afccc492e28c7e16820e46ccb8781ac465b40b7337d6be594473b98 -->
 ---
 name: genex-threejs-multiplayer
 description: Realtime multiplayer for Genex Three.js games with `@genex-ai/multiplayer` — a relay whose SDK auto-smooths remote players AND shared objects (you do NOT write interpolation). Use whenever 2+ players share a world: movement sync, a shared ball/NPC via objects + ownership, host-authoritative scores/waves, shots/emotes, presence.
@@ -104,6 +104,10 @@ runs no physics and no game logic — but it *does* enforce two generic invarian
 path is the correct one: **exactly one smoother** (the SDK interpolates remote players and
 objects for you) and **exactly one owner/host** (server-arbitrated). You read a remote player
 or a shared object and it is already smooth; you never fight over who simulates the ball.
+
+**Competitive play where cheating matters** (ranked PvP, an arena or shooter with a winner worth
+faking, "so nobody can cheat") is a different kind of game: the server runs the rules. Use
+`$genex-authoritative-multiplayer` for it instead of this skill, and never mix the two in one game.
 
 
 ## Two rules that decide whether it feels good

@@ -194,6 +194,110 @@ const from = entry.referrer;              // "https://example.com", or null
 - **A value from a link is text anyone can write.** Check its shape before you
   use it.
 
+## A result link with its own preview picture
+
+`share()` links to the game's page on Genex, and a link card (X, Telegram,
+Discord, iMessage) shows that page's picture: the game's cover, the same for
+every player. Genex keeps no picture per shared link. A game whose players
+should each share a card with their OWN result ("Sam scored 12,400") needs a
+small server of the creator's own that answers that card and sends people on to
+the game. Build it only when the person asks: it is a server outside Genex that
+they host, pay for and answer for, so say that before you build it. It needs no
+Genex credential; never put one in the game.
+
+The flow, with `result` as the parameter (any name that is not reserved):
+
+1. **When the round ends**, the game posts the result and its card picture to
+   the creator's server, which stores both and answers a link on its own
+   domain: `https://share.example.com/r/<id>`.
+2. **That link's page** carries the card in its HTML and sends the person on to
+   the game's page on Genex with `?result=<id>`.
+3. **The game opens** from that link, reads `getEntry().params.get("result")`
+   and fetches the result to show it ("Beat Sam's 12,400").
+
+```ts
+import { copyText, getEntry, share } from "@genex-ai/embed-sdk";
+
+const SHARE_API = "https://share.example.com"; // the creator's server, never a Genex address
+let resultUrl: string | null = null;
+
+// 1. When the round ends, before the Share button shows: a click must not wait on the network.
+async function prepareShare(score: number, card: Blob): Promise<void> {
+  const body = new FormData();
+  body.append("score", String(score));
+  body.append("card", card, "card.png");
+  try {
+    const res = await fetch(`${SHARE_API}/results`, { method: "POST", body });
+    resultUrl = res.ok ? (await res.json()).url : null;
+  } catch {
+    resultUrl = null; // no server: the button falls back to share()
+  }
+}
+
+shareBtn.onclick = () => {
+  const text = "Beat my score";
+  if (!resultUrl) return void share({ text }); // the game's Genex page, with its cover
+  if (typeof navigator.share === "function") {
+    navigator.share({ url: resultUrl, text }).catch((e) => {
+      if (e?.name !== "AbortError") showLink(resultUrl!); // AbortError: the player said no
+    });
+  } else {
+    void copyText(resultUrl).then((r) => (r.ok ? showCopied() : showLink(resultUrl!)));
+  }
+};
+
+// 3. Opened from a result link.
+const id = getEntry().params.get("result");
+if (id && /^[A-Za-z0-9_-]{6,32}$/.test(id)) void showSharedResult(id); // a missing one is ordinary
+```
+
+`share()` takes no link of its own, so the result link goes through
+`navigator.share` where the browser has a sheet (the share row above), and
+`copyText()` where it has none. Keep `share()` as the fallback, so a game
+whose server is down still shares its Genex page.
+
+**The card picture.** 1200×630, PNG or JPEG (some cards drop WebP), under
+1 MB. Draw it on a 2D canvas: `drawImage` the game's canvas right after
+`renderer.render()` in the same frame (a WebGL canvas read later comes back
+blank), then whatever the result card shows on top.
+
+**The server's page for `/r/<id>`** answers `200` with HTML like this, every
+player-sent value HTML-escaped:
+
+```html
+<!doctype html>
+<meta charset="utf-8">
+<title>Sam scored 12,400 in My Game</title>
+<meta property="og:title" content="Sam scored 12,400">
+<meta property="og:description" content="Can you beat it? Play My Game in your browser.">
+<meta property="og:image" content="https://share.example.com/cards/k3f9x2.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://share.example.com/r/k3f9x2">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0;url=https://genex.games/my-game?result=k3f9x2">
+<script>location.replace("https://genex.games/my-game?result=k3f9x2");</script>
+```
+
+What breaks it:
+
+- **A server redirect.** Never answer `/r/<id>` with a 301 or 302: link
+  crawlers follow it and take the card of the Genex page, the cover. Send the
+  person on with the meta refresh and the script above.
+- **`og:url` naming the Genex page.** Some crawlers read the card from the
+  address `og:url` names. It is the result link itself.
+- **Tags added by a script.** Crawlers run no JavaScript; the tags must be in
+  the HTML the server sends.
+- **CORS.** The game posts from its own origins: its live address and its
+  preview address (`npx genex preview` prints both), its own domain if it has
+  one, and the local dev server. The server allows exactly those.
+
+The server answers for what its cards show: anyone can post any picture to it.
+Accept only PNG or JPEG under the size cap, cap how many a player or an address
+may post a day, and keep a way to take one down. A card a social network
+already shows is read again later, so a link whose picture is gone keeps
+answering with its tags and the game's cover as `og:image`, never a 404.
+
 ## The frame, exactly
 
 What the Genex page gives the frame a game runs in, by its attribute names:

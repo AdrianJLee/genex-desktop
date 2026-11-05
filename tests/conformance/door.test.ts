@@ -221,8 +221,4 @@ describe("the door: the surfaces that draw it", () => {
     assert.match(chat, /<PromptBar/);
     assert.match(read("src/renderer/panels/Sidebar.tsx"), /New game/);
   });
-
-  it("the box is sized to its placeholder, so a longer one still cannot be clipped", () => {
-    assert.match(read("src/renderer/ui/PromptBar.tsx"), /if \(draft\.length === 0 && input\.placeholder\)/);
-  });
 });

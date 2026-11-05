@@ -13,6 +13,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { writeFile } from "node:fs/promises";
 import {
+  CloudSendState,
   cleanGenexTitle,
   defaultGenexTitle,
   genexSlug,
@@ -53,7 +54,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { isBlankStill } from "../../shared/preview-contract.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
-import { stageBuildSource } from "./remix-source.ts";
+import { stageBuildSource, unrealEngineOf } from "./remix-source.ts";
 import {
   type MacSigning,
   type NotarizeOutcome,
@@ -62,13 +63,18 @@ import {
   withNotarizing,
 } from "./mac-notarize.ts";
 import {
+  assertCloudPlatform,
+  beginCloudSend,
   CLOUD_BUILD_FILE,
+  CLOUD_SEND_TIMEOUT_MS,
   CLOUD_SOURCE_FOLDER,
+  CLOUD_UNREAL_VERSIONS,
   type CloudBuildDeps,
   isRunning,
   loadCloudBuilds,
+  loadCloudSend,
   pinnedCliBuildsApps,
-  startCloudBuild,
+  sendCloudBuild,
   watchCloudBuild,
 } from "./cloud-build.ts";
 import {
@@ -593,6 +599,8 @@ export class GenexTools {
   readonly #notarize: (app: string, signing: MacSigning, signal: AbortSignal) => Promise<NotarizeOutcome>;
   /** The builds on Genex being followed, by game and job: one watch each. */
   #cloudWatches = new Map<string, Promise<void>>();
+  /** Each game's project on its way to Genex, by game: one at a time, and it outlives the press. */
+  #cloudSends = new Map<string, Promise<void>>();
   /** A development stand's own CA file the CLI runs trust (`createGenexPlugin`); absent on genex.games. */
   readonly #ca: string | undefined;
   /** A development stand's game host (`createGenexPlugin`); absent on genex.games. */
@@ -2257,55 +2265,83 @@ export class GenexTools {
     }
   }
   // ── apps Genex builds ────────────────────────────────────────────────────────────────────
-  /** The game's builds on Genex; one still running that nothing follows (Studio restarted) is followed again. */
+  /**
+   * The game's builds on Genex; one still running that nothing follows (Studio restarted) is followed
+   * again. A send the record calls under way that nothing here is sending stopped when Studio closed.
+   */
   async #cloud(project: string): Promise<NonNullable<GenexNativeRecord["cloud"]>> {
     if (!this.#buildsApps) return { supported: false, builds: [] };
-    const builds = await loadCloudBuilds(this.#publishDir(project), (file) => readJsonOr(file));
+    const dir = this.#publishDir(project);
+    const read = (file: string) => readJsonOr(file);
+    const builds = await loadCloudBuilds(dir, read);
     for (const build of builds.filter(isRunning)) this.#watchCloud(project, build.jobId);
-    return { supported: true, builds };
+    const send = await loadCloudSend(dir, read);
+    if (!send) return { supported: true, builds };
+    const stopped = send.state === CloudSendState.Sending && !this.#cloudSends.has(project);
+    return { supported: true, builds, send: stopped ? { ...send, state: CloudSendState.Failed } : send };
   }
   /** What a build on Genex runs on: the CLI in the game's publish workspace, the game's Unreal project staged alone. */
-  #cloudDeps(project: string): CloudBuildDeps & { read: (file: string) => Promise<unknown> } {
+  #cloudDeps(
+    project: string,
+    timeoutMs = NATIVE_PUBLISH_TIMEOUT_MS,
+  ): CloudBuildDeps & { read: (file: string) => Promise<unknown> } {
     const dir = this.#publishDir(project);
     return {
       cli: (args, signal) =>
-        this.#spawnCli(dir, args, signal, {
-          timeoutMs: NATIVE_PUBLISH_TIMEOUT_MS,
-          parse: true,
-          home: path.join(dir, "home"),
-        }),
+        this.#spawnCli(dir, args, signal, { timeoutMs, parse: true, home: path.join(dir, "home") }),
       stage: (gameDir, dest) => stageBuildSource(gameDir, dest),
       sleep: this.#cloudSleep,
       read: (file) => readJsonOr(file),
     };
   }
+  /** Refused before anything goes up: the build computers would only say so after the whole upload. */
+  async #refuseCloudEngine(gameDir: string): Promise<void> {
+    const engine = await unrealEngineOf(gameDir);
+    if (engine === null || CLOUD_UNREAL_VERSIONS.has(engine)) return;
+    throw new Error(engine ? PUBLISH_MESSAGE.CloudEngineRefusal(engine) : PUBLISH_MESSAGE.CloudNoEngineRefusal());
+  }
   /**
    * Ask Genex to build the game's `platform` app on its own computers, from the project in
-   * `gameDir`. Refused while the CLI can't ask, or before the game has a page on Genex for the app to
-   * go on; a build of that platform still running is answered as it is. The build is then followed
-   * until it ends, and the dialog reads how it goes in the publish record.
+   * `gameDir`. Refused while the CLI can't ask, before the game has a page on Genex for the app to
+   * go on, or for an Unreal Genex doesn't build; a send or a build of that platform still running is
+   * answered as it is. The answer doesn't wait for the project to go up: a big one takes far longer
+   * than a plugin call may run. The dialog reads how the send and then the build go in the record.
    */
   async cloudBuild(project: string, platform: unknown, gameDir: string | undefined): Promise<GenexNativeRecord> {
     if (!this.#buildsApps) throw new Error(PUBLISH_MESSAGE.CloudBuildsUnavailableRefusal());
     if (!gameDir) throw new Error(PUBLISH_MESSAGE.NoGameFolderRefusal());
     if (!(await this.#linkedPublishState(project)).slug) throw new Error(PUBLISH_MESSAGE.NotOnGenexRefusal());
-    const dir = await this.#publishWorkspace(project);
+    assertCloudPlatform(platform);
+    await this.#refuseCloudEngine(gameDir);
+    await this.#publishWorkspace(project);
     const running = (await this.#cloud(project)).builds.find(
       (build) => build.platform === platform && isRunning(build),
     );
-    if (!running) {
-      const controller = new AbortController();
-      this.#controllers.set(controller, { project });
-      const build = await startCloudBuild(
-        dir,
-        String(platform),
-        gameDir,
-        this.#cloudDeps(project),
-        controller.signal,
-      ).finally(() => this.#controllers.delete(controller));
-      this.#watchCloud(project, build.jobId);
-    }
+    if (!running && !this.#cloudSends.has(project)) await this.#sendCloud(project, String(platform), gameDir);
     return this.#nativeRecord(project);
+  }
+  /** Start sending the game's project, said in the record before this answers; it goes on behind the press. */
+  async #sendCloud(project: string, platform: string, gameDir: string): Promise<void> {
+    const dir = this.#publishDir(project);
+    const deps = this.#cloudDeps(project, CLOUD_SEND_TIMEOUT_MS);
+    // Taken before anything is awaited, so a second press joins this send.
+    this.#cloudSends.set(project, Promise.resolve());
+    const send = await beginCloudSend(dir, platform, deps.read).catch((error: unknown) => {
+      this.#cloudSends.delete(project);
+      throw error;
+    });
+    const controller = new AbortController();
+    this.#controllers.set(controller, { project });
+    const sent = sendCloudBuild(dir, send, gameDir, deps, controller.signal)
+      .then((build) => {
+        if (build) this.#watchCloud(project, build.jobId);
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.#controllers.delete(controller);
+        this.#cloudSends.delete(project);
+      });
+    this.#cloudSends.set(project, sent);
   }
   /** Follow build `jobId` of `project` until it ends, once; signing out or disconnecting stops it. */
   #watchCloud(project: string, jobId: string): void {
@@ -2321,8 +2357,9 @@ export class GenexTools {
       });
     this.#cloudWatches.set(key, watch);
   }
-  /** Settles once every build on Genex being followed has ended; for tests. */
+  /** Settles once every send to Genex and every build being followed has ended; for tests. */
   async cloudSettled(): Promise<void> {
+    await Promise.all(this.#cloudSends.values());
     await Promise.all(this.#cloudWatches.values());
   }
   /**

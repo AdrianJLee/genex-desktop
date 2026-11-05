@@ -845,6 +845,25 @@ export interface GenexCloudBuild {
   failure?: CloudBuildFailure;
 }
 
+/** How sending a game's project to Genex for a build stands. Kept in the publish workspace: never rename one. */
+export const CloudSendState = {
+  /** Staged, zipped and on its way up: Genex has no build of it until it all arrives. */
+  Sending: "sending",
+  /** It stopped before Genex had all of it: refused, cut off, or Studio closed. */
+  Failed: "failed",
+} as const;
+export type CloudSendState = (typeof CloudSendState)[keyof typeof CloudSendState];
+
+/** A project on its way to Genex, or the last one that didn't arrive. Gone once Genex has a build of it. */
+export interface GenexCloudSend {
+  /** The system the app is for (`windows`). */
+  platform: string;
+  startedAt: string;
+  state: CloudSendState;
+  /** Why it stopped, in the CLI's words; absent when it was stopped here or Studio closed. */
+  error?: string;
+}
+
 /**
  * The apps Genex builds on its own computers for a game: a Windows app of an Unreal game made on a
  * Mac, which Unreal can't package there. `supported` is false while Studio's pinned CLI cannot ask
@@ -854,4 +873,6 @@ export interface GenexCloudRecord {
   supported: boolean;
   /** Oldest first, at most a few per platform. */
   builds: GenexCloudBuild[];
+  /** A project on its way up, which can take far longer than a press may wait, or the one that stopped. */
+  send?: GenexCloudSend;
 }

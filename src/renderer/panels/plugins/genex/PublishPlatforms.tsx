@@ -22,6 +22,7 @@ import { composeInChat } from "../../../compose-in-chat.ts";
 import { hostPlatform } from "../../../platform.ts";
 import { useLibrary } from "../../../state/hooks.ts";
 import { Icon, type IconName } from "../../../ui/icons.tsx";
+import { Elapsed } from "../../../ui/LoadingState.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { PUBLISH_PLATFORM_WORDS } from "../../../words.ts";
 import {
@@ -37,6 +38,7 @@ import {
   PlatformEnd,
   type PlatformRow,
   platformRows,
+  shownRows,
   reachLine,
   webOfferFor,
 } from "./publish-platforms-view.ts";
@@ -95,6 +97,9 @@ const ASK: Partial<Record<PlatformEnd, { text: string; label: (name: string) => 
   [PlatformEnd.CloudRetry]: { text: WORDS.cloudRetry, label: WORDS.cloudRetryLabel },
 };
 
+/** The notes of work going on now, which shimmer as the chat's current work does. */
+const WORKING_ENDS: ReadonlySet<PlatformEnd> = new Set([PlatformEnd.Sending, PlatformEnd.Building]);
+
 /** The presses Genex answers on its own computers, rather than the agent in the game's chat. */
 const CLOUD_ENDS: ReadonlySet<PlatformEnd> = new Set([
   PlatformEnd.CloudBuild,
@@ -138,7 +143,18 @@ function End({
   if (note)
     return (
       <span className="genex-publish-platform-note" data-end={row.end} role="note" aria-label={note.label(row.name)}>
-        {note.text}
+        {WORKING_ENDS.has(row.end) ? (
+          <span data-shimmer className="chat-status-shimmer">
+            {note.text}
+          </span>
+        ) : (
+          note.text
+        )}
+        {row.since && (
+          <span className="genex-publish-platform-clock" data-publish-platform-clock={row.target}>
+            <Elapsed since={Date.parse(row.since)} />
+          </span>
+        )}
       </span>
     );
   const ask = ASK[row.end];
@@ -189,8 +205,8 @@ function Row({
   );
 }
 
-/** Whether Genex's answer to a row's press has come: the row says it is building, not what it offered. */
-const isAnswered = (row: PlatformRow): boolean => row.end === PlatformEnd.Building;
+/** Whether Genex's answer to a row's press has come: the row says it is sending or building, not what it offered. */
+const isAnswered = (row: PlatformRow): boolean => row.end === PlatformEnd.Building || row.end === PlatformEnd.Sending;
 
 /** What a row's press sends through the game's chat: a web version, an app, or an app built again. */
 function askText(target: PublishTarget, end: PlatformEnd, title: string): string {
@@ -270,7 +286,7 @@ export function PublishPlatforms({
   return (
     <div className="genex-publish-platforms" data-genex-publish-platforms>
       <ul aria-label={WORDS.label}>
-        {rows.map((row) => (
+        {shownRows(rows).map((row) => (
           <Row
             key={row.target}
             row={row}

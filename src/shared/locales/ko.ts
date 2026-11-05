@@ -5706,7 +5706,7 @@ export default {
   "Build on Genex": "Genex에서 만들기",
   "Build the {app} on Genex": "Genex에서 {app} 만들기",
   "Build the {app} on Genex again": "Genex에서 {app} 다시 만들기",
-  "Building on Genex · {minutes} min so far": "Genex에서 만드는 중 · {minutes}분째",
+  "Building on Genex": "Genex에서 만드는 중",
   "Building…": "만드는 중…",
   "Couldn’t build the {app} on Genex: {error}": "Genex에서 {app}을(를) 만들지 못했어요: {error}",
   "Genex builds only Windows apps on its own computers": "Genex는 자체 컴퓨터에서 Windows 앱만 만들어요",
@@ -6047,6 +6047,13 @@ export default {
   "Raise context to 16K": "컨텍스트를 16K로 늘리기",
   "Raising…": "늘리는 중…",
   "The chat now uses {model}. Send your message again.": "이제 채팅이 {model}을 사용해요. 메시지를 다시 보내 주세요.",
+  "Couldn’t send the project to Genex: {error}": "프로젝트를 Genex로 보내지 못했어요: {error}",
+  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
+    "지금은 Genex가 Unreal 5.8 게임만 만들 수 있는데, 이 프로젝트에는 버전이 없어요. Unreal 5.8에서 열어 저장한 뒤 다시 만들어 보세요.",
+  "Sending the project to Genex stopped": "프로젝트를 Genex로 보내는 작업이 멈췄어요",
+  "Sending to Genex. Keep Genex open": "Genex로 보내는 중. Genex를 열어 두세요",
+  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
+    "이 게임은 Unreal {version}을 써요. 지금은 Genex가 Unreal 5.8 게임만 만들 수 있어요. 5.8로 업그레이드한 뒤 다시 만들어 보세요.",
   "Run the game": "게임 실행해 줘",
   "The agent is packaging the game. It starts it once the package is ready.":
     "에이전트가 게임을 패키징하고 있어요. 완성되면 실행해요.",

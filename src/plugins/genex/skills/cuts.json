@@ -255,7 +255,7 @@
       "with": "- `npx genex wait --all` lists every generation and its state; a generation nobody wires in still cost its credits."
     },
     {
-      "replace": "Say it in one line - \"A model running while people play is built into the Genex platform - the player pays, with Genex coins or their own Claude/ChatGPT subscription, and approves it on a Genex sheet; your game just calls `generate()`. Want it that way?\" - and then ask; on their yes load the `genex-tool-llm` card, which owns the rest:",
+      "replace": "Say it in one line - \"A model running while people play is built into the Genex platform - the player pays, with their Genex credits or their own Claude/ChatGPT subscription, and approves it on a Genex sheet; your game just calls `generate()`. Want it that way?\" - and then ask; on their yes load the `genex-tool-llm` card, which owns the rest:",
       "with": "The `genex-tool-llm` card owns the rest:"
     },
     {
@@ -450,16 +450,16 @@
       "with": "- **`generationErrorMessage(code)`** turns every code into words a player can\n  read."
     },
     {
-      "replace": "- [ ] Disclosure numbers derive from the real loop and are written in `DESIGN.md`",
-      "with": "- [ ] Disclosure numbers derive from the real loop"
+      "replace": "- [ ] Disclosure numbers derive from the real loop and the bench's measured average, and are written in `DESIGN.md`",
+      "with": "- [ ] Disclosure numbers derive from the real loop and the bench's measured average"
     },
     {
       "replace": "- [ ] Every grant-ending code has in-fiction copy and a playable fallback",
       "with": "- [ ] Every grant-ending code is handled"
     },
     {
-      "replace": "right for the guest and wrong on a draft, so write the in-fiction line per\ncause rather than showing it for both.",
-      "with": "right for the guest and wrong on a draft."
+      "replace": "The SDK's stock sentence for\nthis code covers both causes; an in-fiction line per cause reads better.",
+      "with": "The SDK's stock sentence for\nthis code covers both causes."
     },
     {
       "replace": "\n  there are. Build the feature.",
@@ -486,12 +486,12 @@
       "with": ""
     },
     {
-      "replace": "| code | what happened | what the game does |\n| --- | --- | --- |\n| `grant_limit_reached` | the approved limit is spent | authored behaviour returns; a button offers to re-request |\n| `grant_stopped` | the player pressed Stop | accept silently, keep playing |\n| `grant_expired` | 24h passed, or the session ended | as stopped; re-request on the next deliberate click |\n| `waiting_for_plan` | their own plan is rate-limited | wait out the stated time — not a failure, and there is no paid fallback |\n| `grant_insufficient_funds` | the wallet cannot fund the next call | pause the thinking NPCs, say it once, stay playable |",
-      "with": "| code | what happened |\n| --- | --- |\n| `grant_limit_reached` | the approved limit is spent |\n| `grant_stopped` | the player pressed Stop |\n| `grant_expired` | 24h passed, or the session ended |\n| `waiting_for_plan` | their own plan is rate-limited for the stated time: not a failure, and there is no paid fallback |\n| `grant_insufficient_funds` | the wallet cannot fund the next call |"
+      "replace": "| code | what happened | what the game does |\n| --- | --- | --- |\n| `grant_limit_reached` | the approved limit is spent | authored behaviour returns; a button offers to re-request |\n| `grant_stopped` | the player pressed Stop | accept silently, keep playing |\n| `grant_expired` | 24h passed, or the session ended | as stopped; re-request on the next deliberate click |\n| `waiting_for_plan` | their own plan is rate-limited | wait out the stated time — not a failure, and there is no paid fallback |\n| `grant_insufficient_funds` | the player's credits ran out before the next call | pause the thinking NPCs, say it once, stay playable |",
+      "with": "| code | what happened |\n| --- | --- |\n| `grant_limit_reached` | the approved limit is spent |\n| `grant_stopped` | the player pressed Stop |\n| `grant_expired` | 24h passed, or the session ended |\n| `waiting_for_plan` | their own plan is rate-limited for the stated time: not a failure, and there is no paid fallback |\n| `grant_insufficient_funds` | the player's credits ran out before the next call |"
     },
     {
-      "replace": "`guest: true` — guests play but hold no wallet, so show the feature\nas sign-in-to-use rather than hiding it (`$genex-threejs-embed-auth`). Signed\nin and still refused — this is a `genex preview` draft, which never spends:\ncheck the layout there, and the call itself only after `genex promote`.",
-      "with": "`guest: true` — guests play but hold no wallet. Signed\nin and still refused — this is a `genex preview` draft, which never spends."
+      "replace": "`guest: true` — guests play but have no\ncredits to spend, so show the feature as sign-in-to-use rather than hiding it\n(`$genex-threejs-embed-auth`). Signed in and still refused on a test build —",
+      "with": "`guest: true` — guests play but have no\ncredits to spend. Signed in and still refused on a test build —"
     },
     {
       "replace": "- [ ] `npx genex llm models` was run and its verdict is in the handoff",
@@ -516,7 +516,7 @@
   ],
   "genex-llm-in-games/references/pricing.md": [
     {
-      "replace": "Write the benchmark date and the model id beside it in `DESIGN.md`, so the next\nperson knows what the number describes. Do not add",
+      "replace": "Write the benchmark date and the model id beside them in `DESIGN.md`, so the\nnext person knows what the numbers describe. Do not add",
       "with": "Do not add"
     }
   ],
@@ -567,10 +567,6 @@
     {
       "replace": "Nex commerce is off on this stand. Build\nthe rest and report the unavailable lane.",
       "with": "Nex commerce is off on this stand."
-    },
-    {
-      "replace": " Update the game's dependency\nbefore wiring them, then rebuild and publish the game:\n\n```bash\nnpm install @genex-ai/embed-sdk@latest\n```\n",
-      "with": "\n"
     }
   ],
   "genex-items/SKILL.md": [

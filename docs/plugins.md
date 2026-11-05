@@ -3385,21 +3385,29 @@ Genex:
   Command Line Tools leaves the app unsigned (`submit`). A failure never stops the app: it goes as built and
   the record keeps why by code (`MacNotarizeFailure`, `notarizeFailure` beside the sent app); the Mac
   row then says "notarized", or a line under the rows says why it went without.
-- An Unreal game's rows for another system say where it is packaged ("Package it on a Windows PC"),
-  except the Windows row on a Mac once Genex can build it (`cloudWords`, `CLOUD_TARGETS`): while the
+- A row nothing can be done about from here is left out (`outOfReach`, `shownRows`): an Unreal
+  game's web row, and its rows for a system this computer doesn't package, except the Windows row on
+  a Mac once Genex can build it (`cloudWords`, `CLOUD_TARGETS`): while the
   game has no page on Genex it says to publish first; then it offers Build on Genex, which runs
   `studio:plugins.genex-cloud-build` (`cloudBuildFromDialog`, Windows only) → the plugin's
   `cloud-build` (`cloudBuild`, `cloud-build.ts`). The press is the consent: the game's Unreal project
   alone is staged, its `.uproject` at the top, without caches and builds as for remixing
   (`stageBuildSource`, into `cloud-source/`, removed once sent). Studio sets no size limit of its
   own: Genex takes or refuses the project by the account's limit, and its refusal says the sizes,
-  shown under the rows. It goes
+  shown under the rows. An Unreal other than the build computers' (`CLOUD_UNREAL_VERSIONS`, from the
+  `.uproject`'s `EngineAssociation`) is refused before anything goes. The press answers at once: a
+  big project takes far longer to go up than the 190 seconds a plugin call may run, so the send runs
+  behind it (`sendCloudBuild`, 6 hours, as long as Genex's signed upload links), one per game, a
+  second press joining it. `cloud-build.json` keeps it as `send` until Genex has the build; the row
+  says "Sending to Genex. Keep Genex open", and a send that stopped says so with Try again, the CLI's
+  last words under the rows, whether it was refused, cut off or Studio closed in the middle. It goes
   privately with `genex native build --platform windows --source <folder> --json`; Genex builds it on
   its own computers and puts the app on the game's page. Each job is kept in the workspace's
   `cloud-build.json` (apart from `native.json`, which every publish writes anew) and followed with
   `genex native build-status <job> --json`, waiting 15 s, 30 s, 1 and then 2 min between reads; a job
   still running when Studio starts is followed again when the record is next read. The record
-  answers as `native.cloud`; the row then says "Building on Genex · N min so far", "On Genex · built …"
+  answers as `native.cloud`; the row then says "Building on Genex", its pill shimmering beside a live
+  clock from when the work began (`PlatformRow.since`), "On Genex · built …"
   with Build again, or why it failed by code (`CloudBuildFailure`) with Try again (none once the
   month's builds are used). A refused press is said under the rows. Job ids and platforms Genex
   answers are kept only when whole (`cloudBuildOf`). Nothing is asked while the pinned CLI is older

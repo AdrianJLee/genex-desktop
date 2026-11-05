@@ -595,3 +595,86 @@ test("the test link shows only while it holds a build players do not have", () =
   // While an attempt runs, the window shows its progress, not links.
   assert.equal(publishView(state({ slug: "g", status: "draft", readyDraft: ready, job: job() })).testLink, null);
 });
+
+test("a game with only apps shows Genex's check as Prepare · Upload · Check · Go live, its clock from when it was sent", async () => {
+  const { withAppsReview, SLOW_CHECK_MS } = await import(
+    "../../src/renderer/panels/plugins/genex/genex-publish-view.ts"
+  );
+  const { GenexAppReview, GenexHumanReview, gameReviewOf } = await import("../../src/shared/genex-review.ts");
+  const now = Date.parse("2026-10-27T14:10:00Z");
+  const record = (state: (typeof GenexAppReview)[keyof typeof GenexAppReview], sentAt: string) => {
+    const apps = [
+      {
+        platform: "mac",
+        arch: "arm64",
+        state,
+        version: "1.3.0",
+        sentAt,
+        things: [],
+        humanReview: { state: GenexHumanReview.None, canRequest: false },
+      },
+    ];
+    return { state: gameReviewOf(apps, null), apps, takedown: null };
+  };
+  const plain = publishView(state({ slug: "dust", status: "draft" }), now);
+  const checking = withAppsReview(
+    plain,
+    { apps: true, appsOnly: true, admin: false, record: record(GenexAppReview.Checking, "2026-10-27T14:08:55Z") },
+    now,
+  );
+  assert.deepEqual(
+    checking.steps.map((step) => [step.step, step.state]),
+    [
+      ["prepare", "done"],
+      ["upload", "done"],
+      ["check", "current"],
+      ["live", "next"],
+    ],
+  );
+  assert.deepEqual(checking.check, { since: "2026-10-27T14:08:55Z", slow: false, person: false });
+  assert.equal(checking.chip?.text, "In review");
+  const late = new Date(now - SLOW_CHECK_MS).toISOString();
+  const slow = withAppsReview(
+    plain,
+    { apps: true, appsOnly: true, admin: false, record: record(GenexAppReview.Checking, late) },
+    now,
+  );
+  assert.equal(slow.check?.slow, true, "15 minutes in, it says so");
+  const person = withAppsReview(
+    plain,
+    { apps: true, appsOnly: true, admin: false, record: record(GenexAppReview.WithPerson, late) },
+    now,
+  );
+  assert.deepEqual([person.check?.person, person.check?.slow], [true, false], "a person's review is never slow");
+  const down = withAppsReview(
+    plain,
+    { apps: true, appsOnly: true, admin: false, record: record(GenexAppReview.NotApproved, late) },
+    now,
+  );
+  assert.deepEqual([down.check, down.chip?.text, down.chip?.tone], [null, "Not approved", "failed"]);
+  const admin = withAppsReview(
+    { ...plain, running: true },
+    {
+      apps: true,
+      appsOnly: true,
+      admin: true,
+      record: null,
+      job: { id: "j", kind: "gallery", state: "running", phase: "uploading", startedAt: "2026-10-27T14:09:00Z" },
+    },
+    now,
+  );
+  assert.deepEqual(
+    admin.steps.map((step) => step.step),
+    ["prepare", "upload", "live"],
+    "an admin's apps go live at once: no Check",
+  );
+  assert.equal(
+    withAppsReview(
+      plain,
+      { apps: false, appsOnly: false, admin: false, record: record(GenexAppReview.Checking, late) },
+      now,
+    ),
+    plain,
+    "a web game's view is never changed",
+  );
+});

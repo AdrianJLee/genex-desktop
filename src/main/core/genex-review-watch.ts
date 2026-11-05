@@ -33,9 +33,11 @@ import {
   type GenexReviewStatus,
   type GenexReviewTold,
   type GenexTakedown,
+  type GenexToldApp,
   reviewFingerprint,
   reviewKeys,
   TAKEDOWN_KEY,
+  toldAppOf,
   toldTakedownRequest,
 } from "../../shared/genex-review.ts";
 
@@ -140,19 +142,62 @@ const TOLD_UNSEEN: ReadonlySet<GenexReviewChange> = new Set([
   GenexReviewChange.TakenDown,
 ]);
 
-/** An app's change as its record says it. */
-function appRecord(app: GenexReviewApp, names: GameNames, at: string): GenexReviewPayload {
-  const asked =
-    app.humanReview.state === GenexHumanReview.Requested || app.humanReview.state === GenexHumanReview.Answered;
+/** Whether `app` is the same build with the same decision as was told: only its request may have moved. */
+const sameDecision = (app: GenexReviewApp, was: GenexToldApp | undefined): was is GenexToldApp =>
+  was !== undefined &&
+  was.state === app.state &&
+  was.version === app.version &&
+  was.sha256 === (app.sha256 ?? "") &&
+  was.decidedAt === (app.decidedAt ?? "");
+
+/**
+ * The change an app's new state is, from what was told of it: a request for a person made elsewhere
+ * (genex.games, the CLI) about the same turned-down build is a request, never a new turn-down; any
+ * other move of only the request is no news. Null when there is nothing to tell.
+ */
+function appChange(app: GenexReviewApp, was: GenexToldApp | undefined): GenexReviewChange | null {
+  if (!sameDecision(app, was)) return APP_CHANGE[app.state];
+  const asked = app.humanReview.state === GenexHumanReview.Requested && was.humanReview !== GenexHumanReview.Requested;
+  return asked ? GenexReviewChange.Requested : null;
+}
+
+/** Whether a build that went live took an earlier one's place: players had one while it was held, or a live one went before. */
+function liveUpdate(app: GenexReviewApp, was: GenexToldApp | undefined): boolean {
+  if (app.players) return true;
+  if (app.state !== GenexAppReview.Live || !was) return false;
+  if (was.players !== "") return true;
+  return was.state === GenexAppReview.Live && (was.version !== app.version || was.sha256 !== (app.sha256 ?? ""));
+}
+
+/** Whether the creator had asked a person about the app: asked now, answered, or asked before it went live. */
+const askedAbout = (app: GenexReviewApp, was: GenexToldApp | undefined): boolean =>
+  app.humanReview.state === GenexHumanReview.Requested ||
+  app.humanReview.state === GenexHumanReview.Answered ||
+  (app.state === GenexAppReview.Live && was?.humanReview === GenexHumanReview.Requested);
+
+/** An app's change as its record says it, with the build it is about. */
+function appRecord(
+  app: GenexReviewApp,
+  change: GenexReviewChange,
+  was: GenexToldApp | undefined,
+  names: GameNames,
+  at: string,
+): GenexReviewPayload {
   return {
     ...names,
-    change: APP_CHANGE[app.state],
-    app: { platform: app.platform, arch: app.arch, version: app.version },
+    change,
+    app: {
+      platform: app.platform,
+      arch: app.arch,
+      version: app.version,
+      ...(app.sha256 ? { sha256: app.sha256 } : {}),
+      ...(app.sentAt ? { sentAt: app.sentAt } : {}),
+    },
     ...(app.things.length > 0 ? { things: app.things, count: app.things.length } : {}),
     ...(app.decidedBy ? { decidedBy: app.decidedBy } : {}),
     ...(app.reply ? { reply: app.reply } : {}),
-    ...(asked ? { requested: true } : {}),
-    ...(app.players ? { update: true } : {}),
+    ...(askedAbout(app, was) ? { requested: true } : {}),
+    ...(liveUpdate(app, was) ? { update: true } : {}),
     at,
   };
 }
@@ -185,7 +230,11 @@ export function reviewChanges(
   const at = new Date(now).toISOString();
   const records: GenexReviewPayload[] = [];
   for (const app of record.apps) {
-    if (before[appKey(app)] !== keys[appKey(app)]) records.push(appRecord(app, names, at));
+    const key = appKey(app);
+    if (before[key] === keys[key]) continue;
+    const was = toldAppOf(before[key]);
+    const change = appChange(app, was);
+    if (change) records.push(appRecord(app, change, was, names, at));
   }
   const takedown = record.takedown;
   if (takedown && before[TAKEDOWN_KEY] !== keys[TAKEDOWN_KEY])

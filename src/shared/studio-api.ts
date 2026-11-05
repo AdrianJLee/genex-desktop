@@ -266,9 +266,14 @@ export interface StudioApi {
    * Fix with agent on a game's review card: Genex's things to fix go to the game's chat as a brief, and,
    * with `autoPublish`, Studio sends the fixed app again (or asks a person to put a takedown back) once
    * the agent is done. The press is the consent. With `fixId` and `autoPublish: false`, it takes that
-   * press's automatic step back ("Don't publish it automatically").
+   * press's automatic step back ("Don't publish it automatically"). With `rebuild` (Build again, after a
+   * fix whose app was not built again), the agent is asked to build the fixed app, and Studio sends it
+   * once that is done.
    */
-  genexFixReview(project: string, options: { autoPublish: boolean; fixId?: string }): Promise<{ fixId: string }>;
+  genexFixReview(
+    project: string,
+    options: { autoPublish: boolean; fixId?: string; rebuild?: boolean },
+  ): Promise<{ fixId: string }>;
   /**
    * Request human review on a game's review card: a person at Genex reviews the turned-down app (`platform`,
    * `arch`, or every one that allows it) or the takedown, with the person's `note`. An app Genex keeps no

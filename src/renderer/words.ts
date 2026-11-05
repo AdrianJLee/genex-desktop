@@ -3827,6 +3827,10 @@ export const REVIEW_WORDS = {
     upheld: t("Human review agreed with the takedown."),
     sentApp: t("Sent to your agent. When it's done, Studio publishes it and Genex checks it again."),
     sentTakedown: t("Sent to your agent. When it's done, Studio asks a person at Genex to put it back."),
+    /** A taken-down game Studio sends again but cannot ask about: no request may go now. */
+    sentPublishes: t("Sent to your agent. When it's done, Studio publishes it."),
+    /** A taken-down web game, or one whose automatic step was taken back: both steps are the person's. */
+    sentPublishThenAsk: t("Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back."),
     autoCancelled: t("Sent to your agent. Publish it yourself when it's ready."),
     fixStopped: t("Your agent stopped before it finished."),
     notBuilt: (app: string) =>
@@ -3847,6 +3851,8 @@ export const REVIEW_WORDS = {
     update: t("Players keep the version they have. After the fix, it publishes by itself and Genex checks it again."),
     person: t("After the fix, it publishes by itself and Genex checks it again."),
     takedown: t("After the fix, Studio asks a person at Genex to put it back. Usually within a day."),
+    /** A taken-down web game, or an old Genex that needs the person's own words: Studio asks nobody by itself. */
+    takedownYourself: t("After the fix, publish it, then ask a person at Genex to put it back. Usually within a day."),
     upheld: t("After the fix, Studio asks a person at Genex to look again. Usually within a day."),
   },
   press: {

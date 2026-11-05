@@ -1147,6 +1147,13 @@ button.genex-publish-banner-name:hover {
   line-height: 20px;
   text-align: center;
 }
+/* An update's celebration: the version that players of that system get now. */
+.genex-publish-live-update {
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
 .genex-publish-hint .genex-publish-text-button {
   font-family: inherit;
   color: var(--ink);

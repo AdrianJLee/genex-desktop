@@ -1946,6 +1946,14 @@ export class StudioCore {
   }
 
   /**
+   * A publish of `project`'s apps started: the review watch reads the game now, again while the
+   * publish runs, then follows what it sent through Genex's check, the dialog open or not.
+   */
+  genexReviewFollow(project: unknown): void {
+    if (typeof project === "string" && project) this.#reviewWatch?.refresh(project);
+  }
+
+  /**
    * Genex's review of `project`, as the Genex plugin keeps it. `refresh` (the Publish dialog, at most
    * once a 30 s per game) has it read again, and has the watch follow it.
    */
@@ -1979,10 +1987,15 @@ export class StudioCore {
     return gameOfSlug(this, slug).catch(() => null);
   }
 
-  /** Fix with agent on `project`'s review card (`core/genex-review.ts`). */
-  async genexFixReview(project: unknown, autoPublish: unknown, fixId?: unknown): Promise<{ fixId: string }> {
+  /** Fix with agent on `project`'s review card, or its Build again with `rebuild` (`core/genex-review.ts`). */
+  async genexFixReview(
+    project: unknown,
+    autoPublish: unknown,
+    fixId?: unknown,
+    rebuild?: unknown,
+  ): Promise<{ fixId: string }> {
     if (typeof project !== "string" || !project) throw new Error(t("Open a game"));
-    return fixReviewFromDialog(this.#reviewFlows(), project, { autoPublish, fixId });
+    return fixReviewFromDialog(this.#reviewFlows(), project, { autoPublish, fixId, rebuild });
   }
 
   /** Request human review on `project`'s review card (`core/genex-review.ts`). */
@@ -2289,6 +2302,11 @@ export class StudioCore {
    */
   async threadForGame(project: string): Promise<string> {
     return serial(this.#gameThreadOperations, project, () => this.#threads.threadForGame(project));
+  }
+
+  /** The game's canonical chat when it has one, else null: a read that makes no chat and remembers nothing. */
+  async existingGameThread(project: string): Promise<string | null> {
+    return this.#threads.existingThreadForGame(project);
   }
 
   createGameThread(

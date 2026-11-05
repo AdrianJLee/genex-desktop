@@ -435,7 +435,7 @@ export interface StudioInvokePayloads {
   "studio:plugins.genex-cloud-build": { project: string; platform: string };
   "studio:plugins.genex-review-status": { project: string; refresh?: boolean };
   "studio:plugins.genex-review-lines": undefined;
-  "studio:plugins.genex-fix-review": { project: string; autoPublish: boolean; fixId?: string };
+  "studio:plugins.genex-fix-review": { project: string; autoPublish: boolean; fixId?: string; rebuild?: boolean };
   "studio:plugins.genex-request-review": { project: string; platform?: string; arch?: string; note?: string };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };

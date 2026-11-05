@@ -282,6 +282,55 @@ app.whenReady().then(async()=>{
   const requestSent=await step('requestSend','window.platformsRig.requestReview("The coin page is our own shop.")');
   assert.deepEqual(requestSent.published,[{via:'request:The coin page is our own shop.'}]);
   assert.equal(requestSent.dialogOpen,false,'the dialog closes once Genex took the request');
+  // A game opened on an app that is already live: no celebration, and Publish is still there to press.
+  const liveApp=await step('appsLive','window.platformsRig.open({scene:"appsLive"})');
+  assert.equal(liveApp.celebrating,false,'an app live before the dialog opened is no news');
+  assert.ok(liveApp.primary,'the press is shown');
+  assert.equal(liveApp.listed,true,'the rows are shown');
+  // An apps publish that ends while the dialog is open: Genex is asked again, and its Check shows.
+  const sendRuns=await step('appsPublishEnds','window.platformsRig.open({scene:"appsPublishEnds"})');
+  assert.equal(sendRuns.check,null,'nothing with Genex yet');
+  const ended=await step('appsPublishEnded','window.platformsRig.endSend()');
+  assert.match(ended.check??'',/^Checking · /,'the Check and its clock once the send ended');
+  assert.ok(ended.reviewReads.length>sendRuns.reviewReads.length&&ended.reviewReads.at(-1),'Genex was read again once the send ended');
+  report.appsPublishEnded=await capture('dark-apps-publish-ended');
+  // A game with a web version whose Mac app is checked: the web game's chip and steps stay.
+  const webChecking=await step('webWithAppsChecking','window.platformsRig.open({scene:"webWithAppsChecking"})');
+  assert.notEqual(webChecking.chip,'In review','the web version is live: its chip stays');
+  assert.equal(webChecking.check,null,'no apps-only Check for a game with a web version');
+  assert.ok(webChecking.primary,'the web Publish press stays');
+  report.webWithAppsChecking=await capture('dark-web-with-apps-checking');
+  // A person waits for the Mac app sent again: Publish sends it.
+  const owed=await step('appsResendOwed','window.platformsRig.open({scene:"appsResendOwed"})');
+  assert.equal(owed.review.kind,'resend-owed');
+  assert.equal(owed.primary,'Publish Mac app','the very build Genex turned down can go to the person');
+  // A taken-down game with a web version, fixed: Publish it, then Request human review.
+  const fixedWeb=await step('webAppsFixedWeb','window.platformsRig.open({scene:"webAppsFixedWeb"})');
+  assert.equal(fixedWeb.review.kind,'fixed-web');
+  assert.deepEqual(fixedWeb.review.presses,['Request human review'],"the dialog's own press is the card's Publish");
+  assert.ok(fixedWeb.primary,'Publish is there to press');
+  assert.doesNotMatch(fixedWeb.text,/Studio asks a person/,"a web game's takedown is the person's to ask about");
+  report.webAppsFixedWeb=await capture('dark-web-apps-fixed-web');
+  // A fix that ended with nothing built half an hour ago, and an app sent since: it is checked, nothing else.
+  const earlier=await step('appsFixEarlierBuild','window.platformsRig.open({scene:"appsFixEarlierBuild"})');
+  assert.equal(earlier.review,null,"no isn't-built line for a fix Genex has moved past");
+  assert.match(earlier.check??'',/^Checking · /);
+  // An update Genex approves while the dialog watches: it celebrates, naming the version Mac players get now.
+  const updating=await step('appsUpdateGoesLive','window.platformsRig.open({scene:"appsUpdateGoesLive"})');
+  assert.equal(updating.celebrating,false);
+  const wentLive=await step('appsUpdateApproved','window.platformsRig.approve()');
+  assert.equal(wentLive.celebrating,true,'a check it watched ended live');
+  assert.equal(wentLive.liveUpdate,'Version 1.3.0 is live for Mac players.');
+  assert.equal(wentLive.hint,"If Genex ever takes it down, you'll hear it here and by email.");
+  report.appsUpdateApproved=await capture('dark-apps-update-approved');
+  assert.match(wentLive.chip??'',/^Live/,'players get the app: the banner never says Not published');
+  // The same two moments in light.
+  await step('lightAppsUpdateGoesLive','window.platformsRig.open({scene:"appsUpdateGoesLive",theme:"light"})');
+  await step('lightAppsUpdateApproved','window.platformsRig.approve()');
+  report.lightAppsUpdateApproved=await capture('light-apps-update-approved');
+  await step('lightWebAppsFixedWeb','window.platformsRig.open({scene:"webAppsFixedWeb",theme:"light"})');
+  report.lightWebAppsFixedWeb=await capture('light-web-apps-fixed-web');
+  for (const [name,seen] of Object.entries({liveApp,ended,webChecking,owed,fixedWeb,earlier,wentLive})) truthful(name,seen);
   // A web game with no app: the dialog as it was, no rows.
   const plain=await step('web','window.platformsRig.open({scene:"web"})');
   assert.equal(plain.listed,false);

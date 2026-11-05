@@ -9,9 +9,13 @@ import { CustomEvent, customPayload } from "./custom-events.ts";
 import { type EventEnvelope, EventKind } from "./event-log.ts";
 import {
   GenexFixKind,
+  GenexGameReview,
+  type GenexReviewApp,
   GenexReviewChange,
   type GenexReviewFixPayload,
   type GenexReviewPayload,
+  type GenexReviewRecord,
+  worstApps,
 } from "./genex-review.ts";
 import { ExecutionStatus } from "./run-state.ts";
 
@@ -25,6 +29,24 @@ const FIX_OUTCOMES: ReadonlySet<string> = new Set([
 
 const FIX_KINDS: ReadonlySet<unknown> = new Set(Object.values(GenexFixKind));
 
+/**
+ * The changes that tell which build of an app Genex has after a fix went again: the first of them for
+ * each app is the build the fix's own send took (a request is about the build already there).
+ */
+const BUILD_TOLD: ReadonlySet<string> = new Set([
+  GenexReviewChange.Sent,
+  GenexReviewChange.Live,
+  GenexReviewChange.NotApproved,
+  GenexReviewChange.WithPerson,
+]);
+
+/** One build of an app, as a review record names it. */
+export interface GenexBuildMark {
+  version: string;
+  sha256?: string;
+  sentAt?: string;
+}
+
 /** The newest fix press of a game and what became of it. */
 export interface GenexFixState {
   fixId: string;
@@ -37,6 +59,13 @@ export interface GenexFixState {
   index: number;
   /** What ended it, once something did. */
   outcome?: GenexReviewChange;
+  /** When it ended. */
+  outcomeAt?: string;
+  /**
+   * After the fix went again (`outcome` sent), the first build of each app (`platform/arch`) the host
+   * told of since: the build that send took.
+   */
+  sentBuilds?: Record<string, GenexBuildMark>;
 }
 
 /** A fix record as read: every field it must have, or null. */
@@ -70,9 +99,86 @@ export function newestFix(events: readonly EventEnvelope[], project?: string): G
     }
     const review = customPayload(event.data, CustomEvent.GenexReview);
     const fix = found.fix;
-    if (fix && !fix.outcome && review && about(review, project) && isOutcome(review)) fix.outcome = review.change;
+    if (fix && review && about(review, project)) noteReview(fix, review);
   }
   return found.fix;
+}
+
+/** A review record after `fix`: its outcome, or, once it went again, the first build told of each app. */
+function noteReview(fix: GenexFixState, review: Partial<GenexReviewPayload>): void {
+  if (!fix.outcome) {
+    if (!isOutcome(review)) return;
+    fix.outcome = review.change;
+    if (typeof review.at === "string") fix.outcomeAt = review.at;
+    return;
+  }
+  if (fix.outcome !== GenexReviewChange.Sent || review.recheck === true) return;
+  const mark = buildTold(review);
+  // A record of the build the fix replaced, told before the new one landed, names no build of the fix's.
+  if (!mark || !sentAfter(mark.build.sentAt, fix.at)) return;
+  const builds = fix.sentBuilds ?? {};
+  if (!builds[mark.key]) builds[mark.key] = mark.build;
+  fix.sentBuilds = builds;
+}
+
+/** The build a record tells Genex has of an app, by its key; null for a record that names none. */
+function buildTold(review: Partial<GenexReviewPayload>): { key: string; build: GenexBuildMark } | null {
+  const app = review.app;
+  if (!app || typeof review.change !== "string" || !BUILD_TOLD.has(review.change)) return null;
+  if (typeof app.platform !== "string" || typeof app.arch !== "string" || typeof app.version !== "string") return null;
+  const sentAt = typeof app.sentAt === "string" ? app.sentAt : undefined;
+  const sha256 = typeof app.sha256 === "string" ? app.sha256 : undefined;
+  return {
+    key: pairKey(app),
+    build: { version: app.version, ...(sha256 ? { sha256 } : {}), ...(sentAt ? { sentAt } : {}) },
+  };
+}
+
+/** The key an app's build is kept by among a fix's sent builds. */
+const pairKey = (app: { platform: string; arch: string }): string => `${app.platform}/${app.arch}`;
+
+/** Whether a build sent at `sentAt` went after a press at `pressedAt`; a build with no time may have. */
+const sentAfter = (sentAt: string | undefined, pressedAt: string): boolean => {
+  const sent = Date.parse(sentAt ?? "");
+  const pressed = Date.parse(pressedAt);
+  return !Number.isFinite(sent) || !Number.isFinite(pressed) || sent > pressed;
+};
+
+/** Whether two marks name the same build: by its archive when both say, else when it was sent, else its version. */
+function sameBuild(one: GenexBuildMark, other: GenexBuildMark): boolean {
+  if (one.sha256 && other.sha256) return one.sha256 === other.sha256;
+  if (one.sentAt && other.sentAt) return Date.parse(one.sentAt) === Date.parse(other.sentAt);
+  return one.version === other.version;
+}
+
+/**
+ * Whether `app` is the build `fix` sent again by itself: sent after the press, and the first build of
+ * its app told since (or none told yet). A later publish of the app, by hand or weeks on, is not it:
+ * Genex checks that one, not "your fixes".
+ */
+export function sentByFix(
+  fix: GenexFixState | null,
+  app: Pick<GenexReviewApp, "platform" | "arch" | "version" | "sha256" | "sentAt">,
+): boolean {
+  if (fix?.outcome !== GenexReviewChange.Sent || !sentAfter(app.sentAt, fix.at)) return false;
+  const first = fix.sentBuilds?.[pairKey(app)];
+  return !first || sameBuild(first, app);
+}
+
+/** Whether a decision at `at` came after a press at `pressedAt`: a time Genex did not give never did. */
+const decidedAfter = (at: string | undefined, pressedAt: string): boolean =>
+  Date.parse(at ?? "") > Date.parse(pressedAt);
+
+/**
+ * Whether Genex still says what `fix` was pressed about: the same takedown, or the same turned-down
+ * apps, with nothing sent or decided since the press. How a fix ended (stopped, not built, fixed)
+ * says nothing once Genex has moved on: a later publish, a decision, a takedown lifted or a new one.
+ */
+export function fixStillCurrent(fix: GenexFixState, record: GenexReviewRecord | null): boolean {
+  if (!record) return false;
+  if (fix.kind !== GenexFixKind.App) return record.takedown !== null && !decidedAfter(record.takedown.at, fix.at);
+  if (record.takedown || record.state !== GenexGameReview.NotApproved) return false;
+  return worstApps(record).every((app) => !decidedAfter(app.decidedAt ?? app.sentAt, fix.at));
 }
 
 /** A press read after `fix`: the same press again is "Don't publish it automatically", any other a new press. */

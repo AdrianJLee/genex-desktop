@@ -9,6 +9,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { CustomEvent, customEventData, customRecord } from "../../shared/custom-events.ts";
 import type { EventData } from "../../shared/event-log.ts";
+import { readRequestAnswer, readReviewStatus } from "../../plugins/genex/native-review.ts";
 import { GENEX_PLUGIN_ID, GenexAction, GenexHostedStatus } from "../../shared/genex.ts";
 import type { GenexReviewRequestAnswer, GenexReviewStatus, GenexReviewTold } from "../../shared/genex-review.ts";
 import { publishesAsWebGame } from "../../shared/project-workspace.ts";
@@ -29,6 +30,7 @@ export type ReviewHostCore = Pick<
   | "publicCopyFiles"
   | "withApprovedExport"
   | "threadForGame"
+  | "existingGameThread"
   | "store"
   | "append"
   | "sendUserMessage"
@@ -36,7 +38,11 @@ export type ReviewHostCore = Pick<
   | "emit"
 >;
 
-const MESSAGE = { NoGame: "not a game in the library", NotAStatus: "the Genex plugin answered no review" } as const;
+const MESSAGE = {
+  NoGame: "not a game in the library",
+  NotAStatus: "the Genex plugin answered no review",
+  NotAnAnswer: "the Genex plugin answered no request",
+} as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
@@ -61,9 +67,22 @@ export async function reviewStatusOf(
     ...(options.refresh && reads ? { refresh: true } : {}),
     ...(options.told ? { told: options.told } : {}),
   };
-  const answer = await genexAction(core, project, GenexAction.ReviewStatus, args);
-  if (!isRecord(answer) || !("record" in answer)) throw new Error(MESSAGE.NotAStatus);
-  return answer as unknown as GenexReviewStatus;
+  const status = readReviewStatus(await genexAction(core, project, GenexAction.ReviewStatus, args));
+  if (!status) throw new Error(MESSAGE.NotAStatus);
+  return status;
+}
+
+/** The Genex plugin's `review-request` for the game, with the apps a person may need sent again. */
+async function requestOf(core: ReviewHostCore, project: string, args: Record<string, unknown>) {
+  const answer = readRequestAnswer(await genexAction(core, project, GenexAction.ReviewRequest, args));
+  if (!answer) throw new Error(MESSAGE.NotAnAnswer);
+  return answer;
+}
+
+/** The game chat's log, read without making a chat for a game that has none. */
+async function gameEvents(core: ReviewHostCore, project: string) {
+  const threadId = await core.existingGameThread(project);
+  return threadId ? core.store.listEvents(threadId) : [];
 }
 
 /** One of the game's records in the Genex plugin's storage, as JSON; null when it is missing or not JSON. */
@@ -156,7 +175,7 @@ export function reviewLinesDeps(core: ReviewHostCore): ReviewLinesDeps {
   return {
     games: () => gamesOnGenex(core),
     status: (project) => reviewStatusOf(core, project, {}, false),
-    events: async (project) => core.store.listEvents(await core.threadForGame(project)),
+    events: (project) => gameEvents(core, project),
     published: (project) => listedOnGenex(core, project),
   };
 }
@@ -170,6 +189,7 @@ export function reviewFlowDeps(
   return {
     status: (project, options = {}) => reviewStatusOf(core, project, options, reads),
     thread: (project) => core.threadForGame(project),
+    existingThread: (project) => core.existingGameThread(project),
     game: (project) => gameOf(core, project),
     events: (threadId) => core.store.listEvents(threadId),
     append: async (threadId, records) => {
@@ -183,9 +203,9 @@ export function reviewFlowDeps(
     resendApps: async (project, native) => {
       await genexAction(core, project, GenexAction.AppsResend, { native });
     },
-    request: async (project, args) =>
-      (await genexAction(core, project, GenexAction.ReviewRequest, args)) as GenexReviewRequestAnswer,
+    request: (project, args): Promise<GenexReviewRequestAnswer> => requestOf(core, project, args),
     refresh,
+    changed: (project) => core.emit(UiEvent.GenexReviewChanged, { project }),
     now: () => Date.now(),
     id: () => randomUUID(),
   };

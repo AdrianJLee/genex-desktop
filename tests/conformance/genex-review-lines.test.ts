@@ -111,6 +111,28 @@ describe("a game's line from its review", () => {
     assert.equal(reviewLineOf({ record, fix: stopped, fixing: false })?.line, GenexSidebarLine.NotApproved);
   });
 
+  it("says Checking fixes only for the build the fix sent, never for a publish weeks later", () => {
+    const fix = {
+      fixId: "fix-1",
+      kind: GenexFixKind.App,
+      count: 3,
+      autoPublish: true,
+      at: at(1),
+      index: 0,
+      outcome: GenexReviewChange.Sent,
+      sentBuilds: { "mac/arm64": { version: "1.3.0", sha256: "a".repeat(64), sentAt: at(12) } },
+    };
+    const checked = (sha256: string, sentAt: string) => recordOf([{ ...app(GenexAppReview.Checking), sha256, sentAt }]);
+    assert.equal(
+      reviewLineOf({ record: checked("a".repeat(64), at(12)), fix, fixing: false })?.line,
+      GenexSidebarLine.CheckingFixes,
+    );
+    assert.equal(
+      reviewLineOf({ record: checked("b".repeat(64), at(60 * 24 * 14)), fix, fixing: false })?.line,
+      GenexSidebarLine.InReview,
+    );
+  });
+
   it("says Public for a listed game with no review of its own, a web game's too", () => {
     assert.deepEqual(sidebarEntryOf(null, true), { line: GenexSidebarLine.Public });
     assert.equal(sidebarEntryOf(null, false), null, "a draft page only: no line");

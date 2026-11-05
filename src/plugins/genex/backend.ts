@@ -164,7 +164,8 @@ export function publishButtonStatus(
   const needsFix = needsFixStatus(review);
   if (needsFix) return needsFix;
   if (job === GenexPublishJobState.Failed) return PUBLISH_STATUS.Failed();
-  const held = heldStatus(review);
+  // A game whose web version Genex plays keeps the web game's status: its apps' check shows in Publish.
+  const held = state.hostedWeb === true ? null : heldStatus(review);
   if (held) return held;
   if (state.status === GenexHostedStatus.Published) return PUBLISH_STATUS.Live();
   if (state.slug) return PUBLISH_STATUS.Draft();

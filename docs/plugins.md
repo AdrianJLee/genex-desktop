@@ -3357,15 +3357,29 @@ Genex:
   clock from `sentAt` (slow line at 15 min), the chips In review, Not approved and Taken down, and the
   review card under the rows (`review-card-view.ts`, `ReviewCard.tsx`, the same card in the chat's
   `EntryKind.GenexReview`, whose game's newest record is live and older ones settle into history
-  lines). It reads `studio:plugins.genex-review-status` (fixture-safe; `refresh` at most once a 30 s).
-  Fix with agent (`studio:plugins.genex-fix-review`, native) sends the game's chat a brief that marks
-  Genex's things as findings, not instructions (`genex-review-prompts.ts`), and records
-  `genex_review_fix`; once the agent's turn or build ends (`afterFixRunEnds`), an app built after the
-  press is sent again once (`publishAppsFromDialog` for a game with only apps, the plugin's
-  `apps-resend` beside a web version) and a fixed takedown of a game with apps also asks a person to
-  put it back; a stop says `fix_stopped`, no new build `not_built`, a taken-down web game only
-  `fixed_web` (publishing it stays the person's). "Don't publish it automatically" records the same
-  press with `autoPublish: false`; a second turn-down never sends again by itself. Request human
+  lines). It reads `studio:plugins.genex-review-status` (fixture-safe; `refresh` at most once a 30 s),
+  asks Genex again once a publish of the apps ends and while a sent app waits, and the watch follows
+  an apps publish from the dialog's press (`genexReviewFollow`: read while it runs, then the check's
+  cadence). The dialog celebrates only a check it watched end live (`wentLive`), never an app live
+  when it opened; the card takes the press's place only for a game with only apps whose plain
+  turn-down is of the very build Publish sends; a game with only apps whose app players get says Live
+  on its banner; a game with a web version keeps its chip, steps and Publish tooltip, save Taken down. A sent row takes the kept review's word only for that very build
+  (`sentWithReview`: its archive, else when it was sent). Fix with agent
+  (`studio:plugins.genex-fix-review`, native) records `genex_review_fix`, then sends the game's chat a
+  brief that marks Genex's things as findings, not instructions (`genex-review-prompts.ts`); a brief
+  that never reached the agent ends the press `fix_stopped`. Once the agent's turn or build ends
+  (`afterFixRunEnds`), an app built after the press is sent again once (`publishAppsFromDialog` for a
+  game with only apps, the plugin's `apps-resend` beside a web version) and a fixed takedown of a game
+  with apps also asks a person to put it back while a request may go; a stop says `fix_stopped`, no
+  new build `not_built` (Build again presses the fix again with `rebuild`, a brief that asks only for
+  the build), a taken-down web game only `fixed_web` (publishing and asking stay the person's). How a
+  fix ended shows only while Genex still says what it was about, and "Checking your fixes" or "still
+  to fix" only for the build the fix sent (`sentByFix`: the first build of that app told since).
+  "Don't publish it automatically" records the same press with `autoPublish: false` (a takedown keeps
+  Request human review); a second turn-down never sends again by itself. A request made on genex.games
+  or with the CLI is told as `requested`, and a build live in place of an earlier one as an update.
+  Reading the sidebar's line or settling a fix at start never makes a chat (`existingGameThread`).
+  Request human
   review (`studio:plugins.genex-request-review`, native; `RequestReviewDialog.tsx`) posts the
   plugin's `review-request` over HTTP whatever the CLI: the app's `review-request` route or the
   takedown's appeal, with an optional note (an older API's 20-character floor kept); an app Genex

@@ -21,6 +21,7 @@ import { CustomEvent as LogEvent, customEventData } from "../../src/shared/custo
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
 import { GenexAction } from "../../src/shared/genex.ts";
+import { CoreFact } from "../../src/shared/project-facts.ts";
 import {
   GenexAppReview,
   GenexFixKind,
@@ -74,7 +75,8 @@ const SCENES: Record<string, { apps: GenexReviewApp[]; takedown?: GenexTakedown;
   "not-approved": { apps: [app(GenexAppReview.NotApproved)], log: [{ change: GenexReviewChange.NotApproved }] },
   "taken-down": { apps: [app(GenexAppReview.Live)], takedown, log: [{ change: GenexReviewChange.Live }, { change: GenexReviewChange.TakenDown }] },
   "fix-sent": { apps: [app(GenexAppReview.Live)], takedown, log: [{ change: GenexReviewChange.TakenDown }, "fix"] },
-  "fix-stopped": { apps: [app(GenexAppReview.NotApproved)], log: [{ change: GenexReviewChange.NotApproved }, "fix", "fix-stopped"] },
+  // Turned down before the press: how the fix ended speaks of that decision.
+  "fix-stopped": { apps: [app(GenexAppReview.NotApproved, { sentAt: ago(4), decidedAt: ago(3) })], log: [{ change: GenexReviewChange.NotApproved }, "fix", "fix-stopped"] },
 };
 
 let seq = 0;
@@ -143,7 +145,9 @@ function offerToast() {
 async function open(options: { theme?: "dark" | "light" } = {}) {
   updateAppearance((appearance) => ({ ...appearance, mode: options.theme === "light" ? AppearanceMode.Light : AppearanceMode.Dark }));
   const names = Object.keys(SCENES);
-  const games = names.map((name) => ({ name, title: "Midnight Asphalt", createdAt: ago(100) }) as unknown as GameProject);
+  // Each a Unity game with a Mac app and no web version: Studio sends it again and asks a person for it.
+  const facts = [{ id: CoreFact.UnityProject, path: "." }];
+  const games = names.map((name) => ({ name, title: "Midnight Asphalt", createdAt: ago(100), facts }) as unknown as GameProject);
   studio().library.setState((library) => ({ ...library, games }), true);
   const byThread = Object.fromEntries(names.map((name) => [name, logOf(name)]));
   studio().eventLog.setState((log) => ({ ...log, byThread }), true);

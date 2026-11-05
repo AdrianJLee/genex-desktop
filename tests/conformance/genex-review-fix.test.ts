@@ -66,7 +66,10 @@ const takenDown = (noteMin?: number): GenexReviewRecord => {
 };
 
 /** The flows over a game chat in memory, an app folder the test fills and recorders for every send. */
-function rig(record: GenexReviewRecord, options: { web?: boolean; built?: boolean } = {}) {
+function rig(
+  record: GenexReviewRecord,
+  options: { web?: boolean; built?: boolean; sendFails?: boolean; noChat?: boolean } = {},
+) {
   let now = START;
   let seq = 0;
   const events: EventEnvelope[] = [];
@@ -75,6 +78,8 @@ function rig(record: GenexReviewRecord, options: { web?: boolean; built?: boolea
   const resent: string[][] = [];
   const requests: unknown[] = [];
   const refreshed: string[] = [];
+  const changed: string[] = [];
+  const made: string[] = [];
   let told: unknown = null;
   const push = (data: EventData, turn: string | null = null) => {
     seq += 1;
@@ -101,13 +106,18 @@ function rig(record: GenexReviewRecord, options: { web?: boolean; built?: boolea
         publishing: false,
       } satisfies GenexReviewStatus;
     },
-    thread: async () => "t1",
+    thread: async (project) => {
+      made.push(project);
+      return "t1";
+    },
+    existingThread: async () => (options.noChat ? null : "t1"),
     game: async () => ({ title: "Midnight Asphalt", slug: "midnight-asphalt", web: options.web === true }),
     events: async () => [...events],
     append: async (_thread, records) => {
       for (const data of records) push(data);
     },
     send: async (text, opts) => {
+      if (options.sendFails) throw new Error("Sign in to Claude Code first");
       sent.push({ text, options: opts });
     },
     apps: async (_project, choice) => {
@@ -126,6 +136,9 @@ function rig(record: GenexReviewRecord, options: { web?: boolean; built?: boolea
     },
     refresh: (project) => {
       refreshed.push(project);
+    },
+    changed: (project) => {
+      changed.push(project);
     },
     now: () => now,
     id: () => "fix-1",
@@ -147,6 +160,8 @@ function rig(record: GenexReviewRecord, options: { web?: boolean; built?: boolea
     resent,
     requests,
     refreshed,
+    changed,
+    made,
     turn,
     push,
     reviews,
@@ -194,6 +209,20 @@ describe("Fix with agent", () => {
     const game = rig(record);
     await fixReviewFromDialog(game.deps, "dust", { autoPublish: true });
     assert.match(game.sent[0]?.text ?? "", /^Fix these 3 things the Genex team found/);
+  });
+
+  it("ends the press stopped when the brief never reached the agent, so nothing waits on it", async () => {
+    const game = rig(turnedDown(), { sendFails: true });
+    await assert.rejects(fixReviewFromDialog(game.deps, "dust", { autoPublish: true }), /Sign in to Claude Code/);
+    const fix = customPayload(game.events[0]?.data ?? { type: "turn_ended" }, CustomEvent.GenexReviewFix);
+    assert.equal(fix?.fixId, "fix-1", "the press came first, so a turn on the brief would follow it");
+    assert.deepEqual(
+      game.reviews().map((review) => review.change),
+      [GenexReviewChange.FixStopped],
+    );
+    game.turn("ok");
+    await afterFixRunEnds(game.deps, "dust", "t1");
+    assert.deepEqual(game.published, [], "a later turn publishes nothing for it");
   });
 
   it("refuses when Genex has nothing to fix, sending nothing", async () => {
@@ -265,10 +294,52 @@ describe("what Studio does once the agent is done", () => {
     const game = rig(turnedDown());
     const { fixId } = await fixReviewFromDialog(game.deps, "dust", { autoPublish: true });
     await fixReviewFromDialog(game.deps, "dust", { autoPublish: false, fixId });
+    await afterFixRunEnds(game.deps, "dust", "t1");
+    assert.deepEqual(game.changed, [], "the agent still works: its line still says Fixing");
     game.turn("ok");
     await afterFixRunEnds(game.deps, "dust", "t1");
     assert.deepEqual(game.published, []);
     assert.deepEqual(game.reviews(), []);
+    assert.deepEqual(game.changed, ["dust"], "the agent is done: the window reads its line again");
+  });
+
+  it("sends the app once after Build again, when the agent built it this time", async () => {
+    const game = rig(turnedDown(), { built: false });
+    await fixReviewFromDialog(game.deps, "dust", { autoPublish: true });
+    game.turn("ok");
+    await afterFixRunEnds(game.deps, "dust", "t1");
+    assert.deepEqual(
+      game.reviews().map((review) => review.change),
+      [GenexReviewChange.NotBuilt],
+    );
+    game.later(60_000);
+    let ids = 0;
+    game.deps.id = () => `fix-${++ids + 1}`;
+    const { fixId } = await fixReviewFromDialog(game.deps, "dust", { autoPublish: true, rebuild: true });
+    assert.equal(fixId, "fix-2", "a new press, so its step after it is armed again");
+    assert.match(game.sent.at(-1)?.text ?? "", /^The fixes to the Mac app of Midnight Asphalt aren't built yet\./);
+    assert.match(game.sent.at(-1)?.text ?? "", /Don't publish it: Studio publishes it when you're done\.$/);
+    game.later(60_000);
+    game.rebuild(Number.POSITIVE_INFINITY);
+    game.push({ type: "turn_started" } as EventData, "turn-2");
+    game.push({ type: "turn_ended", status: "ok" }, "turn-2");
+    await afterFixRunEnds(game.deps, "dust", "t1");
+    await afterFixRunEnds(game.deps, "dust", "t1");
+    assert.deepEqual(game.published, ["dust"], "sent once");
+    assert.deepEqual(
+      game.reviews().map((review) => [review.change, review.recheck]),
+      [
+        [GenexReviewChange.NotBuilt, undefined],
+        [GenexReviewChange.Sent, true],
+      ],
+    );
+  });
+
+  it("has nothing to build again unless the newest fix ended with nothing built", async () => {
+    const game = rig(turnedDown());
+    await fixReviewFromDialog(game.deps, "dust", { autoPublish: true });
+    await assert.rejects(fixReviewFromDialog(game.deps, "dust", { autoPublish: true, rebuild: true }));
+    assert.equal(game.sent.length, 1, "only the first brief went");
   });
 
   it("sends a taken-down game's apps again, then asks a person to put it back", async () => {
@@ -323,6 +394,13 @@ describe("what Studio does once the agent is done", () => {
     game.turn("ok");
     await afterFixRunEnds(game.deps, "dust", "t1");
     assert.deepEqual(game.published, ["dust"]);
+  });
+
+  it("makes no chat for a game that has none when Studio starts", async () => {
+    const game = rig(turnedDown(), { noChat: true });
+    await settleInterruptedFix(game.deps, "dust");
+    assert.deepEqual(game.made, []);
+    assert.deepEqual(game.events, []);
   });
 
   it("says a fix Studio quit in the middle of stopped, once", async () => {

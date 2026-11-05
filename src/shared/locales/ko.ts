@@ -6130,6 +6130,12 @@ export default {
   "Tell us why (at least {min} characters)": "이유를 알려 주세요 ({min}자 이상)",
   "Tell us why in at least {min} characters.": "이유를 {min}자 이상 적어 주세요.",
   "That fix isn't the game's latest one": "이 게임의 최신 수정이 아니에요",
+  "Sent to your agent. When it's done, Studio publishes it.": "에이전트에게 보냈어요. 끝나면 Studio가 게시해요.",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "에이전트에게 보냈어요. 끝나면 게시한 다음 Genex 담당자에게 다시 올려 달라고 요청하세요.",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "수정 후 게시한 다음 Genex 담당자에게 다시 게시해 달라고 요청하세요. 보통 하루 안에 처리돼요.",
+  "This game's latest fix isn't waiting for a build": "이 게임의 최신 수정은 빌드를 기다리고 있지 않아요",
   "The Genex team is reviewing this game.": "Genex 팀이 이 게임을 검토하고 있어요.",
   "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
     "수정 사항이 아직 빌드되지 않았어요. {app, select, mac {Mac 앱} windows {Windows 앱} linux {Linux 앱} other {앱}}을 다시 빌드하면 게시돼요.",

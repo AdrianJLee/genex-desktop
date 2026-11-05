@@ -9,14 +9,11 @@ import type { JSX } from "react";
 import { useState } from "react";
 import { GENEX_PLUGIN_ID } from "../../../../shared/genex.ts";
 import { REVIEW_THINGS_SHOWN, type GenexReviewRecord, type GenexReviewThing } from "../../../../shared/genex-review.ts";
-import { PublishTarget } from "../../../../shared/publish-platforms.ts";
-import { composeInChat } from "../../../compose-in-chat.ts";
 import { signInToGenex } from "../../../play/use-genex-sign-in.ts";
 import { openPluginSetup } from "../../../plugin-setup.ts";
 import { Button } from "../../../ui/Button.tsx";
 import { Icon } from "../../../ui/icons.tsx";
 import { REVIEW_WORDS } from "../../../words.ts";
-import { rebuildAsk } from "./publish-platforms-view.ts";
 import { pressProblem, RequestReviewDialog, type ReviewRequestTarget } from "./RequestReviewDialog.tsx";
 import { elapsedWords, ReviewPlace, ReviewPress, type ReviewCardView } from "./review-card-view.ts";
 import { useElapsed } from "./use-publish-cover.ts";
@@ -58,16 +55,8 @@ function requestTarget(record: GenexReviewRecord | null): ReviewRequestTarget {
   return { takedown: false };
 }
 
-/** The rebuild a Build again asks of the chat: the app's platform, as a row names it. */
-const PLATFORM_TARGET: Readonly<Record<string, PublishTarget>> = {
-  mac: PublishTarget.Mac,
-  windows: PublishTarget.Windows,
-  linux: PublishTarget.Linux,
-};
-
 export function ReviewCard({
   project,
-  title,
   view,
   record,
   place,
@@ -75,7 +64,6 @@ export function ReviewCard({
   onPublish,
 }: {
   project: string;
-  title: string;
   view: ReviewCardView;
   /** The record the view was drawn from: what Request human review asks about. */
   record: GenexReviewRecord | null;
@@ -99,11 +87,9 @@ export function ReviewCard({
     if (which === ReviewPress.Request) return setAsking(true);
     if (which === ReviewPress.SignIn) return run(which, signInToGenex);
     if (which === ReviewPress.Publish) return onPublish ? onPublish() : openPluginSetup(GENEX_PLUGIN_ID);
-    if (which === ReviewPress.BuildAgain) {
-      const target = PLATFORM_TARGET[view.platform ?? ""] ?? PublishTarget.Mac;
-      return composeInChat({ project, text: rebuildAsk(target, title), send: true });
-    }
-    run(which, () => window.studio.genexFixReview(project, { autoPublish: true }));
+    // Build again asks the agent to build the fixed app, and Studio publishes it once that is done.
+    const rebuild = which === ReviewPress.BuildAgain ? { rebuild: true } : {};
+    run(which, () => window.studio.genexFixReview(project, { autoPublish: true, ...rebuild }));
   };
   const presses = place === ReviewPlace.Dialog ? [...view.presses].reverse() : view.presses;
   return (

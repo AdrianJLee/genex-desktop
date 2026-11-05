@@ -34,7 +34,13 @@ import { FEEDBACK_TEXT_MAX_CHARS, type FeedbackDraft, FeedbackScreen } from "../
 import { relativeTime } from "../../../chat-labels.ts";
 import { type StepState, stepStateAt } from "../../../ui/step-bar.ts";
 import { GENEX_WORDS, REVIEW_WORDS } from "../../../words.ts";
-import { GenexGameReview, type GenexReviewRecord } from "../../../../shared/genex-review.ts";
+import {
+  appKey,
+  GenexAppReview,
+  GenexGameReview,
+  type GenexReviewApp,
+  type GenexReviewRecord,
+} from "../../../../shared/genex-review.ts";
 import { checkingSince } from "./review-card-view.ts";
 
 const WORDS = GENEX_WORDS.publish;
@@ -337,6 +343,35 @@ const REVIEW_CHIP: Partial<Record<GenexGameReview, { tone: ChipTone; text: strin
   [GenexGameReview.Checking]: { tone: ChipTone.Quiet, text: REVIEW_WORDS.dialog.chipReview },
 };
 
+/** Where the publish-open action sends the browser (the plugin's `PublishLinkTarget`). */
+export const LinkTarget = { Gallery: "gallery" } as const;
+
+/**
+ * The chip a game's review puts on its banner. A game with only apps says In review, Not approved or
+ * Taken down; a game with a web version keeps the web game's chip, except Taken down, which hides the
+ * whole game: its apps' review shows on their rows and in the card.
+ */
+const reviewChip = (record: GenexReviewRecord | null, appsOnly: boolean) => {
+  if (!record) return undefined;
+  if (!appsOnly && record.state !== GenexGameReview.TakenDown) return undefined;
+  return REVIEW_CHIP[record.state];
+};
+
+/**
+ * A game with only apps whose app players get, while its publish record has no listing to say so
+ * yet: Live, since the newest app went live, never "Not published".
+ */
+function appsLiveChip(view: PublishView, record: GenexReviewRecord | null, now: number): PublishView["chip"] {
+  if (record?.state !== GenexGameReview.Live || view.chip?.tone !== ChipTone.Quiet) return view.chip;
+  const live = record.apps
+    .filter((app) => app.state === GenexAppReview.Live)
+    .map((app) => app.decidedAt ?? app.sentAt)
+    .filter((at): at is string => typeof at === "string" && Number.isFinite(Date.parse(at)))
+    .sort()
+    .at(-1);
+  return { tone: ChipTone.Live, text: live ? WORDS.chipLive(relativeTime(live, now)) : WORDS.chipLiveUndated };
+}
+
 /**
  * The dialog's view of a game with apps, with Genex's review of them: an apps-only publish's steps are
  * Prepare · Upload · Check · Go live (an admin's, whose apps go live at once, have no Check), the Check
@@ -349,9 +384,10 @@ export function withAppsReview(
   now = Date.now(),
 ): PublishView {
   if (!input.apps) return view;
-  const chip = input.record ? REVIEW_CHIP[input.record.state] : undefined;
-  const reviewed = chip && !view.running ? { ...view, chip } : view;
-  if (!input.appsOnly) return reviewed;
+  const chip = reviewChip(input.record, input.appsOnly);
+  const said = chip && !view.running ? { ...view, chip } : view;
+  if (!input.appsOnly) return said;
+  const reviewed = view.running ? said : { ...said, chip: appsLiveChip(said, input.record, now) };
   const since = checkingSince(input.record);
   const checking = since !== null;
   const steps = input.admin ? ADMIN_STEPS : APPS_STEPS;
@@ -365,6 +401,35 @@ export function withAppsReview(
     steps: steps.map((step, index) => ({ step, label: WORDS.step[step], state: stepStateAt(index, at) })),
     check,
   };
+}
+
+/** The apps Genex holds in `record` (checked or with a person), by their key. */
+export function heldApps(record: GenexReviewRecord | null): Map<string, GenexReviewApp> {
+  const held = new Map<string, GenexReviewApp>();
+  if (!record || record.takedown) return held;
+  for (const app of record.apps)
+    if (app.state === GenexAppReview.Checking || app.state === GenexAppReview.WithPerson) held.set(appKey(app), app);
+  return held;
+}
+
+/** An app that went live while the dialog watched it, and whether players had an earlier build of it. */
+export interface WentLive {
+  app: GenexReviewApp;
+  update: boolean;
+}
+
+/**
+ * The app Genex held when the dialog last read it (`held`) that `record` says is live now; null for
+ * none. An app already live when the dialog opened is never one: only a check the dialog watched end
+ * is celebrated.
+ */
+export function wentLive(held: ReadonlyMap<string, GenexReviewApp>, record: GenexReviewRecord | null): WentLive | null {
+  if (!record || record.takedown) return null;
+  for (const app of record.apps) {
+    const before = held.get(appKey(app));
+    if (before && app.state === GenexAppReview.Live) return { app, update: before.players !== undefined };
+  }
+  return null;
 }
 
 /**

@@ -39,15 +39,36 @@ export function appFixBrief(input: {
   ].join("\n");
 }
 
+/** What Studio does once the agent is done with a fix: publish it and ask a person, only publish it, or leave both to the person. */
+export const AfterFix = { AskPerson: "ask-person", Publish: "publish", Yours: "yours" } as const;
+export type AfterFix = (typeof AfterFix)[keyof typeof AfterFix];
+
+/** The brief's last sentence, by what Studio does once the agent is done. */
+const LAST_LINE: Record<AfterFix, string> = {
+  [AfterFix.AskPerson]: "Don't publish it: Studio asks a person at Genex to put it back when you're done.",
+  [AfterFix.Publish]: "Don't publish it: Studio publishes it when you're done.",
+  [AfterFix.Yours]: "Tell me when it's done; I'll publish it.",
+};
+
 /** The brief for a taken-down game: fix, build again, try each fix; then Studio asks a person, or the person publishes a web game. */
-export function takedownFixBrief(input: { title: string; things: readonly GenexReviewThing[]; web: boolean }): string {
+export function takedownFixBrief(input: {
+  title: string;
+  things: readonly GenexReviewThing[];
+  step: AfterFix;
+}): string {
   const count = input.things.length;
-  const last = input.web
-    ? "Tell me when it's done; I'll publish it."
-    : "Don't publish it: Studio asks a person at Genex to put it back when you're done.";
+  const last = LAST_LINE[input.step];
   return [
     `Genex took ${input.title} down for ${count === 1 ? "this thing" : `these ${count} things`}. ${NOT_INSTRUCTIONS}`,
     thingLines(input.things),
     `Fix each one, then build it again and try each fix in the game. ${last}`,
   ].join("\n");
+}
+
+/**
+ * The brief Build again sends after a fix whose app was not built again: build it and try each fix;
+ * Studio publishes it (or, for a takedown, asks a person to put it back) once that is done.
+ */
+export function rebuildBrief(input: { title: string; platform: string; step: AfterFix }): string {
+  return `The fixes to the ${input.platform} of ${input.title} aren't built yet. Build the ${input.platform} again and try each fix in the game. ${LAST_LINE[input.step]}`;
 }

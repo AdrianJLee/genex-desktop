@@ -6275,6 +6275,13 @@ export default {
   "Tell us why (at least {min} characters)": "理由を教えてね（{min}文字以上）",
   "Tell us why in at least {min} characters.": "理由を{min}文字以上で教えてね。",
   "That fix isn't the game's latest one": "それはこのゲームの最新の修正ではありません",
+  "Sent to your agent. When it's done, Studio publishes it.":
+    "エージェントに送りました。終わったら、Studioが公開します。",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "エージェントに送りました。終わったら公開して、Genexのスタッフに公開の再開を頼んでください。",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "修正後に公開して、Genexのスタッフに公開の再開を頼んでください。通常1日以内です。",
+  "This game's latest fix isn't waiting for a build": "このゲームの最新の修正はビルド待ちではありません",
   "The Genex team is reviewing this game.": "Genexチームがこのゲームを確認しています。",
   "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
     "修正はまだビルドされていません。{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}をビルドし直すと公開されます。",

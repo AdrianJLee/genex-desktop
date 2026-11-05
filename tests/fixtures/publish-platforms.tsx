@@ -22,6 +22,7 @@ import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import {
   GenexAppReview,
   GenexFixKind,
+  GenexGameReview,
   GenexHumanReview,
   type GenexReviewApp,
   GenexReviewChange,
@@ -31,6 +32,7 @@ import {
   gameReviewOf,
 } from "../../src/shared/genex-review.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
+import { UiEvent } from "../../src/shared/ui-events.ts";
 import { CoreFact } from "../../src/shared/project-facts.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import {
@@ -54,9 +56,15 @@ async function settle(frames = 10) {
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
 type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "appsReview" | "appsRejected" | "unityNoApp" | "unitySoon" | "unreal" | "unrealCloud" | "unrealBuilding" | "unrealWindows" | "unrealWebOnGenex" | "unityReplacesApps" | ReviewScene;
 
-/** The scenes of Genex's review of a game's Mac app, or of its takedown (spec §6.9). */
-type ReviewScene = "appsChecking" | "appsChecking20m" | "appsNotApproved1" | "appsNotApproved7" | "appsUpdateNotApproved" | "appsStill" | "appsRequested" | "appsWithPerson" | "appsPersonKept" | "appsTakenDown" | "appsTakenDownCsam" | "appsFixSent" | "appsFixStopped" | "appsNotBuilt" | "appsOffline" | "appsSignedOut";
-const REVIEW_SCENES: readonly ReviewScene[] = ["appsChecking", "appsChecking20m", "appsNotApproved1", "appsNotApproved7", "appsUpdateNotApproved", "appsStill", "appsRequested", "appsWithPerson", "appsPersonKept", "appsTakenDown", "appsTakenDownCsam", "appsFixSent", "appsFixStopped", "appsNotBuilt", "appsOffline", "appsSignedOut"];
+/**
+ * The scenes of Genex's review of a game's Mac app, or of its takedown (spec §6.9), and the moments
+ * around them: a game opened on a live app, an apps publish ending, a game with a web version whose
+ * app is checked or whose takedown is fixed, a resend a person waits for, and a fix of an earlier build.
+ */
+type ReviewScene = "appsChecking" | "appsChecking20m" | "appsNotApproved1" | "appsNotApproved7" | "appsUpdateNotApproved" | "appsStill" | "appsRequested" | "appsWithPerson" | "appsPersonKept" | "appsTakenDown" | "appsTakenDownCsam" | "appsFixSent" | "appsFixStopped" | "appsNotBuilt" | "appsOffline" | "appsSignedOut" | "appsLive" | "appsPublishEnds" | "webWithAppsChecking" | "appsResendOwed" | "webAppsFixedWeb" | "appsFixEarlierBuild" | "appsUpdateGoesLive";
+const REVIEW_SCENES: readonly ReviewScene[] = ["appsChecking", "appsChecking20m", "appsNotApproved1", "appsNotApproved7", "appsUpdateNotApproved", "appsStill", "appsRequested", "appsWithPerson", "appsPersonKept", "appsTakenDown", "appsTakenDownCsam", "appsFixSent", "appsFixStopped", "appsNotBuilt", "appsOffline", "appsSignedOut", "appsLive", "appsPublishEnds", "webWithAppsChecking", "appsResendOwed", "webAppsFixedWeb", "appsFixEarlierBuild", "appsUpdateGoesLive"];
+/** The scenes of a game with a web version beside its app: its web build goes with Publish too. */
+const WEB_WITH_APPS: ReadonlySet<Scene> = new Set(["webWithAppsChecking", "webAppsFixedWeb"]);
 const isReviewScene = (of: Scene): of is ReviewScene => (REVIEW_SCENES as readonly string[]).includes(of);
 
 const web = (uploads: boolean): PublishPlatform => ({
@@ -116,7 +124,7 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   unrealWebOnGenex: () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()],
   unityReplacesApps: () => [web(true), mac(PublishPlatformState.Ready, true), windows, linux()],
   ...Object.fromEntries(
-    REVIEW_SCENES.map((one) => [one, () => [web(false), mac(PublishPlatformState.Ready, true), windows, linux()]]),
+    REVIEW_SCENES.map((one) => [one, () => [web(WEB_WITH_APPS.has(one)), mac(PublishPlatformState.Ready, true), windows, linux()]]),
   ),
 } as Record<Scene, () => PublishPlatform[]>;
 
@@ -131,8 +139,16 @@ const THINGS = [
 ];
 const MINER = [{ text: "Mines cryptocurrency on the player's computer", where: "vendor/worker.min.js" }];
 
-/** Genex's review of the scene's Mac app, or of its takedown, as main answers it. */
-function reviewOf(of: Scene): GenexReviewStatus | null {
+/** The apps publish of `appsPublishEnds` has ended: its Mac app is with Genex. */
+let sendEnded = false;
+/** Genex approved the update `appsUpdateGoesLive` checks while the dialog is open. */
+let approved = false;
+
+/**
+ * Genex's review of the scene's Mac app, or of its takedown, as main answers it; `read` once Genex was
+ * read after the scene's publish ended (before, the plugin answers what it kept).
+ */
+function reviewOf(of: Scene, read = true): GenexReviewStatus | null {
   if (!isReviewScene(of)) return null;
   const sentAt = new Date(Date.now() - (of === "appsChecking20m" ? 20 * MINUTE : 65_000)).toISOString();
   const decidedAt = new Date(Date.now() - 2 * MINUTE).toISOString();
@@ -164,6 +180,13 @@ function reviewOf(of: Scene): GenexReviewStatus | null {
     appsNotBuilt: [[app(GenexAppReview.NotApproved)], null],
     appsOffline: [[app(GenexAppReview.NotApproved)], null],
     appsSignedOut: [[app(GenexAppReview.NotApproved)], null],
+    appsLive: [[app(GenexAppReview.Live)], null],
+    appsPublishEnds: [read && sendEnded ? [app(GenexAppReview.Checking, { sentAt: new Date(Date.now() - 5000).toISOString() })] : [], null],
+    webWithAppsChecking: [[app(GenexAppReview.Checking)], null],
+    appsResendOwed: [[app(GenexAppReview.NotApproved, { humanReview: { ...asked, resend: true } })], null],
+    webAppsFixedWeb: [[app(GenexAppReview.Live)], takedown()],
+    appsFixEarlierBuild: [[app(GenexAppReview.Checking, { sentAt: new Date(Date.now() - MINUTE).toISOString() })], null],
+    appsUpdateGoesLive: [[approved ? app(GenexAppReview.Live) : app(GenexAppReview.Checking, { players: { version: "1.2.0", since: "2026-10-25T10:03:10.000Z" } })], null],
   };
   const [list, down] = apps[of];
   const problem = of === "appsOffline" ? { problem: GenexReviewReadProblem.Offline } : of === "appsSignedOut" ? { problem: GenexReviewReadProblem.SignedOut } : {};
@@ -181,6 +204,16 @@ function fixEventsOf(of: Scene): EventEnvelope[] {
   const press = envelope("fix", customEventData(LogEvent.GenexReviewFix, { project: GAME, fixId: "fix-1", kind: GenexFixKind.App, count: 1, autoPublish: true, at }));
   const outcome = (change: GenexReviewChange, extra: Record<string, unknown> = {}) =>
     envelope(`out-${change}`, customEventData(LogEvent.GenexReview, { project: GAME, change, ...extra, at }));
+  if (of === "webAppsFixedWeb") {
+    const web = customEventData(LogEvent.GenexReviewFix, { project: GAME, fixId: "fix-1", kind: GenexFixKind.Web, count: 3, autoPublish: true, at });
+    return [envelope("fix", web), outcome(GenexReviewChange.FixedWeb)];
+  }
+  // A fix that ended with nothing built half an hour ago: the app sent since is checked, not "your fixes".
+  if (of === "appsFixEarlierBuild") {
+    const earlier = new Date(Date.now() - 40 * MINUTE).toISOString();
+    const pressed = customEventData(LogEvent.GenexReviewFix, { project: GAME, fixId: "fix-1", kind: GenexFixKind.App, count: 1, autoPublish: true, at: earlier });
+    return [{ ...envelope("fix", pressed), created_at: earlier }, outcome(GenexReviewChange.NotBuilt, { at: new Date(Date.now() - 30 * MINUTE).toISOString() })];
+  }
   if (of === "appsFixSent") return [press];
   if (of === "appsFixStopped") return [press, outcome(GenexReviewChange.FixStopped)];
   if (of === "appsNotBuilt") return [press, outcome(GenexReviewChange.NotBuilt)];
@@ -190,11 +223,17 @@ function fixEventsOf(of: Scene): EventEnvelope[] {
 }
 
 /** Whether Genex's page plays a web version in each scene (`hostedWeb`); unknown in the rest. */
-const HOSTED_WEB: Partial<Record<Scene, boolean>> = { unrealWebOnGenex: true, unityReplacesApps: false };
+const HOSTED_WEB: Partial<Record<Scene, boolean>> = {
+  unrealWebOnGenex: true,
+  unityReplacesApps: false,
+  webWithAppsChecking: true,
+  webAppsFixedWeb: true,
+};
 
 /** The publish record's apps in each scene: none sent yet, going now, on Genex, or refused. */
 function appsOf(of: Scene): GenexNativeRecord {
-  const record: GenexNativeRecord = { supported: true, sending: of === "appsSending", sent: [], failed: [] };
+  const sending = of === "appsSending" || (of === "appsPublishEnds" && !sendEnded);
+  const record: GenexNativeRecord = { supported: true, sending, sent: [], failed: [] };
   const at = new Date().toISOString();
   if (of === "appsSent" || of === "unrealWebOnGenex" || of === "unityReplacesApps") {
     record.sent.push({ platform: "mac", arch: "universal", version: "1.0+3f2a9c1d0e4b", sizeBytes: 1, publishedAt: at });
@@ -222,7 +261,7 @@ function appsOf(of: Scene): GenexNativeRecord {
     const reviewReason = "It opens a shell.";
     record.sent.push({ platform: "mac", arch: "universal", version: "1", sizeBytes: 1, publishedAt: at, review, reviewReason });
   }
-  const reviewed = reviewOf(of)?.record?.apps[0];
+  const reviewed = reviewOf(of, true)?.record?.apps[0];
   if (reviewed) {
     const review = { live: GenexBuildReview.Approved, not_approved: GenexBuildReview.Rejected }[reviewed.state as string] ?? GenexBuildReview.Pending;
     const reviewReason = reviewed.things[0]?.text;
@@ -235,12 +274,15 @@ let scene: Scene = "engine";
 let closed = 0;
 const composed: ComposeInChat[] = [];
 window.addEventListener(COMPOSE_IN_CHAT_EVENT, (event) => composed.push((event as CustomEvent<ComposeInChat>).detail));
+/** The scenes of a game already public on Genex: its web version is live. */
+const LISTED: ReadonlySet<Scene> = new Set(["webWithAppsChecking"]);
 const state = (): GenexPublishState => ({
   version: 1,
   project: GAME,
   connected: true,
   slug: GAME,
-  status: "draft",
+  status: LISTED.has(scene) ? "published" : "draft",
+  ...(LISTED.has(scene) ? { galleryUrl: `https://genex.games/${GAME}` } : {}),
   native: appsOf(scene),
   ...(HOSTED_WEB[scene] === undefined ? {} : { hostedWeb: HOSTED_WEB[scene] }),
 });
@@ -269,7 +311,22 @@ fake.stub("genexPublish", async (_project, _review, _title, _remix, replaceNativ
   published.push({ via: "web", ...(replaceNativePage ? { replaceNativePage } : {}) });
 });
 fake.stub("genexPublishReview", async () => ({ included: ["index.html"], excluded: [] }));
-fake.stub("genexReviewStatus", async () => reviewOf(scene) ?? { record: null, checkedAt: null, connected: true, open: false, fingerprint: null, told: null, publishing: false });
+/**
+ * Each read of the review, and whether it asked Genex (`refresh`). Like the plugin, a read that asks
+ * Genex while the scene's apps are being sent answers what was kept; one after the send has ended
+ * answers what Genex says of what it sent.
+ */
+const reviewReads: boolean[] = [];
+let genexRead = false;
+const NOTHING_SENT: GenexReviewStatus = {
+  record: { state: GenexGameReview.NotPublished, apps: [], takedown: null },
+  checkedAt: null, connected: true, open: false, fingerprint: "", told: null, publishing: false,
+};
+fake.stub("genexReviewStatus", async (_project, refresh) => {
+  reviewReads.push(refresh === true);
+  if (refresh === true && !appsOf(scene).sending) genexRead = true;
+  return reviewOf(scene, genexRead) ?? NOTHING_SENT;
+});
 fake.stub("genexFixReview", async (_project, options) => {
   published.push({ via: options.autoPublish ? "fix" : "fix:manual" });
   return { fixId: "fix-1" };
@@ -329,6 +386,9 @@ function sample() {
     chip: document.querySelector<HTMLElement>(".genex-publish-chip")?.textContent ?? null,
     steps: [...(content?.querySelectorAll<HTMLElement>(".step-bar [data-state]") ?? [])].map((el) => el.dataset.state ?? ""),
     check: content?.querySelector<HTMLElement>("[data-genex-publish-check]")?.textContent ?? null,
+    celebrating: Boolean(document.querySelector("[data-celebrating]")),
+    liveUpdate: content?.querySelector<HTMLElement>("[data-genex-publish-live-update]")?.textContent ?? null,
+    reviewReads: [...reviewReads],
     text: content?.textContent ?? "",
     order,
     overflow,
@@ -383,9 +443,9 @@ async function requestReview(note: string) {
 }
 
 /** A game made in Unity or Unreal, as the library knows it: its engine and the fact it was found by. */
-const engineOf = (fact: CoreFact) => ({
+const engineOf = (fact: CoreFact, webVersion = false) => ({
   engine: { id: fact === CoreFact.UnrealProject ? "unreal" : "unity", project: "." },
-  facts: [{ id: fact, path: "." }],
+  facts: [{ id: fact, path: "." }, ...(webVersion ? [{ id: CoreFact.WebGame, path: "web" }] : [])],
 });
 
 /** Open the dialog in `theme` on the scene's game: made in an engine unless the scene is a web game. */
@@ -398,9 +458,15 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene; platform
   composed.length = 0;
   published.length = 0;
   actions.length = 0;
+  reviewReads.length = 0;
+  genexRead = false;
+  sendEnded = false;
+  approved = false;
   studio().people.setState((people) => ({ ...people, account: GenexAccountStatus.SignedIn }), true);
   const engine =
-    scene === "web" ? {} : engineOf(scene.startsWith("unreal") ? CoreFact.UnrealProject : CoreFact.UnityProject);
+    scene === "web"
+      ? { facts: [{ id: CoreFact.WebGame, path: "." }] }
+      : engineOf(scene.startsWith("unreal") ? CoreFact.UnrealProject : CoreFact.UnityProject, WEB_WITH_APPS.has(scene));
   const game = { name: GAME, title: "Dust Runners", createdAt: AT, ...engine } as unknown as GameProject;
   studio().library.setState((library) => ({ ...library, games: [game] }), true);
   studio().eventLog.setState((log) => ({ ...log, byThread: { t1: fixEventsOf(scene) } }), true);
@@ -431,6 +497,23 @@ async function press() {
   return sample();
 }
 
+/** End the scene's apps publish, then wait for the dialog to read Genex's word on what it sent. */
+async function endSend() {
+  sendEnded = true;
+  for (let i = 0; i < 400 && !document.querySelector("[data-genex-publish-check]"); i++) await frame();
+  await settle();
+  return sample();
+}
+
+/** Genex approves the update while the dialog is open: main's watch says the game's review changed. */
+async function approve() {
+  approved = true;
+  fake.emit({ type: UiEvent.GenexReviewChanged, payload: { project: GAME } });
+  for (let i = 0; i < 200 && !document.querySelector("[data-celebrating]"); i++) await frame();
+  await settle();
+  return sample();
+}
+
 /** Press a row's Make with agent. */
 async function make(target: PublishTarget) {
   document.querySelector<HTMLButtonElement>(`[data-publish-platform-make="${target}"]`)?.click();
@@ -446,4 +529,4 @@ async function removeWeb() {
   return sample();
 }
 
-Object.assign(window, { platformsRig: { open, make, press, sample, removeWeb, reviewPress, requestReview } });
+Object.assign(window, { platformsRig: { open, make, press, sample, removeWeb, reviewPress, requestReview, endSend, approve } });

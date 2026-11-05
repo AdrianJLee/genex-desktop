@@ -7,20 +7,21 @@
  * not know has no line.
  *
  * Each game's review part is kept in memory until its review changes (`forget`, on every
- * `UiEvent.GenexReviewChanged`); the publish record is read each time, so a web publish shows at once.
+ * `UiEvent.GenexReviewChanged`, which a fix's end says too, even one with no step after it); the
+ * publish record is read each time, so a web publish shows at once. A game with no chat is read as
+ * one with no fix: reading never makes a chat.
  * Electron-free: the games, the kept review, the chat and the publish record come in as deps.
  */
 import type { EventEnvelope } from "../../shared/event-log.ts";
 import {
   GenexAppReview,
   type GenexReviewRecord,
-  GenexReviewChange,
   type GenexReviewStatus,
   type GenexSidebarEntry,
   GenexSidebarLine,
   sidebarLineOf,
 } from "../../shared/genex-review.ts";
-import { fixWorkEnded, type GenexFixState, newestFix } from "../../shared/genex-review-log.ts";
+import { fixWorkEnded, type GenexFixState, newestFix, sentByFix } from "../../shared/genex-review-log.ts";
 
 /** What the lines are read from. */
 export interface ReviewLinesDeps {
@@ -50,10 +51,9 @@ export interface ReviewLineInput {
   fixing: boolean;
 }
 
-/** Whether the fixed app went again after the press, and Genex checks it now. */
+/** Whether Genex checks the very build the fix sent again: a later publish is In review, not Checking fixes. */
 const checkingFixes = (input: ReviewLineInput): boolean =>
-  input.fix?.outcome === GenexReviewChange.Sent &&
-  (input.record?.apps.some((app) => app.state === GenexAppReview.Checking) ?? false);
+  input.record?.apps.some((app) => app.state === GenexAppReview.Checking && sentByFix(input.fix, app)) ?? false;
 
 /** A game's line from its review and its newest fix press; null when the review says nothing. */
 export function reviewLineOf(input: ReviewLineInput): GenexSidebarEntry | null {

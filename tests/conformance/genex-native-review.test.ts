@@ -8,9 +8,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  readRequestAnswer,
+  readReviewStatus,
   REVIEW_CLI,
   reviewDetailOf,
   reviewRecordOf,
+  sentWithReview,
   takesReviewCommand,
 } from "../../src/plugins/genex/native-review.ts";
 import {
@@ -317,5 +320,92 @@ describe("a sent build's review detail", () => {
     });
     assert.equal(reviewDetailOf({ stage: "soon" }), undefined);
     assert.equal(reviewDetailOf("checking"), undefined);
+  });
+});
+
+describe("a sent app's row beside the kept review", () => {
+  const kept = reviewRecordOf({ native: { builds: [], submissions: [rejected()] }, project: {} });
+  const sent = (extra: Record<string, unknown>) => ({
+    platform: "mac",
+    arch: "arm64",
+    version: "1.3.0",
+    sizeBytes: 1,
+    sha256: SHA,
+    publishedAt: "2026-10-27T14:02:00.000Z",
+    review: "pending" as const,
+    ...extra,
+  });
+
+  it("takes Genex's word on the very build that was sent", () => {
+    const [row] = sentWithReview([sent({})], kept);
+    assert.equal(row?.review, "rejected");
+  });
+
+  it("leaves a build sent again with the same version as sent: Genex has said nothing of it yet", () => {
+    const fixed = sent({ sha256: "b".repeat(64), publishedAt: "2026-10-27T15:00:00.000Z" });
+    assert.deepEqual(sentWithReview([fixed], kept), [fixed]);
+    const sameBytes = sent({ publishedAt: "2026-10-27T15:00:00.000Z" });
+    assert.deepEqual(sentWithReview([sameBytes], kept), [sameBytes], "sent after the review was read");
+    const { sha256: _none, ...noArchive } = sent({ publishedAt: "2026-10-27T15:00:00.000Z" });
+    assert.deepEqual(sentWithReview([noArchive], kept), [noArchive], "no archive: told apart by when it went");
+  });
+});
+
+describe("the plugin's answers as main reads them", () => {
+  const status = {
+    record: {
+      state: "not_approved",
+      apps: [
+        {
+          ...rejected(),
+          state: "not_approved",
+          things: [{ text: "x" }],
+          humanReview: { state: "none", canRequest: true },
+        },
+      ],
+      takedown: null,
+    },
+    checkedAt: "2026-10-27T14:07:00.000Z",
+    connected: true,
+    failures: 0,
+    open: false,
+    fingerprint: "stale",
+    told: { fingerprint: "f", keys: { "app:mac/arm64": "x" } },
+    publishing: false,
+  };
+
+  it("keeps a review-status answer through the same checks as the kept review", () => {
+    const read = readReviewStatus(status);
+    assert.equal(read?.record?.state, GenexGameReview.NotApproved);
+    assert.equal(read?.fingerprint, read?.record ? reviewFingerprint(read.record) : null, "the print is Studio's own");
+    assert.deepEqual(read?.told, status.told);
+    assert.equal(readReviewStatus({ ...status, problem: "on_fire" })?.problem, undefined);
+  });
+
+  for (const [name, raw] of [
+    ["nothing", undefined],
+    ["a string", "record"],
+    ["no record", { connected: true }],
+    ["no sign-in", { record: null }],
+  ] as const)
+    it(`answers no status for ${name}`, () => {
+      assert.equal(readReviewStatus(raw), null);
+    });
+
+  it("keeps a review-request answer's apps, takedown and known refusal", () => {
+    assert.deepEqual(
+      readRequestAnswer({
+        requested: [{ platform: "mac", arch: "arm64", resend: true }, { platform: 7 }],
+        takedown: false,
+        refused: "already_requested",
+      }),
+      { requested: [{ platform: "mac", arch: "arm64", resend: true }], takedown: false, refused: "already_requested" },
+    );
+    assert.deepEqual(readRequestAnswer({ requested: [], takedown: true, refused: "because" }), {
+      requested: [],
+      takedown: true,
+    });
+    assert.equal(readRequestAnswer({ requested: [] }), null);
+    assert.equal(readRequestAnswer(null), null);
   });
 });

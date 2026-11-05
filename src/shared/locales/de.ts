@@ -6424,6 +6424,13 @@ export default {
   "Tell us why (at least {min} characters)": "Sag uns, warum (mindestens {min} Zeichen)",
   "Tell us why in at least {min} characters.": "Sag uns in mindestens {min} Zeichen, warum.",
   "That fix isn't the game's latest one": "Das ist nicht die neueste Korrektur des Spiels",
+  "Sent to your agent. When it's done, Studio publishes it.":
+    "An deinen Agent gesendet. Wenn er fertig ist, veröffentlicht Studio es.",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "An deinen Agent gesendet. Wenn er fertig ist, veröffentliche es und bitte dann jemanden bei Genex, es wieder freizuschalten.",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "Nach der Korrektur veröffentliche es und bitte dann jemanden bei Genex, es wieder freizuschalten. Meist innerhalb eines Tages.",
+  "This game's latest fix isn't waiting for a build": "Die neueste Korrektur dieses Spiels wartet auf keinen Build",
   "The Genex team is reviewing this game.": "Das Genex-Team prüft dieses Spiel.",
   "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
     "Die Korrektur ist noch nicht gebaut. Baue {app, select, mac {die Mac-App} windows {die Windows-App} linux {die Linux-App} other {die Apps}} neu, dann wird veröffentlicht.",

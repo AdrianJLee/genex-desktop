@@ -114,6 +114,15 @@ test("an app Genex holds says so, never that the game has a draft page", () => {
   assert.deepEqual(toolbarTip(both), ["Genex is checking the apps. Usually a few minutes."]);
 });
 
+test("a game whose web version Genex plays keeps its web status while its app is checked or with a person", () => {
+  const web = state({ slug: "asphalt", status: GenexHostedStatus.Published, hostedWeb: true });
+  const listedWeb = publishButtonStatus(web, null).title;
+  assert.equal(publishButtonStatus(web, review([app(GenexAppReview.Checking)])).title, listedWeb);
+  assert.equal(publishButtonStatus(web, review([app(GenexAppReview.WithPerson)])).title, listedWeb);
+  const turned = publishButtonStatus(web, review([app(GenexAppReview.NotApproved, "mac", 2)]));
+  assert.equal(turned.dot, true, "a turned-down app still asks the person to fix it");
+});
+
 test("an upload under way still says so first, and a game whose apps are all live is listed", () => {
   const uploading = publishButtonStatus(state({ job: job(GenexPublishJobState.Running) }), review([], takedown));
   assert.equal(uploading.dot, undefined);

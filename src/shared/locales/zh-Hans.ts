@@ -5920,6 +5920,12 @@ export default {
   "Tell us why (at least {min} characters)": "说说原因（至少 {min} 个字符）",
   "Tell us why in at least {min} characters.": "请用至少 {min} 个字符说明原因。",
   "That fix isn't the game's latest one": "这不是该游戏最新的一次修复",
+  "Sent to your agent. When it's done, Studio publishes it.": "已发给你的智能体。完成后，Studio 会发布它。",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "已发给你的智能体。完成后，先发布，再请 Genex 的工作人员恢复上线。",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "修复后，先发布，再请 Genex 的工作人员恢复上线。通常一天内处理。",
+  "This game's latest fix isn't waiting for a build": "该游戏最新的修复没有在等待构建",
   "The Genex team is reviewing this game.": "Genex 团队正在审核这个游戏。",
   "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
     "修复还没有构建。重新构建{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}后就会发布。",

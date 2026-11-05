@@ -678,3 +678,93 @@ test("a game with only apps shows Genex's check as Prepare · Upload · Check ·
     "a web game's view is never changed",
   );
 });
+
+test("a live web game whose app Genex checks or turned down keeps the web game's chip: only a takedown changes it", async () => {
+  const { withAppsReview } = await import("../../src/renderer/panels/plugins/genex/genex-publish-view.ts");
+  const { GenexAppReview, GenexHumanReview, gameReviewOf } = await import("../../src/shared/genex-review.ts");
+  const now = Date.parse("2026-10-27T14:10:00Z");
+  const app = (state: (typeof GenexAppReview)[keyof typeof GenexAppReview]) => ({
+    platform: "mac",
+    arch: "arm64",
+    state,
+    version: "1.3.0",
+    sentAt: "2026-10-27T14:08:55Z",
+    things: [],
+    humanReview: { state: GenexHumanReview.None, canRequest: false },
+  });
+  const takedown = {
+    at: "2026-10-27T14:00:00Z",
+    things: [{ text: "x" }],
+    appealable: true,
+    humanReview: { state: GenexHumanReview.None, canRequest: true },
+  };
+  const record = (apps: ReturnType<typeof app>[], down: typeof takedown | null = null) => ({
+    state: gameReviewOf(apps, down),
+    apps,
+    takedown: down,
+  });
+  const live = publishView(state({ slug: "dust", status: "published", galleryUrl: "https://genex.games/dust" }), now);
+  for (const each of [GenexAppReview.Checking, GenexAppReview.NotApproved, GenexAppReview.WithPerson]) {
+    const view = withAppsReview(live, { apps: true, appsOnly: false, admin: false, record: record([app(each)]) }, now);
+    assert.deepEqual(view.chip, live.chip, each);
+    assert.deepEqual(view.steps, live.steps, `${each}: the web steps stay`);
+  }
+  const down = withAppsReview(
+    live,
+    { apps: true, appsOnly: false, admin: false, record: record([app(GenexAppReview.Live)], takedown) },
+    now,
+  );
+  assert.equal(down.chip?.text, "Taken down", "a takedown hides the whole game, its web version too");
+});
+
+test("the dialog celebrates an app only once a check it watched ends live, never one already live when it opened", async () => {
+  const { heldApps, wentLive } = await import("../../src/renderer/panels/plugins/genex/genex-publish-view.ts");
+  const { GenexAppReview, GenexHumanReview, gameReviewOf } = await import("../../src/shared/genex-review.ts");
+  const app = (state: (typeof GenexAppReview)[keyof typeof GenexAppReview], extra: Record<string, unknown> = {}) => ({
+    platform: "mac",
+    arch: "arm64",
+    state,
+    version: "1.3.0",
+    things: [],
+    humanReview: { state: GenexHumanReview.None, canRequest: false },
+    ...extra,
+  });
+  const record = (...apps: ReturnType<typeof app>[]) => ({ state: gameReviewOf(apps, null), apps, takedown: null });
+  const live = record(app(GenexAppReview.Live));
+  assert.equal(wentLive(heldApps(null), live), null, "opened on a live app: no news");
+  assert.equal(wentLive(heldApps(live), live), null);
+  const mixed = record(app(GenexAppReview.Live), app(GenexAppReview.NotApproved, { platform: "windows" }));
+  assert.equal(wentLive(heldApps(mixed), mixed), null, "one live, one turned down: nothing went live here");
+  const checking = record(app(GenexAppReview.Checking));
+  assert.deepEqual(wentLive(heldApps(checking), live), { app: live.apps[0], update: false });
+  const update = record(app(GenexAppReview.Checking, { players: { version: "1.2.0", since: "2026-10-25T10:00:00Z" } }));
+  assert.equal(wentLive(heldApps(update), live)?.update, true, "players had an earlier version: an update");
+  const person = record(app(GenexAppReview.WithPerson));
+  assert.ok(wentLive(heldApps(person), live), "a person's approval while the dialog watched");
+});
+
+test("a game with only apps whose app players get says Live on its banner, never Not published", async () => {
+  const { withAppsReview } = await import("../../src/renderer/panels/plugins/genex/genex-publish-view.ts");
+  const { GenexAppReview, GenexHumanReview, gameReviewOf } = await import("../../src/shared/genex-review.ts");
+  const now = Date.parse("2026-10-27T14:10:00Z");
+  const apps = [
+    {
+      platform: "mac",
+      arch: "arm64",
+      state: GenexAppReview.Live,
+      version: "1.3.0",
+      sentAt: "2026-10-27T14:02:00Z",
+      decidedAt: "2026-10-27T14:09:50Z",
+      things: [],
+      humanReview: { state: GenexHumanReview.None, canRequest: false },
+    },
+  ];
+  const record = { state: gameReviewOf(apps, null), apps, takedown: null };
+  const drafted = publishView(state({ slug: "dust", status: "draft" }), now);
+  assert.equal(drafted.chip?.text, "Not published");
+  const view = withAppsReview(drafted, { apps: true, appsOnly: true, admin: false, record }, now);
+  assert.deepEqual(view.chip, { tone: "live", text: "Live · just now" });
+  assert.equal(drafted.chip?.text, "Not published", "the plain view is left as it was");
+  const web = withAppsReview(drafted, { apps: true, appsOnly: false, admin: false, record }, now);
+  assert.equal(web.chip?.text, "Not published", "a game with a web version keeps the web game's chip");
+});

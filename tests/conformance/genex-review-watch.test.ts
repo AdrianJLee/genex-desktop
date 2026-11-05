@@ -90,6 +90,7 @@ function fakePlugin(records: Record<string, GenexReviewRecord>) {
   let running = 0;
   let most = 0;
   const failing = new Set<string>();
+  const publishing = new Set<string>();
   let signedOut = false;
   const failures = new Map<string, number>();
   const status = async (
@@ -97,7 +98,7 @@ function fakePlugin(records: Record<string, GenexReviewRecord>) {
     options: { refresh?: boolean; told?: GenexReviewTold },
   ): Promise<GenexReviewStatus> => {
     if (options.told) told.set(project, options.told);
-    if (options.refresh) {
+    if (options.refresh && !publishing.has(project)) {
       running += 1;
       most = Math.max(most, running);
       reads.push(project);
@@ -117,7 +118,7 @@ function fakePlugin(records: Record<string, GenexReviewRecord>) {
       open: isOpenReview(record),
       fingerprint: record ? reviewFingerprint(record) : null,
       told: told.get(project) ?? null,
-      publishing: false,
+      publishing: publishing.has(project),
     };
   };
   return {
@@ -127,6 +128,7 @@ function fakePlugin(records: Record<string, GenexReviewRecord>) {
     most: () => most,
     fail: (project: string) => failing.add(project),
     heal: (project: string) => failing.delete(project),
+    publish: (project: string, running: boolean) => (running ? publishing.add(project) : publishing.delete(project)),
     signOut: () => {
       signedOut = true;
     },
@@ -237,6 +239,29 @@ describe("the review watch's schedule", () => {
     const reads = plugin.reads.length;
     await time.advance(10 * MINUTE_MS);
     assert.equal(plugin.reads.length, reads, "no per-game reads while signed out");
+  });
+
+  it("follows a publish it was told of: again while it runs, then the check of what it sent", async () => {
+    const records: Record<string, GenexReviewRecord> = { a: recordOf([]) };
+    const { time, plugin, appended, start } = watchOver(records);
+    const watch = start();
+    await time.advance(REVIEW_FIRST_SWEEP_MS);
+    assert.equal(plugin.reads.length, 1);
+    plugin.publish("a", true);
+    watch.refresh("a");
+    await time.advance(2 * MINUTE_MS);
+    assert.equal(plugin.reads.length, 1, "nothing is read from Genex while the publish runs");
+    records.a = recordOf([app(GenexAppReview.Checking, { sentAt: new Date(time.now()).toISOString() })]);
+    plugin.publish("a", false);
+    await time.advance(30 * SECOND_MS);
+    assert.equal(plugin.reads.length, 2, "read within 30 s of the publish's end, not at the next sweep");
+    assert.deepEqual(
+      appended.map((entry) => entry.records.map((record) => record.change)),
+      [[GenexReviewChange.Sent]],
+    );
+    records.a = recordOf([app(GenexAppReview.NotApproved, { decidedAt: new Date(time.now()).toISOString() })]);
+    await time.advance(REVIEW_POLL_MS[0] ?? 0);
+    assert.equal(appended.at(-1)?.records[0]?.change, GenexReviewChange.NotApproved, "the check's cadence");
   });
 
   it("reads a game again at once when asked, and focus sweeps when the last sweep is over 5 min old", async () => {
@@ -352,8 +377,54 @@ describe("the changes between what was told and what Genex says", () => {
     assert.equal(record?.decidedBy, "person");
     assert.equal(record?.reply, "The coin page sends players to a store outside Genex.");
     assert.equal(record?.update, true);
-    assert.deepEqual(record?.app, { platform: "mac", arch: "arm64", version: "1.3.0" });
+    // Flipped on purpose: a record names the build it is about, so a fix's re-check can tell it apart.
+    assert.deepEqual(record?.app, {
+      platform: "mac",
+      arch: "arm64",
+      version: "1.3.0",
+      sentAt: new Date(START).toISOString(),
+    });
     assert.equal(record?.title, "Midnight Asphalt");
+  });
+
+  it("tells a request made on genex.games or with the CLI as a request, never as a new turn-down", () => {
+    const down = recordOf([app(GenexAppReview.NotApproved, { decidedAt: new Date(START).toISOString() })]);
+    const told = reviewChanges(null, down, now, game).told;
+    const asked = recordOf([
+      app(GenexAppReview.NotApproved, {
+        decidedAt: new Date(START).toISOString(),
+        humanReview: { state: GenexHumanReview.Requested, canRequest: false, resend: true },
+      }),
+    ]);
+    const changes = reviewChanges(told, asked, now, game);
+    assert.deepEqual(
+      changes.records.map((record) => [record.change, record.requested]),
+      [[GenexReviewChange.Requested, true]],
+    );
+    assert.equal(reviewChanges(changes.told, asked, now, game).records.length, 0, "told once");
+  });
+
+  it("tells a build live in place of an earlier one as an update, and one a person approved after a request", () => {
+    const players = { version: "1.2.0", since: "2026-10-25T10:03:10.000Z" };
+    const held = recordOf([app(GenexAppReview.Checking, { players })]);
+    const live = recordOf([app(GenexAppReview.Live, { decidedAt: new Date(now).toISOString() })]);
+    const update = reviewChanges(reviewChanges(null, held, now, game).told, live, now, game).records[0];
+    assert.deepEqual([update?.change, update?.update, update?.requested], [GenexReviewChange.Live, true, undefined]);
+    const withPerson = recordOf([
+      app(GenexAppReview.WithPerson, {
+        players,
+        humanReview: { state: GenexHumanReview.Requested, canRequest: false },
+      }),
+    ]);
+    const approved = reviewChanges(reviewChanges(null, withPerson, now, game).told, live, now, game).records[0];
+    assert.deepEqual([approved?.change, approved?.update, approved?.requested], [GenexReviewChange.Live, true, true]);
+    const first = reviewChanges(
+      reviewChanges(null, recordOf([app(GenexAppReview.Checking)]), now, game).told,
+      live,
+      now,
+      game,
+    );
+    assert.equal(first.records[0]?.update, undefined, "a first build live is no update");
   });
 
   it("tells nothing when nothing changed", () => {

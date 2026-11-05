@@ -18,6 +18,7 @@ import {
   type GenexReviewRecord,
   GenexReviewReadProblem,
   GenexReviewRefusal,
+  type GenexReviewRequestAnswer,
   GenexReviewStage,
   type GenexReviewStatus,
   type GenexReviewTold,
@@ -387,6 +388,40 @@ export function reviewStatusOf(saved: ReviewSaved, connected: boolean, publishin
   };
 }
 
+/**
+ * A `review-status` answer as it crossed from the plugin: each field through the same checks as
+ * `review.json`, or null for anything that is not one.
+ */
+export function readReviewStatus(raw: unknown): GenexReviewStatus | null {
+  if (!isRecord(raw) || !("record" in raw) || typeof raw.connected !== "boolean") return null;
+  const record = keptRecord(raw.record);
+  const problem = oneOf(GenexReviewReadProblem, raw.problem);
+  const failures = typeof raw.failures === "number" && raw.failures > 0 ? Math.floor(raw.failures) : 0;
+  return {
+    record,
+    checkedAt: stamp(raw.checkedAt) ?? null,
+    connected: raw.connected,
+    ...(problem ? { problem } : {}),
+    failures,
+    open: isOpenReview(record),
+    fingerprint: record ? reviewFingerprint(record) : null,
+    told: toldOf(raw.told),
+    publishing: raw.publishing === true,
+  };
+}
+
+/** A `review-request` answer as it crossed from the plugin, or null for anything that is not one. */
+export function readRequestAnswer(raw: unknown): GenexReviewRequestAnswer | null {
+  if (!isRecord(raw) || typeof raw.takedown !== "boolean") return null;
+  const requested = rows(raw.requested).flatMap((row) => {
+    const platform = words(row.platform, RULE_CHARS);
+    const arch = words(row.arch, RULE_CHARS);
+    return platform && arch ? [{ platform, arch, resend: row.resend === true }] : [];
+  });
+  const refused = oneOf(GenexReviewRefusal, raw.refused);
+  return { requested, takedown: raw.takedown, ...(refused ? { refused } : {}) };
+}
+
 /** Why the review shown may be old: signed out, or the reads keep failing. */
 function reviewProblem(saved: ReviewSaved, connected: boolean): GenexReviewReadProblem | undefined {
   if (!connected || saved.signedOut) return GenexReviewReadProblem.SignedOut;
@@ -413,17 +448,30 @@ const SENT_REVIEW: Record<GenexAppReview, GenexBuildReview> = {
   [GenexAppReview.NotApproved]: GenexBuildReview.Rejected,
 };
 
+/** When a build was sent, as a time to compare; NaN when unknown. */
+const sentMs = (at: string | undefined): number => Date.parse(at ?? "");
+
+/**
+ * Whether the kept review's `known` app is the very build a publish sent (`app`): its archive when both
+ * name one, else the time it was sent. A build sent after the review was read is never it: a fix sent
+ * again with the same version is a new build Genex has not said anything of yet.
+ */
+function sameSentBuild(known: GenexReviewApp, app: GenexNativeSent): boolean {
+  const pair = known.platform === app.platform && known.arch === app.arch && known.version === app.version;
+  if (!pair || sentMs(app.publishedAt) > sentMs(known.sentAt)) return false;
+  if (known.sha256 && app.sha256) return known.sha256 === app.sha256;
+  return sentMs(known.sentAt) === sentMs(app.publishedAt);
+}
+
 /**
  * The apps a publish sent, each with Genex's later word on it from the kept review (the same build:
- * platform, processor and version), so its row says where it stands now. A build Genex did not review
- * (an admin's) and one the review does not name stay as they were sent.
+ * its archive, else when it was sent), so its row says where it stands now. A build Genex did not
+ * review (an admin's) and one the review does not name, a newer send among them, stay as they were sent.
  */
 export function sentWithReview(sent: readonly GenexNativeSent[], record: GenexReviewRecord | null): GenexNativeSent[] {
   if (!record) return [...sent];
   return sent.map((app) => {
-    const known = record.apps.find(
-      (one) => one.platform === app.platform && one.arch === app.arch && one.version === app.version,
-    );
+    const known = record.apps.find((one) => sameSentBuild(one, app));
     if (!known || app.review === undefined) return app;
     const review = SENT_REVIEW[known.state];
     const reason = known.things[0]?.text;

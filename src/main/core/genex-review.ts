@@ -28,26 +28,30 @@ import {
   type GenexReviewRequestAnswer,
   type GenexReviewStatus,
   type GenexReviewTold,
+  type GenexTakedown,
   thingsOf,
   worstApps,
 } from "../../shared/genex-review.ts";
 import { FixEnd, type GenexFixState, fixWorkEnded, newestFix } from "../../shared/genex-review-log.ts";
 import { t } from "../../shared/i18n.ts";
 import { reviewChanges } from "./genex-review-watch.ts";
-import { appFixBrief, takedownFixBrief } from "./genex-review-prompts.ts";
+import { AfterFix, appFixBrief, rebuildBrief, takedownFixBrief } from "./genex-review-prompts.ts";
 
 /** Why a press did nothing, as the person reads it. */
 const MESSAGE = {
   NothingToFix: () => t("Genex has nothing for this game's agent to fix"),
   NoSuchFix: () => t("That fix isn't the game's latest one"),
+  NothingToBuild: () => t("This game's latest fix isn't waiting for a build"),
 } as const;
 
 /** What the review flows run on: the Genex plugin, the game's chat and its folder. */
 export interface GenexReviewDeps {
   /** The plugin's `review-status` for the game; `refresh` reads Genex first, `told` keeps what was told. */
   status(project: string, options?: { refresh?: boolean; told?: GenexReviewTold }): Promise<GenexReviewStatus>;
-  /** The game's own chat. */
+  /** The game's own chat, made when it has none: for what is written there. */
   thread(project: string): Promise<string>;
+  /** The game's own chat when it has one; null otherwise. Reading never makes one. */
+  existingThread(project: string): Promise<string | null>;
   /** The game's name and link on Genex. */
   game(project: string): Promise<{ title: string; slug?: string; web: boolean }>;
   events(threadId: string): Promise<EventEnvelope[]>;
@@ -67,6 +71,8 @@ export interface GenexReviewDeps {
   ): Promise<GenexReviewRequestAnswer>;
   /** Read the game's review again now. */
   refresh(project: string): void;
+  /** Tell the window the game's line and bell row may have changed (`UiEvent.GenexReviewChanged`). */
+  changed(project: string): void;
   now(): number;
   id(): string;
 }
@@ -76,20 +82,36 @@ const APP_NAME: Readonly<Record<string, string>> = { mac: "Mac app", windows: "W
 const appName = (platforms: readonly string[]): string =>
   platforms.length === 1 ? (APP_NAME[platforms[0] ?? ""] ?? "app") : "apps";
 
+/**
+ * What Studio does once the agent is done with a takedown's fix: a web game's is the person's; a game
+ * with apps is sent again, and a person asked to put it back while a request may go (an old Genex that
+ * needs the person's own words gets none from Studio).
+ */
+function takedownStep(takedown: GenexTakedown, web: boolean): AfterFix {
+  if (web) return AfterFix.Yours;
+  return takedown.humanReview.canRequest && !takedown.noteMin ? AfterFix.AskPerson : AfterFix.Publish;
+}
+
+/** The turned-down apps a fix is about, and the words its brief names them by. */
+function turnedDownApps(record: GenexReviewRecord) {
+  const apps = worstApps(record).filter((app) => app.state === GenexAppReview.NotApproved);
+  return { apps, platform: appName([...new Set(apps.map((app) => app.platform))]) };
+}
+
 /** What a game's review asks the agent to fix: its kind, the things, and the brief's words. */
 function fixFor(record: GenexReviewRecord, game: { title: string; web: boolean }) {
   const takedown = record.takedown;
   if (takedown) {
     if (takedown.things.length === 0) return null;
     const kind = game.web ? GenexFixKind.Web : GenexFixKind.Takedown;
-    const text = takedownFixBrief({ title: game.title, things: takedown.things, web: game.web });
+    const step = takedownStep(takedown, game.web);
+    const text = takedownFixBrief({ title: game.title, things: takedown.things, step });
     return { kind, count: takedown.things.length, text };
   }
-  const apps = worstApps(record).filter((app) => app.state === GenexAppReview.NotApproved);
+  const { apps, platform } = turnedDownApps(record);
   const things = thingsOf(apps);
   if (things.length === 0) return null;
   const decidedBy = apps.some((app) => app.decidedBy === GenexDecider.Person) ? GenexDecider.Person : undefined;
-  const platform = appName([...new Set(apps.map((app) => app.platform))]);
   const text = appFixBrief({ title: game.title, platform, things, ...(decidedBy ? { decidedBy } : {}) });
   return { kind: GenexFixKind.App, count: things.length, text };
 }
@@ -101,15 +123,40 @@ const fixRecord = (project: string, fix: Omit<GenexFixState, "index" | "outcome"
 /** A `genex_review` record. */
 const reviewRecord = (payload: GenexReviewPayload) => customEventData(CustomEvent.GenexReview, { ...payload });
 
+/** A fix's outcome as its record says it, at `now`. */
+const outcome = (project: string, change: GenexReviewChange, now: number, extra: Partial<GenexReviewPayload> = {}) => ({
+  project,
+  change,
+  ...extra,
+  at: new Date(now).toISOString(),
+});
+
 /**
- * Fix with agent: the brief goes to the game's chat and the press is recorded, with Studio's step after
- * it (`autoPublish`). With `fixId` and `autoPublish: false`, it is "Don't publish it automatically" on
- * that press: only the record changes.
+ * Build again after a fix whose app was not built again: the same fix, pressed again, with a brief that
+ * asks only for the build; null when the game's newest fix is not waiting for one.
+ */
+function rebuildFor(
+  fix: GenexFixState | null,
+  record: GenexReviewRecord | null,
+  game: { title: string; web: boolean },
+) {
+  if (fix?.outcome !== GenexReviewChange.NotBuilt || !record) return null;
+  const takedown = record.takedown;
+  const step = takedown ? takedownStep(takedown, game.web) : AfterFix.Publish;
+  const platform = takedown ? appName([]) : turnedDownApps(record).platform;
+  return { kind: fix.kind, count: fix.count, text: rebuildBrief({ title: game.title, platform, step }) };
+}
+
+/**
+ * Fix with agent: the press is recorded, with Studio's step after it (`autoPublish`), then the brief
+ * goes to the game's chat; a brief that never reached it ends the press stopped. With `fixId` and
+ * `autoPublish: false`, it is "Don't publish it automatically" on that press: only the record changes.
+ * With `rebuild`, it is Build again: the newest fix, which ended with nothing built, is pressed again.
  */
 export async function fixReviewFromDialog(
   deps: GenexReviewDeps,
   project: string,
-  options: { autoPublish?: unknown; fixId?: unknown },
+  options: { autoPublish?: unknown; fixId?: unknown; rebuild?: unknown },
 ): Promise<{ fixId: string }> {
   const threadId = await deps.thread(project);
   const at = new Date(deps.now()).toISOString();
@@ -124,11 +171,21 @@ export async function fixReviewFromDialog(
   }
   const { record } = await deps.status(project);
   const game = await deps.game(project);
-  const fix = record ? fixFor(record, game) : null;
-  if (!fix) throw new Error(MESSAGE.NothingToFix());
+  const rebuild = options.rebuild === true;
+  const fix = rebuild
+    ? rebuildFor(newestFix(await deps.events(threadId), project), record, game)
+    : record && fixFor(record, game);
+  if (!fix) throw new Error(rebuild ? MESSAGE.NothingToBuild() : MESSAGE.NothingToFix());
   const fixId = deps.id();
+  // The press goes first, so the agent's turn on the brief comes after it in the chat.
   await deps.append(threadId, [fixRecord(project, { fixId, kind: fix.kind, count: fix.count, autoPublish: true, at })]);
-  await deps.send(fix.text, { thread: threadId, from: MessageFrom.Genex });
+  try {
+    await deps.send(fix.text, { thread: threadId, from: MessageFrom.Genex });
+  } catch (error) {
+    // The agent never got the brief: no work will end, so the press ends here, stopped.
+    await deps.append(threadId, [reviewRecord(outcome(project, GenexReviewChange.FixStopped, deps.now()))]);
+    throw error;
+  }
   return { fixId };
 }
 
@@ -189,34 +246,33 @@ async function tellRequested(deps: GenexReviewDeps, project: string, answer: Gen
 /**
  * Once the agent's work on the game's newest fix press ends: Studio's one step after it, unless the
  * person took it back or it already ran. Runs for every append to a game's chat; does nothing until
- * that work has ended.
+ * that work has ended. A fix whose step the person took back has nothing to run, but its game's line
+ * stops saying Fixing: the window is told.
  */
 export async function afterFixRunEnds(deps: GenexReviewDeps, project: string, threadId: string): Promise<void> {
   const events = await deps.events(threadId);
   const fix = newestFix(events, project);
-  if (!fix?.autoPublish || fix.outcome) return;
+  if (!fix || fix.outcome) return;
   const ended = fixWorkEnded(events, fix);
   if (!ended) return;
+  if (!fix.autoPublish) {
+    deps.changed(project);
+    return;
+  }
   await settleFix(deps, project, threadId, fix, ended);
 }
 
 /**
  * A fix press whose agent can no longer finish: Studio quit while it worked. Said once at the next
- * start, as a stop: nothing is published by itself after a restart.
+ * start, as a stop: nothing is published by itself after a restart. A game with no chat has no press.
  */
 export async function settleInterruptedFix(deps: GenexReviewDeps, project: string): Promise<void> {
-  const threadId = await deps.thread(project);
+  const threadId = await deps.existingThread(project);
+  if (!threadId) return;
   const fix = newestFix(await deps.events(threadId), project);
   if (!fix?.autoPublish || fix.outcome) return;
   await deps.append(threadId, [reviewRecord(outcome(project, GenexReviewChange.FixStopped, deps.now()))]);
 }
-
-const outcome = (project: string, change: GenexReviewChange, now: number, extra: Partial<GenexReviewPayload> = {}) => ({
-  project,
-  change,
-  ...extra,
-  at: new Date(now).toISOString(),
-});
 
 /** Studio's step after a fix: send the app again (and ask a person for a takedown), or say why not. */
 async function settleFix(

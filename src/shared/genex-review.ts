@@ -266,7 +266,33 @@ export const TAKEDOWN_KEY = "takedown";
 
 /** One app's state as told: a change of any part is one notice. */
 const appPrint = (app: GenexReviewApp): string =>
-  [app.state, app.version, app.sha256 ?? "", app.decidedAt ?? "", app.humanReview.state, app.things.length].join("|");
+  [
+    app.state,
+    app.version,
+    app.sha256 ?? "",
+    app.decidedAt ?? "",
+    app.humanReview.state,
+    app.things.length,
+    app.players?.version ?? "",
+  ].join("|");
+
+/** One app as it was last told: its state, its build, its decision, its request and the build players kept. */
+export interface GenexToldApp {
+  state: string;
+  version: string;
+  sha256: string;
+  decidedAt: string;
+  humanReview: string;
+  /** The version players kept beside it while it was held or turned down; empty when none. */
+  players: string;
+}
+
+/** An app's told fingerprint read back; undefined when none was told. */
+export function toldAppOf(print: string | undefined): GenexToldApp | undefined {
+  if (print === undefined) return undefined;
+  const [state = "", version = "", sha256 = "", decidedAt = "", humanReview = "", , players = ""] = print.split("|");
+  return { state, version, sha256, decidedAt, humanReview, players };
+}
 
 /** A takedown's state as told: when, where its request stands, how many things. */
 const takedownPrint = (takedown: GenexTakedown): string =>
@@ -341,8 +367,8 @@ export interface GenexReviewPayload {
   slug?: string;
   title?: string;
   change: GenexReviewChange;
-  /** The app it is about; none for the takedown. */
-  app?: { platform: string; arch: string; version: string };
+  /** The app it is about, and which build of it (when Genex said); none for the takedown. */
+  app?: { platform: string; arch: string; version: string; sha256?: string; sentAt?: string };
   /** What to fix, as it stood then: a settled card reads it back. */
   things?: GenexReviewThing[];
   count?: number;

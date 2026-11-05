@@ -27,7 +27,7 @@ import {
   thingsOf,
   worstApps,
 } from "../../../../shared/genex-review.ts";
-import type { GenexFixState } from "../../../../shared/genex-review-log.ts";
+import { fixStillCurrent, type GenexFixState, sentByFix } from "../../../../shared/genex-review-log.ts";
 import { intlLocale, t } from "../../../../shared/i18n.ts";
 import { REVIEW_WORDS } from "../../../words.ts";
 
@@ -128,6 +128,11 @@ export interface ReviewCardInput {
   title: string;
   /** The game's apps are being sent now. */
   sending?: boolean;
+  /**
+   * The game publishes as a web game: after a fix of its takedown, publishing it and asking a person
+   * stay the person's (Studio does neither by itself).
+   */
+  web?: boolean;
   place: ReviewPlace;
 }
 
@@ -184,10 +189,6 @@ const NEEDS_PERSON: ReadonlySet<string> = new Set([
 /** A fix press whose step after it is still to come: the card says it was sent, and how to take the step back. */
 const pendingFix = (fix: GenexFixState | null): fix is GenexFixState => fix !== null && fix.outcome === undefined;
 
-/** Whether `fix` was sent again after the press (its outcome) and Genex decided after it: a re-check. */
-const rechecked = (fix: GenexFixState | null, decidedAt: string | undefined): boolean =>
-  fix?.outcome === GenexReviewChange.Sent && Date.parse(decidedAt ?? "") > Date.parse(fix.at);
-
 /** The card for `input`; null when there is nothing to show where it draws. */
 export function reviewCardView(input: ReviewCardInput): ReviewCardView | null {
   const { status } = input;
@@ -197,9 +198,9 @@ export function reviewCardView(input: ReviewCardInput): ReviewCardView | null {
   const ended = fixEndCard(input.fix, record);
   if (ended) return ended;
   if (!record) return null;
-  const card = record.takedown ? takedownCard(record.takedown) : appsCard(record, input);
+  const card = record.takedown ? takedownCard(record.takedown, input.web === true) : appsCard(record, input);
   if (!card) return null;
-  return withFix(card, input.fix, record);
+  return withFix(card, input.fix, record, input.web === true);
 }
 
 /** Offline or signed out, while the game has something that needs the person. */
@@ -215,16 +216,20 @@ function problemCard(status: GenexReviewStatus | null, record: GenexReviewRecord
   return { ...blank(ReviewCardKind.Offline, "quiet"), lines: [WORDS.line.offline(record.state)], oneLine: true };
 }
 
-/** How the newest fix ended when it ended short: the agent stopped, nothing was built, a web game was fixed. */
+/**
+ * How the newest fix ended when it ended short: the agent stopped, nothing was built, a web game was
+ * fixed. Only while Genex still says what the fix was about: a later publish or decision moves on.
+ */
 function fixEndCard(fix: GenexFixState | null, record: GenexReviewRecord | null): ReviewCardView | null {
-  if (fix?.outcome === GenexReviewChange.FixStopped)
+  if (!fix || !fixStillCurrent(fix, record)) return null;
+  if (fix.outcome === GenexReviewChange.FixStopped)
     return {
       ...blank(ReviewCardKind.FixStopped),
       lines: [WORDS.line.fixStopped],
       presses: [press(ReviewPress.FixAgain)],
       oneLine: true,
     };
-  if (fix?.outcome === GenexReviewChange.NotBuilt) {
+  if (fix.outcome === GenexReviewChange.NotBuilt) {
     const apps = record ? worstApps(record) : [];
     return {
       ...blank(ReviewCardKind.NotBuilt),
@@ -234,7 +239,7 @@ function fixEndCard(fix: GenexFixState | null, record: GenexReviewRecord | null)
       platform: apps[0]?.platform ?? null,
     };
   }
-  if (fix?.outcome === GenexReviewChange.FixedWeb && record?.takedown)
+  if (fix.outcome === GenexReviewChange.FixedWeb && record?.takedown)
     return {
       ...blank(ReviewCardKind.FixedWeb),
       lines: [WORDS.line.fixedWeb],
@@ -243,8 +248,18 @@ function fixEndCard(fix: GenexFixState | null, record: GenexReviewRecord | null)
   return null;
 }
 
+/** Whether Studio asks a person to put a fixed takedown back by itself: a game with apps, while a request may go. */
+const studioAsks = (takedown: GenexTakedown | null, web: boolean): boolean =>
+  !web && takedown?.humanReview.canRequest === true && !takedown.noteMin;
+
+/** The footer of a takedown to fix: who asks a person once it is fixed, or nothing while no request may go. */
+function takedownFooter(takedown: GenexTakedown, web: boolean, asks: string): string | null {
+  if (!takedown.humanReview.canRequest) return null;
+  return studioAsks(takedown, web) ? asks : WORDS.footer.takedownYourself;
+}
+
 /** A taken-down game's card: closed, asked about, kept down, or to fix. */
-function takedownCard(takedown: GenexTakedown): ReviewCardView {
+function takedownCard(takedown: GenexTakedown, web: boolean): ReviewCardView {
   const n = takedown.things.length;
   if (!takedown.appealable)
     return {
@@ -270,7 +285,7 @@ function takedownCard(takedown: GenexTakedown): ReviewCardView {
       quote: human.reply ?? null,
       things,
       presses: [press(ReviewPress.Fix, true)],
-      footer: human.canRequest ? WORDS.footer.upheld : null,
+      footer: takedownFooter(takedown, web, WORDS.footer.upheld),
     };
   return {
     ...blank(ReviewCardKind.TakenDown),
@@ -278,7 +293,7 @@ function takedownCard(takedown: GenexTakedown): ReviewCardView {
     lines: [WORDS.line.hidden],
     things,
     presses: [press(ReviewPress.Fix, true), ...(human.canRequest ? [press(ReviewPress.Request)] : [])],
-    footer: WORDS.footer.takedown,
+    footer: takedownFooter(takedown, web, WORDS.footer.takedown),
   };
 }
 
@@ -295,7 +310,7 @@ function appsCard(record: GenexReviewRecord, input: ReviewCardInput): ReviewCard
     };
   if (record.state === GenexGameReview.Checking) {
     if (input.place === ReviewPlace.Dialog) return null;
-    const fixes = input.fix?.outcome === GenexReviewChange.Sent;
+    const fixes = apps.some((app) => sentByFix(input.fix, app));
     const since = apps.map((app) => app.sentAt).find(Boolean) ?? null;
     return {
       ...blank(fixes ? ReviewCardKind.CheckingFixes : ReviewCardKind.Checking, "quiet"),
@@ -379,7 +394,7 @@ function openingOf(apps: readonly GenexReviewApp[], fix: GenexFixState | null): 
   const things = thingsOf(apps);
   const n = things.length;
   const app = apps[0];
-  if (rechecked(fix, app?.decidedAt))
+  if (app && sentByFix(fix, app))
     return { ...blank(ReviewCardKind.Still), title: WORDS.title.still(n), footer: WORDS.footer.first };
   if (app?.players)
     return {
@@ -431,11 +446,23 @@ function requestedCard(
  * A card a fix press is on its way for: it stays, and says the agent has it, with the link that
  * takes Studio's step after it back, or, once taken back, that publishing is the person's.
  */
-function withFix(card: ReviewCardView, fix: GenexFixState | null, record: GenexReviewRecord): ReviewCardView {
+function withFix(
+  card: ReviewCardView,
+  fix: GenexFixState | null,
+  record: GenexReviewRecord,
+  web: boolean,
+): ReviewCardView {
   if (!pendingFix(fix) || card.tone !== "attention") return card;
   const decided = record.takedown?.at ?? worstApps(record)[0]?.decidedAt;
   if (Date.parse(decided ?? "") > Date.parse(fix.at)) return card;
-  const takedown = fix.kind === GenexFixKind.Takedown;
+  if (fix.kind === GenexFixKind.App) return appFixCard(card, fix);
+  return takedownFixCard(card, fix, record.takedown, web);
+}
+
+const DONT_PUBLISH = { link: ReviewLink.DontPublish, label: WORDS.press.dontPublish };
+
+/** An app's fix on its way: Studio publishes it once the agent is done, until the person takes that back. */
+function appFixCard(card: ReviewCardView, fix: GenexFixState): ReviewCardView {
   if (!fix.autoPublish)
     return {
       ...card,
@@ -444,17 +471,44 @@ function withFix(card: ReviewCardView, fix: GenexFixState | null, record: GenexR
       presses: [press(ReviewPress.Publish, true)],
       footer: null,
     };
-  const link = takedown
-    ? { link: ReviewLink.DontAsk, label: WORDS.press.dontAsk }
-    : { link: ReviewLink.DontPublish, label: WORDS.press.dontPublish };
-  const sent = takedown || fix.kind === GenexFixKind.Web ? WORDS.line.sentTakedown : WORDS.line.sentApp;
   return {
     ...card,
     kind: ReviewCardKind.FixSent,
-    after: [fix.kind === GenexFixKind.Web ? WORDS.line.autoCancelled : sent],
+    after: [WORDS.line.sentApp],
     presses: [],
     footer: null,
-    link: fix.kind === GenexFixKind.Web ? null : link,
+    link: DONT_PUBLISH,
+  };
+}
+
+/**
+ * A takedown's fix on its way. A game with apps is sent again once the agent is done, and a person is
+ * asked to put it back while a request may go; a web game's publish and request stay the person's,
+ * as do both once the person took Studio's step back: then Request human review stays on the card,
+ * until the person asked.
+ */
+function takedownFixCard(
+  card: ReviewCardView,
+  fix: GenexFixState,
+  takedown: GenexTakedown | null,
+  web: boolean,
+): ReviewCardView {
+  const yourself = { ...card, after: [WORDS.line.sentPublishThenAsk], footer: null, link: null };
+  if (fix.kind === GenexFixKind.Web) return { ...yourself, kind: ReviewCardKind.FixSent, presses: [] };
+  // Asked already, once the step was the person's: the card says the request is open.
+  if (!fix.autoPublish && takedown?.humanReview.state === GenexHumanReview.Requested) return card;
+  if (!fix.autoPublish) {
+    const request = takedown?.humanReview.canRequest ? [press(ReviewPress.Request)] : [];
+    return { ...yourself, kind: ReviewCardKind.AutoCancelled, presses: [press(ReviewPress.Publish, true), ...request] };
+  }
+  const asks = studioAsks(takedown, web);
+  return {
+    ...card,
+    kind: ReviewCardKind.FixSent,
+    after: [asks ? WORDS.line.sentTakedown : WORDS.line.sentPublishes],
+    presses: [],
+    footer: null,
+    link: asks ? { link: ReviewLink.DontAsk, label: WORDS.press.dontAsk } : DONT_PUBLISH,
   };
 }
 
@@ -491,6 +545,13 @@ export interface SettledCardView {
   quote: string | null;
   things: GenexReviewThing[];
 }
+
+/** What a settled fix press said, by what it sent the agent: a web game's takedown leaves the rest to the person. */
+const SETTLED_FIX_LINE: Readonly<Record<string, string>> = {
+  [GenexFixKind.App]: WORDS.line.sentApp,
+  [GenexFixKind.Takedown]: WORDS.line.sentTakedown,
+  [GenexFixKind.Web]: WORDS.line.sentPublishThenAsk,
+};
 
 /** The things a record kept that have words, at most ten, each once: an old log's shape is never trusted. */
 const keptThings = (record: Partial<GenexReviewPayload>): GenexReviewThing[] => {
@@ -551,15 +612,11 @@ export function settledCardView(
   title: string,
 ): SettledCardView | null {
   if (entry.fix) {
-    const takedown = entry.fix.kind === GenexFixKind.Takedown || entry.fix.kind === GenexFixKind.Web;
-    const sent = takedown ? WORDS.line.sentTakedown : WORDS.line.sentApp;
+    const sent = SETTLED_FIX_LINE[entry.fix.kind ?? GenexFixKind.App] ?? WORDS.line.sentApp;
     return { title: fixHistoryLabel(entry.fix.count ?? 0), lines: [sent], quote: null, things: [] };
   }
   return entry.review ? settledReview(entry.review, title) : null;
 }
-
-/** Whether the game's state is one the Publish dialog shows a review card for (not live, not checking). */
-export const dialogShowsCard = (view: ReviewCardView | null): view is ReviewCardView => view !== null;
 
 /** The Check step's clock source: the app being checked sent last, while one is. */
 export function checkingSince(record: GenexReviewRecord | null): string | null {

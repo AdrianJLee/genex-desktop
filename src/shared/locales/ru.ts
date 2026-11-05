@@ -6314,6 +6314,13 @@ export default {
   "Tell us why (at least {min} characters)": "Объясни почему (не меньше {min} символов)",
   "Tell us why in at least {min} characters.": "Объясни почему, не меньше {min} символов.",
   "That fix isn't the game's latest one": "Это не последнее исправление игры",
+  "Sent to your agent. When it's done, Studio publishes it.":
+    "Отправлено агенту. Когда он закончит, Studio опубликует игру.",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "Отправлено агенту. Когда он закончит, опубликуй игру, а потом попроси человека из Genex вернуть её.",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "После исправления опубликуй игру, а потом попроси человека из Genex вернуть её. Обычно в течение дня.",
+  "This game's latest fix isn't waiting for a build": "Последнее исправление этой игры не ждёт сборки",
   "The Genex team is reviewing this game.": "Команда Genex проверяет эту игру.",
   "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
     "Исправление ещё не собрано. Собери {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}} заново, и оно опубликуется.",

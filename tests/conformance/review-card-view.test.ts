@@ -15,6 +15,7 @@ import {
   ReviewPlace,
   ReviewPress,
   reviewCardView,
+  settledCardView,
 } from "../../src/renderer/panels/plugins/genex/review-card-view.ts";
 import {
   GenexAppReview,
@@ -28,7 +29,9 @@ import {
   type GenexTakedown,
   gameReviewOf,
 } from "../../src/shared/genex-review.ts";
-import type { GenexFixState } from "../../src/shared/genex-review-log.ts";
+import { CustomEvent, customEventData } from "../../src/shared/custom-events.ts";
+import type { EventEnvelope } from "../../src/shared/event-log.ts";
+import { type GenexFixState, newestFix } from "../../src/shared/genex-review-log.ts";
 
 const DECIDED = "2026-10-27T14:06:00.000Z";
 const thing = (n: number) => ({ text: `Thing ${n}` });
@@ -108,7 +111,8 @@ describe("an app Genex turned down", () => {
   });
 
   it("says still to fix after the re-check Studio sent by itself", () => {
-    const card = view(status([app(GenexAppReview.NotApproved, { decidedAt: "2026-10-27T14:40:00Z" })]), {
+    const resent = { sentAt: "2026-10-27T14:35:00Z", decidedAt: "2026-10-27T14:40:00Z" };
+    const card = view(status([app(GenexAppReview.NotApproved, resent)]), {
       fix: fix({ outcome: GenexReviewChange.Sent }),
     });
     assert.equal(card?.kind, ReviewCardKind.Still);
@@ -182,6 +186,87 @@ describe("an app Genex turned down", () => {
   });
 });
 
+describe("a fix, once Genex has moved past the build it was about", () => {
+  const SHA_FIX = "a".repeat(64);
+  const SHA_LATER = "b".repeat(64);
+  /** The game's chat: the press, Studio's send after it, and the build of it the host told of. */
+  const chat = (...extra: EventEnvelope["data"][]): EventEnvelope[] =>
+    [
+      customEventData(CustomEvent.GenexReviewFix, {
+        project: "a",
+        fixId: "fix-1",
+        kind: GenexFixKind.App,
+        count: 1,
+        autoPublish: true,
+        at: "2026-10-27T14:20:00.000Z",
+      }),
+      customEventData(CustomEvent.GenexReview, {
+        project: "a",
+        change: GenexReviewChange.Sent,
+        recheck: true,
+        at: "2026-10-27T14:30:00.000Z",
+      }),
+      ...extra,
+    ].map((data, index) => ({
+      id: `e${index}`,
+      thread_id: "t1",
+      session_id: null,
+      turn_id: null,
+      created_at: `2026-10-27T14:${String(20 + index).padStart(2, "0")}:00.000Z`,
+      data,
+    }));
+  const told = (change: GenexReviewChange, sha256: string, sentAt: string) =>
+    customEventData(CustomEvent.GenexReview, {
+      project: "a",
+      change,
+      app: { platform: "mac", arch: "arm64", version: "1.3.0", sha256, sentAt },
+      at: "2026-10-27T14:40:00.000Z",
+    });
+
+  it("no longer says the agent stopped, or that the fix isn't built, once a newer build is checked or live", () => {
+    for (const outcome of [GenexReviewChange.FixStopped, GenexReviewChange.NotBuilt]) {
+      const ended = fix({ outcome });
+      const live = view(status([app(GenexAppReview.Live, { sentAt: "2026-11-02T09:00:00Z" })]), { fix: ended });
+      assert.equal(live?.kind, ReviewCardKind.Live, outcome);
+      const checked = view(status([app(GenexAppReview.Checking, { sentAt: "2026-11-02T09:00:00Z" })]), { fix: ended });
+      assert.equal(checked?.kind, ReviewCardKind.Checking, outcome);
+      const later = view(status([app(GenexAppReview.NotApproved, { decidedAt: "2026-11-02T09:10:00Z" })]), {
+        fix: ended,
+      });
+      assert.equal(later?.kind, ReviewCardKind.NotApproved, `${outcome}: a newer turn-down is its own card`);
+    }
+  });
+
+  it("checks your fixes and says still to fix only for the build the fix sent, never for a later publish", () => {
+    const fixSent = { sha256: SHA_FIX, sentAt: "2026-10-27T14:35:00Z" };
+    const pressed = newestFix(chat(told(GenexReviewChange.Sent, fixSent.sha256, fixSent.sentAt)), "a");
+    assert.equal(pressed?.outcome, GenexReviewChange.Sent);
+    const checking = view(status([app(GenexAppReview.Checking, fixSent)]), { fix: pressed });
+    assert.equal(checking?.kind, ReviewCardKind.CheckingFixes);
+    const still = view(status([app(GenexAppReview.NotApproved, { ...fixSent, decidedAt: "2026-10-27T14:41:00Z" })]), {
+      fix: pressed,
+    });
+    assert.equal(still?.kind, ReviewCardKind.Still);
+    const weeksLater = { sha256: SHA_LATER, sentAt: "2026-11-20T10:00:00Z" };
+    const manual = view(status([app(GenexAppReview.Checking, weeksLater)]), { fix: pressed });
+    assert.equal(manual?.kind, ReviewCardKind.Checking, "a later publish is checked, not your fixes");
+    const downAgain = view(
+      status([app(GenexAppReview.NotApproved, { ...weeksLater, decidedAt: "2026-11-20T10:05:00Z" })]),
+      { fix: pressed },
+    );
+    assert.equal(downAgain?.kind, ReviewCardKind.NotApproved, "a later turn-down is no re-check");
+  });
+
+  it("checks your fixes with the same version sent again, told apart by its archive", () => {
+    const pressed = newestFix(chat(told(GenexReviewChange.Sent, SHA_FIX, "2026-10-27T14:35:00Z")), "a");
+    const sameVersion = { sha256: SHA_LATER, sentAt: "2026-10-28T10:00:00Z" };
+    assert.equal(
+      view(status([app(GenexAppReview.Checking, sameVersion)]), { fix: pressed })?.kind,
+      ReviewCardKind.Checking,
+    );
+  });
+});
+
 describe("an app Genex checks, a person reviews, or players get", () => {
   it("draws the check in the chat with its clock, and leaves it to the dialog's own step bar there", () => {
     const checked = status([app(GenexAppReview.Checking)]);
@@ -191,7 +276,8 @@ describe("an app Genex checks, a person reviews, or players get", () => {
     assert.deepEqual(card?.lines, ["usually a few minutes"]);
     assert.equal(card?.since, "2026-10-27T14:02:00.000Z");
     assert.equal(view(checked, { place: ReviewPlace.Dialog }), null);
-    assert.equal(view(checked, { fix: fix({ outcome: GenexReviewChange.Sent }) })?.title, "Checking your fixes");
+    const resent = status([app(GenexAppReview.Checking, { sentAt: "2026-10-27T14:35:00Z" })]);
+    assert.equal(view(resent, { fix: fix({ outcome: GenexReviewChange.Sent }) })?.title, "Checking your fixes");
   });
 
   it("says a person at Genex reviews it within a day", () => {
@@ -262,13 +348,50 @@ describe("a taken-down game", () => {
     assert.deepEqual(apps?.after, [
       "Sent to your agent. When it's done, Studio asks a person at Genex to put it back.",
     ]);
-    const web = view(status([], takedown()), { fix: fix({ kind: GenexFixKind.Web }) });
+    const web = view(status([], takedown()), { fix: fix({ kind: GenexFixKind.Web }), web: true });
     assert.equal(web?.link, null);
+    assert.deepEqual(web?.after, [
+      "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.",
+    ]);
     const fixed = view(status([], takedown()), {
       fix: fix({ kind: GenexFixKind.Web, outcome: GenexReviewChange.FixedWeb }),
     });
     assert.equal(fixed?.kind, ReviewCardKind.FixedWeb);
     assert.deepEqual(presses(fixed), [ReviewPress.Publish, ReviewPress.Request]);
+  });
+});
+
+describe("a taken-down game's words, by who asks a person once it is fixed", () => {
+  it("never says Studio asks for a web game, an old Genex that needs a note, or when no request may go", () => {
+    assert.equal(
+      view(status([], takedown()), { web: true })?.footer,
+      "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.",
+    );
+    assert.equal(
+      view(status([], takedown({ noteMin: 20 })))?.footer,
+      "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.",
+    );
+    const final = takedown({ humanReview: { state: GenexHumanReview.Denied, canRequest: false } });
+    const sent = view(status([], final), { fix: fix({ kind: GenexFixKind.Takedown }) });
+    assert.deepEqual(sent?.after, ["Sent to your agent. When it's done, Studio publishes it."]);
+    assert.equal(sent?.link?.link, ReviewLink.DontPublish);
+    const settled = settledCardView({ review: null, fix: { kind: GenexFixKind.Web, count: 3 } }, "Midnight Asphalt");
+    assert.deepEqual(settled?.lines, [
+      "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.",
+    ]);
+  });
+
+  it("keeps Request human review once the person took Studio's ask back", () => {
+    const cancelled = view(status([], takedown()), { fix: fix({ kind: GenexFixKind.Takedown, autoPublish: false }) });
+    assert.equal(cancelled?.kind, ReviewCardKind.AutoCancelled);
+    assert.deepEqual(cancelled?.after, [
+      "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.",
+    ]);
+    assert.deepEqual(presses(cancelled), [ReviewPress.Publish, ReviewPress.Request]);
+    const asked = takedown({ humanReview: { state: GenexHumanReview.Requested, canRequest: false } });
+    const open = view(status([], asked), { fix: fix({ kind: GenexFixKind.Takedown, autoPublish: false }) });
+    assert.equal(open?.kind, ReviewCardKind.TakedownRequested, "once asked, the card says the request is open");
+    assert.ok(!presses(open).includes(ReviewPress.Request), "a request already open is not offered again");
   });
 });
 

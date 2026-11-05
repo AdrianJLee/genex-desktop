@@ -9,8 +9,10 @@ import type { JSX } from "react";
 import { useState } from "react";
 import { GENEX_PLUGIN_ID, GenexAction } from "../../shared/genex.ts";
 import { intlLocale } from "../../shared/i18n.ts";
+import { publishesAsWebGame } from "../../shared/project-workspace.ts";
 import type { GenexReviewEntry } from "../chat-entries.ts";
 import { readGenexShot } from "../panels/plugins/genex/genex-cover-shot.ts";
+import { LinkTarget } from "../panels/plugins/genex/genex-publish-view.ts";
 import { ReviewCard } from "../panels/plugins/genex/ReviewCard.tsx";
 import {
   fixHistoryLabel,
@@ -108,7 +110,7 @@ function LiveCard({ project, view }: { project: string; view: ReviewCardView }):
       void runPluginAction({
         plugin,
         name: GenexAction.PublishOpen,
-        args: { target: "gallery" },
+        args: { target: LinkTarget.Gallery },
         project,
         review: () => {},
       });
@@ -156,14 +158,15 @@ function LiveCard({ project, view }: { project: string; view: ReviewCardView }):
 function LiveReview({ project }: { project: string }): JSX.Element | null {
   const status = useGenexReview(project);
   const { fix, latest } = useGenexFix(project);
-  const title = useLibrary((s) => s.games.find((game) => game.name === project)?.title) || project;
-  const view = reviewCardView({ status, fix, latest, title, place: ReviewPlace.Chat });
+  const game = useLibrary((s) => s.games.find((one) => one.name === project));
+  const title = game?.title || project;
+  const web = game ? publishesAsWebGame(game) : false;
+  const view = reviewCardView({ status, fix, latest, title, web, place: ReviewPlace.Chat });
   if (!view) return null;
   if (view.live) return <LiveCard project={project} view={view} />;
   return (
     <ReviewCard
       project={project}
-      title={title}
       view={view}
       record={status?.record ?? null}
       place={ReviewPlace.Chat}

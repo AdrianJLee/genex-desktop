@@ -257,7 +257,10 @@ const MESSAGE = {
     `${part} has ${count} ${count === 1 ? "problem" : "problems"} to fix before it can go to the editor:\n${list}`,
   UnknownRun: (id: string) => `There is no part run ${id}.`,
   NoProject: "This game has no Unreal project yet.",
-  NoReference: "There is no node reference for this engine yet; check-part still reads the text without it.",
+  NoReference:
+    "There is no node reference for this engine yet, and this game's Unreal isn't open to export one: open it with open-editor, then call find-nodes again. check-part still reads the Blueprint text without it.",
+  ExportFailed: (reason: string) =>
+    `There is no node reference for this engine yet, and this game's Unreal couldn't export one (${reason}). check-part still reads the Blueprint text without it.`,
   NoQuery: 'find-nodes needs a query: a few words of the node\'s name, such as "set intensity".',
   BadReference: "The editor's node reference didn't have the expected shape; it was not kept.",
   Meant: (message: string, names: readonly string[]) => `${message} Did you mean ${names.join(" or ")}?`,
@@ -748,7 +751,7 @@ export function createLoopTools(deps: LoopToolsDeps) {
       return readBlueprintGuide(engine.directory, engine.version);
     },
     [LoopToolName.FindNodes]: async (args, context, storage) =>
-      findNodes(deps, storage, args, await templateBlueprints(deps, storage, context.project)),
+      findNodes(deps, storage, context, args, await templateBlueprints(deps, storage, context.project)),
     [LoopToolName.CppStatus]: (_args, context, storage) => cpp.status(storage, game(context)),
     [LoopToolName.AddCppModule]: (_args, context, storage) => cpp.add(storage, game(context)),
     ...restartHandlers(reopen, moments),
@@ -1223,14 +1226,13 @@ async function updateGameHelper(deps: SetDeps, storage: string, game: string): P
 async function findNodes(
   deps: LoopToolsDeps,
   storage: string,
+  context: PluginContext,
   args: Record<string, unknown>,
   template: readonly BlueprintDecl[],
 ) {
   const words = text(args, "query").toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) throw new Error(MESSAGE.NoQuery);
-  const engine = await deps.engine();
-  const reference = engine ? await loadReference(storage, engine.version) : null;
-  if (!reference) throw new Error(MESSAGE.NoReference);
+  const reference = await lookupReference(deps, storage, context);
   const base = text(args, "base");
   const graph = text(args, "graph");
   const known = BASES.has(base) && GRAPHS.has(graph);
@@ -1244,6 +1246,28 @@ async function findNodes(
     return pins ? { typeId, pins } : { typeId };
   });
   return { nodes, more: matches.length > MAX_FOUND_NODES };
+}
+
+/**
+ * The engine's node reference for a lookup: the one kept, or, when none is kept yet (only a Loop's
+ * start exports it), the one the game's open Unreal exports now. Throws what the agent can do
+ * about a missing one.
+ */
+async function lookupReference(deps: LoopToolsDeps, storage: string, context: PluginContext): Promise<ReferenceData> {
+  const engine = await deps.engine();
+  if (!engine) throw new Error(MESSAGE.NoReference);
+  const kept = await loadReference(storage, engine.version);
+  if (kept) return kept;
+  const game = gameOf(context);
+  if (!(await deps.editorAnswers(storage, game).catch(() => false))) throw new Error(MESSAGE.NoReference);
+  try {
+    await exportReference(deps, storage, game);
+  } catch (failure) {
+    throw new Error(MESSAGE.ExportFailed(errorMessage(failure)));
+  }
+  const exported = await loadReference(storage, engine.version);
+  if (!exported) throw new Error(MESSAGE.BadReference);
+  return exported;
 }
 
 /** Throws the editor's refusal (`{error}`), so a file left from an earlier export is never read. */

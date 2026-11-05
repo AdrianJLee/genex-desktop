@@ -14,6 +14,7 @@
  */
 import type { JSX } from "react";
 import { useState } from "react";
+import { SECOND_MS } from "../../../../shared/duration.ts";
 import { errorMessage } from "../../../../shared/errors.ts";
 import type { GenexNativeRecord } from "../../../../shared/genex.ts";
 import { t } from "../../../../shared/i18n.ts";
@@ -98,6 +99,9 @@ const ASK: Partial<Record<PlatformEnd, { text: string; label: (name: string) => 
   [PlatformEnd.CloudRebuild]: { text: WORDS.rebuild, label: WORDS.cloudRetryLabel },
   [PlatformEnd.CloudRetry]: { text: WORDS.cloudRetry, label: WORDS.cloudRetryLabel },
 };
+
+/** How long a press of Build on Genex says it asked: past the publish record's slowest read. */
+const CLOUD_ASK_HOLD_MS = 12 * SECOND_MS;
 
 /** The notes of work going on now, which shimmer as the chat's current work does. */
 const WORKING_ENDS: ReadonlySet<PlatformEnd> = new Set([PlatformEnd.Sending, PlatformEnd.Building]);
@@ -278,11 +282,17 @@ export function PublishPlatforms({
     setRefused(null);
     setCloudAsked((before) => new Map(before).set(target, builds(target)));
     const name = rows.find((row) => row.target === target)?.name ?? "";
+    const forget = (): void => setCloudAsked((before) => new Map([...before].filter(([one]) => one !== target)));
     // The row reads Genex's answer from the publish record as it comes; a refusal is said under the rows.
-    void window.studio.genexCloudBuild(project, target).catch((error: unknown) => {
-      setRefused(WORDS.cloudRefused(name, errorMessage(error)));
-      setCloudAsked((before) => new Map([...before].filter(([one]) => one !== target)));
-    });
+    // The press lets go once the record has had time to say so: Genex may answer with the build it
+    // already has, and then no new build ever ends the note.
+    void window.studio
+      .genexCloudBuild(project, target)
+      .then(() => window.setTimeout(forget, CLOUD_ASK_HOLD_MS))
+      .catch((error: unknown) => {
+        setRefused(WORDS.cloudRefused(name, errorMessage(error)));
+        forget();
+      });
   };
   const fix = cloudErrors(platforms, native);
   const fixKey = fix?.errors.join("\n") ?? null;

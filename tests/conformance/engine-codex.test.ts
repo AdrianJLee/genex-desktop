@@ -345,7 +345,7 @@ describe("codex engine", () => {
     assert.equal(call.cwd, game, "started where its chat's session lives");
     const roots = call.argv.find((arg) => arg.startsWith("sandbox_workspace_write.writable_roots="))!;
     const writable = JSON.parse(roots.slice(roots.indexOf("=") + 1)) as string[];
-    assert.deepEqual(writable, [game], "it writes its folder");
+    assert.deepEqual(writable, [game, ...bridgeRoot(game)], "it writes its folder");
     assert.doesNotMatch(call.prompt, /you only read|you cannot change/);
 
     const permissions = { mode: "bypassPermissions", allow: [], directories: [], protectWrites: [] };

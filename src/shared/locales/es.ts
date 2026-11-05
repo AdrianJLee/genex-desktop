@@ -6427,4 +6427,9 @@ export default {
   "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
     "{app, select, mac {La app de Mac} windows {La app de Windows} linux {La app de Linux} other {Las apps}} de {title} no {app, select, mac {fue aprobada} windows {fue aprobada} linux {fue aprobada} other {fueron aprobadas}}",
   "{title}: human review kept it down": "{title}: la revisión humana lo mantuvo retirado",
+  "{count, plural, one {and # more error} other {and # more errors}}":
+    "{count, plural, one {y # error más} other {y # errores más}}",
+  "Ask the agent to fix these errors": "Pedir al agente que arregle estos errores",
+  "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
+    "Genex no pudo crear la app de {players} de “{title}”. Arregla estos errores en el código del juego para que se cree allí, y mantén el juego funcionando como en otros sistemas. Este ordenador no puede crear para {players}, así que revisa bien cada arreglo. Luego dime que pulse Build on Genex otra vez.\n\n{errors}",
 } satisfies LocaleCatalog;

@@ -6193,4 +6193,8 @@ export default {
   "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
     "{title}의 {app, select, mac {Mac 앱} windows {Windows 앱} linux {Linux 앱} other {앱}}이 승인되지 않았어요",
   "{title}: human review kept it down": "{title}: 사람 검토 후에도 게시 중단이 유지됐어요",
+  "{count, plural, one {and # more error} other {and # more errors}}": "{count, plural, other {외 오류 #개}}",
+  "Ask the agent to fix these errors": "이 오류를 고쳐 달라고 에이전트에게 요청",
+  "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
+    "Genex가 “{title}”의 {players} 앱을 만들지 못했어요. 거기서 만들어지도록 게임 코드의 오류를 고치고, 다른 시스템에서는 지금처럼 동작하게 유지해 주세요. 이 컴퓨터로는 {players}용으로 만들 수 없으니 수정마다 꼼꼼히 확인해 주세요. 끝나면 Build on Genex를 다시 누르라고 알려 주세요.\n\n{errors}",
 } satisfies LocaleCatalog;

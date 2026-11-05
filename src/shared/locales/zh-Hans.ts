@@ -5983,4 +5983,8 @@ export default {
   "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
     "{title} 的{app, select, mac {Mac 应用} windows {Windows 应用} linux {Linux 应用} other {应用}}未通过审核",
   "{title}: human review kept it down": "{title}：人工审核后仍保持下架",
+  "{count, plural, one {and # more error} other {and # more errors}}": "{count, plural, other {还有 # 个错误}}",
+  "Ask the agent to fix these errors": "请智能体修复这些错误",
+  "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
+    "Genex 无法构建“{title}”的 {players} 应用。请修复游戏代码中的这些错误，让它能在那里构建，并保持游戏在其他系统上的表现不变。这台电脑无法为 {players} 构建，所以请仔细检查每处修复。完成后告诉我再按一次 Build on Genex。\n\n{errors}",
 } satisfies LocaleCatalog;

@@ -209,6 +209,26 @@ function newestCloudBuild(row: PublishPlatform, native: GenexNativeRecord | unde
   );
 }
 
+/** What went wrong in the newest build of a row, for the agent to fix. */
+export interface CloudBuildErrors {
+  target: PublishTarget;
+  errors: string[];
+}
+
+/** The errors of the build the Windows row speaks for, once it failed with some and no newer send is under way. */
+export function cloudErrors(
+  platforms: readonly PublishPlatform[],
+  native: GenexNativeRecord | undefined,
+): CloudBuildErrors | null {
+  for (const row of platforms) {
+    if (!isNative(row) || !CLOUD_TARGETS.has(row.target) || native?.cloud?.send?.platform === row.target) continue;
+    const build = newestCloudBuild(row, native);
+    if (build?.state === CloudBuildState.Failed && build.errors?.length)
+      return { target: row.target, errors: build.errors };
+  }
+  return null;
+}
+
 /** What a failed build on Genex says, and whether trying again can help. */
 function cloudFailureWords(build: GenexCloudBuild): { detail: string; end: PlatformEnd } {
   const failure = build.failure ?? CloudBuildFailure.Failed;
@@ -476,6 +496,10 @@ export const makeAppAsk = (target: PublishTarget, title: string): string => WORD
 
 /** What "Make with agent" sends through the game's chat for the web version. */
 export const makeWebAsk = (title: string): string => WORDS.makeWebAsk(title);
+
+/** What "Fix with agent" sends through the game's chat: the build's errors, one to a line. */
+export const cloudFixAsk = ({ target, errors }: CloudBuildErrors, title: string): string =>
+  WORDS.cloudFixAsk(playersOf(target), title, errors.join("\n"));
 
 /** What "Build again" sends through the game's chat for a platform. */
 export const rebuildAsk = (target: PublishTarget, title: string): string => WORDS.rebuildAsk(playersOf(target), title);

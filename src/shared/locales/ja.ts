@@ -6339,4 +6339,8 @@ export default {
   "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
     "{title}の{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}は承認されませんでした",
   "{title}: human review kept it down": "{title}：スタッフの確認でも公開停止のままです",
+  "{count, plural, one {and # more error} other {and # more errors}}": "{count, plural, other {ほか#件のエラー}}",
+  "Ask the agent to fix these errors": "これらのエラーの修正をエージェントに頼む",
+  "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
+    "Genexは「{title}」の{players}アプリをつくれませんでした。そこでつくれるようにゲームのコードのエラーを直し、ほかのシステムでの動きは今のままにしてください。このコンピュータでは{players}向けにつくれないので、修正はひとつずつ慎重に確認してください。終わったら、もう一度Build on Genexを押すよう教えてください。\n\n{errors}",
 } satisfies LocaleCatalog;

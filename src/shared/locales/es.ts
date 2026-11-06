@@ -424,6 +424,8 @@ export default {
   "Another clip": "Otro clip",
   "Another cover": "Otra portada",
   "Another folder…": "Otra carpeta…",
+  "Another installer or Visual Studio is running. Close it, then press Do it for me again.":
+    "Hay otro instalador o Visual Studio abierto. Ciérralo y vuelve a pulsar «Hazlo por mí».",
   "Another model installation is running.": "Ya hay otra instalación de modelo en curso.",
   Answer: "Responder",
   "Answer question": "Responder la pregunta",
@@ -580,8 +582,38 @@ export default {
   "Build with the Grok account you already have.": "Crea con la cuenta de Grok que ya tienes.",
   "Changes Harness made to its own instructions. Undo any of them.":
     "Cambios que Harness hizo en sus propias instrucciones. Puedes deshacer cualquiera.",
+  "Checking that Microsoft signed the installer…": "Comprobando que Microsoft firmó el instalador…",
+  "Downloading the Visual Studio Build Tools installer from Microsoft…":
+    "Descargando el instalador de Visual Studio Build Tools desde Microsoft…",
+  "Install Visual Studio Build Tools": "Instalar Visual Studio Build Tools",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
+    "Instala Visual Studio Build Tools 2022 de Microsoft con «Desarrollo para el escritorio con C++».",
+  "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
+    "Instalando Visual Studio Build Tools. Elige Sí cuando Windows lo pregunte; el instalador de Microsoft muestra su progreso.",
+  "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
+    "La descarga de Microsoft llevaba a otro sitio que no era Microsoft, así que Genex se detuvo.",
+  "Microsoft's download link wasn't secure, so Genex didn't download it.":
+    "El enlace de descarga de Microsoft no era seguro, así que Genex no lo descargó.",
+  "Microsoft's download was far bigger than its installer, so Genex stopped.":
+    "La descarga de Microsoft era mucho más grande que su instalador, así que Genex se detuvo.",
+  "Microsoft's installer couldn't download the Build Tools. Check your internet connection and try again.":
+    "El instalador de Microsoft no pudo descargar las Build Tools. Revisa tu conexión a internet y vuelve a intentarlo.",
+  "Microsoft's installer didn't download. Check your internet connection and try again.":
+    "El instalador de Microsoft no se descargó. Revisa tu conexión a internet y vuelve a intentarlo.",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
+    "El instalador de Microsoft terminó, pero Unreal sigue sin poder compilar C++ con lo que instaló. Instala tú Visual Studio Build Tools 2022 con «Desarrollo para el escritorio con C++».",
+  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "Recomendado. Las herramientas gratuitas de C++ de Microsoft: Unreal las necesita para empaquetar un juego o plugin con C++. Unos 7 GB. «Hazlo por mí» las instala: elige Sí cuando Windows lo pregunte.",
+  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
+    "Recomendado. Las herramientas gratuitas de C++ de Microsoft: Unreal las necesita para empaquetar un juego o plugin con C++. Instala Visual Studio Build Tools con «Desarrollo para el escritorio con C++».",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "La automejora está desactivada. Harness deja sus instrucciones como están.",
+  "Unreal can build C++ on this PC.": "Unreal puede compilar C++ en este PC.",
+  "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
+    "Unreal {engine} no compila con las herramientas de C++ de este PC. «Hazlo por mí» las actualiza: elige Sí cuando Windows lo pregunte.",
+  "Update Visual Studio Build Tools": "Actualizar Visual Studio Build Tools",
+  "Visual Studio Build Tools are installed.": "Visual Studio Build Tools está instalado.",
+  "Visual Studio's C++ tools are ready": "Las herramientas de C++ de Visual Studio están listas",
   "When off, Harness doesn’t change its own instructions. Changes it already made stay until you undo them.":
     "Si está desactivada, Harness no cambia sus propias instrucciones. Los cambios que ya hizo se quedan hasta que los deshagas.",
   "Workers pitch in": "Los ayudantes echan una mano",
@@ -5662,6 +5694,8 @@ export default {
   "{name}: {status}, {count, plural, other {# tries}}":
     "{name}: {status}, {count, plural, one {# intento} other {# intentos}}",
   "{name}’s friends": "Amigos de {name}",
+  "{open, plural, =1 {One step left so Unreal can build C++ on this PC.} other {# steps left so Unreal can build C++ on this PC.}}":
+    "{open, plural, =1 {Falta un paso para que Unreal pueda compilar C++ en este PC.} one {Falta # paso para que Unreal pueda compilar C++ en este PC.} other {Faltan # pasos para que Unreal pueda compilar C++ en este PC.}}",
   "{open, plural, =1 {One step left so the agent can add C++ to this game.} =2 {Two steps left so the agent can add C++ to this game.} =3 {Three steps left so the agent can add C++ to this game.} other {# steps left so the agent can add C++ to this game.}}":
     "{open, plural, =1 {Falta un paso para que el agente pueda añadir C++ a este juego.} =2 {Faltan dos pasos para que el agente pueda añadir C++ a este juego.} =3 {Faltan tres pasos para que el agente pueda añadir C++ a este juego.} one {Falta # paso para que el agente pueda añadir C++ a este juego.} other {Faltan # pasos para que el agente pueda añadir C++ a este juego.}}",
   "{owners} came with setup scripts written by their authors. Genex skipped them when it made your copy, and the game may need them to build. Run them only if you trust this game.":
@@ -6163,6 +6197,7 @@ export default {
     "Conecta el plan de Claude o ChatGPT que ya pagas, o crea con créditos de Genex.",
   "Continue in browser": "Continuar en el navegador",
   "Continue on ChatGPT plan": "Seguir con el plan de ChatGPT",
+  "Continue on {name}": "Seguir con {name}",
   "Continue on Claude plan": "Seguir con el plan de Claude",
   "Everything so far is saved.": "Todo lo hecho está guardado.",
   "Finish on genex.games in your browser.": "Termina en genex.games en tu navegador.",
@@ -6290,10 +6325,148 @@ export default {
     "Genex no puede abrir la app de este juego en esta computadora.",
   "Open the game’s chat to have the agent package it.": "Abre el chat del juego para que el agente lo empaquete.",
   "Not open in Unreal": "No está abierto en Unreal",
+  "A person at Genex already decided this build. Change it and publish it again.":
+    "Una persona de Genex ya decidió sobre esta build. Cámbiala y publícala otra vez.",
+  "A person at Genex is already reviewing it.": "Una persona de Genex ya la está revisando.",
+  "A person at Genex is reviewing it": "Una persona de Genex la está revisando",
+  "A person at Genex reviewed it.": "La revisó una persona de Genex.",
+  "After the fix, Studio asks a person at Genex to look again. Usually within a day.":
+    "Tras el arreglo, Studio pide a una persona de Genex que la mire otra vez. Suele ser en un día.",
+  "After the fix, Studio asks a person at Genex to put it back. Usually within a day.":
+    "Tras el arreglo, Studio pide a una persona de Genex que la vuelva a poner. Suele ser en un día.",
+  "After the fix, it publishes by itself and Genex checks it again.":
+    "Tras el arreglo, se publica sola y Genex la vuelve a revisar.",
+  "Anyone can find it on Genex.": "Cualquiera puede encontrarla en Genex.",
+  "Anything we should know? (optional)": "¿Algo que debamos saber? (opcional)",
+  "Checking your fixes": "Revisando tus arreglos",
+  "Checking your {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}":
+    "Revisando {app, select, mac {tu app de Mac} windows {tu app de Windows} linux {tu app de Linux} other {tus apps}}",
+  "Checking · {elapsed}": "Revisando · {elapsed}",
+  "Don't ask automatically": "No pedirlo automáticamente",
+  "Don't publish it automatically": "No publicarla automáticamente",
+  "Fix again": "Arreglar otra vez",
+  "Fix with agent": "Arreglar con el agente",
+  "Fixed. Publish it, then ask a person at Genex to put it back.":
+    "Arreglado. Publícala y luego pide a una persona de Genex que la vuelva a poner.",
+  "For example: the coin page is our own shop, not a third party.":
+    "Por ejemplo: la página de monedas es nuestra propia tienda, no de terceros.",
+  "Genex checks your app before players get it. Usually a few minutes.":
+    "Genex revisa tu app antes de que la reciban los jugadores. Suele tardar unos minutos.",
+  "Genex has nothing for this game's agent to fix": "Genex no tiene nada que el agente de este juego deba arreglar",
+  "Genex reads your app before players get it. Usually a few minutes.":
+    "Genex lee tu app antes de que la reciban los jugadores. Suele tardar unos minutos.",
+  "Genex review": "Revisión de Genex",
+  "Hidden from players until it's fixed and a person at Genex puts it back.":
+    "Oculto para los jugadores hasta que se arregle y una persona de Genex lo vuelva a poner.",
+  "Human review agreed with the check.": "La revisión humana coincidió con la automática.",
+  "Human review agreed with the takedown.": "La revisión humana coincidió con la retirada.",
+  "Human review requested": "Revisión humana solicitada",
+  "Human review requested. A person reviews the next {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} you send.":
+    "Revisión humana solicitada. Una persona revisará {app, select, mac {la próxima app de Mac} windows {la próxima app de Windows} linux {la próxima app de Linux} other {las próximas apps}} que envíes.",
+  "Human review requested. Usually within a day. You can still fix it yourself.":
+    "Revisión humana solicitada. Suele ser en un día. Aún puedes arreglarlo tú.",
+  "If Genex ever takes it down, you'll hear it here and by email.":
+    "Si Genex alguna vez lo retira, te enterarás aquí y por correo.",
+  "Keep the note under {max} characters.": "La nota debe tener menos de {max} caracteres.",
+  "Nothing went public. After the fix, it publishes by itself and Genex checks it again.":
+    "No se publicó nada. Tras el arreglo, se publica sola y Genex la vuelve a revisar.",
+  "Open a game": "Abre un juego",
+  "Open on Genex": "Abrir en Genex",
+  "Players keep the version they have. After the fix, it publishes by itself and Genex checks it again.":
+    "Los jugadores conservan su versión. Tras el arreglo, se publica sola y Genex la vuelve a revisar.",
+  "Players keep the {date} version.": "Los jugadores conservan la versión del {date}.",
+  "Public again": "Público de nuevo",
+  Published: "Publicado",
+  "Request human review": "Pedir revisión humana",
+  "Send request": "Enviar solicitud",
+  "Sending the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again so a person can read it…":
+    "Enviando {app, select, mac {la app de Mac} windows {la app de Windows} linux {la app de Linux} other {las apps}} otra vez para que una persona la lea…",
+  "Sent for review": "Enviado a revisión",
+  "Sent to your agent. Publish it yourself when it's ready.": "Enviado a tu agente. Publícalo tú cuando esté listo.",
+  "Sent to your agent. When it's done, Studio asks a person at Genex to put it back.":
+    "Enviado a tu agente. Cuando termine, Studio pide a una persona de Genex que lo vuelva a poner.",
+  "Sent to your agent. When it's done, Studio publishes it and Genex checks it again.":
+    "Enviado a tu agente. Cuando termine, Studio lo publica y Genex lo vuelve a revisar.",
+  "Show {n} more": "Mostrar {n} más",
+  "Sign in to see what to fix": "Inicia sesión para ver qué arreglar",
+  "Someone from the Genex team agreed it's fine.": "Alguien del equipo de Genex confirmó que está bien.",
+  "Taken down": "Retirado",
+  "Taking longer than usual. If the check can't finish, a person at Genex reviews it.":
+    "Está tardando más de lo normal. Si la revisión no puede terminar, la revisa una persona de Genex.",
+  "Tell us why (at least {min} characters)": "Cuéntanos por qué (al menos {min} caracteres)",
+  "Tell us why in at least {min} characters.": "Cuéntanos por qué en al menos {min} caracteres.",
+  "That fix isn't the game's latest one": "Ese no es el último arreglo del juego",
+  "Sent to your agent. When it's done, Studio publishes it.": "Enviado a tu agente. Cuando termine, Studio lo publica.",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "Enviado a tu agente. Cuando termine, publícalo y luego pide a una persona de Genex que lo vuelva a poner.",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "Tras el arreglo, publícalo y luego pide a una persona de Genex que lo vuelva a poner. Suele ser en un día.",
+  "This game's latest fix isn't waiting for a build": "El último arreglo de este juego no está esperando una build",
+  "The Genex team is reviewing this game.": "El equipo de Genex está revisando este juego.",
+  "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
+    "El arreglo aún no está compilado. Compila {app, select, mac {la app de Mac} windows {la app de Windows} linux {la app de Linux} other {las apps}} otra vez y se publica.",
+  "There's nothing to ask about right now.": "Ahora mismo no hay nada que pedir.",
+  "Think we got it wrong? Someone from the Genex team will check your app, usually within a day. Players don't get it until then.":
+    "¿Crees que nos equivocamos? Alguien del equipo de Genex revisará tu app, normalmente en un día. Hasta entonces los jugadores no la reciben.",
+  "Think we got it wrong? Someone from the Genex team will check your game, usually within a day. It stays taken down until then.":
+    "¿Crees que nos equivocamos? Alguien del equipo de Genex revisará tu juego, normalmente en un día. Hasta entonces sigue retirado.",
+  "This decision can't be reviewed again.": "Esta decisión no se puede revisar otra vez.",
+  "Turned down 3 times this week, so a person at Genex reviews the next build. Usually within a day.":
+    "Rechazada 3 veces esta semana, así que una persona de Genex revisa la próxima build. Suele ser en un día.",
+  "Usually within a day. You'll hear here and by email.": "Suele ser en un día. Te enterarás aquí y por correo.",
+  "Version {version} is live": "La versión {version} está publicada",
+  "Version {version} is live for {app, select, mac {Mac} windows {Windows} linux {Linux} other {desktop}} players.":
+    "La versión {version} está disponible para los jugadores de {app, select, mac {Mac} windows {Windows} linux {Linux} other {escritorio}}.",
+  "You already asked. A person will look at it, usually within a day.":
+    "Ya lo pediste. Una persona lo mirará, normalmente en un día.",
+  "You can close this. Studio tells you when it's done.": "Puedes cerrar esto. Studio te avisa cuando termine.",
+  "Your agent stopped before it finished.": "Tu agente se detuvo antes de terminar.",
+  "usually a few minutes": "suele tardar unos minutos",
+  "{app, select, mac {Mac} windows {Windows} linux {Linux} other {Desktop}} players get it now.":
+    "Los jugadores de {app, select, mac {Mac} windows {Windows} linux {Linux} other {escritorio}} ya la reciben.",
+  "{count}/{max}": "{count}/{max}",
+  "{minutes}m {seconds}s": "{minutes} min {seconds} s",
+  "{n, plural, one {# fix sent} other {# fixes sent}}":
+    "{n, plural, one {# arreglo enviado} other {# arreglos enviados}}",
+  "{n, plural, one {Can't publish yet: # thing to fix} other {Can't publish yet: # things to fix}}":
+    "{n, plural, one {Aún no se puede publicar: # cosa que arreglar} other {Aún no se puede publicar: # cosas que arreglar}}",
+  "{n, plural, one {Not approved: # thing still to fix after the re-check} other {Not approved: # things still to fix after the re-check}}":
+    "{n, plural, one {No aprobado: queda # cosa por arreglar tras la nueva revisión} other {No aprobado: quedan # cosas por arreglar tras la nueva revisión}}",
+  "{n, plural, one {Not approved: # thing to fix} other {Not approved: # things to fix}}":
+    "{n, plural, one {No aprobado: # cosa que arreglar} other {No aprobado: # cosas que arreglar}}",
+  "{n, plural, one {Taken down: # thing to fix} other {Taken down: # things to fix}}":
+    "{n, plural, one {Retirado: # cosa que arreglar} other {Retirado: # cosas que arreglar}}",
+  "{n, plural, one {Update not approved: # thing to fix} other {Update not approved: # things to fix}}":
+    "{n, plural, one {Actualización no aprobada: # cosa que arreglar} other {Actualización no aprobada: # cosas que arreglar}}",
+  "{state, select, taken_down {Taken down} not_approved {Not approved} other {In review}} · reconnect to see what to fix":
+    "{state, select, taken_down {Retirado} not_approved {No aprobado} other {En revisión}} · vuelve a conectarte para ver qué arreglar",
+  "{title} is live!": "¡{title} está publicado!",
+  "{title} is public again": "{title} vuelve a ser público",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Una persona de Genex está revisando {app, select, mac {la app de Mac} windows {la app de Windows} linux {la app de Linux} other {las apps}}. Suele tardar menos de un día.",
+  "Checking fixes": "Revisando arreglos",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genex está revisando {app, select, mac {la app de Mac} windows {la app de Windows} linux {la app de Linux} other {las apps}}. Suele tardar unos minutos.",
+  "Human review": "Revisión humana",
+  "Human review, usually within a day.": "Revisión humana, suele tardar menos de un día.",
+  Public: "Público",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, one {# cosa que arreglar. Haz clic para verla y arreglarla con tu agente.} other {# cosas que arreglar. Haz clic para verlas y arreglarlas con tu agente.}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, one {# cosa que arreglar. Abre Publicar para verla.} other {# cosas que arreglar. Abre Publicar para verlas.}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}":
+    "{n, plural, one {# cosa que arreglar} other {# cosas que arreglar}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}":
+    "{n, plural, one {Arreglando # cosa} other {Arreglando # cosas}}",
+  "{title} was taken down": "{title} fue retirado",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{app, select, mac {La app de Mac} windows {La app de Windows} linux {La app de Linux} other {Las apps}} de {title} no {app, select, mac {fue aprobada} windows {fue aprobada} linux {fue aprobada} other {fueron aprobadas}}",
+  "{title}: human review kept it down": "{title}: la revisión humana lo mantuvo retirado",
   "{count, plural, one {and # more error} other {and # more errors}}":
     "{count, plural, one {y # error más} other {y # errores más}}",
-  "Fix with agent": "Arreglar con el agente",
   "Ask the agent to fix these errors": "Pedir al agente que arregle estos errores",
   "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
     "Genex no pudo crear la app de {players} de “{title}”. Arregla estos errores en el código del juego para que se cree allí, y mantén el juego funcionando como en otros sistemas. Este ordenador no puede crear para {players}, así que revisa bien cada arreglo. Luego dime que pulse Build on Genex otra vez.\n\n{errors}",
+  "The same project fails the same way: change it first, then try again.":
+    "El mismo proyecto falla igual: cámbialo primero y vuelve a intentarlo.",
 } satisfies LocaleCatalog;

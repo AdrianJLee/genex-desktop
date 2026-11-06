@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import type { ConversationRecord, GameProject, ProjectAssets } from "../../src/shared/studio-api.ts";
+import { AssetInventoryFailure } from "../../src/shared/game-assets.ts";
+import { CodedError } from "../../src/shared/errors.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { EngineId } from "../../src/shared/providers.ts";
@@ -57,7 +59,7 @@ import {
   libraryBootstrapped,
 } from "../../src/renderer/state/library.ts";
 import { frameReceived, screenClosed, screensLoaded } from "../../src/renderer/state/agent-screens.ts";
-import { createToastsStore, TOAST_MS } from "../../src/renderer/state/toasts.ts";
+import { createToastsStore, REVIEW_TOAST_MS, TOAST_MS } from "../../src/renderer/state/toasts.ts";
 import {
   chatWidthCommitted,
   chatWidthDragged,
@@ -598,11 +600,33 @@ describe("the library store", () => {
     library.refreshAssets("pond");
     await tick();
     assert.equal(library.getState().assets.pond?.error, "Error: walk failed");
+    assert.equal(library.getState().assets.pond?.code, null, "a failure main named no why for has none");
     assert.ok(library.getState().assets.pond?.value, "the last inventory stays on screen");
     answer = async () => ({ project: "renamed", assets: [], truncated: true, skipped: [] });
     library.refreshAssets("pond");
     await tick();
     assert.equal(library.getState().assets.pond?.value?.truncated, false);
+  });
+});
+
+describe("the library store's inventory failures", () => {
+  it("keeps why main said a read failed, until a read works", async () => {
+    let busy = true;
+    const fake = fakeStudioApi({
+      projectAssets: async (project) => {
+        if (busy) throw new CodedError(AssetInventoryFailure.FileBusy, "EBUSY: resource busy or locked");
+        return { project, assets: [], truncated: false, skipped: [] };
+      },
+    });
+    const library = createLibraryStore(fake.api, manualTimers());
+    library.watchAssets("pond");
+    await tick();
+    assert.equal(library.getState().assets.pond?.code, AssetInventoryFailure.FileBusy);
+    busy = false;
+    library.refreshAssets("pond");
+    await tick();
+    assert.equal(library.getState().assets.pond?.code, null);
+    assert.equal(library.getState().assets.pond?.error, null);
   });
 });
 
@@ -653,6 +677,24 @@ describe("agent screens, toasts and layout", () => {
     );
     timeouts[0]!.run();
     toasts.dismiss(2);
+    assert.deepEqual(toasts.getState().items, []);
+  });
+
+  it("a toast with a press stays eight seconds and keeps its press", () => {
+    const timeouts: Array<{ run: () => void; ms: number }> = [];
+    const toasts = createToastsStore((run, ms) => timeouts.push({ run, ms }));
+    const pressed: string[] = [];
+    toasts.offer("Skate Dog is public again", { label: "Open", run: () => pressed.push("open") });
+    const [toast] = toasts.getState().items;
+    assert.deepEqual([toast?.text, toast?.tone, toast?.action?.label], ["Skate Dog is public again", "info", "Open"]);
+    toast?.action?.run();
+    assert.deepEqual(pressed, ["open"]);
+    assert.deepEqual(
+      timeouts.map((t) => t.ms),
+      [REVIEW_TOAST_MS],
+    );
+    assert.equal(REVIEW_TOAST_MS, 8000);
+    timeouts[0]!.run();
     assert.deepEqual(toasts.getState().items, []);
   });
 
@@ -728,7 +770,15 @@ describe("what each UI event makes the renderer read again", () => {
   const ev = (type: string, payload: unknown = {}): UiEvent => ({ type, payload }) as UiEvent;
 
   it("pulls logged events in live, and lists on their own changes", () => {
-    for (const type of ["chat.message", "run.finished", "delegated.event", "plugin.consent", "coordinator.queued"]) {
+    // A review change's records are in the log by the time it is told: the bell reads them at once.
+    for (const type of [
+      "chat.message",
+      "run.finished",
+      "delegated.event",
+      "plugin.consent",
+      "coordinator.queued",
+      "genex.review",
+    ]) {
       assert.deepEqual(reads(ev(type)), ["events"], type);
     }
     assert.deepEqual(reads(ev("thread.bound")), ["events", "threads"]);
@@ -774,6 +824,36 @@ describe("the studio: one subscription, the bootstrap and the commands that span
     const stop = app.start();
     return { fake, app, stop, timers, storage };
   }
+
+  it("reads the sidebar's Genex lines once up, again when a review changes or Genex speaks, a burst once", async () => {
+    const answers = [
+      { pond: { line: "taken_down" } },
+      { pond: { line: "fixing", things: 3 } },
+      { pond: { line: "fixing", things: 3 } },
+    ];
+    let reads = 0;
+    const { app, fake } = started({
+      genexReviewLines: async () => answers[Math.min(reads++, answers.length - 1)] as never,
+    });
+    await tick();
+    await tick();
+    assert.deepEqual(app.genexReview.getState().lines, { pond: { line: "taken_down" } });
+    fake.emit({ type: "genex.review", payload: { project: "pond" } } as never);
+    fake.emit({ type: "genex.review", payload: { project: "pond" } } as never);
+    await tick();
+    await tick();
+    assert.deepEqual(app.genexReview.getState().lines, { pond: { line: "fixing", things: 3 } });
+    assert.equal(reads, 3, "two changes during a read are one more read");
+    const before = app.genexReview.getState();
+    fake.emit({ type: "plugin.event", payload: { id: "genex", event: {}, project: "pond" } } as never);
+    await tick();
+    await tick();
+    assert.equal(reads, 4);
+    assert.equal(app.genexReview.getState(), before, "the same lines leave the rows alone");
+    fake.emit({ type: "plugin.event", payload: { id: "unreal", event: {}, project: "pond" } } as never);
+    await tick();
+    assert.equal(reads, 4, "another plugin's word is not Genex's");
+  });
 
   it("asks about usage analytics once per consent version, and only in a session that offers them", async () => {
     const analytics = { key: "phc_x", host: "https://eu.i.posthog.com", version: "1.0.0" };

@@ -370,6 +370,8 @@ export default {
   "Another clip": "別のクリップ",
   "Another cover": "別のカバー",
   "Another folder…": "別のフォルダー…",
+  "Another installer or Visual Studio is running. Close it, then press Do it for me again.":
+    "別のインストーラーかVisual Studioが動いています。閉じてから、もう一度「おまかせ」を押してください。",
   "Another model installation is running.": "別のモデルをインストール中です。",
   Answer: "回答する",
   "Answer question": "質問に答える",
@@ -527,8 +529,38 @@ export default {
   "Build with the Grok account you already have.": "すでに持っているGrokアカウントでつくります。",
   "Changes Harness made to its own instructions. Undo any of them.":
     "Harnessが自分の指示に加えた変更です。どれでも元に戻せます。",
+  "Checking that Microsoft signed the installer…": "インストーラーにMicrosoftの署名があるか確認しています…",
+  "Downloading the Visual Studio Build Tools installer from Microsoft…":
+    "MicrosoftからVisual Studio Build Toolsのインストーラーをダウンロードしています…",
+  "Install Visual Studio Build Tools": "Visual Studio Build Toolsをインストール",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
+    "MicrosoftのVisual Studio Build Tools 2022を「C++ によるデスクトップ開発」付きでインストールしてください。",
+  "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
+    "Visual Studio Build Toolsをインストールしています。Windowsに聞かれたら「はい」を選んでください。進み具合はMicrosoftのインストーラーに表示されます。",
+  "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
+    "Microsoftのダウンロードが Microsoft 以外の場所につながっていたため、Genexは中止しました。",
+  "Microsoft's download link wasn't secure, so Genex didn't download it.":
+    "Microsoftのダウンロードリンクが安全ではなかったため、Genexはダウンロードしませんでした。",
+  "Microsoft's download was far bigger than its installer, so Genex stopped.":
+    "Microsoftのダウンロードがインストーラーよりはるかに大きかったため、Genexは中止しました。",
+  "Microsoft's installer couldn't download the Build Tools. Check your internet connection and try again.":
+    "MicrosoftのインストーラーがBuild Toolsをダウンロードできませんでした。インターネット接続を確認して、もう一度試してください。",
+  "Microsoft's installer didn't download. Check your internet connection and try again.":
+    "Microsoftのインストーラーをダウンロードできませんでした。インターネット接続を確認して、もう一度試してください。",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
+    "Microsoftのインストーラーは終わりましたが、インストールされたものではまだUnrealがC++をビルドできません。Visual Studio Build Tools 2022を「C++ によるデスクトップ開発」付きでご自身でインストールしてください。",
+  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "おすすめ。Microsoftの無料のC++ツールです。C++を使うゲームやプラグインをUnrealでパッケージするのに必要です。約7 GB。「おまかせ」でインストールできます。Windowsに聞かれたら「はい」を選んでください。",
+  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
+    "おすすめ。Microsoftの無料のC++ツールです。C++を使うゲームやプラグインをUnrealでパッケージするのに必要です。Visual Studio Build Toolsを「C++ によるデスクトップ開発」付きでインストールしてください。",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "自己改善はオフです。Harnessは自分の指示をそのままにします。",
+  "Unreal can build C++ on this PC.": "このPCでUnrealがC++をビルドできます。",
+  "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
+    "Unreal {engine}はこのPCのC++ツールではビルドできません。「おまかせ」で更新できます。Windowsに聞かれたら「はい」を選んでください。",
+  "Update Visual Studio Build Tools": "Visual Studio Build Toolsを更新",
+  "Visual Studio Build Tools are installed.": "Visual Studio Build Toolsをインストールしました。",
+  "Visual Studio's C++ tools are ready": "Visual StudioのC++ツールの準備ができました",
   "When off, Harness doesn’t change its own instructions. Changes it already made stay until you undo them.":
     "オフにすると、Harnessは自分の指示を変えません。すでに加えた変更は、元に戻すまで残ります。",
   "Workers pitch in": "ワーカーが手伝う",
@@ -5579,6 +5611,8 @@ export default {
   "{name}: {status}": "{name}：{status}",
   "{name}: {status}, {count, plural, other {# tries}}": "{name}：{status}、{count, plural, other {#回試行}}",
   "{name}’s friends": "{name}のフレンド",
+  "{open, plural, =1 {One step left so Unreal can build C++ on this PC.} other {# steps left so Unreal can build C++ on this PC.}}":
+    "{open, plural, =1 {あと1ステップで、このPCでUnrealがC++をビルドできるようになります。} other {あと#ステップで、このPCでUnrealがC++をビルドできるようになります。}}",
   "{open, plural, =1 {One step left so the agent can add C++ to this game.} =2 {Two steps left so the agent can add C++ to this game.} =3 {Three steps left so the agent can add C++ to this game.} other {# steps left so the agent can add C++ to this game.}}":
     "{open, plural, =1 {あと1ステップで、エージェントがこのゲームにC++を追加できるようになります。} =2 {あと2ステップで、エージェントがこのゲームにC++を追加できるようになります。} =3 {あと3ステップで、エージェントがこのゲームにC++を追加できるようになります。} other {あと#ステップで、エージェントがこのゲームにC++を追加できるようになります。}}",
   "{owners} came with setup scripts written by their authors. Genex skipped them when it made your copy, and the game may need them to build. Run them only if you trust this game.":
@@ -6078,6 +6112,7 @@ export default {
     "すでに払っているClaudeかChatGPTのプランを接続するか、Genexのクレジットでつくりましょう。",
   "Continue in browser": "ブラウザで続ける",
   "Continue on ChatGPT plan": "ChatGPTプランで続ける",
+  "Continue on {name}": "{name}で続ける",
   "Continue on Claude plan": "Claudeプランで続ける",
   "Everything so far is saved.": "ここまでの内容は保存されています。",
   "Finish on genex.games in your browser.": "ブラウザでgenex.gamesの手続きを済ませてください。",
@@ -6203,9 +6238,146 @@ export default {
   "Open the game’s chat to have the agent package it.":
     "エージェントにパッケージしてもらうには、ゲームのチャットを開いてください。",
   "Not open in Unreal": "Unrealで開いていません",
+  "A person at Genex already decided this build. Change it and publish it again.":
+    "このビルドはGenexのスタッフがすでに判断しました。変更してからもう一度公開してね。",
+  "A person at Genex is already reviewing it.": "Genexのスタッフがすでに確認しています。",
+  "A person at Genex is reviewing it": "Genexのスタッフが確認中です",
+  "A person at Genex reviewed it.": "Genexのスタッフが確認しました。",
+  "After the fix, Studio asks a person at Genex to look again. Usually within a day.":
+    "修正後、StudioがGenexのスタッフにもう一度確認を頼みます。通常1日以内です。",
+  "After the fix, Studio asks a person at Genex to put it back. Usually within a day.":
+    "修正後、StudioがGenexのスタッフに公開の再開を頼みます。通常1日以内です。",
+  "After the fix, it publishes by itself and Genex checks it again.":
+    "修正後は自動で公開され、Genexがもう一度チェックします。",
+  "Anyone can find it on Genex.": "誰でもGenexで見つけられます。",
+  "Anything we should know? (optional)": "伝えておきたいことは？（任意）",
+  "Checking your fixes": "修正をチェック中",
+  "Checking your {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}":
+    "{app, select, mac {Macアプリをチェック中} windows {Windowsアプリをチェック中} linux {Linuxアプリをチェック中} other {アプリをチェック中}}",
+  "Checking · {elapsed}": "チェック中 · {elapsed}",
+  "Don't ask automatically": "自動で依頼しない",
+  "Don't publish it automatically": "自動で公開しない",
+  "Fix again": "もう一度修正",
+  "Fix with agent": "エージェントで修正",
+  "Fixed. Publish it, then ask a person at Genex to put it back.":
+    "修正済み。公開してから、Genexのスタッフに公開の再開を頼んでね。",
+  "For example: the coin page is our own shop, not a third party.":
+    "例：コインのページは自分たちのショップで、外部のものではありません。",
+  "Genex checks your app before players get it. Usually a few minutes.":
+    "プレイヤーに届く前にGenexがアプリをチェックします。通常数分です。",
+  "Genex has nothing for this game's agent to fix": "このゲームのエージェントが直すべき点はGenexにはありません",
+  "Genex reads your app before players get it. Usually a few minutes.":
+    "プレイヤーに届く前にGenexがアプリを確認します。通常数分です。",
+  "Genex review": "Genexのチェック",
+  "Hidden from players until it's fixed and a person at Genex puts it back.":
+    "修正されてGenexのスタッフが戻すまで、プレイヤーには表示されません。",
+  "Human review agreed with the check.": "スタッフの確認も自動チェックと同じ判断でした。",
+  "Human review agreed with the takedown.": "スタッフの確認も公開停止と同じ判断でした。",
+  "Human review requested": "スタッフによる確認を依頼済み",
+  "Human review requested. A person reviews the next {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} you send.":
+    "スタッフによる確認を依頼しました。次に送る{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}をスタッフが確認します。",
+  "Human review requested. Usually within a day. You can still fix it yourself.":
+    "スタッフによる確認を依頼しました。通常1日以内です。自分で直すこともできます。",
+  "If Genex ever takes it down, you'll hear it here and by email.":
+    "もしGenexが公開を停止したら、こことメールでお知らせします。",
+  "Keep the note under {max} characters.": "メモは{max}文字以内にしてね。",
+  "Nothing went public. After the fix, it publishes by itself and Genex checks it again.":
+    "何も公開されていません。修正後は自動で公開され、Genexがもう一度チェックします。",
+  "Open a game": "ゲームを開いてね",
+  "Open on Genex": "Genexで開く",
+  "Players keep the version they have. After the fix, it publishes by itself and Genex checks it again.":
+    "プレイヤーは今のバージョンのままです。修正後は自動で公開され、Genexがもう一度チェックします。",
+  "Players keep the {date} version.": "プレイヤーは{date}のバージョンのままです。",
+  "Public again": "再公開",
+  Published: "公開済み",
+  "Request human review": "スタッフに確認を依頼",
+  "Send request": "依頼を送る",
+  "Sending the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again so a person can read it…":
+    "スタッフが確認できるよう{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}をもう一度送信中…",
+  "Sent for review": "チェックに送信",
+  "Sent to your agent. Publish it yourself when it's ready.":
+    "エージェントに送りました。準備ができたら自分で公開してね。",
+  "Sent to your agent. When it's done, Studio asks a person at Genex to put it back.":
+    "エージェントに送りました。終わったら、StudioがGenexのスタッフに公開の再開を頼みます。",
+  "Sent to your agent. When it's done, Studio publishes it and Genex checks it again.":
+    "エージェントに送りました。終わったらStudioが公開し、Genexがもう一度チェックします。",
+  "Show {n} more": "あと{n}件を表示",
+  "Sign in to see what to fix": "サインインして直す点を見る",
+  "Someone from the Genex team agreed it's fine.": "Genexチームのスタッフが問題ないと判断しました。",
+  "Taken down": "公開停止",
+  "Taking longer than usual. If the check can't finish, a person at Genex reviews it.":
+    "いつもより時間がかかっています。チェックが終わらない場合はGenexのスタッフが確認します。",
+  "Tell us why (at least {min} characters)": "理由を教えてね（{min}文字以上）",
+  "Tell us why in at least {min} characters.": "理由を{min}文字以上で教えてね。",
+  "That fix isn't the game's latest one": "それはこのゲームの最新の修正ではありません",
+  "Sent to your agent. When it's done, Studio publishes it.":
+    "エージェントに送りました。終わったら、Studioが公開します。",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "エージェントに送りました。終わったら公開して、Genexのスタッフに公開の再開を頼んでください。",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "修正後に公開して、Genexのスタッフに公開の再開を頼んでください。通常1日以内です。",
+  "This game's latest fix isn't waiting for a build": "このゲームの最新の修正はビルド待ちではありません",
+  "The Genex team is reviewing this game.": "Genexチームがこのゲームを確認しています。",
+  "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
+    "修正はまだビルドされていません。{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}をビルドし直すと公開されます。",
+  "There's nothing to ask about right now.": "今は依頼することがありません。",
+  "Think we got it wrong? Someone from the Genex team will check your app, usually within a day. Players don't get it until then.":
+    "判断が間違っていると思う？Genexチームのスタッフがアプリを確認します。通常1日以内です。それまでプレイヤーには届きません。",
+  "Think we got it wrong? Someone from the Genex team will check your game, usually within a day. It stays taken down until then.":
+    "判断が間違っていると思う？Genexチームのスタッフがゲームを確認します。通常1日以内です。それまで公開停止のままです。",
+  "This decision can't be reviewed again.": "この判断は再確認できません。",
+  "Turned down 3 times this week, so a person at Genex reviews the next build. Usually within a day.":
+    "今週3回却下されたので、次のビルドはGenexのスタッフが確認します。通常1日以内です。",
+  "Usually within a day. You'll hear here and by email.": "通常1日以内です。こことメールでお知らせします。",
+  "Version {version} is live": "バージョン{version}を公開中",
+  "Version {version} is live for {app, select, mac {Mac} windows {Windows} linux {Linux} other {desktop}} players.":
+    "バージョン{version}を{app, select, mac {Mac} windows {Windows} linux {Linux} other {デスクトップ}}のプレイヤーに公開中です。",
+  "You already asked. A person will look at it, usually within a day.":
+    "すでに依頼済みです。スタッフが確認します。通常1日以内です。",
+  "You can close this. Studio tells you when it's done.": "閉じても大丈夫。終わったらStudioがお知らせします。",
+  "Your agent stopped before it finished.": "エージェントが終わる前に止まりました。",
+  "usually a few minutes": "通常数分",
+  "{app, select, mac {Mac} windows {Windows} linux {Linux} other {Desktop}} players get it now.":
+    "{app, select, mac {Mac} windows {Windows} linux {Linux} other {デスクトップ}}のプレイヤーに届いています。",
+  "{count}/{max}": "{count}/{max}",
+  "{minutes}m {seconds}s": "{minutes}分{seconds}秒",
+  "{n, plural, one {# fix sent} other {# fixes sent}}": "{n, plural, other {修正を#件送信}}",
+  "{n, plural, one {Can't publish yet: # thing to fix} other {Can't publish yet: # things to fix}}":
+    "{n, plural, other {まだ公開できません：直す点が#件}}",
+  "{n, plural, one {Not approved: # thing still to fix after the re-check} other {Not approved: # things still to fix after the re-check}}":
+    "{n, plural, other {承認されませんでした：再チェック後も直す点が#件}}",
+  "{n, plural, one {Not approved: # thing to fix} other {Not approved: # things to fix}}":
+    "{n, plural, other {承認されませんでした：直す点が#件}}",
+  "{n, plural, one {Taken down: # thing to fix} other {Taken down: # things to fix}}":
+    "{n, plural, other {公開停止：直す点が#件}}",
+  "{n, plural, one {Update not approved: # thing to fix} other {Update not approved: # things to fix}}":
+    "{n, plural, other {アップデートは承認されませんでした：直す点が#件}}",
+  "{state, select, taken_down {Taken down} not_approved {Not approved} other {In review}} · reconnect to see what to fix":
+    "{state, select, taken_down {公開停止} not_approved {未承認} other {チェック中}} · 再接続して直す点を見る",
+  "{title} is live!": "{title}を公開しました！",
+  "{title} is public again": "{title}が再公開されました",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Genexのスタッフが{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}を確認中です。ふつうは1日以内です。",
+  "Checking fixes": "修正をチェック中",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genexが{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}をチェック中です。ふつうは数分です。",
+  "Human review": "スタッフが確認中",
+  "Human review, usually within a day.": "スタッフが確認中。ふつうは1日以内です。",
+  Public: "公開中",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, other {直す点が#件。クリックして確認し、エージェントで直そう。}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, other {直す点が#件。「公開」を開いて確認しよう。}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}": "{n, plural, other {直す点が#件}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}": "{n, plural, other {#件を修正中}}",
+  "{title} was taken down": "{title}は公開停止になりました",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{title}の{app, select, mac {Macアプリ} windows {Windowsアプリ} linux {Linuxアプリ} other {アプリ}}は承認されませんでした",
+  "{title}: human review kept it down": "{title}：スタッフの確認でも公開停止のままです",
   "{count, plural, one {and # more error} other {and # more errors}}": "{count, plural, other {ほか#件のエラー}}",
-  "Fix with agent": "エージェントで直す",
   "Ask the agent to fix these errors": "これらのエラーの修正をエージェントに頼む",
   "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
     "Genexは「{title}」の{players}アプリをつくれませんでした。そこでつくれるようにゲームのコードのエラーを直し、ほかのシステムでの動きは今のままにしてください。このコンピュータでは{players}向けにつくれないので、修正はひとつずつ慎重に確認してください。終わったら、もう一度Build on Genexを押すよう教えてください。\n\n{errors}",
+  "The same project fails the same way: change it first, then try again.":
+    "同じプロジェクトは同じように失敗します。先に変更してから、もう一度試してください。",
 } satisfies LocaleCatalog;

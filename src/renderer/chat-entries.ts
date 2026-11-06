@@ -1,3 +1,4 @@
+import type { GenexReviewFixPayload, GenexReviewPayload } from "../shared/genex-review.ts";
 import { t, tc } from "../shared/i18n.ts";
 import { EngineId, providerInfo } from "../shared/providers.ts";
 import { harnessTurnFailure, TurnFailureCode } from "../shared/engine-requests.ts";
@@ -133,6 +134,8 @@ export const EntryKind = {
   Mentions: "mentions",
   /** A store item the game's agent made: its Listing draft card, with Put on sale (`item_drafted`). */
   ListingDraft: "listing-draft",
+  /** Genex's review of the game's apps or its takedown, or a Fix with agent press (`genex_review`, `genex_review_fix`). */
+  GenexReview: "genex-review",
 } as const;
 export type EntryKind = (typeof EntryKind)[keyof typeof EntryKind];
 
@@ -226,6 +229,19 @@ export type Entry =
    * turn that made it has ended, the item's latest draft (an earlier card of the same item comes down).
    */
   | { kind: typeof EntryKind.ListingDraft; id: string; draft: ListingRecord }
+  /**
+   * A change in Genex's review of the game, or a Fix with agent press, placed at its time. The game's
+   * newest is its live card, drawn from Genex's word now; an older one settles into one line.
+   */
+  | {
+      kind: typeof EntryKind.GenexReview;
+      id: string;
+      project?: string;
+      at: string;
+      review: Partial<GenexReviewPayload> | null;
+      fix: Partial<GenexReviewFixPayload> | null;
+      latest: boolean;
+    }
   /** A card with one affordance: Resume a paused run, prefill a steering message, or Rewind. */
   | {
       kind: typeof EntryKind.Action;
@@ -327,6 +343,7 @@ type ToolsEntry = Extract<Entry, { kind: typeof EntryKind.Tools }>;
 export type GenexCoverEntry = Extract<Entry, { kind: typeof EntryKind.GenexCover }>;
 /** A store item's Listing draft card. */
 export type ListingDraftEntry = Extract<Entry, { kind: typeof EntryKind.ListingDraft }>;
+export type GenexReviewEntry = Extract<Entry, { kind: typeof EntryKind.GenexReview }>;
 type ActionEntry = Extract<Entry, { kind: typeof EntryKind.Action }>;
 
 /** A plugin's permission card in the transcript. */
@@ -576,6 +593,13 @@ interface ChatDraft {
   /** What the run adds up to, gathered as the log is walked so the morning card can say it. */
   rounds: { kept: number; undone: number; firstShot: string | null; lastShot: string | null };
   rowByCall: Map<string, ToolChipRow>;
+  /**
+   * The `rowByCall` rows that may still be running, by the same key. A row that stops running
+   * never runs again, so the passes that settle running rows (a turn's end, a delegation's
+   * result, a run's close) read only these and drop the settled ones as they go: reading every
+   * row ever made at each of them made a long Loop's chat quadratic in its log.
+   */
+  openCalls: Map<string, ToolChipRow>;
   directTurns: Map<string, string | null>;
   runByCall: Map<string, string>;
   /** Rows a build's worker (a facet) called: never the chat's own session, whatever run it answers for. */
@@ -649,6 +673,7 @@ export function toEntries(events: EventEnvelope[], queueIds?: ReadonlyMap<string
   keepOfferedRewind(chat, events);
   placeLastCoverCard(chat);
   placeLastListings(chat);
+  markLatestReviews(chat.entries);
   for (const [runId, deliveries] of chat.runAssets) {
     const result = chat.runResults.get(runId);
     if (result) result.assets = deliveries;
@@ -690,6 +715,7 @@ function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, str
     latestResult: null,
     rounds: { kept: 0, undone: 0, firstShot: null, lastShot: null },
     rowByCall: new Map(),
+    openCalls: new Map(),
     directTurns: new Map(),
     runByCall: new Map(),
     workerCalls: new Set(),
@@ -716,6 +742,7 @@ function readEvent(chat: ChatDraft, event: EventEnvelope): void {
   settleWaitingCards(chat, event.data);
   if (readToolTraffic(chat, event)) return;
   if (holdListing(chat, event)) return;
+  if (readGenexReview(chat, event)) return;
   if (readQuiet(chat, event.data)) return;
   closeGroup(chat);
   for (const narrate of NARRATORS) narrate(chat, event);
@@ -760,11 +787,10 @@ function trackTurn(chat: ChatDraft, event: EventEnvelope): void {
 function endTurn(chat: ChatDraft, event: EventEnvelope, status: string | undefined): void {
   chat.activeTurns.delete(event.thread_id);
   const ended: ToolState = status === "cancelled" ? ToolState.Stopped : ToolState.Unknown;
-  for (const [id, row] of chat.rowByCall) {
+  for (const [id, row] of runningCalls(chat)) {
     const ownTurn = chat.directTurns.get(id) === event.turn_id;
     const unowned = !chat.directTurns.has(id) && !chat.runByCall.has(id);
-    const endsWithTurn = ownTurn || unowned;
-    if (row.state === ToolState.Running && endsWithTurn) row.state = ended;
+    if (ownTurn || unowned) row.state = ended;
   }
   for (const [id, row] of chat.pluginCalls)
     if (row.state === ToolState.Running && !chat.runByCall.has(id)) row.state = ended;
@@ -963,7 +989,7 @@ function requestTool(
     ...(chip ? { chip } : {}),
   };
   group.rows.push(row);
-  chat.rowByCall.set(data.tool_call_id, row);
+  keepCallRow(chat, data.tool_call_id, row);
   chat.directTurns.set(data.tool_call_id, event.turn_id);
 }
 
@@ -986,13 +1012,30 @@ function settleTool(chat: ChatDraft, eventId: string, data: Extract<EventData, {
 function orphanResultRow(chat: ChatDraft, eventId: string, callId: string): ToolChipRow {
   const row: ToolChipRow = { key: callId, icon: "run", label: TRANSCRIPT_WORDS.toolResult };
   toolGroup(chat, eventId).rows.push(row);
-  chat.rowByCall.set(callId, row);
+  keepCallRow(chat, callId, row);
   return row;
 }
 
 function resultState(ok: boolean, stopped: boolean): ToolState {
   if (ok) return ToolState.Succeeded;
   return stopped ? ToolState.Stopped : ToolState.Failed;
+}
+
+/** File a tool call's row under its call id, among the open calls while it runs. */
+function keepCallRow(chat: ChatDraft, callId: string, row: ToolChipRow): void {
+  chat.rowByCall.set(callId, row);
+  if (row.state === ToolState.Running) chat.openCalls.set(callId, row);
+  else chat.openCalls.delete(callId);
+}
+
+/** The call rows still running, by call id; the ones that stopped since the last look are dropped first. */
+function runningCalls(chat: ChatDraft): Array<[string, ToolChipRow]> {
+  const running: Array<[string, ToolChipRow]> = [];
+  for (const [id, row] of chat.openCalls) {
+    if (row.state === ToolState.Running) running.push([id, row]);
+    else chat.openCalls.delete(id);
+  }
+  return running;
 }
 
 type Delegated = NonNullable<ReturnType<typeof delegatedPayload>>;
@@ -1007,8 +1050,7 @@ function readDelegated(chat: ChatDraft, event: EventEnvelope, { engineId, payloa
   const scope = `${payload.delegationId ?? `${DELEGATED_PREFIX}${engineId}:${payload.runId ?? ""}:${payload.facetId ?? ""}`}:`;
   switch (payload.kind) {
     case "result":
-      for (const [id, row] of chat.rowByCall)
-        if (id.startsWith(scope) && row.state === ToolState.Running) row.state = ToolState.Unknown;
+      for (const [id, row] of runningCalls(chat)) if (id.startsWith(scope)) row.state = ToolState.Unknown;
       break;
     case "system":
       readDelegatedSystem(chat, event, engineId, payload);
@@ -1153,7 +1195,7 @@ function addDelegatedToolRow(
     ...inputChip(part.name ?? "", part.input),
   };
   toolGroup(chat, eventId).rows.push(row);
-  chat.rowByCall.set(row.key, row);
+  keepCallRow(chat, row.key, row);
   trackCaller(chat, row.key, payload);
 }
 
@@ -1212,9 +1254,9 @@ function readQuiet(chat: ChatDraft, data: EventData): boolean {
  * calls and build workers' rows are left alone.
  */
 function stopInterruptedLeg(chat: ChatDraft): void {
-  for (const [id, row] of chat.rowByCall) {
+  for (const [id, row] of runningCalls(chat)) {
     const chatLeg = !chat.directTurns.has(id) && !chat.workerCalls.has(id);
-    if (row.state === ToolState.Running && chatLeg) row.state = ToolState.Stopped;
+    if (chatLeg) row.state = ToolState.Stopped;
   }
 }
 
@@ -1771,6 +1813,45 @@ function holdListing(chat: ChatDraft, event: EventEnvelope): boolean {
   return true;
 }
 
+/**
+ * A review record or a fix press (`genex_review`, `genex_review_fix`): its card goes up at its time,
+ * never held for the turn. A later record of the same press (Don't publish it automatically) changes
+ * no card: the live card reads the press from the log. True when the record was one.
+ */
+function readGenexReview(chat: ChatDraft, event: EventEnvelope): boolean {
+  const review = customPayload(event.data, CustomEvent.GenexReview);
+  const fix = review ? null : customPayload(event.data, CustomEvent.GenexReviewFix);
+  if (!review && !fix) return false;
+  const again =
+    fix !== null &&
+    chat.entries.some((entry) => entry.kind === EntryKind.GenexReview && entry.fix?.fixId === fix.fixId);
+  if (again) return true;
+  const project = review?.project ?? fix?.project;
+  chat.entries.push({
+    kind: EntryKind.GenexReview,
+    id: event.id,
+    ...(typeof project === "string" ? { project } : {}),
+    at: event.created_at,
+    review,
+    fix,
+    latest: false,
+  });
+  return true;
+}
+
+/** Each game's newest review card is its live one; the rest settle into lines. */
+function markLatestReviews(entries: Entry[]): void {
+  const seen = new Set<string>();
+  for (let at = entries.length - 1; at >= 0; at -= 1) {
+    const entry = entries[at];
+    if (entry?.kind !== EntryKind.GenexReview) continue;
+    const key = entry.project ?? "";
+    if (seen.has(key)) continue;
+    seen.add(key);
+    entry.latest = true;
+  }
+}
+
 /** The thread's held Listing draft cards go up, in the order they were made. */
 function placeListings(chat: ChatDraft, thread: string): void {
   for (const card of chat.listings) {
@@ -2145,7 +2226,7 @@ function narrateFinished(chat: ChatDraft, event: EventEnvelope): void {
 /** The run's own tool rows still out when it closed: stopped when the user stopped it, else unknown. */
 function settleRunTools(chat: ChatDraft, finished: FinishedPayload): void {
   const cancelled = finished.executionStatus === ExecutionStatus.Cancelled || wasCancelled(finished.stoppedBecause);
-  for (const [id, row] of [...chat.rowByCall, ...chat.pluginCalls]) {
+  for (const [id, row] of [...runningCalls(chat), ...chat.pluginCalls]) {
     const ownRow = Boolean(finished.runId) && chat.runByCall.get(id) === finished.runId;
     if (row.state === ToolState.Running && ownRow) row.state = cancelled ? ToolState.Stopped : ToolState.Unknown;
   }

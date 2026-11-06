@@ -393,6 +393,8 @@ export default {
   "Another clip": "Другой клип",
   "Another cover": "Другая обложка",
   "Another folder…": "Другая папка…",
+  "Another installer or Visual Studio is running. Close it, then press Do it for me again.":
+    "Сейчас работает другой установщик или Visual Studio. Закрой его и снова нажми «Сделать за меня».",
   "Another model installation is running.": "Уже идёт установка другой модели.",
   Answer: "Ответить",
   "Answer question": "Ответить на вопрос",
@@ -548,8 +550,38 @@ export default {
   "Build with the Grok account you already have.": "Собирай на аккаунте Grok, который у тебя уже есть.",
   "Changes Harness made to its own instructions. Undo any of them.":
     "Изменения, которые Harness внёс в свои инструкции. Любое можно отменить.",
+  "Checking that Microsoft signed the installer…": "Проверяем, что установщик подписан Microsoft…",
+  "Downloading the Visual Studio Build Tools installer from Microsoft…":
+    "Скачиваем установщик Visual Studio Build Tools с сайта Microsoft…",
+  "Install Visual Studio Build Tools": "Установить Visual Studio Build Tools",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
+    "Установи Visual Studio Build Tools 2022 от Microsoft с набором «Разработка классических приложений на C++».",
+  "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
+    "Устанавливаем Visual Studio Build Tools. Нажми «Да», когда Windows спросит; установщик Microsoft покажет, как идёт установка.",
+  "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
+    "Загрузка Microsoft вела не на сайт Microsoft, поэтому Genex остановился.",
+  "Microsoft's download link wasn't secure, so Genex didn't download it.":
+    "Ссылка Microsoft на загрузку была небезопасной, поэтому Genex ничего не скачал.",
+  "Microsoft's download was far bigger than its installer, so Genex stopped.":
+    "Загрузка Microsoft оказалась намного больше установщика, поэтому Genex остановился.",
+  "Microsoft's installer couldn't download the Build Tools. Check your internet connection and try again.":
+    "Установщик Microsoft не смог скачать Build Tools. Проверь интернет и попробуй ещё раз.",
+  "Microsoft's installer didn't download. Check your internet connection and try again.":
+    "Установщик Microsoft не скачался. Проверь интернет и попробуй ещё раз.",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
+    "Установщик Microsoft закончил, но Unreal всё ещё не может собирать C++ с тем, что он поставил. Установи Visual Studio Build Tools 2022 с набором «Разработка классических приложений на C++» сам.",
+  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "Рекомендуем. Бесплатные инструменты C++ от Microsoft: без них Unreal не соберёт игру или плагин с C++. Около 7 ГБ. «Сделать за меня» установит их: нажми «Да», когда Windows спросит.",
+  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
+    "Рекомендуем. Бесплатные инструменты C++ от Microsoft: без них Unreal не соберёт игру или плагин с C++. Установи Visual Studio Build Tools с набором «Разработка классических приложений на C++».",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "Самоулучшение выключено. Harness не меняет свои инструкции.",
+  "Unreal can build C++ on this PC.": "Unreal может собирать C++ на этом ПК.",
+  "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
+    "Unreal {engine} не работает с инструментами C++ на этом ПК. «Сделать за меня» обновит их: нажми «Да», когда Windows спросит.",
+  "Update Visual Studio Build Tools": "Обновить Visual Studio Build Tools",
+  "Visual Studio Build Tools are installed.": "Visual Studio Build Tools установлены.",
+  "Visual Studio's C++ tools are ready": "Инструменты C++ из Visual Studio готовы",
   "When off, Harness doesn’t change its own instructions. Changes it already made stay until you undo them.":
     "Когда выключено, Harness не меняет свои инструкции. Уже сделанные изменения остаются, пока ты их не отменишь.",
   "Workers pitch in": "Помощники подключаются",
@@ -5616,6 +5648,8 @@ export default {
   "{name}: {status}, {count, plural, other {# tries}}":
     "{name}: {status}, {count, plural, one {# попытка} few {# попытки} many {# попыток} other {# попытки}}",
   "{name}’s friends": "Друзья {name}",
+  "{open, plural, =1 {One step left so Unreal can build C++ on this PC.} other {# steps left so Unreal can build C++ on this PC.}}":
+    "{open, plural, =1 {Остался один шаг, и Unreal сможет собирать C++ на этом ПК.} one {Остался # шаг, и Unreal сможет собирать C++ на этом ПК.} few {Осталось # шага, и Unreal сможет собирать C++ на этом ПК.} many {Осталось # шагов, и Unreal сможет собирать C++ на этом ПК.} other {Осталось # шага, и Unreal сможет собирать C++ на этом ПК.}}",
   "{open, plural, =1 {One step left so the agent can add C++ to this game.} =2 {Two steps left so the agent can add C++ to this game.} =3 {Three steps left so the agent can add C++ to this game.} other {# steps left so the agent can add C++ to this game.}}":
     "{open, plural, =1 {Остался один шаг, и агент сможет добавлять C++ в эту игру.} =2 {Осталось два шага, и агент сможет добавлять C++ в эту игру.} =3 {Осталось три шага, и агент сможет добавлять C++ в эту игру.} one {Остался # шаг, и агент сможет добавлять C++ в эту игру.} few {Осталось # шага, и агент сможет добавлять C++ в эту игру.} many {Осталось # шагов, и агент сможет добавлять C++ в эту игру.} other {Осталось # шага, и агент сможет добавлять C++ в эту игру.}}",
   "{owners} came with setup scripts written by their authors. Genex skipped them when it made your copy, and the game may need them to build. Run them only if you trust this game.":
@@ -6119,6 +6153,7 @@ export default {
     "Подключи тариф Claude или ChatGPT, за который уже платишь, или собирай на кредитах Genex.",
   "Continue in browser": "Продолжить в браузере",
   "Continue on ChatGPT plan": "Продолжить на тарифе ChatGPT",
+  "Continue on {name}": "Продолжить на {name}",
   "Continue on Claude plan": "Продолжить на тарифе Claude",
   "Everything so far is saved.": "Всё, что уже сделано, сохранено.",
   "Finish on genex.games in your browser.": "Закончи на genex.games в браузере.",
@@ -6243,10 +6278,149 @@ export default {
     "Genex не может запустить приложение этой игры на этом компьютере.",
   "Open the game’s chat to have the agent package it.": "Открой чат игры, чтобы агент её собрал.",
   "Not open in Unreal": "Не открыта в Unreal",
+  "A person at Genex already decided this build. Change it and publish it again.":
+    "Человек из Genex уже принял решение по этой сборке. Измени её и опубликуй снова.",
+  "A person at Genex is already reviewing it.": "Человек из Genex уже её проверяет.",
+  "A person at Genex is reviewing it": "Человек из Genex проверяет её",
+  "A person at Genex reviewed it.": "Её проверил человек из Genex.",
+  "After the fix, Studio asks a person at Genex to look again. Usually within a day.":
+    "После исправления Studio попросит человека из Genex посмотреть ещё раз. Обычно в течение дня.",
+  "After the fix, Studio asks a person at Genex to put it back. Usually within a day.":
+    "После исправления Studio попросит человека из Genex вернуть её. Обычно в течение дня.",
+  "After the fix, it publishes by itself and Genex checks it again.":
+    "После исправления она опубликуется сама, и Genex проверит её снова.",
+  "Anyone can find it on Genex.": "Её может найти кто угодно на Genex.",
+  "Anything we should know? (optional)": "Что нам стоит знать? (необязательно)",
+  "Checking your fixes": "Проверяем твои исправления",
+  "Checking your {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}":
+    "Проверяем {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}}",
+  "Checking · {elapsed}": "Проверка · {elapsed}",
+  "Don't ask automatically": "Не просить автоматически",
+  "Don't publish it automatically": "Не публиковать автоматически",
+  "Fix again": "Исправить ещё раз",
+  "Fix with agent": "Исправить с агентом",
+  "Fixed. Publish it, then ask a person at Genex to put it back.":
+    "Исправлено. Опубликуй её, а потом попроси человека из Genex вернуть её.",
+  "For example: the coin page is our own shop, not a third party.":
+    "Например: страница с монетами — наш собственный магазин, а не чужой.",
+  "Genex checks your app before players get it. Usually a few minutes.":
+    "Genex проверяет приложение, прежде чем его получат игроки. Обычно несколько минут.",
+  "Genex has nothing for this game's agent to fix": "Genex не нашёл, что агенту этой игры нужно исправить",
+  "Genex reads your app before players get it. Usually a few minutes.":
+    "Genex изучает приложение, прежде чем его получат игроки. Обычно несколько минут.",
+  "Genex review": "Проверка Genex",
+  "Hidden from players until it's fixed and a person at Genex puts it back.":
+    "Скрыта от игроков, пока её не исправят и человек из Genex её не вернёт.",
+  "Human review agreed with the check.": "Проверка человеком согласилась с автоматической.",
+  "Human review agreed with the takedown.": "Проверка человеком согласилась со снятием.",
+  "Human review requested": "Запрошена проверка человеком",
+  "Human review requested. A person reviews the next {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} you send.":
+    "Проверка человеком запрошена. Человек проверит {app, select, mac {следующее приложение для Mac} windows {следующее приложение для Windows} linux {следующее приложение для Linux} other {следующие приложения}}, которое ты отправишь.",
+  "Human review requested. Usually within a day. You can still fix it yourself.":
+    "Проверка человеком запрошена. Обычно в течение дня. Ты всё ещё можешь исправить всё сам.",
+  "If Genex ever takes it down, you'll hear it here and by email.":
+    "Если Genex когда-нибудь её снимет, ты узнаешь об этом здесь и по почте.",
+  "Keep the note under {max} characters.": "Уложись в {max} символов.",
+  "Nothing went public. After the fix, it publishes by itself and Genex checks it again.":
+    "Ничего не опубликовано. После исправления она опубликуется сама, и Genex проверит её снова.",
+  "Open a game": "Открой игру",
+  "Open on Genex": "Открыть на Genex",
+  "Players keep the version they have. After the fix, it publishes by itself and Genex checks it again.":
+    "У игроков остаётся их версия. После исправления она опубликуется сама, и Genex проверит её снова.",
+  "Players keep the {date} version.": "У игроков остаётся версия от {date}.",
+  "Public again": "Снова опубликована",
+  Published: "Опубликована",
+  "Request human review": "Запросить проверку человеком",
+  "Send request": "Отправить запрос",
+  "Sending the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again so a person can read it…":
+    "Снова отправляем {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}}, чтобы человек мог его проверить…",
+  "Sent for review": "Отправлено на проверку",
+  "Sent to your agent. Publish it yourself when it's ready.": "Отправлено агенту. Опубликуй сам, когда будет готово.",
+  "Sent to your agent. When it's done, Studio asks a person at Genex to put it back.":
+    "Отправлено агенту. Когда он закончит, Studio попросит человека из Genex вернуть игру.",
+  "Sent to your agent. When it's done, Studio publishes it and Genex checks it again.":
+    "Отправлено агенту. Когда он закончит, Studio опубликует игру, и Genex проверит её снова.",
+  "Show {n} more": "Показать ещё {n}",
+  "Sign in to see what to fix": "Войди, чтобы увидеть, что исправить",
+  "Someone from the Genex team agreed it's fine.": "Кто-то из команды Genex согласился, что всё в порядке.",
+  "Taken down": "Снята",
+  "Taking longer than usual. If the check can't finish, a person at Genex reviews it.":
+    "Дольше обычного. Если проверка не сможет закончить, её посмотрит человек из Genex.",
+  "Tell us why (at least {min} characters)": "Объясни почему (не меньше {min} символов)",
+  "Tell us why in at least {min} characters.": "Объясни почему, не меньше {min} символов.",
+  "That fix isn't the game's latest one": "Это не последнее исправление игры",
+  "Sent to your agent. When it's done, Studio publishes it.":
+    "Отправлено агенту. Когда он закончит, Studio опубликует игру.",
+  "Sent to your agent. When it's done, publish it, then ask a person at Genex to put it back.":
+    "Отправлено агенту. Когда он закончит, опубликуй игру, а потом попроси человека из Genex вернуть её.",
+  "After the fix, publish it, then ask a person at Genex to put it back. Usually within a day.":
+    "После исправления опубликуй игру, а потом попроси человека из Genex вернуть её. Обычно в течение дня.",
+  "This game's latest fix isn't waiting for a build": "Последнее исправление этой игры не ждёт сборки",
+  "The Genex team is reviewing this game.": "Команда Genex проверяет эту игру.",
+  "The fix isn't built yet. Build the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} again and it publishes.":
+    "Исправление ещё не собрано. Собери {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}} заново, и оно опубликуется.",
+  "There's nothing to ask about right now.": "Сейчас не о чем просить.",
+  "Think we got it wrong? Someone from the Genex team will check your app, usually within a day. Players don't get it until then.":
+    "Думаешь, мы ошиблись? Кто-то из команды Genex проверит приложение, обычно в течение дня. До тех пор игроки его не получат.",
+  "Think we got it wrong? Someone from the Genex team will check your game, usually within a day. It stays taken down until then.":
+    "Думаешь, мы ошиблись? Кто-то из команды Genex проверит игру, обычно в течение дня. До тех пор она остаётся снятой.",
+  "This decision can't be reviewed again.": "Это решение нельзя пересмотреть.",
+  "Turned down 3 times this week, so a person at Genex reviews the next build. Usually within a day.":
+    "На этой неделе отклонено 3 раза, поэтому следующую сборку проверит человек из Genex. Обычно в течение дня.",
+  "Usually within a day. You'll hear here and by email.": "Обычно в течение дня. Ты узнаешь здесь и по почте.",
+  "Version {version} is live": "Версия {version} опубликована",
+  "Version {version} is live for {app, select, mac {Mac} windows {Windows} linux {Linux} other {desktop}} players.":
+    "Версия {version} доступна игрокам на {app, select, mac {Mac} windows {Windows} linux {Linux} other {компьютерах}}.",
+  "You already asked. A person will look at it, usually within a day.":
+    "Ты уже просил. Человек посмотрит, обычно в течение дня.",
+  "You can close this. Studio tells you when it's done.": "Можно закрыть. Studio скажет, когда всё будет готово.",
+  "Your agent stopped before it finished.": "Агент остановился, не закончив.",
+  "usually a few minutes": "обычно несколько минут",
+  "{app, select, mac {Mac} windows {Windows} linux {Linux} other {Desktop}} players get it now.":
+    "Игроки на {app, select, mac {Mac} windows {Windows} linux {Linux} other {компьютерах}} уже получают её.",
+  "{count}/{max}": "{count}/{max}",
+  "{minutes}m {seconds}s": "{minutes} мин {seconds} с",
+  "{n, plural, one {# fix sent} other {# fixes sent}}":
+    "{n, plural, one {Отправлено # исправление} few {Отправлено # исправления} many {Отправлено # исправлений} other {Отправлено # исправления}}",
+  "{n, plural, one {Can't publish yet: # thing to fix} other {Can't publish yet: # things to fix}}":
+    "{n, plural, one {Пока нельзя опубликовать: # исправление} few {Пока нельзя опубликовать: # исправления} many {Пока нельзя опубликовать: # исправлений} other {Пока нельзя опубликовать: # исправления}}",
+  "{n, plural, one {Not approved: # thing still to fix after the re-check} other {Not approved: # things still to fix after the re-check}}":
+    "{n, plural, one {Не одобрено: после повторной проверки осталось # исправление} few {Не одобрено: после повторной проверки осталось # исправления} many {Не одобрено: после повторной проверки осталось # исправлений} other {Не одобрено: после повторной проверки осталось # исправления}}",
+  "{n, plural, one {Not approved: # thing to fix} other {Not approved: # things to fix}}":
+    "{n, plural, one {Не одобрено: # исправление} few {Не одобрено: # исправления} many {Не одобрено: # исправлений} other {Не одобрено: # исправления}}",
+  "{n, plural, one {Taken down: # thing to fix} other {Taken down: # things to fix}}":
+    "{n, plural, one {Снята: # исправление} few {Снята: # исправления} many {Снята: # исправлений} other {Снята: # исправления}}",
+  "{n, plural, one {Update not approved: # thing to fix} other {Update not approved: # things to fix}}":
+    "{n, plural, one {Обновление не одобрено: # исправление} few {Обновление не одобрено: # исправления} many {Обновление не одобрено: # исправлений} other {Обновление не одобрено: # исправления}}",
+  "{state, select, taken_down {Taken down} not_approved {Not approved} other {In review}} · reconnect to see what to fix":
+    "{state, select, taken_down {Снята} not_approved {Не одобрено} other {На проверке}} · подключись снова, чтобы увидеть, что исправить",
+  "{title} is live!": "{title} опубликована!",
+  "{title} is public again": "{title} снова опубликована",
+  "A person at Genex is reviewing the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually within a day.":
+    "Человек из Genex проверяет {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}}. Обычно в течение дня.",
+  "Checking fixes": "Проверяем исправления",
+  "Genex is checking the {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}}. Usually a few minutes.":
+    "Genex проверяет {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}}. Обычно несколько минут.",
+  "Human review": "Проверка человеком",
+  "Human review, usually within a day.": "Проверка человеком, обычно в течение дня.",
+  Public: "Опубликована",
+  "{n, plural, one {# thing to fix. Click to see it and fix it with your agent.} other {# things to fix. Click to see them and fix them with your agent.}}":
+    "{n, plural, one {# исправление. Нажми, чтобы посмотреть и исправить с агентом.} few {# исправления. Нажми, чтобы посмотреть и исправить их с агентом.} many {# исправлений. Нажми, чтобы посмотреть и исправить их с агентом.} other {# исправления. Нажми, чтобы посмотреть и исправить их с агентом.}}",
+  "{n, plural, one {# thing to fix. Open Publish to see it.} other {# things to fix. Open Publish to see them.}}":
+    "{n, plural, one {# исправление. Открой «Опубликовать», чтобы посмотреть.} few {# исправления. Открой «Опубликовать», чтобы посмотреть.} many {# исправлений. Открой «Опубликовать», чтобы посмотреть.} other {# исправления. Открой «Опубликовать», чтобы посмотреть.}}",
+  "{n, plural, one {# thing to fix} other {# things to fix}}":
+    "{n, plural, one {# исправление} few {# исправления} many {# исправлений} other {# исправления}}",
+  "{n, plural, one {Fixing # thing} other {Fixing # things}}":
+    "{n, plural, one {Исправляем # проблему} few {Исправляем # проблемы} many {Исправляем # проблем} other {Исправляем # проблемы}}",
+  "{title} was taken down": "{title} снята с публикации",
+  "{title}'s {app, select, mac {Mac app} windows {Windows app} linux {Linux app} other {apps}} wasn't approved":
+    "{title}: {app, select, mac {приложение для Mac} windows {приложение для Windows} linux {приложение для Linux} other {приложения}} не одобрено",
+  "{title}: human review kept it down": "{title}: проверка человеком оставила игру снятой",
   "{count, plural, one {and # more error} other {and # more errors}}":
     "{count, plural, one {и ещё # ошибка} few {и ещё # ошибки} many {и ещё # ошибок} other {и ещё # ошибки}}",
-  "Fix with agent": "Исправить с агентом",
   "Ask the agent to fix these errors": "Попросить агента исправить эти ошибки",
   "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
     "Genex не смог собрать приложение {players} для «{title}». Исправь эти ошибки в коде игры, чтобы она там собиралась, и сохрани работу игры на других системах. На этом компьютере нельзя собрать для {players}, поэтому внимательно проверь каждое исправление. Потом скажи мне снова нажать Build on Genex.\n\n{errors}",
+  "The same project fails the same way: change it first, then try again.":
+    "Тот же проект упадёт так же: сначала измени его, потом пробуй снова.",
 } satisfies LocaleCatalog;

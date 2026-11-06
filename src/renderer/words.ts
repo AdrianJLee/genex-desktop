@@ -4002,6 +4002,8 @@ export const PUBLISH_PLATFORM_WORDS = {
   cloudSending: t("Sending to Genex. Keep Genex open"),
   /** A failed build's first error, then how many more the agent is given. */
   cloudMoreErrors: (count: number) => t("{count, plural, one {and # more error} other {and # more errors}}", { count }),
+  /** Under a failed build's errors: Genex answers the same project with the same failure. */
+  cloudChangeFirst: t("The same project fails the same way: change it first, then try again."),
   cloudFix: t("Fix with agent"),
   cloudFixLabel: t("Ask the agent to fix these errors"),
   cloudFixAsk: (players: string, title: string, errors: string) =>

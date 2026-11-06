@@ -33,7 +33,14 @@ import { credentialHomes } from "../credential-homes.ts";
 import type { Usage } from "../types.ts";
 import type { ModelTokenUsage } from "../../shared/event-log.ts";
 import { claudeAuthStatus, type ClaudeAuthStatus } from "./claude-cli.ts";
-import { briefFrame, briefImages, steerFeed, steerSession, type SteerFeed, type SteerSession } from "./claude-steer.ts";
+import {
+  briefFrame,
+  type StallSchedule,
+  steerFeed,
+  steerSession,
+  type SteerFeed,
+  type SteerSession,
+} from "./claude-steer.ts";
 import { autoModeRules } from "./claude-auto-mode.ts";
 import {
   askingOptions,
@@ -121,7 +128,7 @@ import { StudioPlatform } from "../../shared/boot.ts";
 import { EngineKind, EngineStatusCode, EngineStatusReason, LoginSource } from "../../shared/engine-descriptor.ts";
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { ContextSource } from "../../shared/context.ts";
-import { EngineFailureKind, MessageFrom, StopReason } from "../../shared/engine-requests.ts";
+import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { SessionCostLedger, sessionTotals, turnShare } from "./session-cost.ts";
 import { AccountId, accountsRoot, SubscriptionAccounts } from "./subscription-accounts.ts";
 
@@ -168,6 +175,8 @@ export interface ClaudeCodeEngineOptions {
   sessionCosts?: string;
   /** Injected in tests. Production asks the `claude` CLI, never a credential file. */
   authStatusFn?: (home: string | null) => Promise<ClaudeAuthStatus>;
+  /** The clock a session's input holds and stalls run on (claude-steer.ts); a test's own, or real timers. */
+  inputClock?: StallSchedule;
   /**
    * Where every judge session runs; defaults to the one stable `JUDGE_CWD` the app shares. A test
    * passes a directory it owns so a conformance run does not sit in the live judge's folder.
@@ -275,6 +284,8 @@ const SdkSystemSubtype = {
   PermissionDenied: "permission_denied",
   /** A status report; one that carries `permissionMode` says the session's mode changed. */
   Status: "status",
+  /** The tasks the session runs in the background now: its shells and subagents. */
+  BackgroundTasksChanged: "background_tasks_changed",
 } as const;
 
 /** The only `result` subtype that means the turn ended well. */
@@ -494,6 +505,7 @@ export class ClaudeCodeEngine implements Engine {
   readonly #toolless: { enabled: boolean };
   /** The OS the CLI runs on: where Claude Code's own sandbox cannot start, Genex's runs the commands. */
   readonly #platform: NodeJS.Platform;
+  readonly #inputClock: StallSchedule | undefined;
   /** What a studio-shell session's command sandbox is made with. */
   readonly #shells: Pick<ClaudeCodeEngineOptions, "scratchRoot" | "toolPath" | "commandSandbox">;
   /** Finds Git Bash for a Windows CLI; null off Windows, where the CLI's shell is the system's. */
@@ -607,6 +619,7 @@ export class ClaudeCodeEngine implements Engine {
     this.#queryFn = options.queryFn;
     this.#toolless = toollessSandbox(options.platform);
     this.#platform = options.platform ?? process.platform;
+    this.#inputClock = options.inputClock;
     this.#shells = {
       scratchRoot: options.scratchRoot,
       toolPath: options.toolPath,
@@ -1381,7 +1394,10 @@ export class ClaudeCodeEngine implements Engine {
     // The running session, for what an answer asks of it after the answer (claude-permissions.ts).
     const running: RunningSession = { stream: null };
     const options = await this.#delegateOptions(request, { cliInstallation, login, controller, running, run });
-    const stream = query({ prompt: sessionPrompt(request, steer, run, controller.signal), options } as never);
+    const stream = query({
+      prompt: sessionPrompt(request, steer, run, controller.signal, this.#inputClock),
+      options,
+    } as never);
     this.#catalogEpoch.set(stream, this.#catalog.epoch());
     running.stream = stream as RunningSession["stream"];
     // The mode picker reaches a running turn of a session that asks (the chat's own, a lead's, a
@@ -1605,13 +1621,9 @@ export class ClaudeCodeEngine implements Engine {
     if (type !== SdkMessage.Result) return;
     readResult(message as SdkResult, run);
     run.feed?.answered();
-    // A string brief's input closes at the first result, a steered session's once it has answered
-    // everything it read: a mode picked after that reaches nothing, and is for the next message.
-    if (!run.feed || run.feed.ended) {
-      run.inputClosed = true;
-      run.closedSummary ??= run.summary;
-      run.control.release();
-    }
+    // A string prompt's input (Compact now) closes at the first result; a fed one once the session
+    // owes nothing (claude-steer.ts), which its feed says. A mode picked after that reaches nothing.
+    if (!run.feed) closeInput(run);
   }
 
   /** An assistant or user message: one more turn, the interview's calls, the activity line. */
@@ -1621,12 +1633,15 @@ export class ClaudeCodeEngine implements Engine {
     if (fromAssistant) run.replied = true;
     if (fromAssistant && request.interviewTools?.length) recordStudioToolCalls(message, run, request.interviewTools);
     this.#reportActivity(message, run, request);
+    // A tool's answer on the session's own thread: a background task's notice owed joins its next request.
+    if (!fromAssistant && !message.parent_tool_use_id) run.feed?.toolAnswered();
     if (!fromAssistant) return;
     this.#observeTelemetry(stream, request.onEvent, run.sessionId);
     // A subagent's request is its own context, not the one the session's next turn starts from.
     if (message.parent_tool_use_id) return;
+    run.feed?.working();
     // A reply after the input ended: a background task woke the CLI, and no tool call it makes now
-    // can be answered (the host's permission answers go over the input).
+    // can be answered (Genex's tools and the host's permission answers go over the input).
     if (run.inputClosed) {
       run.wokeAfterEnd = true;
       recordCutAfterTurn(message, run);
@@ -1641,11 +1656,14 @@ export class ClaudeCodeEngine implements Engine {
     if (message.subtype === SdkSystemSubtype.Init) {
       readInit(message, run);
       run.feed?.initialized(message, isInterview(request.interviewTools));
+      // Each turn opens with one: a turn a task's notice woke is under way before its first word.
+      run.feed?.working();
     }
     // The mode the session really runs in: Auto falls back to Manual where the plan or the model
     // cannot use it, and a plan approval or a picker change moves it mid-turn.
     const onMode = request.permissions?.onMode;
     if (onMode && reportsMode(message)) quietly(() => onMode(reportedMode(message)));
+    if (message.subtype === SdkSystemSubtype.BackgroundTasksChanged) run.feed?.background(message);
     if (message.subtype === SdkSystemSubtype.CompactBoundary) this.#reportCompaction(stream as object, run, request);
     if (message.subtype === SdkSystemSubtype.Status && message.compact_result === CompactOutcome.Failed) {
       run.compactError = String(message.compact_error ?? "") || MESSAGE.NotCompacted;
@@ -2152,6 +2170,17 @@ function readInit(message: Record<string, unknown>, run: RunState): void {
 }
 
 /**
+ * The session's input has ended: from here on no answer of Genex's reaches it (its tools, a
+ * permission, a mode picked), and what it said by then is what it said as its turn ended.
+ */
+function closeInput(run: RunState): void {
+  if (run.inputClosed) return;
+  run.inputClosed = true;
+  run.closedSummary ??= run.summary;
+  run.control.release();
+}
+
+/**
  * A worker's turn is its whole job: what its session did after a background task woke it, past its
  * input's end, is not its delivery, and the turn ends not ok, handing back what it said as its turn
  * ended. A lead or the chat is resumed by its own loop, and keeps its last result's verdict.
@@ -2336,27 +2365,22 @@ function sessionPrompt(
   steer: SteerSession | null,
   run: RunState,
   signal: AbortSignal,
+  clock?: StallSchedule,
 ): unknown {
   if (request.compact) return COMPACT_COMMAND;
-  // A resumed session may first answer what it had queued: its input waits for the brief's answer.
-  if (!steer && !request.resume) return delegatePrompt(request);
+  // Every session is fed through an input Genex holds (claude-steer.ts `steerFeed`): a resumed one
+  // may first answer what it had queued, and any may leave work in the background whose calls of
+  // Genex's tools need it open.
   const session = steer ?? steerSession(() => {});
-  run.feed = steerFeed(session, briefFrame(request), signal, () => run.sessionId);
+  run.feed = steerFeed(
+    session,
+    briefFrame(request),
+    signal,
+    () => run.sessionId,
+    clock,
+    () => closeInput(run),
+  );
   return run.feed.prompt;
-}
-
-/**
- * The builder's prompt. Stills go in as image blocks, the same content-block shape the judge uses
- * — a builder that never saw the reference read it nine times in 2,245 turns. Genex's own message,
- * one with pictures, and one with Genex's notices go as a frame (claude-steer.ts `briefFrame`);
- * any other is the same message as a string.
- */
-function delegatePrompt(request: DelegateRequest): unknown {
-  const plain = request.from !== MessageFrom.Genex && !briefImages(request).length && !request.notices?.length;
-  if (plain) return request.prompt;
-  return (async function* () {
-    yield briefFrame(request);
-  })();
 }
 
 /**

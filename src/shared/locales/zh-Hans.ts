@@ -6022,4 +6022,6 @@ export default {
   "Ask the agent to fix these errors": "请智能体修复这些错误",
   "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
     "Genex 无法构建“{title}”的 {players} 应用。请修复游戏代码中的这些错误，让它能在那里构建，并保持游戏在其他系统上的表现不变。这台电脑无法为 {players} 构建，所以请仔细检查每处修复。完成后告诉我再按一次 Build on Genex。\n\n{errors}",
+  "The same project fails the same way: change it first, then try again.":
+    "同一个项目会以同样的方式失败：请先修改，再试一次。",
 } satisfies LocaleCatalog;

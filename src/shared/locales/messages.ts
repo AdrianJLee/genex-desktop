@@ -3616,6 +3616,7 @@ export const MESSAGES = [
   "The run stopped because of an error. Your game is as you left it.",
   "The run was stopped before it finished.",
   "The running reply could not switch to {mode}. Your next message will use it.",
+  "The same project fails the same way: change it first, then try again.",
   "The screen was blank: one flat colour, nothing drawn.",
   "The selected preview changed while this build was preparing. Open the build again when ready.",
   "The server at {host}",

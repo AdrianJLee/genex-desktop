@@ -6533,4 +6533,6 @@ export default {
   "Ask the agent to fix these errors": "Den Agenten bitten, diese Fehler zu beheben",
   "Genex couldn’t build the {players} app of “{title}”. Fix these errors in the game’s code so it builds there, and keep the game working as it does on other systems. This computer can’t build for {players}, so check each fix carefully. Then tell me to press Build on Genex again.\n\n{errors}":
     "Genex konnte die {players}-App von „{title}“ nicht bauen. Behebe diese Fehler im Code des Spiels, damit es dort gebaut wird, und lass das Spiel auf anderen Systemen weiter so laufen wie bisher. Dieser Computer kann nicht für {players} bauen, also prüfe jede Korrektur genau. Sag mir dann, dass ich wieder Build on Genex drücken soll.\n\n{errors}",
+  "The same project fails the same way: change it first, then try again.":
+    "Dasselbe Projekt scheitert genauso: Ändere es zuerst und versuch es dann noch mal.",
 } satisfies LocaleCatalog;

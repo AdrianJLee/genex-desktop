@@ -3446,7 +3446,9 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   `studio:plugins.genex-cloud-build` (`cloudBuildFromDialog`, Windows only) → the plugin's
   `cloud-build` (`cloudBuild`, `cloud-build.ts`). The press is the consent: the game's Unreal project
   alone is staged, its `.uproject` at the top, without caches and builds as for remixing
-  (`stageBuildSource`, into `cloud-source/`, removed once sent). Studio sets no size limit of its
+  (`stageBuildSource`, into `cloud-source/`, removed once sent). Unlike a remix it also takes what the
+  game's `.gitignore` keeps out of checkpoints under `Content`, `Config` and `Plugins` (`gitListIgnored`,
+  `BUILD_FOLDERS`): a Fab kit stays out of what others get, but the game's Blueprints need it to cook. Studio sets no size limit of its
   own: Genex takes or refuses the project by the account's limit, and its refusal says the sizes,
   shown under the rows. An Unreal other than the build computers' (`CLOUD_UNREAL_VERSIONS`, from the
   `.uproject`'s `EngineAssociation`) is refused before anything goes. The press answers at once: a
@@ -3466,7 +3468,7 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   month's builds are used). A failed compile or cook carries the log's errors (`errors`, at most 60
   lines): the first shows under the rows beside Fix with agent, which sends them all through the
   game's chat (`cloudErrors`, `cloudFixAsk`). Genex answers an unchanged project that failed so with
-  that failure, without an upload, so Try again costs only the zip. A refused press is said under the rows. Job ids and platforms Genex
+  that failure, without an upload, so Try again costs only the zip, and the rows say to change it first. A refused press is said under the rows. Job ids and platforms Genex
   answers are kept only when whole (`cloudBuildOf`). Nothing is asked while the pinned CLI is older
   than `genex native build` (1.38.0, `pinnedCliBuildsApps`): `native.cloud.supported` is false and
   the row reads as before. Genex's side of this is a draft contract.

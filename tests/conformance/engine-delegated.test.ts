@@ -12,16 +12,34 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { ClaudeCodeEngine, claudeJudgeContent, compactSdkMessage } from "../../src/substrate/engines/claude-code.ts";
+import {
+  ClaudeCodeEngine,
+  type ClaudeCodeEngineOptions,
+  claudeJudgeContent,
+  compactSdkMessage,
+} from "../../src/substrate/engines/claude-code.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
-import { STEER_STALL_MS, steerFeed, steerSession, userFrame } from "../../src/substrate/engines/claude-steer.ts";
+import {
+  BACKGROUND_HOLD_MS,
+  STEER_STALL_MS,
+  steerFeed,
+  steerSession,
+  userFrame,
+} from "../../src/substrate/engines/claude-steer.ts";
 import { GENEX_MARK } from "../../src/substrate/engines/genex-mark-prompts.ts";
 import { credentialHomes } from "../../src/substrate/credential-homes.ts";
 import { absoluteRule } from "../../src/substrate/engines/claude-permissions.ts";
 import { EngineError, type DelegateRequest, type Engine } from "../../src/substrate/engines/types.ts";
 import { MessageFrom, StopReason } from "../../src/shared/engine-requests.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
-import { registeredSchema, scriptedClaude, wokenSession } from "../helpers/scripted-claude.ts";
+import {
+  CUT_OFF_ANSWER,
+  registeredSchema,
+  scriptedClaude,
+  type StdinCli,
+  stdinClaude,
+  wokenSession,
+} from "../helpers/scripted-claude.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 // An engine resolves — and sweeps — its login homes the moment it is built, and `CLAUDE_CONFIG_DIR`
@@ -46,6 +64,26 @@ function fakeQuery(messages: unknown[], options: { throwOn?: Error; throwAfter?:
 }
 
 type Frame = Record<string, any>;
+
+/**
+ * The frames a delegation's input held, each without the uuid it carries so the session can say
+ * when it read it (every frame has one).
+ */
+async function framesIn(prompt: unknown): Promise<Frame[]> {
+  const frames: Frame[] = [];
+  for await (const { uuid, ...frame } of prompt as AsyncIterable<Frame>) {
+    assert.match(String(uuid), /^[0-9a-f]{8}-/, "the frame carries a uuid");
+    frames.push(frame);
+  }
+  return frames;
+}
+
+/** The words of a delegation's first frame. */
+async function briefWords(prompt: unknown): Promise<string> {
+  const [brief] = await framesIn(prompt);
+  const parts: Array<{ text?: string }> = brief?.message.content ?? [];
+  return parts.map((part) => part.text ?? "").join("");
+}
 
 /**
  * The fakeQuery above, for a steerable delegation: it reads `params.prompt` the way the SDK does
@@ -109,7 +147,11 @@ type Send =
     }) => boolean)
   | null;
 
-async function engineWithLogin(queryFn: never, platform?: NodeJS.Platform): Promise<ClaudeCodeEngine> {
+async function engineWithLogin(
+  queryFn: never,
+  platform?: NodeJS.Platform,
+  extra: Partial<ClaudeCodeEngineOptions> = {},
+): Promise<ClaudeCodeEngine> {
   const root = await tmpDir("studio-engine-");
   const home = path.join(root, "claude-home");
   await mkdir(home, { recursive: true });
@@ -120,6 +162,7 @@ async function engineWithLogin(queryFn: never, platform?: NodeJS.Platform): Prom
     systemHome: path.join(root, "no-system-login"),
     queryFn,
     ...(platform ? { platform } : {}),
+    ...extra,
   });
 }
 
@@ -930,7 +973,11 @@ describe("claude code delegated engine", () => {
       preset: "claude_code",
       append: "You are working inside Genex.",
     });
-    assert.equal(seen[0]!.prompt, "make a snake game", "the session's context is not repeated in the message");
+    assert.equal(
+      await briefWords(seen[0]!.prompt),
+      "make a snake game",
+      "the session's context is not repeated in the message",
+    );
     assert.deepEqual(seen[1]!.systemPrompt, { type: "preset", preset: "claude_code" });
   });
 
@@ -1827,10 +1874,13 @@ describe("steering a running Claude Code turn", () => {
     assert.deepEqual(stopped, [null]);
   });
 
-  it("a delegation without steer still sends the plain prompt, byte for byte", async () => {
+  it("a delegation without steer sends its words byte for byte, in the one frame its input starts with", async () => {
     const plain = fakeQuery(successRun);
     const result = await (await engineWithLogin(plain.fn)).delegate({ prompt: "build", cwd: "/tmp/x" });
-    assert.equal(plain.seen[0]!.prompt, "build");
+    // Flipped: the words were the SDK's string prompt, whose stdin closes at the first result.
+    assert.deepEqual(await framesIn(plain.seen[0]!.prompt), [
+      { type: "user", message: { role: "user", content: [{ type: "text", text: "build" }] }, parent_tool_use_id: null },
+    ]);
     assert.equal("steered" in result, false);
 
     const stills = fakeQuery(successRun);
@@ -1839,9 +1889,7 @@ describe("steering a running Claude Code turn", () => {
       cwd: "/tmp/x",
       images: [{ label: "ref", mimeType: "image/jpeg", data: "abc" }],
     });
-    const messages: unknown[] = [];
-    for await (const message of stills.seen[0]!.prompt as unknown as AsyncIterable<unknown>) messages.push(message);
-    assert.deepEqual(messages, [
+    assert.deepEqual(await framesIn(stills.seen[0]!.prompt), [
       {
         type: "user",
         message: {
@@ -1860,10 +1908,7 @@ describe("steering a running Claude Code turn", () => {
     const framesOf = async (request: Partial<DelegateRequest>) => {
       const fake = fakeQuery(successRun);
       await (await engineWithLogin(fake.fn)).delegate({ prompt: "", cwd: "/tmp/x", ...request } as DelegateRequest);
-      const frames: Array<Record<string, any>> = [];
-      for await (const frame of fake.seen[0]!.prompt as unknown as AsyncIterable<Record<string, any>>)
-        frames.push(frame);
-      return frames;
+      return framesIn(fake.seen[0]!.prompt);
     };
     // CLI 2.1.257 shows an isSynthetic message under "[MESSAGE FROM NON-USER SOURCE - NOT USER INPUT]".
     assert.deepEqual(await framesOf({ prompt: "The build landed. Make the cover.", from: MessageFrom.Genex }), [
@@ -1895,11 +1940,7 @@ describe("steering a running Claude Code turn", () => {
     const framesOf = async (request: Partial<DelegateRequest>) => {
       const fake = fakeQuery(successRun);
       await (await engineWithLogin(fake.fn)).delegate({ prompt: "", cwd: "/tmp/x", ...request } as DelegateRequest);
-      const prompt = fake.seen[0]!.prompt;
-      if (typeof prompt === "string") return prompt;
-      const frames: Array<Record<string, any>> = [];
-      for await (const frame of prompt as unknown as AsyncIterable<Record<string, any>>) frames.push(frame);
-      return frames;
+      return framesIn(fake.seen[0]!.prompt);
     };
     const sketch = { label: "sketch.png", mimeType: "image/png", data: "iVBOR" };
     const marked = `${GENEX_MARK}\nGenex cut a call off.`;
@@ -1933,10 +1974,18 @@ describe("steering a running Claude Code turn", () => {
       notices: ["Genex cut a call off."],
     })) as Array<Record<string, any>>;
     assert.deepEqual(alone?.message.content, [{ type: "text", text: marked }], "no empty words block");
-    assert.equal(
+    // Flipped: with no notices the words went as the SDK's string prompt.
+    assert.deepEqual(
       await framesOf({ prompt: "add a moat", from: MessageFrom.Person }),
-      "add a moat",
-      "no notices: the words as a string",
+      [
+        {
+          type: "user",
+          message: { role: "user", content: [{ type: "text", text: "add a moat" }] },
+          parent_tool_use_id: null,
+          origin: { kind: "human" },
+        },
+      ],
+      "no notices: the person's words alone",
     );
   });
 
@@ -2569,5 +2618,256 @@ describe("a session that goes on after its input ended", () => {
     const answer = await engine.delegate({ prompt: "Make the character.", cwd: await tmpDir("claude-woken-") });
     assert.equal(answer.ok, true);
     assert.equal(answer.summary, "Done.");
+  });
+});
+
+describe("a session's background tasks", () => {
+  const timeout = 5_000;
+  const tasksNow = (...tasks: Array<{ ambient?: boolean }>) => ({
+    type: "system",
+    subtype: "background_tasks_changed",
+    tasks: tasks.map((task, i) => ({ task_id: `t${i}`, task_type: "local_bash", description: "import", ...task })),
+  });
+  const shell = {};
+  const ended = (text: string) => ({ type: "result", subtype: "success", is_error: false, result: text, usage: {} });
+  const editorCall = (id: string) => toolUse(id, "mcp__studio__unreal-editor__call_tool");
+  const editorAnswer = (id: string, open: boolean) => ({
+    type: "user",
+    message: {
+      content: [
+        { type: "tool_result", tool_use_id: id, is_error: !open, content: open ? "the graph" : CUT_OFF_ANSWER },
+      ],
+    },
+  });
+
+  /**
+   * A turn that leaves an import running in the background and rests; the import's end wakes it to
+   * read a Blueprint through Genex's editor tool. `endsMidAnswer`: the import ends while the turn
+   * writes its final answer, so the notice runs as a turn of its own after the result.
+   */
+  const importRun = (reached: boolean[], endsMidAnswer = false) =>
+    async function* (cli: StdinCli) {
+      yield steerInit();
+      const read = await cli.briefRead();
+      if (read) yield read;
+      yield toolUse("tu_bg");
+      yield tasksNow(shell);
+      yield toolResult("tu_bg");
+      if (endsMidAnswer) yield tasksNow();
+      yield said("The import runs; I'll read the graph when it's in.");
+      yield ended("The import runs; I'll read the graph when it's in.");
+      if (!endsMidAnswer) yield tasksNow();
+      // The notice wakes the session: a turn of its own, which reads the graph.
+      yield steerInit();
+      yield editorCall("tu_read");
+      reached.push(await cli.inputOpen());
+      yield editorAnswer("tu_read", reached.at(-1) === true);
+      yield said("Read the graph.");
+      yield ended("Read the graph.");
+    };
+
+  for (const [name, request] of [
+    ["a fresh session", {}],
+    ["a resumed one", { resume: "ses_steer" }],
+    ["a steered one", { steer: { ready: () => {} } }],
+  ] as const) {
+    it(`${name}'s Genex calls reach Genex in the turn its finished background shell wakes`, { timeout }, async () => {
+      const reached: boolean[] = [];
+      const { fn, seen } = stdinClaude(importRun(reached));
+      const answer = await (await engineWithLogin(fn)).delegate({
+        prompt: "Read BP_CombatCharacter's EventGraph.",
+        cwd: await tmpDir("claude-background-"),
+        ...request,
+      } as DelegateRequest);
+      assert.deepEqual(reached, [true], "the call was not cut off");
+      assert.equal(answer.ok, true);
+      assert.equal(answer.summary, "Read the graph.");
+      assert.equal(answer.cutAfterTurn, undefined);
+      assert.equal(seen.inputEnded, true, "the input ends at the answer of the turn the shell woke");
+    });
+  }
+
+  it("the turn a finished shell wakes is under way from its init: a long think before its first word keeps the input open", {
+    timeout,
+  }, async () => {
+    const stalls: Array<{ fire: () => void; cancelled: boolean }> = [];
+    const inputClock = (fire: () => void) => {
+      const stall = { fire, cancelled: false };
+      stalls.push(stall);
+      return () => {
+        stall.cancelled = true;
+      };
+    };
+    const reached: boolean[] = [];
+    const { fn } = stdinClaude(async function* (cli) {
+      yield steerInit();
+      const read = await cli.briefRead();
+      if (read) yield read;
+      yield toolUse("tu_bg");
+      yield tasksNow(shell);
+      yield toolResult("tu_bg");
+      yield ended("The import runs.");
+      yield tasksNow();
+      yield steerInit();
+      // It thinks past every stall before its first word: the test's clock moves that far.
+      for (const stall of stalls) if (!stall.cancelled) stall.fire();
+      yield editorCall("tu_read");
+      reached.push(await cli.inputOpen());
+      yield editorAnswer("tu_read", reached.at(-1) === true);
+      yield ended("Read the graph.");
+    });
+    const engine = await engineWithLogin(fn, undefined, { inputClock });
+    const answer = await engine.delegate({ prompt: "Read the graph.", cwd: await tmpDir("claude-background-") });
+    assert.deepEqual(reached, [true]);
+    assert.equal(answer.summary, "Read the graph.");
+  });
+
+  it("a shell that ends while the final answer is written still owes that turn: its Genex calls are answered", {
+    timeout,
+  }, async () => {
+    const reached: boolean[] = [];
+    const { fn } = stdinClaude(importRun(reached, true));
+    const answer = await (await engineWithLogin(fn)).delegate({
+      prompt: "Read BP_CombatCharacter's EventGraph.",
+      cwd: await tmpDir("claude-background-"),
+    });
+    assert.deepEqual(reached, [true]);
+    assert.equal(answer.summary, "Read the graph.");
+  });
+
+  it("holds the input for a running task at most a minute, and for a finished one's notice until its turn starts", async () => {
+    const stalls: Array<{ fire: () => void; ms: number; cancelled: boolean }> = [];
+    const schedule = (fire: () => void, ms: number) => {
+      const stall = { fire, ms, cancelled: false };
+      stalls.push(stall);
+      return () => {
+        stall.cancelled = true;
+      };
+    };
+    const feedFor = async () => {
+      let ends = 0;
+      const feed = steerFeed(
+        steerSession(() => {}),
+        userFrame("Build it", []),
+        new AbortController().signal,
+        () => "ses_steer",
+        schedule,
+        () => ends++,
+      );
+      const input = feed.prompt[Symbol.asyncIterator]();
+      const brief = (await input.next()).value as Frame;
+      feed.initialized(steerInit(), false);
+      feed.lifecycle(lifecycle(brief, "started"), () => {});
+      return { feed, ends: () => ends };
+    };
+
+    // A shell still running at the result (a dev server, say) holds the input a minute at most.
+    const server = await feedFor();
+    server.feed.background(tasksNow(shell));
+    server.feed.answered();
+    assert.equal(server.feed.ended, false);
+    assert.equal(stalls.at(-1)!.ms, BACKGROUND_HOLD_MS);
+    stalls.at(-1)!.fire();
+    assert.equal(server.feed.ended, true);
+    assert.equal(server.ends(), 1, "the engine hears the input ended, though no result came");
+
+    // One that ends after the result owes the turn its notice wakes: a slow start (its init, then a
+    // long think) is still under way, and that turn's answer ends the input.
+    const woken = await feedFor();
+    woken.feed.background(tasksNow(shell));
+    woken.feed.answered();
+    woken.feed.background(tasksNow());
+    assert.equal(woken.feed.ended, false, "its notice wakes the session");
+    assert.equal(stalls.at(-1)!.ms, STEER_STALL_MS);
+    woken.feed.working();
+    assert.equal(stalls.at(-1)!.cancelled, true, "the woken turn is under way");
+    woken.feed.answered();
+    assert.equal(woken.feed.ended, true);
+
+    // One that ends mid-turn, before a tool's answer: the notice joined the turn, owed no more.
+    const joined = await feedFor();
+    joined.feed.background(tasksNow(shell));
+    joined.feed.background(tasksNow());
+    joined.feed.toolAnswered();
+    joined.feed.working();
+    joined.feed.answered();
+    assert.equal(joined.feed.ended, true);
+
+    // One that ends while the final answer streams: that reply came before the notice, which is still owed.
+    const late = await feedFor();
+    late.feed.background(tasksNow(shell));
+    late.feed.background(tasksNow());
+    late.feed.working();
+    late.feed.answered();
+    assert.equal(late.feed.ended, false);
+    assert.equal(stalls.at(-1)!.ms, STEER_STALL_MS);
+    stalls.at(-1)!.fire();
+    assert.equal(late.feed.ended, true, "a notice that starts no turn holds it only until the stall passes");
+
+    // The CLI's housekeeping is not the session's work.
+    const ambient = await feedFor();
+    ambient.feed.background(tasksNow({ ambient: true }));
+    ambient.feed.answered();
+    assert.equal(ambient.feed.ended, true);
+
+    // With nothing in the background, the input ends at the result, as it always did.
+    const plain = await feedFor();
+    plain.feed.answered();
+    assert.equal(plain.feed.ended, true);
+    assert.equal(plain.ends(), 1);
+  });
+
+  it("a frame about background work before a result leaves an unread brief's stall standing", async () => {
+    const stalls: Array<{ fire: () => void; cancelled: boolean }> = [];
+    const schedule = (fire: () => void) => {
+      const stall = { fire, cancelled: false };
+      stalls.push(stall);
+      return () => {
+        stall.cancelled = true;
+      };
+    };
+    const feed = steerFeed(
+      steerSession(() => {}),
+      userFrame("Go on", []),
+      new AbortController().signal,
+      () => "ses_steer",
+      schedule,
+    );
+    await feed.prompt[Symbol.asyncIterator]().next();
+    feed.initialized(steerInit(), false);
+    // A resumed session first answers a notice it had queued; then its old task list arrives.
+    feed.answered();
+    feed.background(tasksNow(shell));
+    assert.equal(stalls.length, 1);
+    assert.equal(stalls[0]!.cancelled, false, "a brief that never starts still ends the input");
+    stalls[0]!.fire();
+    assert.equal(feed.ended, true);
+  });
+
+  it("a second queued turn before the brief is not cut by the first one's stall; its own result arms it again", async () => {
+    const stalls: Array<{ fire: () => void; cancelled: boolean }> = [];
+    const schedule = (fire: () => void) => {
+      const stall = { fire, cancelled: false };
+      stalls.push(stall);
+      return () => {
+        stall.cancelled = true;
+      };
+    };
+    const feed = steerFeed(
+      steerSession(() => {}),
+      userFrame("Go on", []),
+      new AbortController().signal,
+      () => "ses_steer",
+      schedule,
+    );
+    await feed.prompt[Symbol.asyncIterator]().next();
+    feed.initialized(steerInit(), false);
+    feed.answered();
+    feed.working();
+    assert.equal(stalls[0]!.cancelled, true, "the second notice's turn is under way");
+    feed.answered();
+    assert.equal(stalls.length, 2);
+    stalls[1]!.fire();
+    assert.equal(feed.ended, true, "a brief that never starts still ends the input");
   });
 });

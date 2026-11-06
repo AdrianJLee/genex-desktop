@@ -611,9 +611,12 @@ never-touch list); only Ollama's tool loop, which keeps no session, opens no poo
   (`changed`): `worker_status <id>` answers them in full, `worker_wait` answers them for each worker
   that ended while it waited, and the list of every worker names each by its report's first sentence.
 - A worker's brief says its turn is its whole job: never ended to wait, never waiting by sleep or a
-  background command. A worker's Claude Code session that a background task woke after its input
-  ended (no tool call can be answered then) ends not ok, saying so, with its last words kept
-  (`claude-code.ts` `wokeAfterEnd`); a lead's or the chat's session keeps its last result's verdict.
+  background command. A Claude Code session's input stays open while its background tasks run
+  (conversation lifecycle), so the turn a finished task wakes goes on as its own, and that turn's
+  answer is a worker's delivery. A worker's session that a task woke after its input had ended
+  anyway (a task that outran its hold; no tool call can be answered then) ends not ok, saying so,
+  with its last words kept (`claude-code.ts` `wokeAfterEnd`); a lead's or the chat's session keeps
+  its last result's verdict.
 - `worker_steer` interrupts that worker alone (`engine.interrupt {cwd, worker}`) and resumes its
   session with the words in front; `worker_stop` aborts it alone (`engine.abort {cwd, worker}`),
   sent again while the host finds no session to stop (one still being seated), and a stopped

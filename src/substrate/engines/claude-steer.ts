@@ -13,7 +13,7 @@
  * by a turn that had already decided), take nothing mid-turn and are interrupted instead.
  */
 import { randomUUID } from "node:crypto";
-import { SECOND_MS } from "../../shared/duration.ts";
+import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { MessageFrom } from "../../shared/engine-requests.ts";
 import { markedNotices } from "./genex-mark-prompts.ts";
 import {
@@ -31,6 +31,15 @@ import {
  * Exported for the test that runs the stall on its own clock.
  */
 export const STEER_STALL_MS = 30 * SECOND_MS;
+
+/**
+ * How long a session that answered while a task of its own still runs in the background keeps its
+ * input open for it: the CLI's own wait on such a shell once its input has ended
+ * (`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS`). The CLI's wait starts only then, so a shell that outruns
+ * this hold may still wake the session, its Genex calls cut (`claude-code.ts` `wokeAfterEnd`); a
+ * server the CLI would not wait on (a dev server left running) holds it this long too.
+ */
+export const BACKGROUND_HOLD_MS = MINUTE_MS;
 
 /** The init capability of a CLI that reports each pushed message's lifecycle (2.1.281 does). */
 const MESSAGE_LIFECYCLES = "msg_lifecycle_v1";
@@ -212,18 +221,72 @@ export interface SteerFeed {
   lifecycle(message: Record<string, unknown>, onEvent: DelegateRequest["onEvent"]): void;
   /** A result: the input ends once the session has answered everything it read. */
   answered(): void;
+  /** A `background_tasks_changed` frame: what the session still runs in the background. */
+  background(message: Record<string, unknown>): void;
+  /** A tool's result went back on the session's own thread: a task's notice owed now joins its next request. */
+  toolAnswered(): void;
+  /** The session is at work on its own thread again (a turn's init, a reply of its own): it took what woke it. */
+  working(): void;
   /** The delegation ended: the input ends with it. */
   dispose(): void;
   /** The input has ended: the session takes nothing more over stdin, a control request included. */
   readonly ended: boolean;
 }
 
+/** The tasks a `background_tasks_changed` frame lists as the session's work: not the CLI's housekeeping (`ambient`). */
+function userTasks(message: Record<string, unknown>): unknown[] {
+  const tasks: unknown[] = Array.isArray(message.tasks) ? message.tasks : [];
+  return tasks.filter((task) => (task as { ambient?: unknown } | null)?.ambient !== true);
+}
+
 /**
- * The input a steerable session is fed through, held open by the delegation: a string prompt
- * has the SDK close stdin at the first result, which would cut off a message taken during the
- * final answer before the CLI started it, and a resumed session's brief behind a queued notice.
+ * The session's background tasks, as its `background_tasks_changed` frames list them, and the
+ * notice a task that ended owes it: the CLI puts the notice in at its next tool-result boundary
+ * (priority `next`), or, when the turn has none left, runs it as a turn of its own after the result.
+ */
+function backgroundWork() {
+  let running = 0;
+  let wakeOwed = false;
+  let wakeJoins = false;
+  return {
+    changed(message: Record<string, unknown>): void {
+      const now = userTasks(message).length;
+      if (now < running) {
+        wakeOwed = true;
+        wakeJoins = false;
+      }
+      running = now;
+    },
+    toolAnswered(): void {
+      if (wakeOwed) wakeJoins = true;
+    },
+    /** At work again past a result, or past the tool answer the notice joined: the notice is taken. */
+    working(afterResult: boolean): void {
+      if (!afterResult && !wakeJoins) return;
+      wakeOwed = false;
+      wakeJoins = false;
+    },
+    /**
+     * How long the input waits past a result: for a message the CLI took (`unread`) or a task's
+     * notice to start a turn, and for a task still running. Zero when nothing is owed.
+     */
+    holdMs(unread: boolean): number {
+      const startOwed = unread || wakeOwed ? STEER_STALL_MS : 0;
+      return Math.max(startOwed, running > 0 ? BACKGROUND_HOLD_MS : 0);
+    },
+  };
+}
+
+/**
+ * The input a session is fed through, held open by the delegation: a string prompt has the SDK
+ * close stdin at the first result, which would cut off a message taken during the final answer
+ * before the CLI started it, a resumed session's brief behind a queued notice, and every Genex
+ * tool call after that result. Genex's tools answer over this input, so it stays open while the
+ * session still works in the background: the turn a finished task's notice wakes reaches Genex as
+ * the turn's own do (CLI 2.1.318 answers a call made past the input's end "interrupted before a
+ * result was received").
  * `sessionId` names the session each message goes to;
- * `schedule` is the clock the stall runs on.
+ * `schedule` is the clock the stall runs on; `ended` hears once that the input has ended.
  */
 export function steerFeed(
   steer: SteerSession,
@@ -231,6 +294,7 @@ export function steerFeed(
   signal: AbortSignal,
   sessionId: () => string | undefined,
   schedule: StallSchedule = realSchedule,
+  ended: () => void = () => {},
 ): SteerFeed {
   // The brief carries a uuid so the session says when it reads it: a resumed session first
   // answers what it had queued (a background task's notice), and that result is not the brief's.
@@ -243,16 +307,27 @@ export function steerFeed(
   const pending = new Map<string, string>();
   let resultSinceSteer = false;
   let cancelStall: (() => void) | null = null;
-  // The input ends once the session has answered everything it read (a result since the last
-  // steer started) and holds nothing unread — or, with something unread and no progress, after
-  // STEER_STALL_MS. Whatever never started by then is reported as not delivered.
-  const settleInput = (): void => {
+  const work = backgroundWork();
+  const close = (): void => {
     if (input.ended) return;
+    input.end();
+    ended();
+  };
+  const holdOff = (): void => {
     cancelStall?.();
     cancelStall = null;
-    if (!resultSinceSteer) return;
-    if (!pending.size) input.end();
-    else cancelStall = schedule(() => input.end(), STEER_STALL_MS);
+  };
+  // The input ends once the session has answered everything it read (a result since the last
+  // steer started) and owes nothing: no message unread, no task running or notice to start — or,
+  // with no progress, once its hold passes (`backgroundWork().holdMs`). Whatever never started by
+  // then is reported as not delivered. Before a result there is nothing to settle, and a stall set
+  // for an unread brief stands.
+  const settleInput = (): void => {
+    if (input.ended || !resultSinceSteer) return;
+    holdOff();
+    const holdMs = work.holdMs(pending.size > 0);
+    if (holdMs === 0) close();
+    else cancelStall = schedule(close, holdMs);
   };
   // The brief read (or dropped): only a result after it answers it.
   const briefTook = (state: string): void => {
@@ -260,9 +335,8 @@ export function steerFeed(
     briefTaken = true;
     briefUnread = false;
     resultSinceSteer = false;
-    cancelStall?.();
-    cancelStall = null;
-    if (DROPPED.has(state)) input.end();
+    holdOff();
+    if (DROPPED.has(state)) close();
   };
   const send: SteerSend = (message) => {
     if (input.ended || signal.aborted) return false;
@@ -292,6 +366,7 @@ export function steerFeed(
       if (state === LifecycleState.Started) {
         pending.delete(uuid);
         resultSinceSteer = false;
+        holdOff();
         steer.steered.push(id);
         onEvent?.({ type: DelegateEventType.SteerDelivered, payload: { id } });
       } else if (DROPPED.has(state)) pending.delete(uuid);
@@ -300,16 +375,33 @@ export function steerFeed(
     answered() {
       if (briefUnread) {
         // What it answered was queued before the brief; one that never starts must not hold it open.
-        cancelStall?.();
-        cancelStall = schedule(() => input.end(), STEER_STALL_MS);
+        holdOff();
+        cancelStall = schedule(close, STEER_STALL_MS);
         return;
       }
       resultSinceSteer = true;
       settleInput();
     },
+    background(message) {
+      work.changed(message);
+      settleInput();
+    },
+    toolAnswered() {
+      work.toolAnswered();
+    },
+    working() {
+      if (input.ended) return;
+      // A turn under way before the brief started (another queued notice): its own result re-arms the stall.
+      if (briefUnread) holdOff();
+      work.working(resultSinceSteer);
+      if (!resultSinceSteer) return;
+      // Past a result: the turn under way answers what woke it, and its own result settles the input.
+      resultSinceSteer = false;
+      holdOff();
+    },
     dispose() {
-      cancelStall?.();
-      input.end();
+      holdOff();
+      close();
     },
     get ended() {
       return input.ended;

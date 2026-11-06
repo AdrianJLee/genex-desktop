@@ -202,7 +202,14 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   a late message is never cut off, and one taken but never started closes it after
   `STEER_STALL_MS`, reported as not delivered. The brief carries a uuid too: a resumed session may
   first answer what it had queued (a background task's notice), and that result does not close the
-  input before the brief's own turn, whose Genex tool calls answer over it. A tool that only waits ends early when one of the
+  input before the brief's own turn, whose Genex tool calls answer over it. Every Claude Code
+  session, steered or not, is fed this way, and its input also stays open past a result while it
+  still works in the background (`background_tasks_changed`, the CLI's housekeeping left out): a
+  running task at most `BACKGROUND_HOLD_MS`, and a finished one's notice, which the CLI runs as a
+  turn of its own once the turn it ended in has no tool result left to join, up to
+  `STEER_STALL_MS` for that turn to start. A Genex tool called once the input has ended gets the
+  CLI's own "interrupted before a result was received", so the woken turn's calls would otherwise
+  all be lost. A tool that only waits ends early when one of the
   person's messages is handed over (`loop/person-wrote.ts`: a worker wait, a lead's wait for a busy
   reviewer, a plugin lock wait on the host), so the session reaches its next step in seconds and may
   wait again; a line of Genex's ends no wait. A message the chat wrote itself (any `origin`) or a

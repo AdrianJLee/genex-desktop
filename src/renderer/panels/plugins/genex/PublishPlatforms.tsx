@@ -19,6 +19,7 @@ import { errorMessage } from "../../../../shared/errors.ts";
 import type { GenexNativeRecord } from "../../../../shared/genex.ts";
 import { t } from "../../../../shared/i18n.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
+import { UiEvent } from "../../../../shared/ui-events.ts";
 import { composeInChat } from "../../../compose-in-chat.ts";
 import { hostPlatform } from "../../../platform.ts";
 import { useLibrary } from "../../../state/hooks.ts";
@@ -56,20 +57,40 @@ const MARK: Readonly<Record<PublishTarget, IconName>> = {
   [PublishTarget.Linux]: "linux",
 };
 
-/** The game folder's platforms, read once as the dialog opens; null until read or when unreadable. */
-export function usePublishPlatforms(project: string): PublishPlatform[] | null {
+/** How often the folder is read again while the agent builds an app the Publish card asked for. */
+const BUILD_REREAD_MS = 10 * SECOND_MS;
+
+/**
+ * The game folder's platforms, read as the dialog opens; null until read or when unreadable. The
+ * folder is read again whenever an agent's turn ends (it may have built an app) and when the window
+ * comes back to the front, so an open dialog follows what lands in the folder without being reopened;
+ * while `watch` (the agent builds an app the card asked for) it is also read every few seconds.
+ */
+export function usePublishPlatforms(project: string, watch = false): PublishPlatform[] | null {
   const [platforms, setPlatforms] = useState<PublishPlatform[] | null>(null);
   useAsyncEffect(
     (alive) => {
-      void window.studio
-        .genexPublishPlatforms(project)
-        .then((read) => {
-          if (alive()) setPlatforms(read);
-        })
-        .catch(() => {});
-      return undefined;
+      const read = (): void => {
+        void window.studio
+          .genexPublishPlatforms(project)
+          .then((rows) => {
+            if (alive()) setPlatforms(rows);
+          })
+          .catch(() => {});
+      };
+      read();
+      const off = window.studio.onEvent((event) => {
+        if (event.type === UiEvent.ChatStreamEnded) read();
+      });
+      window.addEventListener("focus", read);
+      const timer = watch ? window.setInterval(read, BUILD_REREAD_MS) : undefined;
+      return () => {
+        off();
+        window.removeEventListener("focus", read);
+        if (timer !== undefined) window.clearInterval(timer);
+      };
     },
-    [project],
+    [project, watch],
   );
   return platforms;
 }
@@ -221,7 +242,7 @@ function askText(target: PublishTarget, end: PlatformEnd, title: string): string
 }
 
 /** What went wrong in a build on Genex: the first error, how many more, and the agent to fix them all. */
-function CloudErrors({
+export function CloudErrors({
   project,
   title,
   platforms,

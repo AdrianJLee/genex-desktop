@@ -528,8 +528,8 @@ export default {
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "Microsoft에서 Visual Studio Build Tools 설치 프로그램을 내려받고 있어요…",
   "Install Visual Studio Build Tools": "Visual Studio Build Tools 설치",
-  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
-    "Microsoft의 Visual Studio Build Tools 2022를 'C++를 사용한 데스크톱 개발'과 함께 설치하세요.",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "Microsoft의 Visual Studio Build Tools 2022를 'C++를 사용한 데스크톱 개발', .NET Framework 4.8 SDK와 함께 설치하세요.",
   "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
     "Visual Studio Build Tools를 설치하고 있어요. Windows가 물어보면 '예'를 고르세요. 진행 상황은 Microsoft 설치 프로그램에 표시돼요.",
   "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
@@ -542,12 +542,12 @@ export default {
     "Microsoft 설치 프로그램이 Build Tools를 내려받지 못했어요. 인터넷 연결을 확인하고 다시 시도하세요.",
   "Microsoft's installer didn't download. Check your internet connection and try again.":
     "Microsoft 설치 프로그램을 내려받지 못했어요. 인터넷 연결을 확인하고 다시 시도하세요.",
-  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
-    "Microsoft 설치 프로그램은 끝났지만, 설치된 것으로는 Unreal이 아직 C++를 빌드할 수 없어요. Visual Studio Build Tools 2022를 'C++를 사용한 데스크톱 개발'과 함께 직접 설치하세요.",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
-    "추천해요. Microsoft의 무료 C++ 도구예요. C++가 들어간 게임이나 플러그인을 Unreal로 패키징하려면 필요해요. 약 7GB예요. '대신 해 주기'로 설치할 수 있어요. Windows가 물어보면 '예'를 고르세요.",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
-    "추천해요. Microsoft의 무료 C++ 도구예요. C++가 들어간 게임이나 플러그인을 Unreal로 패키징하려면 필요해요. Visual Studio Build Tools를 'C++를 사용한 데스크톱 개발'과 함께 설치하세요.",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
+    "Microsoft 설치 프로그램은 끝났지만, 설치된 것으로는 Unreal이 아직 C++를 빌드할 수 없어요. Visual Studio Build Tools 2022를 'C++를 사용한 데스크톱 개발', .NET Framework 4.8 SDK와 함께 직접 설치하세요.",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "추천해요. Microsoft의 무료 C++ 도구예요. 이게 있으면 에이전트가 게임 로직을 C++로 쓰고, C++가 들어간 게임이나 플러그인을 Unreal로 패키징할 수 있어요. 약 7GB예요. '대신 해 주기'로 설치할 수 있어요. Windows가 물어보면 '예'를 고르세요.",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "추천해요. Microsoft의 무료 C++ 도구예요. 이게 있으면 에이전트가 게임 로직을 C++로 쓰고, C++가 들어간 게임이나 플러그인을 Unreal로 패키징할 수 있어요. Visual Studio Build Tools를 'C++를 사용한 데스크톱 개발', .NET Framework 4.8 SDK와 함께 설치하세요.",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "자기 개선이 꺼져 있어요. Harness가 자기 지침을 그대로 둬요.",
   "Unreal can build C++ on this PC.": "이 PC에서 Unreal이 C++를 빌드할 수 있어요.",
@@ -704,6 +704,8 @@ export default {
   "Choose another": "다른 사진 선택",
   "Choose another model or check your account in Model providers, then try again.":
     "다른 모델을 고르거나 ‘모델 제공자’에서 계정을 확인한 뒤 다시 시도해 주세요.",
+  "Choose another model, or try again once its provider is back. Your prompt stays here.":
+    "다른 모델을 고르거나, 제공자가 돌아오면 다시 시도하세요. 프롬프트는 여기 그대로 있어요.",
   "Choose another version": "다른 버전 선택",
   "Choose blender.exe": "blender.exe 선택",
   "Choose browser OAuth or an Authorization header, not both": "브라우저 OAuth와 Authorization 헤더 중 하나만 고르세요",
@@ -1004,6 +1006,7 @@ export default {
   "Couldn't look up Blueprint nodes": "블루프린트 노드를 찾아보지 못했어요",
   "Couldn't make Blueprint {blueprint}": "블루프린트 {blueprint} 만들지 못했어요",
   "Couldn't make material {material}": "머티리얼 {material} 만들지 못했어요",
+  "Couldn't measure how {character} moves": "{character}의 움직임을 측정하지 못했어요",
   "Couldn't measure the route": "경로를 측정하지 못했어요",
   "Couldn't measure {count}": "측정 불가 {count}",
   "Couldn't move {actor}": "{actor} 옮기지 못했어요",
@@ -2160,9 +2163,11 @@ export default {
   Mast: "마스트",
   "Matrix rain": "매트릭스 비",
   "Maximum concurrent workers": "최대 동시 작업자 수",
+  "Measured how {character} moves": "{character}의 움직임을 측정했어요",
   "Measured in a plugin": "플러그인에서 측정",
   "Measured in {plugin}": "{plugin}에서 측정",
   "Measured the route": "경로를 측정했어요",
+  "Measuring how {character} moves": "{character}의 움직임을 측정하는 중",
   "Measuring the route": "경로를 측정하는 중",
   "Measuring…": "측정 중…",
   "Meet your Genex avatar": "나만의 Genex 아바타를 만나 보세요",
@@ -2795,7 +2800,6 @@ export default {
   "Processed in {plugin}": "{plugin}에서 처리",
   Profile: "프로필",
   Prompt: "프롬프트",
-  "Public:": "공개:",
   Publish: "게시하기",
   "Publish again": "다시 게시하기",
   "Publish again without waiting for the last upload": "지난 업로드를 기다리지 않고 다시 게시하기",
@@ -3579,7 +3583,6 @@ export default {
   Terrain: "지형",
   Test: "테스트",
   "Test connector {id}": "커넥터 {id} 테스트",
-  "Test link:": "테스트 링크:",
   Testing: "테스트 중",
   Text: "텍스트",
   "Text adjusted for readability.": "읽기 쉽게 글자색을 조정했어요.",
@@ -4020,6 +4023,7 @@ export default {
   "This model is unavailable": "이 모델은 사용할 수 없어요",
   "This model is unavailable. Check the connection or choose another model.":
     "이 모델은 사용할 수 없어요. 연결을 확인하거나 다른 모델을 고르세요.",
+  "This model isn’t available right now": "이 모델은 지금 사용할 수 없어요",
   "This page isn't from the sign-in Genex started.": "이 페이지는 Genex가 시작한 로그인에서 온 것이 아니에요.",
   "This paste has {count, plural, other {# servers}}. Pick one:":
     "붙여 넣은 내용에 서버가 {count, plural, other {#개}} 있어요. 하나 골라 주세요:",
@@ -5061,6 +5065,7 @@ export default {
   "the plan": "계획",
   "the plan is ready — {parts}.": "계획이 준비됐어요 — {parts}.",
   "the plan is ready.": "계획이 준비됐어요.",
+  "the player": "플레이어",
   "the player's word": "플레이어의 말",
   "the preview shows the current build": "미리보기에 현재 빌드가 표시돼요",
   "the reviewer preferred it to the round before": "리뷰어가 이전 라운드보다 이쪽을 더 좋게 봤어요",
@@ -5269,10 +5274,6 @@ export default {
     "{count, plural, other {원래 기록은 이름을 .git.studio-backup으로 바꿔서 바로 옆에 보관해 뒀어요.}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, other {게임 파일 #개를 복원했어요.}}",
-  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
-    "{count, plural, other {이 변경이 한 번에 {size}를 넘어 가장 큰 파일 #개가 저장되지 않았고, 되감기로 되돌릴 수 없어요: {files}.}}",
-  "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
-    "{count, plural, other {저장하기에 너무 큰 파일 #개는 되감기로 되돌릴 수 없어요: {files}.}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":
     "{count, plural, other {채팅을 되감았고, 게임 파일 #개도 함께 되돌렸어요.}}",
   "{count, plural, one {Working on # task} other {Working on # tasks}}": "{count, plural, other {작업 #개 진행 중}}",
@@ -5931,7 +5932,8 @@ export default {
   "Let the agent see your screen in this chat?": "이 채팅에서 에이전트가 화면을 보게 할까요?",
   "Let the agent use this app?": "에이전트가 이 앱을 쓰게 할까요?",
   "Let the agent use {app}?": "에이전트가 {app} 앱을 쓰게 할까요?",
-  "They ask before each app.": "에이전트는 앱마다 먼저 물어봐요.",
+  "They ask before each app, except in Auto and Bypass.":
+    "에이전트는 앱마다 먼저 물어봐요. Auto와 Bypass에서는 묻지 않아요.",
   "Turn on computer control?": "컴퓨터 제어를 켤까요?",
   "{plugin} asks: {task}": "{plugin}의 요청: {task}",
   "Add an icon and a thumbnail, or Roblox shows a grey square.":
@@ -6235,4 +6237,42 @@ export default {
     "Genex가 “{title}”의 {players} 앱을 만들지 못했어요. 거기서 만들어지도록 게임 코드의 오류를 고치고, 다른 시스템에서는 지금처럼 동작하게 유지해 주세요. 이 컴퓨터로는 {players}용으로 만들 수 없으니 수정마다 꼼꼼히 확인해 주세요. 끝나면 Build on Genex를 다시 누르라고 알려 주세요.\n\n{errors}",
   "The same project fails the same way: change it first, then try again.":
     "같은 프로젝트는 똑같이 실패해요. 먼저 고친 뒤 다시 시도해 주세요.",
+  "Build {count} apps": "앱 {count}개 빌드",
+  "Build {platforms}": "{platforms} 빌드",
+  "Building on Genex Cloud": "Genex Cloud에서 빌드 중",
+  "Building on this Mac": "이 Mac에서 빌드 중",
+  "Building on this PC": "이 PC에서 빌드 중",
+  "Building {platforms}": "{platforms} 빌드 중",
+  "Couldn’t build": "빌드하지 못했어요",
+  "Couldn’t build · the older one is still live": "빌드하지 못했어요 · 이전 버전이 계속 공개 중이에요",
+  "Couldn’t send": "보내지 못했어요",
+  "It can take up to an hour.": "최대 한 시간까지 걸릴 수 있어요.",
+  "Live · older than your game": "공개 중 · 게임보다 오래된 버전",
+  "Live · up to date": "공개 중 · 최신",
+  "Only a Mac, Windows or Linux app can be taken off Genex this way.":
+    "이 방법으로는 Mac, Windows, Linux 앱만 Genex에서 내릴 수 있어요.",
+  "Publish to {count} platforms": "플랫폼 {count}곳에 게시",
+  "Publish to {name}": "{name}에 게시",
+  "Publish to {platforms}": "{platforms}에 게시",
+  "Publish to {platforms} and take {down} down": "{platforms}에 게시하고 {down} 내리기",
+  "Publishing to {platforms}": "{platforms}에 게시 중",
+  "Sending to Genex": "Genex로 보내는 중",
+  "Sending to Genex Cloud": "Genex Cloud로 보내는 중",
+  "Take {platforms} down": "{platforms} 내리기",
+  "Update {count} platforms": "플랫폼 {count}곳 업데이트",
+  "Update {platforms}": "{platforms} 업데이트",
+  "Update {platforms} and take {down} down": "{platforms} 업데이트하고 {down} 내리기",
+  "Updating {platforms}": "{platforms} 업데이트 중",
+  "builds on Genex Cloud": "Genex Cloud에서 빌드",
+  "builds on this Mac": "이 Mac에서 빌드",
+  "builds on this PC": "이 PC에서 빌드",
+  "coming soon": "곧 지원",
+  web: "웹",
+  "{minutes} min ago": "{minutes}분 전",
+  "Agent is fixing the {platform} build": "에이전트가 {platform} 빌드를 고치는 중",
+  "Copy the error": "오류 복사",
+  "Send the {platform} error to the agent": "{platform} 오류를 에이전트에게 보내기",
+  "Send to agent": "에이전트에게 보내기",
+  "{platform} app didn’t send": "{platform} 앱을 보내지 못했어요",
+  "{platform} build error": "{platform} 빌드 오류",
 } satisfies LocaleCatalog;

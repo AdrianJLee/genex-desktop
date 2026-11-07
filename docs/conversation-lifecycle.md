@@ -59,7 +59,8 @@ project, and graph: a request to wait for the remaining workers could start a se
   Optional **Resume** also keeps the journal; a run interrupted by a quit or a crash is repaired
   at boot as paused, keyed on its journal artifact rather than on `mode`, so a director run is
   resumable too. A resumed
-  director run goes on from its journal with no clock, as every Loop
+  director run goes on from its journal with no clock (the time the person asked for counts what
+  it worked, never the pause), as every Loop
   ([what ends a Loop](harness-runtime.md#what-ends-a-loop)): its lead's first message is Genex's
   line that it resumed, with the run's lines it was not told before the pause
   ([what wakes a Loop's lead](harness-runtime.md#what-wakes-a-loops-lead)); `run_status` names the
@@ -202,7 +203,14 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   a late message is never cut off, and one taken but never started closes it after
   `STEER_STALL_MS`, reported as not delivered. The brief carries a uuid too: a resumed session may
   first answer what it had queued (a background task's notice), and that result does not close the
-  input before the brief's own turn, whose Genex tool calls answer over it. A tool that only waits ends early when one of the
+  input before the brief's own turn, whose Genex tool calls answer over it. Every Claude Code
+  session, steered or not, is fed this way, and its input also stays open past a result while it
+  still works in the background (`background_tasks_changed`, the CLI's housekeeping left out): a
+  running task at most `BACKGROUND_HOLD_MS`, and a finished one's notice, which the CLI runs as a
+  turn of its own once the turn it ended in has no tool result left to join, up to
+  `STEER_STALL_MS` for that turn to start. A Genex tool called once the input has ended gets the
+  CLI's own "interrupted before a result was received", so the woken turn's calls would otherwise
+  all be lost. A tool that only waits ends early when one of the
   person's messages is handed over (`loop/person-wrote.ts`: a worker wait, a lead's wait for a busy
   reviewer, a plugin lock wait on the host), so the session reaches its next step in seconds and may
   wait again; a line of Genex's ends no wait. A message the chat wrote itself (any `origin`) or a
@@ -475,12 +483,17 @@ still seen (Git compares file times to the second). It preserves raw file
 bytes instead of running clean/smudge filters, including LFS. Chat links also read stored blobs
 without downloading or converting LFS pointers. It never captures `.env` or `.env.*`, packages, build output or nested repositories,
 and leaves out files over 50 MB and the largest ones past 1 GB of new content; each checkpoint
-records what it left out, and a restore never touches those paths. Leaving them out is never
-silent: a checkpoint that skips a new set of files for their size appends the host-only
-`checkpoint_skipped` (`by: checkpoint`, each file's size), the confirmation names the changed ones
-(`tooLargeFiles`), and a restore that left some appends it with `by: rewind`. Its chat line is the
-person's alone: no delegated session is told of the files, since nothing it can do brings them
-back and it would only repeat the line. It commits as the studio on
+records what it left out, with each file's size and modified time, and a restore never touches
+those paths. Nothing is lost when a checkpoint leaves a file out, so the chat says nothing then
+(a `checkpoint_skipped` with `by: checkpoint` from an older version shows no line). The rewind
+confirmation names the changed ones (`tooLargeFiles`): one either tree holds that changed, one left
+out then that is gone or whose size or time differs now, and one left out now that was not there
+then; a checkpoint an older version took kept no times, so of its files only a gone one is named,
+and a recorded path that is not a plain one inside the folder, or crosses a link, is never named.
+A restore that left some appends the host-only `checkpoint_skipped` with `by: rewind`, each file's
+size (a gone one's is 0, and its line names it without one). That line is the person's alone: no
+delegated session is told of the files, since nothing it can do brings them back and it would
+only repeat the line. It commits as the studio on
 `refs/studio/chat/<thread>/before|after/<message>` with hooks off, without moving HEAD, branches
 or the user's index. Restoring changes the working tree only, and only while HEAD is the
 checkpoint's parent. The pre-rewind folder is saved on `.../rewound/<id>`; a restore that fails
@@ -545,8 +558,8 @@ sends, Stop's hand-over to queued input, a stale Plan flag). `chat-steer.test.ts
 read mid-turn and recorded where, the Codex interrupt-and-resume fallback, the first-prompt path,
 Stop, Rewind and restart replay; engine conformance covers the Claude input and Codex resume.
 `director-wake-loop-run.test.ts` (L1–L10) covers live chat: answered by the lead within one wake while
-the run is going, steered into a turn natively and by interrupt (the first turn of a lead continuing
-the chat's session too, told a stop is `wrap_up`), Stop's hand-over, the long turn's
+the run is going, a turn cut for the person's words on every engine, one that reads input mid-turn
+too (the first turn of a lead continuing the chat's session too), Stop's hand-over, the long turn's
 queue, the chat freed before the learning pass, a crash's hand-back
 before the close — each answered after by the chat's own session — and Stop during the pass; `harness-incidents.test.ts` (LC rows) covers what a resumed lead is told, the
 tool-call guard, owed words, the wake cap, the release races, a picture among messages and a

@@ -507,8 +507,8 @@ export default {
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "正在从 Microsoft 下载 Visual Studio Build Tools 安装程序…",
   "Install Visual Studio Build Tools": "安装 Visual Studio Build Tools",
-  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
-    "从 Microsoft 安装 Visual Studio Build Tools 2022，并勾选“使用 C++ 的桌面开发”。",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "从 Microsoft 安装 Visual Studio Build Tools 2022，并勾选“使用 C++ 的桌面开发”和 .NET Framework 4.8 SDK。",
   "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
     "正在安装 Visual Studio Build Tools。Windows 询问时请选“是”；Microsoft 的安装程序会显示进度。",
   "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
@@ -521,12 +521,12 @@ export default {
     "Microsoft 的安装程序没能下载 Build Tools。请检查网络连接后再试一次。",
   "Microsoft's installer didn't download. Check your internet connection and try again.":
     "没能下载 Microsoft 的安装程序。请检查网络连接后再试一次。",
-  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
-    "Microsoft 的安装程序已完成，但 Unreal 仍无法用它安装的内容编译 C++。请自行安装 Visual Studio Build Tools 2022，并勾选“使用 C++ 的桌面开发”。",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
-    "推荐。Microsoft 免费的 C++ 工具：Unreal 打包含 C++ 的游戏或插件时需要它们。约 7 GB。“帮我完成”会自动安装：Windows 询问时请选“是”。",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
-    "推荐。Microsoft 免费的 C++ 工具：Unreal 打包含 C++ 的游戏或插件时需要它们。请安装 Visual Studio Build Tools，并勾选“使用 C++ 的桌面开发”。",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
+    "Microsoft 的安装程序已完成，但 Unreal 仍无法用它安装的内容编译 C++。请自行安装 Visual Studio Build Tools 2022，并勾选“使用 C++ 的桌面开发”和 .NET Framework 4.8 SDK。",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "推荐。Microsoft 免费的 C++ 工具：有了它们，代理就能用 C++ 编写游戏逻辑，Unreal 也能打包含 C++ 的游戏或插件。约 7 GB。“帮我完成”会自动安装：Windows 询问时请选“是”。",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "推荐。Microsoft 免费的 C++ 工具：有了它们，代理就能用 C++ 编写游戏逻辑，Unreal 也能打包含 C++ 的游戏或插件。请安装 Visual Studio Build Tools，并勾选“使用 C++ 的桌面开发”和 .NET Framework 4.8 SDK。",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "自我改进已关闭。Harness 会保持自己的指令不变。",
   "Unreal can build C++ on this PC.": "Unreal 可以在这台电脑上编译 C++。",
@@ -680,6 +680,8 @@ export default {
   "Choose another": "换一张",
   "Choose another model or check your account in Model providers, then try again.":
     "请选择其他模型，或在“模型提供方”中检查你的账号，然后重试。",
+  "Choose another model, or try again once its provider is back. Your prompt stays here.":
+    "请选择其他模型，或等它的提供方恢复后再试。你的提示会留在这里。",
   "Choose another version": "选择其他版本",
   "Choose blender.exe": "选择 blender.exe",
   "Choose browser OAuth or an Authorization header, not both":
@@ -966,6 +968,7 @@ export default {
   "Couldn't look up Blueprint nodes": "无法查找蓝图节点",
   "Couldn't make Blueprint {blueprint}": "无法创建蓝图 {blueprint}",
   "Couldn't make material {material}": "无法创建材质 {material}",
+  "Couldn't measure how {character} moves": "无法测量{character}的动作",
   "Couldn't measure the route": "无法测量路线",
   "Couldn't measure {count}": "无法测量 {count}",
   "Couldn't move {actor}": "无法移动 {actor}",
@@ -2082,9 +2085,11 @@ export default {
   Mast: "桅杆",
   "Matrix rain": "矩阵代码雨",
   "Maximum concurrent workers": "同时运行的助手上限",
+  "Measured how {character} moves": "已测量{character}的动作",
   "Measured in a plugin": "在插件中测量",
   "Measured in {plugin}": "在 {plugin} 中测量",
   "Measured the route": "已测量路线",
+  "Measuring how {character} moves": "正在测量{character}的动作",
   "Measuring the route": "正在测量路线",
   "Measuring…": "正在计算…",
   "Meet your Genex avatar": "来看看你的 Genex 头像",
@@ -2700,7 +2705,6 @@ export default {
   "Processed in {plugin}": "在 {plugin} 中处理",
   Profile: "个人主页",
   Prompt: "提示词",
-  "Public:": "公开：",
   Publish: "发布",
   "Publish again": "重新发布",
   "Publish again without waiting for the last upload": "不等上次上传完成，再次发布",
@@ -3465,7 +3469,6 @@ export default {
   Terrain: "地形",
   Test: "测试",
   "Test connector {id}": "测试连接器 {id}",
-  "Test link:": "测试链接：",
   Testing: "测试中",
   Text: "文字",
   "Text adjusted for readability.": "已调整文字以便阅读。",
@@ -3873,6 +3876,7 @@ export default {
   "This model is unavailable": "此模型不可用",
   "This model is unavailable. Check the connection or choose another model.":
     "此模型不可用。请检查连接或选择其他模型。",
+  "This model isn’t available right now": "此模型暂时不可用",
   "This page isn't from the sign-in Genex started.": "此页面不属于 Genex 发起的登录。",
   "This paste has {count, plural, other {# servers}}. Pick one:":
     "粘贴内容中有 {count, plural, other {# 个服务器}}。选一个：",
@@ -4888,6 +4892,7 @@ export default {
   "the plan": "计划",
   "the plan is ready — {parts}.": "计划已就绪——{parts}。",
   "the plan is ready.": "计划已就绪。",
+  "the player": "玩家",
   "the player's word": "玩家自述",
   "the preview shows the current build": "预览显示的是当前构建",
   "the reviewer preferred it to the round before": "审查员认为这一轮比上一轮更好",
@@ -5092,10 +5097,6 @@ export default {
     "{count, plural, other {原有的历史记录已改名为 .git.studio-backup，保存在旁边。}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, other {已恢复 # 个游戏文件。}}",
-  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
-    "{count, plural, other {这次更改一次超过了 {size}，最大的 # 个文件未保存，回退时无法恢复：{files}。}}",
-  "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
-    "{count, plural, other {有 # 个文件过大，无法保存，回退时无法恢复：{files}。}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":
     "{count, plural, other {对话已回退，# 个游戏文件也一并回退。}}",
   "{count, plural, one {Working on # task} other {Working on # tasks}}": "{count, plural, other {正在处理 # 个任务}}",
@@ -5734,7 +5735,7 @@ export default {
   "Let the agent see your screen in this chat?": "允许智能体在这个对话里查看你的屏幕吗？",
   "Let the agent use this app?": "允许智能体使用这个应用吗？",
   "Let the agent use {app}?": "允许智能体使用 {app} 吗？",
-  "They ask before each app.": "它们会在每个应用前先问你。",
+  "They ask before each app, except in Auto and Bypass.": "它们会在每个应用前先问你，Auto 和 Bypass 模式除外。",
   "Turn on computer control?": "要开启电脑控制吗？",
   "{plugin} asks: {task}": "{plugin} 请求：{task}",
   "Add an icon and a thumbnail, or Roblox shows a grey square.": "添加图标和缩略图，否则 Roblox 会显示灰色方块。",
@@ -6025,4 +6026,42 @@ export default {
     "Genex 无法构建“{title}”的 {players} 应用。请修复游戏代码中的这些错误，让它能在那里构建，并保持游戏在其他系统上的表现不变。这台电脑无法为 {players} 构建，所以请仔细检查每处修复。完成后告诉我再按一次 Build on Genex。\n\n{errors}",
   "The same project fails the same way: change it first, then try again.":
     "同一个项目会以同样的方式失败：请先修改，再试一次。",
+  "Build {count} apps": "构建 {count} 个应用",
+  "Build {platforms}": "构建 {platforms}",
+  "Building on Genex Cloud": "正在 Genex Cloud 上构建",
+  "Building on this Mac": "正在这台 Mac 上构建",
+  "Building on this PC": "正在这台电脑上构建",
+  "Building {platforms}": "正在构建 {platforms}",
+  "Couldn’t build": "构建失败",
+  "Couldn’t build · the older one is still live": "构建失败 · 旧版本仍在线",
+  "Couldn’t send": "发送失败",
+  "It can take up to an hour.": "最多可能需要一小时。",
+  "Live · older than your game": "已上线 · 比你的游戏旧",
+  "Live · up to date": "已上线 · 最新",
+  "Only a Mac, Windows or Linux app can be taken off Genex this way.":
+    "这种方式只能从 Genex 下架 Mac、Windows 或 Linux 应用。",
+  "Publish to {count} platforms": "发布到 {count} 个平台",
+  "Publish to {name}": "发布到 {name}",
+  "Publish to {platforms}": "发布到 {platforms}",
+  "Publish to {platforms} and take {down} down": "发布到 {platforms} 并下架 {down}",
+  "Publishing to {platforms}": "正在发布到 {platforms}",
+  "Sending to Genex": "正在发送到 Genex",
+  "Sending to Genex Cloud": "正在发送到 Genex Cloud",
+  "Take {platforms} down": "下架 {platforms}",
+  "Update {count} platforms": "更新 {count} 个平台",
+  "Update {platforms}": "更新 {platforms}",
+  "Update {platforms} and take {down} down": "更新 {platforms} 并下架 {down}",
+  "Updating {platforms}": "正在更新 {platforms}",
+  "builds on Genex Cloud": "在 Genex Cloud 构建",
+  "builds on this Mac": "在这台 Mac 上构建",
+  "builds on this PC": "在这台电脑上构建",
+  "coming soon": "即将推出",
+  web: "网页",
+  "{minutes} min ago": "{minutes} 分钟前",
+  "Agent is fixing the {platform} build": "代理正在修复 {platform} 构建",
+  "Copy the error": "复制错误",
+  "Send the {platform} error to the agent": "把 {platform} 错误发给代理",
+  "Send to agent": "发给代理",
+  "{platform} app didn’t send": "{platform} 应用未发送",
+  "{platform} build error": "{platform} 构建错误",
 } satisfies LocaleCatalog;

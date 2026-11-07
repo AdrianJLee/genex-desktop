@@ -1286,48 +1286,28 @@ function isSkippedFile(entry: unknown): entry is SkippedFile {
   return typeof file?.file === "string" && file.file !== "" && typeof file.bytes === "number" && file.bytes >= 0;
 }
 
-/**
- * The change budget a checkpoint's files were left out by, when each one was under the file limit
- * (sized as the checkpoint left them out): their change was too large at once, not any of them.
- * Null when a file was over the limit, or for an older record that doesn't say its limits.
- */
-function overBudget(skipped: CustomPayload<typeof CustomEvent.CheckpointSkipped>, files: SkippedFile[]): number | null {
-  const { fileLimitBytes, changeLimitBytes } = skipped;
-  if (typeof fileLimitBytes !== "number" || typeof changeLimitBytes !== "number") return null;
-  return files.every((file) => file.bytes <= fileLimitBytes) ? changeLimitBytes : null;
-}
-
-/** A checkpoint's line for files a change too large at once left out, `limit` being its budget. */
-function overBudgetWords(total: number, files: string, limit: number): string {
-  return t(
-    "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}",
-    { count: total, size: sizeWords(limit), files },
-  );
+/** A file's name with its size, or its name alone once it is gone (sized 0). */
+function skippedFileWords(file: SkippedFile): string {
+  const name = file.file.split("/").pop() ?? file.file;
+  return file.bytes > 0 ? `${name} (${sizeWords(file.bytes)})` : name;
 }
 
 /**
- * Files too large to save, which Rewind cannot bring back, as the chat says it: left out by a
- * message's checkpoint, or left as they were by a rewind; a checkpoint's change too large at once
- * says so rather than calling each file too large (a rewind sizes its files later, so it can't tell). Up to three names with their sizes, then how many more.
- * Null when the record names no file it can read.
+ * Files too large to save that a rewind left as they were, as the chat says it: up to three names
+ * with their sizes, then how many more. A message's checkpoint wrote such a record too in older
+ * versions; it says nothing now, since nothing was lost then and nothing the person does brings
+ * the files back. Null when the record names no file it can read.
  */
 export function checkpointSkippedWords(skipped: CustomPayload<typeof CustomEvent.CheckpointSkipped>): string | null {
+  if (skipped.by !== SkippedBy.Rewind) return null;
   const listed: unknown[] = Array.isArray(skipped.files) ? skipped.files : [];
   const files = listed.filter(isSkippedFile);
   if (!files.length) return null;
   const total = Math.max(files.length, typeof skipped.total === "number" ? skipped.total : 0);
   const shown = files.slice(0, SKIPPED_FILES_NAMED);
-  const named = shown.map((file) => `${file.file.split("/").pop()} (${sizeWords(file.bytes)})`).join(", ");
+  const named = shown.map(skippedFileWords).join(", ");
   const which =
     total > shown.length ? t("{files} and {count} more", { files: named, count: total - shown.length }) : named;
-  if (skipped.by !== SkippedBy.Rewind) {
-    const budget = overBudget(skipped, files);
-    if (budget !== null) return overBudgetWords(total, which, budget);
-    return t(
-      "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}",
-      { count: total, files: which },
-    );
-  }
   if (total === 1)
     return t("This file was too large to save, so the rewind left it as it is: {files}.", { files: which });
   return t("These files were too large to save, so the rewind left them as they are: {files}.", { files: which });
@@ -1561,6 +1541,14 @@ const STEP_WORDS: Readonly<Record<StepAction, (step: ConnectorStep) => StepPhras
   },
   [StepAction.MotionStrip]: () =>
     fixed(t("Took a motion strip"), t("Taking a motion strip"), t("Couldn't take a motion strip")),
+  [StepAction.MotionCheck]: (s) => {
+    const character = s.object ?? t("the player");
+    return fixed(
+      t("Measured how {character} moves", { character }),
+      t("Measuring how {character} moves", { character }),
+      t("Couldn't measure how {character} moves", { character }),
+    );
+  },
   [StepAction.ListedCameras]: () =>
     fixed(t("Listed the hero cameras"), t("Listing the hero cameras"), t("Couldn't list the hero cameras")),
   [StepAction.ViewportShot]: () =>
@@ -1658,6 +1646,7 @@ const STEP_ICONS: Readonly<Record<StepAction, ToolIcon>> = {
   [StepAction.PictureOf]: "see",
   [StepAction.HeroShot]: "see",
   [StepAction.MotionStrip]: "see",
+  [StepAction.MotionCheck]: "game",
   [StepAction.Played]: "game",
   [StepAction.StoppedPlay]: "game",
   [StepAction.CheckedPlay]: "game",
@@ -1831,10 +1820,10 @@ export const COMPUTER_CONTROL_SETTING_WORDS = {
   label: t("Let agents use your computer"),
 } as const;
 
-/** What the switch says on `platform`, in one line: agents ask first, or where it runs. */
+/** What the switch says on `platform`, in one line: agents ask first outside Auto and Bypass, or where it runs. */
 export function computerControlDetail(platform: string): string {
   if (!computerControlOffered(platform)) return t("macOS and Windows only.");
-  return t("They ask before each app.");
+  return t("They ask before each app, except in Auto and Bypass.");
 }
 
 /** What computer control never touches on `platform`, under a computer-control card's Details. */
@@ -2718,6 +2707,9 @@ export const COMPACT_WORDS = {
 /** The model picker's section headers, row tags and reasons (`model-choices.ts`). */
 export const MODEL_PICKER_WORDS = {
   unavailable: t("This model is unavailable. Check the connection or choose another model."),
+  /** A send the chat's model could not take: the model button's tooltip says why and what to do. */
+  sendHeldTitle: t("This model isn’t available right now"),
+  sendHeldText: t("Choose another model, or try again once its provider is back. Your prompt stays here."),
   localModels: t("Local models"),
   chatGptModels: t("ChatGPT models"),
   claudeModels: t("Claude models"),
@@ -4110,6 +4102,89 @@ export const PUBLISH_PLATFORM_WORDS = {
   replacesApps: t("Publish makes this web version the game’s page, in place of its apps."),
 } as const;
 
+/**
+ * The Publish card of a game made in an engine (canvas "Publish to every platform", round 4): each
+ * row says only what is true now, and the one button says what pressing it does.
+ */
+export const PUBLISH_CARD_WORDS = {
+  /** The rows' list, for a screen reader. */
+  listLabel: t("Platforms"),
+  /** A row's title. */
+  name: {
+    [PublishTarget.Web]: t("Web"),
+    [PublishTarget.Mac]: "Mac",
+    [PublishTarget.Windows]: "Windows",
+    [PublishTarget.Linux]: "Linux",
+  } satisfies Record<PublishTarget, string>,
+  /** A platform inside the button's words: "Update Mac and web". */
+  inPress: {
+    [PublishTarget.Web]: t("web"),
+    [PublishTarget.Mac]: "Mac",
+    [PublishTarget.Windows]: "Windows",
+    [PublishTarget.Linux]: "Linux",
+  } satisfies Record<PublishTarget, string>,
+  /** What is on Genex for a platform now. */
+  live: t("Live"),
+  liveCurrent: t("Live · up to date"),
+  liveOlder: t("Live · older than your game"),
+  notPublished: t("Not published"),
+  inReview: t("In review"),
+  notApproved: t("Not approved"),
+  sendFailed: t("Couldn’t send"),
+  buildFailed: t("Couldn’t build"),
+  buildFailedLive: t("Couldn’t build · the older one is still live"),
+  /** The work going on for a platform now; its clock is at the row's end. */
+  sending: t("Sending to Genex"),
+  sendingCloud: t("Sending to Genex Cloud"),
+  buildingCloud: t("Building on Genex Cloud"),
+  buildingHere: (mac: boolean) => (mac ? t("Building on this Mac") : t("Building on this PC")),
+  /** The row's end: where the press builds it. */
+  buildsHere: (mac: boolean) => (mac ? t("builds on this Mac") : t("builds on this PC")),
+  buildsCloud: t("builds on Genex Cloud"),
+  /** A ready app the pinned CLI can't send yet. */
+  soon: t("coming soon"),
+  /** When the version players have went live: "just now", "5 min ago", "2 days ago". */
+  ago: (at: string, now: number) => {
+    const ms = Math.max(0, now - Date.parse(at));
+    if (ms < MINUTE_MS) return t("just now");
+    if (ms < HOUR_MS) return t("{minutes} min ago", { minutes: Math.floor(ms / MINUTE_MS) });
+    if (ms < DAY_MS)
+      return t("{count, plural, one {# hour ago} other {# hours ago}}", { count: Math.floor(ms / HOUR_MS) });
+    return t("{count, plural, one {# day ago} other {# days ago}}", { count: Math.floor(ms / DAY_MS) });
+  },
+  /** The button: what pressing it does. */
+  update: (platforms: string) => t("Update {platforms}", { platforms }),
+  updateCount: (count: number) => t("Update {count} platforms", { count }),
+  publishTo: (platforms: string) => t("Publish to {platforms}", { platforms }),
+  publishToCount: (count: number) => t("Publish to {count} platforms", { count }),
+  takeDown: (platforms: string) => t("Take {platforms} down", { platforms }),
+  updateAndTakeDown: (platforms: string, down: string) =>
+    t("Update {platforms} and take {down} down", { platforms, down }),
+  publishAndTakeDown: (platforms: string, down: string) =>
+    t("Publish to {platforms} and take {down} down", { platforms, down }),
+  /** The button when apps must be built first: the agent builds them, and a second press publishes them. */
+  build: (platforms: string) => t("Build {platforms}", { platforms }),
+  buildCount: (count: number) => t("Build {count} apps", { count }),
+  /** The button while it works. */
+  building: (platforms: string) => t("Building {platforms}", { platforms }),
+  updating: (platforms: string) => t("Updating {platforms}", { platforms }),
+  publishing: (platforms: string) => t("Publishing to {platforms}", { platforms }),
+  /** Under the button while Genex Cloud builds: so a long wait doesn't scare anyone. */
+  cloudTakesLong: t("It can take up to an hour."),
+  /** A row's switch, for a screen reader. */
+  switchLabel: (name: string) => t("Publish to {name}", { name }),
+  /** An error block under the rows: what failed, never the log itself. */
+  buildError: (platform: string) => t("{platform} build error", { platform }),
+  sendError: (platform: string) => t("{platform} app didn’t send", { platform }),
+  /** The block once the agent has the error: its clock is at its end. */
+  fixing: (platform: string) => t("Agent is fixing the {platform} build", { platform }),
+  sendToAgent: t("Send to agent"),
+  sendToAgentLabel: (platform: string) => t("Send the {platform} error to the agent", { platform }),
+  tryAgain: t("Try again"),
+  copyError: t("Copy the error"),
+  copied: t("Copied"),
+} as const;
+
 /** Each kind of space freeing deletes: its name and what it is. */
 export const STORAGE_KIND_WORDS = {
   [StorageKind.Copies]: { label: t("Build copies"), about: t("Folders Genex made to run and show builds.") },
@@ -5048,8 +5123,6 @@ export const GENEX_WORDS = {
     copyLink: t("Copy"),
     copyLinkLabel: t("Copy the game's link"),
     copied: t("Copied"),
-    /** The public link's label in the dialog, beside the globe. */
-    publicLink: t("Public:"),
     /** The public link's own press, its pencil: the field it opens, its Save and the line under it. */
     changeLink: t("Change the link"),
     newLink: t("New link"),
@@ -5058,7 +5131,7 @@ export const GENEX_WORDS = {
     oldLinkWorks: t("The old link will still open the game"),
     changesLeft: (count: number) => t("{count, plural, one {# change left} other {# changes left}}", { count }),
     /** The tested draft, while players do not have it yet: its label, its Copy, and the line under it. */
-    testLink: t("Test link:"),
+    testLink: t("Test"),
     copyTestLinkLabel: t("Copy the test link"),
     testBefore: t("Friends can play it before you publish."),
     testChanges: t("Try your changes before you update."),

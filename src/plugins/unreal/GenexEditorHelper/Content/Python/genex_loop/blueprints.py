@@ -12,7 +12,8 @@
 - a function: BlueprintTools.add_function_graph, then BlueprintGraphEditor
   add_graph_input_parameter / add_graph_output_parameter for each missing input and output (what
   add_function_param does, without refusing one that exists);
-- a graph's Blueprint text: BlueprintTools.write_graph_dsl (it compiles and raises on errors);
+- a graph's Blueprint text: BlueprintTools.write_graph_dsl (it compiles and raises on errors), read
+  back and compared with the text (graph_write), since Epic's writer can answer ok and drop nodes;
 - a component held at a socket: an "Attach Component To Component" node right after the construction
   script's entry (Python can't set a Blueprint component's parent socket), made with BlueprintTools'
   node calls, or the one made before reused;
@@ -20,9 +21,12 @@
   ErrorMsg of each node with an error (as Epic's compile_blueprint helper reads them).
 """
 
+import contextlib
 import re
 
 import unreal
+
+from genex_loop import graph_write
 
 OBJECT_REF = re.compile(r'([A-Za-z][A-Za-z0-9_]{0,63}) object ref', re.IGNORECASE)
 BASIC_TYPES = {'bool': 'bool', 'int': 'int', 'float': 'real', 'real': 'real', 'byte': 'byte',
@@ -34,6 +38,12 @@ def _tools():
     # Imported on use so the helper's other tools load even if Epic's toolset changes.
     from editor_toolset.toolsets.blueprint import BlueprintTools
     return BlueprintTools
+
+
+def _node_type_cache():
+    # Epic's private memory of each graph's node types, or None once a later toolset drops it.
+    from editor_toolset.toolsets import blueprint
+    return getattr(blueprint, '_BlueprintCache', None)
 
 
 def unreal_class(name_or_class: object, base: type = unreal.Object) -> unreal.Class:
@@ -157,8 +167,11 @@ def graph_named(blueprint: unreal.Blueprint, graph: str | None) -> unreal.EdGrap
 
 
 def write_graph(blueprint: unreal.Blueprint, text: str, graph: str | None = None) -> None:
-    """Writes Blueprint text into a graph (Epic's write_graph_dsl); raises with Epic's message."""
-    _tools().write_graph_dsl(graph_named(blueprint, graph), text)
+    """Writes Blueprint text into a graph (Epic's write_graph_dsl); raises with Epic's message, and
+    with Genex's when the graph came back short (graph_write)."""
+    # A part writes all its events in one EventGraph text, and check-part doesn't count its nodes:
+    # its write is read back, never refused for its size.
+    graph_write.write(graph_named(blueprint, graph), text, limit=False)
 
 
 def compile_status(blueprint: unreal.Blueprint) -> tuple[bool, list[str]]:
@@ -182,12 +195,21 @@ KEEP_RELATIVE = 'KeepRelative'
 FUNCTION_ENTRY = 'K2Node_FunctionEntry'
 
 
+def _forget_node_types(blueprint: unreal.Blueprint) -> None:
+    """Drops the node types Epic's toolset remembers for the Blueprint's graphs. It keeps each graph's list
+    for the editor session under the Blueprint's member variables and graph names; a component added since
+    changes neither, and compiling drops nothing, so the node reading that component would be missing.
+    A toolset that changed this private call only loses the refresh, never the attach."""
+    with contextlib.suppress(AttributeError, TypeError):
+        _node_type_cache().invalidate(blueprint)
+
+
 def _getter(graph, name: str) -> str:
     """The type id of the Blueprint node that reads the component variable `name` (its display name, no _ or spaces)."""
     wanted = f'|Get{name.replace("_", "").replace(" ", "")}'
     found = [t for t in _tools().find_node_types(graph, wanted[1:]) if t.startswith('Variables|') and t.endswith(wanted)]
     if not found:
-        raise ValueError(f'No Blueprint node reads the component {name}; compile the Blueprint and retry.')
+        raise ValueError(f'Unreal lists no node that reads the component {name}, even after compiling the Blueprint.')
     return found[0]
 
 
@@ -201,18 +223,19 @@ def _reads(source, getter: str) -> bool:
     return source is not None and source.type_id.rsplit('|', 1)[-1] == getter.rsplit('|', 1)[-1]
 
 
-def _existing_attaches(graph, getter: str) -> list:
-    """The attach nodes whose target is read by `getter` (ones this made before), in graph order."""
+def _existing_attaches(graph, getter: str, parent_getter: str) -> tuple[list, list]:
+    """The attach nodes whose target is read by `getter` (ones this made before), in graph order: those
+    whose parent is read by `parent_getter`, and the others."""
     tools = _tools()
     infos = tools.get_node_infos(tools.find_nodes(graph))
     by_node = {info.node.get_path_name(): info for info in infos}
-    found = []
-    for info in infos:
-        if info.type_id != ATTACH_NODE:
-            continue
-        if any(_reads(by_node.get(linked.node.get_path_name()), getter) for linked in _pin(info, 'self').connected_pins):
-            found.append(info)
-    return found
+
+    def fed_by(info, pin: str, reader: str) -> bool:
+        return any(_reads(by_node.get(linked.node.get_path_name()), reader) for linked in _pin(info, pin).connected_pins)
+
+    found = [info for info in infos if info.type_id == ATTACH_NODE and fed_by(info, 'self', getter)]
+    same = [info for info in found if fed_by(info, 'Parent', parent_getter)]
+    return same, [info for info in found if info not in same]
 
 
 def _remove_attach(info) -> None:
@@ -255,14 +278,18 @@ def attach_in_construction_script(blueprint: unreal.Blueprint, component: str, p
                                   parent_getter: str | None, socket: str) -> None:
     """Holds the component variable `component` at `socket` of `parent` from the construction script,
     keeping its relative offset; `parent_getter` names the node reading the parent when it isn't the
-    Blueprint's own component variable (a Character's inherited Mesh)."""
+    Blueprint's own component variable (a Character's inherited Mesh). A node made before for the
+    component is kept when it holds it on the same parent, else replaced (moved from a hidden mesh).
+    The component was added and compiled just before, so Epic's remembered node types are dropped first."""
     tools = _tools()
     graph = tools.get_graph(blueprint, CONSTRUCTION_SCRIPT)
+    _forget_node_types(blueprint)
     getter = _getter(graph, component)
-    existing = _existing_attaches(graph, getter)
-    for extra in existing[1:]:
+    parent_reader = parent_getter or _getter(graph, parent)
+    same, other = _existing_attaches(graph, getter, parent_reader)
+    for extra in same[1:] + other:
         _remove_attach(extra)
-    info = existing[0] if existing else _insert_attach(graph, getter, parent_getter or _getter(graph, parent))
+    info = same[0] if same else _insert_attach(graph, getter, parent_reader)
     tools.set_pin_value(_pin(info, 'SocketName').pin_id, socket)
     for rule in ('LocationRule', 'RotationRule', 'ScaleRule'):
         tools.set_pin_value(_pin(info, rule).pin_id, KEEP_RELATIVE)

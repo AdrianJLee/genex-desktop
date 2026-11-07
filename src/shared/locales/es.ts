@@ -586,8 +586,8 @@ export default {
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "Descargando el instalador de Visual Studio Build Tools desde Microsoft…",
   "Install Visual Studio Build Tools": "Instalar Visual Studio Build Tools",
-  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
-    "Instala Visual Studio Build Tools 2022 de Microsoft con «Desarrollo para el escritorio con C++».",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "Instala Visual Studio Build Tools 2022 de Microsoft con «Desarrollo para el escritorio con C++» y el SDK de .NET Framework 4.8.",
   "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
     "Instalando Visual Studio Build Tools. Elige Sí cuando Windows lo pregunte; el instalador de Microsoft muestra su progreso.",
   "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
@@ -600,12 +600,12 @@ export default {
     "El instalador de Microsoft no pudo descargar las Build Tools. Revisa tu conexión a internet y vuelve a intentarlo.",
   "Microsoft's installer didn't download. Check your internet connection and try again.":
     "El instalador de Microsoft no se descargó. Revisa tu conexión a internet y vuelve a intentarlo.",
-  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
-    "El instalador de Microsoft terminó, pero Unreal sigue sin poder compilar C++ con lo que instaló. Instala tú Visual Studio Build Tools 2022 con «Desarrollo para el escritorio con C++».",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
-    "Recomendado. Las herramientas gratuitas de C++ de Microsoft: Unreal las necesita para empaquetar un juego o plugin con C++. Unos 7 GB. «Hazlo por mí» las instala: elige Sí cuando Windows lo pregunte.",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
-    "Recomendado. Las herramientas gratuitas de C++ de Microsoft: Unreal las necesita para empaquetar un juego o plugin con C++. Instala Visual Studio Build Tools con «Desarrollo para el escritorio con C++».",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
+    "El instalador de Microsoft terminó, pero Unreal sigue sin poder compilar C++ con lo que instaló. Instala tú Visual Studio Build Tools 2022 con «Desarrollo para el escritorio con C++» y el SDK de .NET Framework 4.8.",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "Recomendado. Las herramientas gratuitas de C++ de Microsoft: con ellas el agente escribe la lógica de tu juego en C++, y Unreal empaqueta un juego o plugin con C++. Unos 7 GB. «Hazlo por mí» las instala: elige Sí cuando Windows lo pregunte.",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "Recomendado. Las herramientas gratuitas de C++ de Microsoft: con ellas el agente escribe la lógica de tu juego en C++, y Unreal empaqueta un juego o plugin con C++. Instala Visual Studio Build Tools con «Desarrollo para el escritorio con C++» y el SDK de .NET Framework 4.8.",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "La automejora está desactivada. Harness deja sus instrucciones como están.",
   "Unreal can build C++ on this PC.": "Unreal puede compilar C++ en este PC.",
@@ -768,6 +768,8 @@ export default {
   "Choose another": "Elegir otra",
   "Choose another model or check your account in Model providers, then try again.":
     "Elige otro modelo o revisa tu cuenta en Proveedores de modelos y vuelve a intentarlo.",
+  "Choose another model, or try again once its provider is back. Your prompt stays here.":
+    "Elige otro modelo o vuelve a intentarlo cuando su proveedor vuelva. Tu mensaje se queda aquí.",
   "Choose another version": "Elegir otra versión",
   "Choose blender.exe": "Elige blender.exe",
   "Choose browser OAuth or an Authorization header, not both":
@@ -1078,6 +1080,7 @@ export default {
   "Couldn't look up Blueprint nodes": "No se pudieron buscar los nodos de Blueprint",
   "Couldn't make Blueprint {blueprint}": "No se pudo crear el Blueprint {blueprint}",
   "Couldn't make material {material}": "No se pudo crear el material {material}",
+  "Couldn't measure how {character} moves": "No se pudo medir cómo se mueve {character}",
   "Couldn't measure the route": "No se pudo medir la ruta",
   "Couldn't measure {count}": "Sin medir: {count}",
   "Couldn't move {actor}": "No se pudo mover {actor}",
@@ -2261,9 +2264,11 @@ export default {
   Mast: "Mástil",
   "Matrix rain": "Lluvia de Matrix",
   "Maximum concurrent workers": "Máximo de ayudantes a la vez",
+  "Measured how {character} moves": "Medido cómo se mueve {character}",
   "Measured in a plugin": "Medido en un plugin",
   "Measured in {plugin}": "Medido en {plugin}",
   "Measured the route": "Midió la ruta",
+  "Measuring how {character} moves": "Midiendo cómo se mueve {character}",
   "Measuring the route": "Midiendo la ruta",
   "Measuring…": "Midiendo…",
   "Meet your Genex avatar": "Este es tu avatar de Genex",
@@ -2913,7 +2918,6 @@ export default {
   "Processed in {plugin}": "Procesado en {plugin}",
   Profile: "Perfil",
   Prompt: "Mensaje",
-  "Public:": "Público:",
   Publish: "Publicar",
   "Publish again": "Volver a publicar",
   "Publish again without waiting for the last upload": "Publicar de nuevo sin esperar a la última subida",
@@ -3718,7 +3722,6 @@ export default {
   Terrain: "Terreno",
   Test: "Probar",
   "Test connector {id}": "Probar el conector {id}",
-  "Test link:": "Enlace de prueba:",
   Testing: "Probando",
   Text: "Texto",
   "Text adjusted for readability.": "Texto ajustado para que se lea bien.",
@@ -4179,6 +4182,7 @@ export default {
   "This model is unavailable": "Este modelo no está disponible",
   "This model is unavailable. Check the connection or choose another model.":
     "Este modelo no está disponible. Revisa la conexión o elige otro modelo.",
+  "This model isn’t available right now": "Este modelo no está disponible ahora",
   "This page isn't from the sign-in Genex started.": "Esta página no es del inicio de sesión que abrió Genex.",
   "This paste has {count, plural, other {# servers}}. Pick one:":
     "Lo que pegaste tiene {count, plural, one {# servidor} other {# servidores}}. Elige uno:",
@@ -5242,6 +5246,7 @@ export default {
   "the plan": "el plan",
   "the plan is ready — {parts}.": "el plan está listo: {parts}.",
   "the plan is ready.": "el plan está listo.",
+  "the player": "el jugador",
   "the player's word": "según el jugador",
   "the preview shows the current build": "la vista previa muestra el build actual",
   "the reviewer preferred it to the round before": "el revisor la prefirió a la ronda anterior",
@@ -5470,10 +5475,6 @@ export default {
     "{count, plural, one {Su propio historial se guarda al lado, renombrado como .git.studio-backup.} other {Sus propios historiales se guardan al lado, renombrados como .git.studio-backup.}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, one {Se restauró # archivo del juego.} other {Se restauraron # archivos del juego.}}",
-  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
-    "{count, plural, one {Retroceder no puede recuperar # archivo de este cambio: superó {size} de una vez, así que los más grandes quedaron fuera: {files}.} other {Retroceder no puede recuperar # archivos de este cambio: superó {size} de una vez, así que los más grandes quedaron fuera: {files}.}}",
-  "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
-    "{count, plural, one {Retroceder no puede recuperar # archivo demasiado grande para guardarse: {files}.} other {Retroceder no puede recuperar # archivos demasiado grandes para guardarse: {files}.}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":
     "{count, plural, one {El chat retrocedió, y # archivo del juego con él.} other {El chat retrocedió, y # archivos del juego con él.}}",
   "{count, plural, one {Working on # task} other {Working on # tasks}}":
@@ -6153,7 +6154,7 @@ export default {
   "Let the agent see your screen in this chat?": "¿Dejas que el agente vea tu pantalla en este chat?",
   "Let the agent use this app?": "¿Dejas que el agente use esta app?",
   "Let the agent use {app}?": "¿Dejas que el agente use {app}?",
-  "They ask before each app.": "Preguntan antes de cada app.",
+  "They ask before each app, except in Auto and Bypass.": "Preguntan antes de cada app, salvo en Auto y Bypass.",
   "Turn on computer control?": "¿Activar el control del equipo?",
   "{plugin} asks: {task}": "{plugin} pide: {task}",
   "Add an icon and a thumbnail, or Roblox shows a grey square.":
@@ -6470,4 +6471,42 @@ export default {
     "Genex no pudo crear la app de {players} de “{title}”. Arregla estos errores en el código del juego para que se cree allí, y mantén el juego funcionando como en otros sistemas. Este ordenador no puede crear para {players}, así que revisa bien cada arreglo. Luego dime que pulse Build on Genex otra vez.\n\n{errors}",
   "The same project fails the same way: change it first, then try again.":
     "El mismo proyecto falla igual: cámbialo primero y vuelve a intentarlo.",
+  "Build {count} apps": "Crear {count} apps",
+  "Build {platforms}": "Crear {platforms}",
+  "Building on Genex Cloud": "Creándose en Genex Cloud",
+  "Building on this Mac": "Creándose en este Mac",
+  "Building on this PC": "Creándose en este PC",
+  "Building {platforms}": "Creando {platforms}",
+  "Couldn’t build": "No se pudo crear",
+  "Couldn’t build · the older one is still live": "No se pudo crear · la anterior sigue publicada",
+  "Couldn’t send": "No se pudo enviar",
+  "It can take up to an hour.": "Puede tardar hasta una hora.",
+  "Live · older than your game": "Publicada · más antigua que tu juego",
+  "Live · up to date": "Publicada · al día",
+  "Only a Mac, Windows or Linux app can be taken off Genex this way.":
+    "Así solo se puede quitar de Genex una app de Mac, Windows o Linux.",
+  "Publish to {count} platforms": "Publicar en {count} plataformas",
+  "Publish to {name}": "Publicar en {name}",
+  "Publish to {platforms}": "Publicar en {platforms}",
+  "Publish to {platforms} and take {down} down": "Publicar en {platforms} y quitar {down}",
+  "Publishing to {platforms}": "Publicando en {platforms}",
+  "Sending to Genex": "Enviando a Genex",
+  "Sending to Genex Cloud": "Enviando a Genex Cloud",
+  "Take {platforms} down": "Quitar {platforms}",
+  "Update {count} platforms": "Actualizar {count} plataformas",
+  "Update {platforms}": "Actualizar {platforms}",
+  "Update {platforms} and take {down} down": "Actualizar {platforms} y quitar {down}",
+  "Updating {platforms}": "Actualizando {platforms}",
+  "builds on Genex Cloud": "se crea en Genex Cloud",
+  "builds on this Mac": "se crea en este Mac",
+  "builds on this PC": "se crea en este PC",
+  "coming soon": "muy pronto",
+  web: "web",
+  "{minutes} min ago": "hace {minutes} min",
+  "Agent is fixing the {platform} build": "El agente arregla la versión de {platform}",
+  "Copy the error": "Copiar el error",
+  "Send the {platform} error to the agent": "Enviar el error de {platform} al agente",
+  "Send to agent": "Enviar al agente",
+  "{platform} app didn’t send": "La app de {platform} no se envió",
+  "{platform} build error": "Error al crear {platform}",
 } satisfies LocaleCatalog;

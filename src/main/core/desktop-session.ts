@@ -7,6 +7,7 @@
 import path from "node:path";
 import { type AgentScreen, ScreenRole } from "../../shared/agent-screen.ts";
 import { t } from "../../shared/i18n.ts";
+import { PermissionMode } from "../../shared/permissions.ts";
 import { type PluginBinding, StudioConsentSource } from "../../shared/plugins.ts";
 import { DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
 import type { DesktopApp } from "../../substrate/desktop-driver.ts";
@@ -40,6 +41,12 @@ const MESSAGE = {
 
 /** Who asks for computer control on the consent card: the studio itself, never a plugin. */
 export const DESKTOP_CONSENT_SOURCE = StudioConsentSource.Desktop;
+
+/**
+ * The chat modes that ask no computer-control card: Bypass, and Auto, where the setting being on
+ * is the person's yes. Manual, Accept edits and Plan still ask once for the chat and once per app.
+ */
+export const DESKTOP_UNASKED_MODES: readonly PermissionMode[] = [PermissionMode.Bypass, PermissionMode.Auto];
 
 /** The consent card's tool: the `desktop` tool, asked about before it moves anything. */
 const DESKTOP_CONSENT_TOOL = {
@@ -119,7 +126,7 @@ export function forgetChatComputerYes(core: object, threadId: string): void {
   chatYesOf(core).delete(threadId);
 }
 
-/** Whether the person turned computer control on (Settings → Permissions; off by default). */
+/** Whether computer control is on (Settings → Permissions; on by default). */
 export function computerControlOn(core: Pick<StudioCore, "settings">): boolean {
   return core.settings.computerControl;
 }
@@ -127,12 +134,12 @@ export function computerControlOn(core: Pick<StudioCore, "settings">): boolean {
 /**
  * The `desktop` tool for one chat, where computer control is on and a desktop driver is installed;
  * null otherwise, without looking for the driver while it is off. Nothing moves before the person
- * answers its card in that chat — once for the session, then once per app — and turned off later,
- * every further call answers so.
+ * answers its card in that chat — once for the session, then once per app — unless the chat is in
+ * a mode that asks none (`DESKTOP_UNASKED_MODES`); turned off later, every further call answers so.
  */
 export async function desktopSessionTools(
   core: StudioCore,
-  x: Pick<CoreInternals, "pluginTools" | "previews">,
+  x: Pick<CoreInternals, "pluginTools" | "previews" | "chatMode">,
   place: DesktopSessionPlace,
 ): Promise<DesktopTools | null> {
   const desktop = core.options.desktop;
@@ -148,13 +155,22 @@ export async function desktopSessionTools(
   };
   const grants = assistGrants(core);
   const yes = chatYes(core, place.threadId, () => desktop.stopsAll());
-  const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<DesktopAnswer> => {
-    if (yes.covers(question, app)) return DesktopAnswer.Yes;
+  /** The chat whose mode decides whether a card is asked, and whose switch answers one. */
+  const chatThread = place.binding.threadId ?? place.threadId;
+  /** Whether this question goes ahead with no card: the chat's yes, the turn's pressed assist, or its mode. */
+  const unasked = async (question: DesktopQuestion, app?: DesktopApp): Promise<boolean> => {
+    if (yes.covers(question, app)) return true;
     // The person's press (or the card they approved) for this turn's assist already said yes to the
     // session and the grant's apps; any other app (their browser, for the game's page) is asked.
     const grant = grants.forTurn(place.threadId, place.turn);
     const covered = !app || (app.bundleId !== null && grant?.apps.has(app.bundleId) === true);
-    if (grant?.asked && covered) return DesktopAnswer.Yes;
+    if (grant?.asked && covered) return true;
+    // Auto and Bypass ask no card, call by call and never kept as the chat's yes: a switch to a mode
+    // that asks puts the cards back.
+    return DESKTOP_UNASKED_MODES.includes(await x.chatMode(chatThread));
+  };
+  const ask = async (question: DesktopQuestion, app?: DesktopApp): Promise<DesktopAnswer> => {
+    if (await unasked(question, app)) return DesktopAnswer.Yes;
     const { prompt, note } = consentWords(question, app);
     const tool = { ...DESKTOP_CONSENT_TOOL, confirmation: prompt };
     const asked = app ? { app: app.name, bundleId: app.bundleId } : {};
@@ -165,16 +181,17 @@ export async function desktopSessionTools(
       place.binding,
       place.signal,
       undefined,
-      { note },
+      { note, modeAnswers: { threadId: chatThread, modes: DESKTOP_UNASKED_MODES } },
     );
     if (answer.approved) {
-      yes.keep(question, app);
+      // The person's own yes lasts the chat; a switch to Auto or Bypass answered only this card.
+      if (answer.by !== "mode") yes.keep(question, app);
       return DesktopAnswer.Yes;
     }
     return answer.by === "timeout" ? DesktopAnswer.Unanswered : DesktopAnswer.No;
   };
-  // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,
-  // read afresh on every action.
+  // A turn holding a setup assist drives only its grant's apps, and nobody drives an app an engine's
+  // games are played in: read afresh on every action.
   const engineApps = (app: DesktopApp) => {
     const grant = grants.forTurn(place.threadId, place.turn);
     return engineAppRefusal(app, {

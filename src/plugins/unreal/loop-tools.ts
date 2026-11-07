@@ -113,6 +113,7 @@ import { readBlueprintGuide } from "./blueprint-guide.ts";
 import { PROJECT_EXPORT, projectExported, readProjectBlueprints } from "./project-blueprints.ts";
 import { checkPython, type PythonCpp, PythonProblemCode, unrealPython } from "./python-check.ts";
 import { loadReference, parseReference, referencePaths, storeReference } from "./reference-store.ts";
+import { createReferenceExports, endWithin, type ReferenceExports } from "./reference-warm.ts";
 import {
   HELPER_FOLDER,
   type HelperUpdate,
@@ -120,6 +121,7 @@ import {
   type SetupOptions,
   systemSetupEnv,
   updateHelper,
+  updateHelperLive,
 } from "./setup.ts";
 import { toneOf } from "./tone.ts";
 import {
@@ -131,7 +133,7 @@ import {
   type RunCommand,
 } from "./ubt.ts";
 import type { VisualStudioStatus } from "./visual-studio.ts";
-import type { XcodeStatus } from "./xcode.ts";
+import { XcodeState, type XcodeStatus } from "./xcode.ts";
 
 /** The editor tools the Loop uses beyond the queue's own. */
 export const LoopEditorTool = {
@@ -140,6 +142,8 @@ export const LoopEditorTool = {
   ExportReference: "export_reference",
   ExportPythonNames: "export_python_names",
   ExportProject: "export_project",
+  SaveDuringPlay: "save_during_play",
+  ReloadHelper: "reload_helper",
 } as const;
 export type LoopEditorTool = (typeof LoopEditorTool)[keyof typeof LoopEditorTool];
 
@@ -184,6 +188,8 @@ export const TOOLSET_OF = {
   [LoopEditorTool.ExportReference]: LOOP_TOOLSET,
   [LoopEditorTool.ExportPythonNames]: LOOP_TOOLSET,
   [LoopEditorTool.ExportProject]: LOOP_TOOLSET,
+  [LoopEditorTool.SaveDuringPlay]: LOOP_TOOLSET,
+  [LoopEditorTool.ReloadHelper]: LOOP_TOOLSET,
   [CppEditorTool.SaveAll]: LOOP_TOOLSET,
   [HeroShotTool.ShotCameras]: BUILD_TOOLSET,
   [HeroShotTool.CaptureShot]: BUILD_TOOLSET,
@@ -243,6 +249,13 @@ const GRAPHS: ReadonlySet<string> = new Set(Object.values(GraphKind));
 const MAX_SHOT_BYTES = 16 * 1024 * 1024;
 /** Where the editor writes the exported reference, inside the project. */
 const EXPORT_FOLDER = path.join("Saved", "Genex");
+/**
+ * The longest each editor call of the node reference's export may take: about 5 s on a Mac, past
+ * the 15 s of a moment's ask on Windows.
+ */
+const REFERENCE_EXPORT_MS = 3 * MINUTE_MS;
+/** How long a lookup waits for an export that runs; the export goes on after. */
+const FIND_WAIT_MS = 90 * SECOND_MS;
 
 const MESSAGE = {
   NoFolder: "This call needs a game: run it from a game's chat or build.",
@@ -260,6 +273,7 @@ const MESSAGE = {
     "There is no node reference for this engine yet, and this game's Unreal isn't answering to export one: open it with open-editor if it is closed, or call find-nodes again once it has started. check-part still reads the Blueprint text without it.",
   ExportFailed: (reason: string) =>
     `There is no node reference for this engine yet, and this game's Unreal couldn't export one (${reason}). check-part still reads the Blueprint text without it.`,
+  StillExporting: `This game's Unreal is exporting the engine's node reference (once per engine; it can take a few minutes on a slow computer). Call find-nodes again in a minute: it keeps running, and once it is kept lookups answer at once, during play too.`,
   NoQuery: 'find-nodes needs a query: a few words of the node\'s name, such as "set intensity".',
   BadReference: "The editor's node reference didn't have the expected shape; it was not kept.",
   Meant: (message: string, names: readonly string[]) => `${message} Did you mean ${names.join(" or ")}?`,
@@ -286,8 +300,11 @@ const MESSAGE = {
   NoCameras: "The Genex editor helper didn't answer shot_cameras with the level's hero cameras.",
 } as const;
 
-/** The only platform Unreal C++ is compiled on (Xcode). */
+/** The platforms Unreal C++ is compiled on: a Mac (Xcode) and Windows (Microsoft's C++ tools). */
 const MAC: NodeJS.Platform = "darwin";
+const WINDOWS: NodeJS.Platform = "win32";
+/** Xcode as Windows has it: never there, never asked. */
+const NO_XCODE = { state: XcodeState.NotApplicable } as const;
 /** The largest module rules file read into a compile's fingerprint. */
 const MAX_RULES_BYTES = 64 * 1024;
 const SOURCE_FOLDER = "Source";
@@ -396,6 +413,8 @@ export type LoopToolsDeps = {
   setup?(storage: string): SetupOptions;
   /** Updates a project's Genex editor helper; `updateHelper` unless a test stands in. */
   updateHelper?: typeof updateHelper;
+  /** Updates the helper of a project Unreal has open, when it reloads; `updateHelperLive` unless a test stands in. */
+  updateHelperLive?: typeof updateHelperLive;
   /** Where Genex's own start of the game's set-up project stands (the toolbar's Starting); null without one. */
   starting?(storage: string, game: string): Promise<EditorStart | null>;
   /** Runs the headless editor for a plugin's tests; the product's runner unless a test stands in. */
@@ -445,11 +464,19 @@ async function templateBlueprints(deps: LoopToolsDeps, storage: string, game: st
   return readProjectBlueprints(await linkedProject(deps, storage, game));
 }
 
-/** Whether this computer compiles the game's C++ (a Mac whose Xcode is ready for the engine), and with which Xcode. */
+/**
+ * Whether this computer compiles the game's C++ (a Mac whose Xcode is ready for the engine, or
+ * Windows whose Microsoft C++ tools are), and with which Xcode.
+ */
 async function cppSupportOf(deps: LoopToolsDeps, engine: Engine | undefined): Promise<CppSupportFound> {
+  if (deps.platform === WINDOWS) {
+    const visualStudio = await deps.visualStudio?.(engine?.directory).catch(() => undefined);
+    const ready = canCompileCpp({ xcode: NO_XCODE, visualStudio }, deps.platform);
+    return { support: ready ? CppSupport.Ready : CppSupport.NoBuildTools, app: null };
+  }
   if (deps.platform !== MAC) return { support: CppSupport.NotMac, app: null };
   const xcode = await deps.xcode(engine?.directory).catch(() => undefined);
-  const support = xcode && canCompileCpp(xcode, deps.platform) ? CppSupport.Ready : CppSupport.NoXcode;
+  const support = xcode && canCompileCpp({ xcode }, deps.platform) ? CppSupport.Ready : CppSupport.NoXcode;
   return { support, app: xcode?.app ?? null };
 }
 
@@ -693,7 +720,11 @@ export function createLoopTools(deps: LoopToolsDeps) {
 
   const compiles = createCompileJobs(deps.now);
   // One export of an engine's reference at a time: lookups that find none kept wait for the same one.
-  const lookupExports: LookupExports = new Map();
+  const lookupExports: LookupExports = { reference: createReferenceExports(deps.now), facts: new Map() };
+  // The reference exported ahead of the first lookup, whenever the game's Unreal is seen answering.
+  const warm = (storage: string, game: string) => {
+    warmReference(deps, lookupExports, storage, game).catch(() => undefined);
+  };
   const cpp = createCppTools(deps);
   const motion = createMotionTools(deps);
   // Adding the C++ module or the sample's content restarts Unreal: one restart of a project at a time.
@@ -703,7 +734,7 @@ export function createLoopTools(deps: LoopToolsDeps) {
   const set: SetDeps = { ...deps, setup: deps.setup ?? systemSetup() };
   // Those jobs and building a plugin restart Unreal: the reopen tools read them as Genex's own reopen.
   const reopen = createReopenTools(set, (project) => restartsForJob(project) || ship.restarting(project));
-  const moments = momentTools(set, queueFor, reopen);
+  const moments = momentTools(set, queueFor, reopen, warm);
   const play = createComputerPlay({ queueDeps: (storage) => queueDepsFor(deps, storage), queue: queueFor, game });
 
   const handlers: Record<LoopToolName, Handler> = {
@@ -747,7 +778,8 @@ export function createLoopTools(deps: LoopToolsDeps) {
       deps.editorCall(storage, game(context), LoopEditorTool.RollbackPart, { part: partArg(args) }),
     [LoopToolName.ReloadLevel]: async (_args, context, storage) =>
       deps.editorCall(storage, game(context), LoopEditorTool.ReloadLevel, {}),
-    [LoopToolName.ExportReference]: (_args, context, storage) => exportReference(deps, storage, game(context)),
+    [LoopToolName.ExportReference]: (_args, context, storage) =>
+      exportJoined(deps, lookupExports, storage, game(context)),
     [LoopToolName.BlueprintGuide]: async () => {
       const engine = await deps.engine();
       if (!engine) throw new Error(MESSAGE.NoEngine);
@@ -766,7 +798,7 @@ export function createLoopTools(deps: LoopToolsDeps) {
     ...packageHandlers(deps),
     [MotionToolName.Status]: (_args, context, storage) => motion.status(storage, game(context)),
     [MotionToolName.Add]: (_args, context, storage) => motion.add(storage, game(context), context.directory),
-    ...controlHandlers(deps, reopen),
+    ...controlHandlers(deps, reopen, warm),
     ...play.handlers,
   };
   return {
@@ -783,10 +815,23 @@ const packageHandlers = (deps: LoopToolsDeps) =>
     save: (storage, game, timeoutMs) => saveAll(deps, storage, game, { saveMs: timeoutMs }),
   }).handlers;
 
-/** The agent's own editor tools (`editor-control.ts`) over the reopen jobs: open, quit and where it stands. */
+/** Starts the reference's background export, unless kept or running: the game's Unreal was seen answering. */
+type Warm = (storage: string, game: string) => void;
+
+/** `answer`, after warming the reference when it says the game's Unreal answers. */
+function warmedOn<T extends object>(answer: T, warm: () => void): T {
+  if ("answering" in answer && answer.answering === true) warm();
+  return answer;
+}
+
+/**
+ * The agent's own editor tools (`editor-control.ts`) over the reopen jobs: open, quit and where it
+ * stands; an answer that Unreal answers starts the reference's export.
+ */
 function controlHandlers(
   deps: LoopToolsDeps,
   reopen: ReturnType<typeof createReopenTools>,
+  warm: Warm,
 ): Record<EditorControlToolName, Handler> {
   const control = createEditorControl({
     project: deps.project,
@@ -801,10 +846,15 @@ function controlHandlers(
     sleep: deps.sleep,
   });
   return {
-    [EditorControlToolName.OpenEditor]: (args, context, storage) => control.open(storage, gameOf(context), args),
+    [EditorControlToolName.OpenEditor]: async (args, context, storage) => {
+      const game = gameOf(context);
+      return warmedOn(await control.open(storage, game, args), () => warm(storage, game));
+    },
     [EditorControlToolName.QuitEditor]: (_args, context, storage) => control.quit(storage, gameOf(context)),
-    [EditorControlToolName.EditorStatus]: (args, context, storage) =>
-      control.state(storage, gameOf(context), args, context.signal),
+    [EditorControlToolName.EditorStatus]: async (args, context, storage) => {
+      const game = gameOf(context);
+      return warmedOn(await control.state(storage, game, args, context.signal), () => warm(storage, game));
+    },
   };
 }
 
@@ -917,6 +967,7 @@ function momentTools(
   deps: SetDeps,
   queueFor: (storage: string) => EditorQueue,
   reopen: ReturnType<typeof createReopenTools>,
+  warm: Warm,
 ) {
   const readLog = createLogReader(deps);
   const marks = new Map<string, number>();
@@ -924,16 +975,18 @@ function momentTools(
     if (!marks.has(game) && marks.size >= MAX_LOG_MARKS) marks.delete(marks.keys().next().value ?? "");
     marks.set(game, offset);
   };
-  // At a run's start it also tells the lead of an open Unreal's outdated helper (`helperAnswer`).
+  // At a run's start it also tells the lead of an open Unreal's outdated helper (`helperAnswer`),
+  // and starts the reference's export when none is kept.
   const log = async (context: PluginContext, storage: string, hook: HookContext): Promise<HookAnswer> => {
     if (hook.on !== HookEvent.RunPrepare && hook.on !== HookEvent.CheckpointBefore) return {};
     const game = gameOf(context);
     const since = hook.on === HookEvent.CheckpointBefore ? marks.get(game) : undefined;
     const read = await readLog(storage, game, since).catch(() => null);
     if (read) mark(game, read.offset);
-    if (hook.on === HookEvent.RunPrepare)
-      return inRun(hook) ? helperAtStart(editorOps(deps, reopen, context, storage)) : {};
-    return read && since !== undefined ? logAnswer(read.lines.slice(0, MAX_MOMENT_LOG_LINES), hook) : {};
+    if (hook.on === HookEvent.CheckpointBefore)
+      return read && since !== undefined ? logAnswer(read.lines.slice(0, MAX_MOMENT_LOG_LINES), hook) : {};
+    warm(storage, game);
+    return inRun(hook) ? helperAtStart(editorOps(deps, reopen, context, storage)) : {};
   };
   // The hero cameras' stills as pictures, nothing when Unreal doesn't answer; within `withinMs`
   // (an observer's call), the stills taken by then.
@@ -1009,8 +1062,15 @@ function editorOps(
       (await agentPlaying(storage, game, deps.now())) ||
       (inRun(context.hook) && (await agentsSetting(storage)).whilePlaying),
     // A checkpoint's save has its step to itself; before a restore the busy wait leaves it less.
-    save: () =>
-      saveAll(deps, storage, game, context.hook?.on === HookEvent.CheckpointBefore ? CHECKPOINT_SAVE : MOMENT_SAVE),
+    updateHelperLive: () => liveHelperUpdate(deps, storage, game),
+    save: (keepPlay) =>
+      saveAll(
+        deps,
+        storage,
+        game,
+        context.hook?.on === HookEvent.CheckpointBefore ? CHECKPOINT_SAVE : MOMENT_SAVE,
+        keepPlay,
+      ),
     end: () => reopen.end(storage, game),
     reopen: () => reopen.reopen(storage, game, true),
     state: () => reopen.state(storage, game),
@@ -1157,19 +1217,34 @@ async function stopPlayFirst(deps: LoopToolsDeps, storage: string, game: string,
 /** How long each editor call of a save may take: under a moment, its limits (`editor-moments.ts`); else each call's own. */
 type SaveLimits = { askMs?: number; saveMs?: number };
 
-/**
- * `save-all`: a play session ended first, then the helper saves every unsaved level and asset;
- * throws its refusal, or when Unreal doesn't answer or stays in play.
- */
-async function saveAll(deps: LoopToolsDeps, storage: string, game: string, limits: SaveLimits = {}) {
-  if (!(await deps.editorAnswers(storage, game).catch(() => false))) throw new Error(MESSAGE.NotAnswering);
-  await stopPlayFirst(deps, storage, game, limits.askMs);
-  const answer = await deps.editorCall(storage, game, CppEditorTool.SaveAll, {}, limits.saveMs);
+/** What a save answered (`save_all`, `save_during_play`); throws the helper's refusal or anything else. */
+function savedOf(answer: unknown) {
   const reply = isJsonObject(answer) ? answer : {};
   if (reply.error !== undefined) throw new Error(String(reply.error));
   if (typeof reply.saved !== "boolean" || !Array.isArray(reply.dirty)) throw new Error(MESSAGE.NoSaveAnswer);
   const dirty = reply.dirty.filter((name): name is string => typeof name === "string");
   return { saved: reply.saved, dirty, ms: typeof reply.ms === "number" ? reply.ms : 0 };
+}
+
+/** Whether the game's editor helper saves while a play session goes on: an older one has no `save_during_play`. */
+async function savesDuringPlay(deps: LoopToolsDeps, storage: string, game: string, askMs?: number): Promise<boolean> {
+  const tool = LoopEditorTool.SaveDuringPlay;
+  const answer = await deps.editorCall(storage, game, tool, { check_only: true }, askMs).catch(() => undefined);
+  return isJsonObject(answer) && answer.ready === true;
+}
+
+/**
+ * `save-all`: the helper saves every unsaved level and asset, a play session ended first. With
+ * `keepPlay` (a save point while the agent plays) a helper that can saves with the play going on, so
+ * the agent's play test outlives its save point; an older one ends the play as before. Throws the
+ * helper's refusal, or when Unreal doesn't answer or stays in play.
+ */
+async function saveAll(deps: LoopToolsDeps, storage: string, game: string, limits: SaveLimits = {}, keepPlay = false) {
+  if (!(await deps.editorAnswers(storage, game).catch(() => false))) throw new Error(MESSAGE.NotAnswering);
+  if (keepPlay && (await savesDuringPlay(deps, storage, game, limits.askMs)))
+    return savedOf(await deps.editorCall(storage, game, LoopEditorTool.SaveDuringPlay, {}, limits.saveMs));
+  await stopPlayFirst(deps, storage, game, limits.askMs);
+  return savedOf(await deps.editorCall(storage, game, CppEditorTool.SaveAll, {}, limits.saveMs));
 }
 
 /** `log-errors`' `since`: absent, or a byte offset (a whole number, 0 or more); anything else is refused. */
@@ -1202,6 +1277,23 @@ function createLogReader(deps: LoopToolsDeps) {
     }
     return { offset: read.offset, lines: read.lines, more: read.more, rotated: read.rotated };
   };
+}
+
+/**
+ * The open Unreal's outdated Genex editor helper brought up to the plugin's without a restart, when
+ * every change is Python the editor reloads (`updateHelperLive`) and the running helper can reload
+ * now (`reload_helper`, which an older helper lacks); whether it was. Nothing is written when the
+ * running helper can't reload; a reload that fails after the write leaves the next start to load it.
+ */
+async function liveHelperUpdate(deps: SetDeps, storage: string, game: string): Promise<boolean> {
+  const project = await linkedOrThrow(deps, storage, game);
+  const reload = (args: Record<string, unknown>) =>
+    deps.editorCall(storage, game, LoopEditorTool.ReloadHelper, args, MOMENT_ASK_MS).catch(() => undefined);
+  const check = await reload({ check_only: true });
+  if (!isJsonObject(check) || check.ready !== true) return false;
+  if (!(await (deps.updateHelperLive ?? updateHelperLive)(project, deps.setup(storage)))) return false;
+  const reloaded = await reload({});
+  return isJsonObject(reloaded) && Array.isArray(reloaded.reloaded);
 }
 
 /** `update-helper`: the project's Genex editor helper brought up to the plugin's, only while this game's Unreal is closed. */
@@ -1244,17 +1336,50 @@ async function findNodes(
 }
 
 /**
- * The exports lookups started while each runs: the engine's reference by plugin storage and engine
- * version, a project's template facts by plugin storage and project.
+ * The exports lookups wait for: the engine's reference by plugin storage and engine version (also
+ * started in the background, `reference-warm.ts`), a project's template facts by plugin storage and
+ * project.
  */
-type LookupExports = Map<string, Promise<unknown>>;
+type LookupExports = { reference: ReferenceExports; facts: Map<string, Promise<unknown>> };
+
+/** The key an engine's reference is exported and kept under. */
+const referenceKey = (storage: string, engine: string) => `${storage}\0${engine}`;
+
+/**
+ * Starts exporting the engine's node reference from the game's Unreal in the background when none
+ * is kept yet and it answers, so a lookup during play later finds it kept. Never throws.
+ */
+async function warmReference(deps: LoopToolsDeps, exports: LookupExports, storage: string, game: string) {
+  const engine = await deps.engine().catch(() => undefined);
+  if (!engine) return;
+  const kept = await stat(referencePaths(storage, engine.version).nodes).catch(() => null);
+  if (kept || !(await deps.editorAnswers(storage, game).catch(() => false))) return;
+  exports.reference.warm(referenceKey(storage, engine.version), () => exportUnlessKept(deps, storage, game));
+}
+
+/** `export-reference`: an export of the engine's reference, joining one that runs (a background one), so two never write the same files. */
+async function exportJoined(deps: LoopToolsDeps, exports: LookupExports, storage: string, game: string) {
+  const engine = await deps.engine();
+  if (!engine) throw new Error(MESSAGE.NoEngine);
+  return exports.reference.start(referenceKey(storage, engine.version), () => exportReference(deps, storage, game));
+}
+
+/**
+ * The engine's reference exported with {@link REFERENCE_EXPORT_MS} per editor call, unless one is
+ * kept by the time it starts: a background export may have kept it since its caller looked.
+ */
+async function exportUnlessKept(deps: LoopToolsDeps, storage: string, game: string) {
+  const engine = await deps.engine();
+  if (engine && (await loadReference(storage, engine.version))) return { engine: engine.version, stored: true };
+  return exportReference(deps, storage, game, REFERENCE_EXPORT_MS);
+}
 
 /**
  * The engine's node reference for a lookup: the one kept, or, when none is kept yet, the one the
- * game's open Unreal exports now (with the template's facts), each editor call within
- * `MOMENT_ASK_MS`. Throws what the agent can do about a missing one. With a reference kept, a game
- * whose project never exported its template's facts (a second project on the same engine) has its
- * open Unreal export them first: nothing else does.
+ * game's open Unreal exports (with the template's facts), each editor call within
+ * `REFERENCE_EXPORT_MS`, waited for up to `FIND_WAIT_MS`. Throws what the agent can do about a
+ * missing one. With a reference kept, a game whose project never exported its template's facts (a
+ * second project on the same engine) has its open Unreal export them first: nothing else does.
  */
 async function lookupReference(
   deps: LoopToolsDeps,
@@ -1266,21 +1391,17 @@ async function lookupReference(
   if (!engine) throw new Error(MESSAGE.NoEngine);
   const kept = await loadReference(storage, engine.version);
   if (kept) {
-    await exportMissingFacts(deps, storage, context.project, exports);
+    await exportMissingFacts(deps, storage, context.project, exports.facts);
     return kept;
   }
   const game = gameOf(context);
   if (!(await deps.editorAnswers(storage, game).catch(() => false))) throw new Error(MESSAGE.NoReference);
-  const key = `${storage}\0${engine.version}`;
-  const running = exports.get(key) ?? exportReference(deps, storage, game, MOMENT_ASK_MS);
-  exports.set(key, running);
-  try {
-    await running;
-  } catch (failure) {
-    throw new Error(MESSAGE.ExportFailed(errorMessage(failure)));
-  } finally {
-    if (exports.get(key) === running) exports.delete(key);
-  }
+  const running = exports.reference.start(referenceKey(storage, engine.version), () =>
+    exportUnlessKept(deps, storage, game),
+  );
+  const ended = await endWithin(running, (ms, signal) => deps.sleep(ms, signal), FIND_WAIT_MS, context.signal);
+  if (!ended) throw new Error(MESSAGE.StillExporting);
+  if ("failure" in ended) throw new Error(MESSAGE.ExportFailed(errorMessage(ended.failure)));
   const exported = await loadReference(storage, engine.version);
   if (!exported) throw new Error(MESSAGE.BadReference);
   return exported;
@@ -1295,7 +1416,7 @@ async function exportMissingFacts(
   deps: LoopToolsDeps,
   storage: string,
   game: string | undefined,
-  exports: LookupExports,
+  exports: LookupExports["facts"],
 ): Promise<void> {
   if (!game) return;
   const project = await linkedProject(deps, storage, game);

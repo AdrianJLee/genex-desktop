@@ -13,12 +13,18 @@ appended to `state['traces']`, so a test can assert that refused input never eve
 The player controller's view is `state['control_rotation']`; the nav mesh's path is `state['nav_path']`
 (None: the level has none), every query appended to `state['nav_queries']`.
 
+A Blueprint graph is an EdGraph in `state['graphs']` (by path); Epic's write_graph_dsl keeps its
+text in `state['written']`, and read_graph_dsl answers it back unless `state['kept']` holds what
+Unreal kept of that graph instead (a write that dropped nodes).
+
 A console command is recorded, then handed to `state['on_console']` when a test sets it (a fake
 UBT for `Module Recompile`); the editor's log folder is the project's Saved/Logs.
 
 The play world's game clock is `state['game_seconds']` and its last frame's delta
 `state['world_delta']`, its real-time clock (which runs on while the game is paused)
-`state['real_seconds']`; a test advances them itself. Slate post-tick callbacks are kept in
+`state['real_seconds']`, its global time dilation `state['time_dilation']` (a test that advances the
+game clock scales its step by it; set it is clamped to at least `state['min_time_dilation']`); a test
+advances them itself. Slate post-tick callbacks are kept in
 `state['ticks']` (handle: callback), so a test runs a frame by calling each. The valid key names
 are `state['keys']`.
 
@@ -49,6 +55,7 @@ def reset(project_dir: str) -> None:
                   'camera': None, 'cvars': {}, 'registry': [], 'classes': {},
                   'mode_override': None, 'default_mode': '', 'dirty': [], 'imports': {}, 'loaded': {},
                   'import_tasks': [], 'game_seconds': 0.0, 'real_seconds': 0.0, 'world_delta': 0.0, 'ticks': {},
+                  'time_dilation': 1.0, 'min_time_dilation': 0.0001,
                   'control_rotation': Rotator(), 'nav_path': None, 'nav_queries': [],
                   'keys': {'W', 'A', 'S', 'D', 'SpaceBar', 'Gamepad_LeftX'}, 'pictures': {},
                   'viewport_size': (1280, 720)})
@@ -132,14 +139,19 @@ def _box_of(points: list[tuple]) -> tuple[Vector, Vector]:
 
 
 class World(Object):
-    def __init__(self, name: str) -> None:
+    """A level's world. A play session's is the editor's copied into a package named with Unreal's
+    play prefix (/Game/Maps/UEDPIE_0_Map); the world inside keeps the level's own name."""
+
+    def __init__(self, name: str, play_instance: int | None = None) -> None:
         self.name = name
+        prefix = '' if play_instance is None else f'UEDPIE_{play_instance}_'
+        self.package = f'/Game/Maps/{prefix}{name}'
 
     def get_name(self) -> str:
         return self.name
 
     def get_path_name(self) -> str:
-        return f'/Game/Maps/{self.name}.{self.name}'
+        return f'{self.package}.{self.name}'
 
     def get_world_settings(self):
         return WorldSettings()
@@ -270,7 +282,7 @@ class SceneComponent(ActorComponent):
         return self.visible
 
     def get_editor_property(self, name: str):
-        return self.props.get(name, False)
+        return self.props.get(name, self.visible if name == 'visible' else False)
 
     def corners(self) -> list[tuple]:
         return [(self.location.x, self.location.y, self.location.z)]
@@ -529,11 +541,15 @@ class SkeletalMeshComponent(MeshComponent):
     def __init__(self, name: str = 'SkeletalMeshComponent', bones: dict[str, Vector] | None = None,
                  location: Vector | None = None, visible: bool = True,
                  bounds: tuple[Vector, Vector] | None = None, **props) -> None:
+        # Unreal draws a mesh in the main pass unless it is told not to.
+        props.setdefault('render_in_main_pass', True)
         super().__init__(name, location, None, None, visible, **props)
         self.bones, self.bounds = bones or {}, bounds
 
     def get_all_socket_names(self) -> list[Name]:
-        return [Name(name) for name in self.bones]
+        """Its posed bones, else the bones of the mesh asset it shows (a Blueprint's component)."""
+        asset = self.props.get('skeletal_mesh_asset') or self.props.get('skinned_asset')
+        return [Name(name) for name in self.bones or getattr(asset, 'parents', {})]
 
     def get_skinned_asset(self):
         return self.props.get('skinned_asset')
@@ -810,10 +826,14 @@ class AnimBlueprint(Blueprint):
 
 
 class _Defaults(Object):
-    """A generated class's defaults: its variables by name, read and set as editor properties."""
+    """A generated class's defaults: its variables by name, read and set as editor properties, and the
+    components a C++ class makes (`components`, [(name, template)]); never one a Blueprint adds."""
 
     def __init__(self, **values) -> None:
         self.props = dict(values)
+
+    def get_components_by_class(self, cls) -> list:
+        return [component for _, component in getattr(self, 'components', []) if isinstance(component, cls)]
 
     def get_editor_property(self, name: str):
         return self.props[name]
@@ -1000,6 +1020,25 @@ def log_warning(message: str) -> None:
     pass
 
 
+class EdGraph(Object):
+    """A Blueprint graph, found by its path once a test lists it in `state['graphs']`."""
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+
+    def get_path_name(self) -> str:
+        return self.path
+
+
+def find_object(outer, path: str):
+    _record('find_object', path)
+    return state.get('graphs', {}).get(path)
+
+
+def load_object(outer, path: str):
+    return state.get('graphs', {}).get(path)
+
+
 class ScopedEditorTransaction:
     def __init__(self, description: str) -> None:
         self.description = description
@@ -1014,10 +1053,11 @@ class ScopedEditorTransaction:
 
 class UnrealEditorSubsystem:
     def get_game_world(self):
-        return World('PIE_Map') if state['pie'] else None
+        return World('Map', play_instance=0) if state['pie'] else None
 
     def get_editor_world(self):
-        return World('Map')
+        # Like Unreal's, it answers None while a play session runs ("The Editor is currently in a play mode.").
+        return None if state['pie'] else World('Map')
 
     def get_level_viewport_camera_info(self):
         return Vector(1, 2, 3), Rotator(0, -10, 90)
@@ -1092,7 +1132,9 @@ def get_engine_subsystem(cls):
 class EditorAssetLibrary:
     @staticmethod
     def find_asset_data(path: str):
-        return next((a for a in state['registry'] if str(a.package_name) == path), AssetData(path, 'None'))
+        # Like Unreal's, it finds nothing while a play session runs.
+        found = None if state['pie'] else next((a for a in state['registry'] if str(a.package_name) == path), None)
+        return found or AssetData(path, 'None')
 
     @staticmethod
     def does_directory_exist(path: str) -> bool:
@@ -1368,6 +1410,15 @@ class GameplayStatics:
         return state['real_seconds']
 
     @staticmethod
+    def get_global_time_dilation(world_context_object) -> float:
+        return state['time_dilation']
+
+    @staticmethod
+    def set_global_time_dilation(world_context_object, time_dilation: float) -> None:
+        # Unreal clamps it to the world's MinGlobalTimeDilation and MaxGlobalTimeDilation (0.0001 and 20 by default).
+        state['time_dilation'] = min(max(float(time_dilation), state['min_time_dilation']), 20.0)
+
+    @staticmethod
     def set_game_paused(world_context_object, paused: bool) -> bool:
         state['paused'] = bool(paused)
         return True
@@ -1385,16 +1436,22 @@ class GameplayStatics:
 class BlueprintEditorLibrary:
     @staticmethod
     def compile_blueprint(blueprint) -> None:
+        """Records it; a Blueprint's components then have variables graph nodes can read (`compiled`)."""
         _record('compile', blueprint)
+        if isinstance(blueprint, Blueprint):
+            blueprint.compiled = [str(handle[0]) for handle in blueprint.components]
 
     @staticmethod
     def create_blueprint_asset_with_parent(asset_path: str, parent_class: 'Class') -> Blueprint:
-        """A child Blueprint whose components start as the parent's (its defaults' `components`), each its own copy."""
+        """A child Blueprint whose components start as the parent's (its defaults' `components`), each its own
+        copy with the parent's settings; its own defaults list those copies, as Unreal's list a C++ class's."""
         _record('create_blueprint', asset_path, parent_class.get_name())
         inherited = getattr(parent_class.cdo, 'components', []) if parent_class.cdo is not None else []
-        components = [[name, type(template)(name)] for name, template in inherited]
+        components = [[name, type(template)(name, **dict(template.props))] for name, template in inherited]
         name = asset_path.rsplit('/', 1)[-1]
-        made = Blueprint(components, generated=Class(path=f'{asset_path}.{name}_C', cdo=_Defaults()), name=name)
+        defaults = _Defaults()
+        defaults.components = [(name, component) for name, component in components]
+        made = Blueprint(components, generated=Class(path=f'{asset_path}.{name}_C', cdo=defaults), name=name)
         state['loaded'][asset_path] = made
         state['assets'].add(asset_path)
         return made

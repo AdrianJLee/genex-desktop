@@ -554,8 +554,8 @@ export default {
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "Скачиваем установщик Visual Studio Build Tools с сайта Microsoft…",
   "Install Visual Studio Build Tools": "Установить Visual Studio Build Tools",
-  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
-    "Установи Visual Studio Build Tools 2022 от Microsoft с набором «Разработка классических приложений на C++».",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "Установи Visual Studio Build Tools 2022 от Microsoft с набором «Разработка классических приложений на C++» и .NET Framework 4.8 SDK.",
   "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
     "Устанавливаем Visual Studio Build Tools. Нажми «Да», когда Windows спросит; установщик Microsoft покажет, как идёт установка.",
   "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
@@ -568,12 +568,12 @@ export default {
     "Установщик Microsoft не смог скачать Build Tools. Проверь интернет и попробуй ещё раз.",
   "Microsoft's installer didn't download. Check your internet connection and try again.":
     "Установщик Microsoft не скачался. Проверь интернет и попробуй ещё раз.",
-  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
-    "Установщик Microsoft закончил, но Unreal всё ещё не может собирать C++ с тем, что он поставил. Установи Visual Studio Build Tools 2022 с набором «Разработка классических приложений на C++» сам.",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
-    "Рекомендуем. Бесплатные инструменты C++ от Microsoft: без них Unreal не соберёт игру или плагин с C++. Около 7 ГБ. «Сделать за меня» установит их: нажми «Да», когда Windows спросит.",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
-    "Рекомендуем. Бесплатные инструменты C++ от Microsoft: без них Unreal не соберёт игру или плагин с C++. Установи Visual Studio Build Tools с набором «Разработка классических приложений на C++».",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
+    "Установщик Microsoft закончил, но Unreal всё ещё не может собирать C++ с тем, что он поставил. Установи Visual Studio Build Tools 2022 с набором «Разработка классических приложений на C++» и .NET Framework 4.8 SDK сам.",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "Рекомендуем. Бесплатные инструменты C++ от Microsoft: с ними агент пишет логику твоей игры на C++, а Unreal собирает игру или плагин с C++. Около 7 ГБ. «Сделать за меня» установит их: нажми «Да», когда Windows спросит.",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "Рекомендуем. Бесплатные инструменты C++ от Microsoft: с ними агент пишет логику твоей игры на C++, а Unreal собирает игру или плагин с C++. Установи Visual Studio Build Tools с набором «Разработка классических приложений на C++» и .NET Framework 4.8 SDK.",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "Самоулучшение выключено. Harness не меняет свои инструкции.",
   "Unreal can build C++ on this PC.": "Unreal может собирать C++ на этом ПК.",
@@ -731,6 +731,8 @@ export default {
   "Choose another": "Выбрать другую",
   "Choose another model or check your account in Model providers, then try again.":
     "Выбери другую модель или проверь аккаунт в «Провайдерах моделей», потом попробуй снова.",
+  "Choose another model, or try again once its provider is back. Your prompt stays here.":
+    "Выбери другую модель или попробуй снова, когда провайдер вернётся. Твой запрос останется здесь.",
   "Choose another version": "Выбрать другую версию",
   "Choose blender.exe": "Выбери blender.exe",
   "Choose browser OAuth or an Authorization header, not both":
@@ -1039,6 +1041,7 @@ export default {
   "Couldn't look up Blueprint nodes": "Не удалось найти ноды Blueprint",
   "Couldn't make Blueprint {blueprint}": "Не удалось создать Blueprint {blueprint}",
   "Couldn't make material {material}": "Не удалось создать материал {material}",
+  "Couldn't measure how {character} moves": "Не удалось измерить, как двигается {character}",
   "Couldn't measure the route": "Не удалось измерить маршрут",
   "Couldn't measure {count}": "Не удалось измерить: {count}",
   "Couldn't move {actor}": "Не удалось переместить {actor}",
@@ -2215,9 +2218,11 @@ export default {
   Mast: "Мачта",
   "Matrix rain": "Дождь из Матрицы",
   "Maximum concurrent workers": "Максимум помощников одновременно",
+  "Measured how {character} moves": "Измерено, как двигается {character}",
   "Measured in a plugin": "Измерено в плагине",
   "Measured in {plugin}": "Измерено в {plugin}",
   "Measured the route": "Маршрут измерен",
+  "Measuring how {character} moves": "Измеряет, как двигается {character}",
   "Measuring the route": "Измеряет маршрут",
   "Measuring…": "Подсчёт…",
   "Meet your Genex avatar": "Знакомься: твой аватар Genex",
@@ -2851,7 +2856,6 @@ export default {
   "Processed in {plugin}": "Обработано в {plugin}",
   Profile: "Профиль",
   Prompt: "Запрос",
-  "Public:": "Для всех:",
   Publish: "Опубликовать",
   "Publish again": "Опубликовать снова",
   "Publish again without waiting for the last upload": "Опубликовать снова, не дожидаясь прошлой загрузки",
@@ -3647,7 +3651,6 @@ export default {
   Terrain: "Ландшафт",
   Test: "Проверить",
   "Test connector {id}": "Проверить коннектор {id}",
-  "Test link:": "Тестовая ссылка:",
   Testing: "Проверяем",
   Text: "Текст",
   "Text adjusted for readability.": "Текст подправлен для читаемости.",
@@ -4097,6 +4100,7 @@ export default {
   "This model is unavailable": "Эта модель недоступна",
   "This model is unavailable. Check the connection or choose another model.":
     "Эта модель недоступна. Проверь подключение или выбери другую модель.",
+  "This model isn’t available right now": "Эта модель сейчас недоступна",
   "This page isn't from the sign-in Genex started.": "Эта страница не от того входа, который начал Genex.",
   "This paste has {count, plural, other {# servers}}. Pick one:":
     "Во вставленном тексте {count, plural, one {# сервер} few {# сервера} many {# серверов} other {# сервера}}. Выбери один:",
@@ -5151,6 +5155,7 @@ export default {
   "the plan": "план",
   "the plan is ready — {parts}.": "план готов — {parts}.",
   "the plan is ready.": "план готов.",
+  "the player": "игрок",
   "the player's word": "со слов игрока",
   "the preview shows the current build": "превью показывает текущую сборку",
   "the reviewer preferred it to the round before": "проверяющему этот раунд понравился больше предыдущего",
@@ -5396,10 +5401,6 @@ export default {
     "{count, plural, one {Его собственная история сохранена рядом под именем .git.studio-backup.} few {Их собственные истории сохранены рядом под именем .git.studio-backup.} many {Их собственные истории сохранены рядом под именем .git.studio-backup.} other {Их собственные истории сохранены рядом под именем .git.studio-backup.}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, one {Восстановлен # файл игры.} few {Восстановлено # файла игры.} many {Восстановлено # файлов игры.} other {Восстановлено # файла игры.}}",
-  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
-    "{count, plural, one {Откат не сможет вернуть # файл из этого изменения: оно было больше {size} за раз, поэтому самые большие не сохранились: {files}.} few {Откат не сможет вернуть # файла из этого изменения: оно было больше {size} за раз, поэтому самые большие не сохранились: {files}.} many {Откат не сможет вернуть # файлов из этого изменения: оно было больше {size} за раз, поэтому самые большие не сохранились: {files}.} other {Откат не сможет вернуть # файла из этого изменения: оно было больше {size} за раз, поэтому самые большие не сохранились: {files}.}}",
-  "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
-    "{count, plural, one {Откат не сможет вернуть # файл, слишком большой для сохранения: {files}.} few {Откат не сможет вернуть # файла, слишком больших для сохранения: {files}.} many {Откат не сможет вернуть # файлов, слишком больших для сохранения: {files}.} other {Откат не сможет вернуть # файла, слишком больших для сохранения: {files}.}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":
     "{count, plural, one {Чат откатился, а с ним # файл игры.} few {Чат откатился, а с ним # файла игры.} many {Чат откатился, а с ним # файлов игры.} other {Чат откатился, а с ним # файла игры.}}",
   "{count, plural, one {Working on # task} other {Working on # tasks}}":
@@ -6110,7 +6111,8 @@ export default {
   "Let the agent see your screen in this chat?": "Разрешить агенту видеть экран в этом чате?",
   "Let the agent use this app?": "Разрешить агенту работать в этом приложении?",
   "Let the agent use {app}?": "Разрешить агенту работать в {app}?",
-  "They ask before each app.": "Они спрашивают перед каждым приложением.",
+  "They ask before each app, except in Auto and Bypass.":
+    "Они спрашивают перед каждым приложением, кроме режимов Auto и Bypass.",
   "Turn on computer control?": "Включить управление компьютером?",
   "{plugin} asks: {task}": "{plugin} просит: {task}",
   "Add an icon and a thumbnail, or Roblox shows a grey square.":
@@ -6425,4 +6427,45 @@ export default {
     "Genex не смог собрать приложение {players} для «{title}». Исправь эти ошибки в коде игры, чтобы она там собиралась, и сохрани работу игры на других системах. На этом компьютере нельзя собрать для {players}, поэтому внимательно проверь каждое исправление. Потом скажи мне снова нажать Build on Genex.\n\n{errors}",
   "The same project fails the same way: change it first, then try again.":
     "Тот же проект упадёт так же: сначала измени его, потом пробуй снова.",
+  "Build {count} apps":
+    "Собрать {count, plural, one {# приложение} few {# приложения} many {# приложений} other {# приложения}}",
+  "Build {platforms}": "Собрать {platforms}",
+  "Building on Genex Cloud": "Собирается в Genex Cloud",
+  "Building on this Mac": "Собирается на этом Mac",
+  "Building on this PC": "Собирается на этом ПК",
+  "Building {platforms}": "Собираю {platforms}",
+  "Couldn’t build": "Не собралось",
+  "Couldn’t build · the older one is still live": "Не собралось · старая версия всё ещё в игре",
+  "Couldn’t send": "Не отправилось",
+  "It can take up to an hour.": "Это может занять до часа.",
+  "Live · older than your game": "В игре · старее твоей игры",
+  "Live · up to date": "В игре · актуальная",
+  "Only a Mac, Windows or Linux app can be taken off Genex this way.":
+    "Так с Genex можно убрать только приложение для Mac, Windows или Linux.",
+  "Publish to {count} platforms":
+    "Опубликовать на {count, plural, one {# платформе} few {# платформах} many {# платформах} other {# платформах}}",
+  "Publish to {name}": "Публиковать на {name}",
+  "Publish to {platforms}": "Опубликовать на {platforms}",
+  "Publish to {platforms} and take {down} down": "Опубликовать на {platforms} и убрать {down}",
+  "Publishing to {platforms}": "Публикую на {platforms}",
+  "Sending to Genex": "Отправляется в Genex",
+  "Sending to Genex Cloud": "Отправляется в Genex Cloud",
+  "Take {platforms} down": "Убрать {platforms}",
+  "Update {count} platforms":
+    "Обновить {count, plural, one {# платформу} few {# платформы} many {# платформ} other {# платформы}}",
+  "Update {platforms}": "Обновить {platforms}",
+  "Update {platforms} and take {down} down": "Обновить {platforms} и убрать {down}",
+  "Updating {platforms}": "Обновляю {platforms}",
+  "builds on Genex Cloud": "соберёт Genex Cloud",
+  "builds on this Mac": "соберётся на этом Mac",
+  "builds on this PC": "соберётся на этом ПК",
+  "coming soon": "скоро",
+  web: "веб",
+  "{minutes} min ago": "{minutes} мин назад",
+  "Agent is fixing the {platform} build": "Агент чинит сборку {platform}",
+  "Copy the error": "Скопировать ошибку",
+  "Send the {platform} error to the agent": "Отправить ошибку {platform} агенту",
+  "Send to agent": "Отправить агенту",
+  "{platform} app didn’t send": "Приложение {platform} не отправилось",
+  "{platform} build error": "Ошибка сборки {platform}",
 } satisfies LocaleCatalog;

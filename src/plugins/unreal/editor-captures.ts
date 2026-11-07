@@ -2,9 +2,11 @@
  * The Genex editor helper's eyes (genex_build's capture_shot, capture_play and motion_strip, and
  * character_check's picture sheet) answer at once with the files Unreal writes a frame or more
  * later. The bridge waits for those files and hands the agent the picture itself, with the tone
- * numbers it can't judge by eye: a still or a play shot as its PNG, a motion strip as one contact
+ * numbers it can't judge by eye: a still or a play shot as its PNG (a copy at most
+ * {@link LIFTED_MAX_SIDE} pixels on its longest side, the file keeping every pixel), a motion strip as one contact
  * sheet with each frame's pose and how far it moved, a character sheet as one contact sheet with
- * each shot's view.
+ * each shot's view. motion_check answers at once too and writes its report once the game seconds it
+ * measures are up: the bridge waits for that record and hands the agent its problems and numbers.
  *
  * A file is read only when its real path is a regular file inside the project's own
  * Saved/Genex/captures folder: an answer naming anything else (another folder, a link out, a path
@@ -21,6 +23,7 @@ import {
   encodePng,
   frameDifference,
   type RgbImage,
+  resize,
   type Tone,
   toneGate,
   looksUnlit,
@@ -36,6 +39,7 @@ export const CaptureTool = {
   Play: "capture_play",
   Strip: "motion_strip",
   Character: "character_check",
+  Check: "motion_check",
 } as const;
 export type CaptureTool = (typeof CaptureTool)[keyof typeof CaptureTool];
 
@@ -59,6 +63,13 @@ const SHEET_COLUMNS = 3;
 const SHEET_CELL_WIDTH = 480;
 /** Consecutive frames closer than this (mean abs difference, 0 to 1) show the same picture. */
 const SAME_FRAME = 8 / 255;
+/**
+ * The longest side of a still or a play shot handed to the agent: a bigger one goes as a copy this
+ * size, and its file keeps every pixel. A 4K PNG is about 13 MB as an answer's text, and an engine's
+ * tool call carrying one lost its connection to Genex (three 4K covers in a row, each time), while
+ * 1920x1080 shots came through; no model looks at more pixels than this anyway.
+ */
+export const LIFTED_MAX_SIDE = 1920;
 
 /** The bridge's clock for waits: `sleep` ends early, without throwing, once the call is cancelled. */
 export type CaptureClock = { now: () => number; sleep: (ms: number, signal: AbortSignal) => Promise<void> };
@@ -71,14 +82,25 @@ const MESSAGE = {
   NeverCame: "never arrived",
   Unreadable: (why: string) => `could not be read (${why})`,
   ShotHeader: (name: string, image: RgbImage) => `[capture ${name}, ${image.width}x${image.height}, attached]`,
+  ScaledShotHeader: (name: string, image: RgbImage, sent: RgbImage) =>
+    `[capture ${name}, ${image.width}x${image.height}, attached at ${sent.width}x${sent.height}; the file keeps every pixel]`,
   StripHeader: (count: number, interval: unknown) =>
     `[motion strip: ${count} frames, ${interval} game s apart, attached as one sheet, left to right then down]`,
+  StripRecord: (file: string) =>
+    `poses file: ${file} (the Loop's judge takes it as its strip and reads each frame at full size with its game time)`,
   StripError: (why: string) => `The strip stopped early: ${why}.`,
   SheetHeader: (count: number) =>
     `[character sheet: ${count} shots of a copy of the character, attached as one sheet, left to right then down]`,
   SheetLine: (index: number, label: string) => `shot ${index}: ${label}`,
   SheetError: (why: string) => `The sheet stopped early: ${why}.`,
   Fps: (fps: number) => ` at ${fps} fps`,
+  CheckHeader: (target: unknown, mesh: unknown, others: string) =>
+    `[motion check of ${target}, measured on its mesh ${mesh}${others}]`,
+  CheckOthers: (names: string) => ` (not measured: ${names})`,
+  CheckClean: "No sliding, pose pops, snap turns, cut, restarted or stuck montages, or hidden frames.",
+  CheckProblem: (detail: unknown) => `- ${detail}`,
+  CheckStopped: (why: string) => `The check stopped early: ${why}.`,
+  CheckNumbers: (json: string) => `numbers: ${json}`,
 } as const;
 
 /** The capture tool a forwarded call is, resolved the way Unreal does: case-insensitively, short or qualified. */
@@ -221,7 +243,17 @@ export async function landedShot(
   return "why" in read ? read : { file: landed.file, ...read };
 }
 
-/** A still or a play shot: its PNG and its tone line. */
+/** The picture the agent is handed: the PNG as Unreal wrote it, or a copy scaled to fit {@link LIFTED_MAX_SIDE}. */
+export function liftedPicture(bytes: Buffer, image: RgbImage): { data: string; sent: RgbImage } {
+  const scale = LIFTED_MAX_SIDE / Math.max(image.width, image.height);
+  if (scale >= 1) return { data: bytes.toString("base64"), sent: image };
+  const width = Math.max(1, Math.round(image.width * scale));
+  const height = Math.max(1, Math.round(image.height * scale));
+  const sent = resize(image, width, height);
+  return { data: encodePng(sent).toString("base64"), sent };
+}
+
+/** A still or a play shot: its PNG (a smaller copy of a big one) and its tone line. */
 async function liftShot(
   tool: CaptureTool,
   answer: Record<string, unknown>,
@@ -232,10 +264,13 @@ async function liftShot(
   const read = await landedShot(tool, answer, projectFile, clock, signal);
   if ("why" in read) return notRead(answer.file, read.why);
   const fps = typeof answer.fps === "number" ? MESSAGE.Fps(answer.fps) : "";
-  const header = `${MESSAGE.ShotHeader(path.basename(read.file), read.image)}${fps}`;
+  const name = path.basename(read.file);
+  const picture = liftedPicture(read.bytes, read.image);
+  const scaled = picture.sent !== read.image;
+  const shot = scaled ? MESSAGE.ScaledShotHeader(name, read.image, picture.sent) : MESSAGE.ShotHeader(name, read.image);
   return [
-    { type: "image", mimeType: "image/png", data: read.bytes.toString("base64") },
-    { type: "text", text: `${header}\n${toneLine(toneOf(read.image))}` },
+    { type: "image", mimeType: "image/png", data: picture.data },
+    { type: "text", text: `${shot}${fps}\n${toneLine(toneOf(read.image))}` },
   ];
 }
 
@@ -361,8 +396,50 @@ async function liftStrip(
   const [first] = frames;
   const text = [MESSAGE.StripHeader(frames.length, record.intervalS ?? answer.intervalS), ...lines];
   if (record.error) text.push(MESSAGE.StripError(record.error));
+  if (typeof answer.poses === "string") text.push(MESSAGE.StripRecord(answer.poses));
   if (first) text.push(`first frame ${toneLine(toneOf(first))}`);
   return sheetParts(frames, text);
+}
+
+/** A motion check's report, once its record lands: its problems in words, then its numbers. */
+async function liftCheck(
+  answer: Record<string, unknown>,
+  projectFile: string,
+  clock: CaptureClock,
+  signal: AbortSignal,
+): Promise<Lifted> {
+  const landed = await awaitFile(projectFile, answer.record, clock, checkWaitMs(answer.waitS), signal);
+  if ("why" in landed) return notRead(answer.record, landed.why);
+  let report: unknown;
+  try {
+    report = JSON.parse(await readFile(landed.file, "utf8"));
+  } catch (failure) {
+    return notRead(answer.record, MESSAGE.Unreadable(String(failure)));
+  }
+  if (!isRecord(report)) return notRead(answer.record, MESSAGE.Unreadable("not a JSON object"));
+  return [{ type: "text", text: checkLines(report).join("\n") }];
+}
+
+/** How long a check's record is waited for: its own wall-clock cap and the time to write it, within the strip's cap. */
+function checkWaitMs(waitS: unknown): number {
+  const asked = Number(waitS ?? 0) * SECOND_MS;
+  return Math.min(STRIP_WAIT_MAX_MS, asked > 0 ? asked + SHOT_WAIT_MS : STRIP_WAIT_MAX_MS);
+}
+
+/** A check's report as the agent reads it: who was measured, each problem, why it stopped early, the numbers. */
+function checkLines(report: Record<string, unknown>): string[] {
+  const others =
+    Array.isArray(report.otherMeshes) && report.otherMeshes.length
+      ? MESSAGE.CheckOthers(report.otherMeshes.join(", "))
+      : "";
+  const lines = [MESSAGE.CheckHeader(report.target, report.mesh, others)];
+  const problems = Array.isArray(report.problems) ? report.problems.filter(isRecord) : [];
+  if (typeof report.error === "string") lines.push(report.error);
+  else if (problems.length) lines.push(...problems.map((problem) => MESSAGE.CheckProblem(problem.detail)));
+  else lines.push(MESSAGE.CheckClean);
+  if (typeof report.stopped === "string") lines.push(MESSAGE.CheckStopped(report.stopped));
+  lines.push(MESSAGE.CheckNumbers(JSON.stringify(report)));
+  return lines;
 }
 
 /** A character sheet's shots, read once its record lands: one contact sheet and each shot's view. */
@@ -405,5 +482,7 @@ export async function liftCapture(
     return answer.poses === undefined ? [] : liftStrip(answer, projectFile, clock, signal);
   if (tool === CaptureTool.Character)
     return isRecord(answer.pictures) ? liftSheet(answer.pictures, projectFile, clock, signal) : [];
+  if (tool === CaptureTool.Check)
+    return answer.record === undefined ? [] : liftCheck(answer, projectFile, clock, signal);
   return answer.queued === true ? liftShot(tool, answer, projectFile, clock, signal) : [];
 }

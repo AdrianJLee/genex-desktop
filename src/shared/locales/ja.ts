@@ -533,8 +533,8 @@ export default {
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "MicrosoftからVisual Studio Build Toolsのインストーラーをダウンロードしています…",
   "Install Visual Studio Build Tools": "Visual Studio Build Toolsをインストール",
-  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++.":
-    "MicrosoftのVisual Studio Build Tools 2022を「C++ によるデスクトップ開発」付きでインストールしてください。",
+  "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "MicrosoftのVisual Studio Build Tools 2022を「C++ によるデスクトップ開発」と .NET Framework 4.8 SDK 付きでインストールしてください。",
   "Installing Visual Studio Build Tools. Choose Yes when Windows asks; Microsoft's installer shows its progress.":
     "Visual Studio Build Toolsをインストールしています。Windowsに聞かれたら「はい」を選んでください。進み具合はMicrosoftのインストーラーに表示されます。",
   "Microsoft's download led somewhere other than Microsoft, so Genex stopped.":
@@ -547,12 +547,12 @@ export default {
     "MicrosoftのインストーラーがBuild Toolsをダウンロードできませんでした。インターネット接続を確認して、もう一度試してください。",
   "Microsoft's installer didn't download. Check your internet connection and try again.":
     "Microsoftのインストーラーをダウンロードできませんでした。インターネット接続を確認して、もう一度試してください。",
-  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ yourself.":
-    "Microsoftのインストーラーは終わりましたが、インストールされたものではまだUnrealがC++をビルドできません。Visual Studio Build Tools 2022を「C++ によるデスクトップ開発」付きでご自身でインストールしてください。",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
-    "おすすめ。Microsoftの無料のC++ツールです。C++を使うゲームやプラグインをUnrealでパッケージするのに必要です。約7 GB。「おまかせ」でインストールできます。Windowsに聞かれたら「はい」を選んでください。",
-  "Recommended. Microsoft's free C++ tools: Unreal needs them to package a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++.":
-    "おすすめ。Microsoftの無料のC++ツールです。C++を使うゲームやプラグインをUnrealでパッケージするのに必要です。Visual Studio Build Toolsを「C++ によるデスクトップ開発」付きでインストールしてください。",
+  "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
+    "Microsoftのインストーラーは終わりましたが、インストールされたものではまだUnrealがC++をビルドできません。Visual Studio Build Tools 2022を「C++ によるデスクトップ開発」と .NET Framework 4.8 SDK 付きでご自身でインストールしてください。",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
+    "おすすめ。Microsoftの無料のC++ツールです。これがあるとエージェントがゲームのロジックをC++で書けて、C++を使うゲームやプラグインをUnrealでパッケージできます。約7 GB。「おまかせ」でインストールできます。Windowsに聞かれたら「はい」を選んでください。",
+  "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
+    "おすすめ。Microsoftの無料のC++ツールです。これがあるとエージェントがゲームのロジックをC++で書けて、C++を使うゲームやプラグインをUnrealでパッケージできます。Visual Studio Build Toolsを「C++ によるデスクトップ開発」と .NET Framework 4.8 SDK 付きでインストールしてください。",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "自己改善はオフです。Harnessは自分の指示をそのままにします。",
   "Unreal can build C++ on this PC.": "このPCでUnrealがC++をビルドできます。",
@@ -711,6 +711,8 @@ export default {
   "Choose another": "別の画像を選ぶ",
   "Choose another model or check your account in Model providers, then try again.":
     "別のモデルを選ぶか、「モデルプロバイダー」でアカウントを確認してから、もう一度試してください。",
+  "Choose another model, or try again once its provider is back. Your prompt stays here.":
+    "別のモデルを選ぶか、プロバイダーが戻ってからもう一度試してください。プロンプトはここに残ります。",
   "Choose another version": "別のバージョンを選ぶ",
   "Choose blender.exe": "blender.exeを選ぶ",
   "Choose browser OAuth or an Authorization header, not both":
@@ -1021,6 +1023,7 @@ export default {
   "Couldn't look up Blueprint nodes": "ブループリントのノードを調べられませんでした",
   "Couldn't make Blueprint {blueprint}": "ブループリント{blueprint}を作成できませんでした",
   "Couldn't make material {material}": "マテリアル{material}を作成できませんでした",
+  "Couldn't measure how {character} moves": "{character}の動きを測れませんでした",
   "Couldn't measure the route": "ルートを測定できませんでした",
   "Couldn't measure {count}": "測定不可{count}",
   "Couldn't move {actor}": "{actor}を移動できませんでした",
@@ -2212,9 +2215,11 @@ export default {
   Mast: "マスト",
   "Matrix rain": "マトリックスの雨",
   "Maximum concurrent workers": "同時に動かすワーカーの上限",
+  "Measured how {character} moves": "{character}の動きを測りました",
   "Measured in a plugin": "プラグインで計測",
   "Measured in {plugin}": "{plugin}で計測",
   "Measured the route": "ルートを測定しました",
+  "Measuring how {character} moves": "{character}の動きを測っています",
   "Measuring the route": "ルートを測定しています",
   "Measuring…": "計測中…",
   "Meet your Genex avatar": "あなたのGenexアバターです",
@@ -2866,7 +2871,6 @@ export default {
   "Processed in {plugin}": "{plugin}で処理",
   Profile: "プロフィール",
   Prompt: "プロンプト",
-  "Public:": "公開リンク：",
   Publish: "公開",
   "Publish again": "もう一度公開",
   "Publish again without waiting for the last upload": "前回のアップロードを待たずにもう一度公開",
@@ -3664,7 +3668,6 @@ export default {
   Terrain: "地形",
   Test: "テスト",
   "Test connector {id}": "コネクタ{id}をテスト",
-  "Test link:": "テストリンク：",
   Testing: "テスト中",
   Text: "テキスト",
   "Text adjusted for readability.": "読みやすいように文字色を調整しました。",
@@ -4127,6 +4130,7 @@ export default {
   "This model is unavailable": "このモデルは利用できません",
   "This model is unavailable. Check the connection or choose another model.":
     "このモデルは使えません。接続を確認するか、別のモデルを選んでください。",
+  "This model isn’t available right now": "このモデルは今使えません",
   "This page isn't from the sign-in Genex started.": "このページは、Genexが開始したサインインのものではありません。",
   "This paste has {count, plural, other {# servers}}. Pick one:":
     "貼り付けた内容に{count, plural, other {#個のサーバー}}があります。1つ選んでください：",
@@ -5184,6 +5188,7 @@ export default {
   "the plan": "プラン",
   "the plan is ready — {parts}.": "プランができました：{parts}。",
   "the plan is ready.": "プランができました。",
+  "the player": "プレイヤー",
   "the player's word": "プレイヤーの申告",
   "the preview shows the current build": "プレビューには現在のビルドが表示されています",
   "the reviewer preferred it to the round before": "レビュアーが前のラウンドよりこちらを選びました",
@@ -5395,10 +5400,6 @@ export default {
     "{count, plural, other {元の履歴は.git.studio-backupという名前に変えて、すぐ横に保存してあります。}}",
   "{count, plural, one {Restored # game file.} other {Restored # game files.}}":
     "{count, plural, other {ゲームのファイルを#個復元しました。}}",
-  "{count, plural, one {Rewind can’t bring back # file from this change: it was over {size} at once, so the largest stayed out: {files}.} other {Rewind can’t bring back # files from this change: it was over {size} at once, so the largest stayed out: {files}.}}":
-    "{count, plural, other {この変更は一度に{size}を超えたため、大きいファイル#件が保存されず、巻き戻しで元に戻せません：{files}。}}",
-  "{count, plural, one {Rewind can’t bring back # file that is too large to save: {files}.} other {Rewind can’t bring back # files that are too large to save: {files}.}}":
-    "{count, plural, other {保存するには大きすぎるファイル#件は、巻き戻しで元に戻せません：{files}。}}",
   "{count, plural, one {The chat went back, and # game file with it.} other {The chat went back, and # game files with it.}}":
     "{count, plural, other {チャットを巻き戻し、ゲームファイル#個も一緒に戻しました。}}",
   "{count, plural, one {Working on # task} other {Working on # tasks}}":
@@ -6068,7 +6069,8 @@ export default {
   "Let the agent see your screen in this chat?": "このチャットでエージェントに画面を見せますか？",
   "Let the agent use this app?": "エージェントにこのアプリを使わせますか？",
   "Let the agent use {app}?": "エージェントに{app}を使わせますか？",
-  "They ask before each app.": "エージェントはアプリごとに先に確認します。",
+  "They ask before each app, except in Auto and Bypass.":
+    "エージェントはアプリごとに先に確認します（Auto と Bypass では確認しません）。",
   "Turn on computer control?": "コンピューター操作をオンにしますか？",
   "{plugin} asks: {task}": "{plugin}からの依頼：{task}",
   "Add an icon and a thumbnail, or Roblox shows a grey square.":
@@ -6381,4 +6383,42 @@ export default {
     "Genexは「{title}」の{players}アプリをつくれませんでした。そこでつくれるようにゲームのコードのエラーを直し、ほかのシステムでの動きは今のままにしてください。このコンピュータでは{players}向けにつくれないので、修正はひとつずつ慎重に確認してください。終わったら、もう一度Build on Genexを押すよう教えてください。\n\n{errors}",
   "The same project fails the same way: change it first, then try again.":
     "同じプロジェクトは同じように失敗します。先に変更してから、もう一度試してください。",
+  "Build {count} apps": "{count}個のアプリをビルド",
+  "Build {platforms}": "{platforms}をビルド",
+  "Building on Genex Cloud": "Genex Cloudでビルド中",
+  "Building on this Mac": "このMacでビルド中",
+  "Building on this PC": "このPCでビルド中",
+  "Building {platforms}": "{platforms}をビルド中",
+  "Couldn’t build": "ビルドできませんでした",
+  "Couldn’t build · the older one is still live": "ビルドできませんでした · 以前の版が公開中のままです",
+  "Couldn’t send": "送信できませんでした",
+  "It can take up to an hour.": "最大1時間ほどかかることがあります。",
+  "Live · older than your game": "公開中 · ゲームより古い版",
+  "Live · up to date": "公開中 · 最新",
+  "Only a Mac, Windows or Linux app can be taken off Genex this way.":
+    "この方法でGenexから外せるのはMac・Windows・Linuxのアプリだけです。",
+  "Publish to {count} platforms": "{count}つのプラットフォームに公開",
+  "Publish to {name}": "{name}に公開",
+  "Publish to {platforms}": "{platforms}に公開",
+  "Publish to {platforms} and take {down} down": "{platforms}に公開し、{down}を取り下げ",
+  "Publishing to {platforms}": "{platforms}に公開中",
+  "Sending to Genex": "Genexに送信中",
+  "Sending to Genex Cloud": "Genex Cloudに送信中",
+  "Take {platforms} down": "{platforms}を取り下げ",
+  "Update {count} platforms": "{count}つのプラットフォームを更新",
+  "Update {platforms}": "{platforms}を更新",
+  "Update {platforms} and take {down} down": "{platforms}を更新し、{down}を取り下げ",
+  "Updating {platforms}": "{platforms}を更新中",
+  "builds on Genex Cloud": "Genex Cloudでビルド",
+  "builds on this Mac": "このMacでビルド",
+  "builds on this PC": "このPCでビルド",
+  "coming soon": "近日対応",
+  web: "Web",
+  "{minutes} min ago": "{minutes}分前",
+  "Agent is fixing the {platform} build": "エージェントが{platform}のビルドを修正中",
+  "Copy the error": "エラーをコピー",
+  "Send the {platform} error to the agent": "{platform}のエラーをエージェントに送る",
+  "Send to agent": "エージェントに送る",
+  "{platform} app didn’t send": "{platform}アプリを送信できませんでした",
+  "{platform} build error": "{platform}のビルドエラー",
 } satisfies LocaleCatalog;

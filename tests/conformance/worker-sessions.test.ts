@@ -28,7 +28,7 @@ import type {
   WorkerSeat,
 } from "../../src/substrate/engines/types.ts";
 import { fixtureCodingCli } from "../helpers/external-cli.ts";
-import { wokenSession } from "../helpers/scripted-claude.ts";
+import { CUT_OFF_ANSWER, stdinClaude, wokenSession } from "../helpers/scripted-claude.ts";
 import { ruleDenies } from "../helpers/claude-rules.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -411,6 +411,61 @@ describe("a worker whose session goes on after its turn ended", () => {
     assert.equal(answer.ok, false, "what it did after its input ended is not finished work");
     assert.match(String(answer.errorText), /after its turn ended/);
     assert.match(String(answer.summary), /^The generation is still running/, "not what it said once woken");
+  });
+
+  it("a worker whose background shell ends finishes in the turn it wakes: its Genex calls are answered, and that turn's answer is its delivery", async () => {
+    const f = await fixture();
+    const reached: boolean[] = [];
+    const call = (id: string, name: string) => ({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name, id, input: { command: "sleep 180" } }] },
+    });
+    const answer = (id: string, content: string, isError = false) => ({
+      type: "user",
+      message: { content: [{ type: "tool_result", tool_use_id: id, is_error: isError, content }] },
+    });
+    const result = (text: string) => ({ type: "result", subtype: "success", is_error: false, result: text, usage: {} });
+    const tasks = (...types: string[]) => ({
+      type: "system",
+      subtype: "background_tasks_changed",
+      tasks: types.map((task_type, i) => ({ task_id: `t${i}`, task_type, description: "import" })),
+    });
+    const { fn } = stdinClaude(async function* (cli) {
+      yield {
+        type: "system",
+        subtype: "init",
+        model: "claude-opus-5",
+        session_id: "ses_w",
+        capabilities: ["msg_lifecycle_v1"],
+      };
+      const read = await cli.briefRead();
+      if (read) yield read;
+      yield call("tu_bg", "Bash");
+      yield tasks("local_bash");
+      yield answer("tu_bg", "Command running in background");
+      yield result("The import is still running.");
+      yield tasks();
+      yield {
+        type: "user",
+        message: { content: [{ type: "text", text: "<task-notification>done</task-notification>" }] },
+      };
+      yield call("tu_check", "mcp__studio__unreal-editor__call_tool");
+      reached.push(await cli.inputOpen());
+      yield answer("tu_check", reached.at(-1) ? "imported" : CUT_OFF_ANSWER, !reached.at(-1));
+      yield result("Imported and checked.");
+    });
+    const engine = new ClaudeCodeEngine({
+      resolveCli: fixtureCodingCli,
+      engineHome: f.engineHome,
+      systemHome: path.join(f.root, "no-system-login"),
+      queryFn: fn,
+      protectedPaths: [path.dirname(f.engineHome)],
+    });
+    const worker = seat(f, PermissionMode.AcceptEdits);
+    const done = await engine.delegate({ prompt: "Import the pack.", cwd: f.copy, worker } as never);
+    assert.deepEqual(reached, [true], "the input stayed open for the shell");
+    assert.equal(done.ok, true);
+    assert.equal(done.summary, "Imported and checked.");
   });
 
   it("a lead or chat woken the same way keeps its result, and hands back the Genex calls it made that no answer could reach", async () => {

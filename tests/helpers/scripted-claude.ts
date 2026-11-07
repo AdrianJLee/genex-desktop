@@ -181,3 +181,61 @@ export function wokenSession(): Array<Record<string, unknown>> {
     result("Done."),
   ];
 }
+
+/** What the CLI answers a Genex tool call once its input has ended (CLI 2.1.318): no answer can reach it any more. */
+export const CUT_OFF_ANSWER =
+  "The tool call was interrupted before a result was received. It may or may not have completed on the server — verify before assuming it succeeded, and retry if needed.";
+
+/** What a {@link stdinClaude} script asks of the CLI it stands in for. */
+export interface StdinCli {
+  /** Whether a Genex tool call made now could be answered: the CLI's stdin is still open. */
+  inputOpen(): Promise<boolean>;
+  /** The CLI's receipt that it read the brief (a lifecycle `started`), or null for a string prompt. */
+  briefRead(): Promise<Record<string, unknown> | null>;
+}
+
+/** A tick: what the engine does with the message it was last handed settles before the CLI goes on. */
+const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * A `query` that keeps the CLI's stdin as the SDK does: a string prompt, or an input that has run
+ * out, closes it at the first result; an input the engine holds closes when the engine ends it.
+ * Genex's tools answer over that stdin, so a script asks `inputOpen()` at a Genex call to learn
+ * whether the CLI would get Genex's answer or {@link CUT_OFF_ANSWER}.
+ */
+export function stdinClaude(script: (cli: StdinCli) => AsyncGenerator<unknown>) {
+  const seen = { inputEnded: false };
+  const fn = ((params: { prompt: unknown }) => {
+    const frames: Array<Record<string, unknown>> = [];
+    let drained = typeof params.prompt === "string";
+    let results = 0;
+    if (!drained)
+      void (async () => {
+        for await (const frame of params.prompt as AsyncIterable<Record<string, unknown>>) frames.push(frame);
+        drained = true;
+      })();
+    const cli: StdinCli = {
+      inputOpen: async () => {
+        await settled();
+        const open = !(drained && results > 0);
+        if (!open) seen.inputEnded = true;
+        return open;
+      },
+      briefRead: async () => {
+        await settled();
+        const brief = frames[0];
+        if (!brief) return null;
+        return { type: "command_lifecycle", command_uuid: brief.uuid, state: "started", uuid: `lc-${brief.uuid}` };
+      },
+    };
+    async function* stream() {
+      for await (const message of script(cli)) {
+        yield message;
+        if ((message as { type?: unknown }).type === "result") results++;
+      }
+      await cli.inputOpen();
+    }
+    return { [Symbol.asyncIterator]: () => stream() };
+  }) as never;
+  return { fn, seen };
+}

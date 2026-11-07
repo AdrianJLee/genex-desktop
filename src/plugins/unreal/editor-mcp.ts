@@ -26,7 +26,12 @@
  * or description that names it, however spelled, is refused before any editor is reached. While a
  * play the agent started runs, the bridge keeps a marker beside it (`agent-play.ts`), so the
  * editor lock tells the agent's play from the person's: an agent's `StartPIE` the editor took sets
- * it, and its `StopPIE`, the editor crashing under a call and the bridge closing clear it.
+ * it, and its `StopPIE`, the editor crashing under a call and the bridge closing clear it. A play
+ * step Unreal refuses is checked against the helper's `play_state`: a start whose play runs anyway
+ * (the game's own errors read as a failed `StartPIE`) or a stop with no play left answers so. An
+ * agent's Blueprint write (Epic's `write_graph_dsl`) is checked by the Genex editor helper before
+ * and after (`graph-write-guard.ts`): a text too big for one write is refused, and a graph that came
+ * back short of its text fails the call, though Unreal answered ok.
  */
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -57,7 +62,16 @@ import {
 } from "./editor-port.ts";
 import { BUILD_TOOLSET, type CaptureClock, captureTool, helperAnswer, liftCapture } from "./editor-captures.ts";
 import { fitDescription } from "./editor-describe.ts";
-import { LOOP_TOOLSET } from "./editor-queue.ts";
+import {
+  CHECK_AFTER_MS,
+  CHECK_BEFORE_MS,
+  CHECK_GRAPH_TOOL,
+  checkArguments,
+  checkProblem,
+  type GraphWrite,
+  graphWriteOf,
+} from "./graph-write-guard.ts";
+import { LOOP_TOOLSET, LoopTool } from "./editor-queue.ts";
 import {
   OBJECT_TOOLSET,
   ObjectTool,
@@ -98,6 +112,8 @@ const EDITOR_START_WAIT_MS = 150 * SECOND_MS;
  * answers about a second after the editor's log says it loaded, which ends the Starting state.
  */
 const LOADED_ANSWER_MS = 10 * SECOND_MS;
+/** The time a graph write's two checks may take out of the call's own. */
+const CHECKS_MS = CHECK_BEFORE_MS + CHECK_AFTER_MS;
 /** Pictures handed over per answer; any more leave the text without becoming images. */
 const MAX_IMAGES = 4;
 /** The picture types every engine accepts as a tool-result image. */
@@ -115,6 +131,8 @@ const SESSION_END_MS = 5 * SECOND_MS;
 
 /** How long a closing bridge waits to give the user's throttle setting back. */
 const GIVE_BACK_ON_CLOSE_MS = 3 * SECOND_MS;
+/** How long the bridge asks the helper whether a play runs, after the editor refused a play step. */
+const PLAY_STATE_MS = 15 * SECOND_MS;
 
 /** The toolset holding the play-in-editor tools whose session the bridge keeps at full speed. */
 const PLAY_TOOLSET = "EditorToolset.EditorAppToolset";
@@ -163,6 +181,9 @@ const MESSAGE = {
   CallFailed: (reason: string) =>
     `Unreal Editor did not complete the call (${reason}), so whether it took effect is unknown. Look before you repeat it.`,
   NotCompleted: (reason: string) => `Unreal Editor did not complete the call: ${reason}`,
+  PlayRuns: (said: string) =>
+    `The play session is running. Unreal's answer to StartPIE${said ? `: ${said}` : " was an error"} (the game's own errors while play starts read as one).`,
+  NothingToStop: "No play session is running now (it had already ended), so there was nothing to stop.",
   Crashed: (detail: string | undefined) =>
     `Unreal crashed while this call ran${detail ? ` (${detail})` : ""}, so whether it took effect is unknown. Call unreal__open-editor to reopen it; once it answers, look before you repeat the call.`,
   ImageAttached: (n: number) => `[image ${n} attached]`,
@@ -801,6 +822,49 @@ async function settlePlay(
   if (step === PlayStep.Stop && !failed) await marker.stopped();
 }
 
+/** Whether the editor is in a play session, as the helper's `play_state` says; undefined when it can't say. */
+async function playing(session: EditorSession): Promise<boolean | undefined> {
+  const read = toolsetCall(LOOP_TOOLSET, LoopTool.PlayState, {});
+  const answer = await session.call(read, PLAY_STATE_MS).catch(() => undefined);
+  const value = answer ? returnValue(answer) : undefined;
+  const state = typeof value === "string" ? parseJson(value)?.value : value;
+  const pie = state && typeof state === "object" ? Reflect.get(state, "pie") : undefined;
+  return typeof pie === "boolean" ? pie : undefined;
+}
+
+/** A forwarded call's play step: which it is, whether a play ran before a start, and the mark to give back. */
+type PlayCall = { step: PlayStep | undefined; before: boolean | undefined; giveBack: () => Promise<void> };
+
+/**
+ * Gives back or keeps the throttle and the agent's mark once the editor answered a play step. A step
+ * it refused is read by the helper's play state after it, never by the editor's words: a start that
+ * began a play nobody ran before (the game's own errors as play starts make Epic's StartPIE answer an
+ * error, though the play goes on) or a stop with no play left (its pilot, a save point or the game
+ * ended it) held, and is settled as one the editor took; a stop whose play goes on keeps both; when
+ * the helper can't say, the refusal stands. Answers whether a refused step's aim held.
+ */
+async function settleStep(session: EditorSession, play: PlayCall, refused: boolean, how: Forwarding) {
+  const { step } = play;
+  const pie = refused && step !== undefined ? await playing(session) : undefined;
+  const held = step === PlayStep.Start ? play.before === false && pie === true : pie === false;
+  const failed = refused && !held;
+  const playsOn = failed && step === PlayStep.Stop && pie === true;
+  if (!playsOn) await how.keeper.after(session, step, failed);
+  await settlePlay(how.agentPlay, step, failed, play.giveBack);
+  return refused && held;
+}
+
+/** The answer to a refused play step whose aim holds: the play runs, with Unreal's own words, or there was nothing to stop. */
+function heldAnswer(step: PlayStep, said: string, project: EditorProject) {
+  const text = step === PlayStep.Start ? MESSAGE.PlayRuns(said) : MESSAGE.NothingToStop;
+  return {
+    content: [
+      { type: "text", text },
+      { type: "text", text: MESSAGE.Answered(project.name) },
+    ],
+  };
+}
+
 /** What the editor is asked: a description's `tool_name` is the bridge's own, so Epic gets only the toolset. */
 function editorParams(params: CallParams): CallParams {
   if (params.name !== EditorTool.DescribeToolset) return params;
@@ -834,36 +898,78 @@ async function capturedParts(
  */
 async function forward(session: EditorSession, params: CallParams, how: Forwarding, signal: AbortSignal) {
   const step = playStep(params);
+  const write = params.name === EditorTool.CallTool ? graphWriteOf(params.arguments) : undefined;
+  const refusal = write ? await checkGraph(session, write, false) : undefined;
+  if (refusal) return errorResult(`${refusal}\n${MESSAGE.Answered(how.project.name)}`);
   try {
     await how.keeper.before(session, step);
   } catch (error) {
     return errorResult(MESSAGE.NotCompleted(errorMessage(error)));
   }
-  const giveBack = await markStart(how.agentPlay, step);
+  // Whether a play already ran tells a refused start that began one from one that found the person's.
+  const before = step === PlayStep.Start ? await playing(session) : undefined;
+  const play = { step, before, giveBack: await markStart(how.agentPlay, step) };
   let result: CallResult;
   try {
-    result = await session.call(editorParams(params), how.timeoutMs);
+    // A graph write leaves its checks their time inside the call's own.
+    result = await session.call(editorParams(params), write ? how.timeoutMs - CHECKS_MS : how.timeoutMs);
   } catch (error) {
     // A JSON-RPC error is the editor's own answer: it is still there, and the call did not complete.
-    if (editorAnswered(error)) {
-      await settlePlay(how.agentPlay, step, true, giveBack);
-      return errorResult(MESSAGE.NotCompleted(errorMessage(error)));
-    }
+    if (editorAnswered(error)) return refusedStep(session, play, errorMessage(error), how);
     return errorResult(MESSAGE.CallFailed(errorMessage(error)), editorWentAway(error, signal));
   }
   try {
-    await how.keeper.after(session, step, Boolean(result.isError));
-    await settlePlay(how.agentPlay, step, Boolean(result.isError), giveBack);
-    const content = Array.isArray(result.content) ? (result.content as Part[]) : [];
-    const fit = fitAnswer(params, content, Boolean(result.isError));
-    const captured = result.isError ? [] : await capturedParts(params, content, how.project, how.clock, signal);
-    const named = [...liftImages(fit.parts), ...captured, { type: "text", text: MESSAGE.Answered(how.project.name) }];
-    const failed = Boolean(result.isError) || fit.failed || helperFailed(params, content);
-    return { content: named, ...(failed ? { isError: true } : {}) };
+    const held = await settleStep(session, play, Boolean(result.isError), how);
+    if (held && step) return heldAnswer(step, answerText(result), how.project);
+    return await answerOf(session, params, result, how, { write, signal });
   } catch (error) {
     // The editor answered: what failed after is Genex's own, and the editor is still there.
     return errorResult(MESSAGE.NotCompleted(errorMessage(error)));
   }
+}
+
+/**
+ * The editor's answer as the caller reads it: fitted, with a capture's pictures, naming the
+ * project; a graph write that came back short fails, the helper's words first.
+ */
+async function answerOf(
+  session: EditorSession,
+  params: CallParams,
+  result: CallResult,
+  how: Forwarding,
+  call: { write: GraphWrite | undefined; signal: AbortSignal },
+) {
+  const content = Array.isArray(result.content) ? (result.content as Part[]) : [];
+  const fit = fitAnswer(params, content, Boolean(result.isError));
+  const captured = result.isError ? [] : await capturedParts(params, content, how.project, how.clock, call.signal);
+  const failed = Boolean(result.isError) || fit.failed || helperFailed(params, content);
+  const lost = call.write && !failed ? await checkGraph(session, call.write, true) : undefined;
+  const said = lost ? [{ type: "text", text: lost }] : [];
+  const named = [
+    ...said,
+    ...liftImages(fit.parts),
+    ...captured,
+    { type: "text", text: MESSAGE.Answered(how.project.name) },
+  ];
+  return { content: named, ...(failed || lost ? { isError: true } : {}) };
+}
+
+/**
+ * What the Genex editor helper's check says is wrong with a graph write (`graph-write-guard.ts`):
+ * before it, a text too big for one write; after it, a graph that came back short. Undefined when
+ * nothing is, and when the helper can't check (it answers anything else, or not in time).
+ */
+async function checkGraph(session: EditorSession, write: GraphWrite, written: boolean): Promise<string | undefined> {
+  const check = toolsetCall(BUILD_TOOLSET, CHECK_GRAPH_TOOL, checkArguments(write, written));
+  const result = await session.call(check, written ? CHECK_AFTER_MS : CHECK_BEFORE_MS).catch(() => undefined);
+  if (!result || result.isError || !Array.isArray(result.content)) return undefined;
+  return checkProblem(result.content as Part[], written);
+}
+
+/** A call the editor answered with a JSON-RPC error: a play step whose aim held anyway answers so ({@link settleStep}); anything else fails. */
+async function refusedStep(session: EditorSession, play: PlayCall, said: string, how: Forwarding) {
+  const held = await settleStep(session, play, true, how);
+  return held && play.step ? heldAnswer(play.step, said, how.project) : errorResult(MESSAGE.NotCompleted(said));
 }
 
 /** The MCP SDK's own codes for a call that got no answer: it ran out of time, or its connection closed. */

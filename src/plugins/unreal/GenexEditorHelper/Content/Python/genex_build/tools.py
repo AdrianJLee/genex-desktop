@@ -14,6 +14,7 @@ from genex_build import (
     material,
     models,
     motion,
+    motion_check,
     retarget,
     routes,
     scripts,
@@ -21,6 +22,7 @@ from genex_build import (
     sockets,
     terrain,
 )
+from genex_loop import graph_write
 from genex_loop.errors import Refused, short_message
 
 
@@ -42,12 +44,14 @@ class GenexBuildTools(unreal.ToolsetDefinition):
     script idempotent, kit pieces, instancing, world-aligned materials, atmosphere presets, lights,
     hero cameras), in one undo step: keep every system's geometry and materials in such a script and
     run it again after each change. capture_shot, capture_play and motion_strip are the eyes: clean
-    frames of the game (never the editor), each answered as an image with its tone numbers.
+    frames of the game (never the editor), each answered as an image with its tone numbers;
+    motion_check measures a character's motion on its visible body every frame (sliding feet, pose
+    pops, snap turns, cut montages, hidden frames).
     Imports bring the game's own model, character, animation and sound files in; retarget plays
     one skeleton's clips on another; motion_character moves a character with the Game Animation
     Sample's Motion Matching; character_check measures and pictures a character standing and
     walking; attach_to_socket puts a mesh in a hand; audit counts what the level is made of. Compound arguments are JSON text. Every tool answers JSON; a refusal is
-    {error} and changes nothing. Stop play first, except for capture_play and motion_strip.
+    {error} and changes nothing. Stop play first, except for capture_play, motion_strip and motion_check.
 
     Writing your own Python against the editor: a function with out-params answers a tuple
     (its result and each out-param), so pick the value you want by its type, not its position.
@@ -119,7 +123,10 @@ class GenexBuildTools(unreal.ToolsetDefinition):
         unreal/build/ import fresh each run. An MCP timeout does not stop a running script. A run
         that changed a level with navigation bounds rebuilds its nav mesh (navigation: rebuilt). A
         material Unreal fails to compile while it runs fails the run (Unreal would draw it with its
-        default material): materials names each one and why.
+        default material): materials names each one and why. Its Blueprint writes (Epic's
+        BlueprintTools.write_graph_dsl) are checked: a graph's text over 150 nodes is refused, and a
+        graph Unreal answered ok for that came back short of its text fails the run (graphs names
+        each one, what it kept and what is missing), even when the script caught the error.
 
         Args:
             file: The script, relative to unreal/build/: kit.py or zones/shaft.py.
@@ -129,9 +136,33 @@ class GenexBuildTools(unreal.ToolsetDefinition):
             JSON {ok, ms, script, output, result?, scopes: {scope: {removed, made}}, navigation?, actors,
             otherMaterials?}; when it failed also {error, where: "file.py:line", line} or {error, materials:
             [{material, instanceOf?, platform, reasons}]} for materials it changed that Unreal failed to compile
-            (otherMaterials: ones it didn't change that failed meanwhile). What it changed before failing stays.
+            (otherMaterials: ones it didn't change that failed meanwhile), or {error, graphs: [{graph, error,
+            wrote, kept, missing, readBack}]} for Blueprint writes that lost nodes or were too big. What it
+            changed before failing stays.
         """
         return _answer(scripts.run_script, file, args_json)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def check_graph(graph: str, code: str, written: bool) -> str:
+        """Checks Blueprint text against a graph, as Genex does around every write_graph_dsl: before
+        the write (written false), whether the text may be sent as one write (at most 150 nodes, not
+        counting variable reads, and no Utilities|IsValid without its exec pins); changes nothing.
+        After it (written true), deletes the nodes nothing in the graph runs (Unreal's writer leaves
+        old ones behind) and answers whether the graph read back holds every node the text makes,
+        since Unreal's writer can answer ok and drop nodes.
+
+        Args:
+            graph: The graph's path, such as /Game/BP_Door.BP_Door:EventGraph.
+            code: The Blueprint text written (or to write) to it.
+            written: Whether the text was already written.
+
+        Returns:
+            JSON {graph, nodes, kept?, cleared?} (cleared: unlinked nodes deleted), or {error, wrote, kept,
+            missing, readBack, cleared} for a graph that came back short, or {error, refused: true} for a
+            text refused before the write.
+        """
+        return _answer(graph_write.check_graph, graph, code, written)
 
     @toolset_registry.tool_call
     @staticmethod
@@ -168,7 +199,8 @@ class GenexBuildTools(unreal.ToolsetDefinition):
     @staticmethod
     def capture_play(name: str, width: int, height: int) -> str:
         """A shot of the 3D frame the player sees during a play session (StartPIE first), without the
-        editor around it and without on-screen UI (the HUD and screen-space bars are not in it). The
+        editor around it and without its widgets (UMG menus and screen-space bars are not in it; what a
+        HUD draws on its Canvas is). The
         image, its tone numbers and the frame rate come back with the answer.
 
         Args:
@@ -184,19 +216,45 @@ class GenexBuildTools(unreal.ToolsetDefinition):
     @toolset_registry.tool_call
     @staticmethod
     def motion_strip(frames: int, interval_s: float) -> str:
-        """Frames of the 3D view the player sees during a play session (no on-screen UI),
-        interval_s GAME seconds apart, each with where the pawn and the view were when it was taken. Start the motion first
+        """Frames of the 3D view the player sees during a play session (no UMG widgets; a HUD's Canvas
+        shows), interval_s GAME seconds apart, each with where the pawn and the view were and its game
+        time; the game is held all but still while each frame is drawn. Start the motion first
         (hold an input with genex_play's hold), then call this. The frames come back as one
         contact sheet with each frame's pose, how much it differs from the one before, and tone.
 
+        For a step, a swing or a turn, take a burst: 0.03 to 0.1 s apart (0.03 is about every frame
+        at 30 fps). Hand the strip to the Loop's judge as its strip (the poses file), so it reads each
+        frame with its game time.
+
         Args:
-            frames: How many frames, 2 to 12.
-            interval_s: Game seconds between frames, 0.1 to 5.
+            frames: How many frames, 2 to 24.
+            interval_s: Game seconds between frames, 0.03 to 5; frames x interval_s at most 60.
 
         Returns:
             JSON {strip, files, poses, width, height, intervalS, waitS}, or {error}.
         """
         return _answer(shots.motion_strip, frames, interval_s)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def motion_check(target: str = '', seconds: float = 3.0) -> str:
+        """Measures how a character moves during a play session, every frame of `seconds` game seconds,
+        on the body the player sees (a Motion Matching character's Body, never its driver): whether
+        its planted feet slide while it travels, frames its pose jumps (pops), snap turns, montages
+        that stop well before their end, start over or stay at their start, and frames it is hidden
+        or a ragdoll; frames too far apart to read (under about 10 fps) are a problem of their own.
+        Start the move first (a pilot, hold, walk_to), then call this; several characters can be
+        checked at once. The report comes back with the answer once the time is up.
+
+        Args:
+            target: The character's actor label or name (or part of it: the closest match wins);
+                empty for the player's pawn.
+            seconds: Game seconds to measure, 0.5 to 20.
+
+        Returns:
+            JSON {check, record, target, mesh, otherMeshes, bones, askedSeconds, waitS}, or {error}.
+        """
+        return _answer(motion_check.motion_check, target, seconds)
 
     @toolset_registry.tool_call
     @staticmethod
@@ -315,7 +373,7 @@ class GenexBuildTools(unreal.ToolsetDefinition):
 
         Returns:
             JSON {blueprint, retargeter, tag, fbik, spineFrom, oneToOne, ikOff, armFixDeg,
-            fingersAligned, next, ms}, or {error}.
+            fingersAligned, meshes (what Mesh and Body each do), next, ms}, or {error}.
         """
         return _answer(motion.motion_character, mesh, name)
 
@@ -348,10 +406,12 @@ class GenexBuildTools(unreal.ToolsetDefinition):
     @toolset_registry.tool_call
     @staticmethod
     def attach_to_socket(target: str, mesh: str, socket: str, offset: str) -> str:
-        """Puts a static mesh in a skeletal mesh's socket or bone (a sword in hand_r or HandGrip_R).
-        On a Blueprint (a /Game/ path) every spawned character carries it: the component
-        Gx<mesh> under its skeletal mesh, attached by its construction script; the Blueprint is
-        compiled and saved. On a level actor (its label) the mesh's actor is attached there.
+        """Puts a static mesh in a skeletal mesh's socket or bone (a sword in hand_r or HandGrip_R),
+        on the first skeletal mesh players see that has it (a motion_character's Body, not its
+        hidden mannequin Mesh). On a Blueprint (a /Game/ path) every spawned character carries it:
+        the component Gx<mesh> under that skeletal mesh, attached by its construction script; the
+        Blueprint is compiled and saved. On a level actor (its label) the mesh's actor is attached
+        there. Attaching the same mesh again moves it (socket, offset, and onto the visible mesh).
 
         Args:
             target: The Blueprint's /Game/ path, or a level actor's label.
@@ -361,7 +421,7 @@ class GenexBuildTools(unreal.ToolsetDefinition):
                 relative to the socket, each optional; empty for none.
 
         Returns:
-            JSON {blueprint, component, parent, socket, compiled, saved} or {actor, held, socket}.
+            JSON {blueprint, component, parent, socket, compiled, saved} or {actor, held, parent, socket}.
         """
         return _answer(lambda: sockets.attach_to_socket(target, mesh, socket, args.json_object(offset, 'offset')))
 

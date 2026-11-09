@@ -29,6 +29,10 @@ licenses and terms of included third-party software.
   self-edit type gate runs keep their license and notice files under `dist/resources/tsc`.
 - The Genex asset CLI (`@genex-ai/cli-demo`, MIT) and its dependencies keep their license files
   in the Genex plugin payload under `dist/resources/plugins/genex/node_modules`.
+- Genex's room-module toolchain (`@genex-ai/authority-dev` 0.1.5, MIT), which a publish copy and a
+  local room use, ships in the same payload with its dependencies and the peers they import
+  (Colyseus, express, esbuild-wasm, QuickJS and `@genex-ai/physics`: MIT, ISC, BSD-3-Clause and
+  0BSD), each keeping its license files there. The two that ship none have sections below.
 
 ## Bundled plugin icons
 
@@ -344,6 +348,59 @@ map. Its package and repository (https://github.com/genex-games/genex) declare t
 without a license file. The MIT terms:
 
 Copyright (c) 2026 Genex
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+### @genex-ai/authority-dev 0.1.5
+
+Shipped in the Genex plugin payload (`plugins/genex/node_modules`), the toolchain that bundles,
+validates and runs a server-authoritative game's room module on this machine. Its package and
+repository (https://github.com/genex-games/genex) declare the MIT license without a license file.
+The MIT terms:
+
+Copyright (c) 2026 Genex
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+### @better-auth/utils 0.3.1
+
+Shipped in the Genex plugin payload as a dependency of `@colyseus/core`, which the room-module
+toolchain runs. Its package and repository (https://github.com/better-auth/utils) declare the MIT
+license without a license file; the author is Bereket Engida. The MIT terms:
+
+Copyright (c) Bereket Engida
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

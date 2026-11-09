@@ -1944,7 +1944,13 @@ Available services are capability checked and scoped to the calling plugin:
   target is Studio's, never the game folder: the plugin names no path and the same audited
   exporter the Export button uses does the copying. The copy carries no package.json, so the
   result's `genex` field holds what the game's own one tells Genex (its Genex SDK versions and
-  `genex` settings), read only when that file lives inside the game.
+  `genex` settings, a server-authoritative `authority` block as written), read only when that
+  file lives inside the game. For a game with a usable `authority` block the host also stages its
+  room (`substrate/genex-room-stage.ts`) beside `dist/`, never in it: `server/` and every game file
+  the module imports by a relative path, at their paths in the game, each staged folder ignored by
+  git. A link on the way, a file outside the game or at its top level, a hidden or reserved folder,
+  or more than 2,000 files or 32 MiB refuses the export with the copy untouched; a game without the
+  block leaves no staged room.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
   the bound game to a project file of the engine the plugin declares (an Unreal `.uproject`, a
   Godot project's `project.godot`, a Roblox place), read its link, or show the plugin's steps card
@@ -3672,6 +3678,12 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   module naming the slug into the copy's `vendor/genex/`, loads that module after the page's last
   import map, names the SDK in the copy's package.json so the CLI sends `embedSdkVersion`, and
   marks the copy again. A game that brings its own SDK connects itself; Studio never adds a second.
+- A game that declares a room (`genex.authority`, or `authority` in a template game's `genex.json`)
+  publishes it with the CLI's own gate: the copy's package.json carries the block, and the copy
+  gets `node_modules/@genex-ai/authority-dev`, a link to the pinned toolchain in the plugin's
+  payload (`GENEX_STUDIO_TOOLS`, `authority-toolchain.ts`), so the CLI bundles, validates and
+  uploads the module before any game file. A game without the block publishes from the copy it
+  always did: no block, no dependency folder, no staged room.
 - That dialog also reads the cover record publish-status answers (`GenexPublishState.cover`, typed
   in `shared/genex.ts` with the plugin's outcome kinds as `GenexCoverOutcome`). While it reports no
   kept shot and no send running, the owner chose no cover on genex.games (`kept_owner`, which the
@@ -3788,7 +3800,7 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`
   refreshes them; `genex-skills-vendor.test.ts` catches drift, and a `$genex-…` skill a card names
   that the plugin does not ship) and served as file skills. The server-authoritative card's preface
-  says what Studio cannot run or publish of a room module yet. The
+  says that publishing ships the room module and that Studio cannot yet run a local room. The
   `genex` plugin keeps Genex's product requirements and API facts: Studio's cuts (`cuts.json`, a
   section, a run of lines, a replaced sentence or a dropped reference, each matching the pinned text
   exactly once) take Genex's design and process advice out of the vendored text, and the prefaces

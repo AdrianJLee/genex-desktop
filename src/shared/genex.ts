@@ -96,6 +96,20 @@ export const GENEX_GAME_PACKAGES = {
 export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
 
 /**
+ * Genex's game-maker tools Studio ships pinned in the Genex plugin's payload, beside the CLI: never
+ * a game's dependency and never served to a player. `@genex-ai/authority-dev` bundles, validates
+ * and runs a server-authoritative room module; a publish copy resolves it from there, so the CLI's
+ * room check runs for a game that installed nothing.
+ */
+export const GENEX_STUDIO_TOOLS = {
+  "@genex-ai/authority-dev": "0.1.5",
+} as const;
+/** A Genex tool Studio ships. */
+export type GenexStudioTool = keyof typeof GENEX_STUDIO_TOOLS;
+/** The package that checks and runs a room module. */
+export const AUTHORITY_DEV_PACKAGE: GenexStudioTool = "@genex-ai/authority-dev";
+
+/**
  * Where Studio's copy of `@genex-ai/embed-sdk` sits under a vendor folder (the app's, served as
  * `/vendor/`, and a published copy's `vendor/`), and the module beside it that connects a page to
  * Genex: a template game imports the SDK through its import map from there, and a published game
@@ -181,7 +195,15 @@ export function isGenexGamePackage(name: unknown): name is GenexGamePackage {
  */
 export interface GenexGameManifest {
   dependencies: Partial<Record<GenexGamePackage, string>>;
-  genex?: { matchmaking?: Record<string, unknown>; mobileControls?: boolean };
+  genex?: {
+    matchmaking?: Record<string, unknown>;
+    mobileControls?: boolean;
+    /**
+     * The game's server-authoritative room block, exactly as it wrote it: the CLI checks it and
+     * refuses a malformed one by name, where dropping it would publish a game every join refuses.
+     */
+    authority?: unknown;
+  };
 }
 
 /** The longest name a game is listed under on Genex. */

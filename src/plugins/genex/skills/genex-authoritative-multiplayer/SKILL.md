@@ -7,21 +7,29 @@ preface, this preface wins.
 ## What Studio runs of it today
 
 - Writing works: the room module, its `authority` block and the client, in any web game made here.
-- Running it does not yet. Studio has no `genex-authority-dev` for a game (a game's commands
-  cannot download it, and Studio does not ship it), so `validate`, `replay` and `start` are not
-  available. Studio's preview is single-player and cannot join a local room.
-- Shipping it does not yet. `genex__publish` sends the web build without the room module, so
-  players of that draft or release are refused with 424 (no room module published).
-- Say this to the person before building one, and let them choose: the game written now, running
-  once Studio ships room modules, or a casual game (`$genex-threejs-multiplayer`) that runs on the
-  draft link today. Never report a server-authoritative game as tested, validated or online.
+- Shipping works. `genex__publish` (draft or gallery) sends the room module with the build: Studio
+  ships `@genex-ai/authority-dev` itself, stages `server/` and every file the module imports beside
+  the public copy (never in it), and the publish bundles and validates the module before any game
+  file moves. A module that fails stops the publish with each typed reason in the job's error; fix
+  the module and publish again. On Genex's servers the owner needs Genex Pro: a free account is
+  refused with `authority_requires_pro` after validation, and nothing is uploaded.
+- Running it on this machine does not yet. Studio has no tool that starts a local room, and Studio's
+  preview cannot join one, so the card's `npx genex-authority-dev` commands are not available (a
+  game's commands cannot download it). A draft publish is the check: its validation is the same
+  gate `validate` runs.
+- Say this to the person before building one, and let them choose: the game written now, checked
+  and shipped by a draft, or a casual game (`$genex-threejs-multiplayer`) that also plays in the
+  preview. Never report a server-authoritative game as tested locally or online before a draft passed.
 
 ## Packages
 
 - `genex__package {"package":"@genex-ai/multiplayer"}` adds both SDKs at Studio's pins (nobody is
   asked): `@genex-ai/multiplayer` with `@genex-ai/multiplayer/authority`, and `@genex-ai/embed-sdk`
   with `getAuthorityUrls`. Never run `npm i` for them yourself; the card's step 4 does not apply.
-- `@genex-ai/authority-dev` is not a package Studio installs.
+- `@genex-ai/authority-dev` ships with Studio: never install it in the game.
+- A room module imports nothing at runtime from a package, and imports the game's own files only
+  from folders inside the game (`src/`, `shared/`), never a file at the game's top level or in a
+  hidden folder: the publish refuses those, and a link anywhere on the way.
 
 ## A game made from Studio's template
 
@@ -47,8 +55,8 @@ as listed, for example
 ## Commands
 
 `npx genex preview` is `genex__publish {"operation":"draft"}` and `npx genex publish` is
-`genex__publish {"operation":"gallery"}`; neither carries a room module yet (above). Other commands
-map onto Studio tools as the `genex` skill describes (`genex__skill {"name":"genex"}`).
+`genex__publish {"operation":"gallery"}`; both carry the room module (above). Other commands map
+onto Studio tools as the `genex` skill describes (`genex__skill {"name":"genex"}`).
 
 <!-- upstream @genex-ai/cli-demo/templates/skills/genex-authoritative-multiplayer/SKILL.md v1.40.0 sha256 956e9e2600339ce919fadee720d61e6aa018fb778068fd10acc735be7472a002 -->
 ---

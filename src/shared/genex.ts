@@ -88,7 +88,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
  * a package; the version always comes from here. Multiplayer's card asks for `^0.16.0`.
  */
 export const GENEX_GAME_PACKAGES = {
-  "@genex-ai/multiplayer": "0.17.1",
+  "@genex-ai/multiplayer": "0.17.9",
   "@genex-ai/embed-sdk": "0.33.0",
 } as const;
 /** A Genex SDK package a game may add. */

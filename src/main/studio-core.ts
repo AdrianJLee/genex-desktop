@@ -1350,6 +1350,7 @@ export class StudioCore {
         boundGameFolder(binding, { gameDir: (project) => this.games.dirFor(project), scratch: this.layout.scratch }),
       ...(this.options.execPath ? { execPath: this.options.execPath } : {}),
       onRoom: (project, url) => this.#previews.joinLocalRoom(project, url),
+      loopbackPorts: () => this.sandbox.loopbackPorts(),
     });
   }
 

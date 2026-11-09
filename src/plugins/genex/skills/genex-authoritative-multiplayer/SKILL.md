@@ -51,6 +51,14 @@ preface, this preface wins.
   game's slug, from `src/genex.config.js` as the multiplayer card's preface describes
   (`genex__skill {"name":"genex-threejs-multiplayer"}`).
 
+## An Unreal game
+
+- The room module, its `authority` block in `genex.json`, `genex__room` and the publish are the
+  same as above: only the client differs. Read `unreal__skill {"name":"unreal-multiplayer"}` for
+  it: `unreal__multiplayer` adds Genex's Unreal plugin (shipped with Studio, never fetched by the
+  game), and the client joins with its `Genex Authority Subsystem`. Ignore this card's
+  `@genex-ai/multiplayer` and embed SDK steps for an Unreal game.
+
 ## Reading the references
 
 The card links its references by relative path. Read one with `genex__skill` and the file exactly

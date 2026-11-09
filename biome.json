@@ -20,7 +20,8 @@
       "!package-lock.json",
       "!src/harness-seed/types/host-api.d.ts",
       "!evals/ledger",
-      "!marketplace/template/scripts"
+      "!marketplace/template/scripts",
+      "!src/plugins/unreal/multiplayer/GenexMultiplayer"
     ]
   },
   "formatter": {

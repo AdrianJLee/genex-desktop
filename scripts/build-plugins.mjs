@@ -204,6 +204,8 @@ async function buildUnreal(root, resources, sdk) {
     path.join(unreal, "panel.html"),
     await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")),
   );
+  // Genex's multiplayer plugin for Unreal (vendor-unreal-multiplayer.ts), copied whole into a game by `multiplayer`.
+  await cp(path.join(root, "src/plugins/unreal/multiplayer"), path.join(unreal, "multiplayer"), { recursive: true });
   // The editor helper is Unreal's own plugin, copied whole into a game's Plugins folder at setup.
   await cp(path.join(root, "src/plugins/unreal/GenexEditorHelper"), path.join(unreal, "GenexEditorHelper"), {
     recursive: true,

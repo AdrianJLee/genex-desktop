@@ -59,6 +59,7 @@
     "plugin:submit": "node scripts/check-node.mjs && node scripts/plugin-submit.ts",
     "plugin:unpack": "node scripts/check-node.mjs && node scripts/plugin-unpack.ts",
     "genex:skills": "node scripts/check-node.mjs && node scripts/refresh-genex-skills.ts",
+    "unreal:multiplayer": "node scripts/check-node.mjs && node scripts/vendor-unreal-multiplayer.ts",
     "verify:context": "node scripts/check-node.mjs && node scripts/check-agent-context.ts && node --test --test-reporter=dot tests/conformance/skills-sync.test.ts tests/conformance/agent-settings.test.ts",
     "review:context": "node scripts/check-node.mjs && node scripts/review-agent-context.ts",
     "verify:architecture": "node scripts/check-node.mjs && node scripts/check-boundaries.ts",

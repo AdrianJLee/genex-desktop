@@ -172,6 +172,24 @@ file). Its browser modules are copied unchanged to `dist/resources/vendor/genex/
 `dist/resources/plugins/genex/embed-sdk`, and from there into a published game's
 `vendor/genex/embed-sdk`.
 
+## Vendored Genex Unreal multiplayer plugin (GenexMultiplayer)
+
+`src/plugins/unreal/multiplayer/GenexMultiplayer` is Genex's own Unreal plugin, copied unchanged
+from the Genex SDK (`sdks/unreal/GenexMultiplayer`, commit pinned in `vendor.json`) and from the app
+into a game's `unreal/Plugins/` by `unreal__multiplayer`. Its `Source/ThirdParty/GenexPhysicsNative`
+libraries (`PROVENANCE.json`) are Genex Physics' C ABI built from this repository's
+`native/genex-rust` (commit ae524c44), which statically links these Rust crates, each under the
+permissive terms its Cargo.toml states (MIT, Apache-2.0, Zlib or Unlicense, alone or as a choice;
+cargo-deny holds the workspace to them): rapier3d 0.36.0, parry3d 0.31.1, nalgebra 0.35.0,
+simba 0.10.2, glam, glamx 0.3.1, spade 2.15.1, rstar 0.13.0, robust 1.2.0, wide 1.7.1,
+safe_arch 1.2.0, ordered-float 5.5.0, serde 1.0.229, serde_json 1.0.151, postcard 1.1.3,
+libm 0.2.16, hashbrown, indexmap 2.14.2, smallvec 1.16.2, arrayvec 0.7.8, bytemuck 1.25.2,
+num-traits 0.2.19 and the num, heapless, approx and small utility crates they pull in.
+
+The Colyseus native core (`colyseus/native-sdk` 0.18.10, MIT) the plugin links is not shipped in
+the app: `unreal__multiplayer` downloads its pinned release into the game's plugin with its
+license (`src/plugins/unreal/multiplayer/COLYSEUS-LICENSE`) beside it.
+
 ## Cover orb shaders from orbkit
 
 `src/shared/cover-orbs.ts` holds twelve fragment shaders and orbkit's shared GLSL helpers, copied

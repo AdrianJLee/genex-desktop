@@ -160,7 +160,7 @@ export interface PluginTool {
  * A program Studio itself runs for a manifest tool instead of your backend. Reserved for the
  * bundled Genex plugin on API 3; any other plugin that names one is refused.
  */
-export type PluginHostTool = "genex-cli" | "genex-cli-paid" | "genex-package";
+export type PluginHostTool = "genex-cli" | "genex-cli-paid" | "genex-package" | "genex-room";
 
 /**
  * Who may call a tool (API 3): `agents`, the default, or `harness`: only Genex's own harness loop

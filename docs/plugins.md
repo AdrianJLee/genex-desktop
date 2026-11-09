@@ -1944,7 +1944,13 @@ Available services are capability checked and scoped to the calling plugin:
   target is Studio's, never the game folder: the plugin names no path and the same audited
   exporter the Export button uses does the copying. The copy carries no package.json, so the
   result's `genex` field holds what the game's own one tells Genex (its Genex SDK versions and
-  `genex` settings), read only when that file lives inside the game.
+  `genex` settings, a server-authoritative `authority` block as written), read only when that
+  file lives inside the game. For a game with a usable `authority` block the host also stages its
+  room (`substrate/genex-room-stage.ts`) beside `dist/`, never in it: `server/` and every game file
+  the module imports by a relative path, at their paths in the game, each staged folder ignored by
+  git. A link on the way, a file outside the game or at its top level, a hidden or reserved folder,
+  or more than 2,000 files or 32 MiB refuses the export with the copy untouched; a game without the
+  block leaves no staged room.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
   the bound game to a project file of the engine the plugin declares (an Unreal `.uproject`, a
   Godot project's `project.godot`, a Roblox place), read its link, or show the plugin's steps card
@@ -3672,6 +3678,12 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   module naming the slug into the copy's `vendor/genex/`, loads that module after the page's last
   import map, names the SDK in the copy's package.json so the CLI sends `embedSdkVersion`, and
   marks the copy again. A game that brings its own SDK connects itself; Studio never adds a second.
+- A game that declares a room (`genex.authority`, or `authority` in a template game's `genex.json`)
+  publishes it with the CLI's own gate: the copy's package.json carries the block, and the copy
+  gets `node_modules/@genex-ai/authority-dev`, a link to the pinned toolchain in the plugin's
+  payload (`GENEX_STUDIO_TOOLS`, `authority-toolchain.ts`), so the CLI bundles, validates and
+  uploads the module before any game file. A game without the block publishes from the copy it
+  always did: no block, no dependency folder, no staged room.
 - That dialog also reads the cover record publish-status answers (`GenexPublishState.cover`, typed
   in `shared/genex.ts` with the plugin's outcome kinds as `GenexCoverOutcome`). While it reports no
   kept shot and no send running, the owner chose no cover on genex.games (`kept_owner`, which the
@@ -3772,18 +3784,29 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   `package.json`: for `@genex-ai/embed-sdk` the tool maps Studio's copy in its page's import map
   (`/vendor/genex/embed-sdk/index.js`, which the build copies from the pinned devDependency) and
   loads `/vendor/genex/connect.js` after the map (`withGenexSdkImport`); its page must be a
-  regular file, never a link. Multiplayer is refused there. A Godot game (`godot/project.godot`)
+  regular file, never a link. `@genex-ai/multiplayer` maps Studio's build of it as well
+  (`/vendor/genex/multiplayer/`: the entry, `/schema` and the server-authoritative client
+  `/authority`, from `scripts/vendor-genex-multiplayer.ts`); a page mapped before `/authority` was
+  served still counts as using Studio's copy, and asking again adds it. A Godot game (`godot/project.godot`)
   or a Unity game (`[unity/]ProjectSettings/ProjectVersion.txt`) is refused with a pointer to
   `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool needs consent; the package tool asks nobody (Genex's own pinned packages spend nothing), and fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
+- `genex__room` (host `genex-room`) tests a server-authoritative game's room module on this Mac
+  with the toolchain Studio ships: `validate` answers the publish gate's verdict, `start` serves the
+  room on 127.0.0.1 with up to 8 bots and up to 300 ms of delay and loads the game's loopback
+  preview into it, `status` answers its last REPORT, log lines and errors, `stop` ends it. It runs in
+  ProcessSandbox, asks nobody, spends nothing and, touching no account or download, runs in fixture
+  profiles too.
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;
   `character.import` is Uthana); it names no order between Genex and Local Blender.
-- Genex's guide, eight platform cards and five lane cards (model, character, texture, audio,
+- Genex's guide, nine platform cards and five lane cards (model, character, texture, audio,
   image) are vendored behind Studio-written prefaces in
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`
-  refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills. The
+  refreshes them; `genex-skills-vendor.test.ts` catches drift, and a `$genex-…` skill a card names
+  that the plugin does not ship) and served as file skills. The server-authoritative card's preface
+  says that publishing ships the room module and that `genex__room` tests it on this Mac. The
   `genex` plugin keeps Genex's product requirements and API facts: Studio's cuts (`cuts.json`, a
   section, a run of lines, a replaced sentence or a dropped reference, each matching the pinned text
   exactly once) take Genex's design and process advice out of the vendored text, and the prefaces

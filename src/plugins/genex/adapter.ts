@@ -53,7 +53,8 @@ import {
 import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { isBlankStill } from "../../shared/preview-contract.ts";
-import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
+import { GenexCliStopped, authorityDevDir, runGenexCli, genexCliPath } from "./cli.ts";
+import { linkAuthorityToolchain } from "./authority-toolchain.ts";
 import { stageBuildSource, unrealEngineOf } from "./remix-source.ts";
 import {
   type MacSigning,
@@ -1195,6 +1196,7 @@ export class GenexTools {
       if (Number.isSafeInteger(files)) job.export = { files: files as number };
       const connect = !bringsOwnSdk(exported?.genex);
       await this.#writeWorkspaceManifest(dir, project, job, exported?.genex, connect);
+      await linkAuthorityToolchain(dir, authorityDevDir(), exported?.genex);
       job.deployment = await markDeployment(path.join(dir, "dist"), job.id);
       job.phase = startPhase;
       return connect;

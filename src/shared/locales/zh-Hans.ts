@@ -4642,6 +4642,15 @@ export default {
   "in {game} and {count} more": "在 {game} 及另外 {count} 款游戏中",
   "install and run the apps it names, such as Blender": "安装并运行它指定的应用，例如 Blender",
   "installs Genex packages in the game": "在游戏中安装 Genex 依赖包",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "房间模块导入了 {file}，它位于发布副本自留的文件夹中；请把它移到 src/",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "房间模块导入了 {file}，它在游戏文件夹之外；请把共享代码放在 src/ 这样的文件夹中",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "房间模块通过链接访问 {file}；发布需要真实文件",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "房间模块的 server/ 文件夹及其导入内容过大，无法作为房间模块发布",
+  "runs the game's multiplayer room on this computer": "在这台电脑上运行游戏的多人房间",
   integrations: "集成",
   "it finished": "已结束",
   "it landed": "已进入游戏",

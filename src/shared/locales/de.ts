@@ -5030,6 +5030,15 @@ export default {
   "install and run the apps it names, such as Blender":
     "die Apps installieren und ausführen, die es nennt, etwa Blender",
   "installs Genex packages in the game": "installiert Genex-Pakete im Spiel",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "Das Raummodul importiert {file} aus einem Ordner, den die Veröffentlichungskopie für sich behält; verschiebe die Datei nach src/",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "Das Raummodul importiert {file} von außerhalb der Ordner des Spiels; lege gemeinsamen Code in einen Ordner wie src/",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "Das Raummodul erreicht {file} über einen Link; zum Veröffentlichen wird die echte Datei gebraucht",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "Der Ordner server/ des Raummoduls und seine Importe sind zu groß, um als Raummodul veröffentlicht zu werden",
+  "runs the game's multiplayer room on this computer": "führt den Mehrspieler-Raum des Spiels auf diesem Computer aus",
   integrations: "Integrationen",
   "it finished": "abgeschlossen",
   "it landed": "ist im Spiel",

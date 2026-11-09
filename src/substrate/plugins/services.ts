@@ -18,6 +18,7 @@ import { VIEWPORT_MAX, VIEWPORT_MIN } from "../preview-pool.ts";
 import type { ExportResult } from "../game-export.ts";
 import type { GenexGameManifest } from "../../shared/genex.ts";
 import { readGenexGameManifest } from "../genex-game-manifest.ts";
+import { clearStagedRoom, roomModulePath, stageRoom } from "../genex-room-stage.ts";
 import { SecretStore } from "../secrets.ts";
 import { atomicWriteJson } from "../fsx.ts";
 import { createHash } from "node:crypto";
@@ -511,6 +512,7 @@ export class PluginServices {
     await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
     const result = await this.exportStage(bound, target, id);
     const genex = await readGenexGameManifest(bound.directory);
+    await stageRoomFor(bound.directory, path.dirname(target), genex);
     return genex ? { ...result, genex } : result;
   }
   /**
@@ -532,6 +534,16 @@ export class PluginServices {
       });
     return this.observe(binding, args.files, still);
   }
+}
+
+/**
+ * The room module a server-authoritative game declares, staged beside the public copy in the
+ * publish workspace (never in it); a game that declares none leaves no staged room behind.
+ */
+async function stageRoomFor(gameDir: string, workspace: string, genex: GenexGameManifest | undefined): Promise<void> {
+  const module = roomModulePath(genex?.genex?.authority);
+  if (module === null) await clearStagedRoom(workspace);
+  else await stageRoom(gameDir, workspace, module);
 }
 
 /**

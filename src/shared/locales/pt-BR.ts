@@ -4971,6 +4971,15 @@ export default {
   "in {game} and {count} more": "em {game} e mais {count}",
   "install and run the apps it names, such as Blender": "instalar e executar os apps que ele indica, como o Blender",
   "installs Genex packages in the game": "instala pacotes do Genex no jogo",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "O módulo de sala importa {file}, de uma pasta que a cópia de publicação reserva para si; mova o arquivo para src/",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "O módulo de sala importa {file}, fora das pastas do jogo; mantenha o código compartilhado em uma pasta como src/",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "O módulo de sala chega a {file} por um link; a publicação precisa do arquivo real",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "A pasta server/ do módulo de sala e suas importações são grandes demais para publicar como módulo de sala",
+  "runs the game's multiplayer room on this computer": "executa a sala multijogador do jogo neste computador",
   integrations: "integrações",
   "it finished": "terminou",
   "it landed": "chegou ao jogo",

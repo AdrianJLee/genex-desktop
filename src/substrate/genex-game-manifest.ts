@@ -33,6 +33,8 @@ const UNITY_MULTIPLAYER_PACKAGES = [
 ];
 /** A `genex.matchmaking` block larger than this, as JSON, is left out. */
 const MAX_MATCHMAKING_CHARS = 4096;
+/** The `genex` setting that names a game's server-authoritative room module. */
+const AUTHORITY_SETTING = "authority";
 /** A version range as npm writes one for a registry package; links, paths and URLs are left out. */
 const VERSION_RANGE = /^[0-9A-Za-z.^~<>=*+| -]{1,64}$/;
 
@@ -49,7 +51,12 @@ function versionOf(pkg: Record<string, unknown>, name: GenexGamePackage): string
   return undefined;
 }
 
-/** The `genex` settings the CLI sends with an upload: a matchmaking block and the mobile-controls flag. */
+/**
+ * The `genex` settings the CLI sends with an upload: a matchmaking block, the mobile-controls flag
+ * and the server-authoritative room block. The room block goes as written, malformed or not: the
+ * CLI checks it and refuses a bad one by name, where leaving it out would ship a game whose every
+ * join is refused (424, no room module).
+ */
 function genexSettings(pkg: Record<string, unknown>): GenexGameManifest["genex"] {
   const genex = pkg.genex;
   if (!isRecord(genex)) return undefined;
@@ -58,6 +65,7 @@ function genexSettings(pkg: Record<string, unknown>): GenexGameManifest["genex"]
   if (isRecord(matchmaking) && JSON.stringify(matchmaking).length <= MAX_MATCHMAKING_CHARS)
     settings.matchmaking = matchmaking;
   if (genex.mobileControls === true) settings.mobileControls = true;
+  if (Object.hasOwn(genex, AUTHORITY_SETTING)) settings.authority = genex[AUTHORITY_SETTING];
   return Object.keys(settings).length > 0 ? settings : undefined;
 }
 

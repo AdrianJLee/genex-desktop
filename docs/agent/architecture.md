@@ -887,7 +887,13 @@ removed afterwards), never a game folder, where the CLI's skill sync and contrac
 write `.claude`, `AGENTS.md` and ancestor contracts. Only `api.genex.games` (or a dev stand's, `GenexStand`) is reachable,
 games are write-denied, the token goes on stdin, and project commands see only `{id, slug}`. `GenexPackageService` (`genex-package.ts`) checks the name against
 `GENEX_GAME_PACKAGES` and the binding folder by realpath (the game, or a registered git worktree of
-it under scratch), then runs the toolchain's `add` through `GameBuilds.addPackages`.
+it under scratch), then runs the toolchain's `add` through `GameBuilds.addPackages`. `GenexRoomService`
+(`genex-room.ts`, host `genex-room`, no native step: no account, download or app) runs the payload's
+pinned `@genex-ai/authority-dev` on the bound game's room module in ProcessSandbox: `validate`
+through `run` (writes only its scratch), `start` through `spawnLongLived` (game write-denied,
+loopback only, stdin closing stops it), one room per game, all ended when the core stops. A running
+room's address goes into the game's loopback preview entry (`genex_local_test`,
+`genex_authority_url`, `PreviewService.joinLocalRoom`), and Live loads again into and out of it.
 
 **Blender.** Local Blender supplies `blender__model` through the ordinary API 3 registry with a
 managed local runtime; core has no Blender tool of its own.

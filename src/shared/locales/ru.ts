@@ -4895,6 +4895,16 @@ export default {
   "install and run the apps it names, such as Blender":
     "устанавливать и запускать нужные ему приложения, например Blender",
   "installs Genex packages in the game": "устанавливает пакеты Genex в игру",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "Модуль комнаты импортирует {file} из папки, которую копия для публикации оставляет себе; перенесите файл в src/",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "Модуль комнаты импортирует {file} вне папок игры; держите общий код в папке вроде src/",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "Модуль комнаты получает {file} через ссылку; для публикации нужен настоящий файл",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "Папка server/ модуля комнаты и её импорты слишком велики, чтобы опубликовать их как модуль комнаты",
+  "runs the game's multiplayer room on this computer":
+    "запускает многопользовательскую комнату игры на этом компьютере",
   integrations: "слияния",
   "it finished": "работа завершена",
   "it landed": "шаг попал в игру",

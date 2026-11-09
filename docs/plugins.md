@@ -2967,8 +2967,13 @@ editors are found where Unity Hub puts them (`editors.ts`): its own folder
 `multiplayer` (agent tool, `multiplayer.ts`; its `unity-multiplayer` file skill says how to write
 the online play) puts Genex multiplayer into the game's Unity project, WebGL and native alike:
 - **The package.** Genex's package is embedded as `Packages/com.genex.multiplayer/`, a copy of the
-  Genex SDK's `sdks/unity` (`MULTIPLAYER_PACKAGE_SOURCE`). A changed file is kept beside it as
-  `<name>.mine~`, a name Unity never imports.
+  Genex SDK's `sdks/unity` at one commit (`MULTIPLAYER_PACKAGE_SOURCE`): the relay client and the
+  server-authoritative room client. `scripts/refresh-unity-multiplayer.ts` writes it and
+  `multiplayer/vendor.json` (pin, version, each file's sha256) from a genex-demo checkout, leaving
+  out the SDK's `Tests~` and its native Genex Physics core (`Runtime/Plugins`, about 130 MB), so a
+  physics room's bodies are drawn unpredicted; `--check` names any drift and
+  `unity-multiplayer-vendor.test.ts` holds the copy to the record. Biome leaves the copy alone. A
+  changed file is kept beside it as `<name>.mine~`, a name Unity never imports.
 - **Colyseus.** The Colyseus Unity SDK it runs on is asked for in `Packages/manifest.json` at the
   tested `upm` commit (`COLYSEUS_PACKAGE_URL`). Unity fetches it from Colyseus's repository, which
   needs git on the Mac. Studio ships none of it: its bundled serializer carries Asset Store terms.
@@ -2986,9 +2991,20 @@ the online play) puts Genex multiplayer into the game's Unity project, WebGL and
 - **Identity.** A WebGL build's player comes from the published page's `window.genexEmbed` (the
   connect module's). A native build's comes from `GenexNativeIdentity`: Play's gateway and ticket
   (`GENEX_API_URL`, `GENEX_EMBED_TICKET`), or a guest.
+- **Server rooms.** The skill's section 5 picks them for competitive play (never mixed with the
+  relay): `server/room.ts` and its `authority` block in `genex.json` (kept when `multiplayer` writes
+  the matchmaking), `GenexAuthority.Connect` on the client. `GenexGame.LocalRoomUrl` is
+  `genex__room`'s local room: `GENEX_AUTHORITY_URL` in a native build, the preview's
+  `genex_authority_url` in a WebGL one (only a `ws://` loopback room on a loopback page);
+  `GenexGame.PageAuthorityUrls` is the published page's `window.genexEmbed.getAuthorityUrls()`. The
+  room travels with the WebGL build through the same staging as any game's (`readGenexGameManifest`
+  reads `genex.json` once the project embeds the package).
 - **Verified so far:** a Unity 6 Mono Mac build, named by `GENEX_GAME`, signed in as a guest and
   two copies met in a published game's room; a WebGL build read its name from the page. Not yet:
-  an IL2CPP build, or a WebGL build's sign-in on a published page.
+  an IL2CPP build, or a WebGL build's sign-in on a published page. For server rooms: the package's
+  core passes Genex's authority conformance on .NET 8 over loopback UDP in genex-demo's engines CI,
+  and a Unity-shaped game's room validates, serves bots and publishes; no Unity build has joined a
+  room from Studio yet.
 
 #### The panel and the toolbar button
 

@@ -21,7 +21,9 @@
       "!src/harness-seed/types/host-api.d.ts",
       "!evals/ledger",
       "!marketplace/template/scripts",
-      "!src/plugins/unreal/multiplayer/GenexMultiplayer"
+      "!src/plugins/unreal/multiplayer/GenexMultiplayer",
+      "!src/plugins/unity/multiplayer/com.genex.multiplayer",
+      "!src/plugins/unity/multiplayer/vendor.json"
     ]
   },
   "formatter": {

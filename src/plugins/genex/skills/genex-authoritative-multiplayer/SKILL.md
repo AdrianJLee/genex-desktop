@@ -7,6 +7,8 @@ preface, this preface wins.
 ## What Studio runs of it today
 
 - Writing works: the room module, its `authority` block and the client, in any web game made here.
+  A Unity game writes the same room module and block (in `genex.json`) with a C# client: follow
+  section 5 of `unity__skill {"name":"unity-multiplayer"}`, not this card's client half.
 - Shipping works. `genex__publish` (draft or gallery) sends the room module with the build: Studio
   ships `@genex-ai/authority-dev` itself, stages `server/` and every file the module imports beside
   the public copy (never in it), and the publish bundles and validates the module before any game

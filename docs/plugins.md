@@ -3772,7 +3772,10 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   `package.json`: for `@genex-ai/embed-sdk` the tool maps Studio's copy in its page's import map
   (`/vendor/genex/embed-sdk/index.js`, which the build copies from the pinned devDependency) and
   loads `/vendor/genex/connect.js` after the map (`withGenexSdkImport`); its page must be a
-  regular file, never a link. Multiplayer is refused there. A Godot game (`godot/project.godot`)
+  regular file, never a link. `@genex-ai/multiplayer` maps Studio's build of it as well
+  (`/vendor/genex/multiplayer/`: the entry, `/schema` and the server-authoritative client
+  `/authority`, from `scripts/vendor-genex-multiplayer.ts`); a page mapped before `/authority` was
+  served still counts as using Studio's copy, and asking again adds it. A Godot game (`godot/project.godot`)
   or a Unity game (`[unity/]ProjectSettings/ProjectVersion.txt`) is refused with a pointer to
   `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool needs consent; the package tool asks nobody (Genex's own pinned packages spend nothing), and fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
@@ -3780,10 +3783,12 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;
   `character.import` is Uthana); it names no order between Genex and Local Blender.
-- Genex's guide, eight platform cards and five lane cards (model, character, texture, audio,
+- Genex's guide, nine platform cards and five lane cards (model, character, texture, audio,
   image) are vendored behind Studio-written prefaces in
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`
-  refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills. The
+  refreshes them; `genex-skills-vendor.test.ts` catches drift, and a `$genex-…` skill a card names
+  that the plugin does not ship) and served as file skills. The server-authoritative card's preface
+  says what Studio cannot run or publish of a room module yet. The
   `genex` plugin keeps Genex's product requirements and API facts: Studio's cuts (`cuts.json`, a
   section, a run of lines, a replaced sentence or a dropped reference, each matching the pinned text
   exactly once) take Genex's design and process advice out of the vendored text, and the prefaces

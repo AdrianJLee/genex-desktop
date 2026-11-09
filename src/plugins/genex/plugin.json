@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.16.4",
+  "version": "1.16.5",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -191,6 +191,21 @@
       "summary": "The @genex-ai/multiplayer API for a web game: rooms, matchmaking, shared state, host and ownership, rate limits, and the draft link that runs it (Studio's preview is single-player).",
       "file": "skills/genex-threejs-multiplayer/SKILL.md",
       "references": ["skills/genex-threejs-multiplayer/references/realtime-patterns.md"]
+    },
+    {
+      "name": "genex-authoritative-multiplayer",
+      "engines": ["web"],
+      "summary": "Server-authoritative multiplayer for a competitive web game: the room module Genex's servers run, connectAuthority on the client, movement presets, lag-compensated shots, and what Studio cannot run or publish of it yet.",
+      "file": "skills/genex-authoritative-multiplayer/SKILL.md",
+      "references": [
+        "skills/genex-authoritative-multiplayer/references/module-api.md",
+        "skills/genex-authoritative-multiplayer/references/physics.md",
+        "skills/genex-authoritative-multiplayer/references/presets.md",
+        "skills/genex-authoritative-multiplayer/references/projectiles.md",
+        "skills/genex-authoritative-multiplayer/references/room-template.md",
+        "skills/genex-authoritative-multiplayer/references/settings.md",
+        "skills/genex-authoritative-multiplayer/references/testing.md"
+      ]
     },
     {
       "name": "genex-threejs-embed-auth",

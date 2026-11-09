@@ -389,6 +389,7 @@ Two different things, both asked by the host and never by the plugin or the agen
   offers **Allow in this chat**, covering that tool for the rest of the chat.
 - **`tools[].timeoutMs`** (API 3) — whole milliseconds, 1,000 to 540,000: how long one call may
   run when that is longer than the host's 190-second ceiling, such as an engine's import or export.
+  A card the host shows inside the call (`export.stage`'s file list) does not count against it.
 - **`actions[].confirmation`** — a user-invoked action behind a Studio-owned review and a native
   dialog. Your optional `review` returns `{message, detail, images:[{label, dataUrl}]}`: `message`
   (at most 2,000 characters) is the dialog's question instead of the manifest's `confirmation`, and

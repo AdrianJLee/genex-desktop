@@ -1950,7 +1950,16 @@ Available services are capability checked and scoped to the calling plugin:
   the module imports by a relative path, at their paths in the game, each staged folder ignored by
   git. A link on the way, a file outside the game or at its top level, a hidden or reserved folder,
   or more than 2,000 files or 32 MiB refuses the export with the copy untouched; a game without the
-  block leaves no staged room.
+  block leaves no staged room. Unless the person just approved these very files in Studio's Publish
+  dialog, the host first shows them on a card (`reviewExport`). That card is the person's time,
+  not the plugin's: the call's own deadline (190 s, or its `timeoutMs`) stands still from the card's
+  showing to its answer (`PluginInvocation.personAnswers`, `substrate/plugins/process.ts`), the time
+  before and after it still counts, and the card closes when the call ends, so no export goes ahead
+  on an answer nobody waits for. Genex's publish records what it made of a room module in its job's
+  `room` (`GenexPublishRoom`): `validated` from the CLI's kept gate report of this attempt
+  (`.genex/authority/report.json` in the publish copy, with `moduleSha256`, or the gate's
+  `failures`), `uploaded` once that upload finished, which the CLI refuses unless Genex stored the
+  module and named its sha.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
   the bound game to a project file of the engine the plugin declares (an Unreal `.uproject`, a
   Godot project's `project.godot`, a Roblox place), read its link, or show the plugin's steps card

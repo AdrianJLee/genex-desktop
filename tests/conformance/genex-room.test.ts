@@ -33,6 +33,19 @@ const ROOM_JS = [
   "  step() {},",
   "};",
 ].join("\n");
+/** A Unity game's room module: TypeScript, sharing nothing with its C# client. */
+const UNITY_ROOM_TS = [
+  "type Player = { id: string };",
+  "export default {",
+  "  contract: 1,",
+  '  config: { tickHz: 30, maxPlayers: 8, preset: { name: "topdown" } },',
+  "  init: () => ({ joins: 0 }),",
+  '  onJoin(ctx: any, player: Player) { ctx.state.joins += 1; ctx.entities.spawn({ kind: "player", owner: player.id, hp: 3 }); },',
+  "  onLeave(ctx: any, player: Player) { const me = ctx.entities.ownedBy(player.id); if (me) ctx.entities.remove(me.id); },",
+  "  onInput() {},",
+  "  step() {},",
+  "};",
+].join("\n");
 /** A module whose every tick throws: a fault the gate names. */
 const FAULTY_JS = ROOM_JS.replace("step() {},", 'step() { throw new Error("boom"); },');
 /** How often a test looks at a running room, and how long it looks before it gives up. */
@@ -322,6 +335,38 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
     assert.deepEqual(told, [first.url, null, second.url]);
     await rooms.stopAll();
     assert.equal(rooms.status(binding.project).running, false);
+  });
+
+  it("validates and serves a Unity game's room: server/room.ts beside its project and its WebGL build", async () => {
+    // A Unity game has no page or package.json of its own at the top: its project carries Genex's
+    // package, its WebGL build is in web/, and genex.json declares the room.
+    const dir = path.join(root, "games", "unity-arena");
+    const files: Record<string, string> = {
+      "unity/Packages/com.genex.multiplayer/package.json": JSON.stringify({ name: "com.genex.multiplayer" }),
+      "unity/Assets/Scripts/Online.cs": "public sealed class Online {}",
+      "web/index.html": "<!doctype html>",
+      "server/room.ts": UNITY_ROOM_TS,
+      "genex.json": JSON.stringify({ authority: { module: "server/room.ts", tickHz: 30, maxPlayers: 8 } }),
+    };
+    for (const [rel, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+      await writeFile(path.join(dir, rel), text);
+    }
+    const { rooms, told, binding } = service(dir);
+    const verdict = (await rooms.call({ action: "validate" }, binding)) as { passed: boolean };
+    assert.equal(verdict.passed, true, JSON.stringify(verdict));
+    const started = (await rooms.call({ action: "start", bots: 2 }, binding)) as RoomStatus;
+    try {
+      assert.match(started.url ?? "", /^ws:\/\/127\.0\.0\.1:\d+$/);
+      assert.deepEqual(told, [started.url], "the preview (the WebGL build) is told the room's address");
+      await until(
+        rooms,
+        binding.project,
+        (status) => ((status.report as { players?: number } | null)?.players ?? 0) >= 2,
+      );
+    } finally {
+      await rooms.call({ action: "stop" }, binding).catch(() => null);
+    }
   });
 
   it("fails a start whose module does not load, leaving nothing running and the preview alone", async () => {

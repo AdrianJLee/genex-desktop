@@ -260,6 +260,41 @@ describe("the room is staged beside the public copy, never in it", () => {
   });
 });
 
+describe("a Unity game's room travels with its WebGL build", () => {
+  it("export.stage stages server/room.ts beside the build, and none of the Unity project", async () => {
+    // A Unity game: its project (here in unity/) carries Genex's package, its WebGL build is web/,
+    // and genex.json declares the room; it has no package.json or page of its own at the top.
+    const room = { module: "server/room.ts", tickHz: 30, maxPlayers: 8 };
+    const { root, game } = await gameWith({
+      "unity/Packages/com.genex.multiplayer/package.json": JSON.stringify({ name: "com.genex.multiplayer" }),
+      "unity/Assets/Scripts/Online.cs": "public sealed class Online {}",
+      "web/index.html": "<!doctype html>",
+      "genex.json": JSON.stringify({ authority: room, matchmaking: { preset: "open" } }),
+      "server/room.ts": "export default { contract: 1 };",
+      "server/rules.ts": "export const SPEED: number = 4;",
+    });
+    const manifest = await readGenexGameManifest(game);
+    assert.deepEqual(manifest?.genex, { authority: room, matchmaking: { preset: "open" } });
+    assert.ok(manifest?.dependencies["@genex-ai/multiplayer"], "a multiplayer game, as a relay Unity game is");
+    const services = new PluginServices(path.join(root, "data"), {}, async () => null);
+    // The host's export copies the WebGL build (web/), as studio-core's exportPublicCopy does for an engine's web export.
+    services.exportStage = async (_binding, target) => {
+      await mkdir(target, { recursive: true });
+      await writeFile(path.join(target, "index.html"), await readFile(path.join(game, "web", "index.html")));
+      return { dir: target, files: 1, included: ["index.html"], excluded: [] };
+    };
+    const binding = { project: "game", directory: game };
+    const workspace = path.join(services.root("genex"), "publish", "game");
+    const staged = (await services.call("genex", PluginService.ExportStage, {}, binding)) as {
+      genex?: GenexGameManifest;
+    };
+    assert.deepEqual(staged.genex?.genex?.authority, room);
+    assert.deepEqual((await readdir(workspace)).sort(), [".genex", "dist", "server"], "only the room beside the build");
+    assert.deepEqual((await readdir(path.join(workspace, "server"))).sort(), [".gitignore", "room.ts", "rules.ts"]);
+    assert.deepEqual(await readdir(path.join(workspace, "dist")), ["index.html"], "server code is never public");
+  });
+});
+
 describe("the publish copy finds Studio's pinned toolchain", () => {
   const declared: GenexGameManifest = { dependencies: {}, genex: { authority: ROOM } };
 

@@ -131,6 +131,30 @@
       "host": "genex-package"
     },
     {
+      "name": "room",
+      "facts": ["web-game"],
+      "description": "Test this game's server-authoritative room module on this computer, with the room-module toolchain Studio ships; the game installs nothing. action validate runs the publish gate: it bundles the module named by the game's authority block, fuzzes it for 30 simulated seconds and replays it, and answers {passed, moduleSha256, failures}; fix every failure before you publish. action start serves the room on 127.0.0.1 with bots (default 3, at most 8) behind latencyMs of one-way delay (default 0, at most 300), and loads the game's preview into it, so the person plays against the bots there; it answers the room's address and whether the preview joined. action status answers the room's last REPORT (players, tick p50/p99 against budgetMs, strikes, lastFault, corrections), its ctx.log lines and errors; read it while the room runs. action stop ends the room and puts the preview back. One room per game; starting again replaces it. Free: no account, no network, nothing published.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "validate, start, status or stop"
+          },
+          "bots": {
+            "type": "number",
+            "description": "start: bots that join, wander, aim at the nearest player and fire (0 to 8, default 3)."
+          },
+          "latencyMs": {
+            "type": "number",
+            "description": "start: one-way delay added in front of the room, in milliseconds (0 to 300, default 0)."
+          }
+        },
+        "required": ["action"]
+      },
+      "host": "genex-room"
+    },
+    {
       "name": "cover",
       "description": "Keep this game's Genex cover: the 16:9 picture genex.games shows on its gallery card, its page and every shared link (not Studio's own sidebar look, set_game_cover), and optionally the clip it plays over the cover on its cards. Make them of the real game by any means, save them inside this game's folder and pass their paths: image is a PNG or JPEG of at least 1280×720 and at most 8 MB (Genex shows 16:9 whole and crops other shapes to their middle 16:9); clip is a WebM or MP4 of at least 5.3 seconds of play (Genex keeps five) and at most 8 MB. Studio checks both and copies them into its own storage in place of the last cover; when either is refused nothing is kept. The answer has the kept picture's size and light (Genex refuses a picture too dark or one flat colour), the last send, who chose the cover on Genex (coverSource; the owner's pick always stands) and when it is sent: the next publish sends it (a draft only until the game is public), genex__cover-set sends it now. Asks nothing, charges nothing and uploads nothing.",
       "parameters": {

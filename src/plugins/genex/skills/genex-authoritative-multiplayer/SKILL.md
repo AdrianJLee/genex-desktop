@@ -13,13 +13,18 @@ preface, this preface wins.
   file moves. A module that fails stops the publish with each typed reason in the job's error; fix
   the module and publish again. On Genex's servers the owner needs Genex Pro: a free account is
   refused with `authority_requires_pro` after validation, and nothing is uploaded.
-- Running it on this machine does not yet. Studio has no tool that starts a local room, and Studio's
-  preview cannot join one, so the card's `npx genex-authority-dev` commands are not available (a
-  game's commands cannot download it). A draft publish is the check: its validation is the same
-  gate `validate` runs.
-- Say this to the person before building one, and let them choose: the game written now, checked
-  and shipped by a draft, or a casual game (`$genex-threejs-multiplayer`) that also plays in the
-  preview. Never report a server-authoritative game as tested locally or online before a draft passed.
+- Testing it on this computer works, with `genex__room` in place of the card's
+  `npx genex-authority-dev` commands (a game's commands cannot download it):
+  - `genex__room {"action":"validate"}` is the publish gate's own check: `{passed, failures}`.
+    Run it after every change to the module, and fix each failure before anything else.
+  - `genex__room {"action":"start","bots":3,"latencyMs":75}` serves the room on this computer with
+    bots and loads the game's preview into it, so the person plays against the bots there.
+    `genex__room {"action":"status"}` answers the room's last REPORT, its `ctx.log` lines and
+    errors; read it while the room runs, as the card's testing reference describes. Stop it with
+    `genex__room {"action":"stop"}`. The preview hands the game the room's address through the
+    embed SDK's local test mode (`getAuthorityUrls()`): never write the address into the game.
+- Before a publish, validate, then play it in a local room with bots, and say what you saw. Never
+  report a server-authoritative game as online before a draft of it passed.
 
 ## Packages
 

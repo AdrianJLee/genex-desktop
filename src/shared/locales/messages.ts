@@ -4697,6 +4697,7 @@ export const MESSAGES = [
   "run {runtimes}",
   "running",
   "runs the Genex CLI",
+  "runs the game's multiplayer room on this computer",
   "save a sign-in for its own account",
   "saved",
   "saved a snapshot",

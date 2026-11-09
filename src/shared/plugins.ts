@@ -191,6 +191,8 @@ export const PluginHostTool = {
   GenexCli: "genex-cli",
   GenexCliPaid: "genex-cli-paid",
   GenexPackage: "genex-package",
+  /** A server-authoritative game's room on this Mac: validated or served with bots, in the sandbox. */
+  GenexRoom: "genex-room",
 } as const;
 export type PluginHostTool = (typeof PluginHostTool)[keyof typeof PluginHostTool];
 /**

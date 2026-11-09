@@ -3791,6 +3791,12 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   or a Unity game (`[unity/]ProjectSettings/ProjectVersion.txt`) is refused with a pointer to
   `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool needs consent; the package tool asks nobody (Genex's own pinned packages spend nothing), and fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
+- `genex__room` (host `genex-room`) tests a server-authoritative game's room module on this Mac
+  with the toolchain Studio ships: `validate` answers the publish gate's verdict, `start` serves the
+  room on 127.0.0.1 with up to 8 bots and up to 300 ms of delay and loads the game's loopback
+  preview into it, `status` answers its last REPORT, log lines and errors, `stop` ends it. It runs in
+  ProcessSandbox, asks nobody, spends nothing and, touching no account or download, runs in fixture
+  profiles too.
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;
@@ -3800,7 +3806,7 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`
   refreshes them; `genex-skills-vendor.test.ts` catches drift, and a `$genex-…` skill a card names
   that the plugin does not ship) and served as file skills. The server-authoritative card's preface
-  says that publishing ships the room module and that Studio cannot yet run a local room. The
+  says that publishing ships the room module and that `genex__room` tests it on this Mac. The
   `genex` plugin keeps Genex's product requirements and API facts: Studio's cuts (`cuts.json`, a
   section, a run of lines, a replaced sentence or a dropped reference, each matching the pinned text
   exactly once) take Genex's design and process advice out of the vendored text, and the prefaces

@@ -4808,6 +4808,15 @@ export default {
   "in {game} and {count} more": "{game} 외 {count}개 게임에서 플레이 중",
   "install and run the apps it names, such as Blender": "Blender처럼 지정한 앱 설치 및 실행",
   "installs Genex packages in the game": "게임에 Genex 패키지 설치",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "룸 모듈이 게시 사본이 자체적으로 쓰는 폴더의 {file}을(를) 가져옵니다. src/로 옮기세요",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "룸 모듈이 게임 폴더 밖의 {file}을(를) 가져옵니다. 공유 코드는 src/ 같은 폴더에 두세요",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "룸 모듈이 링크를 통해 {file}에 접근합니다. 게시하려면 실제 파일이 필요합니다",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "룸 모듈의 server/ 폴더와 가져온 파일이 너무 커서 룸 모듈로 게시할 수 없습니다",
+  "runs the game's multiplayer room on this computer": "이 컴퓨터에서 게임의 멀티플레이어 룸을 실행합니다",
   integrations: "병합 횟수",
   "it finished": "끝났어요",
   "it landed": "반영됐어요",

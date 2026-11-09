@@ -4927,6 +4927,15 @@ export default {
   "in {game} and {count} more": "{game}ほか{count}本でプレイ中",
   "install and run the apps it names, such as Blender": "Blenderなど、指定したアプリをインストールして実行する",
   "installs Genex packages in the game": "ゲームにGenexパッケージをインストールする",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "ルームモジュールが、公開用コピーが自分用に使うフォルダーにある {file} をインポートしています。src/ に移動してください",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "ルームモジュールが、ゲームのフォルダー外にある {file} をインポートしています。共有コードは src/ などのフォルダーに置いてください",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "ルームモジュールがリンク経由で {file} を参照しています。公開には実際のファイルが必要です",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "ルームモジュールの server/ フォルダーとインポートが大きすぎて、ルームモジュールとして公開できません",
+  "runs the game's multiplayer room on this computer": "このコンピューターでゲームのマルチプレイヤールームを実行する",
   integrations: "統合",
   "it finished": "終了しました",
   "it landed": "反映されました",

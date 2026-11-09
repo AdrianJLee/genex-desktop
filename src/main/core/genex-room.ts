@@ -22,6 +22,7 @@ import { SECOND_MS, MINUTE_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import type { PluginBinding } from "../../shared/plugins.ts";
 import { readGenexGameManifest } from "../../substrate/genex-game-manifest.ts";
+import { nameRoom, unnameRoom } from "./genex-room-handoff.ts";
 import { roomModulePath } from "../../substrate/genex-room-stage.ts";
 import { LoopbackProtocol } from "../../substrate/linux-loopback-bridge.ts";
 import { containedReal } from "../../substrate/paths.ts";
@@ -139,6 +140,8 @@ interface Room {
   expose: LoopbackExpose | undefined;
   url: string | null;
   reachable: boolean;
+  /** The game's real folder, where the room is named for an engine's editor while it runs. */
+  game: string;
   /** Whether the preview was told the room's address, so is told again when it ends. */
   told: boolean;
   previewJoined: boolean;
@@ -476,6 +479,7 @@ export class GenexRoomService {
       expose,
       url: null,
       reachable: false,
+      game,
       told: false,
       previewJoined: false,
       report: null,
@@ -490,6 +494,8 @@ export class GenexRoomService {
     room.reachable = await this.#reach(room, room.url);
     // A room this computer cannot reach is never handed to the preview: it would load into nothing.
     if (!room.reachable) return this.status(project);
+    // An editor's Play (Unreal's GenexMultiplayer) joins it from here; a link in the way names it nowhere.
+    await nameRoom(game, room.url).catch(() => undefined);
     room.told = true;
     room.previewJoined = (await this.#deps.onRoom?.(project, room.url).catch(() => false)) ?? false;
     return this.status(project);
@@ -558,6 +564,7 @@ export class GenexRoomService {
   async #ended(project: string, room: Room): Promise<void> {
     if (this.#rooms.get(project) !== room) return;
     this.#rooms.delete(project);
+    if (room.url !== null) await unnameRoom(room.game, room.url).catch(() => undefined);
     if (room.told && !this.#closing) await this.#deps.onRoom?.(project, null).catch(() => false);
   }
 }

@@ -2061,8 +2061,9 @@ run at its moments, their observers feed its finish check and their worker types
 in any of its chats, or a run on it, ends with the folder holding a kind (`core/build-ends.ts`);
 it stays built after. `multiplayer` is set while the game's package.json names
 `@genex-ai/multiplayer`, its page maps Studio's copy, its Godot project carries Genex's
-multiplayer addon (`godot/addons/genex_multiplayer/plugin.cfg`) or its Unity project embeds Genex's
-package (`[unity/]Packages/com.genex.multiplayer/package.json`) (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
+multiplayer addon (`godot/addons/genex_multiplayer/plugin.cfg`), its Unity project embeds Genex's
+package (`[unity/]Packages/com.genex.multiplayer/package.json`) or its Unreal project carries Genex's
+plugin (`[unreal/]Plugins/GenexMultiplayer/GenexMultiplayer.uplugin`) (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
 Multiplayer shows only on a built game that is not multiplayer (`showsMultiplayer`), and on an
 engine's web export only for a Godot or Unity game (`takesEngineMultiplayer`), whose project takes it.
 
@@ -2699,6 +2700,20 @@ its report is a failed run, its summary naming the exit code, the counts so far 
 `unreal__plugin-status` answers each job's state and results and `proof`: the summary, the note and
 `unreal/Saved/Genex/Shots/<Plugin>-window.jpg` (kept by `app_look`'s `save`) that exist, the summary
 and note only for a run that finished, relative to the game, read from disk after a restart.
+Any Unreal game also gets `unreal__multiplayer {}` (`multiplayer-tools.ts`): Genex's own Unreal client
+for relay and server-authoritative rooms, the `GenexMultiplayer` plugin the app ships under
+`plugins/unreal/multiplayer/` (vendored byte for byte from the Genex SDK's
+`sdks/unreal/GenexMultiplayer` at the commit `vendor.json` pins, by `npm run unreal:multiplayer --
+--from <genex-demo>`; `unreal-multiplayer-vendor.test.ts` recomputes its git tree id), copied into
+the linked project's `Plugins/GenexMultiplayer` and turned on in the .uproject. The plugin links the
+official Colyseus native core, which nobody commits: on a Mac the backend downloads the pinned
+release once into its storage (`COLYSEUS_UNREAL_CORE`, sha256-checked before it is unpacked; a
+sandboxed job never fetches it) and places its macOS library, headers and license in the plugin's
+`Source/ThirdParty/ColyseusNative`; Windows has no published Win64 core yet, so there the plugin goes
+in and the answer says the core is missing. A link anywhere on the way refuses the call before
+anything is written. The `unreal-multiplayer` skill takes the builder from there: the room module
+and `genex.json`'s `authority` block, the `Genex Authority Subsystem` client, `genex__room` with bots
+(Play joins it through `.studio/authority.json`) and publish, which stages the room as for any game.
 Any Unreal game also gets `unreal__package-game {stop?, system?}` and `unreal__package-status {system?}`
 (`game-package.ts`): the app players install, for this computer's own system, or on Windows a Linux
 one with `system: "linux"` (`PackageSystem`, `HOST_SYSTEMS`; Unreal makes a Mac app only on a Mac and a
@@ -3819,7 +3834,10 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   Linux the sandbox gives the room a network namespace of its own, so it listens on ports free on
   this computer too and the loopback bridge opens them here: this computer's connections and
   datagrams go in, the room reaches nothing out. The preview is loaded into a room only once this
-  computer gets an answer from it (`reachable`); `previewJoined` is never true otherwise.
+  computer gets an answer from it (`reachable`); `previewJoined` is never true otherwise. A reachable
+  room is also named in the game's `.studio/authority.json` (`{"url":"ws://127.0.0.1:<port>"}`,
+  `genex-room-handoff.ts`), which an engine editor's Play joins (Unreal's GenexMultiplayer); it is
+  removed when the room ends, and never written or removed through a link.
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;

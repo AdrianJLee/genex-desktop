@@ -8,6 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { createSocket } from "node:dgram";
 import http from "node:http";
 import { createServer, type Server } from "node:net";
 import os from "node:os";
@@ -40,13 +41,15 @@ const LOOK_FOR_MS = 20_000;
 
 /**
  * A stand-in toolchain that runs as the room does and tries what the room must not: write in the
- * game, reach any network but loopback, reach loopback outside the sandbox's fence (Windows), and
- * reports each outcome; it listens and connects to itself where the room's own clients do, and
- * stops once its input closes. It reads its targets from `probe.json` beside it.
+ * game, reach any network but loopback, reach loopback outside the sandbox's fence (Windows) or
+ * this computer's loopback (Linux), hold the bridge's channel, and reports each outcome; it listens
+ * (answering HTTP, and echoing datagrams on its fast port) and connects to itself where the room's
+ * own clients do, and stops once its input closes. It reads its targets from `probe.json` beside it.
  */
 const PROBE_CLI = String.raw`"use strict";
 const fs = require("node:fs");
 const net = require("node:net");
+const http = require("node:http");
 const dgram = require("node:dgram");
 const path = require("node:path");
 const args = process.argv.slice(2);
@@ -63,11 +66,14 @@ const connect = (host, port) => new Promise((resolve) => {
 });
 const datagram = (port) => new Promise((resolve) => {
   const socket = dgram.createSocket("udp4");
-  const done = (outcome) => { try { socket.close(); } catch {} resolve(outcome); };
-  const timer = setTimeout(() => done("timeout"), 3000);
-  socket.once("message", () => { clearTimeout(timer); done("received"); });
-  socket.once("error", (e) => { clearTimeout(timer); done(e.code || "error"); });
-  socket.bind(port, "127.0.0.1", () => socket.send("x", port, "127.0.0.1", (e) => e && done(e.code || "error")));
+  const timer = setTimeout(() => resolve("timeout"), 3000);
+  socket.on("message", (data, from) => {
+    if (from.port !== port) { socket.send(data, from.port, from.address); return; }
+    clearTimeout(timer);
+    resolve("received");
+  });
+  socket.once("error", (e) => { clearTimeout(timer); resolve(e.code || "error"); });
+  socket.bind(port, "127.0.0.1", () => socket.send("x", port, "127.0.0.1", (e) => e && resolve(e.code || "error")));
 });
 const writes = () => ({
   gameNewFile: tryWrite(path.join(arg("--root"), "planted.txt"), "planted"),
@@ -78,11 +84,12 @@ if (args[0] === "validate") {
   process.exit(0);
 }
 (async () => {
-  const server = net.createServer((s) => s.destroy());
+  const server = http.createServer((request, response) => { response.statusCode = 204; response.end(); });
   await new Promise((resolve) => server.listen(Number(arg("--port") || 0), "127.0.0.1", resolve));
   const port = server.address().port;
   const outcomes = {
     env: { electronAsNode: process.env.ELECTRON_RUN_AS_NODE === "1", noProxy: process.env.no_proxy || null },
+    channel: typeof process.send === "function",
     ...writes(),
     selfTcp: await connect("127.0.0.1", port),
     selfUdp: arg("--fast-port") ? await datagram(Number(arg("--fast-port"))) : "not named",
@@ -90,6 +97,7 @@ if (args[0] === "validate") {
   };
   for (const target of targets.outside) outcomes.outside[target.name] = await connect(target.host, target.port);
   process.stdout.write("LISTEN " + JSON.stringify("ws://127.0.0.1:" + port) + "\n");
+  if (arg("--fast-port")) process.stdout.write("FAST " + JSON.stringify({ state: "on", url: "udp://127.0.0.1:" + arg("--fast-port") }) + "\n");
   report(outcomes);
   process.stdin.resume();
   process.stdin.on("end", () => { report({ ...outcomes, stopped: true }); process.exit(0); });
@@ -136,9 +144,9 @@ function service(dir: string, toolDir = authorityDevDir()) {
     },
     spawn: async (request) => {
       runs.push(request.command);
-      const { child, input } = await sandbox.spawnLongLived(request);
+      const { child, input, expose } = await sandbox.spawnLongLived(request);
       if (child.pid) pids.push(child.pid);
-      return { child, input };
+      return expose ? { child, input, expose } : { child, input };
     },
     toolDir,
     scratch: path.join(root, "runs"),
@@ -148,6 +156,7 @@ function service(dir: string, toolDir = authorityDevDir()) {
       return url !== null;
     },
     loopbackPorts: () => sandbox.loopbackPorts(),
+    ownLoopback: () => sandbox.ownLoopback(),
   });
   return { rooms, told, runs, pids, binding: { project: path.basename(dir), directory: dir } };
 }
@@ -171,6 +180,26 @@ function hostReaches(url: string | null): Promise<number> {
     request.once("timeout", () => request.destroy());
     request.once("error", () => resolve(0));
   });
+}
+
+/** What this process gets back for a datagram to `port` on loopback (as a native client's would be): its echo, or why not. */
+function hostEchoes(port: number): Promise<string> {
+  const socket = createSocket("udp4");
+  return new Promise<string>((resolve) => {
+    const timer = setTimeout(() => resolve("timeout"), 5000);
+    socket.once("message", (data) => {
+      clearTimeout(timer);
+      resolve(data.toString());
+    });
+    socket.once("error", (error) => resolve(error.message));
+    socket.send("ping", port, "127.0.0.1");
+  }).finally(() => socket.close());
+}
+
+/** The value after `flag` on a command line of single-quoted or bare words. */
+function option(command: string | undefined, flag: string): number | null {
+  const match = new RegExp(`${flag}'? '?(\\d+)'?`).exec(command ?? "");
+  return match ? Number(match[1]) : null;
 }
 
 /** A listener on `host` that counts who reached it. */
@@ -258,13 +287,11 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
     try {
       assert.match(started.url ?? "", /^ws:\/\/127\.0\.0\.1:\d+$/);
       assertInRange(started.url);
+      // Linux gives the room a network namespace of its own: the loopback bridge opens its ports here.
+      const status = await hostReaches(started.url);
+      assert.ok(status > 0, "the preview's side (this process, outside the sandbox) reaches the room");
+      assert.equal(started.reachable, true);
       assert.equal(started.previewJoined, true);
-      // Not yet on Linux: its sandbox gives the room a network namespace of its own, whose 127.0.0.1
-      // is not this process's, so a Linux preview cannot reach the room (an open defect, not a rule).
-      if (process.platform !== "linux") {
-        const status = await hostReaches(started.url);
-        assert.ok(status > 0, "the preview's side (this process, outside the sandbox) reaches the room");
-      }
       assert.deepEqual(told, [started.url], "the preview was told the room's address");
       const playing = await until(rooms, binding.project, (status) => {
         const report = status.report as { players?: number } | null;
@@ -315,17 +342,23 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
  */
 async function outsideTargets() {
   const listeners = new Map<string, Awaited<ReturnType<typeof counting>>>();
-  const outside = [{ name: "public address", host: "1.1.1.1", port: 80 }];
+  // `own`: a refusal there is the room's own empty loopback answering, not that place.
+  const outside = [{ name: "public address", host: "1.1.1.1", port: 80, own: false }];
   const lan = process.platform === "darwin" ? null : lanAddress();
   if (lan) {
     const listener = await counting("0.0.0.0");
     listeners.set("this machine's LAN address", listener);
-    outside.push({ name: "this machine's LAN address", host: lan, port: listener.port });
+    outside.push({ name: "this machine's LAN address", host: lan, port: listener.port, own: false });
   }
   if (sandbox.loopbackPorts()) {
     const listener = await counting("127.0.0.1");
     listeners.set("loopback outside the fence", listener);
-    outside.push({ name: "loopback outside the fence", host: "127.0.0.1", port: listener.port });
+    outside.push({ name: "loopback outside the fence", host: "127.0.0.1", port: listener.port, own: false });
+  }
+  if (sandbox.ownLoopback()) {
+    const listener = await counting("127.0.0.1");
+    listeners.set("this computer's loopback", listener);
+    outside.push({ name: "this computer's loopback", host: "127.0.0.1", port: listener.port, own: true });
   }
   return { outside, listeners };
 }
@@ -338,7 +371,7 @@ describe("the room's sandbox gives it loopback and its scratch, nothing of the g
     await writeFile(path.join(toolDir, "dist", "cli.js"), PROBE_CLI);
     const { outside, listeners } = await outsideTargets();
     await writeFile(path.join(toolDir, "dist", "probe.json"), JSON.stringify({ outside }));
-    const { rooms, binding } = service(dir, toolDir);
+    const { rooms, runs, binding } = service(dir, toolDir);
     try {
       const validated = (await rooms.call({ action: "validate" }, binding)) as Record<string, unknown>;
       assert.notEqual(validated.gameNewFile, "written", "validation plants nothing in the game");
@@ -354,10 +387,20 @@ describe("the room's sandbox gives it loopback and its scratch, nothing of the g
       assert.notEqual(outcomes.gameNewFile, "written", "no new file in the game");
       assert.notEqual(outcomes.gameModule, "written", "the room module is untouched");
       assert.equal(outcomes.selfTcp, "connected", "the room's own clients reach it");
-      for (const { name } of outside) {
-        assert.ok(
-          !["connected", "ECONNREFUSED"].includes(outcomes.outside[name] ?? ""),
-          `${name}: ${outcomes.outside[name]}`,
+      assert.equal(outcomes.channel, false, "the room holds no channel to Genex (the bridge's relay does)");
+      for (const { name, own } of outside) {
+        const reached = own ? ["connected"] : ["connected", "ECONNREFUSED"];
+        assert.ok(!reached.includes(outcomes.outside[name] ?? ""), `${name}: ${outcomes.outside[name]}`);
+      }
+      assert.ok((await hostReaches(started.url)) > 0, "this process reaches the room's WebSocket port");
+      assert.equal(started.reachable, true);
+      const fastPort = option(runs.at(-1), "--fast-port");
+      if (sandbox.ownLoopback() && fastPort !== null) {
+        assert.equal(outcomes.selfUdp, "received", "the room's own clients reach its fast port");
+        assert.equal(
+          await hostEchoes(fastPort),
+          "ping",
+          "a datagram from here reaches the room and its answer comes back",
         );
       }
       const stopped = (await rooms.call({ action: "stop" }, binding)) as RoomStatus;

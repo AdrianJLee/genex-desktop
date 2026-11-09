@@ -1351,6 +1351,7 @@ export class StudioCore {
       ...(this.options.execPath ? { execPath: this.options.execPath } : {}),
       onRoom: (project, url) => this.#previews.joinLocalRoom(project, url),
       loopbackPorts: () => this.sandbox.loopbackPorts(),
+      ownLoopback: () => this.sandbox.ownLoopback(),
     });
   }
 

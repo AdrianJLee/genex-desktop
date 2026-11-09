@@ -13,17 +13,27 @@ import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createSocket } from "node:dgram";
 import { lstat, mkdir, rm } from "node:fs/promises";
+import http from "node:http";
 import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Writable } from "node:stream";
 import { SECOND_MS, MINUTE_MS } from "../../shared/duration.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import type { PluginBinding } from "../../shared/plugins.ts";
 import { readGenexGameManifest } from "../../substrate/genex-game-manifest.ts";
 import { roomModulePath } from "../../substrate/genex-room-stage.ts";
+import { LoopbackProtocol } from "../../substrate/linux-loopback-bridge.ts";
 import { containedReal } from "../../substrate/paths.ts";
 import { treeKiller } from "../../substrate/plugins/native-process.ts";
-import { OutputKept, type RunRequest, type RunResult, type SandboxPolicy, shellQuote } from "../../substrate/spawn.ts";
+import {
+  type LoopbackExpose,
+  OutputKept,
+  type RunRequest,
+  type RunResult,
+  type SandboxPolicy,
+  shellQuote,
+} from "../../substrate/spawn.ts";
 
 /** What `genex__room` does. */
 export const GenexRoomAction = {
@@ -48,10 +58,14 @@ type RoomLine = (typeof RoomLine)[keyof typeof RoomLine];
 
 /** The address the room listens on and its own clients reach it at. */
 const ROOM_HOST = "127.0.0.1";
-/** The transports a room listens on: its WebSocket and its fast@1 datagrams. */
-export const RoomPortProtocol = { Tcp: "tcp", Udp: "udp" } as const;
+/** The transports a room listens on: its WebSocket and its fast@1 datagrams (the loopback bridge's table). */
+export const RoomPortProtocol = LoopbackProtocol;
 /** One of {@link RoomPortProtocol}. */
-export type RoomPortProtocol = (typeof RoomPortProtocol)[keyof typeof RoomPortProtocol];
+export type RoomPortProtocol = LoopbackProtocol;
+/** What went wrong on this computer's side of a running room, kept with its errors. */
+const RoomHostFault = { FastUnreachable: "fast_unreachable" } as const;
+/** The toolchain's FAST state while its fast@1 channel is on. */
+const FAST_ON = "on";
 
 /** The toolchain's command line, inside its package. */
 const CLI_IN_PACKAGE = "dist/cli.js";
@@ -67,6 +81,8 @@ const ROOM_LISTEN_TIMEOUT_MS = 30 * SECOND_MS;
 const ROOM_VALIDATE_TIMEOUT_MS = 5 * MINUTE_MS;
 /** How often a running room reports. */
 const ROOM_REPORT_EVERY_MS = SECOND_MS;
+/** How long this computer waits for the room to answer at its address before it is unreachable. */
+const ROOM_REACH_TIMEOUT_MS = 5 * SECOND_MS;
 /** How long a stopping room may take to print its last report and exit before it is killed. */
 const ROOM_STOP_GRACE_MS = 3 * SECOND_MS;
 /** The room's own log lines and errors kept for `status`. */
@@ -91,6 +107,7 @@ const MESSAGE = {
   NoVerdict: (detail: string) => `Validation gave no verdict: ${detail}`,
   NoDelay:
     "A room on Windows adds no delay yet: its sandbox lets the room's bots reach only the room's own ports. Start it with latencyMs 0",
+  NoFreePort: "This computer has no free loopback port for the room",
   NoPort: (range: readonly [number, number]) =>
     `No port in ${range.join("-")} is free for the room: close another game's room and try again`,
 } as const;
@@ -103,7 +120,9 @@ export interface RoomStatus {
   running: boolean;
   /** The room's address while it runs (`ws://127.0.0.1:<port>`). */
   url: string | null;
-  /** Whether the game's preview was loaded into the room. */
+  /** Whether this computer (the preview's side, outside the sandbox) reaches the room at `url`. */
+  reachable: boolean;
+  /** Whether the game's preview was loaded into the room: never while it is unreachable. */
   previewJoined: boolean;
   /** The room's last REPORT: rooms, players, tick times, faults, bots. */
   report: unknown;
@@ -116,7 +135,12 @@ export interface RoomStatus {
 interface Room {
   child: ChildProcess;
   input: Writable;
+  /** Linux: opens a port of the room's on this computer's loopback; absent where it shares it. */
+  expose: LoopbackExpose | undefined;
   url: string | null;
+  reachable: boolean;
+  /** Whether the preview was told the room's address, so is told again when it ends. */
+  told: boolean;
   previewJoined: boolean;
   report: unknown;
   logs: unknown[];
@@ -139,7 +163,9 @@ export interface GenexRoomDeps {
     policy?: Partial<SandboxPolicy>;
     /** Input written to `input` for the life of the process: on Windows it reaches it only so. */
     liveInput?: boolean;
-  }) => Promise<{ child: ChildProcess; input: Writable }>;
+    /** The process serves on its loopback for this computer: on Linux it is started under the bridge. */
+    loopbackServer?: boolean;
+  }) => Promise<{ child: ChildProcess; input: Writable; expose?: LoopbackExpose }>;
   /** The pinned `@genex-ai/authority-dev` folder in the Genex plugin's payload. */
   toolDir: string;
   /** Where each run keeps its scratch: never a game. */
@@ -158,6 +184,13 @@ export interface GenexRoomDeps {
   loopbackPorts?: () => readonly [number, number] | null;
   /** Whether this Mac or PC can listen on `port` on loopback now (default: tried and let go). */
   portFree?: (port: number, protocol: RoomPortProtocol) => Promise<boolean>;
+  /**
+   * Whether the room's loopback is its own (ProcessSandbox's `ownLoopback`, Linux'): its listeners
+   * then take ports free on this computer's loopback too, where the bridge opens them.
+   */
+  ownLoopback?: () => boolean;
+  /** Whether this computer gets an answer from the room at its address (default: an HTTP request). */
+  reaches?: (url: string) => Promise<boolean>;
 }
 
 /** A call's checked arguments. */
@@ -217,6 +250,46 @@ export async function loopbackPortFree(port: number, protocol: RoomPortProtocol)
   return listening;
 }
 
+/** A port of {@link ROOM_HOST} free for `protocol` now: the system's pick, opened and closed again. */
+export async function anyLoopbackPort(protocol: RoomPortProtocol): Promise<number> {
+  if (protocol === RoomPortProtocol.Udp) {
+    const socket = createSocket("udp4");
+    await new Promise<void>((resolve, reject) => {
+      socket.once("error", reject);
+      socket.bind(0, ROOM_HOST, () => resolve());
+    });
+    const { port } = socket.address();
+    await new Promise<void>((resolve) => socket.close(() => resolve()));
+    return port;
+  }
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, ROOM_HOST, () => resolve());
+  });
+  const address = server.address();
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  if (typeof address !== "object" || address === null) throw new Error(MESSAGE.NoFreePort);
+  return address.port;
+}
+
+/** Whether the room at `url` answers an HTTP request from this process, within {@link ROOM_REACH_TIMEOUT_MS}. */
+export function roomAnswers(url: string): Promise<boolean> {
+  const target = URL.canParse(url) ? new URL(url) : null;
+  if (!target?.port) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const request = http.get(
+      { host: target.hostname, port: target.port, path: "/", agent: false, timeout: ROOM_REACH_TIMEOUT_MS },
+      (response) => {
+        response.resume();
+        resolve(true);
+      },
+    );
+    request.once("timeout", () => request.destroy());
+    request.once("error", () => resolve(false));
+  });
+}
+
 /** The room's listeners where loopback is fenced: its WebSocket (TCP) and fast@1 (UDP) ports. */
 interface RoomPorts {
   port: number;
@@ -253,16 +326,17 @@ export class GenexRoomService {
   /** How the game's room stands. */
   status(project: string): RoomStatus {
     const room = this.#rooms.get(project);
-    if (!room) return { running: false, url: null, previewJoined: false, report: null, logs: [], errors: [] };
-    const { url, previewJoined, report, logs, errors } = room;
-    return { running: true, url, previewJoined, report, logs: [...logs], errors: [...errors] };
+    if (!room)
+      return { running: false, url: null, reachable: false, previewJoined: false, report: null, logs: [], errors: [] };
+    const { url, reachable, previewJoined, report, logs, errors } = room;
+    return { running: true, url, reachable, previewJoined, report, logs: [...logs], errors: [...errors] };
   }
 
   /** End the game's room: its last report, then its process tree. */
   async stop(project: string): Promise<RoomStatus> {
     const room = this.#rooms.get(project);
     if (!room) return this.status(project);
-    const last = { ...this.status(project), running: false, url: null, previewJoined: false };
+    const last = { ...this.status(project), running: false, url: null, reachable: false, previewJoined: false };
     room.input.end();
     const ended = await Promise.race([room.closed.then(() => true), sleep(ROOM_STOP_GRACE_MS).then(() => false)]);
     if (!ended) await treeKiller(room.child)();
@@ -299,11 +373,17 @@ export class GenexRoomService {
 
   /**
    * Where a fenced loopback needs the room: a free port of the range for each listener, the top
-   * first (the sandbox's proxies take the range from the bottom). Null where it may take any port.
-   * A delay is refused there, as the toolchain's delay proxies listen on a port of their own choosing.
+   * first (the sandbox's proxies take the range from the bottom). A delay is refused there, as the
+   * toolchain's delay proxies listen on a port of their own choosing. Where the room's loopback is
+   * its own, ports free on this computer's too, for the bridge to open. Null where it may take any.
    */
   async #ports(latencyMs: number): Promise<RoomPorts | null> {
     const range = this.#deps.loopbackPorts?.() ?? null;
+    if (range === null && this.#deps.ownLoopback?.())
+      return {
+        port: await anyLoopbackPort(RoomPortProtocol.Tcp),
+        fastPort: await anyLoopbackPort(RoomPortProtocol.Udp),
+      };
     if (range === null) return null;
     if (latencyMs > 0) throw new Error(MESSAGE.NoDelay);
     const port = await this.#freePort(range, RoomPortProtocol.Tcp);
@@ -380,19 +460,23 @@ export class GenexRoomService {
     // The toolchain writes nothing of the game's; the module itself runs in QuickJS with no files at all.
     // Its own clients (the bots) reach it directly, never through the sandbox's proxy, which Node's
     // clients take on Windows (`NODE_USE_ENV_PROXY`); the sandbox still decides what they reach.
-    const { child, input } = await this.#deps.spawn({
+    const { child, input, expose } = await this.#deps.spawn({
       command,
       cwd: game,
       env: { no_proxy: ROOM_HOST },
       label: "genex-room:start",
       policy: { denyWrite: [game] },
       liveInput: true,
+      loopbackServer: true,
     });
     const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
     const room: Room = {
       child,
       input,
+      expose,
       url: null,
+      reachable: false,
+      told: false,
       previewJoined: false,
       report: null,
       logs: [],
@@ -403,8 +487,32 @@ export class GenexRoomService {
     room.ended = closed.then(() => this.#ended(project, room));
     this.#rooms.set(project, room);
     room.url = await this.#listening(room);
+    room.reachable = await this.#reach(room, room.url);
+    // A room this computer cannot reach is never handed to the preview: it would load into nothing.
+    if (!room.reachable) return this.status(project);
+    room.told = true;
     room.previewJoined = (await this.#deps.onRoom?.(project, room.url).catch(() => false)) ?? false;
     return this.status(project);
+  }
+
+  /** Open the room's WebSocket on this computer's loopback where it has its own, then ask it at `url`. */
+  async #reach(room: Room, url: string): Promise<boolean> {
+    const port = URL.canParse(url) ? Number(new URL(url).port) : 0;
+    const opened = await (room.expose?.(port, RoomPortProtocol.Tcp) ?? Promise.resolve()).then(
+      () => true,
+      () => false,
+    );
+    return opened && (await (this.#deps.reaches ?? roomAnswers)(url));
+  }
+
+  /** Open the room's fast@1 port on this computer's loopback where it has its own; a failure is kept. */
+  #exposeFast(room: Room, fast: unknown): void {
+    const url = typeof fast === "object" && fast !== null ? Reflect.get(fast, "url") : null;
+    const on = typeof fast === "object" && fast !== null && Reflect.get(fast, "state") === FAST_ON;
+    if (!room.expose || !on || typeof url !== "string" || !URL.canParse(url)) return;
+    room.expose(Number(new URL(url).port), RoomPortProtocol.Udp).catch((error: unknown) => {
+      keep(room.errors, { reason: RoomHostFault.FastUnreachable, detail: errorMessage(error) });
+    });
   }
 
   /** The room's address once it prints LISTEN; the room is ended when it fails or takes too long. */
@@ -438,6 +546,7 @@ export class GenexRoomService {
   /** Keep what a protocol line says; an ERROR before the room listens fails the start. */
   #note(room: Room, line: ReturnType<typeof roomLine>, fail: (error: Error) => void): void {
     if (line?.kind === RoomLine.Report) room.report = line.value;
+    else if (line?.kind === RoomLine.Fast) this.#exposeFast(room, line.value);
     else if (line?.kind === RoomLine.Log) keep(room.logs, line.value);
     else if (line?.kind === RoomLine.Error) {
       keep(room.errors, line.value);
@@ -449,6 +558,6 @@ export class GenexRoomService {
   async #ended(project: string, room: Room): Promise<void> {
     if (this.#rooms.get(project) !== room) return;
     this.#rooms.delete(project);
-    if (room.url !== null && !this.#closing) await this.#deps.onRoom?.(project, null).catch(() => false);
+    if (room.told && !this.#closing) await this.#deps.onRoom?.(project, null).catch(() => false);
   }
 }

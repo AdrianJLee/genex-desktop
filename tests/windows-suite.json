@@ -129,6 +129,7 @@
   "tests/conformance/genex-plugin-cli.test.ts",
   "tests/conformance/genex-publish-settle.test.ts",
   "tests/conformance/genex-room-preview.test.ts",
+  "tests/conformance/genex-room-reach.test.ts",
   "tests/conformance/genex-room-windows.test.ts",
   "tests/conformance/genex-room.test.ts",
   "tests/conformance/genex.test.ts",

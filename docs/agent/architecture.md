@@ -892,8 +892,12 @@ it under scratch), then runs the toolchain's `add` through `GameBuilds.addPackag
 pinned `@genex-ai/authority-dev` on the bound game's room module in ProcessSandbox: `validate`
 through `run` (writes only its scratch), `start` through `spawnLongLived` (game write-denied,
 loopback only, stdin closing stops it; on Windows its listeners take free ports of the sandbox's
-loopback range, `ProcessSandbox.loopbackPorts`, and its stdin goes through the live-input relay),
-one room per game, all ended when the core stops. A running
+loopback range, `ProcessSandbox.loopbackPorts`, and its stdin goes through the live-input relay;
+on Linux, `ProcessSandbox.ownLoopback`, it is a `loopbackServer` whose ports the loopback bridge,
+`substrate/linux-loopback-bridge.ts`, opens on the host's loopback: a relay in the same sandbox
+holds a Node IPC channel, takes each accepted TCP socket whole and passes datagrams both ways, and
+the host answers only a sender it heard), one room per game, all ended when the core stops. Once
+this process gets an HTTP answer at the room's address (`reachable`), the
 room's address goes into the game's loopback preview entry (`genex_local_test`,
 `genex_authority_url`, `PreviewService.joinLocalRoom`), and Live loads again into and out of it.
 

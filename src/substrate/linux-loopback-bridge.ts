@@ -16,6 +16,12 @@
  * which sends it on from a socket of its own per sender and passes the answers back, and the host
  * sends an answer only to a sender it heard from. The relay never holds a listening socket or a
  * datagram socket of this computer's, so the command still reaches no network of the host's.
+ *
+ * The host keeps at most {@link BRIDGE_PEER_MAX} senders a port and decides which one a new sender
+ * replaces: the one the server answered least lately, any it never answered first. Every program
+ * here may send to the port, and the server answers only its own clients, so senders it ignores
+ * take each other's places and never a client's: a client keeps its socket in the sandbox, and so
+ * its address at the server, however many others send.
  */
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -39,7 +45,7 @@ export type LoopbackBridgeEnv = (typeof LoopbackBridgeEnv)[keyof typeof Loopback
 
 /** The address bridged on both sides: this computer's loopback, and the sandbox's own. */
 const LOOPBACK = "127.0.0.1";
-/** The most datagram senders a bridged port keeps, each with its own socket in the sandbox; the oldest goes first. */
+/** The most datagram senders a bridged port keeps, each with its own socket in the sandbox. */
 export const BRIDGE_PEER_MAX = 64;
 /** The largest datagram over IPv4, and so the largest one passed either way. */
 const DATAGRAM_MAX_BYTES = 65_507;
@@ -54,6 +60,8 @@ export interface BridgeMessage {
   peer?: string;
   /** A datagram's bytes, base64. */
   data?: string;
+  /** A sender the host no longer keeps, from host to relay: its socket in the sandbox is closed. */
+  forget?: string;
 }
 
 /**
@@ -80,7 +88,7 @@ const flow = (port, peer) => {
   const key = port + " " + peer;
   const known = flows.get(key);
   if (known) { flows.delete(key); flows.set(key, known); return known; }
-  if (flows.size >= ${BRIDGE_PEER_MAX}) { const [oldest, gone] = flows.entries().next().value; flows.delete(oldest); try { gone.close(); } catch {} }
+  if (flows.size >= ${BRIDGE_PEER_MAX}) forget(flows.keys().next().value);
   const socket = dgram.createSocket("udp4");
   socket.on("message", (data, from) => {
     if (from.port !== port || !process.connected) return;
@@ -90,9 +98,11 @@ const flow = (port, peer) => {
   flows.set(key, socket);
   return socket;
 };
+const forget = (key) => { const gone = flows.get(key); flows.delete(key); try { gone?.close(); } catch {} };
 process.on("message", (message, handle) => {
   if (!message || typeof message !== "object" || !Number.isInteger(message.port)) return;
-  if (message.kind === "tcp" && handle instanceof net.Socket) {
+  if (message.kind === "udp" && typeof message.forget === "string") forget(message.port + " " + message.forget);
+  else if (message.kind === "tcp" && handle instanceof net.Socket) {
     const inner = net.connect(message.port, "127.0.0.1");
     const end = () => { handle.destroy(); inner.destroy(); };
     for (const side of [handle, inner]) { side.on("error", end); side.on("close", end); }
@@ -109,12 +119,15 @@ process.on("message", (message, handle) => {
 interface Peer {
   address: string;
   port: number;
+  /** When the server last answered it, as the port's count of answers then; 0 if it never has. */
+  answered: number;
 }
 
-/** A bridged UDP port: the host's socket on it and the senders it may answer, oldest first. */
+/** A bridged UDP port: the host's socket on it, the senders it may answer (the least lately heard first), and its answers so far. */
 interface DatagramPort {
   socket: DatagramSocket;
   peers: Map<string, Peer>;
+  answers: number;
 }
 
 /** One process's bridge: its relay's file and variables, and the host's side of its ports. */
@@ -135,7 +148,7 @@ const isPort = (value: unknown): value is number =>
   typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65_536;
 
 /** A datagram's sender as the channel names it. */
-const peerKey = (peer: Peer) => `${peer.address}:${peer.port}`;
+const peerKey = (peer: Pick<Peer, "address" | "port">) => `${peer.address}:${peer.port}`;
 
 /** A TCP listener on `port` of this computer's loopback, holding each connection until it is handed on. */
 function listenTcp(port: number, onSocket: (socket: net.Socket) => void): Promise<net.Server> {
@@ -161,16 +174,29 @@ function bindUdp(port: number): Promise<DatagramSocket> {
   });
 }
 
-/** Remember `peer` on `bound` as the newest, the oldest dropped past {@link BRIDGE_PEER_MAX}. */
-function hear(bound: DatagramPort, peer: Peer): string {
-  const key = peerKey(peer);
+/**
+ * The sender a new one replaces on a full port: the one the server answered least lately (one it
+ * never answered before any it did), the least lately heard of equals.
+ */
+function replaced(peers: ReadonlyMap<string, Peer>): string | undefined {
+  let chosen: [string, Peer] | undefined;
+  for (const entry of peers) if (chosen === undefined || entry[1].answered < chosen[1].answered) chosen = entry;
+  return chosen?.[0];
+}
+
+/**
+ * Remember `from` on `bound` as the latest heard; past {@link BRIDGE_PEER_MAX} senders, the one
+ * {@link replaced} chooses is forgotten first, and named.
+ */
+function hear(bound: DatagramPort, from: { address: string; port: number }): { key: string; forgot?: string } {
+  const key = peerKey(from);
+  const known = bound.peers.get(key);
   bound.peers.delete(key);
-  bound.peers.set(key, peer);
-  if (bound.peers.size > BRIDGE_PEER_MAX) {
-    const oldest = bound.peers.keys().next().value;
-    if (oldest !== undefined) bound.peers.delete(oldest);
-  }
-  return key;
+  const full = known === undefined && bound.peers.size >= BRIDGE_PEER_MAX;
+  const forgot = full ? replaced(bound.peers) : undefined;
+  if (forgot !== undefined) bound.peers.delete(forgot);
+  bound.peers.set(key, known ?? { address: from.address, port: from.port, answered: 0 });
+  return forgot === undefined ? { key } : { key, forgot };
 }
 
 /**
@@ -184,6 +210,8 @@ function answer(datagrams: ReadonlyMap<number, DatagramPort>, message: unknown):
   const bound = datagrams.get(port);
   const to = bound?.peers.get(peer);
   if (!bound || !to || data.length > DATAGRAM_MAX_BASE64) return;
+  bound.answers++;
+  to.answered = bound.answers;
   bound.socket.send(Buffer.from(data, "base64"), to.port, to.address);
 }
 
@@ -214,10 +242,11 @@ export async function openLoopbackBridge(options: {
     servers.set(port, await listenTcp(port, (socket) => send({ kind: LoopbackProtocol.Tcp, port }, socket)));
   };
   const exposeUdp = async (port: number) => {
-    const bound: DatagramPort = { socket: await bindUdp(port), peers: new Map() };
+    const bound: DatagramPort = { socket: await bindUdp(port), peers: new Map(), answers: 0 };
     bound.socket.on("message", (data, from) => {
-      const peer = hear(bound, { address: from.address, port: from.port });
-      send({ kind: LoopbackProtocol.Udp, port, peer, data: data.toString("base64") });
+      const { key, forgot } = hear(bound, from);
+      if (forgot !== undefined) send({ kind: LoopbackProtocol.Udp, port, forget: forgot });
+      send({ kind: LoopbackProtocol.Udp, port, peer: key, data: data.toString("base64") });
     });
     bound.socket.on("error", () => {});
     datagrams.set(port, bound);

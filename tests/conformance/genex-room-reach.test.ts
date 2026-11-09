@@ -168,6 +168,14 @@ function standInRelay() {
   return { child, sent, say: (message: unknown) => child.emit("message", message) };
 }
 
+/** The datagrams the host passed the relay. */
+const datagrams = (relay: ReturnType<typeof standInRelay>) =>
+  relay.sent.filter(({ message }) => message.kind === LoopbackProtocol.Udp && message.data !== undefined);
+
+/** The senders the host told the relay it forgot, in order. */
+const forgotten = (relay: ReturnType<typeof standInRelay>) =>
+  relay.sent.flatMap(({ message }) => (message.forget === undefined ? [] : [message.forget]));
+
 /** A UDP socket on loopback that keeps what reaches it. */
 async function datagramListener(): Promise<{ socket: DatagramSocket; port: number; got: Buffer[] }> {
   const socket = createSocket("udp4");
@@ -252,7 +260,7 @@ describe("the Linux loopback bridge carries this computer's traffic in, and noth
     }
   });
 
-  it("forgets the oldest sender past its cap, and refuses what is not a port", async () => {
+  it("forgets the oldest sender past its cap, tells the relay so, and refuses what is not a port", async () => {
     const scratch = await tmpDir("studio-bridge-");
     const bridge = await openLoopbackBridge({ command: "true", shell: "/bin/sh", scratchDir: scratch });
     const relay = standInRelay();
@@ -268,7 +276,8 @@ describe("the Linux loopback bridge carries this computer's traffic in, and noth
       await settle(() => relay.sent.length === 1);
       const firstPeer = relay.sent[0]?.message.peer;
       for (const other of others) other.socket.send("n", port, "127.0.0.1");
-      await settle(() => relay.sent.length === BRIDGE_PEER_MAX + 1);
+      await settle(() => datagrams(relay).length === BRIDGE_PEER_MAX + 1);
+      assert.deepEqual(forgotten(relay), [firstPeer], "the relay is told which sender's socket to close");
       relay.say({ kind: "udp", port, peer: firstPeer, data: Buffer.from("late").toString("base64") });
       await settle();
       assert.equal(first.got.length, 0, "a forgotten sender is not answered");
@@ -276,6 +285,51 @@ describe("the Linux loopback bridge carries this computer's traffic in, and noth
       await bridge.close();
       first.socket.close();
       for (const other of others) other.socket.close();
+    }
+  });
+
+  it("keeps a sender the server answers when more others than it keeps send: they take each other's places", async () => {
+    const scratch = await tmpDir("studio-bridge-");
+    const bridge = await openLoopbackBridge({ command: "true", shell: "/bin/sh", scratchDir: scratch });
+    const relay = standInRelay();
+    bridge.attach(relay.child);
+    const port = await anyLoopbackPort(LoopbackProtocol.Udp);
+    const player = await datagramListener();
+    const strangers = await Promise.all(Array.from({ length: BRIDGE_PEER_MAX + 16 }, () => datagramListener()));
+    const data = (text: string) => Buffer.from(text).toString("base64");
+    try {
+      await bridge.expose(port, LoopbackProtocol.Udp);
+      player.socket.send("join", port, "127.0.0.1");
+      await settle(() => relay.sent.length === 1);
+      const peer = relay.sent[0]?.message.peer ?? "";
+      relay.say({ kind: "udp", port, peer, data: data("welcome") });
+      await settle(() => player.got.length === 1);
+      // The strangers send twice round: each after the first 63 replaces another, never the player.
+      for (const round of [1, 2])
+        for (const stranger of strangers) {
+          stranger.socket.send(`n${round}`, port, "127.0.0.1");
+          await settle(
+            () => datagrams(relay).length > 1 + strangers.length * (round - 1) + strangers.indexOf(stranger),
+          );
+        }
+      assert.equal(datagrams(relay).length, 1 + 2 * strangers.length, "every datagram went in");
+      relay.say({ kind: "udp", port, peer, data: data("still here") });
+      await settle(() => player.got.length === 2);
+      assert.deepEqual(
+        player.got.map((got) => got.toString()),
+        ["welcome", "still here"],
+        "the server's answer still reaches the player",
+      );
+      assert.ok(!forgotten(relay).includes(peer), "the player was never forgotten");
+      assert.equal(
+        forgotten(relay).length,
+        2 * strangers.length - (BRIDGE_PEER_MAX - 1),
+        "each stranger past the cap replaced one",
+      );
+    } finally {
+      await bridge.close();
+      player.socket.close();
+      for (const stranger of strangers) stranger.socket.close();
     }
   });
 });

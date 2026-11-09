@@ -896,7 +896,9 @@ loopback range, `ProcessSandbox.loopbackPorts`, and its stdin goes through the l
 on Linux, `ProcessSandbox.ownLoopback`, it is a `loopbackServer` whose ports the loopback bridge,
 `substrate/linux-loopback-bridge.ts`, opens on the host's loopback: a relay in the same sandbox
 holds a Node IPC channel, takes each accepted TCP socket whole and passes datagrams both ways, and
-the host answers only a sender it heard), one room per game, all ended when the core stops. Once
+the host answers only a sender it heard; it keeps 64 senders a port, a new one replacing the one the
+room answered least lately, so senders the room ignores never displace its clients, and tells the
+relay to close that sender's socket), one room per game, all ended when the core stops. Once
 this process gets an HTTP answer at the room's address (`reachable`), the
 room's address goes into the game's loopback preview entry (`genex_local_test`,
 `genex_authority_url`, `PreviewService.joinLocalRoom`), and Live loads again into and out of it.

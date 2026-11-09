@@ -7,7 +7,10 @@
  * address, `stop` ends it with its process tree. The real sandbox and the real toolchain run here.
  */
 import assert from "node:assert/strict";
-import { mkdir, readdir, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import http from "node:http";
+import { createServer, type Server } from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -35,11 +38,74 @@ const FAULTY_JS = ROOM_JS.replace("step() {},", 'step() { throw new Error("boom"
 const LOOK_EVERY_MS = 100;
 const LOOK_FOR_MS = 20_000;
 
+/**
+ * A stand-in toolchain that runs as the room does and tries what the room must not: write in the
+ * game, reach any network but loopback, reach loopback outside the sandbox's fence (Windows), and
+ * reports each outcome; it listens and connects to itself where the room's own clients do, and
+ * stops once its input closes. It reads its targets from `probe.json` beside it.
+ */
+const PROBE_CLI = String.raw`"use strict";
+const fs = require("node:fs");
+const net = require("node:net");
+const dgram = require("node:dgram");
+const path = require("node:path");
+const args = process.argv.slice(2);
+const arg = (name) => { const i = args.indexOf(name); return i === -1 ? undefined : args[i + 1]; };
+const targets = JSON.parse(fs.readFileSync(path.join(__dirname, "probe.json"), "utf8"));
+const report = (value) => process.stdout.write("REPORT " + JSON.stringify(value) + "\n");
+const tryWrite = (file, text) => { try { fs.writeFileSync(file, text); return "written"; } catch (e) { return e.code || "refused"; } };
+const connect = (host, port) => new Promise((resolve) => {
+  const socket = net.connect({ host, port });
+  const done = (outcome) => { socket.destroy(); resolve(outcome); };
+  socket.setTimeout(3000, () => done("timeout"));
+  socket.once("connect", () => done("connected"));
+  socket.once("error", (e) => done(e.code || "error"));
+});
+const datagram = (port) => new Promise((resolve) => {
+  const socket = dgram.createSocket("udp4");
+  const done = (outcome) => { try { socket.close(); } catch {} resolve(outcome); };
+  const timer = setTimeout(() => done("timeout"), 3000);
+  socket.once("message", () => { clearTimeout(timer); done("received"); });
+  socket.once("error", (e) => { clearTimeout(timer); done(e.code || "error"); });
+  socket.bind(port, "127.0.0.1", () => socket.send("x", port, "127.0.0.1", (e) => e && done(e.code || "error")));
+});
+const writes = () => ({
+  gameNewFile: tryWrite(path.join(arg("--root"), "planted.txt"), "planted"),
+  gameModule: tryWrite(arg("--module"), "tampered"),
+});
+if (args[0] === "validate") {
+  process.stdout.write("VALIDATE " + JSON.stringify({ passed: true, ...writes() }) + "\n");
+  process.exit(0);
+}
+(async () => {
+  const server = net.createServer((s) => s.destroy());
+  await new Promise((resolve) => server.listen(Number(arg("--port") || 0), "127.0.0.1", resolve));
+  const port = server.address().port;
+  const outcomes = {
+    env: { electronAsNode: process.env.ELECTRON_RUN_AS_NODE === "1", noProxy: process.env.no_proxy || null },
+    ...writes(),
+    selfTcp: await connect("127.0.0.1", port),
+    selfUdp: arg("--fast-port") ? await datagram(Number(arg("--fast-port"))) : "not named",
+    outside: {},
+  };
+  for (const target of targets.outside) outcomes.outside[target.name] = await connect(target.host, target.port);
+  process.stdout.write("LISTEN " + JSON.stringify("ws://127.0.0.1:" + port) + "\n");
+  report(outcomes);
+  process.stdin.resume();
+  process.stdin.on("end", () => { report({ ...outcomes, stopped: true }); process.exit(0); });
+})();
+`;
+
 let sandbox: ProcessSandbox;
 let root: string;
 before(async () => {
   root = await tmpDir("studio-genex-room-");
-  sandbox = await ProcessSandbox.create({ writableRoots: [], scratchDir: path.join(root, "sandbox"), secretPaths: [] });
+  // The games folder is writable, as in the app: the room's own deny is what keeps it from a game.
+  sandbox = await ProcessSandbox.create({
+    writableRoots: [path.join(root, "games")],
+    scratchDir: path.join(root, "sandbox"),
+    secretPaths: [],
+  });
 });
 after(async () => {
   await sandbox.dispose();
@@ -47,7 +113,7 @@ after(async () => {
 
 /** A game folder declaring a room, with `files` (relative path → text). */
 async function game(name: string, files: Record<string, string>, authority: unknown = { module: "server/room.js" }) {
-  const dir = path.join(root, name);
+  const dir = path.join(root, "games", name);
   const page = { "index.html": "<!doctype html>", "src/world.js": "export const SPEED = 4;" };
   for (const [rel, text] of Object.entries({ ...page, ...files })) {
     await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
@@ -57,12 +123,11 @@ async function game(name: string, files: Record<string, string>, authority: unkn
   return dir;
 }
 
-/** The service on the real sandbox and toolchain, recording what it told the preview. */
-function service(dir: string) {
+/** The service on the real sandbox and toolchain (or `toolDir`'s), recording what it told the preview. */
+function service(dir: string, toolDir = authorityDevDir()) {
   const told: Array<string | null> = [];
   const runs: string[] = [];
   const pids: number[] = [];
-  const toolDir = authorityDevDir();
   assert.ok(toolDir, "the repository carries the toolchain");
   const rooms = new GenexRoomService({
     run: (request) => {
@@ -82,8 +147,48 @@ function service(dir: string) {
       told.push(url);
       return url !== null;
     },
+    loopbackPorts: () => sandbox.loopbackPorts(),
   });
   return { rooms, told, runs, pids, binding: { project: path.basename(dir), directory: dir } };
+}
+
+/** The room's address lies inside the sandbox's loopback fence, where there is one. */
+function assertInRange(url: string | null) {
+  const range = sandbox.loopbackPorts();
+  if (!range) return;
+  const port = Number(new URL(url ?? "ws://x").port);
+  assert.ok(port >= range[0] && port <= range[1], `${url} lies in ${range.join("-")}`);
+}
+
+/** The HTTP status the room answers this process with (outside the sandbox, as the preview is), 0 if none. */
+function hostReaches(url: string | null): Promise<number> {
+  const target = new URL(url ?? "ws://x");
+  return new Promise((resolve) => {
+    const request = http.get({ host: target.hostname, port: target.port, path: "/", timeout: 5000 }, (response) => {
+      response.resume();
+      resolve(response.statusCode ?? 0);
+    });
+    request.once("timeout", () => request.destroy());
+    request.once("error", () => resolve(0));
+  });
+}
+
+/** A listener on `host` that counts who reached it. */
+async function counting(host: string): Promise<{ server: Server; port: number; reached: () => number }> {
+  let reached = 0;
+  const server = createServer((socket) => {
+    reached++;
+    socket.destroy();
+  });
+  await new Promise<void>((resolve) => server.listen(0, host, resolve));
+  const address = server.address();
+  return { server, port: typeof address === "object" && address ? address.port : 0, reached: () => reached };
+}
+
+/** This machine's first address off loopback, or null. */
+function lanAddress(): string | null {
+  const all = Object.values(os.networkInterfaces()).flat();
+  return all.find((entry) => entry && entry.family === "IPv4" && !entry.internal)?.address ?? null;
 }
 
 /** The room's status once `ready` holds, looked at every {@link LOOK_EVERY_MS}. */
@@ -150,15 +255,26 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
     const dir = await game("start", { "server/room.js": ROOM_JS });
     const { rooms, told, pids, binding } = service(dir);
     const started = (await rooms.call({ action: "start", bots: 2 }, binding)) as RoomStatus;
-    assert.match(started.url ?? "", /^ws:\/\/127\.0\.0\.1:\d+$/);
-    assert.equal(started.previewJoined, true);
-    assert.deepEqual(told, [started.url], "the preview was told the room's address");
-    const playing = await until(rooms, binding.project, (status) => {
-      const report = status.report as { players?: number } | null;
-      return (report?.players ?? 0) >= 2;
-    });
-    assert.equal(playing.running, true);
-    const stopped = await rooms.call({ action: "stop" }, binding);
+    try {
+      assert.match(started.url ?? "", /^ws:\/\/127\.0\.0\.1:\d+$/);
+      assertInRange(started.url);
+      assert.equal(started.previewJoined, true);
+      // Not yet on Linux: its sandbox gives the room a network namespace of its own, whose 127.0.0.1
+      // is not this process's, so a Linux preview cannot reach the room (an open defect, not a rule).
+      if (process.platform !== "linux") {
+        const status = await hostReaches(started.url);
+        assert.ok(status > 0, "the preview's side (this process, outside the sandbox) reaches the room");
+      }
+      assert.deepEqual(told, [started.url], "the preview was told the room's address");
+      const playing = await until(rooms, binding.project, (status) => {
+        const report = status.report as { players?: number } | null;
+        return (report?.players ?? 0) >= 2;
+      });
+      assert.equal(playing.running, true);
+    } finally {
+      await rooms.call({ action: "stop" }, binding).catch(() => null);
+    }
+    const stopped = rooms.status(binding.project);
     assert.equal((stopped as RoomStatus).running, false);
     assert.deepEqual(told, [started.url, null], "the preview left the room");
     assert.equal(rooms.status(binding.project).running, false);
@@ -168,10 +284,14 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
 
   it("ends a game's last room when it starts another", async () => {
     const dir = await game("restart", { "server/room.js": ROOM_JS });
-    const { rooms, told, binding } = service(dir);
+    const { rooms, told, pids, binding } = service(dir);
     const first = (await rooms.call({ action: "start", bots: 0 }, binding)) as RoomStatus;
     const second = (await rooms.call({ action: "start", bots: 0 }, binding)) as RoomStatus;
-    assert.notEqual(first.url, second.url);
+    // Flipped from `first.url !== second.url`: on Windows both listen at the top of the fence's
+    // range, so the same address can come back. The first room's process is what must be gone.
+    assert.equal(pids.length, 2);
+    assert.equal(running(pids[0] ?? 0), false, "the first room ended before the second started");
+    assert.equal(second.running, true);
     assert.deepEqual(told, [first.url, null, second.url]);
     await rooms.stopAll();
     assert.equal(rooms.status(binding.project).running, false);
@@ -183,5 +303,75 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
     await assert.rejects(rooms.call({ action: "start" }, binding), /did not start/);
     assert.deepEqual(told, []);
     await until(rooms, binding.project, (status) => !status.running);
+  });
+});
+
+/**
+ * Where the probe reaches out to: a public address, and listeners of this process's own that count
+ * who reached them: this machine's LAN address, and on Windows loopback outside the fence's range
+ * (closed to the sandbox user, whoever listens). macOS has no LAN row: Seatbelt's `localhost` takes
+ * this machine's own addresses too, so every sandboxed process there reaches them (sandbox-runtime's
+ * profile, not the room's).
+ */
+async function outsideTargets() {
+  const listeners = new Map<string, Awaited<ReturnType<typeof counting>>>();
+  const outside = [{ name: "public address", host: "1.1.1.1", port: 80 }];
+  const lan = process.platform === "darwin" ? null : lanAddress();
+  if (lan) {
+    const listener = await counting("0.0.0.0");
+    listeners.set("this machine's LAN address", listener);
+    outside.push({ name: "this machine's LAN address", host: lan, port: listener.port });
+  }
+  if (sandbox.loopbackPorts()) {
+    const listener = await counting("127.0.0.1");
+    listeners.set("loopback outside the fence", listener);
+    outside.push({ name: "loopback outside the fence", host: "127.0.0.1", port: listener.port });
+  }
+  return { outside, listeners };
+}
+
+describe("the room's sandbox gives it loopback and its scratch, nothing of the game or the network", () => {
+  it("refuses each hostile reach of a process started as the room is, with no side effect", async (t) => {
+    const dir = await game("hostile", { "server/room.js": ROOM_JS });
+    const toolDir = path.join(root, "games", "probe-tool");
+    await mkdir(path.join(toolDir, "dist"), { recursive: true });
+    await writeFile(path.join(toolDir, "dist", "cli.js"), PROBE_CLI);
+    const { outside, listeners } = await outsideTargets();
+    await writeFile(path.join(toolDir, "dist", "probe.json"), JSON.stringify({ outside }));
+    const { rooms, binding } = service(dir, toolDir);
+    try {
+      const validated = (await rooms.call({ action: "validate" }, binding)) as Record<string, unknown>;
+      assert.notEqual(validated.gameNewFile, "written", "validation plants nothing in the game");
+      assert.notEqual(validated.gameModule, "written", "validation leaves the room module alone");
+      const started = (await rooms.call({ action: "start", bots: 0 }, binding)) as RoomStatus;
+      assertInRange(started.url);
+      const status = await until(rooms, binding.project, (now) => now.report !== null);
+      const outcomes = status.report as Record<string, unknown> & { outside: Record<string, string> };
+      t.diagnostic(`probe: ${JSON.stringify(outcomes)}`);
+      const env = outcomes.env as { electronAsNode: boolean; noProxy: string | null };
+      assert.equal(env.electronAsNode, true, "the toolchain runs as node");
+      assert.ok(env.noProxy?.split(",").includes("127.0.0.1"), `its clients reach the room directly (${env.noProxy})`);
+      assert.notEqual(outcomes.gameNewFile, "written", "no new file in the game");
+      assert.notEqual(outcomes.gameModule, "written", "the room module is untouched");
+      assert.equal(outcomes.selfTcp, "connected", "the room's own clients reach it");
+      for (const { name } of outside) {
+        assert.ok(
+          !["connected", "ECONNREFUSED"].includes(outcomes.outside[name] ?? ""),
+          `${name}: ${outcomes.outside[name]}`,
+        );
+      }
+      const stopped = (await rooms.call({ action: "stop" }, binding)) as RoomStatus;
+      assert.equal(
+        (stopped.report as { stopped?: boolean } | null)?.stopped,
+        true,
+        "its input reached it and ended it",
+      );
+      for (const [name, listener] of listeners) assert.equal(listener.reached(), 0, `nothing reached ${name}`);
+      assert.equal(await readFile(path.join(dir, "server", "room.js"), "utf8"), ROOM_JS);
+      assert.equal((await readdir(dir)).includes("planted.txt"), false, "nothing planted in the game");
+    } finally {
+      await rooms.stopAll();
+      for (const listener of listeners.values()) listener.server.close();
+    }
   });
 });

@@ -39,6 +39,7 @@ import {
   SandboxUnavailableError,
   gitMissingProblem,
   missingLinuxTools,
+  SRT_PROXY_PORT_RANGE,
   sandboxProblem,
   windowsLaunchError,
   windowsProxyPortsError,
@@ -653,6 +654,17 @@ export class ProcessSandbox {
 
   get initError(): Error | null {
     return this.#initError;
+  }
+
+  /**
+   * The only loopback ports a sandboxed process may connect to, where the sandbox fences loopback:
+   * on Windows srt-win's egress filter lets the sandbox user reach its proxies' range and nothing
+   * else, machine-wide (`allowLocalBinding` cannot open it for one process), so a server that a
+   * sandboxed process's own clients must reach listens there. Null where loopback is the
+   * process's to use: macOS (`allowLocalBinding`) and Linux (its own network namespace).
+   */
+  loopbackPorts(): readonly [number, number] | null {
+    return this.#platform === StudioPlatform.Windows ? SRT_PROXY_PORT_RANGE : null;
   }
 
   /** Wait for sandbox initialization before booting or recovering code that must run inside it. */

@@ -11,7 +11,9 @@
  */
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { createSocket } from "node:dgram";
 import { lstat, mkdir, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { Writable } from "node:stream";
@@ -43,6 +45,13 @@ const RoomLine = {
   Validate: "VALIDATE",
 } as const;
 type RoomLine = (typeof RoomLine)[keyof typeof RoomLine];
+
+/** The address the room listens on and its own clients reach it at. */
+const ROOM_HOST = "127.0.0.1";
+/** The transports a room listens on: its WebSocket and its fast@1 datagrams. */
+export const RoomPortProtocol = { Tcp: "tcp", Udp: "udp" } as const;
+/** One of {@link RoomPortProtocol}. */
+export type RoomPortProtocol = (typeof RoomPortProtocol)[keyof typeof RoomPortProtocol];
 
 /** The toolchain's command line, inside its package. */
 const CLI_IN_PACKAGE = "dist/cli.js";
@@ -80,6 +89,10 @@ const MESSAGE = {
   TimedOut: `The room did not start within ${ROOM_LISTEN_TIMEOUT_MS / SECOND_MS} s`,
   Exited: (code: number | null) => `the toolchain exited (${code})`,
   NoVerdict: (detail: string) => `Validation gave no verdict: ${detail}`,
+  NoDelay:
+    "A room on Windows adds no delay yet: its sandbox lets the room's bots reach only the room's own ports. Start it with latencyMs 0",
+  NoPort: (range: readonly [number, number]) =>
+    `No port in ${range.join("-")} is free for the room: close another game's room and try again`,
 } as const;
 
 /** A validation's verdict, as the toolchain printed it (`passed`, `moduleSha256`, typed `failures`). */
@@ -124,6 +137,8 @@ export interface GenexRoomDeps {
     env?: Record<string, string>;
     label?: string;
     policy?: Partial<SandboxPolicy>;
+    /** Input written to `input` for the life of the process: on Windows it reaches it only so. */
+    liveInput?: boolean;
   }) => Promise<{ child: ChildProcess; input: Writable }>;
   /** The pinned `@genex-ai/authority-dev` folder in the Genex plugin's payload. */
   toolDir: string;
@@ -136,6 +151,13 @@ export interface GenexRoomDeps {
   /** Told when a game's room starts (its address) or ends (null); answers whether the preview joined. */
   onRoom?: (project: string, url: string | null) => Promise<boolean>;
   listenTimeoutMs?: number;
+  /**
+   * The only loopback ports the room's own sandboxed clients may connect to (ProcessSandbox's
+   * `loopbackPorts`, Windows'), where it then listens; null or absent where any port is reachable.
+   */
+  loopbackPorts?: () => readonly [number, number] | null;
+  /** Whether this Mac or PC can listen on `port` on loopback now (default: tried and let go). */
+  portFree?: (port: number, protocol: RoomPortProtocol) => Promise<boolean>;
 }
 
 /** A call's checked arguments. */
@@ -173,6 +195,32 @@ export function roomLine(line: string): { kind: RoomLine; value: unknown } | nul
   } catch {
     return { kind, value: rest };
   }
+}
+
+/** Whether a listener on `port` of {@link ROOM_HOST} can open now: opened and closed again. */
+export async function loopbackPortFree(port: number, protocol: RoomPortProtocol): Promise<boolean> {
+  if (protocol === RoomPortProtocol.Udp) {
+    const socket = createSocket("udp4");
+    const bound = await new Promise<boolean>((resolve) => {
+      socket.once("error", () => resolve(false));
+      socket.bind(port, ROOM_HOST, () => resolve(true));
+    });
+    if (bound) await new Promise<void>((resolve) => socket.close(() => resolve()));
+    return bound;
+  }
+  const server = createServer();
+  const listening = await new Promise<boolean>((resolve) => {
+    server.once("error", () => resolve(false));
+    server.listen({ port, host: ROOM_HOST, exclusive: true }, () => resolve(true));
+  });
+  if (listening) await new Promise<void>((resolve) => server.close(() => resolve()));
+  return listening;
+}
+
+/** The room's listeners where loopback is fenced: its WebSocket (TCP) and fast@1 (UDP) ports. */
+interface RoomPorts {
+  port: number;
+  fastPort: number;
 }
 
 /** Keep the last {@link ROOM_KEPT_LINES} of `list`. */
@@ -239,11 +287,37 @@ export class GenexRoomService {
     return file;
   }
 
-  /** The toolchain's command line for `args`, run by Electron as node. */
+  /**
+   * The toolchain's command line for `args`, run by Electron as node: the variable is set on the
+   * line itself, as Windows' live-input relay starts the command without the one it ran under.
+   */
   async #command(args: string[]): Promise<string> {
     const cli = path.join(this.#deps.toolDir, CLI_IN_PACKAGE);
     if (!(await lstat(cli).catch(() => null))?.isFile()) throw new Error(MESSAGE.NoToolchain);
-    return [this.#deps.execPath ?? process.execPath, cli, ...args].map(shellQuote).join(" ");
+    return `ELECTRON_RUN_AS_NODE=1 ${[this.#deps.execPath ?? process.execPath, cli, ...args].map(shellQuote).join(" ")}`;
+  }
+
+  /**
+   * Where a fenced loopback needs the room: a free port of the range for each listener, the top
+   * first (the sandbox's proxies take the range from the bottom). Null where it may take any port.
+   * A delay is refused there, as the toolchain's delay proxies listen on a port of their own choosing.
+   */
+  async #ports(latencyMs: number): Promise<RoomPorts | null> {
+    const range = this.#deps.loopbackPorts?.() ?? null;
+    if (range === null) return null;
+    if (latencyMs > 0) throw new Error(MESSAGE.NoDelay);
+    const port = await this.#freePort(range, RoomPortProtocol.Tcp);
+    const fastPort = await this.#freePort(range, RoomPortProtocol.Udp);
+    if (port === null || fastPort === null) throw new Error(MESSAGE.NoPort(range));
+    return { port, fastPort };
+  }
+
+  /** The highest port of `range` free for `protocol`, or null. */
+  async #freePort(range: readonly [number, number], protocol: RoomPortProtocol): Promise<number | null> {
+    const free = this.#deps.portFree ?? loopbackPortFree;
+    const [low, high] = range;
+    for (let port = high; port >= low; port--) if (await free(port, protocol)) return port;
+    return null;
   }
 
   /** A run's own scratch folder and TMPDIR. */
@@ -268,6 +342,8 @@ export class GenexRoomService {
         keepOutput: OutputKept.Tail,
         label: "genex-room:validate",
         confine: { write: [dir], tmp },
+        // Windows takes no confinement (srt-win's grants are the session's): the deny holds there too.
+        policy: { denyWrite: [game] },
       });
       const verdict = result.stdout
         .split("\n")
@@ -283,6 +359,8 @@ export class GenexRoomService {
   /** Serve the module with bots, once it listens; the last room of the game ends first. */
   async #start(project: string, game: string, module: string, call: RoomCall): Promise<RoomStatus> {
     await this.stop(project);
+    const ports = await this.#ports(call.latencyMs);
+    const listeners = ports ? ["--port", String(ports.port), "--fast-port", String(ports.fastPort)] : [];
     const command = await this.#command([
       "start",
       "--module",
@@ -297,14 +375,18 @@ export class GenexRoomService {
       "--report-every",
       String(ROOM_REPORT_EVERY_MS),
       "--stop-on-stdin-close",
+      ...listeners,
     ]);
     // The toolchain writes nothing of the game's; the module itself runs in QuickJS with no files at all.
+    // Its own clients (the bots) reach it directly, never through the sandbox's proxy, which Node's
+    // clients take on Windows (`NODE_USE_ENV_PROXY`); the sandbox still decides what they reach.
     const { child, input } = await this.#deps.spawn({
       command,
       cwd: game,
-      env: { ELECTRON_RUN_AS_NODE: "1" },
+      env: { no_proxy: ROOM_HOST },
       label: "genex-room:start",
       policy: { denyWrite: [game] },
+      liveInput: true,
     });
     const closed = new Promise<void>((resolve) => child.once("close", () => resolve()));
     const room: Room = {

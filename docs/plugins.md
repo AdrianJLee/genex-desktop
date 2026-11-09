@@ -3799,7 +3799,11 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   profiles too. On Windows srt-win's egress filter lets a sandboxed process reach only its proxies'
   loopback range (60080-60089), machine-wide, so the room listens there (WebSocket and fast@1 on
   the range's highest free ports) for its own bots, takes no delay (the toolchain's delay proxies
-  pick their own ports) and is stopped through the live-input relay; nothing else is opened.
+  pick their own ports) and is stopped through the live-input relay; nothing else is opened. On
+  Linux the sandbox gives the room a network namespace of its own, so it listens on ports free on
+  this computer too and the loopback bridge opens them here: this computer's connections and
+  datagrams go in, the room reaches nothing out. The preview is loaded into a room only once this
+  computer gets an answer from it (`reachable`); `previewJoined` is never true otherwise.
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;

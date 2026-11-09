@@ -61,6 +61,7 @@ async function game(name: string, files: Record<string, string>, authority: unkn
 function service(dir: string) {
   const told: Array<string | null> = [];
   const runs: string[] = [];
+  const pids: number[] = [];
   const toolDir = authorityDevDir();
   assert.ok(toolDir, "the repository carries the toolchain");
   const rooms = new GenexRoomService({
@@ -71,6 +72,7 @@ function service(dir: string) {
     spawn: async (request) => {
       runs.push(request.command);
       const { child, input } = await sandbox.spawnLongLived(request);
+      if (child.pid) pids.push(child.pid);
       return { child, input };
     },
     toolDir,
@@ -81,7 +83,7 @@ function service(dir: string) {
       return url !== null;
     },
   });
-  return { rooms, told, runs, binding: { project: path.basename(dir), directory: dir } };
+  return { rooms, told, runs, pids, binding: { project: path.basename(dir), directory: dir } };
 }
 
 /** The room's status once `ready` holds, looked at every {@link LOOK_EVERY_MS}. */
@@ -146,7 +148,7 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
 
   it("serves the room with bots on 127.0.0.1, puts the preview in it, and stops it with its process tree", async () => {
     const dir = await game("start", { "server/room.js": ROOM_JS });
-    const { rooms, told, binding } = service(dir);
+    const { rooms, told, pids, binding } = service(dir);
     const started = (await rooms.call({ action: "start", bots: 2 }, binding)) as RoomStatus;
     assert.match(started.url ?? "", /^ws:\/\/127\.0\.0\.1:\d+$/);
     assert.equal(started.previewJoined, true);
@@ -156,12 +158,12 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
       return (report?.players ?? 0) >= 2;
     });
     assert.equal(playing.running, true);
-    const pids = (await childPids()).filter(Boolean);
     const stopped = await rooms.call({ action: "stop" }, binding);
     assert.equal((stopped as RoomStatus).running, false);
     assert.deepEqual(told, [started.url, null], "the preview left the room");
     assert.equal(rooms.status(binding.project).running, false);
-    for (const pid of pids) assert.equal(running(pid), false, `process ${pid} ended`);
+    assert.equal(pids.length, 1, "one room process");
+    for (const pid of pids) assert.equal(running(pid), false, `the room process ${pid} ended`);
   });
 
   it("ends a game's last room when it starts another", async () => {
@@ -183,13 +185,3 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
     await until(rooms, binding.project, (status) => !status.running);
   });
 });
-
-/** Pids of every process this test process started that still runs (the room's tree). */
-async function childPids(): Promise<number[]> {
-  const { spawnSync } = await import("node:child_process");
-  const ps = spawnSync("/usr/bin/pgrep", ["-P", String(process.pid)], { encoding: "utf8" });
-  return ps.stdout
-    .split("\n")
-    .map((line) => Number(line.trim()))
-    .filter((pid) => Number.isInteger(pid) && pid > 0);
-}

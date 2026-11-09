@@ -3823,7 +3823,8 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool needs consent; the package tool asks nobody (Genex's own pinned packages spend nothing), and fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
 - `genex__room` (host `genex-room`) tests a server-authoritative game's room module on this Mac
-  with the toolchain Studio ships: `validate` answers the publish gate's verdict, `start` serves the
+  with the toolchain Studio ships. It reaches web, Unity, Unreal and Godot games (the engines whose
+  multiplayer Genex carries); a game with no `authority` block gets the service's refusal naming it: `validate` answers the publish gate's verdict, `start` serves the
   room on 127.0.0.1 with up to 8 bots and up to 300 ms of delay and loads the game's loopback
   preview into it, `status` answers its last REPORT, log lines and errors, `stop` ends it. It runs in
   ProcessSandbox, asks nobody, spends nothing and, touching no account or download, runs in fixture

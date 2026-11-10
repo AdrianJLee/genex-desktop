@@ -3740,7 +3740,9 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   (`cloud_build_not_releasable`) is said in Genex's words and the record then calls the build failed
   (`CloudBuildFailure.Expired`, or `failed`), which the rows read as no build, so the next press
   builds; and each kept app is read again once after Studio starts (`#recheckKept`,
-  `refreshCloudBuild`), so the row says "Not built" before anyone presses Publish. Two answers about
+  `refreshCloudBuild`), so the row says "Not built" before anyone presses Publish. A release Genex
+  can't do right now (it can't read the build, or the build is changing) is said in Genex's words
+  too and changes nothing: the build is still kept (`unansweredRelease`). Two answers about
   one build never take it back a step (`latestOf`). Each job is kept in the workspace's
   `cloud-build.json` (apart from `native.json`, which every publish writes anew) and followed with
   `genex native build-status <job> --json`, waiting 15 s, 30 s, 1 and then 2 min between reads; a job

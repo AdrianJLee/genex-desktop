@@ -382,12 +382,27 @@ export interface CloudRelease {
   listing?: unknown;
 }
 
+/** What Genex said in an error it answered with, cut to a line's length; empty when it said nothing. */
+const saidIn = (answer: Record<string, unknown>): string =>
+  typeof answer.message === "string" ? answer.message.trim().slice(0, SEND_ERROR_CHARS) : "";
+
 /** How a build Genex refuses to release ended, and Genex's words for it; null when `answer` is no such refusal. */
 function refusedRelease(answer: unknown): { failure: CloudBuildFailure; words: string } | null {
   if (!isRecord(answer) || answer.error !== NOT_RELEASABLE) return null;
   const expired = answer.failure === CloudBuildFailure.Expired;
-  const said = typeof answer.message === "string" ? answer.message.trim().slice(0, SEND_ERROR_CHARS) : "";
-  return { failure: expired ? CloudBuildFailure.Expired : CloudBuildFailure.Failed, words: said || MESSAGE.NotKept };
+  return {
+    failure: expired ? CloudBuildFailure.Expired : CloudBuildFailure.Failed,
+    words: saidIn(answer) || MESSAGE.NotKept,
+  };
+}
+
+/**
+ * Why a release that answered no build didn't happen: Genex's own words when it answered an error
+ * (it can't read the build right now, or the build is changing), so the person knows to try again.
+ */
+function unansweredRelease(answer: unknown): string {
+  const said = isRecord(answer) && typeof answer.error === "string" ? saidIn(answer) : "";
+  return said || MESSAGE.NotABuild;
 }
 
 /**
@@ -413,6 +428,7 @@ async function endKeptBuild(
  * else as soon as it is. The build as Genex answers it is kept in the record. Throws with the CLI's
  * words when Genex refused, or answered without the build; a build Genex has nothing of to give (it
  * failed, or Genex no longer keeps it) is first said so in the record, so the next press builds it.
+ * A release Genex can't do right now leaves the record as it is: the build is still kept.
  */
 export async function releaseCloudBuild(
   dir: string,
@@ -430,7 +446,7 @@ export async function releaseCloudBuild(
     throw new Error(refused.words);
   }
   const build = cloudBuildOf(answer);
-  if (!build || build.jobId !== jobId) throw new Error(MESSAGE.NotABuild);
+  if (!build || build.jobId !== jobId) throw new Error(unansweredRelease(answer));
   await keepBuild(dir, build, deps.read);
   return { build, ...(isRecord(answer) && answer.listing !== undefined ? { listing: answer.listing } : {}) };
 }

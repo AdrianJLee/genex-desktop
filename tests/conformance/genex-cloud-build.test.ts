@@ -324,6 +324,24 @@ describe("a build on Genex in the publish workspace", () => {
     }
   });
 
+  it("fails a release Genex can't do right now in Genex's words, and the build stays kept", async () => {
+    const signal = new AbortController().signal;
+    const busy = "Genex could not read this build right now. Try again in a moment.";
+    const cases: Array<[unknown, RegExp]> = [
+      [{ error: "cloud_build_storage_unavailable", message: busy }, /: Genex could not read this build right now\./],
+      [{ error: "cloud_build_busy", message: "This build is changing right now. Try again in a moment." }, /changing/],
+      [{ error: "cloud_build_busy", message: 7 }, /without the build/],
+      [{ error: "cloud_build_busy", message: "   " }, /without the build/],
+    ];
+    for (const [answer, words] of cases) {
+      const dir = await tmpDir("cloud-build");
+      await writeFile(path.join(dir, CLOUD_BUILD_FILE), JSON.stringify({ builds: [KEPT] }));
+      const { deps } = fakeDeps([answer]);
+      await assert.rejects(releaseCloudBuild(dir, "job_1", deps, signal), words);
+      assert.deepEqual(await readJson(path.join(dir, CLOUD_BUILD_FILE)), { builds: [KEPT] });
+    }
+  });
+
   it("reads an app Genex keeps again once: what Genex says now is kept, and nothing when it can't be read", async () => {
     assert.deepEqual(
       [KEPT, BUILD, { ...KEPT, held: undefined }, { ...KEPT, state: CloudBuildState.Done }].map(isKeptApp),

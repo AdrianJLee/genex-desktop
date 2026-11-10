@@ -54,7 +54,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { t } from "../../shared/i18n.ts";
 import { isBlankStill } from "../../shared/preview-contract.ts";
 import { GenexCliStopped, authorityDevDir, runGenexCli, genexCliPath } from "./cli.ts";
-import { linkAuthorityToolchain } from "./authority-toolchain.ts";
+import { linkAuthorityToolchain, roomAfterUpload, roomBeforeUpload } from "./authority-toolchain.ts";
 import { stageBuildSource, unrealEngineOf } from "./remix-source.ts";
 import {
   type MacSigning,
@@ -1197,6 +1197,8 @@ export class GenexTools {
       const connect = !bringsOwnSdk(exported?.genex);
       await this.#writeWorkspaceManifest(dir, project, job, exported?.genex, connect);
       await linkAuthorityToolchain(dir, authorityDevDir(), exported?.genex);
+      const room = await roomBeforeUpload(dir, exported?.genex);
+      if (room) job.room = room;
       job.deployment = await markDeployment(path.join(dir, "dist"), job.id);
       job.phase = startPhase;
       return connect;
@@ -1334,12 +1336,21 @@ export class GenexTools {
     for (;;) {
       run.job.uploads = (run.job.uploads ?? 0) + 1;
       try {
-        return await this.#runStep(run, GenexPublishPhase.Uploading);
+        const out = await this.#runStep(run, GenexPublishPhase.Uploading);
+        await this.#noteRoom(run, true);
+        return out;
       } catch (error) {
+        await this.#noteRoom(run, false);
         const again = (run.job.uploads ?? 0) < MAX_UPLOADS && (await this.#nothingLanded(run));
         if (!again) throw error;
       }
     }
+  }
+  /** What this upload made of the game's room module (`roomAfterUpload`), persisted with the job. */
+  async #noteRoom(run: PublishRun, landed: boolean): Promise<void> {
+    if (!run.job.room) return;
+    run.job.room = await roomAfterUpload(run.dir, run.job.room, landed);
+    await this.#persistJob(run.project, run.job);
   }
   /** Whether Genex's record is as it was before the failed upload: nothing reached it. */
   async #nothingLanded(run: PublishRun): Promise<boolean> {

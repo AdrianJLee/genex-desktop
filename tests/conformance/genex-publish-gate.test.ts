@@ -417,6 +417,19 @@ const ROOM_MODULE = [
   "};",
 ].join("\n");
 
+/** A room module the gate refuses: every tick throws. */
+const BROKEN_ROOM_MODULE = [
+  "export default {",
+  "  contract: 1,",
+  '  config: { tickHz: 30, maxPlayers: 4, preset: { name: "topdown" } },',
+  "  init: () => ({}),",
+  "  onJoin() {},",
+  "  onLeave() {},",
+  "  onInput() {},",
+  '  step() { throw new Error("broken room"); },',
+  "};",
+].join("\n");
+
 describe("a server-authoritative game publishes its room module", () => {
   const room = { module: "server/room.js", tickHz: 30, maxPlayers: 4 };
 
@@ -455,6 +468,31 @@ describe("a server-authoritative game publishes its room module", () => {
         [...fx.hosted.keys()].every((file) => !file.toLowerCase().startsWith("server/")),
         "no server file is served at the game's address",
       );
+      assert.deepEqual(
+        done.job?.room,
+        { module: room.module, validated: true, uploaded: true, moduleSha256: goLive.moduleSha256 },
+        "the publish says the room module passed the gate and went up with this build",
+      );
+    } finally {
+      await fx.close();
+    }
+  });
+
+  it("says a room module that fails the gate was neither validated nor uploaded, with the gate's reasons", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await genexFixture();
+    try {
+      await mkdir(path.join(fx.game, "server"), { recursive: true });
+      await writeFile(path.join(fx.game, "server", "room.js"), BROKEN_ROOM_MODULE);
+      const manifest: GenexGameManifest = { dependencies: {}, genex: { authority: room } };
+      const started = await fx.genex.publishDraft(PROJECT, stageWithRoom(fx, manifest));
+      const done = await fx.genex.publishWait(PROJECT, started.job?.id);
+      assert.equal(done.job?.state, "failed");
+      assert.equal(done.job?.room?.module, room.module);
+      assert.equal(done.job?.room?.validated, false);
+      assert.equal(done.job?.room?.uploaded, false);
+      assert.ok(done.job?.room?.failures?.length, "the gate's typed reasons ride along");
+      assert.equal(fx.seen.modules.size, 0, "nothing was stored");
     } finally {
       await fx.close();
     }
@@ -475,6 +513,7 @@ describe("a server-authoritative game publishes its room module", () => {
         (await fx.genex.publishDraft(PROJECT, stageWithRoom(fx, SIGN_IN_GAME))).job?.id,
       );
       assert.equal(plain.job?.state, "done", plain.job?.error);
+      assert.equal(plain.job?.room, undefined, "a publish with no room says nothing of one");
       assert.equal(
         Object.hasOwn(fx.seen.deploys.at(-1) ?? {}, "authority"),
         false,

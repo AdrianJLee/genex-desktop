@@ -1950,7 +1950,16 @@ Available services are capability checked and scoped to the calling plugin:
   the module imports by a relative path, at their paths in the game, each staged folder ignored by
   git. A link on the way, a file outside the game or at its top level, a hidden or reserved folder,
   or more than 2,000 files or 32 MiB refuses the export with the copy untouched; a game without the
-  block leaves no staged room.
+  block leaves no staged room. Unless the person just approved these very files in Studio's Publish
+  dialog, the host first shows them on a card (`reviewExport`). That card is the person's time,
+  not the plugin's: the call's own deadline (190 s, or its `timeoutMs`) stands still from the card's
+  showing to its answer (`PluginInvocation.personAnswers`, `substrate/plugins/process.ts`), the time
+  before and after it still counts, and the card closes when the call ends, so no export goes ahead
+  on an answer nobody waits for. Genex's publish records what it made of a room module in its job's
+  `room` (`GenexPublishRoom`): `validated` from the CLI's kept gate report of this attempt
+  (`.genex/authority/report.json` in the publish copy, with `moduleSha256`, or the gate's
+  `failures`), `uploaded` once that upload finished, which the CLI refuses unless Genex stored the
+  module and named its sha.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
   the bound game to a project file of the engine the plugin declares (an Unreal `.uproject`, a
   Godot project's `project.godot`, a Roblox place), read its link, or show the plugin's steps card
@@ -2504,7 +2513,8 @@ sandbox (`main/play/local-plays.ts`), or answers that there is none, that it is 
 game's last change (package again first) or that a package the chat started is still running. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
 the installed plugins that match (on, then off or removed; never one under the hood), then the entries of Genex's curated
 catalog not installed, and never anything from another source (`main/core/plugin-finder.ts`). A
-plugin matches when it detects, is scoped to or makes `fact`, or when a word of `text` other than a
+plugin matches when it detects, is scoped to or makes `fact` (a host tool it carries, such as
+Genex's room, is Studio's service and names no kind of the plugin's), or when a word of `text` other than a
 generic one ("engine", "plugin", "editor"…) is a word, or starts a word, of its id, name, description
 or facts: the agent's own search, not Genex deciding. Each found plugin carries
 its `offer` (`turn-on`, `install`, or none when it is on) and its facts; the answer's `next` says
@@ -3823,7 +3833,8 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   `godot__multiplayer` or `unity__multiplayer`: its multiplayer goes into its project. The paid tool needs consent; the package tool asks nobody (Genex's own pinned packages spend nothing), and fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
 - `genex__room` (host `genex-room`) tests a server-authoritative game's room module on this Mac
-  with the toolchain Studio ships: `validate` answers the publish gate's verdict, `start` serves the
+  with the toolchain Studio ships. It reaches web, Unity and Unreal games (their multiplayer skills
+  send the builder to it); a game with no `authority` block gets the service's refusal naming it: `validate` answers the publish gate's verdict, `start` serves the
   room on 127.0.0.1 with up to 8 bots and up to 300 ms of delay and loads the game's loopback
   preview into it, `status` answers its last REPORT, log lines and errors, `stop` ends it. It runs in
   ProcessSandbox, asks nobody, spends nothing and, touching no account or download, runs in fixture

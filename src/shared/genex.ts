@@ -466,6 +466,23 @@ export interface GenexPublishJob {
   embedSdkVersion?: string;
   /** How many times this attempt uploaded the build: a draft that fails its test is uploaded once more. */
   uploads?: number;
+  /** A server-authoritative game's room module in this publish; absent for a game with no room block. */
+  room?: GenexPublishRoom;
+}
+/**
+ * What one publish made of a game's room module, from the CLI's own record of its gate (the report
+ * it keeps in the publish copy), never from its words. `validated`: this attempt's bundle passed
+ * the gate (`moduleSha256` is that bundle's). `uploaded`: it went up with this build, which the
+ * CLI finishes only once Genex stored the module and its go-live named that very sha.
+ */
+export interface GenexPublishRoom {
+  /** The module the game's `authority` block names (`server/room.ts`), or null for a block that names none. */
+  module: string | null;
+  validated: boolean;
+  uploaded: boolean;
+  moduleSha256?: string;
+  /** The gate's typed reasons (`module_threw`, …) when it did not pass. */
+  failures?: string[];
 }
 /**
  * How a Genex cover send ended (`GenexCoverSent.kind`). The first five are the CLI's own answers

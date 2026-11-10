@@ -27,6 +27,7 @@ import { VisualStudioState } from "../../src/plugins/unreal/visual-studio.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { CrashLog, crashLog } from "../helpers/unreal-editor-stand-in.ts";
+import { engineByGame } from "../helpers/unreal-fake-engine.ts";
 
 const NAME = "TowerClimb";
 const XCODE_APP = "/Applications/Xcode-26.2.app";
@@ -87,6 +88,8 @@ type Options = {
   editorCall?: (tool: string, events: string[]) => unknown;
   /** Where Genex's own start of the game's project stands. */
   starting?: EditorStart;
+  /** A newer Unreal is installed beside the game's own, which answers only when asked for this game. */
+  newerUnreal?: boolean;
 };
 
 type Paths = { home: string; project: string; crashes: string; ours: string; other: string; elsewhere: string };
@@ -171,16 +174,20 @@ async function reopenWorld(options: Options = {}) {
   };
   const remembered = rememberAnswers(asked, () => clock.at);
   const helper = options.outdatedHelper ? await helperUpdates(root, paths, events, rows) : {};
+  const own = { version: "5.8", directory: path.join(root, "engine") };
+  const newer = { version: "5.9", directory: path.join(root, "engine-5.9") };
+  const builtWith: string[] = [];
 
   const tools = createLoopTools({
     ...helper,
     platform: options.platform ?? "darwin",
-    engine: async () => ({ version: "5.8", directory: path.join(root, "engine") }),
+    engine: options.newerUnreal ? engineByGame("tower-climb", own, newer) : async () => own,
     project: async () => (options.unlinked ? undefined : project),
     xcode: async () => ({ state: options.xcode ?? XcodeState.Ready, app: XCODE_APP }),
     ...visualStudioOf(options.visualStudio),
     compile: async (compile) => {
       events.push("compile");
+      builtWith.push(compile.engineDir);
       assert.equal(compile.projectFile, project);
       assert.equal(compile.module, NAME);
       assert.equal(compile.xcodeApp, XCODE_APP);
@@ -248,7 +255,22 @@ async function reopenWorld(options: Options = {}) {
   /** One of the agent's editor tools, as a chat calls it. */
   const agentCall = (name: string, args: Record<string, unknown> = {}) =>
     tools.call(name as LoopToolName, args, context, storage);
-  return { paths, rows, events, signals, clock, state, reopen, reopened, editorState, endEditor, atMoment, agentCall };
+  return {
+    paths,
+    rows,
+    events,
+    signals,
+    builtWith,
+    engineDir: own.directory,
+    clock,
+    state,
+    reopen,
+    reopened,
+    editorState,
+    endEditor,
+    atMoment,
+    agentCall,
+  };
 }
 
 /** A setup env for the project's helper: this stand-in computer, where nothing else runs. */
@@ -348,6 +370,15 @@ describe("reopen-editor", () => {
       "the other project's reporter and editor are left as they were",
     );
     assert.ok(w.clock.at >= OPEN_TAKES_MS, "it waited for the project to answer");
+  });
+
+  it("ends the crash reporter of the game's own Unreal and builds with that Unreal, where a newer one is installed too", async () => {
+    const w = await reopenWorld({ newerUnreal: true });
+    assert.deepEqual(await w.reopen(), { started: true });
+    const end = await w.reopened();
+    assert.equal(end.reopening.state, ReopenState.Done, end.reopening.error);
+    assert.deepEqual(w.signals, [[7900, "SIGTERM"]], "the reporter of a crash filed under the game's own Unreal");
+    assert.deepEqual(w.builtWith, [w.engineDir]);
   });
 
   it("on Windows builds the game's module with Microsoft's C++ tools before it opens the project", async () => {
@@ -643,6 +674,12 @@ describe("end-editor (the live builder's cold restore)", () => {
       [8001],
       "another project's editor runs on",
     );
+  });
+
+  it("ends the crash reporter of the game's own Unreal where a newer one is installed too", async () => {
+    const w = await reopenWorld({ newerUnreal: true });
+    assert.deepEqual(await w.endEditor(), { ended: 1 });
+    assert.deepEqual(w.signals, [[7900, "SIGTERM"]]);
   });
 
   it("throws when this project's processes outlive even a kill", async () => {

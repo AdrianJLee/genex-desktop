@@ -52,6 +52,12 @@ export type StepsCard = {
   stuckSays?: string;
 };
 
+/**
+ * Whether a card is one question, not a list of steps: it has no rows, and its own two buttons are
+ * the answers. Its primary then does nothing on this computer for the person, so it bears no screen.
+ */
+export const isQuestion = (card: StepsCard): boolean => card.steps.length === 0;
+
 /** The newest offer in a chat's log, or null. */
 export function stepsOffer(events: readonly EventEnvelope[]): StepsOffer | null {
   for (let i = events.length - 1; i >= 0; i--) {

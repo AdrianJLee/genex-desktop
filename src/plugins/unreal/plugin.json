@@ -1,16 +1,17 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.55.0",
+  "version": "0.56.0",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
-  "description": "Agents build your game in Unreal Editor 5.8 on this computer. Getting Unreal needs a free Epic account; each game has its own Unreal project. Unreal® is a trademark or registered trademark of Epic Games, Inc.",
+  "description": "Agents build your game in Unreal Editor on this computer. Getting Unreal needs a free Epic account; each game has its own Unreal project. Unreal® is a trademark or registered trademark of Epic Games, Inc.",
   "backend": "backend.mjs",
   "capabilities": ["game-engine"],
   "detect": [
     { "fact": "unreal-project", "files": ["**/*.uproject"] },
-    { "fact": "unreal-plugin", "files": ["**/*.uplugin"], "notUnder": ["**/Plugins/"] }
+    { "fact": "unreal-plugin", "files": ["**/*.uplugin"], "notUnder": ["**/Plugins/"] },
+    { "fact": "unreal-web-build", "files": ["**/wasm-manifest.json"] }
   ],
   "engine": {
     "id": "unreal",
@@ -54,7 +55,7 @@
     {
       "name": "install-unreal",
       "facts": ["web-game", "unreal-project"],
-      "description": "Install what Unreal needs on this computer, one step per call, as Do it for me on the Unreal setup card does: Epic's launcher (on Windows Genex downloads it from Epic, checks Epic signed it and installs it; Windows asks the user for permission), then Unreal 5.8 in the launcher (Genex opens the launcher and hands the install to this chat's next turn, which clicks it with the desktop tool), then, on Windows when it is missing, Microsoft's Visual C++ runtime the editor needs, and, in a game with an Unreal project on Windows, Microsoft's Visual Studio Build Tools, which compiling and packaging C++ need (Genex downloads Microsoft's installer, checks Microsoft signed it and installs them; Windows asks the user for permission): call it for them when cpp-status, add-cpp-module or a package says so. Call it yourself when the user wants an Unreal game and Unreal isn't installed, instead of asking them to install it; only signing in to Epic is theirs. It answers at once with what it started; end your reply then, and call it again for the next step once the card shows the last one done.",
+      "description": "Install what Unreal needs on this computer, one step per call, as Do it for me on the Unreal setup card does: Epic's launcher (on Windows Genex downloads it from Epic, checks Epic signed it and installs it; Windows asks the user for permission), then Unreal in the launcher (Genex opens the launcher and hands the install to this chat's next turn, which clicks it with the desktop tool), then, on Windows when it is missing, Microsoft's Visual C++ runtime the editor needs, and, in a game with an Unreal project on Windows, Microsoft's Visual Studio Build Tools, which compiling and packaging C++ need (Genex downloads Microsoft's installer, checks Microsoft signed it and installs them; Windows asks the user for permission): call it for them when cpp-status, add-cpp-module or a package says so. Call it yourself when the user wants an Unreal game and Unreal isn't installed, instead of asking them to install it; only signing in to Epic is theirs. It answers at once with what it started; end your reply then, and call it again for the next step once the card shows the last one done.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -109,7 +110,7 @@
     {
       "name": "blueprint-guide",
       "facts": ["unreal-project"],
-      "description": "Epic's own Blueprint guide and the full Blueprint text syntax (the (event …) and (fn …) forms a part's .dsl files use), read from this engine without Unreal. Read it before writing Blueprint text.",
+      "description": "How Blueprint text is written on this game's Unreal, with Epic's own Blueprint guide, read from that engine without Unreal: on Unreal 5.8 the full text syntax (the (event …) and (fn …) forms a part's .dsl files use), from 5.9 which of the editor's toolsets write it. Read it before writing Blueprint text.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -118,7 +119,7 @@
     {
       "name": "find-nodes",
       "facts": ["unreal-project"],
-      "description": "Look Blueprint node types up by a few words of their name in this engine's node reference, without Unreal: their exact type ids (the NodeType|Id a .dsl call names) and, where known, their pins. Pass the Blueprint's base and graph to see the nodes that context offers first.",
+      "description": "Look Blueprint node types up by a few words of their name in this engine's node reference, without Unreal: their exact type ids (the NodeType|Id a .dsl call names) and, where known, their pins. Pass the Blueprint's base and graph to see the nodes that context offers first. For a game on Unreal 5.8; from 5.9 it says which of the editor's tools look nodes up.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -244,7 +245,7 @@
     {
       "name": "motion-status",
       "facts": ["unreal-project"],
-      "description": "Whether the Game Animation Sample (Epic's Motion Matching characters) is among this computer's Unreal projects, whether this game holds its content, and how adding it goes. When it isn't, make it yourself with the desktop tool in the Epic Games Launcher (Fab Library or Samples › Game Animation Sample › Create Project, 5.8).",
+      "description": "Whether the Game Animation Sample (Epic's Motion Matching characters) is among this computer's Unreal projects, whether this game holds its content, and how adding it goes. When it isn't, make it yourself with the desktop tool in the Epic Games Launcher (Fab Library or Samples › Game Animation Sample › Create Project, the Unreal version this game uses).",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -255,7 +256,7 @@
       "jobStatus": "motion-status",
       "facts": ["unreal-project"],
       "needs": ["editor"],
-      "description": "Add the Game Animation Sample's Motion Matching content to this game, once the user confirms: Genex saves their open work in Unreal, quits it, clones the sample's character, clips and pose databases into the game (kept out of its checkpoints), merges the sample's settings and plugins, and opens Unreal again; its first open takes about ten minutes. Needs the sample among the user's Unreal projects: when it isn't, make it yourself with the desktop tool in the Epic Games Launcher (Fab Library or Samples › Game Animation Sample › Create Project, 5.8). Answers {started} at once, or {already}; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; motion-status says how it went. Then motion_character gives a character the sample's Motion Matching.",
+      "description": "Add the Game Animation Sample's Motion Matching content to this game, once the user confirms: Genex saves their open work in Unreal, quits it, clones the sample's character, clips and pose databases into the game (kept out of its checkpoints), merges the sample's settings and plugins, and opens Unreal again; its first open takes about ten minutes. Needs the sample among the user's Unreal projects: when it isn't, make it yourself with the desktop tool in the Epic Games Launcher (Fab Library or Samples › Game Animation Sample › Create Project, the Unreal version this game uses). Answers {started} at once, or {already}; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; motion-status says how it went. Then motion_character gives a character the sample's Motion Matching.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -276,7 +277,7 @@
       "name": "package-game",
       "jobStatus": "package-status",
       "facts": ["unreal-project"],
-      "description": "Package this Unreal game as the app its players install: a Mac app on a Mac; on Windows, a Windows program, or a Linux one with system: \"linux\" (Unreal makes no Mac app off a Mac and no Windows app off Windows). A Linux package needs Epic's free Linux cross-compile toolchain for this Unreal: without it the call refuses with the installer's link, which you give the user, then package again once they ran it. Genex saves the open work in Unreal first (Unreal stays open), then runs Epic's BuildCookRun (Shipping) in the background into unreal/Builds/Mac/, unreal/Builds/Windows/ or unreal/Builds/Linux/, where Publish finds it. One package runs at a time per game. A first package compiles every shader and takes minutes. Answers {started, system} at once; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; package-status (with the same system) says how it went. stop: true ends a running package.",
+      "description": "Package this Unreal game as the app its players install: a Mac app on a Mac; on Windows, a Windows program, or a Linux one with system: \"linux\" (Unreal makes no Mac app off a Mac and no Windows app off Windows). A Linux package needs Epic's free Linux cross-compile toolchain for this Unreal: without it the call refuses with the installer's link, which you give the user, then package again once they ran it. system: \"web\" makes the game's web version instead (Unreal 5.9's web platform), on a Mac or Windows: the whole site, made the game's web/ folder, where Publish and Live find it. It needs an Unreal whose install includes the web platform, the game's C++ module (add-cpp-module) and emscripten in exactly the version that Unreal names, in an emsdk folder the user installs; each one missing refuses the call with what to do, and so does a web/ folder that holds other files. Genex saves the open work in Unreal first (Unreal stays open), then runs Epic's BuildCookRun (Shipping) in the background into unreal/Builds/Mac/, unreal/Builds/Windows/ or unreal/Builds/Linux/, where Publish finds it. One package runs at a time per game. A first package compiles every shader and takes minutes. Answers {started, system} at once; Genex starts this chat's next turn once it has ended, so you may end your turn meanwhile; package-status (with the same system) says how it went. stop: true ends a running package.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -286,8 +287,8 @@
           },
           "system": {
             "type": "string",
-            "enum": ["mac", "windows", "linux"],
-            "description": "Optional. The system the app is for; this computer's own when left out. On Windows, \"linux\" packages a Linux app."
+            "enum": ["mac", "windows", "linux", "web"],
+            "description": "Optional. The system the app is for; this computer's own when left out. On Windows, \"linux\" packages a Linux app. \"web\" makes the game's web version."
           }
         }
       }
@@ -295,14 +296,14 @@
     {
       "name": "package-status",
       "facts": ["unreal-project"],
-      "description": "How this game's package for a system stands (system: \"linux\" for a Linux package on Windows; this computer's own system when left out): running, done (with the app's path inside the game and how long it took), failed (with its first error lines) or stopped; idle names an app already in that system's build folder.",
+      "description": "How this game's package for a system stands (system: \"linux\" for a Linux package on Windows, \"web\" for the web version; this computer's own system when left out): running, done (with the app's path inside the game and how long it took), failed (with its first error lines) or stopped; idle names an app already in that system's build folder.",
       "parameters": {
         "type": "object",
         "properties": {
           "system": {
             "type": "string",
-            "enum": ["mac", "windows", "linux"],
-            "description": "Optional. The system the app is for; this computer's own when left out. On Windows, \"linux\" packages a Linux app."
+            "enum": ["mac", "windows", "linux", "web"],
+            "description": "Optional. The system the app is for; this computer's own when left out. On Windows, \"linux\" packages a Linux app. \"web\" makes the game's web version."
           }
         }
       }
@@ -805,6 +806,15 @@
       "confirmation": "Take back what Genex added to this Unreal project: its plugin entries, the MCP server start-up lines and the Genex editor helper. Anything else you changed stays."
     },
     {
+      "name": "move-engine",
+      "label": "Move",
+      "confirmation": "Move this Unreal project to the Unreal Engine version Genex makes new games with. What the newer version saves won't open in the older one."
+    },
+    {
+      "name": "move-later",
+      "label": "Not now"
+    },
+    {
       "name": "use-project",
       "label": "Use in this game"
     },
@@ -856,7 +866,7 @@
       "reads": ["list_toolsets", "describe_toolset"],
       "maxTools": 3,
       "callTimeoutMs": 330000,
-      "description": "The user's open Unreal Editor 5.8 through Epic's Unreal MCP on 127.0.0.1. Set up Unreal prepares a project: Epic's MCP plugins on, the server starting on a port of the project's own, and the Genex editor helper. Each game's calls go to the Unreal project Genex linked it to; a game without one uses the project chosen in the panel."
+      "description": "The user's open Unreal Editor through Epic's Unreal MCP on 127.0.0.1. Set up Unreal prepares a project: Epic's MCP plugins on, the server starting on a port of the project's own, and the Genex editor helper. Each game's calls go to the Unreal project Genex linked it to; a game without one uses the project chosen in the panel."
     }
   ],
   "workerTypes": [

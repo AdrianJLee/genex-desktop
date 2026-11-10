@@ -110,7 +110,8 @@ import {
 import { type CompileJobs, compileWaitMs, cppFingerprint, createCompileJobs, freshenSources } from "./part-compile.ts";
 import { parsePartManifest } from "./part-manifest.ts";
 import { type PartCheck, parsePartTest, readPartCheck } from "./part-test.ts";
-import { readBlueprintGuide } from "./blueprint-guide.ts";
+import { noReferenceMessage, readBlueprintGuide, readGraphDslGuide } from "./blueprint-guide.ts";
+import { BlueprintText, traitsOf } from "./engine-line.ts";
 import { PROJECT_EXPORT, projectExported, readProjectBlueprints } from "./project-blueprints.ts";
 import { checkPython, type PythonCpp, PythonProblemCode, unrealPython } from "./python-check.ts";
 import { loadReference, parseReference, referencePaths, storeReference } from "./reference-store.ts";
@@ -184,6 +185,8 @@ export const TOOLSET_OF = {
   [LoopTool.PilotStep]: HELPER_TOOLSET,
   [LoopTool.GetProperties]: OBJECT_TOOLSET,
   [LoopTool.SetProperties]: OBJECT_TOOLSET,
+  [LoopTool.RunSettings]: LOOP_TOOLSET,
+  [LoopTool.SetThrottle]: LOOP_TOOLSET,
   [LoopEditorTool.RollbackPart]: LOOP_TOOLSET,
   [LoopEditorTool.ReloadLevel]: LOOP_TOOLSET,
   [LoopEditorTool.ExportReference]: LOOP_TOOLSET,
@@ -367,8 +370,11 @@ const SHIPPED_HELPER = path.join(path.dirname(fileURLToPath(import.meta.url)), H
 /** What the tools need from the computer and the editor. */
 export type LoopToolsDeps = {
   platform: NodeJS.Platform;
-  /** The supported engine's version and folder, or undefined without one. */
-  engine(): Promise<{ version: string; directory: string } | undefined>;
+  /**
+   * The installed engine `game`'s tools run with, by version and folder: the one its linked project
+   * names, else the newest supported one (a call with no game gets that one too); undefined without one.
+   */
+  engine(storage: string, game: string | undefined): Promise<{ version: string; directory: string } | undefined>;
   /** The game's linked project file in the plugin's storage, or undefined. */
   project(storage: string, game: string): Promise<string | undefined>;
   /** Where Xcode stands against the engine in `engineDir` (C++ compiles only when Ready on a Mac), and its app. */
@@ -377,6 +383,8 @@ export type LoopToolsDeps = {
   visualStudio?(engineDir: string | undefined): Promise<Pick<VisualStudioStatus, "state">>;
   /** Windows: `LINUX_MULTIARCH_ROOT` as Epic's Linux toolchain installer set it, for a Linux package. */
   linuxToolchain?(): Promise<string | undefined>;
+  /** The emsdk folder this computer names for a web build (`EMSDK_VARIABLES`). */
+  emsdk?(): Promise<string | undefined>;
   /** Compiles a game copy's editor target; UnrealBuildTool's own unless a test stands in. */
   compile?(options: CompileOptions): Promise<CompileResult>;
   /** Writes a Blueprint project's C++ module; `addCppModule` unless a test stands in. */
@@ -587,7 +595,7 @@ type GateRead = {
  */
 async function gate(deps: LoopToolsDeps, storage: string, directory: string, part: string, game?: string) {
   const { dir, files } = await readPartFiles(directory, part);
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   const linked = await linkedProject(deps, storage, game);
   const others = await readOtherParts(directory);
   const cpp = linked ? await readPartCpp(part, { copy: directory, project: linked }) : undefined;
@@ -784,11 +792,7 @@ export function createLoopTools(deps: LoopToolsDeps) {
       deps.editorCall(storage, game(context), LoopEditorTool.ReloadLevel, {}),
     [LoopToolName.ExportReference]: (_args, context, storage) =>
       exportJoined(deps, lookupExports, storage, game(context)),
-    [LoopToolName.BlueprintGuide]: async () => {
-      const engine = await deps.engine();
-      if (!engine) throw new Error(MESSAGE.NoEngine);
-      return readBlueprintGuide(engine.directory, engine.version);
-    },
+    [LoopToolName.BlueprintGuide]: (_args, context, storage) => blueprintGuide(deps, storage, context.project),
     [LoopToolName.FindNodes]: async (args, context, storage) => findNodes(deps, storage, context, args, lookupExports),
     [LoopToolName.CppStatus]: (_args, context, storage) => cpp.status(storage, game(context)),
     [LoopToolName.AddCppModule]: (_args, context, storage) => cpp.add(storage, game(context)),
@@ -1337,6 +1341,7 @@ async function findNodes(
 ) {
   const words = text(args, "query").toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) throw new Error(MESSAGE.NoQuery);
+  await refuseWithoutReference(deps, storage, context.project);
   const reference = await lookupReference(deps, storage, context, exports);
   // Read after the reference: an export it needed also wrote the template's project file.
   const template = await templateBlueprints(deps, storage, context.project);
@@ -1362,6 +1367,24 @@ async function findNodes(
  */
 type LookupExports = { reference: ReferenceExports; facts: Map<string, Promise<unknown>> };
 
+/** `blueprint-guide`: how Blueprint text is written on the game's own Unreal, read from that engine. */
+async function blueprintGuide(deps: LoopToolsDeps, storage: string, game: string | undefined): Promise<string> {
+  const engine = await deps.engine(storage, game);
+  if (!engine) throw new Error(MESSAGE.NoEngine);
+  return keepsReference(engine.version)
+    ? readBlueprintGuide(engine.directory, engine.version)
+    : readGraphDslGuide(engine.directory, engine.version);
+}
+
+/** Whether Genex keeps a node reference for an Unreal: only one that writes Blueprint text with Epic's Python tools. */
+const keepsReference = (version: string): boolean => traitsOf(version).blueprintText === BlueprintText.PythonTools;
+
+/** Refuses a tool of the node reference for a game whose Unreal has none, saying where nodes are looked up there. */
+async function refuseWithoutReference(deps: LoopToolsDeps, storage: string, game: string | undefined): Promise<void> {
+  const engine = await deps.engine(storage, game).catch(() => undefined);
+  if (engine && !keepsReference(engine.version)) throw new Error(noReferenceMessage(engine.version));
+}
+
 /** The key an engine's reference is exported and kept under. */
 const referenceKey = (storage: string, engine: string) => `${storage}\0${engine}`;
 
@@ -1370,8 +1393,8 @@ const referenceKey = (storage: string, engine: string) => `${storage}\0${engine}
  * is kept yet and it answers, so a lookup during play later finds it kept. Never throws.
  */
 async function warmReference(deps: LoopToolsDeps, exports: LookupExports, storage: string, game: string) {
-  const engine = await deps.engine().catch(() => undefined);
-  if (!engine) return;
+  const engine = await deps.engine(storage, game).catch(() => undefined);
+  if (!engine || !keepsReference(engine.version)) return;
   const kept = await stat(referencePaths(storage, engine.version).nodes).catch(() => null);
   if (kept || !(await deps.editorAnswers(storage, game).catch(() => false))) return;
   exports.reference.warm(referenceKey(storage, engine.version), () => exportUnlessKept(deps, storage, game));
@@ -1379,8 +1402,9 @@ async function warmReference(deps: LoopToolsDeps, exports: LookupExports, storag
 
 /** `export-reference`: an export of the engine's reference, joining one that runs (a background one), so two never write the same files. */
 async function exportJoined(deps: LoopToolsDeps, exports: LookupExports, storage: string, game: string) {
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   if (!engine) throw new Error(MESSAGE.NoEngine);
+  if (!keepsReference(engine.version)) throw new Error(noReferenceMessage(engine.version));
   return exports.reference.start(referenceKey(storage, engine.version), () => exportReference(deps, storage, game));
 }
 
@@ -1389,7 +1413,7 @@ async function exportJoined(deps: LoopToolsDeps, exports: LookupExports, storage
  * kept by the time it starts: a background export may have kept it since its caller looked.
  */
 async function exportUnlessKept(deps: LoopToolsDeps, storage: string, game: string) {
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   if (engine && (await loadReference(storage, engine.version))) return { engine: engine.version, stored: true };
   return exportReference(deps, storage, game, REFERENCE_EXPORT_MS);
 }
@@ -1407,7 +1431,7 @@ async function lookupReference(
   context: PluginContext,
   exports: LookupExports,
 ): Promise<ReferenceData> {
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, context.project);
   if (!engine) throw new Error(MESSAGE.NoEngine);
   const kept = await loadReference(storage, engine.version);
   if (kept) {
@@ -1476,7 +1500,7 @@ async function exportProject(deps: LoopToolsDeps, storage: string, game: string,
 
 /** Asks the game's editor for the node reference and the Python names, and keeps them per engine; each call within `callMs` when given. */
 async function exportReference(deps: LoopToolsDeps, storage: string, game: string, callMs?: number) {
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   if (!engine) throw new Error(MESSAGE.NoEngine);
   const project = await deps.project(storage, game);
   if (!project) throw new Error(MESSAGE.NoProject);

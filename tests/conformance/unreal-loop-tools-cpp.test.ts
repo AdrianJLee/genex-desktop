@@ -20,6 +20,7 @@ import { CompileFailure, type CompileOptions, type CompileResult } from "../../s
 import { VisualStudioState } from "../../src/plugins/unreal/visual-studio.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+import { engineByGame } from "../helpers/unreal-fake-engine.ts";
 
 const MODULE = "Rush";
 const PART = {
@@ -72,6 +73,8 @@ type Options = {
   module?: boolean;
   /** Runs while Xcode is probed: a slow probe moves the clock, a watcher looks for apply.py's check. */
   probing?: (clock: { at: number }) => Promise<void>;
+  /** A newer Unreal is installed beside the game's own, which answers only when asked for this game. */
+  newerUnreal?: boolean;
 };
 
 /** The Xcode app the stand-in probe finds. */
@@ -97,9 +100,11 @@ async function world(options: Options = {}) {
   /** check-part's waits for a compile: how long, and whether each was told to stop. */
   const sleeps: Array<{ ms: number; signal: AbortSignal | undefined }> = [];
   const clock = { at: 0 };
+  const own = { version: "5.8", directory: path.join(root, "engine") };
+  const newer = { version: "5.9", directory: path.join(root, "engine-5.9") };
   const tools = createLoopTools({
     platform: options.platform ?? "darwin",
-    engine: async () => ({ version: "5.8", directory: path.join(root, "engine") }),
+    engine: options.newerUnreal ? engineByGame("rush", own, newer) : async () => own,
     project: async () => path.join(game, "unreal", "Rush.uproject"),
     xcode: async (engineDir) => {
       xcodeAsked.push(engineDir);
@@ -150,6 +155,15 @@ describe("check-part on a C++ part", () => {
     assert.equal(w.compiles[0]?.projectFile, path.join(copy, "unreal", "Rush.uproject"));
     assert.equal(w.compiles[0]?.module, MODULE);
     assert.equal(w.compiles[0]?.engineDir, path.join(w.root, "engine"));
+  });
+
+  it("compiles with the game's own Unreal and judges Xcode against it, where a newer Unreal is installed too", async () => {
+    const w = await world({ newerUnreal: true });
+    const checked = w.check(w.copies[0] ?? "");
+    await w.answer(0, OK);
+    assert.match(await checked, /^Bike passes/);
+    assert.equal(w.compiles[0]?.engineDir, path.join(w.root, "engine"));
+    assert.deepEqual(w.xcodeAsked, [path.join(w.root, "engine")]);
   });
 
   it("compiles the builder's copy on Windows with Microsoft's C++ tools, and never asks for Xcode", async () => {

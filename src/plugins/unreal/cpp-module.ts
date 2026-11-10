@@ -13,6 +13,7 @@
 import { lstat, mkdir, readdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteText, isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
+import { traitsOf } from "./engine-line.ts";
 import { isProjectPath, projectName } from "./project-file.ts";
 
 /** Why Genex refused to add the module; nothing was written. */
@@ -119,8 +120,6 @@ const ENGINE_VERSION = /^(\d+)\.(\d+)(?:\.\d+)?$/;
  * keeps the two before it), else 5.8's, the version this file was compared against.
  */
 const INCLUDE_ORDER = { major: 5, minor: 8 } as const;
-/** UE 5.8's latest build settings, as its own C++ templates name them; later engines keep it. */
-const BUILD_SETTINGS = "V7";
 const VEHICLE_PLUGIN = "ChaosVehiclesPlugin";
 /** What every game module may use: gameplay, Enhanced Input, and UMG and Slate for HUDs. */
 const DEPENDENCIES = ["Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore"];
@@ -427,7 +426,16 @@ function vehiclesEnabled(json: Record<string, unknown>): boolean {
   return listOf(json[PLUGINS_KEY]).some((p) => isJsonObject(p) && p.Name === VEHICLE_PLUGIN && p.Enabled === true);
 }
 
-function targetText(module: string, kind: TargetKind, includeOrder: string): string {
+/**
+ * The build settings an engine's targets name: its release's own (`LineTraits.buildSettings`), the
+ * oldest supported release's for a version this file can't read.
+ */
+function buildSettingsFor(version: unknown): string {
+  const match = typeof version === "string" ? ENGINE_VERSION.exec(version) : null;
+  return traitsOf(match ? `${match[1]}.${match[2]}` : "").buildSettings;
+}
+
+function targetText(module: string, kind: TargetKind, engine: { includeOrder: string; buildSettings: string }): string {
   const target = `${kind === TargetKind.Editor ? `${module}${EDITOR_SUFFIX}` : module}Target`;
   return [
     "using UnrealBuildTool;",
@@ -438,8 +446,8 @@ function targetText(module: string, kind: TargetKind, includeOrder: string): str
     `\tpublic ${target}(TargetInfo Target) : base(Target)`,
     "\t{",
     `\t\tType = TargetType.${kind};`,
-    `\t\tDefaultBuildSettings = BuildSettingsVersion.${BUILD_SETTINGS};`,
-    `\t\tIncludeOrderVersion = EngineIncludeOrderVersion.${includeOrder};`,
+    `\t\tDefaultBuildSettings = BuildSettingsVersion.${engine.buildSettings};`,
+    `\t\tIncludeOrderVersion = EngineIncludeOrderVersion.${engine.includeOrder};`,
     `\t\tExtraModuleNames.Add("${module}");`,
     "\t}",
     "}",
@@ -467,14 +475,15 @@ function buildText(module: string, dependencies: readonly string[]): string {
 
 /** The module's files, as Unreal lays a C++ project out. */
 function moduleFiles(module: string, json: Record<string, unknown>, engineVersion: string | undefined): ModuleFile[] {
-  const includeOrder = includeOrderFor(engineVersion ?? json.EngineAssociation);
+  const version = engineVersion ?? json.EngineAssociation;
+  const engine = { includeOrder: includeOrderFor(version), buildSettings: buildSettingsFor(version) };
   const dependencies = vehiclesEnabled(json) ? [...DEPENDENCIES, ...VEHICLE_DEPENDENCIES] : DEPENDENCIES;
   const folder = `${SOURCE_FOLDER}/${module}`;
   return [
-    { relative: `${SOURCE_FOLDER}/${module}${TARGET_SUFFIX}`, text: targetText(module, TargetKind.Game, includeOrder) },
+    { relative: `${SOURCE_FOLDER}/${module}${TARGET_SUFFIX}`, text: targetText(module, TargetKind.Game, engine) },
     {
       relative: `${SOURCE_FOLDER}/${module}${EDITOR_SUFFIX}${TARGET_SUFFIX}`,
-      text: targetText(module, TargetKind.Editor, includeOrder),
+      text: targetText(module, TargetKind.Editor, engine),
     },
     { relative: `${folder}/${module}.Build.cs`, text: buildText(module, dependencies) },
     { relative: `${folder}/${module}.h`, text: '#pragma once\n\n#include "CoreMinimal.h"\n' },

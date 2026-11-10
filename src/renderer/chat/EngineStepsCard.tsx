@@ -17,6 +17,7 @@ import { STEPS_WORDS } from "../words.ts";
 import { usePlugins } from "../state/hooks.ts";
 import { Icon } from "../ui/icons.tsx";
 import {
+  isQuestion,
   type KeptSteps,
   parseSteps,
   runButton,
@@ -198,11 +199,22 @@ function StepLine({ row, onRun }: { row: StepRow; onRun: (row: StepRow) => void 
   );
 }
 
-/** The card's own button, which does every step it can for the person: a screen marks that Genex works on this computer. */
-function PrimaryButton({ button, onRun }: { button: StepButton; onRun: (button: StepButton) => void }): JSX.Element {
+/**
+ * The card's own button. On a card of steps it does every step it can for the person, and a screen
+ * marks that Genex works on this computer; on a card that is one question it is the answer, unmarked.
+ */
+function PrimaryButton({
+  button,
+  works,
+  onRun,
+}: {
+  button: StepButton;
+  works: boolean;
+  onRun: (button: StepButton) => void;
+}): JSX.Element {
   return (
     <button type="button" className="chat-question-submit" onClick={() => onRun(button)}>
-      <Icon name="computer" size={15} />
+      {works ? <Icon name="computer" size={15} /> : null}
       {button.label}
     </button>
   );
@@ -260,19 +272,25 @@ export function EngineStepsCard({
     press(row.action, SetupButton.Step, row.id);
   };
   const wayOut = card.secondary;
+  const question = isQuestion(card);
   return (
     <section data-engine-steps aria-labelledby="engine-steps-title" className="chat-question chat-waiting-card mb-2">
       <div className="min-h-0 overflow-y-auto px-4 py-3">
-        <h3 id="engine-steps-title" className="text-chat font-medium">
-          {card.title}
-        </h3>
-        <p className="mt-0.5 text-chat-sub text-ink-3">{card.intro}</p>
+        {/* A question's own words can name the person's project. */}
+        <div {...(question ? { "data-analytics-mask": "" } : {})}>
+          <h3 id="engine-steps-title" className="text-chat font-medium">
+            {card.title}
+          </h3>
+          <p className="mt-0.5 text-chat-sub text-ink-3">{card.intro}</p>
+        </div>
         {/* The steps are the plugin's words, and their commands can hold paths and user names. */}
-        <ul data-analytics-mask className="@container mt-3 flex min-w-0 flex-col gap-2">
-          {card.steps.map((row) => (
-            <StepLine key={row.id} row={row} onRun={run} />
-          ))}
-        </ul>
+        {question ? null : (
+          <ul data-analytics-mask className="@container mt-3 flex min-w-0 flex-col gap-2">
+            {card.steps.map((row) => (
+              <StepLine key={row.id} row={row} onRun={run} />
+            ))}
+          </ul>
+        )}
       </div>
       {/* The card's buttons stay in view under the steps, which scroll above them. */}
       <div
@@ -291,7 +309,11 @@ export function EngineStepsCard({
           </Button>
         )}
         {card.primary ? (
-          <PrimaryButton button={card.primary} onRun={(button) => press(button, SetupButton.Primary)} />
+          <PrimaryButton
+            button={card.primary}
+            works={!question}
+            onRun={(button) => press(button, SetupButton.Primary)}
+          />
         ) : null}
       </div>
     </section>

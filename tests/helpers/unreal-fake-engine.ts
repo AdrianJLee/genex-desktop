@@ -1,10 +1,12 @@
 /**
- * A small fake Unreal 5.8 for the Unreal plugin's project-making tools: its Blank Blueprint template
- * as Epic's TemplateDefs.ini describes it, the three C++ plugin templates the New Plugin wizard copies
- * (`Engine/Plugins/Editor/PluginBrowser/Templates/{Advanced,Basic,Blank}`), one engine plugin and one
- * engine module by name, the launcher's install list and the editor app; and the plugin's backend on
- * it, in a Genex game open in the chat, with every launch and host call recorded instead of run,
- * its tools called as an agent calls them or as Genex does at its moments. Nothing here reads the
+ * A small fake Unreal, the release Genex makes new games with (and, when asked, the oldest one a
+ * game may stay on beside it), for the Unreal plugin's project-making tools: its Blank Blueprint
+ * template as Epic's TemplateDefs.ini describes it, the three C++ plugin templates the New Plugin
+ * wizard copies (`Engine/Plugins/Editor/PluginBrowser/Templates/{Advanced,Basic,Blank}`), one engine
+ * plugin and one engine module by name, the launcher's install list and the editor app; and the
+ * plugin's backend on it, in a Genex game open in the chat, with every launch and host call recorded
+ * instead of run, its tools called as an agent calls them or as Genex does at its moments; and a
+ * tool's `engine` dep on a computer with two engines ({@link engineByGame}). Nothing here reads the
  * real engine.
  */
 import { createHash } from "node:crypto";
@@ -14,6 +16,7 @@ import { createUnrealBackend, type UnrealBackendDeps } from "../../src/plugins/u
 import { GameEngine } from "../../src/shared/game-engine.ts";
 import { ENGINE_LINKS_FOLDER } from "../../src/shared/plugins.ts";
 import type { LaunchEnv } from "../../src/plugins/unreal/editor-launch.ts";
+import { EngineLine, NEW_GAMES_ENGINE, OLDEST_ENGINE } from "../../src/plugins/unreal/engine-line.ts";
 import type { PluginHookContext } from "../../src/plugin-sdk/index.d.ts";
 import type { Engine, SetupEnv } from "../../src/plugins/unreal/setup.ts";
 import { type XcodeStatus, XcodeState } from "../../src/plugins/unreal/xcode.ts";
@@ -40,6 +43,25 @@ const READY_XCODE: XcodeStatus = {
 };
 
 const tab = (value: unknown) => JSON.stringify(value, null, "\t");
+
+/** The fake releases: each one's build and the version Epic's launcher lists it by. */
+const RELEASES = {
+  [EngineLine.Unreal58]: { build: "5.8.3", listed: "5.8.3-58210709+++UE5+Release-5.8-Mac" },
+  [EngineLine.Unreal59]: { build: "5.9.0", listed: "5.9.0-60000001+++UE5+Release-5.9-Mac" },
+} as const satisfies Record<EngineLine, { build: string; listed: string }>;
+
+/** An engine as a tool's `engine` dep answers it. */
+type ToolEngine = Pick<Engine, "version" | "directory">;
+
+/**
+ * A tool's `engine` dep on a computer with two Unreals, a game's own and another: `own` when asked
+ * for `game`, `other` for any other ask, as the backend answers a game whose project names the
+ * Unreal it was made with.
+ */
+export const engineByGame =
+  (game: string, own: ToolEngine, other: ToolEngine) =>
+  async (_storage?: string, asked?: string): Promise<ToolEngine> =>
+    asked === game ? own : other;
 
 /** Writes a file, making its folder. */
 export async function put(file: string, data: string | Buffer): Promise<void> {
@@ -92,9 +114,12 @@ function pluginTemplateFiles(editor: boolean): Record<string, string | Buffer> {
   return files;
 }
 
-/** A fake UE 5.8 at `root/UE_5.8` with the Blank template and the three plugin templates. */
-export async function fakeUnrealEngine(root: string): Promise<Engine> {
-  const directory = path.join(root, "UE_5.8");
+/**
+ * A fake UE at `root/UE_<version>` (the release new games are made with, unless named) with the
+ * Blank template and the three plugin templates.
+ */
+export async function fakeUnrealEngine(root: string, version: EngineLine = NEW_GAMES_ENGINE): Promise<Engine> {
+  const directory = path.join(root, `UE_${version}`);
   const blank = path.join(directory, "Templates", "TP_BlankBP");
   await put(
     path.join(blank, "TP_BlankBP.uproject"),
@@ -128,32 +153,45 @@ export async function fakeUnrealEngine(root: string): Promise<Engine> {
     path.join(directory, "Engine", "Config", "Mac", "DataDrivenPlatformInfo.ini"),
     "[DataDrivenPlatformInfo]\n",
   );
-  return { version: "5.8", build: "5.8.3", directory, supported: true };
+  return { version, build: RELEASES[version].build, directory, supported: true };
 }
+
+/** An engine as Epic's launcher lists it. */
+const listedAs = (version: EngineLine, engine: Engine) => ({
+  InstallLocation: engine.directory,
+  AppVersion: RELEASES[version].listed,
+  AppName: `UE_${version}`,
+});
 
 type Launched = { command: string; args: readonly string[] };
 
 /** What a fixture's backend is built with besides the fake engine: the programs it runs instead of UBT, the headless editor and UAT. */
 /**
- * `game: false` opens no game; `refuseLink` is the error the host's game link answers with;
- * `signal` is the turn's (a stopped turn's is aborted).
+ * `game: false` opens no game; `older` installs the oldest Unreal a game may stay on beside the one
+ * new games are made with; `refuseLink` is the error the host's game link answers with; `signal` is
+ * the turn's (a stopped turn's is aborted).
  */
 export type UnrealFixtureOptions = {
   game?: boolean;
+  older?: boolean;
   programs?: UnrealBackendDeps["programs"];
   refuseLink?: Error;
   signal?: AbortSignal;
 };
 
 /**
- * The Unreal plugin's backend on a fake engine, in a Genex game `valley` open in the chat (with its
- * own ignore file, unless `game` is false), with the launches and host calls it asks for recorded.
- * A game link the host is asked for is kept as the real host keeps it, and Unreal, once launched,
- * runs and answers.
+ * The Unreal plugin's backend on a fake engine (`engine`, the Unreal new games are made with; with
+ * `older`, the oldest one a game may stay on is installed beside it), in a Genex game `valley` open
+ * in the chat (with its own ignore file, unless `game` is false), with the launches and host calls
+ * it asks for recorded. A game link the host is asked for is kept as the real host keeps it, and
+ * Unreal, once launched, runs and answers. `linkProject` gives the game a project of its own naming
+ * an engine, linked the same way; `xcodeAsked` is the engine folder each Xcode check was judged
+ * against.
  */
 export async function unrealBackendFixture(options: UnrealFixtureOptions = {}) {
   const root = await tmpDir("studio-unreal-fake-");
   const engine = await fakeUnrealEngine(path.join(root, "Engines"));
+  const older = options.older ? await fakeUnrealEngine(path.join(root, "Engines"), OLDEST_ENGINE) : undefined;
   const parent = path.join(root, "Unreal Projects");
   const outside = path.join(root, "outside");
   const home = path.join(root, "home");
@@ -162,13 +200,13 @@ export async function unrealBackendFixture(options: UnrealFixtureOptions = {}) {
   await put(
     path.join(home, "Library/Application Support/Epic/UnrealEngineLauncher/LauncherInstalled.dat"),
     JSON.stringify({
-      InstallationList: [
-        { InstallLocation: engine.directory, AppVersion: "5.8.3-58210709+++UE5+Release-5.8-Mac", AppName: "UE_5.8" },
-      ],
+      InstallationList: [listedAs(NEW_GAMES_ENGINE, engine), ...(older ? [listedAs(OLDEST_ENGINE, older)] : [])],
     }),
   );
-  await mkdir(path.join(engine.directory, "Engine", "Binaries", "Mac", "UnrealEditor.app"), { recursive: true });
+  for (const installed of older ? [engine, older] : [engine])
+    await mkdir(path.join(installed.directory, "Engine", "Binaries", "Mac", "UnrealEditor.app"), { recursive: true });
   const launches: Launched[] = [];
+  const xcodeAsked: Array<string | undefined> = [];
   const env: SetupEnv = {
     home,
     platform: "darwin",
@@ -176,7 +214,10 @@ export async function unrealBackendFixture(options: UnrealFixtureOptions = {}) {
     editorRunning: async () => launches.length > 0,
     portListening: async () => false,
     editorAnswers: async () => launches.length > 0,
-    xcode: async () => READY_XCODE,
+    xcode: async (engineDir) => {
+      xcodeAsked.push(engineDir);
+      return READY_XCODE;
+    },
     freeBytes: async () => 200 * GIB,
     totalMemory: () => 32 * GIB,
   };
@@ -196,6 +237,16 @@ export async function unrealBackendFixture(options: UnrealFixtureOptions = {}) {
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, ".gitignore"), ".studio/\nnode_modules\n");
   const linked: unknown[] = [];
+  /** As the host keeps it: the game's link record in the plugin's storage. */
+  const keepLink = (project: string) =>
+    put(path.join(storage, ENGINE_LINKS_FOLDER, "valley.json"), JSON.stringify({ kind: GameEngine.Unreal, project }));
+  /** Gives the game a project in its `unreal/` folder whose `.uproject` names `association`, linked; answers the file. */
+  const linkProject = async (association: string) => {
+    const file = path.join(dir, "unreal", "Valley.uproject");
+    await put(file, tab({ FileVersion: 3, EngineAssociation: association }));
+    await keepLink(file);
+    return file;
+  };
   const context = {
     signal: options.signal ?? new AbortController().signal,
     callId: 1,
@@ -204,10 +255,7 @@ export async function unrealBackendFixture(options: UnrealFixtureOptions = {}) {
       if (method === "storage.root") return storage;
       if (method === "game.engine.link" && options.refuseLink) throw options.refuseLink;
       if (method === "game.engine.link") {
-        // As the host keeps it: the game's link record in the plugin's storage.
-        const project = (args as { project: string }).project;
-        const record = JSON.stringify({ kind: GameEngine.Unreal, project });
-        await put(path.join(storage, ENGINE_LINKS_FOLDER, "valley.json"), record);
+        await keepLink((args as { project: string }).project);
         return linked.push(args);
       }
       if (method === "game.engine.steps") return true;
@@ -220,5 +268,19 @@ export async function unrealBackendFixture(options: UnrealFixtureOptions = {}) {
   /** Calls one of the backend's harness tools as Genex does at one of its moments (`hook`). */
   const atMoment = (name: string, hook: PluginHookContext) =>
     backend.tool?.(name, {}, { ...context, hook }) ?? Promise.reject(new Error("no tools"));
-  return { root, engine, parent, outside, storage, dir, linked, launches, call, atMoment };
+  return {
+    root,
+    engine,
+    older,
+    parent,
+    outside,
+    storage,
+    dir,
+    linked,
+    launches,
+    xcodeAsked,
+    linkProject,
+    call,
+    atMoment,
+  };
 }

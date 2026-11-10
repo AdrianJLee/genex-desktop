@@ -8,6 +8,7 @@
  */
 import { SECOND_MS } from "../../shared/duration.ts";
 import { canCreateWith } from "./create-project.ts";
+import { atLeast, NEW_GAMES_ENGINE } from "./engine-line.ts";
 import { EditorStart } from "./editor-status.ts";
 import type { Engine } from "./setup.ts";
 
@@ -24,8 +25,9 @@ export type EditorWait = (typeof EditorWait)[keyof typeof EditorWait];
 
 /**
  * Whether this computer has an Unreal Genex makes projects with (`ready`), only a newer one it
- * opens but makes no projects with yet (`newer-only`), only one older than Unreal games need
- * (`older-only`), or none (`none`). Wire values: the seed reads them.
+ * opens but makes no projects with yet (`newer-only`), only one older than new Unreal games need
+ * (`older-only`: games made with a supported one still open with it), or none (`none`). Wire
+ * values: the seed reads them.
  */
 export const EngineReadiness = {
   Ready: "ready",
@@ -71,11 +73,14 @@ export async function waitForEditor(deps: EditorWaitDeps, waitMs: number, signal
   }
 }
 
-/** Whether the installed engines let Genex make an Unreal project: 5.8, only a newer one, only an older one, or none. */
+/**
+ * Whether the installed engines let Genex make an Unreal project: the one it makes new games with,
+ * only a newer one, only an older one (one old games still open with included), or none.
+ */
 export function engineReadiness(engines: readonly Engine[]): { engine: EngineReadiness; version: string | null } {
   const creatable = engines.find(canCreateWith);
   if (creatable) return { engine: EngineReadiness.Ready, version: creatable.version };
-  const newer = engines.find((e) => e.supported);
+  const newer = engines.find((e) => e.supported && !atLeast(NEW_GAMES_ENGINE, e.version));
   if (newer) return { engine: EngineReadiness.NewerOnly, version: newer.version };
   // Newest first: the older Unreal the question names is the newest one installed.
   const older = engines[0];

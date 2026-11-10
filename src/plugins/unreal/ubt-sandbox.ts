@@ -59,6 +59,13 @@ const UBT_SETTINGS = [
   [...APP_SUPPORT, "Unreal Engine", "UnrealBuildTool"],
   [...EPIC, "UnrealEngine", "Intermediate"],
 ];
+/**
+ * The engine's own build folder. UBT makes a module's generated-code folder there before it builds
+ * (`<platform>/<arch>/UnrealEditor/Development/BuildSettings/Gen`), and a fresh Unreal 5.9 from
+ * Epic's launcher ships without those folders, so a first build makes them: folders only, never a
+ * file in them.
+ */
+const ENGINE_BUILD = ["Engine", "Intermediate", "Build"];
 /** .NET keeps its named mutexes (UBT's configuration lock) here, whatever TMPDIR says. */
 const DOTNET_SHARED = "/private/tmp/.dotnet";
 const DEVICES = ["/dev/null", "/dev/zero", "/dev/tty", "/dev/dtracehelper"];
@@ -102,6 +109,8 @@ type ProfilePaths = {
   reads: string[];
   writes: string[];
   createOnly: string[];
+  /** Folders the build may make folders in, at any depth, and nothing else. */
+  foldersOnly: string[];
   denied: string[];
 };
 
@@ -111,8 +120,9 @@ const literals = (values: readonly string[]) => values.map((v) => `(literal ${qu
 
 /**
  * The Seatbelt profile: everything a process may do by default, then the home folder's contents
- * closed, the named folders opened, every write refused but the named ones, the sign-in homes
- * closed again whatever was opened, signals only within the build, no network, and no Apple Events:
+ * closed, the named folders opened, every write refused but the named ones and new folders in the
+ * engine's build folder, the sign-in homes closed again whatever was opened, signals only within
+ * the build, no network, and no Apple Events:
  * a build's rules can't script another app, or type into one through System Events, with the grants
  * Genex holds.
  */
@@ -129,6 +139,9 @@ export function buildSandboxProfile(p: ProfilePaths): string {
     `(allow ${READ} ${subpaths(p.reads)} ${literals([path.join(p.home, ...APP_SUPPORT)])})`,
     `(deny ${WRITE})`,
     `(allow ${WRITE} ${subpaths(p.writes)} ${literals([...p.createOnly, ...DEVICES])})`,
+    ...(p.foldersOnly.length
+      ? [`(allow file-write-create (require-all (vnode-type DIRECTORY) (require-any ${subpaths(p.foldersOnly)})))`]
+      : []),
     ...(p.denied.length ? [`(deny ${READ} ${subpaths(p.denied)})`, `(deny ${WRITE} ${subpaths(p.denied)})`] : []),
   ].join("\n");
 }
@@ -210,6 +223,7 @@ async function profilePaths(request: BuildSandboxRequest, scratch: string): Prom
     writes: [...output, scratch, inHome(UBT_LOG), ...(await spellings(DOTNET_SHARED))],
     // A first build makes Epic/ for UBT's log folder: the folder itself, nothing in it.
     createOnly: [inHome(EPIC)],
+    foldersOnly: engine.map((folder) => path.join(folder, ...ENGINE_BUILD)),
     denied: (await Promise.all(denied.map(spellings))).flat(),
   };
 }

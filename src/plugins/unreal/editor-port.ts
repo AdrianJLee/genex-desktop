@@ -4,7 +4,8 @@
  * set-up projects never clash and a port outside the block, such as Epic's default 8000 that any
  * project or app may hold, is never trusted to mean this project. "Answering" means Epic's own
  * server completes an MCP `initialize` on that port: a bare TCP connect said yes to any app holding
- * it, and other MCP apps name themselves where Epic's leaves the name empty. Setup records each
+ * it, and other MCP apps name themselves where Epic's leaves the name empty (5.8) or gives its own
+ * (5.9). Setup records each
  * project and its port in the plugin's storage; the bridge reads them there with the panel's choice.
  */
 import { execFile } from "node:child_process";
@@ -74,7 +75,9 @@ const STORED_JSON_MAX_BYTES = 64 * 1024;
 export const HELPER_TOOLSET = "genex_play.tools.GenexPlayTools";
 export const PROJECT_FILE_TOOL = "project_file";
 const IDENTITY_ID = 2;
-/** The MCP revision the check asks for; Epic 5.8 supports it. */
+/** The id of the request that asks what blocks the editor. */
+const BLOCK_ID = 3;
+/** The MCP revision the check asks for; Epic's server speaks it in 5.8 and 5.9. */
 const PROTOCOL_VERSION = "2025-06-18";
 const CHECK_ID = 1;
 const SESSION_HEADER = "mcp-session-id";
@@ -278,15 +281,27 @@ async function answerMessage(response: Response): Promise<unknown> {
 }
 
 /**
- * Whether an `initialize` answer is Epic's Unreal MCP as UE 5.8.3 sends it: an empty server name
- * (Epic never fills `serverInfo`, where other MCP apps name themselves) with both the resources and
- * the tools capability.
+ * The name Epic's Unreal MCP gives in `serverInfo`: none in 5.8, which never fills it, and its own
+ * from 5.9 (`DefaultServerName`). Every other MCP app names itself something else.
+ */
+const EpicServerName = { Unnamed: "", UnrealMcp: "unreal-mcp" } as const;
+const EPIC_SERVER_NAMES: ReadonlySet<unknown> = new Set(Object.values(EpicServerName));
+
+/**
+ * Whether an `initialize` answer is Epic's Unreal MCP: one of Epic's server names
+ * ({@link EpicServerName}) with both the resources and the tools capability.
  */
 export function isEpicServer(info: unknown, capabilities: unknown): boolean {
-  const unnamed = isJsonObject(info) && info.name === "";
+  const epicName = isJsonObject(info) && EPIC_SERVER_NAMES.has(info.name);
   const offers = isJsonObject(capabilities) && isJsonObject(capabilities.resources) && isJsonObject(capabilities.tools);
-  return unnamed && offers;
+  return epicName && offers;
 }
+
+/**
+ * Whether Epic's server names itself, as it does from Unreal 5.9: that server describes several
+ * toolsets in one call (`describe_toolsets`) and has no `describe_toolset`.
+ */
+export const namesItself = (info: unknown): boolean => isJsonObject(info) && info.name === EpicServerName.UnrealMcp;
 
 /** Whether the message completes our `initialize` as Epic's Unreal MCP does. */
 function completesAsEpic(message: unknown): boolean {
@@ -332,6 +347,71 @@ const PROJECT_FILE_CALL = JSON.stringify({
     arguments: { toolset_name: HELPER_TOOLSET, tool_name: PROJECT_FILE_TOOL, arguments: {} },
   },
 });
+/** A request that runs no tool: Unreal 5.9 refuses it, with why, while a task or a dialog blocks the editor. */
+const RESOURCES_LIST = JSON.stringify({ jsonrpc: "2.0", id: BLOCK_ID, method: "resources/list", params: {} });
+
+/**
+ * Why an open Unreal 5.9 editor runs no tool for now, by Epic's own wire values (`error.data.reason`
+ * of a request it refuses): a long task (loading, compiling, importing), or a dialog that waits for
+ * an answer.
+ */
+export const EditorBlock = { SlowTask: "slowTaskInProgress", ModalDialog: "modalDialogOpen" } as const;
+export type EditorBlock = (typeof EditorBlock)[keyof typeof EditorBlock];
+const EDITOR_BLOCKS: ReadonlySet<unknown> = new Set(Object.values(EditorBlock));
+
+/** The block a refused request's answer names, if it names one. */
+function blockIn(message: unknown): EditorBlock | undefined {
+  const error = isJsonObject(message) && message.id === BLOCK_ID ? message.error : undefined;
+  const reason = isJsonObject(error) && isJsonObject(error.data) ? error.data.reason : undefined;
+  return EDITOR_BLOCKS.has(reason) ? (reason as EditorBlock) : undefined;
+}
+
+/**
+ * The editor's answer to one request, asked in a session of its own with Epic's server at the
+ * endpoint; the session is ended. Undefined when the server isn't Epic's, doesn't answer, or
+ * answers nothing that reads as JSON. Each request has its own {@link ANSWER_TIMEOUT_MS}: an editor
+ * behind another app takes about 400 ms per request, so one budget for all three failed it.
+ */
+async function askInSession(endpoint: URL, request: string, fetchImpl: typeof fetch): Promise<unknown> {
+  const post = (body: string, session: string | null) =>
+    fetchImpl(endpoint.href, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...(session ? { [SESSION_HEADER]: session } : {}),
+      },
+      body,
+      redirect: "error",
+      signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
+    });
+  let session: string | null = null;
+  try {
+    const opened = await post(INITIALIZE, null);
+    session = opened.headers.get(SESSION_HEADER);
+    if (!opened.ok || !completesAsEpic(await answerMessage(opened))) return undefined;
+    await (await post(INITIALIZED, session)).text();
+    // A refusal comes with HTTP 400 and a JSON-RPC error, so the body is read whatever the status.
+    return await answerMessage(await post(request, session));
+  } catch {
+    return undefined;
+  } finally {
+    if (session) {
+      const signal = AbortSignal.timeout(ANSWER_TIMEOUT_MS);
+      const end = { method: "DELETE", headers: { [SESSION_HEADER]: session }, redirect: "error" as const, signal };
+      await fetchImpl(endpoint.href, end).catch(() => undefined);
+    }
+  }
+}
+
+/**
+ * What blocks the editor at the endpoint, if it says so: Unreal 5.9 answers `initialize` at any
+ * time and refuses a request that isn't a tool call with the reason, where a tool call only gets
+ * words. Undefined for an editor that isn't blocked, says nothing (Unreal 5.8) or doesn't answer.
+ */
+export async function editorBlock(endpoint: URL, fetchImpl: typeof fetch = fetch): Promise<EditorBlock | undefined> {
+  return blockIn(await askInSession(endpoint, RESOURCES_LIST, fetchImpl));
+}
 
 /** The `returnValue` text an Epic tool answer carries, or undefined. */
 export function returnedText(result: unknown): string | undefined {
@@ -355,42 +435,13 @@ export async function sameProject(named: string, project: string): Promise<boole
  * Whether the editor at the endpoint is Epic's Unreal MCP with `project` open: it answers
  * `initialize` as Epic's server does, and the Genex editor helper's `project_file` names this
  * project. Epic's own answer carries no project, so without this another project's editor on
- * the same port would pass for this one. Each request has its own {@link ANSWER_TIMEOUT_MS}: an
- * editor behind another app takes about 400 ms per request, so one budget for all three failed it.
- * The session the check opened is ended.
+ * the same port would pass for this one.
  */
 export async function editorServes(endpoint: URL, project: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
-  const post = (body: string, session: string | null) =>
-    fetchImpl(endpoint.href, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        ...(session ? { [SESSION_HEADER]: session } : {}),
-      },
-      body,
-      redirect: "error",
-      signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
-    });
-  let session: string | null = null;
-  try {
-    const opened = await post(INITIALIZE, null);
-    session = opened.headers.get(SESSION_HEADER);
-    if (!opened.ok || !completesAsEpic(await answerMessage(opened))) return false;
-    await (await post(INITIALIZED, session)).text();
-    const answer = await post(PROJECT_FILE_CALL, session);
-    const message = answer.ok ? await answerMessage(answer) : undefined;
-    const named = isJsonObject(message) && message.id === IDENTITY_ID ? returnedText(message.result) : undefined;
-    return named !== undefined && (await sameProject(named, project));
-  } catch {
-    return false;
-  } finally {
-    if (session) {
-      const signal = AbortSignal.timeout(ANSWER_TIMEOUT_MS);
-      const end = { method: "DELETE", headers: { [SESSION_HEADER]: session }, redirect: "error" as const, signal };
-      await fetchImpl(endpoint.href, end).catch(() => undefined);
-    }
-  }
+  const message = await askInSession(endpoint, PROJECT_FILE_CALL, fetchImpl);
+  const answered = isJsonObject(message) && message.id === IDENTITY_ID && message.error === undefined;
+  const named = answered ? returnedText(message.result) : undefined;
+  return named !== undefined && (await sameProject(named, project));
 }
 
 /** A JSON file in the plugin's storage, or undefined when it is missing, a link, not a plain file or not JSON. */

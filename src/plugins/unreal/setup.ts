@@ -47,19 +47,26 @@ import {
   rememberAnswers,
   SetupStorage,
 } from "./editor-port.ts";
+import {
+  atLeast,
+  type LineTraits,
+  McpSection,
+  NEW_GAMES_ENGINE,
+  OLDEST_ENGINE,
+  traitsOf,
+  versionNumbers,
+} from "./engine-line.ts";
+import { EMSDK_VARIABLES } from "./web-build.ts";
 import { systemVisualStudioCheck, type VisualStudioCheck } from "./visual-studio.ts";
 import { systemXcodeCheck, type XcodeCheck } from "./xcode.ts";
 
-/** The oldest engine Genex works with: Epic's MCP server ships from 5.8. */
-const MIN_ENGINE = { major: 5, minor: 8 } as const;
-
-/** The Unreal version Genex makes projects with and asks a newcomer to install ({@link MIN_ENGINE}). */
-export const installEngineVersion = () => `${MIN_ENGINE.major}.${MIN_ENGINE.minor}`;
+/** The Unreal version Genex makes projects with and asks a newcomer to install ({@link NEW_GAMES_ENGINE}). */
+export const installEngineVersion = (): string => NEW_GAMES_ENGINE;
 
 /**
  * What to do when no Unreal Genex works with is installed: where to get it (the Unreal button
  * shows the steps and notices the install), read by the user in the panel and by agents, who pass
- * it on. Named after the version Genex makes projects with ({@link MIN_ENGINE}).
+ * it on. Named after the version Genex makes projects with ({@link NEW_GAMES_ENGINE}).
  */
 export const installEngineText = () =>
   t(
@@ -69,26 +76,15 @@ export const installEngineText = () =>
 /** Epic's plugins the bridge talks to, in the order setup adds them: a project without them on isn't set up. */
 const MCP_PLUGINS = ["ModelContextProtocol", "EditorToolset"] as const;
 /**
- * Epic's other toolsets agents make games with, added after {@link MCP_PLUGINS}, for the editor only:
- * UI widgets, effects, AI (state trees, behavior trees), animation and sequences, procedural content,
- * physics assets, gameplay tags and automation tests. Not Epic's AllToolsets: its GameFeaturesToolset
- * makes every editor start log a load error, and its other toolsets serve no game Genex makes. A
+ * Epic's other toolsets agents make games with, added after {@link MCP_PLUGINS}, for the editor
+ * only: the ones of the project's own Unreal release (`LineTraits.toolsets`). Not Epic's
+ * AllToolsets: on UE 5.8 its GameFeaturesToolset makes every editor start log a load error. A
  * toolset the project already names, on or off, stays as the user left it, and one Genex added that
  * the user took out again stays out.
  */
-const TOOLSET_PLUGINS = [
-  "UMGToolSet",
-  "NiagaraToolsets",
-  "StateTreeToolset",
-  "AIModuleToolset",
-  "AnimationAssistantToolset",
-  "PCGToolset",
-  "PhysicsToolsets",
-  "GameplayTagsToolset",
-  "AutomationTestToolset",
-] as const;
-/** The section of the per-user project settings that starts Epic's MCP server. */
-const MCP_SECTION = "[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]";
+const toolsetPlugins = (json: UProject): readonly string[] => traitsOf(associationOf(json)).toolsets;
+/** Every name the section of the per-user project settings that starts Epic's MCP server goes by, the newest first. */
+const ANY_MCP_SECTION: readonly McpSection[] = [McpSection.OwnModule, McpSection.EngineModule];
 const AutoStartKey = { Start: "bAutoStartServer", Port: "ServerPortNumber" } as const;
 const SETTINGS_INI = "EditorPerProjectUserSettings.ini";
 /** The Genex editor helper's folder, in this plugin and in a project's Plugins folder. */
@@ -158,6 +154,8 @@ export const SetupErrorCode = {
   NothingToUndo: "nothing-to-undo",
   NoFreePort: "no-free-port",
   NotSetUp: "not-set-up",
+  NothingToMove: "nothing-to-move",
+  MoveEngineMissing: "move-engine-missing",
 } as const;
 export type SetupErrorCode = (typeof SetupErrorCode)[keyof typeof SetupErrorCode];
 
@@ -176,6 +174,10 @@ const MESSAGE = {
       { first: PROJECT_PORT_RANGE.first, last: PROJECT_PORT_RANGE.last },
     ),
   NotSetUp: () => t("Genex hasn't set up this project, so it has no Genex editor helper to update. Set it up first."),
+  NothingToMove: (version: string) =>
+    t("This project isn't on an older Unreal that Genex moves to {version}.", { version }),
+  MoveEngineMissing: (version: string) =>
+    t("Unreal {version} isn't on this computer yet. Install it first, then move the project.", { version }),
 } as const;
 
 /** A copy of a helper file the user changed, kept beside it when setup puts the shipped one back. */
@@ -228,6 +230,11 @@ export type SetupEnv = {
    * the registry (an install after Genex started is seen), else this process's own; undefined without one.
    */
   linuxToolchain?: () => Promise<string | undefined>;
+  /**
+   * The emsdk folder this computer names for Unreal's web builds (`EMSDK_VARIABLES`, the first that is
+   * set): on Windows from the registry (one set after Genex started is seen), else this process's own.
+   */
+  emsdk?: () => Promise<string | undefined>;
   freeBytes: (dir: string) => Promise<number>;
   totalMemory: () => number;
   /** A folder's entries, as readdir names them; tests stand in for Windows, which calls a placeholder a link. */
@@ -278,7 +285,7 @@ export type ProjectState = {
   cpp: boolean;
   plugins: boolean;
   /**
-   * Each of Epic's toolsets for games ({@link TOOLSET_PLUGINS}) is named in the .uproject, or Genex
+   * Each of Epic's toolsets for games (its release's `LineTraits.toolsets`) is named in the .uproject, or Genex
    * added it and the user took it out again.
    */
   toolsets: boolean;
@@ -301,8 +308,21 @@ type UProject = Record<string, unknown>;
 type SetupRecord = {
   project: string;
   port?: number;
-  uproject: { added: string[]; enabled: string[] };
-  ini?: { sectionExisted: boolean; previous: Record<string, string | null>; fileExisted?: boolean };
+  /**
+   * `dropped`: the project's own entries of toolsets the Unreal it was moved to lacks, taken out by
+   * the move ({@link moveProject}) and put back by undo.
+   */
+  uproject: { added: string[]; enabled: string[]; dropped?: unknown[] };
+  /**
+   * `sectionExisted`: Epic's MCP section was there before Genex, under either name. `added`: the
+   * sections setup wrote beside one that was there, because the project's Unreal doesn't read that one.
+   */
+  ini?: {
+    sectionExisted: boolean;
+    previous: Record<string, string | null>;
+    fileExisted?: boolean;
+    added?: McpSection[];
+  };
   /** `installed`: each helper file setup wrote, relative to the helper folder, with the sha256 of its bytes. */
   helper?: { existed: boolean; pluginsExisted?: boolean; installed?: Record<string, string> };
   /** The `EngineAssociation` a project from an older Unreal had, and the one setup switched it to. */
@@ -389,6 +409,14 @@ export function systemSetupEnv(
       if (platform !== "win32") return undefined;
       const registry = await readRegistryVariable(LINUX_TOOLCHAIN_VARIABLE, env).catch(() => null);
       return registry ?? envValue(env, LINUX_TOOLCHAIN_VARIABLE);
+    },
+    emsdk: async () => {
+      for (const name of EMSDK_VARIABLES) {
+        const registry = platform === "win32" ? await readRegistryVariable(name, env).catch(() => null) : null;
+        const value = registry ?? envValue(env, name);
+        if (value) return value;
+      }
+      return undefined;
     },
     freeBytes: async (dir) => {
       const disk = await statfs(dir);
@@ -491,9 +519,8 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-function isSupported(major: number, minor: number): boolean {
-  return major > MIN_ENGINE.major || (major === MIN_ENGINE.major && minor >= MIN_ENGINE.minor);
-}
+/** Whether Genex works with an Unreal of this version: {@link OLDEST_ENGINE} or a later one. */
+const isSupported = (version: string): boolean => atLeast(version, OLDEST_ENGINE);
 
 /**
  * The engine an entry of the launcher's list or one of its install records names; undefined for
@@ -507,7 +534,7 @@ function engineFrom(item: unknown): Engine | undefined {
   const [major, minor] = [Number(app[1]), Number(app[2])];
   const version = `${major}.${minor}`;
   const build = ENGINE_BUILD.exec(String(item.AppVersion ?? item.AppVersionString ?? ""))?.[0] ?? version;
-  return { version, build, directory: item.InstallLocation, supported: isSupported(major, minor) };
+  return { version, build, directory: item.InstallLocation, supported: isSupported(version) };
 }
 
 /** Whether an install record says the launcher is still installing (or updating) what it names. */
@@ -586,10 +613,18 @@ export async function recentProjects(env: SetupEnv, engines: Engine[]): Promise<
 
 /** How a project's engine compares with the installed ones. */
 export function engineMatch(association: string, engines: Engine[]): EngineMatch {
-  const named = /^(\d+)\.(\d+)$/.exec(association);
-  if (!named) return EngineMatch.Custom;
-  if (!isSupported(Number(named[1]), Number(named[2]))) return EngineMatch.TooOld;
+  if (!versionNumbers(association)) return EngineMatch.Custom;
+  if (!isSupported(association)) return EngineMatch.TooOld;
   return engines.some((e) => e.version === association) ? EngineMatch.Installed : EngineMatch.Missing;
+}
+
+/**
+ * The installed engine a project's own tools run with (its compiler, packager, Python and node
+ * names): the one its `EngineAssociation` names when Genex works with it, else the newest supported
+ * one; undefined when none is installed. `engines` are newest first, as {@link findEngines} lists them.
+ */
+export function engineOfProject(association: string, engines: readonly Engine[]): Engine | undefined {
+  return engines.find((e) => e.supported && e.version === association) ?? engines.find((e) => e.supported);
 }
 
 /**
@@ -634,7 +669,7 @@ const addedBefore = (record: SetupRecord | null, name: string) =>
 
 /** The toolsets the project doesn't name and Genex never added to it: the ones setup still adds. */
 const toolsetsMissing = (json: UProject, record: SetupRecord | null) =>
-  TOOLSET_PLUGINS.filter((name) => pluginEntry(json, name) === undefined && !addedBefore(record, name));
+  toolsetPlugins(json).filter((name) => pluginEntry(json, name) === undefined && !addedBefore(record, name));
 
 function addOnce(list: string[], name: string) {
   if (!list.includes(name)) list.push(name);
@@ -676,7 +711,13 @@ function addToolsets(json: UProject, record: SetupRecord): string[] {
 function restorePlugins(json: UProject, record: SetupRecord): void {
   if (!Array.isArray(json.Plugins)) return;
   const added = new Set(record.uproject.added.map(lower));
-  json.Plugins = json.Plugins.filter((p) => !(isJsonObject(p) && added.has(lower(String(p.Name)))));
+  const own: unknown[] = json.Plugins.filter((p) => !(isJsonObject(p) && added.has(lower(String(p.Name)))));
+  json.Plugins = own;
+  // The user's own entries a move took out, back where the project's Unreal has them again.
+  const back = (record.uproject.dropped ?? []).filter(
+    (entry) => isJsonObject(entry) && pluginEntry(json, String(entry.Name)) === undefined,
+  );
+  json.Plugins = [...own, ...back];
   for (const name of record.uproject.enabled) {
     const entry = pluginEntry(json, name);
     if (entry) entry.Enabled = false;
@@ -686,8 +727,8 @@ function restorePlugins(json: UProject, record: SetupRecord): void {
 const eolOf = (text: string) => (text.includes("\r\n") ? "\r\n" : "\n");
 const splitLines = (text: string) => (text === "" ? [] : text.split(LINE_BREAK));
 
-function findSection(lines: string[]): IniSection | undefined {
-  const start = lines.findIndex((line) => line.trim() === MCP_SECTION);
+function findSection(lines: string[], header: McpSection): IniSection | undefined {
+  const start = lines.findIndex((line) => line.trim() === header);
   if (start < 0) return undefined;
   const next = lines.findIndex((line, i) => i > start && line.trim().startsWith("["));
   return { start, end: next < 0 ? lines.length : next };
@@ -717,61 +758,118 @@ function autoStartValues(port: number): Record<string, string> {
   return { [AutoStartKey.Start]: "True", [AutoStartKey.Port]: String(port) };
 }
 
-/** The settings text with Epic's MCP server starting on `port`, and what the section held before. */
+/** The names Epic's MCP section has in the lines, the ones `reads` lists first and in its order. */
+function sectionsIn(lines: string[], reads: readonly McpSection[]): McpSection[] {
+  const order = [...reads, ...ANY_MCP_SECTION.filter((header) => !reads.includes(header))];
+  return order.filter((header) => findSection(lines, header) !== undefined);
+}
+
+/** Appends a section with the values after the file's last setting, a blank line between. */
+function appendSection(lines: string[], header: McpSection, values: Record<string, string>): void {
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  if (lines.length > 0) lines.push("");
+  lines.push(header, ...Object.entries(values).map(([key, value]) => `${key}=${value}`), "");
+}
+
+/** Whether a section starts the server without saying so: its release starts it, and the section doesn't set it. */
+function startsUnsaid(lines: string[], header: McpSection, traits: LineTraits): boolean {
+  const section = findSection(lines, header);
+  return traits.autoStarts && section !== undefined && findKey(lines, section, AutoStartKey.Start) < 0;
+}
+
+/**
+ * The settings text with Epic's MCP server starting on `port` for an Unreal of these ways, and what
+ * the section held before. Every section already there, under either name, gets the port, so a file
+ * with both never disagrees; a file with none the Unreal reads gets its first. A section that
+ * starts the server without saying so stays that way: its Unreal would drop the line on its next save.
+ */
 function withAutoStart(
   text: string,
   port: number,
-): { text: string; sectionExisted: boolean; previous: Record<string, string | null> } {
+  traits: LineTraits,
+): { text: string; sectionExisted: boolean; previous: Record<string, string | null>; added?: McpSection } {
+  const reads = traits.mcpSections;
   const lines = splitLines(text);
   const values = autoStartValues(port);
-  const section = findSection(lines);
-  if (!section) {
-    while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-    const block = [MCP_SECTION, ...Object.entries(values).map(([key, value]) => `${key}=${value}`), ""];
-    const separated = lines.length > 0 ? [...lines, "", ...block] : block;
-    return { text: separated.join(eolOf(text)), sectionExisted: false, previous: {} };
-  }
+  const present = sectionsIn(lines, reads);
   const previous: Record<string, string | null> = {};
-  for (const [key, value] of Object.entries(values)) previous[key] = putKey(lines, section, key, value);
-  return { text: lines.join(eolOf(text)), sectionExisted: true, previous };
+  for (const [at, header] of present.entries()) {
+    const unsaid = startsUnsaid(lines, header, traits);
+    for (const [key, value] of Object.entries(values)) {
+      const section = findSection(lines, header);
+      const leave = unsaid && key === AutoStartKey.Start;
+      const before = section && !leave ? putKey(lines, section, key, value) : null;
+      // What the project's Unreal read before: the first section in its order.
+      if (at === 0) previous[key] = before;
+    }
+  }
+  const readsOne = present.some((header) => reads.includes(header));
+  if (!readsOne) appendSection(lines, reads[0], values);
+  const added = !readsOne && present.length > 0 ? { added: reads[0] } : {};
+  return { text: lines.join(eolOf(text)), sectionExisted: present.length > 0, previous, ...added };
 }
 
-function withoutAutoStart(text: string, ini: NonNullable<SetupRecord["ini"]>): string {
-  const lines = splitLines(text);
-  const section = findSection(lines);
-  if (!section) return text;
-  if (!ini.sectionExisted) {
-    lines.splice(section.start, section.end - section.start);
-    return lines.join(eolOf(text));
-  }
-  for (const [key, value] of Object.entries(ini.previous)) {
+/** One section with the values it had before Genex, a key Genex added taken out. */
+function restoreSection(lines: string[], header: McpSection, previous: Record<string, string | null>): void {
+  for (const [key, value] of Object.entries(previous)) {
+    const section = findSection(lines, header);
+    if (!section) return;
     if (value !== null) {
       putKey(lines, section, key, value);
       continue;
     }
     const at = findKey(lines, section, key);
-    if (at < 0) continue;
-    lines.splice(at, 1);
-    section.end--;
+    if (at >= 0) lines.splice(at, 1);
+  }
+}
+
+/**
+ * The settings text without what setup put in: a section that wasn't there before Genex goes, under
+ * whichever name Unreal has saved it since; one that was gets its own values back.
+ */
+function withoutAutoStart(text: string, ini: NonNullable<SetupRecord["ini"]>): string {
+  const lines = splitLines(text);
+  for (const header of sectionsIn(lines, ANY_MCP_SECTION)) {
+    const section = findSection(lines, header);
+    if (!section) continue;
+    const setupMadeIt = !ini.sectionExisted || ini.added?.includes(header) === true;
+    if (setupMadeIt) lines.splice(section.start, section.end - section.start);
+    else restoreSection(lines, header, ini.previous);
   }
   return lines.join(eolOf(text));
 }
 
-/** The MCP section's value for `key`, trimmed; "" when the section or the key is missing. */
-function sectionValue(text: string, key: string): string {
+/**
+ * The value of `key` in Epic's MCP section as an Unreal that reads the sections `reads` sees it:
+ * the first of them that sets it, trimmed; "" when none does.
+ */
+function sectionValue(text: string, key: string, reads: readonly McpSection[]): string {
   const lines = splitLines(text);
-  const section = findSection(lines);
-  const at = section ? findKey(lines, section, key) : -1;
-  return at < 0 ? "" : lines[at].slice(key.length + 1).trim();
+  for (const header of reads) {
+    const section = findSection(lines, header);
+    const at = section ? findKey(lines, section, key) : -1;
+    if (at >= 0) return lines[at].slice(key.length + 1).trim();
+  }
+  return "";
 }
 
 /** The port the settings give Epic's MCP server, whether or not it starts by itself. */
-const settingsPort = (text: string) => parsePort(sectionValue(text, AutoStartKey.Port));
+const settingsPort = (text: string, reads: readonly McpSection[] = ANY_MCP_SECTION) =>
+  parsePort(sectionValue(text, AutoStartKey.Port, reads));
 
-/** The port Epic's MCP server starts on when the project opens; undefined when it doesn't start by itself. */
-function autoStartPort(text: string): number | undefined {
-  return lower(sectionValue(text, AutoStartKey.Start)) === "true" ? settingsPort(text) : undefined;
+/**
+ * The port Epic's MCP server starts on when the project opens in an Unreal of these ways; undefined
+ * when it doesn't start by itself. A file that doesn't say whether it starts follows the release.
+ */
+function autoStartPort(text: string, traits: LineTraits): number | undefined {
+  const saved = lower(sectionValue(text, AutoStartKey.Start, traits.mcpSections));
+  const starts = saved === "" ? traits.autoStarts : saved === "true";
+  return starts ? settingsPort(text, traits.mcpSections) : undefined;
 }
+
+/** The `EngineAssociation` a project's descriptor names, as written; "" when it names none. */
+const associationOf = (json: UProject): string =>
+  typeof json.EngineAssociation === "string" ? json.EngineAssociation : "";
 
 /** The settings file's text, or "" when it is missing or not a plain file. */
 async function readSettings(file: string): Promise<string> {
@@ -990,13 +1088,13 @@ export async function inspectProject(file: string, options: SetupOptions): Promi
   const { json } = await readUProject(project);
   const settings = await readSettings(path.join(project.directory, settingsIniPath(options.env)));
   const record = await readRecord(recordFolder(options.storage, project));
-  const port = autoStartPort(settings) ?? null;
+  const port = autoStartPort(settings, traitsOf(associationOf(json))) ?? null;
   const state = {
     ...project,
     real: project.file,
     // The path as the user chose it, so the panel can tell which project this is; writes use the real one.
     file,
-    engine: typeof json.EngineAssociation === "string" ? json.EngineAssociation : "",
+    engine: associationOf(json),
     cpp: Array.isArray(json.Modules) && json.Modules.length > 0,
     plugins: pluginsOn(json),
     toolsets: toolsetsMissing(json, record).length === 0,
@@ -1022,8 +1120,7 @@ async function engineSwitch(association: string, env: SetupEnv): Promise<EngineS
 
 /** Switches a project from an older Unreal in its descriptor and records from what; whether it did. */
 async function switchEngine(json: UProject, record: SetupRecord, env: SetupEnv): Promise<boolean> {
-  const association = typeof json.EngineAssociation === "string" ? json.EngineAssociation : "";
-  const engine = await engineSwitch(association, env);
+  const engine = await engineSwitch(associationOf(json), env);
   if (!engine) return false;
   json.EngineAssociation = engine.to;
   record.engine = { previous: engine.from, switched: engine.to };
@@ -1053,6 +1150,23 @@ export async function planSetup(
 }
 
 /**
+ * Records, on the first setup, what Epic's MCP section held before Genex and whether the settings
+ * file was there; and on any setup, a section it wrote beside one that was there.
+ */
+async function recordSection(
+  record: SetupRecord,
+  autoStart: ReturnType<typeof withAutoStart>,
+  settingsFile: string,
+): Promise<void> {
+  record.ini ??= {
+    sectionExisted: autoStart.sectionExisted,
+    previous: autoStart.previous,
+    fileExisted: await isFile(settingsFile),
+  };
+  if (autoStart.added) record.ini.added = [...new Set([...(record.ini.added ?? []), autoStart.added])];
+}
+
+/**
  * Sets a project up for Genex. Setting up a ready project changes none of its files, but records
  * it and its port the first time, so the bridge finds a project that was set up by hand. It
  * refuses only while Unreal has this very project open; an editor with another project open
@@ -1075,12 +1189,9 @@ export async function setUpProject(
   const port = await projectPort(project, settings, kept, options);
   const engine = await switchEngine(json, record, options.env);
   const plugins = enablePlugins(json, record);
-  const autoStart = withAutoStart(settings, port);
-  record.ini ??= {
-    sectionExisted: autoStart.sectionExisted,
-    previous: autoStart.previous,
-    fileExisted: await isFile(settingsFile),
-  };
+  // After the switch: the section is written for the Unreal that opens the project from now on.
+  const autoStart = withAutoStart(settings, port, traitsOf(associationOf(json)));
+  await recordSection(record, autoStart, settingsFile);
   // A newer helper stays as it is: setup never takes a project's helper back to an older one.
   const helper = helperNeedsInstall(await helperState(project, options.helper));
   record.helper ??= {
@@ -1107,6 +1218,84 @@ export async function setUpProject(
   // On the first setup `before/` holds the helper as it was; later, a file the user changed is kept as `.mine`.
   if (helper) await installHelper(project, options.helper, kept ? installed : undefined);
   return inspectProject(file, options);
+}
+
+/** A move of a game made with an older supported Unreal to the one new games are made with, and whether that one is installed. */
+export type EngineMove = EngineSwitch & { installed: boolean };
+
+/** The move a project made with `association` is offered; none for the newest Unreal, an unsupported one or a source build. */
+function moveOf(association: string, engines: readonly Engine[]): EngineMove | undefined {
+  const older = isSupported(association) && !atLeast(association, NEW_GAMES_ENGINE);
+  if (!older) return undefined;
+  return { from: association, to: NEW_GAMES_ENGINE, installed: engines.some((e) => e.version === NEW_GAMES_ENGINE) };
+}
+
+/** The move the project at `file` is offered ({@link moveOf}) among `engines` (the installed ones, unless given), read without changing anything. */
+export async function planMove(
+  file: string,
+  options: SetupOptions,
+  engines?: readonly Engine[],
+): Promise<EngineMove | undefined> {
+  const { json } = await readUProject(await resolveProject(file));
+  return moveOf(associationOf(json), engines ?? (await findEngines(options.env)));
+}
+
+/**
+ * Takes the toolsets the Unreal the project moves to lacks out of its descriptor: an entry that
+ * names a plugin the engine doesn't have stops the project opening with a question. One Genex added
+ * is forgotten; the user's own is kept in the record, for undo.
+ */
+function dropLackedToolsets(json: UProject, record: SetupRecord, from: string, to: string): void {
+  if (!Array.isArray(json.Plugins)) return;
+  const kept = new Set(traitsOf(to).toolsets.map(lower));
+  const lacked = new Set(
+    traitsOf(from)
+      .toolsets.map(lower)
+      .filter((name) => !kept.has(name)),
+  );
+  const isLacked = (entry: unknown) => isJsonObject(entry) && lacked.has(lower(String(entry.Name)));
+  const ours = new Set(record.uproject.added.map(lower));
+  const own = json.Plugins.filter((entry) => isLacked(entry) && !ours.has(lower(String((entry as UProject).Name))));
+  if (own.length > 0) record.uproject.dropped = [...(record.uproject.dropped ?? []), ...own];
+  record.uproject.added = record.uproject.added.filter((name) => !lacked.has(lower(name)));
+  json.Plugins = json.Plugins.filter((entry) => !isLacked(entry));
+}
+
+/**
+ * Moves a game made with an older supported Unreal to the one new games are made with: its
+ * descriptor names that Unreal, the toolsets it lacks go and its own come, and the project is set
+ * up for it (its port and helper stay). One-way inside Unreal: what the newer one saves, the older
+ * can't open, so the caller saves a point to rewind to in `before`, which runs once nothing refuses
+ * the move and before its first write; a `before` that throws stops it. Undo setup gives the
+ * descriptor back as it was before Genex. Refused, changing nothing, for a project with no such
+ * move, while that Unreal isn't installed, and while Unreal has the project open.
+ */
+export async function moveProject(
+  file: string,
+  options: SetupOptions,
+  before?: () => Promise<unknown>,
+): Promise<ProjectState> {
+  const project = await resolveProject(file);
+  const { json, text } = await readUProject(project);
+  const move = moveOf(associationOf(json), await findEngines(options.env));
+  if (!move) throw new SetupError(SetupErrorCode.NothingToMove, MESSAGE.NothingToMove(NEW_GAMES_ENGINE));
+  if (!move.installed) throw new SetupError(SetupErrorCode.MoveEngineMissing, MESSAGE.MoveEngineMissing(move.to));
+  await assertWritable(project, options);
+  const folder = recordFolder(options.storage, project);
+  const kept = await readRecord(folder);
+  const settings = await readSettings(path.join(project.directory, settingsIniPath(options.env)));
+  await assertProjectClosed(options.env, project, kept?.port ?? settingsPort(settings));
+  await before?.();
+  const record: SetupRecord = kept ?? { project: project.file, uproject: { added: [], enabled: [] } };
+  // Undo goes back to the Unreal the project had before Genex first changed it.
+  record.engine = { previous: record.engine?.previous ?? move.from, switched: move.to };
+  dropLackedToolsets(json, record, move.from, move.to);
+  json.EngineAssociation = move.to;
+  await keepCopy(folder, project, path.basename(project.file));
+  await atomicWriteJson(path.join(folder, SetupStorage.Record), record);
+  await atomicWriteText(project.file, formatLike(text, json));
+  // Setup for the Unreal it names now: that release's toolsets and settings section.
+  return setUpProject(file, options);
 }
 
 /**

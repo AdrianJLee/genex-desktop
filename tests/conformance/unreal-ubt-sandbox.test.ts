@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -145,6 +145,29 @@ describe("UnrealBuildTool's sandbox", { skip: SKIP }, () => {
     assert.equal(await readFile(path.join(moved, "token"), "utf8"), `${MARK}-moved`);
   });
 
+  it("makes folders, never files, under the engine's own build folder, and nothing elsewhere in the engine", async () => {
+    // UnrealBuildTool makes a module's generated-code folder there before it builds; a fresh
+    // Unreal 5.9 from Epic's launcher doesn't ship those folders, so the first build needs to.
+    const { engine } = world;
+    const build = path.join(engine, "Engine", "Intermediate", "Build");
+    const made = path.join(build, "Mac", "arm64", "UnrealEditor", "Development", "BuildSettings", "Gen");
+    await mkdir(build, { recursive: true });
+    assert.equal((await confined(world.sandbox, `mkdir -p "${made}"`)).code, 0, "a module's folder is made");
+    assert.ok(existsSync(made));
+    const refused: Array<[string, string]> = [
+      ["a file in the build folder", `echo planted > "${path.join(made, "Planted.gen.cpp")}"`],
+      ["a link in the build folder", `ln -s /etc/hosts "${path.join(made, "link")}"`],
+      ["a folder beside the build folder", `mkdir "${path.join(engine, "Engine", "Intermediate", "Planted")}"`],
+      ["a folder elsewhere in the engine", `mkdir "${path.join(engine, "Planted")}"`],
+      ["removing a folder it made", `rmdir "${made}"`],
+    ];
+    for (const [label, script] of refused) assert.notEqual((await confined(world.sandbox, script)).code, 0, label);
+    assert.deepEqual(await readdir(made), [], "no file in the folder it made");
+    assert.ok(
+      !existsSync(path.join(engine, "Planted")) && !existsSync(path.join(engine, "Engine", "Intermediate", "Planted")),
+    );
+  });
+
   it("has no network, not even this computer's own", async () => {
     const server = createServer((socket) => socket.end("hello"));
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -191,7 +214,14 @@ describe("UnrealBuildTool's sandbox", { skip: SKIP }, () => {
 
 describe("the build sandbox's profile", () => {
   it("sends no Apple Events and reaches no service that acts outside the build", () => {
-    const rules = buildSandboxProfile({ home: "/h", reads: [], writes: [], createOnly: [], denied: [] }).split("\n");
+    const rules = buildSandboxProfile({
+      home: "/h",
+      reads: [],
+      writes: [],
+      createOnly: [],
+      foldersOnly: [],
+      denied: [],
+    }).split("\n");
     assert.ok(rules.includes("(deny appleevent-send)"), "no Apple Event leaves the build (osascript, System Events)");
     const deniedMach = rules.find((rule) => rule.startsWith("(deny mach-lookup")) ?? "";
     for (const name of ["com.apple.coreservices.appleevents", "com.apple.lsd.open", "com.apple.pasteboard.1"])

@@ -368,7 +368,7 @@ describe("a new game's first turn while a plugin offers a kind", () => {
 describe("engine-status, in the words the card shows (the Unreal plugin)", () => {
   it("engine-status says whether a new Unreal game can be made here, in the words the card shows", async () => {
     const { readinessAnswer } = await import("../../src/plugins/unreal/hook-answers.ts");
-    const ready = readinessAnswer({ engine: EngineReadiness.Ready, version: "5.8" });
+    const ready = readinessAnswer({ engine: EngineReadiness.Ready, version: "5.9" });
     assert.equal(ready.ready, true);
     assert.match(ready.note, /plays in the Unreal editor on this computer/);
     assert.match(ready.note, /call unreal__new-game with a template and a name/);
@@ -377,24 +377,40 @@ describe("engine-status, in the words the card shows (the Unreal plugin)", () =>
     assert.equal(none.ready, false);
     assert.match(
       none.note,
-      /offer it as "Unreal Engine" with the description "Plays in Epic's free editor on this computer; needs a 45 GB install first"/,
+      /offer it as "Unreal Engine" with the description "Plays in Epic's free editor on this computer; needs a 47 GB install first"/,
     );
     assert.match(none.note, /don't call unreal__new-game/);
     assert.match(none.note, /call unreal__show-steps, which puts the Unreal setup card in the chat/);
+    assert.match(none.note, /it shows how to get Unreal 5\.9 free from Epic/);
     assert.match(none.note, /brings the Unreal button out above the game/);
     assert.match(none.note, /then unreal__install-unreal, which starts installing it for them/, "never asks them to");
 
-    const newer = readinessAnswer({ engine: EngineReadiness.NewerOnly, version: "5.9" });
+    const newer = readinessAnswer({ engine: EngineReadiness.NewerOnly, version: "6.0" });
     assert.equal(newer.ready, false);
+    assert.match(newer.note, /This computer has Unreal 6\.0, and Genex makes new Unreal projects with 5\.9 only/);
     assert.match(
       newer.note,
-      /"Unreal Engine 5\.8" with the description "Needs 5\.8 installed beside your 5\.9, about 45 GB"/,
+      /"Unreal Engine 5\.9" with the description "Needs 5\.9 installed beside your 6\.0, about 47 GB"/,
     );
-    assert.match(newer.note, /install 5\.8 beside 5\.9 in the Epic Games Launcher/);
-
-    const older = readinessAnswer({ engine: EngineReadiness.OlderOnly, version: "5.4" });
-    assert.equal(older.ready, false);
-    assert.match(older.note, /Unreal 5\.4, older than the 5\.8/);
-    assert.doesNotMatch(older.note, /isn't installed/);
+    assert.match(newer.note, /install 5\.9 beside 6\.0 in the Epic Games Launcher/);
   });
+
+  // An older Unreal is one Genex doesn't work with (5.4) or the one games made with it stay on (5.8):
+  // either way a new game needs 5.9 beside it.
+  for (const version of ["5.4", "5.8"])
+    it(`engine-status with only Unreal ${version} says a new game needs 5.9 installed beside it`, async () => {
+      const { readinessAnswer } = await import("../../src/plugins/unreal/hook-answers.ts");
+      const older = readinessAnswer({ engine: EngineReadiness.OlderOnly, version });
+      assert.equal(older.ready, false);
+      const has = version.replace(".", "\\.");
+      assert.match(
+        older.note,
+        new RegExp(
+          `^This computer has Unreal ${has}, older than the 5\\.9 Genex makes new Unreal games with, so offer it as "Unreal Engine 5\\.9" with the description "Needs 5\\.9 installed beside your ${has}, about \\d+ GB"\\.`,
+        ),
+      );
+      assert.match(older.note, /don't call unreal__new-game/);
+      assert.match(older.note, /it shows how to get 5\.9 free from Epic/);
+      assert.doesNotMatch(older.note, /isn't installed/);
+    });
 });

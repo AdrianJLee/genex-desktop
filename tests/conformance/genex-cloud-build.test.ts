@@ -393,7 +393,7 @@ describe("the Genex plugin's builds on Genex", () => {
   });
 
   it("refuses an Unreal version the build computers don't have before anything is sent", async () => {
-    const versions = ["5.5", "5.7", "4.27", "", "{A1B2C3D4-0000-0000-0000-000000000000}"];
+    const versions = ["5.5", "5.7", "5.9", "4.27", "", "{A1B2C3D4-0000-0000-0000-000000000000}"];
     for (const engine of versions) {
       const { make, runs, game, onGenex } = await toolsWithBuildCli({ engine });
       await onGenex();

@@ -7,6 +7,7 @@
  * clearly help. On Windows its Do it for me installs Microsoft's Build Tools (`backend.ts`).
  */
 import { t } from "../../shared/i18n.ts";
+import { NEW_GAMES_ENGINE_GB } from "./engine-line.ts";
 import { BuildToolsPlan, type VisualStudioStatus, VisualStudioState } from "./visual-studio.ts";
 import { type XcodeRange, type XcodeStatus, XcodeState } from "./xcode.ts";
 
@@ -333,12 +334,14 @@ const INSTALL_WORDS = {
   Download: () => t("Download"),
   Install: (version: string) => t("Install Unreal {version}", { version }),
   InstallDetail: (version: string) =>
-    t("In the launcher, sign in, then {clickPath}. About 45 GB. Only you can sign in to Epic.", {
+    t("In the launcher, sign in, then {clickPath}. About {gb} GB. Only you can sign in to Epic.", {
       clickPath: launcherInstallPath(version),
+      gb: NEW_GAMES_ENGINE_GB,
     }),
   InstallForMe: () =>
     t(
-      "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.",
+      "Do it for me opens the launcher, and this chat installs it there with computer control. About {gb} GB. Only you sign in to Epic, when it asks.",
+      { gb: NEW_GAMES_ENGINE_GB },
     ),
   OpenLauncher: () => t("Open the Epic Games Launcher"),
   Installed: (version: string) => t("Unreal {version} is installed", { version }),
@@ -441,4 +444,42 @@ export function unrealInstallCard(state: InstallCardState): UnrealSteps {
   const skip = button(InstallCardAction.Skip, INSTALL_WORDS.Skip());
   if (!canDoNext(state, runtimeMissing)) return { ...card, open: true, secondary: skip };
   return { ...card, open: true, primary: button(InstallCardAction.ForMe, INSTALL_WORDS.ForMe()), secondary: skip };
+}
+
+/** The plugin actions the move card's buttons run. Wire values: the manifest declares them. */
+export const MoveCardAction = { Move: "move-engine", Later: "move-later" } as const;
+
+/** The move a game's chat is offered: its project (name and `.uproject`), from which Unreal to which, and whether that one is installed. */
+export type MoveOffer = { project: string; file: string; from: string; to: string; installed: boolean };
+
+const MOVE_WORDS = {
+  Title: (project: string, to: string) => t("Move {project} to Unreal {to}", { project, to }),
+  Intro: (to: string) => t("Genex makes new games with Unreal {to}. Agents get its tools.", { to }),
+  MoveButton: (version: string) => t("Move to {version}", { version }),
+  /** Where the newer Unreal isn't installed yet: getting it comes first. */
+  GetIntro: (to: string, gb: number, from: string) =>
+    t("Unreal {to} isn’t on this computer yet: about {gb} GB, beside Unreal {from}.", { to, gb, from }),
+  GetButton: (version: string) => t("Get {version}", { version }),
+  Later: () => t("Not now"),
+} as const;
+
+/**
+ * The card that offers a game made with an older Unreal its move to the one new games are made
+ * with: one question with no rows, its answers the card's own two buttons (the move, or getting
+ * that Unreal first where it isn't installed; and Not now, which ends the offer). With no `offer`
+ * left (the game moved, or lost its project) it is closed and tells the agent nothing: a move
+ * starts no turn.
+ */
+export function moveCard(offer: MoveOffer | undefined): UnrealSteps {
+  if (!offer) return { title: "", intro: "", steps: [], open: false };
+  const { to, from, installed } = offer;
+  const move = { name: MoveCardAction.Move, args: { project: offer.file }, label: MOVE_WORDS.MoveButton(to) };
+  return {
+    title: MOVE_WORDS.Title(offer.project, to),
+    intro: installed ? MOVE_WORDS.Intro(to) : MOVE_WORDS.GetIntro(to, NEW_GAMES_ENGINE_GB, from),
+    steps: [],
+    open: true,
+    primary: installed ? move : button(InstallCardAction.GetUnreal, MOVE_WORDS.GetButton(to)),
+    secondary: button(MoveCardAction.Later, MOVE_WORDS.Later()),
+  };
 }

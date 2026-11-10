@@ -127,7 +127,8 @@ export type ShipStatus = {
 /** What the plugin's tools need from the computer, the editor and the clock; tests stand in for every program. */
 export type ShipToolsDeps = RestartDeps & {
   platform: NodeJS.Platform;
-  engine(): Promise<Engine | undefined>;
+  /** The installed engine `game`'s tools run with: its project's own, else the newest supported one. */
+  engine(storage: string, game: string): Promise<Engine | undefined>;
   project(storage: string, game: string): Promise<string | undefined>;
   xcode(engineDir: string | undefined): Promise<Pick<XcodeStatus, "state"> & Partial<Pick<XcodeStatus, "app">>>;
   /** Where Microsoft's C++ tools stand on Windows, which BuildPlugin compiles the plugin with; none off Windows. */
@@ -301,9 +302,9 @@ const jobOf = (target: ShipTarget, job: ShipJob): JobOf => ({
   job,
 });
 
-/** A target with the supported engine; with `compiles`, refused where Unreal C++ can't be built. */
+/** A target with its game's engine; with `compiles`, refused where Unreal C++ can't be built. */
 async function engineTarget(deps: ShipToolsDeps, target: ShipTarget, compiles: boolean): Promise<EngineTarget> {
-  const engine = await deps.engine();
+  const engine = await deps.engine(target.storage, target.game);
   if (!engine) throw new Error(MESSAGE.NoEngine);
   const xcode = await deps.xcode(engine.directory);
   if (compiles) await assertCompiles(deps, engine.directory, xcode);

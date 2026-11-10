@@ -1,8 +1,10 @@
-"""Writes real-names-5.8.json: Unreal 5.8's own Python names for what the stub `unreal` models and
-what the helper's engine-facing modules (genex_build, genex_play; not the pure *_math.py) use.
+"""Writes real-names-<release>.json (5.8 unless GENEX_REAL_NAMES names another file): that Unreal's
+own Python names for what the stub `unreal` models and what the helper's engine-facing modules
+(genex_build, genex_play; not the pure *_math.py) use.
 
 Run on a machine with the engine's exported names (the Genex editor helper's `export_python_names`):
     python3 make_real_names.py <python-names.json> [<python-names.json> ...]
+    GENEX_REAL_NAMES=real-names-5.9.json python3 make_real_names.py <5.9 exports...>
 Several exports are merged: a template's own plugins (the vehicle template's Chaos Vehicles) export
 names the others lack, and the file in place may be one of them.
 Kept: the stub's classes with the members the stub defines, every `unreal.<Name>` and
@@ -100,7 +102,7 @@ def main(paths: list) -> None:
         owner = next((name for name, members in sorted(real.items()) if isinstance(members, list) and method in members), None)
         if owner:
             keep(out, real, owner, {method})
-    json.dump(out, open('real-names-5.8.json', 'w'), indent=1, sort_keys=True)
+    json.dump(out, open(os.environ.get('GENEX_REAL_NAMES', 'real-names-5.8.json'), 'w'), indent=1, sort_keys=True)
     print(f'{sum(1 for v in out.values() if v is not None)} classes')
 
 

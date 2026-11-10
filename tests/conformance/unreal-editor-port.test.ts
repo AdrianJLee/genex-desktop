@@ -165,6 +165,25 @@ const EPIC_INITIALIZE = {
   serverInfo: { name: "", title: "", version: "" },
 };
 
+/**
+ * Epic's initialize answer as UE 5.9 builds it: the server names itself and says which editor it is
+ * (`ModelContextProtocolServer.cpp`, `ModelContextProtocolUtils.cpp`).
+ */
+const EPIC_NAMED_INITIALIZE = {
+  protocolVersion: "2025-06-18",
+  capabilities: { resources: {}, tools: { listChanged: true } },
+  serverInfo: { name: "unreal-mcp", version: "5.9.0-60351404" },
+  _meta: {
+    "com.epicgames.unrealengine/instance": {
+      instanceId: "0b6a4a52-9d3c-4f0e-8a51-6f1f4f8f2d10",
+      processId: 4242,
+      engineVersion: "5.9.0-60351404",
+      projectName: "Lantern",
+      projectFile: "/games/Lantern/Lantern.uproject",
+    },
+  },
+};
+
 /** A JSON-RPC answer to an MCP request, the way Epic's server sends it. */
 function rpc(response: ServerResponse, body: string, result: unknown, session?: string) {
   const { id } = JSON.parse(body);
@@ -275,7 +294,17 @@ const answering: Array<{ name: string; serve: (elsewhere: Served) => Promise<Ser
     answers: false,
   },
   { name: "a server that accepts and never answers", serve: silentServer, answers: false },
+  {
+    name: "a server that takes Epic's name and offers no resources",
+    serve: () => mcpServer({ ...EPIC_NAMED_INITIALIZE, capabilities: { tools: { listChanged: true } } }),
+    answers: false,
+  },
   { name: "Epic's Unreal MCP", serve: epicMcp, answers: true },
+  {
+    name: "Epic's Unreal MCP naming itself, as 5.9 does",
+    serve: () => mcpServer(EPIC_NAMED_INITIALIZE),
+    answers: true,
+  },
 ];
 
 describe("Unreal is answering", () => {

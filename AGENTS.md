@@ -184,8 +184,10 @@ incidental verification step.
 
 ## Don'ts
 
-- Don't create, switch or remove branches/worktrees, install hooks, merge
-  or release unless explicitly asked. Verification or merging authorizes none of these, nor
-  workspace cleanup.
+- Don't create, switch or remove branches/worktrees, install hooks, merge or release unless
+  asked: each changes the checkout or the product for other people and sessions. The user's
+  request, the assigned issue and the owner's standing rules for your session (for example a
+  project's instructions) all count as asked, with no second confirmation needed. A request to
+  verify or to merge authorizes only that step, not the others and not workspace cleanup.
 - Don't reference local-only documents (knowledge-map `localOnly`) from tracked files.
 - Don't overwrite normal games, profiles, credentials or harness edits.

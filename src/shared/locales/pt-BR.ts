@@ -6525,4 +6525,8 @@ export default {
     "O campo genex do package.json não é um objeto, então nenhum bloco authority chega ao Genex e o jogo seria publicado sem sala",
   "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
     "{file} não é um objeto JSON, então o bloco authority dele nunca chega ao Genex e o jogo seria publicado sem sala. Corrija {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "O Genex não conseguiu ler se o app de Mac {app} pode usar a rede. Se os jogadores não conseguirem se conectar, empacote-o de novo no Genex e publique.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "O app de Mac {app} não consegue acessar a internet: ele está em um sandbox sem acesso à rede, então nenhum jogador conseguiria se conectar. Empacote-o de novo no Genex e depois publique. Nada foi enviado.",
 } satisfies LocaleCatalog;

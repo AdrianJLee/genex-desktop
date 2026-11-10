@@ -6090,4 +6090,8 @@ export default {
     "package.json 里的 genex 不是对象，所以没有 authority 块能到达 Genex，游戏会在没有房间的情况下发布",
   "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
     "{file} 不是 JSON 对象，所以它的 authority 块永远到不了 Genex，游戏会在没有房间的情况下发布。请修复 {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex 无法读取 Mac 应用 {app} 是否可以使用网络。如果玩家无法连接，请在 Genex 中重新打包并发布。",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "Mac 应用 {app} 无法连接互联网：它在没有网络权限的沙盒中运行，因此任何玩家都无法连接。请在 Genex 中重新打包，然后发布。没有发送任何内容。",
 } satisfies LocaleCatalog;

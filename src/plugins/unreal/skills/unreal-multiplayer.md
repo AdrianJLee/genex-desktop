@@ -42,6 +42,15 @@ Blueprint, on the game instance's `Genex Authority Subsystem`:
   **Get Entities** (everyone else, 100 ms behind on the server's timeline). Never move a networked
   actor from local logic: move it to what these return.
 - Locations are converted with the project's `UnitsPerMeter` (100: Unreal's centimetres).
+- **On Refused** hands a `Refusal` (`EGenexJoinRefusal`), a `Code` and a `Message`: switch on the
+  `Refusal`, with a line of its own for each. `Unauthorized` (401) means the player could not sign
+  in, which includes no network ("Couldn't sign in to Genex. Check your connection."); `Other` with
+  code 0 means no server was named or none answered; `Capacity` (503) is retried. Never fold them
+  into one catch-all, and log `Message`: it names the reason.
+
+A Shipping app logs nothing of Unreal's. On a Mac, macOS's own log shows what it refused the game
+(a sandbox denial reads "Sandbox restriction" or "Operation not permitted"):
+`/usr/bin/log show --last 5m --style compact --predicate 'process == "<Name>-Mac-Shipping"'`.
 
 C++ games include `GenexAuthoritySubsystem.h` and call the same functions on
 `GetGameInstance()->GetSubsystem<UGenexAuthoritySubsystem>()`; `Core()` is the engine-free
@@ -81,4 +90,7 @@ gate fails the publish and no app goes. `genex__publish-status` reports it in `j
 uploaded and the module's sha, or the gate's failures. The owner needs Genex Pro for
 server-authoritative rooms. The first publish names the game's slug (`genex__publish-status`): put
 it in `Slug` above, then `unreal__package-game` and ask the person to publish again so the app
-players install joins its rooms.
+players install joins its rooms. Package only with `unreal__package-game`: on a Mac it lets the app
+reach the network, while a package made from Unreal's own Platforms menu keeps Unreal's Shipping
+sandbox, which has no network, and its players never get online. Publish refuses such a Mac app
+before anything goes ("can't reach the internet"): package it again with `unreal__package-game`.

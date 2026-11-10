@@ -6301,4 +6301,8 @@ export default {
     "package.json의 genex가 객체가 아니어서 authority 블록이 Genex에 닿지 않고, 게임은 룸 없이 게시돼요",
   "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
     "{file}이(가) JSON 객체가 아니어서 authority 블록이 Genex에 닿지 않고, 게임은 룸 없이 게시돼요. {file}을(를) 고치세요",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex가 Mac 앱 {app}이(가) 네트워크를 쓸 수 있는지 읽지 못했어요. 플레이어가 연결하지 못하면 Genex에서 다시 패키징하고 게시하세요.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "Mac 앱 {app}은(는) 인터넷에 연결할 수 없어요. 네트워크 접근이 없는 샌드박스에서 실행되어 어떤 플레이어도 연결할 수 없어요. Genex에서 다시 패키징한 뒤 게시하세요. 아무것도 보내지 않았어요.",
 } satisfies LocaleCatalog;

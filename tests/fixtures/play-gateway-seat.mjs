@@ -3,7 +3,7 @@
  * for a guest session, joins the authority room the answer's regions name with Studio's Node client
  * (fast@1 on node:dgram by default), walks out and back for `argv[2]` ms and prints one JSON line of
  * what its channel did. Bundled into the game's saves folder and run in the game sandbox by
- * `genex-gateway-sandbox.test.ts`.
+ * `genex-gateway-sandbox.test.ts`; with `GENEX_GAME` set it joins that game's room as a guest.
  */
 import { connectAuthority } from "@genex-ai/multiplayer/authority";
 
@@ -28,7 +28,9 @@ try {
   const session = await connectAuthority({
     urls: authorityUrls,
     regions: authorityRegions,
-    room: "local",
+    // A local room takes any game id; Genex's own takes the game's, with the guest's token.
+    room: process.env.GENEX_GAME || "local",
+    ...(answer.embedToken ? { auth: { embedToken: answer.embedToken } } : {}),
     name: "sandboxed",
     capacityRetryMs: [],
     predict: false,

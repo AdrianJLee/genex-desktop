@@ -442,6 +442,38 @@ export interface GenexRequest {
   options?: Record<string, string | number | boolean | Array<string | number>>;
 }
 
+/**
+ * What the Genex CLI is sending or preparing, as its progress lines name it (`GENEX_PROGRESS=json`).
+ * Wire values: never rename one.
+ */
+export const GenexSendStage = {
+  /** Packing an app or a project into its archive. */
+  Zip: "zip",
+  /** Reading an archive to name it. */
+  Hash: "hash",
+  /** Sending a web build's files, an app's archive or a project to a build on Genex. */
+  Upload: "upload",
+  /** Sending the project's large files to the source store, for Remix. */
+  SourceLfs: "source-lfs",
+  /** Sending the rest of the project's source. */
+  SourceGit: "source-git",
+} as const;
+export type GenexSendStage = (typeof GenexSendStage)[keyof typeof GenexSendStage];
+
+/** How far a send is, as of `at`. Kept in memory while the CLI runs: never written to a record. */
+export interface GenexSendProgress {
+  stage: GenexSendStage;
+  doneBytes: number;
+  /** 0 when the size is not known. */
+  totalBytes: number;
+  /** When this was read (epoch ms). */
+  at: number;
+  /** The speed over the last seconds; absent until bytes have moved. */
+  bytesPerSecond?: number;
+  /** Which app this is about (`mac-arm64`, `windows`); absent for a web build and a project's source. */
+  target?: string;
+}
+
 /** One publish attempt. Studio owns the record; the Genex CLI owns the hosted project it acts on. */
 export interface GenexPublishJob {
   id: string;
@@ -468,6 +500,8 @@ export interface GenexPublishJob {
   uploads?: number;
   /** A server-authoritative game's room module in this publish; absent for a game with no room block. */
   room?: GenexPublishRoom;
+  /** How far the build or its source is on the way up; only on a running job, never in its record. */
+  progress?: GenexSendProgress;
 }
 /**
  * What one publish made of a game's room module, from the CLI's own record of its gate (the report
@@ -870,6 +904,8 @@ export interface GenexNativeRecord {
   listing?: GenexNativeListing;
   /** The apps Genex builds on its own computers; absent from a Genex plugin older than them. */
   cloud?: GenexCloudRecord;
+  /** How far the app being sent now is; absent when none is, or from a CLI that says nothing of it. */
+  progress?: GenexSendProgress;
 }
 
 /** Where an app Genex builds on its own computers stands (`genex native build`). Wire values: never rename one. */
@@ -953,6 +989,8 @@ export interface GenexCloudSend {
   held?: boolean;
   /** A publish asked for the app while its project was still on its way: its build goes to players once built. */
   released?: boolean;
+  /** How far the project is on its way up; only while it is being sent. */
+  progress?: GenexSendProgress;
 }
 
 /**

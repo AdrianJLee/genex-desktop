@@ -1965,8 +1965,10 @@ export default {
     "패키지가 아직 설치되지 않았어요 — 한 번 누르면 “{install}” 명령이 실행돼요.",
   "Its packages aren’t installed yet.": "패키지가 아직 설치되지 않았어요.",
   "Its project didn’t go, so no one can remix it yet.": "프로젝트가 전송되지 않아서 아직 아무도 리믹스할 수 없어요.",
-  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
-    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 5GB, 파일 5,000개까지 보관해요.",
+  "Its project is too big to remix: Genex keeps up to 100 GB and 50,000 files.":
+    "프로젝트가 너무 커서 리믹스할 수 없어요. Genex는 100GB, 파일 50,000개까지 보관해요.",
+  "There isn’t enough free space on this computer to remix this game.":
+    "이 컴퓨터에 여유 공간이 부족해서 이 게임을 리믹스할 수 없어요.",
   "Its session failed before it delivered anything.": "아무것도 전달하기 전에 세션이 실패했어요.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "소스가 내 저장소에 있어요. 리믹스를 허용하려면 게임 폴더에서 genex make-remixable을 실행하세요.",
@@ -6336,4 +6338,19 @@ export default {
   "Ready to publish": "게시 준비됨",
   "{platforms} can take up to an hour.": "{platforms} 빌드는 최대 한 시간까지 걸릴 수 있어요.",
   "{platform} build didn’t start": "{platform} 빌드가 시작되지 않았어요",
+  "Checking the archive": "아카이브 확인 중",
+  Packing: "묶는 중",
+  "Sending the project for Remix": "Remix용 프로젝트 보내는 중",
+  "{done} of {total} · {speed}/s": "{done} / {total} · {speed}/초",
+  "{done} of {total} · {speed}/s · under a minute left": "{done} / {total} · {speed}/초 · 1분 미만 남음",
+  "{done} of {total} · {speed}/s · about {minutes} min left": "{done} / {total} · {speed}/초 · 약 {minutes}분 남음",
+  "{done} of {total} · {speed}/s · about {hours} h left": "{done} / {total} · {speed}/초 · 약 {hours}시간 남음",
+  "{done} of {total} · {speed}/s · about {hours} h {minutes} min left":
+    "{done} / {total} · {speed}/초 · 약 {hours}시간 {minutes}분 남음",
+  "{size} MB/s": "{size}MB/s",
+  "{size} KB/s": "{size}KB/s",
+  "Verifying…": "검증 중…",
+  "Unpacking…": "압축 푸는 중…",
+  "Installing… {percent}% · {speed} · about {minutes} min left": "설치 중… {percent}% · {speed} · 약 {minutes}분 남음",
+  "Installing… {percent}% · {speed} · under a minute left": "설치 중… {percent}% · {speed} · 1분 미만 남음",
 } satisfies LocaleCatalog;

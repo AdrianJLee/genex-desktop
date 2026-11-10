@@ -38,6 +38,7 @@ import {
   type GenexJob,
   GenexListingState,
   type GenexNativeRecord,
+  type GenexSendProgress,
   type GenexPublishJob,
   GenexRemixProblem,
   type GenexRemixRecord,
@@ -61,6 +62,7 @@ import { isBlankStill } from "../../shared/preview-contract.ts";
 import { GenexCliStopped, authorityDevDir, runGenexCli, genexCliPath } from "./cli.ts";
 import { linkAuthorityToolchain, roomAfterUpload, roomBeforeUpload } from "./authority-toolchain.ts";
 import { stageBuildSource, unrealEngineOf } from "./remix-source.ts";
+import { createSendMeter, type SendProgressEvent } from "./send-progress.ts";
 import {
   type MacSigning,
   type NotarizeOutcome,
@@ -487,6 +489,19 @@ interface NativeStep {
 /** A publish's apps as `native.json` keeps them. */
 type NativeSaved = Pick<GenexNativeRecord, "jobId" | "sent" | "failed" | "listing">;
 
+/** The sends of one game that can each be on their way at once. */
+const SendLane = {
+  /** The web build and the project's source (`genex preview`). */
+  Web: "web",
+  /** The game's apps, one after another (`genex native publish`). */
+  Apps: "apps",
+  /** The project, to a build on Genex (`genex native build`). */
+  Cloud: "cloud",
+} as const;
+type SendLane = (typeof SendLane)[keyof typeof SendLane];
+
+const sendKey = (project: string, lane: SendLane): string => `${project}\n${lane}`;
+
 /** `native.json` as read: any shape that is not a record of sent and failed apps is none. */
 function readNativeSaved(value: unknown): NativeSaved {
   const record = typeof value === "object" && value !== null ? (value as Partial<NativeSaved>) : {};
@@ -664,6 +679,8 @@ export class GenexTools {
   #cloudRechecks = new Set<string>();
   /** Each game's project on its way to Genex, by game: one at a time, and it outlives the press. */
   #cloudSends = new Map<string, CloudSend>();
+  /** How far each running send is, by game and lane (`SendLane`). In memory only: a record never holds it. */
+  #sendProgress = new Map<string, GenexSendProgress>();
   /** The sends a publish asked for the app of (`cloudKey`): the build each becomes goes to players once built. */
   #cloudReleases = new Set<string>();
   /** The systems whose kept app was asked for while a publish of the game ran, by game: each goes once it is done. */
@@ -893,7 +910,9 @@ export class GenexTools {
   async #savePublishState(project: string, state: GenexPublishState) {
     // A publish that moved on may have changed what Genex plays: it is asked again.
     this.#hostedWebs.delete(project);
-    await atomicWriteJson(path.join(this.#publishDir(project), "publish.json"), state);
+    // How far a send is lives in memory only: a record that kept it would show a stale bar after a restart.
+    const record = state.job?.progress ? { ...state, job: { ...state.job, progress: undefined } } : state;
+    await atomicWriteJson(path.join(this.#publishDir(project), "publish.json"), record);
   }
   /** Save `job` into the latest publish record, carrying its error to `lastError`. */
   async #persistJob(project: string, job: GenexPublishJob) {
@@ -934,7 +953,7 @@ export class GenexTools {
     const state = await this.#linkedPublishState(project);
     state.connected = !!(await this.#token());
     const live = this.#publishJobs.get(project);
-    if (live) state.job = live.job;
+    if (live) state.job = { ...live.job, ...this.#progressOf(project, SendLane.Web) };
     else if (interruptedInTest(state.job, this.#exporting.has(project))) {
       // The CLI had finished uploading and nothing was made public: the attempt is over, not unknown.
       finishJob(state.job, GenexPublishJobState.Failed, new Date().toISOString());
@@ -1528,7 +1547,14 @@ export class GenexTools {
     run.attempt.submitted = true;
     // Only an upload pushes the game's source; the other steps ship nothing new.
     const source = phase === GenexPublishPhase.Uploading ? sourceArgs(run.staged) : [];
-    return (await this.#cliText(run.dir, [...publishArgs(phase, listing), ...source], run.signal, run.home)).out;
+    // Only the upload moves bytes worth following; its progress ends with the step.
+    const follow = phase === GenexPublishPhase.Uploading ? this.#followSend(run.project, SendLane.Web) : undefined;
+    try {
+      const args = [...publishArgs(phase, listing), ...source];
+      return (await this.#cliText(run.dir, args, run.signal, run.home, follow)).out;
+    } finally {
+      this.#sendProgress.delete(sendKey(run.project, SendLane.Web));
+    }
   }
   /**
    * Upload the build to the draft page. A CLI that failed while Genex's record shows nothing
@@ -2353,6 +2379,7 @@ export class GenexTools {
       ...saved,
       sent: sentWithReview(saved.sent, record),
       cloud: await this.#cloud(project),
+      ...this.#progressOf(project, SendLane.Apps),
     };
   }
   /**
@@ -2542,19 +2569,23 @@ export class GenexTools {
     if (stopped) return { supported: true, builds, send: { ...send, state: CloudSendState.Failed } };
     // A publish asked for this send's app: it is on its way to players, not only being made.
     const released = this.#cloudReleases.has(cloudKey(project, send.platform));
-    return { supported: true, builds, send: released ? { ...send, released: true } : send };
+    const following = send.state === CloudSendState.Sending ? this.#progressOf(project, SendLane.Cloud) : {};
+    return { supported: true, builds, send: { ...send, ...(released ? { released: true } : {}), ...following } };
   }
   /** What a build on Genex runs on: the CLI in the game's publish workspace, the game's Unreal project staged alone. */
   #cloudDeps(
     project: string,
     timeoutMs = NATIVE_PUBLISH_TIMEOUT_MS,
     answerExitCodes?: readonly number[],
+    onProgress?: (event: SendProgressEvent) => void,
   ): CloudBuildDeps & { read: (file: string) => Promise<unknown> } {
     const dir = this.#publishDir(project);
     const home = path.join(dir, "home");
     const answers = answerExitCodes ? { answerExitCodes } : {};
+    const follow = onProgress ? { onProgress } : {};
+    const options = { timeoutMs, parse: true, home, ...answers, ...follow };
     return {
-      cli: (args, signal) => this.#spawnCli(dir, args, signal, { timeoutMs, parse: true, home, ...answers }),
+      cli: (args, signal) => this.#spawnCli(dir, args, signal, options),
       stage: (gameDir, dest) => stageBuildSource(gameDir, dest),
       sleep: this.#cloudSleep,
       read: (file) => readJsonOr(file),
@@ -2627,7 +2658,7 @@ export class GenexTools {
   /** Start sending the game's project, said in the record before this answers; it goes on behind the press. */
   async #sendCloud(project: string, platform: string, gameDir: string, keep: boolean): Promise<void> {
     const dir = this.#publishDir(project);
-    const deps = this.#cloudDeps(project, CLOUD_SEND_TIMEOUT_MS);
+    const deps = this.#cloudDeps(project, CLOUD_SEND_TIMEOUT_MS, undefined, this.#followSend(project, SendLane.Cloud));
     // Taken before anything is awaited, so a second press joins this send.
     const going: CloudSend = { platform, done: Promise.resolve() };
     this.#cloudSends.set(project, going);
@@ -2644,6 +2675,7 @@ export class GenexTools {
       .catch(() => {})
       .finally(() => {
         this.#controllers.delete(controller);
+        this.#sendProgress.delete(sendKey(project, SendLane.Cloud));
         if (this.#cloudSends.get(project) === going) this.#cloudSends.delete(project);
       });
   }
@@ -2849,8 +2881,10 @@ export class GenexTools {
           home: path.join(dir, "home"),
           // A refused listing exits 1 with its answer: the build itself is live.
           answerExitCodes: [0, 1],
+          onProgress: this.#followSend(project, SendLane.Apps),
         }),
       );
+      this.#sendProgress.delete(sendKey(project, SendLane.Apps));
       // Stopped: a newer publish writes its own record.
       if (signal.aborted) return record;
       if ("sent" in outcome) record.sent.push(withNotarizing(outcome.sent, notarized));
@@ -3037,16 +3071,40 @@ export class GenexTools {
     return allowance;
   }
   /** Publish commands: plain logs (preview/publish/promote ignore `--json`), a long timeout, a contained HOME. */
-  async #cliText(cwd: string, args: string[], signal: AbortSignal | undefined, home: string): Promise<{ out: string }> {
-    return this.#spawnCli(cwd, args, signal, { timeoutMs: PUBLISH_TIMEOUT_MS, parse: false, home }) as Promise<{
-      out: string;
-    }>;
+  async #cliText(
+    cwd: string,
+    args: string[],
+    signal: AbortSignal | undefined,
+    home: string,
+    onProgress?: (event: SendProgressEvent) => void,
+  ): Promise<{ out: string }> {
+    const follow = onProgress ? { onProgress } : {};
+    const options = { timeoutMs: PUBLISH_TIMEOUT_MS, parse: false, home, ...follow };
+    return this.#spawnCli(cwd, args, signal, options) as Promise<{ out: string }>;
+  }
+  /** A CLI run's `onProgress` for one of a game's sends: each update is metered and kept for the readers. */
+  #followSend(project: string, lane: SendLane): (event: SendProgressEvent) => void {
+    const meter = createSendMeter(this.#now);
+    const key = sendKey(project, lane);
+    this.#sendProgress.delete(key);
+    return (event) => this.#sendProgress.set(key, meter(event));
+  }
+  /** How far a game's send in `lane` is, as `{ progress }` to spread into its record; nothing when none is known. */
+  #progressOf(project: string, lane: SendLane): { progress?: GenexSendProgress } {
+    const progress = this.#sendProgress.get(sendKey(project, lane));
+    return progress ? { progress } : {};
   }
   async #spawnCli(
     cwd: string,
     args: string[],
     signal: AbortSignal | undefined,
-    options: { timeoutMs: number; parse: boolean; home: string; answerExitCodes?: readonly number[] },
+    options: {
+      timeoutMs: number;
+      parse: boolean;
+      home: string;
+      answerExitCodes?: readonly number[];
+      onProgress?: (event: SendProgressEvent) => void;
+    },
   ) {
     const cli = genexCliPath();
     const authEpoch = this.#authEpoch;

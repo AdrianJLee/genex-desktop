@@ -15,6 +15,7 @@ import {
   gitListFiles,
   LFS_FILE_BYTES,
   RemixSourceError,
+  SOURCE_MAX_BYTES,
   SOURCE_MAX_FILES,
   stageBuildSource,
   stageRemixSource,
@@ -216,13 +217,26 @@ describe("a game's project staged for remixing", () => {
       stageRemixSource(onlyCaches.game, onlyCaches.dest, listing([".env", "node_modules/a.js"])),
       (error: unknown) => error instanceof RemixSourceError && error.code === GenexRemixProblem.Empty,
     );
-    const many = Array.from({ length: SOURCE_MAX_FILES + 1 }, (_, n) => `levels/${n}.json`);
+    const many = Array.from({ length: 4 }, (_, n) => `levels/${n}.json`);
+    const tooBig = (error: unknown) => error instanceof RemixSourceError && error.code === GenexRemixProblem.TooBig;
     const crowded = await gameWith(Object.fromEntries(many.map((file) => [file, "{}"])));
-    await assert.rejects(
-      stageRemixSource(crowded.game, crowded.dest, listing(many)),
-      (error: unknown) => error instanceof RemixSourceError && error.code === GenexRemixProblem.TooBig,
-    );
-    for (const refused of [plain, onlyCaches, crowded]) assert.deepEqual(await filesIn(refused.dest), []);
+    const fewer = { ...listing(many), limits: { files: 3, bytes: SOURCE_MAX_BYTES } };
+    await assert.rejects(stageRemixSource(crowded.game, crowded.dest, fewer), tooBig, "one file too many");
+    const heavy = await gameWith(Object.fromEntries(many.map((file) => [file, "{}"])));
+    const lighter = { ...listing(many), limits: { files: SOURCE_MAX_FILES, bytes: 7 } };
+    await assert.rejects(stageRemixSource(heavy.game, heavy.dest, lighter), tooBig, "one byte too many");
+    for (const refused of [plain, onlyCaches, crowded, heavy]) assert.deepEqual(await filesIn(refused.dest), []);
+    const exact = { ...listing(many), limits: { files: 4, bytes: 8 } };
+    assert.deepEqual(await stageRemixSource(heavy.game, heavy.dest, exact), { files: 4, bytes: 8 });
+  });
+
+  it("refuses nothing below what genex.games keeps: 100 GiB and 50,000 files", async () => {
+    assert.deepEqual([SOURCE_MAX_BYTES, SOURCE_MAX_FILES], [100 * 1024 ** 3, 50_000]);
+    // More files than Studio once took (5,000) go with the limits it has when none is handed in.
+    const many = Array.from({ length: 5_001 }, (_, n) => `levels/${n % 50}/${n}.json`);
+    const big = await gameWith(Object.fromEntries(many.map((file) => [file, "{}"])));
+    const staged = await stageRemixSource(big.game, big.dest, listing(many));
+    assert.equal(staged.files, 5_001);
   });
 
   it("starts the copy afresh, so a file the game dropped since the last publish is gone", async () => {
@@ -392,12 +406,15 @@ describe("a game's project staged for a build on Genex", () => {
   });
 
   it("keeps no limit of Studio's own: a project past what remixing takes still goes, and Genex decides", async () => {
-    const many = Array.from({ length: SOURCE_MAX_FILES + 1 }, (_, n) => `unreal/Content/${n}.uasset`);
+    const many = Array.from({ length: 4 }, (_, n) => `unreal/Content/${n}.uasset`);
     const files = { "unreal/Strike.uproject": "{}", ...Object.fromEntries(many.map((file) => [file, "a"])) };
     const { game, dest } = await gameWith(files);
-    await assert.rejects(stageRemixSource(game, path.join(dest, "..", "remix"), listing(Object.keys(files))));
-    const staged = await stageBuildSource(game, dest, listing(Object.keys(files)));
-    assert.equal(staged.files, SOURCE_MAX_FILES + 2);
+    const limits = { files: 3, bytes: 3 };
+    await assert.rejects(
+      stageRemixSource(game, path.join(dest, "..", "remix"), { ...listing(Object.keys(files)), limits }),
+    );
+    const staged = await stageBuildSource(game, dest, { ...listing(Object.keys(files)), limits });
+    assert.equal(staged.files, 5);
   });
 
   it("counts only the game's own .uproject: one in a package or a cache leaves the project found", async () => {

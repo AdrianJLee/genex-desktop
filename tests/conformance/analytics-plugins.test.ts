@@ -666,6 +666,7 @@ describe("Play", () => {
       phase,
       receivedBytes: 0,
       totalBytes: 1,
+      bytesPerSecond: null,
       etaMs: null,
       failure,
     });

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PlayWorld } from "../../src/main/play/gallery.ts";
+import { LfsNoSpaceError } from "../../src/main/play/lfs.ts";
 import {
   claimFolder,
   cloneArgs,
@@ -459,6 +460,75 @@ describe("Play remix", () => {
     await remixGame(WORLD, quiet(root));
     assert.equal(await exists(left), false);
     for (const name of kept) assert.equal(await exists(path.join(root, name)), true, name);
+  });
+
+  it("keeps a failed copy's whole files for the next attempt at the same game, and nothing once it is made", async () => {
+    const root = await tmpDir("play-remix-kept");
+    const keptAt = path.join(root, ".remix-kept.lost-cathedral");
+    const handed: string[] = [];
+    const failing = quiet(root, {
+      clone: async (_url, dest, _models, kept) => {
+        handed.push(kept);
+        await mkdir(kept, { recursive: true });
+        await writeFile(path.join(kept, "object"), "whole");
+        await mkdir(dest, { recursive: true });
+        await writeFile(path.join(dest, "half"), "x");
+        throw new Error("network went away");
+      },
+    });
+    await assert.rejects(remixGame(WORLD, failing), /network went away/);
+    assert.deepEqual(await readdir(root), [".remix-kept.lost-cathedral"], "the half copy goes; what came whole stays");
+    let found = "";
+    await remixGame(
+      WORLD,
+      quiet(root, {
+        clone: async (_url, dest, _models, kept) => {
+          handed.push(kept);
+          found = await readFile(path.join(kept, "object"), "utf8");
+          await mkdir(dest, { recursive: true });
+          await writeFile(path.join(dest, "index.html"), "<canvas></canvas>");
+        },
+      }),
+    );
+    assert.equal(found, "whole", "the next attempt is handed what the last one kept");
+    assert.deepEqual(handed, [keptAt, keptAt]);
+    assert.deepEqual(await readdir(root), ["lost-cathedral-remix"], "a remix that is made keeps nothing aside");
+  });
+
+  it("drops what was kept for another game, and touches nothing else by a like name", async () => {
+    const root = await tmpDir("play-remix-kept-other");
+    const elsewhere = await tmpDir("play-remix-kept-elsewhere");
+    await writeFile(path.join(elsewhere, "theirs"), "x");
+    await mkdir(path.join(root, ".remix-kept.lost-cathedral"));
+    await writeFile(path.join(root, ".remix-kept.lost-cathedral", "object"), "whole");
+    const untouched = [".remix-kept.", ".remix-kept.Lost", ".remix-kept.a_b", ".remix-keptnotes", "remix-kept.game"];
+    for (const name of untouched) await mkdir(path.join(root, name));
+    await writeFile(path.join(root, ".remix-kept.a-file"), "a file, not a folder");
+    await symlink(elsewhere, path.join(root, ".remix-kept.linked"));
+    await remixGame({ ...WORLD, slug: "other-game" }, quiet(root));
+    assert.equal(await exists(path.join(root, ".remix-kept.lost-cathedral")), false);
+    for (const name of [...untouched, ".remix-kept.a-file", ".remix-kept.linked"])
+      assert.equal(await exists(path.join(root, name)), true, name);
+    assert.deepEqual(await readdir(elsewhere), ["theirs"], "nothing is removed through a link");
+  });
+
+  it("makes nothing when the disk has no room for the game's files, and says so by its code", async () => {
+    const root = await tmpDir("play-remix-no-space");
+    const logged: string[] = [];
+    const full = quiet(root, {
+      clone: async (_url, dest) => {
+        await mkdir(dest, { recursive: true });
+        throw new LfsNoSpaceError(2_000, 500);
+      },
+      log: (line) => logged.push(line),
+    });
+    await assert.rejects(
+      remixGame(WORLD, full),
+      (error: unknown) => error instanceof RemixRefusedError && error.code === PlayRemixRefusal.NoSpace,
+    );
+    assert.deepEqual(await readdir(root), []);
+    assert.equal(logged.length, 1);
+    assert.match(logged[0] ?? "", /2000 bytes.*500/, "the log says how much room it takes");
   });
 
   it("makes one remix at a time", async () => {

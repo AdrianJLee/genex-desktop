@@ -22,6 +22,7 @@ import {
   GenexPublishPhase,
   type GenexPublishJob,
   type GenexPublishState,
+  type GenexSendProgress,
 } from "../../../../shared/genex.ts";
 import { type PluginToolbarEntry, toolbarItems } from "../../../../shared/plugin-toolbar.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
@@ -109,6 +110,8 @@ export interface PublishButton {
 
 /** Everything the dialog draws. */
 export interface PublishView {
+  /** How far the build or its source is on the way up; absent when nothing is being sent or the CLI says nothing of it. */
+  progress?: GenexSendProgress;
   stage: PublishStage;
   /** The line under Publish: who can play it. */
   intro: string;
@@ -199,7 +202,8 @@ function chipOf(state: GenexPublishState, outcome: PublishOutcome, now: number):
 function isSlow(job: GenexPublishJob | undefined, unresolved: boolean, now: number): boolean {
   if (unresolved) return true;
   const testing = job?.state === GenexPublishJobState.Running && PHASE_STEP[job.phase] === GenexPublishStep.Test;
-  return testing && now - Date.parse(job.startedAt) > SLOW_TEST_MS;
+  // From when the upload ended, where the record says: a long upload is not a slow test.
+  return testing && now - Date.parse(job.uploadedAt ?? job.startedAt) > SLOW_TEST_MS;
 }
 
 /** Publish again, while Studio cannot tell whether the last upload reached Genex. */
@@ -273,6 +277,10 @@ export function flipCover(choices: { shas: string[]; index: number }, step: 1 | 
   return shas[(from + step + shas.length) % shas.length] ?? null;
 }
 
+/** How far a running attempt's send is, as `{ progress }` to spread into the view; nothing when it says none. */
+const sendProgressOf = (job: GenexPublishJob | undefined, running: boolean): Pick<PublishView, "progress"> =>
+  running && job?.progress ? { progress: job.progress } : {};
+
 /** The dialog's view of a publish record, at `now`. */
 export function publishView(state: GenexPublishState, now = Date.now()): PublishView {
   const job = state.job;
@@ -292,6 +300,7 @@ export function publishView(state: GenexPublishState, now = Date.now()): Publish
     slow,
     phase: job && running ? (slow && WORDS.stillTesting) || WORDS.phase[job.phase] : "",
     startedAt: running && job ? job.startedAt : null,
+    ...sendProgressOf(job, running),
     steps: stepViews(job, running),
     chip: chipOf(state, outcome, now),
     primary: {

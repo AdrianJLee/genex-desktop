@@ -17,7 +17,7 @@
  * RunUAT.bat runs through cmd.exe with every path whole inside quotes (`quotedScriptLine`); a game
  * whose path cmd.exe can't carry is refused before anything is touched.
  *
- * A Mac app is let onto the network once packaged (`mac-entitlements.ts`): Unreal's Shipping
+ * A Mac app is let onto the network once packaged (`substrate/mac-entitlements.ts`): Unreal's Shipping
  * default sandboxes it with no network, which no online game survives.
  *
  * Before packaging, the person's open Unreal saves its work (play is ended first), so the app is
@@ -37,7 +37,7 @@ import { killProcessTree } from "../../substrate/process-tree.ts";
 import { editorCmdPath, type ProgramOutcome } from "./automation-tests.ts";
 import { uatEnv } from "./program-env.ts";
 import { projectModule } from "./cpp-module.ts";
-import { letAppReachNetwork, type MacSigner, systemMacSigner } from "./mac-entitlements.ts";
+import { letAppReachNetwork, type MacSigner, systemMacSigner } from "../../substrate/mac-entitlements.ts";
 import { LINUX_TOOLCHAIN_VARIABLE } from "./setup.ts";
 import { canCompileCpp, cmdCarries, outputCollector, pathScrubber } from "./ubt.ts";
 import { type VisualStudioStatus, visualStudioLacking } from "./visual-studio.ts";

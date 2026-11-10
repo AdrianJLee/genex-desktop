@@ -22,7 +22,7 @@ import {
   type RunUat,
   uatLaunch,
 } from "../../src/plugins/unreal/game-package.ts";
-import { MacEntitlement, type MacEntitlements, systemMacSigner } from "../../src/plugins/unreal/mac-entitlements.ts";
+import { MacEntitlement, type MacEntitlements, systemMacSigner } from "../../src/substrate/mac-entitlements.ts";
 import { uatEnv } from "../../src/plugins/unreal/program-env.ts";
 import { VisualStudioState } from "../../src/plugins/unreal/visual-studio.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";

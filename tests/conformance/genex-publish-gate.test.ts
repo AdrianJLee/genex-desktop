@@ -21,6 +21,7 @@ import { GenexTools } from "../../src/plugins/genex/adapter.ts";
 import { bringsOwnSdk } from "../../src/plugins/genex/entry-page.ts";
 import { MESSAGE as PUBLISH_MESSAGE } from "../../src/plugins/genex/publish.ts";
 import {
+  GenexAppRefusal,
   cleanGenexTitle,
   defaultGenexTitle,
   GENEX_EMBED_VENDOR,
@@ -34,6 +35,9 @@ import {
   usesGenexMultiplayer,
 } from "../../src/substrate/genex-game-manifest.ts";
 import { PluginService } from "../../src/shared/plugins.ts";
+import { errorCodeIn } from "../../src/shared/errors.ts";
+import type { MacEntitlementsReader } from "../../src/plugins/genex/native-publish.ts";
+import { MacEntitlement, systemMacSigner } from "../../src/substrate/mac-entitlements.ts";
 import { clearStagedRoom, roomModulePath, stageRoom } from "../../src/substrate/genex-room-stage.ts";
 import { PluginServices } from "../../src/substrate/plugins/services.ts";
 import { startGenexFixtureApi } from "../helpers/genex-fixture-api.ts";
@@ -97,7 +101,9 @@ interface Seen {
  * As Genex does, the project records sign-in support only for the build players get: a draft
  * upload keeps it with the draft, and promoting the draft makes it the project's.
  */
-async function genexFixture(options: { broken?: boolean; failFirstDeploy?: boolean } = {}) {
+async function genexFixture(
+  options: { broken?: boolean; failFirstDeploy?: boolean; readMacEntitlements?: MacEntitlementsReader } = {},
+) {
   const temp = await tmpDir("studio-genex-gate-");
   const bare = path.join(temp, "source.git");
   await mkdir(bare, { recursive: true });
@@ -213,6 +219,8 @@ async function genexFixture(options: { broken?: boolean; failFirstDeploy?: boole
   const genex = new GenexTools(path.join(temp, "host"), api, {
     credentials: { get: async () => "fixture-token", set: async () => {}, clear: async () => {} },
     draftTestMs: QUICK_TEST_MS,
+    // A Mac app the test doesn't speak of is outside the sandbox, as a Mac app Genex packages is.
+    readMacEntitlements: options.readMacEntitlements ?? (async () => ({})),
   });
   const workspace = path.join(genex.root, "publish", PROJECT);
   /** What the host's `export.stage` answers: the public copy, and what the game's package.json says. */
@@ -597,14 +605,22 @@ describe("an Unreal game's room module goes with its apps", () => {
    * The Unreal game Genex's New game makes, with Genex's multiplayer plugin, its room in `server/`,
    * the block in `genex.json` (`authority` null leaves it out) and a packaged Mac app.
    */
-  async function unrealGame(game: string, module: string, authority: unknown = room): Promise<string> {
+  async function unrealGame(
+    game: string,
+    module: string,
+    authority: unknown = room,
+    multiplayer = true,
+  ): Promise<string> {
+    const plugin: Record<string, string> = multiplayer
+      ? { "unreal/Plugins/GenexMultiplayer/GenexMultiplayer.uplugin": JSON.stringify({ FileVersion: 3 }) }
+      : {};
     const files: Record<string, string | Buffer> = {
       "studio.json": "{}",
       "unreal/Duel.uproject": JSON.stringify({
         FileVersion: 3,
-        Plugins: [{ Name: "GenexMultiplayer", Enabled: true }],
+        Plugins: multiplayer ? [{ Name: "GenexMultiplayer", Enabled: true }] : [],
       }),
-      "unreal/Plugins/GenexMultiplayer/GenexMultiplayer.uplugin": JSON.stringify({ FileVersion: 3 }),
+      ...plugin,
       "server/room.ts": module,
       "server/rules.ts": "export const SPEED = 4;",
       "genex.json": JSON.stringify(authority === null ? {} : { authority }),
@@ -682,6 +698,107 @@ describe("an Unreal game's room module goes with its apps", () => {
       await fx.close();
     }
   });
+
+  // The owner's published Unreal game said "Couldn't reach the arena" forever: its Mac app was
+  // packaged with Unreal's Shipping default, the App Sandbox with no network, so macOS refused every
+  // lookup. An online game's Mac app like that is refused before anything goes.
+  const sandboxOnly = { [MacEntitlement.AppSandbox]: true, [MacEntitlement.GetTaskAllow]: true };
+  const unsigned = async (): Promise<never> => {
+    throw new Error("code object is not signed at all");
+  };
+  const offlineCases: Array<{
+    why: string;
+    authority: unknown;
+    multiplayer: boolean;
+    read: MacEntitlementsReader;
+    refused: boolean;
+    warns?: boolean;
+  }> = [
+    {
+      why: "a room game's sandboxed app",
+      authority: room,
+      multiplayer: true,
+      read: async () => sandboxOnly,
+      refused: true,
+    },
+    {
+      why: "a multiplayer game's sandboxed app with no room",
+      authority: null,
+      multiplayer: true,
+      read: async () => sandboxOnly,
+      refused: true,
+    },
+    {
+      why: "a room game's app sandboxed with the network",
+      authority: room,
+      multiplayer: true,
+      read: async () => ({ ...sandboxOnly, [MacEntitlement.NetworkClient]: true }),
+      refused: false,
+    },
+    {
+      why: "a room game's app outside the sandbox",
+      authority: room,
+      multiplayer: true,
+      read: async () => ({}),
+      refused: false,
+    },
+    {
+      why: "a single-player game's sandboxed app",
+      authority: null,
+      multiplayer: false,
+      read: async () => sandboxOnly,
+      refused: false,
+    },
+    {
+      why: "a room game's unsigned app",
+      authority: room,
+      multiplayer: true,
+      read: unsigned,
+      refused: false,
+      warns: true,
+    },
+    {
+      why: "a room game's app read by this computer's codesign (a stand-in Mach-O, never signed)",
+      authority: room,
+      multiplayer: true,
+      read: systemMacSigner.read,
+      refused: false,
+      warns: true,
+    },
+  ];
+  for (const row of offlineCases) {
+    it(`${row.refused ? "refuses" : "publishes"} ${row.why}${row.warns ? ", saying it couldn't read it" : ""}`, async (t) => {
+      if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+      const fx = await genexFixture({ readMacEntitlements: row.read });
+      try {
+        const app = await unrealGame(fx.game, ROOM_TS, row.authority, row.multiplayer);
+        if (row.refused) {
+          const refusal = await publishApps(fx, app).then(
+            () => null,
+            (error: unknown) => error,
+          );
+          assert.equal(errorCodeIn(GenexAppRefusal, refusal), GenexAppRefusal.MacAppOffline, String(refusal));
+          assert.match(String(refusal), /Duel\.app.*Package it again in Genex/);
+          assert.deepEqual(fx.seen.apps, [], "no app went");
+          assert.equal(fx.seen.modules.size, 0, "no room module went");
+          assert.deepEqual(fx.seen.releases, []);
+          const state = await fx.genex.publishStatus(PROJECT);
+          assert.equal(state.job, undefined, "no publish job started");
+          return;
+        }
+        const done = await publishApps(fx, app);
+        assert.equal(done.job?.state, "done", done.job?.error);
+        assert.deepEqual(
+          fx.seen.apps.map((sent) => sent.platform),
+          ["mac"],
+        );
+        const warned = (done.warnings ?? []).some((line) => /couldn't read whether the Mac app Duel\.app/.test(line));
+        assert.equal(warned, row.warns === true, `${row.why}: ${JSON.stringify(done.warnings)}`);
+      } finally {
+        await fx.close();
+      }
+    });
+  }
 
   it("publishes the apps of a game with no room block exactly as before", async (t) => {
     if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");

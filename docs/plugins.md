@@ -2757,7 +2757,7 @@ leaves nothing packaged), then `RunUAT BuildCookRun -platform=Mac|Win64|Linux -c
 through a link; ignored by the game's history; never `-archive`, which copies a Mac app without its
 cooked content), the cook run by the engine's `UnrealEditor-Cmd`, within 120
 minutes. A Mac needs Xcode: a template's plugins make even a Blueprint game build code there. A
-packaged Mac app is then let onto the network (`mac-entitlements.ts`): Unreal 5.8 signs Shipping with
+packaged Mac app is then let onto the network (`substrate/mac-entitlements.ts`): Unreal 5.8 signs Shipping with
 `Sandbox.NoNet.entitlements` (App Sandbox, no network), under which macOS refuses the game every DNS
 lookup, so a sandboxed app without `com.apple.security.network.client` is signed again ad hoc with it
 added and read back; one that can't be fails the package. Like
@@ -3594,7 +3594,10 @@ Genex:
   once the hosted project exists `genex native module --channel production` bundles, validates,
   stores and releases the module to the live rooms installed apps join. A module the gate refuses
   fails the publish and no app goes; `job.room` records it as a web publish's does. A game with no
-  block publishes its apps from the copy it always did.
+  block publishes its apps from the copy it always did. An online game (a room, or Genex's engine
+  multiplayer) is refused before any upload (`GenexAppRefusal.MacAppOffline`) when its Mac app is in
+  the App Sandbox without `network.client` (read with `substrate/mac-entitlements.ts`); a Mac app
+  whose signature can't be read goes, named in `warnings`.
   Listed, the record turns public with the game's genex.games page as its link; held for review or
   not listed, a line under the rows says so; refused, the publish fails in Genex's words. A listing
   whose app Genex still reviews counts as held (`listingForPlayers`): the game shows nowhere until

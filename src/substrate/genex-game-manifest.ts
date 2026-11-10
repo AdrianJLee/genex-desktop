@@ -171,10 +171,13 @@ export async function readGenexGameManifest(dir: string): Promise<GenexGameManif
   return templateGenexManifest(html, parsedJson(await readOwnFile(dir, TEMPLATE_GENEX_SETTINGS)));
 }
 
+/** Whether a game's Genex manifest loads Genex's multiplayer. */
+export const manifestUsesMultiplayer = (manifest: GenexGameManifest | undefined): boolean =>
+  manifest?.dependencies[MULTIPLAYER_PACKAGE] !== undefined;
+
 /** Whether the game in `dir` loads Genex's multiplayer, by the manifest a publish would send. */
 export async function usesGenexMultiplayer(dir: string): Promise<boolean> {
-  const manifest = await readGenexGameManifest(dir);
-  return manifest?.dependencies[MULTIPLAYER_PACKAGE] !== undefined;
+  return manifestUsesMultiplayer(await readGenexGameManifest(dir));
 }
 
 /** Why a game's `authority` block never reaches Genex, as the builder reads it. */

@@ -745,6 +745,14 @@ export const GenexWebRefusal = {
 } as const;
 export type GenexWebRefusal = (typeof GenexWebRefusal)[keyof typeof GenexWebRefusal];
 
+/**
+ * Why Studio refused to send a game's apps before any upload (the thrown error's `code`). Wire values:
+ * never rename one. `MacAppOffline`: an online game's Mac app is in the App Sandbox without
+ * `com.apple.security.network.client` (Unreal's Shipping default), so no player of it could connect.
+ */
+export const GenexAppRefusal = { MacAppOffline: "mac_app_offline" } as const;
+export type GenexAppRefusal = (typeof GenexAppRefusal)[keyof typeof GenexAppRefusal];
+
 /** Where Genex's review of an app someone other than an admin sent stands. Wire values: never rename one. */
 export const GenexBuildReview = { Pending: "pending", Approved: "approved", Rejected: "rejected" } as const;
 export type GenexBuildReview = (typeof GenexBuildReview)[keyof typeof GenexBuildReview];

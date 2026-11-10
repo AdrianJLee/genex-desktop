@@ -92,4 +92,5 @@ server-authoritative rooms. The first publish names the game's slug (`genex__pub
 it in `Slug` above, then `unreal__package-game` and ask the person to publish again so the app
 players install joins its rooms. Package only with `unreal__package-game`: on a Mac it lets the app
 reach the network, while a package made from Unreal's own Platforms menu keeps Unreal's Shipping
-sandbox, which has no network, and its players never get online.
+sandbox, which has no network, and its players never get online. Publish refuses such a Mac app
+before anything goes ("can't reach the internet"): package it again with `unreal__package-game`.

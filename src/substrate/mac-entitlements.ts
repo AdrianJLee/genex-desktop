@@ -13,7 +13,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { SECOND_MS } from "../../shared/duration.ts";
+import { SECOND_MS } from "../shared/duration.ts";
 
 /** The entitlements this module reads and grants, by Apple's key. */
 export const MacEntitlement = {
@@ -50,6 +50,9 @@ export function withNetwork(entitlements: MacEntitlements): MacEntitlements | nu
   if (!sandboxed || entitlements[MacEntitlement.NetworkClient] === true) return null;
   return { ...entitlements, [MacEntitlement.NetworkClient]: true };
 }
+
+/** Whether a signature's entitlements keep its app off the network: the App Sandbox without `network.client`. */
+export const keepsOffline = (entitlements: MacEntitlements): boolean => withNetwork(entitlements) !== null;
 
 /**
  * Lets the Mac app at `app` reach the network when its sandbox doesn't: signs it again with

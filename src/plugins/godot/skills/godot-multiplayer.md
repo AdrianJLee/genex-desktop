@@ -127,8 +127,9 @@ applies the damage to its own state, so every client agrees.
 
 - Call `godot__check` after each change. In Genex's preview the game has no Genex page, so online
   play can't run there: the online button should say why and leave the offline mode working.
-- The web build plays online on its Genex page. Publish a draft (`genex__publish`), then test it
-  on the draft link as two *different* players: a normal and a private window, or a friend. Two
+- The web build plays online on its Genex page. Publish a draft (`genex__publish`), then open its
+  `draftPlayUrl` (from `genex__publish-status`) as two *different* players: a normal and a private
+  window, or a friend; a guest plays there, and `draftUrl` is the owner's page, behind sign-in. Two
   tabs on one account share one seat. Draft players meet only draft players.
 - Native builds join only the *published* game, as a guest or with a ticket from Genex. Draft rooms
   are web-only.

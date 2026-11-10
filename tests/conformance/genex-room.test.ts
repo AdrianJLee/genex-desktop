@@ -261,10 +261,22 @@ describe("genex__room checks its call before anything runs", () => {
       ["fractional bots", { action: "start", bots: 1.5 }],
       ["bots as text", { action: "start", bots: "3" }],
       ["too much delay", { action: "start", latencyMs: 301 }],
+      ["an empty match key", { action: "start", matchKey: "" }],
+      ["a match key past 32 characters", { action: "start", matchKey: "a".repeat(33) }],
+      ["a match key opening with a mark", { action: "start", matchKey: "-duel" }],
+      ["a match key with a space", { action: "start", matchKey: "duel one" }],
+      ["a match key carrying a flag", { action: "start", matchKey: "duel' --port '1" }],
+      ["a match key as a number", { action: "start", matchKey: 7 }],
     ];
     for (const [name, args] of cases) assert.throws(() => roomCall(args), Error, name);
     // Flipped from `bots: 3`: the default now depends on the game's seats, so the call leaves it unset.
     assert.deepEqual(roomCall({ action: "start" }), { action: "start", bots: null, latencyMs: 0 });
+    assert.deepEqual(roomCall({ action: "start", matchKey: "duel:eu-1.v2_b" }), {
+      action: "start",
+      bots: null,
+      latencyMs: 0,
+      matchKey: "duel:eu-1.v2_b",
+    });
   });
 
   it("refuses a game with no room, or a module that leads out of it, and runs nothing", async () => {
@@ -392,6 +404,23 @@ describe("genex__room runs the toolchain Studio ships, in the sandbox", () => {
  * default leaves a seat free once the preview joins, a bot count that leaves none is refused by
  * name, and `status` says how many rooms are open and how many seats each has.
  */
+describe("the local room's bots join the pool the preview's client asks for", () => {
+  it("passes the call's match key to the toolchain, whose bots then play in that pool", async () => {
+    const dir = await game("match-key", { "server/room.js": ROOM_JS });
+    const { rooms, runs, binding } = service(dir);
+    try {
+      await rooms.call({ action: "start", bots: 2, matchKey: "duel" }, binding);
+      assert.match(runs.at(-1) ?? "", /--bot-match-key'? '?duel'?(\s|$)/);
+      const playing = await until(rooms, binding.project, (status) => (status.rooms ?? 0) >= 1);
+      assert.equal(playing.rooms, 1);
+      await rooms.call({ action: "start", bots: 1 }, binding);
+      assert.doesNotMatch(runs.at(-1) ?? "", /--bot-match-key/, "no key: the game's one pool");
+    } finally {
+      await rooms.stopAll();
+    }
+  });
+});
+
 describe("the local room is honest about its seats", () => {
   /** A room module seating `seats`. */
   const seatedRoom = (seats: number) => ROOM_JS.replace("maxPlayers: 8", `maxPlayers: ${seats}`);
@@ -480,7 +509,9 @@ describe("the local room is honest about its seats", () => {
       assert.equal(started.seatsPerRoom, null, "the block names no seats");
       const split = await until(rooms, binding.project, (status) => (status.rooms ?? 0) >= 2);
       assert.equal(split.warning?.code, RoomWarning.Split);
-      assert.match(split.warning?.detail ?? "", /2 rooms/);
+      assert.match(split.warning?.detail ?? "", /2 rooms of 2 seats/);
+      assert.equal(split.seatsPerRoom, 2, "each room's seats, from the REPORT's perRoom");
+      assert.match(split.warning?.detail ?? "", /2 of 2 seats \(2 bots\)/, "each room's players and bots");
     } finally {
       await rooms.stopAll();
     }

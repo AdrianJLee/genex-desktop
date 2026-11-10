@@ -2729,12 +2729,17 @@ for relay and server-authoritative rooms, the `GenexMultiplayer` plugin the app 
 `sdks/unreal/GenexMultiplayer` at the commit `vendor.json` pins, by `npm run unreal:multiplayer --
 --from <genex-demo>`; `unreal-multiplayer-vendor.test.ts` recomputes its git tree id), copied into
 the linked project's `Plugins/GenexMultiplayer` and turned on in the .uproject. The plugin links the
-official Colyseus native core, which nobody commits: on a Mac the backend downloads the pinned
-release once into its storage (`COLYSEUS_UNREAL_CORE`, sha256-checked before it is unpacked; a
-sandboxed job never fetches it) and places its macOS library, headers and license in the plugin's
-`Source/ThirdParty/ColyseusNative`; Windows has no published Win64 core yet, so there the plugin goes
-in and the answer says the core is missing. A link anywhere on the way refuses the call before
-anything is written. The `unreal-multiplayer` skill takes the builder from there: the room module
+official Colyseus native core in the plugin's `Source/ThirdParty/ColyseusNative`: on a Mac the
+backend downloads the pinned release once into its storage (`COLYSEUS_UNREAL_CORE`, sha256-checked
+before it is unpacked; a sandboxed job never fetches it) and places its macOS library, headers and
+license. Colyseus publishes no MSVC build, so on Windows it places the Win64 core the app ships under
+`plugins/unreal/multiplayer/colyseus-win64/` (`colyseus.dll`, its import library `colyseus.lib` and
+the headers: the Genex SDK's reproducible zig build of the same release, `COLYSEUS_WIN64_CORE`,
+vendored from genex-demo's `win64-core` CI artifact by `scripts/vendor-unreal-colyseus-win64.ts`, whose
+`vendor.json` records the provenance and every file's sha256), checking each file against its pin before
+any is written, with its license and the notices of what the dll links statically; nothing is
+downloaded. A core that isn't the pinned one, or a link in its way, is a note in `core.why`, never a
+refusal; a link anywhere on the plugin's way refuses the call before anything is written. The `unreal-multiplayer` skill takes the builder from there: the room module
 and `genex.json`'s `authority` block, the `Genex Authority Subsystem` client, `genex__room` with bots
 (Play joins it through `.studio/authority.json`) and publish, which stages the room as for any game.
 Any Unreal game also gets `unreal__package-game {stop?, system?}` and `unreal__package-status {system?}`
@@ -3875,9 +3880,11 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   preview takes one seat and the builder's own test client needs another, so with the authority
   block's `maxPlayers` a start's default is min(3, maxPlayers - 2) bots and a bot count that leaves
   no seat free is refused by name (`room_no_free_seat`); without it, 3 bots. `status` answers the
-  room's `bots`, `seatsPerRoom` (that `maxPlayers`, or null) and `rooms` (the REPORT's count), and a
-  `warning` (`rooms_split`) while the room server holds more than one room, as it does when a module
-  seats fewer than its bots: the toolchain's REPORT counts rooms and players, not each room's seats.
+  room's `bots`, `seatsPerRoom` (the REPORT's `perRoom` seats once it reports, before that that
+  `maxPlayers`, or null) and `rooms` (the REPORT's count), and a `warning` (`rooms_split`) naming each
+  room's seats, players and bots while the room server holds more than one room, as it does when a
+  module seats fewer than its bots. `start` takes the `matchKey` the game's client joins with and
+  passes it as `--bot-match-key`, so the bots share the preview's pool.
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;

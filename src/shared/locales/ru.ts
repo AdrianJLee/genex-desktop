@@ -6510,4 +6510,16 @@ export default {
   "Send to agent": "Отправить агенту",
   "{platform} app didn’t send": "Приложение {platform} не отправилось",
   "{platform} build error": "Ошибка сборки {platform}",
+  "Genex reads no settings of this game, so genex.json's authority block is ignored: it needs an index.html, a package.json, or Genex's multiplayer in its engine project":
+    "Genex не читает настройки этой игры, поэтому блок authority в genex.json не учитывается: нужен index.html, package.json или мультиплеер Genex в проекте движка",
+  "Genex reads this game's package.json, not its genex.json, so genex.json's authority block is ignored. Move the block into package.json as genex.authority, or remove package.json":
+    "Genex читает package.json этой игры, а не genex.json, поэтому блок authority в genex.json не учитывается. Перенеси блок в package.json как genex.authority или удали package.json",
+  "package.json's genex is not an object, so no authority block reaches Genex and the game would publish with no room":
+    "Поле genex в package.json — не объект, поэтому блок authority не доходит до Genex и игра опубликуется без комнаты",
+  "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
+    "{file} — не JSON-объект, поэтому его блок authority не доходит до Genex и игра опубликуется без комнаты. Исправь {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex не смог прочитать, может ли приложение для Mac {app} пользоваться сетью. Если игроки не могут подключиться, упакуйте его в Genex заново и опубликуйте.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "Приложение для Mac {app} не может выйти в интернет: оно работает в песочнице без доступа к сети, поэтому ни один игрок не сможет подключиться. Упакуйте его в Genex заново, затем опубликуйте. Ничего не отправлено.",
 } satisfies LocaleCatalog;

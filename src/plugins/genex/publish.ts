@@ -82,6 +82,18 @@ export const MESSAGE = {
   DraftFailedTest:
     "The new build did not pass its test on the draft page, so it was not made public. Players still get the previous version.",
   NoApps: "This game has no Mac, Windows or Linux app ready to publish.",
+  /** An online game's Mac app whose sandbox keeps it off the network: nothing was sent. */
+  MacAppOfflineRefusal: (app: string) =>
+    t(
+      "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.",
+      { app },
+    ),
+  /** An online game's Mac app whose signature couldn't be read: it goes, with this said. */
+  MacAppUnreadWarning: (app: string) =>
+    t(
+      "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.",
+      { app },
+    ),
   /** {@link MESSAGE.NoApps} as Publish's refusal. */
   NoAppsRefusal: () => t("This game has no Mac, Windows or Linux app ready to publish."),
   /** The Publish card switched off something that is no app: only a Mac, Windows or Linux app can be taken off. */

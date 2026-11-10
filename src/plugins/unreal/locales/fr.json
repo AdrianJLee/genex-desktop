@@ -143,6 +143,7 @@
   "Unreal {engine} builds with Xcode {min} to {max}; this Mac has Xcode {version}.": "Unreal {engine} compile avec Xcode {min} à {max} ; ce Mac a Xcode {version}.",
   "Unreal {version} and a first game need about {need} GB; this disk has {free} GB free. Free up space before you install it.": "Unreal {version} et un premier jeu ont besoin d’environ {need} Go ; ce disque a {free} Go libres. Libère de l’espace avant de l’installer.",
   "Unreal {version}'s templates are missing. In the Epic Games Launcher, open Library, click ⋯ next to {version}, then Verify.": "Il manque les modèles d’Unreal {version}. Dans Epic Games Launcher, ouvre Library, clique sur ⋯ à côté de {version}, puis sur Verify.",
+  "Unreal's build accelerator keeps its lock files here": "C’est ici que l’accélérateur de build d’Unreal garde ses fichiers de verrou",
   "Unreal's build tool writes its log here": "C’est ici que l’outil de build d’Unreal écrit son journal",
   "Use in this game": "Utiliser dans ce jeu",
   "Use {name} in this game": "Utiliser {name} dans ce jeu",

@@ -6616,4 +6616,16 @@ export default {
   "Send to agent": "An Agenten senden",
   "{platform} app didn’t send": "Die {platform}-App wurde nicht gesendet",
   "{platform} build error": "{platform}-Build-Fehler",
+  "Genex reads no settings of this game, so genex.json's authority block is ignored: it needs an index.html, a package.json, or Genex's multiplayer in its engine project":
+    "Genex liest keine Einstellungen dieses Spiels, daher wird der authority-Block in genex.json ignoriert: Es braucht eine index.html, eine package.json oder Genex-Multiplayer im Engine-Projekt",
+  "Genex reads this game's package.json, not its genex.json, so genex.json's authority block is ignored. Move the block into package.json as genex.authority, or remove package.json":
+    "Genex liest die package.json dieses Spiels, nicht die genex.json, daher wird der authority-Block in genex.json ignoriert. Verschieb den Block als genex.authority in die package.json oder entferne die package.json",
+  "package.json's genex is not an object, so no authority block reaches Genex and the game would publish with no room":
+    "genex in der package.json ist kein Objekt, daher erreicht kein authority-Block Genex und das Spiel würde ohne Raum veröffentlicht",
+  "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
+    "{file} ist kein JSON-Objekt, daher erreicht sein authority-Block Genex nie und das Spiel würde ohne Raum veröffentlicht. Korrigier {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex konnte nicht lesen, ob die Mac-App {app} das Netzwerk nutzen darf. Wenn Spieler sich nicht verbinden können, pack sie in Genex noch einmal und veröffentliche sie.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "Die Mac-App {app} erreicht das Internet nicht: Sie läuft in einer Sandbox ohne Netzwerkzugriff, daher könnte sich kein Spieler verbinden. Pack sie in Genex noch einmal und veröffentliche dann. Es wurde nichts gesendet.",
 } satisfies LocaleCatalog;

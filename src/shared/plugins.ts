@@ -1138,6 +1138,11 @@ export const PluginService = {
   ProjectWrite: "project.write",
   AssetsDeliver: "assets.deliver",
   ExportStage: "export.stage",
+  /**
+   * `export`: the bound game's room module alone, staged into the publish copy with no web export,
+   * for a game whose apps go without a web build (an Unreal game's).
+   */
+  ExportRoom: "export.room",
   JobsRead: "jobs.read",
   JobsWrite: "jobs.write",
   NativeRun: "native.run",

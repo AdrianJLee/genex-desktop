@@ -143,6 +143,7 @@
   "Unreal {engine} builds with Xcode {min} to {max}; this Mac has Xcode {version}.": "Unreal {engine} 需要用 Xcode {min} 到 {max} 构建；这台 Mac 上是 Xcode {version}。",
   "Unreal {version} and a first game need about {need} GB; this disk has {free} GB free. Free up space before you install it.": "Unreal {version} 和第一个游戏需要约 {need} GB；这个磁盘只剩 {free} GB 可用。安装前请释放空间。",
   "Unreal {version}'s templates are missing. In the Epic Games Launcher, open Library, click ⋯ next to {version}, then Verify.": "缺少 Unreal {version} 的模板。在 Epic Games Launcher 中打开 Library，点击 {version} 旁的 ⋯，然后选择 Verify。",
+  "Unreal's build accelerator keeps its lock files here": "Unreal 的构建加速器在这里存放锁文件",
   "Unreal's build tool writes its log here": "Unreal 的构建工具在这里写入日志",
   "Use in this game": "在这个游戏中使用",
   "Use {name} in this game": "在这个游戏中使用 {name}",

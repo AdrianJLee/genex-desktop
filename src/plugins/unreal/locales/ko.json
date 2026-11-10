@@ -143,6 +143,7 @@
   "Unreal {engine} builds with Xcode {min} to {max}; this Mac has Xcode {version}.": "Unreal {engine} 버전은 Xcode {min}~{max} 버전으로 빌드하는데, 이 Mac의 Xcode는 {version} 버전이에요.",
   "Unreal {version} and a first game need about {need} GB; this disk has {free} GB free. Free up space before you install it.": "Unreal {version} 버전과 첫 게임에는 약 {need}GB가 필요한데, 이 디스크의 남은 공간은 {free}GB예요. 설치하기 전에 공간을 확보하세요.",
   "Unreal {version}'s templates are missing. In the Epic Games Launcher, open Library, click ⋯ next to {version}, then Verify.": "Unreal {version} 템플릿이 없어요. Epic Games Launcher에서 Library를 열고 {version} 옆의 ⋯를 클릭한 다음 Verify를 선택하세요.",
+  "Unreal's build accelerator keeps its lock files here": "Unreal의 빌드 가속기가 잠금 파일을 여기에 둬요",
   "Unreal's build tool writes its log here": "Unreal 빌드 도구가 여기에 로그를 기록해요",
   "Use in this game": "이 게임에서 사용",
   "Use {name} in this game": "이 게임에서 {name} 사용",

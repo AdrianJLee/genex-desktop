@@ -11,6 +11,7 @@ import path from "node:path";
 // look-up at run time from the app's own bundle finds nothing and no app would ever be sent.
 import cliPackage from "@genex-ai/cli-demo/package.json" with { type: "json" };
 import {
+  GenexAppRefusal,
   GenexBuildReview,
   type GenexNativeFailure,
   type GenexNativeListing,
@@ -18,6 +19,7 @@ import {
   GenexListingState,
 } from "../../shared/genex.ts";
 import { linuxBuildOf } from "../../shared/publish-platforms.ts";
+import { keepsOffline, type MacEntitlements } from "../../substrate/mac-entitlements.ts";
 import type { MacSigning } from "./mac-notarize.ts";
 import { isAtLeast } from "./cli-version.ts";
 import { reviewDetailOf } from "./native-review.ts";
@@ -39,6 +41,11 @@ const CLIP_COMMIT_CHARS = 40;
 const SHA256_HEX = /^[0-9a-f]{64}$/i;
 
 const MESSAGE = { NotABuild: "Genex answered without the build it published" } as const;
+
+/** The rooms the apps players install join: Genex's live ones, as an app is live once it goes. */
+const APPS_ROOM_CHANNEL = "production";
+/** The CLI's words that bundle, check, upload and release a room module with no build (`genex native module`). */
+export const NATIVE_MODULE_ARGS = ["native", "module", "--channel", APPS_ROOM_CHANNEL] as const;
 
 /** Whether CLI `version` has `genex native`. */
 export const hasNativeCommand = (version: string): boolean => isAtLeast(version, NATIVE_CLI);
@@ -62,6 +69,36 @@ export interface NativeUpload {
   entry?: string;
   /** A Mac app the creator asked to sign and notarize under their own Apple Developer ID first. */
   sign?: MacSigning;
+}
+
+/** Studio's refusal to send apps, before any upload, with its typed code beside the words. */
+export class AppsRefusedError extends Error {
+  readonly code: GenexAppRefusal;
+  constructor(code: GenexAppRefusal, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+/** Reads a Mac app's signed entitlements; throws when it can't (no signature, no codesign). */
+export type MacEntitlementsReader = (app: string) => Promise<MacEntitlements>;
+
+/**
+ * The Mac apps among `apps` whose sandbox keeps them off the network, and those whose signature
+ * couldn't be read. Only a positive finding counts as offline: an unreadable app is named apart.
+ */
+export async function offlineMacApps(
+  apps: readonly NativeUpload[],
+  read: MacEntitlementsReader,
+): Promise<{ offline: NativeUpload[]; unread: NativeUpload[] }> {
+  const offline: NativeUpload[] = [];
+  const unread: NativeUpload[] = [];
+  for (const app of apps.filter((one) => one.platform === "mac")) {
+    const entitlements = await read(app.target).catch(() => null);
+    if (entitlements === null) unread.push(app);
+    else if (keepsOffline(entitlements)) offline.push(app);
+  }
+  return { offline, unread };
 }
 
 /** `uploads` with the creator's notarizing on each Mac app, when they turned it on (`macSigningOf`). */

@@ -13,20 +13,31 @@ preface, this preface wins.
   ships `@genex-ai/authority-dev` itself, stages `server/` and every file the module imports beside
   the public copy (never in it), and the publish bundles and validates the module before any game
   file moves. A module that fails stops the publish with each typed reason in the job's error; fix
-  the module and publish again. On Genex's servers the owner needs Genex Pro: a free account is
-  refused with `authority_requires_pro` after validation, and nothing is uploaded.
+  the module and publish again. The job's `room` (in `genex__publish-status`) says it plainly:
+  `validated` and `uploaded` with the module's `moduleSha256` once it passed and went up with this
+  build, or the gate's `failures`; tell the person from it. On Genex's servers the owner needs
+  Genex Pro: a free account is refused with `authority_requires_pro` after validation, and nothing
+  is uploaded.
 - Testing it on this computer works, with `genex__room` in place of the card's
   `npx genex-authority-dev` commands (a game's commands cannot download it):
   - `genex__room {"action":"validate"}` is the publish gate's own check: `{passed, failures}`.
     Run it after every change to the module, and fix each failure before anything else.
-  - `genex__room {"action":"start","bots":3,"latencyMs":75}` serves the room on this computer with
-    bots and loads the game's preview into it, so the person plays against the bots there.
-    `genex__room {"action":"status"}` answers the room's last REPORT, its `ctx.log` lines and
-    errors; read it while the room runs, as the card's testing reference describes. Stop it with
+  - `genex__room {"action":"start","latencyMs":75}` serves the room on this computer with bots
+    and loads the game's preview into it, so the person plays against the bots there. The preview
+    takes a seat and your own test client needs another: with the authority block's `maxPlayers`
+    the default is that less 2 bots (at most 3), and a `bots` count that leaves no seat free is
+    refused by name. `genex__room {"action":"status"}` answers the room's last REPORT, its `ctx.log`
+    lines and errors, and `rooms`: more than 1 (its `warning`) means players did not all fit and
+    opened another room, so start with fewer bots; the REPORT's `perRoom` lists each room's seats,
+    players and bots. A client that joins with a `matchKey` needs the same `"matchKey"` on `start`,
+    or the bots play in the game's other pool. Read it while the room runs, as the card's testing reference describes. Stop it with
     `genex__room {"action":"stop"}`. The preview hands the game the room's address through the
     embed SDK's local test mode (`getAuthorityUrls()`): never write the address into the game.
 - Before a publish, validate, then play it in a local room with bots, and say what you saw. Never
   report a server-authoritative game as online before a draft of it passed.
+- A passed draft's `draftPlayUrl` (in `genex__publish-status`) is where two people test the rooms:
+  a guest joins there with no account, and the owner's Genex Pro pays for the rooms. `draftUrl` is
+  the owner's draft page, behind their sign-in.
 
 ## Packages
 
@@ -42,6 +53,10 @@ preface, this preface wins.
 
 - It has no `package.json`: the `authority` block goes in `genex.json` at the game's root, beside
   any other setting: `{"authority": {"module": "server/room.js", "tickHz": 30, "maxPlayers": 8}}`.
+  Keep `genex.json` valid JSON and add no package.json beside it: Genex reads a package.json first,
+  so a stray one, or a `genex.json` that does not parse, would drop the block. The publish and
+  `genex__room` refuse such a game by name (`export_room_manifest_shadowed`,
+  `export_room_manifest_broken`) rather than ship it with no room.
 - The same `genex__package` call maps `@genex-ai/multiplayer/authority` in its import map; a game
   that mapped multiplayer earlier gets it by making the call again. Never copy the SDK by hand.
 - It has no TypeScript build: write the room module and every file it shares with the client in

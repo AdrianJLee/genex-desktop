@@ -6573,4 +6573,16 @@ export default {
   "Send to agent": "Envoyer à l’agent",
   "{platform} app didn’t send": "L’app {platform} n’est pas partie",
   "{platform} build error": "Erreur de compilation {platform}",
+  "Genex reads no settings of this game, so genex.json's authority block is ignored: it needs an index.html, a package.json, or Genex's multiplayer in its engine project":
+    "Genex ne lit aucun réglage de ce jeu, donc le bloc authority de genex.json est ignoré : il faut un index.html, un package.json ou le multijoueur de Genex dans le projet du moteur",
+  "Genex reads this game's package.json, not its genex.json, so genex.json's authority block is ignored. Move the block into package.json as genex.authority, or remove package.json":
+    "Genex lit le package.json de ce jeu, pas son genex.json, donc le bloc authority de genex.json est ignoré. Déplace le bloc dans package.json en tant que genex.authority, ou supprime package.json",
+  "package.json's genex is not an object, so no authority block reaches Genex and the game would publish with no room":
+    "Le champ genex de package.json n'est pas un objet, donc aucun bloc authority n'atteint Genex et le jeu serait publié sans salon",
+  "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
+    "{file} n'est pas un objet JSON, donc son bloc authority n'atteint jamais Genex et le jeu serait publié sans salon. Corrige {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex n’a pas pu lire si l’app Mac {app} peut utiliser le réseau. Si les joueurs ne peuvent pas se connecter, réempaquette-la dans Genex et publie-la.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "L’app Mac {app} ne peut pas accéder à internet : elle est dans un bac à sable sans accès réseau, donc aucun joueur ne pourrait se connecter. Réempaquette-la dans Genex, puis publie. Rien n’a été envoyé.",
 } satisfies LocaleCatalog;

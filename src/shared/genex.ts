@@ -102,7 +102,7 @@ export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
  * room check runs for a game that installed nothing.
  */
 export const GENEX_STUDIO_TOOLS = {
-  "@genex-ai/authority-dev": "0.1.5",
+  "@genex-ai/authority-dev": "0.1.6",
 } as const;
 /** A Genex tool Studio ships. */
 export type GenexStudioTool = keyof typeof GENEX_STUDIO_TOOLS;
@@ -466,6 +466,23 @@ export interface GenexPublishJob {
   embedSdkVersion?: string;
   /** How many times this attempt uploaded the build: a draft that fails its test is uploaded once more. */
   uploads?: number;
+  /** A server-authoritative game's room module in this publish; absent for a game with no room block. */
+  room?: GenexPublishRoom;
+}
+/**
+ * What one publish made of a game's room module, from the CLI's own record of its gate (the report
+ * it keeps in the publish copy), never from its words. `validated`: this attempt's bundle passed
+ * the gate (`moduleSha256` is that bundle's). `uploaded`: it went up with this build, which the
+ * CLI finishes only once Genex stored the module and its go-live named that very sha.
+ */
+export interface GenexPublishRoom {
+  /** The module the game's `authority` block names (`server/room.ts`), or null for a block that names none. */
+  module: string | null;
+  validated: boolean;
+  uploaded: boolean;
+  moduleSha256?: string;
+  /** The gate's typed reasons (`module_threw`, …) when it did not pass. */
+  failures?: string[];
 }
 /**
  * How a Genex cover send ended (`GenexCoverSent.kind`). The first five are the CLI's own answers
@@ -680,6 +697,11 @@ export interface GenexPublishState {
   galleryUrl?: string;
   playUrl?: string;
   readyDraft?: { revision: string; url: string; digest: string; verifiedAt: string };
+  /**
+   * The tested draft's own address, answered beside the record: anyone with it plays the draft (in
+   * rooms of its own, as a guest or signed in). `draftUrl` is the owner's draft page, behind sign-in.
+   */
+  draftPlayUrl?: string;
   lastExportAt?: string;
   lastPreviewAt?: string;
   lastPublishAt?: string;
@@ -722,6 +744,14 @@ export const GenexWebRefusal = {
   NativePageWouldBeReplaced: "native_page_would_be_replaced",
 } as const;
 export type GenexWebRefusal = (typeof GenexWebRefusal)[keyof typeof GenexWebRefusal];
+
+/**
+ * Why Studio refused to send a game's apps before any upload (the thrown error's `code`). Wire values:
+ * never rename one. `MacAppOffline`: an online game's Mac app is in the App Sandbox without
+ * `com.apple.security.network.client` (Unreal's Shipping default), so no player of it could connect.
+ */
+export const GenexAppRefusal = { MacAppOffline: "mac_app_offline" } as const;
+export type GenexAppRefusal = (typeof GenexAppRefusal)[keyof typeof GenexAppRefusal];
 
 /** Where Genex's review of an app someone other than an admin sent stands. Wire values: never rename one. */
 export const GenexBuildReview = { Pending: "pending", Approved: "approved", Rejected: "rejected" } as const;

@@ -162,7 +162,8 @@ pick seeds the first game's chat (`rememberWelcomeModel`). A locked store saves 
 the key; only tool-calling models are listed, with their context, reply cap, vision, reasoning
 efforts and price. OpenRouter picks no default model. Context is estimated from characters before
 each request (compaction runs early rather than late); 401/403 is a sign-in failure, 402 a usage
-limit, 429 a rate limit. Errors are redacted before they are logged.
+limit (when it says the balance can only afford a shorter reply of at least 1,024 tokens, the
+request is sent once more asking for 90% of that), 429 a rate limit. Errors are redacted before they are logged.
 
 **OpenCode** ([opencode.ts](../src/substrate/engines/opencode.ts)) is a delegated engine that runs
 `opencode run --format json` with the brief on stdin, resumed by `--session`. Two command lines are
@@ -715,8 +716,8 @@ throws when they could not be read; each engine reuses a reading under a minute 
 in-flight read; a Recheck clears it. The composer asks when its ring panel opens or the ring is
 hovered, and every minute while open; until the first answer it draws each plan this setup uses
 at full size with shimmering bars, and a plan being read with no numbers yet does the same. A
-failed read shows one orange line with Try again, a signed-out plan Sign in again. The panel leaves the
-`model_scoped` windows out (`shownLimits`; `SHOW_MODEL_LIMITS` in `usage-words.ts` brings them back). Its
+failed read shows one orange line with Try again, a signed-out plan Sign in again. The panel draws
+every window a plan reports, a `model_scoped` one (Weekly · Fable) after the plan's own. Its
 last row opens Settings → Model Providers. Genex is read after the plans: a Pro member's monthly
 credits, one window under the plan's name from `GET /api/plans/me` (its allowance and renewal) and
 the balance from `GET /api/credits/me`; without Pro there is no month to show and the panel leaves
@@ -823,8 +824,9 @@ build game after consent, opening the npm registry for that one install. A Studi
 gets player identity by mapping Studio's copy in its import map instead, and Studio then calls
 `initEmbed()` for it; multiplayer cannot be added there yet. Studio connects every web game it
 publishes that brings no SDK of its own, so genex.games can sign its players in. Multiplayer is tested only on the published draft: build,
-add the package, publish a draft with `genex__publish`, then play the draft link. Studio's
-preview stays single-player. Fixture profiles refuse the CLI and package tools.
+add the package, publish a draft with `genex__publish`, then play the tested draft's own address
+(`draftPlayUrl` in `genex__publish-status`, `preview--<slug>`), which a guest can open; `draftUrl`
+is the owner's draft page on genex.games, behind sign-in. Studio's preview stays single-player. Fixture profiles refuse the CLI and package tools.
 
 ### The game's Genex cover
 

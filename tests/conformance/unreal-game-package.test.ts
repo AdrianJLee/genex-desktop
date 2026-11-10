@@ -6,7 +6,8 @@
  * by the one the game's own project names. RunUAT and the editor are stand-ins.
  */
 import assert from "node:assert/strict";
-import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { copyFile, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
@@ -24,6 +25,7 @@ import {
   type UatLaunch,
   uatLaunch,
 } from "../../src/plugins/unreal/game-package.ts";
+import { MacEntitlement, type MacEntitlements, systemMacSigner } from "../../src/substrate/mac-entitlements.ts";
 import { uatEnv } from "../../src/plugins/unreal/program-env.ts";
 import { VisualStudioState } from "../../src/plugins/unreal/visual-studio.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";
@@ -60,9 +62,13 @@ function depsFor(
     engine?: { version: string; directory: string };
     /** The emsdk folder the computer's variables name. */
     emsdk?: string;
+    /** The packaged Mac app's entitlements as its signature reads, or the failure reading them. */
+    entitlements?: MacEntitlements | Error;
   } = {},
 ) {
   const launches: string[][] = [];
+  const signed: Array<{ app: string; entitlements: MacEntitlements }> = [];
+  let current = options.entitlements ?? {};
   const envs: Array<Record<string, string> | undefined> = [];
   const saves: string[] = [];
   const deps: GamePackageDeps = {
@@ -84,8 +90,18 @@ function depsFor(
       envs.push(launch.env);
       return runUat(launch, run);
     },
+    macSigner: {
+      read: async () => {
+        if (current instanceof Error) throw current;
+        return current;
+      },
+      sign: async (app, entitlements) => {
+        signed.push({ app, entitlements });
+        current = entitlements;
+      },
+    },
   };
-  return { deps, launches, saves, envs };
+  return { deps, launches, saves, envs, signed };
 }
 
 /** `package-status` until the job is no longer running. */
@@ -180,6 +196,61 @@ describe("packaging an Unreal game", () => {
       app: "unreal/Builds/Mac/Dust-Mac-Shipping.app",
       jobRunning: false,
     });
+  });
+
+  // The owner's published Mac build said "Couldn't reach the arena" forever: Unreal 5.8 signs a
+  // Shipping Mac app with Sandbox.NoNet.entitlements (App Sandbox, no network), so macOS refused every
+  // DNS lookup ("Sandbox restriction") and the sign-in and the join never left the computer.
+  it("lets a sandboxed Mac app reach the network, and leaves an app that already can as it is", async () => {
+    const stagesMac: RunUat = async (launch) => {
+      const staging = launch.args.find((arg) => arg.startsWith("-stagingdirectory="))?.split("=")[1] ?? "";
+      await mkdir(path.join(staging, "Mac", "Dust-Mac-Shipping.app", "Contents"), { recursive: true });
+      return { code: 0, output: PACKAGED, timedOut: false };
+    };
+    const sandboxOnly = { [MacEntitlement.AppSandbox]: true, [MacEntitlement.GetTaskAllow]: true };
+    const cases: Array<[string, MacEntitlements, MacEntitlements | null]> = [
+      ["Unreal's Shipping default", sandboxOnly, { ...sandboxOnly, [MacEntitlement.NetworkClient]: true }],
+      [
+        "a sandbox that turns the network off",
+        { ...sandboxOnly, [MacEntitlement.NetworkClient]: false },
+        { ...sandboxOnly, [MacEntitlement.NetworkClient]: true },
+      ],
+      ["no sandbox", {}, null],
+      ["a sandbox with the network", { [MacEntitlement.AppSandbox]: true, [MacEntitlement.NetworkClient]: true }, null],
+    ];
+    for (const [why, entitlements, expected] of cases) {
+      const { game, project } = await gameWithProject();
+      const { deps, signed } = depsFor(project, stagesMac, { entitlements });
+      const tools = createGamePackageTools(deps);
+      const context = contextIn(game);
+      await tools.handlers["package-game"]({}, context, "/s");
+      const done = await settled(() => tools.handlers["package-status"]({}, context, "/s"));
+      assert.equal(done.state, GamePackageState.Done, `${why}: ${done.line}`);
+      assert.equal(done.app, "unreal/Builds/Mac/Dust-Mac-Shipping.app", why);
+      assert.deepEqual(
+        signed.map((one) => one.entitlements),
+        expected ? [expected] : [],
+        why,
+      );
+      for (const one of signed) assert.equal(path.basename(one.app), "Dust-Mac-Shipping.app", why);
+    }
+  });
+
+  it("fails a Mac package loudly when its app can't be given the network", async () => {
+    const stagesMac: RunUat = async (launch) => {
+      const staging = launch.args.find((arg) => arg.startsWith("-stagingdirectory="))?.split("=")[1] ?? "";
+      await mkdir(path.join(staging, "Mac", "Dust-Mac-Shipping.app", "Contents"), { recursive: true });
+      return { code: 0, output: PACKAGED, timedOut: false };
+    };
+    const { game, project } = await gameWithProject();
+    const { deps } = depsFor(project, stagesMac, { entitlements: new Error("codesign exited 1") });
+    const tools = createGamePackageTools(deps);
+    const context = contextIn(game);
+    await tools.handlers["package-game"]({}, context, "/s");
+    const failed = await settled(() => tools.handlers["package-status"]({}, context, "/s"));
+    assert.equal(failed.state, GamePackageState.Failed);
+    assert.match(failed.line ?? "", /network/);
+    assert.equal(failed.app, undefined, "an app that can't go online is not offered to Publish");
   });
 
   it("packages nothing when Unreal answers but can't save, or when the Mac has no Xcode", async () => {
@@ -638,4 +709,36 @@ describe("packaging an Unreal game where two Unreals are installed", () => {
       const packaged = await packagedWithTwoUnreals(association, uproject);
       assert.deepEqual(packaged.started, uatOf(packaged.newer));
     });
+});
+
+describe("a Mac app's network entitlement, through codesign", () => {
+  it("adds network.client to an ad hoc sandboxed app and keeps its other entitlements", {
+    skip: process.platform !== "darwin" && "codesign is macOS's",
+  }, async () => {
+    const app = path.join(await tmpDir("unreal-entitlements-"), "Mini.app");
+    await mkdir(path.join(app, "Contents", "MacOS"), { recursive: true });
+    await copyFile("/usr/bin/true", path.join(app, "Contents", "MacOS", "mini"));
+    await writeFile(
+      path.join(app, "Contents", "Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>games.genex.mini</string><key>CFBundleExecutable</key><string>mini</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>\n`,
+    );
+    const noNet = path.join(path.dirname(app), "NoNet.entitlements");
+    await writeFile(
+      noNet,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>\n`,
+    );
+    const signedNoNet = spawnSync("codesign", ["--force", "--sign", "-", "--entitlements", noNet, app], {
+      encoding: "utf8",
+    });
+    assert.equal(signedNoNet.status, 0, signedNoNet.stderr);
+    assert.deepEqual(await systemMacSigner.read(app), { [MacEntitlement.AppSandbox]: true });
+
+    await systemMacSigner.sign(app, { [MacEntitlement.AppSandbox]: true, [MacEntitlement.NetworkClient]: true });
+    assert.deepEqual(await systemMacSigner.read(app), {
+      [MacEntitlement.AppSandbox]: true,
+      [MacEntitlement.NetworkClient]: true,
+    });
+    const verify = spawnSync("codesign", ["--verify", "--strict", app], { encoding: "utf8" });
+    assert.equal(verify.status, 0, verify.stderr);
+  });
 });

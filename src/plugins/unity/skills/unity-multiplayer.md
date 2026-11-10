@@ -151,9 +151,10 @@ the damage to its own state.
 - **WebGL:** build into `web/` at the game's root with **Compression Format: Disabled**, because
   Genex hosting serves no compressed files. The published page gives the build its player; in
   Genex's preview there is none, so online play says it's unavailable and offline play stays.
-- **Testing on the web:** publish a draft (`genex__publish`) and test on the draft link as two
-  *different* players: a normal and a private window, or a friend. Draft players meet only draft
-  players.
+- **Testing on the web:** publish a draft (`genex__publish`) and open its `draftPlayUrl` (from
+  `genex__publish-status`) as two *different* players: a normal and a private window, or a friend.
+  Anyone with that link plays as a guest; `draftUrl` is the owner's draft page, behind sign-in.
+  Draft players meet only draft players.
 - **Native builds** (Mac, Windows) join only the *published* game: as a guest, or as the signed-in
   player when Genex's Play starts them.
 - **Testing two players on this Mac:** once the game is published, start two copies of the Mac
@@ -183,7 +184,8 @@ Your own body is predicted with the room's movement preset, so moving feels inst
    everything only the server uses in `server/`.
 3. Declare it in `genex.json` at the game's root, beside any other setting:
    `{"authority": {"module": "server/room.ts", "tickHz": 30, "maxPlayers": 8}}`. A
-   `firstperson` room asks for `tickHz` 60.
+   `firstperson` room asks for `tickHz` 60. Keep it valid JSON, and put no package.json at the
+   game's root: Genex would read that instead, and refuses the publish and `genex__room` by name.
 4. Run `genex__room {"action":"validate"}` after every change to the module, and fix each
    failure before anything else. It is the publish gate's own check.
 
@@ -277,9 +279,10 @@ public sealed class Arena : MonoBehaviour
 
 ### Test it on this computer, then publish
 
-- `genex__room {"action":"start","bots":3}` serves the room on this computer with bots, and
-  `genex__room {"action":"status"}` answers its `url`, its last REPORT, its `ctx.log` lines and
-  errors. Stop it with `genex__room {"action":"stop"}`.
+- `genex__room {"action":"start"}` serves the room on this computer with bots that leave a seat
+  free for your build beside the preview (a `bots` count that fills the room is refused by name),
+  and `genex__room {"action":"status"}` answers its `url`, its last REPORT, its `ctx.log` lines,
+  errors and `rooms`: above 1, a player did not fit and is in another room. Stop it with `genex__room {"action":"stop"}`.
 - **The WebGL build** in `web/` joins it in Studio's preview: the room hands the preview its
   address, which `GenexGame.LocalRoomUrl` reads. Never write the address into the game.
 - **A Mac build** joins it when started with the address:

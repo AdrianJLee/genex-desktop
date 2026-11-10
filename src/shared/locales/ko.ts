@@ -6315,4 +6315,16 @@ export default {
   "Send to agent": "에이전트에게 보내기",
   "{platform} app didn’t send": "{platform} 앱을 보내지 못했어요",
   "{platform} build error": "{platform} 빌드 오류",
+  "Genex reads no settings of this game, so genex.json's authority block is ignored: it needs an index.html, a package.json, or Genex's multiplayer in its engine project":
+    "Genex가 이 게임의 설정을 읽지 않아서 genex.json의 authority 블록은 무시돼요. index.html, package.json, 또는 엔진 프로젝트의 Genex 멀티플레이어가 필요해요",
+  "Genex reads this game's package.json, not its genex.json, so genex.json's authority block is ignored. Move the block into package.json as genex.authority, or remove package.json":
+    "Genex는 이 게임의 genex.json이 아니라 package.json을 읽어서 genex.json의 authority 블록은 무시돼요. 블록을 package.json의 genex.authority로 옮기거나 package.json을 지우세요",
+  "package.json's genex is not an object, so no authority block reaches Genex and the game would publish with no room":
+    "package.json의 genex가 객체가 아니어서 authority 블록이 Genex에 닿지 않고, 게임은 룸 없이 게시돼요",
+  "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
+    "{file}이(가) JSON 객체가 아니어서 authority 블록이 Genex에 닿지 않고, 게임은 룸 없이 게시돼요. {file}을(를) 고치세요",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex가 Mac 앱 {app}이(가) 네트워크를 쓸 수 있는지 읽지 못했어요. 플레이어가 연결하지 못하면 Genex에서 다시 패키징하고 게시하세요.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "Mac 앱 {app}은(는) 인터넷에 연결할 수 없어요. 네트워크 접근이 없는 샌드박스에서 실행되어 어떤 플레이어도 연결할 수 없어요. Genex에서 다시 패키징한 뒤 게시하세요. 아무것도 보내지 않았어요.",
 } satisfies LocaleCatalog;

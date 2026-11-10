@@ -5,6 +5,8 @@ import { recordGenexUse, type GenexObserver } from "../../substrate/genex-outcom
 import { fileURLToPath } from "node:url";
 import { SessionCredentials } from "../../substrate/session-credentials.ts";
 import { SecretStore } from "../../substrate/secrets.ts";
+import { manifestUsesMultiplayer } from "../../substrate/genex-game-manifest.ts";
+import { systemMacSigner } from "../../substrate/mac-entitlements.ts";
 import { deliverGenexFiles } from "../../substrate/genex-delivery.ts";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -13,6 +15,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { writeFile } from "node:fs/promises";
 import {
+  GenexAppRefusal,
   CloudSendState,
   cleanGenexTitle,
   defaultGenexTitle,
@@ -54,7 +57,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import { formatList, t } from "../../shared/i18n.ts";
 import { isBlankStill } from "../../shared/preview-contract.ts";
 import { GenexCliStopped, authorityDevDir, runGenexCli, genexCliPath } from "./cli.ts";
-import { linkAuthorityToolchain } from "./authority-toolchain.ts";
+import { linkAuthorityToolchain, roomAfterUpload, roomBeforeUpload } from "./authority-toolchain.ts";
 import { stageBuildSource, unrealEngineOf } from "./remix-source.ts";
 import {
   type MacSigning,
@@ -95,10 +98,14 @@ import {
   toldOf,
 } from "./native-review.ts";
 import {
+  AppsRefusedError,
   appClipCommit,
   listingOf,
+  type MacEntitlementsReader,
+  NATIVE_MODULE_ARGS,
   type NativeUpload,
   nativePublishArgs,
+  offlineMacApps,
   pinnedCliReplacesNativePage,
   pinnedCliSendsApps,
   sendNativeBuild,
@@ -601,6 +608,8 @@ export class GenexTools {
   readonly #buildsApps: boolean;
   readonly #cloudSleep: CloudBuildDeps["sleep"];
   readonly #notarize: (app: string, signing: MacSigning, signal: AbortSignal) => Promise<NotarizeOutcome>;
+  /** Reads a Mac app's signed entitlements, to keep an online game's offline Mac app from going. */
+  readonly #readMacEntitlements: MacEntitlementsReader | undefined;
   /** The builds on Genex being followed, by game and job: one watch each. */
   #cloudWatches = new Map<string, Promise<void>>();
   /** Each game's project on its way to Genex, by game: one at a time, and it outlives the press. */
@@ -658,6 +667,8 @@ export class GenexTools {
       cloudSleep?: CloudBuildDeps["sleep"];
       /** Signs and notarizes a Mac app under the creator's Apple ID; the system tools unless a test stands in. */
       notarize?: (app: string, signing: MacSigning, signal: AbortSignal) => Promise<NotarizeOutcome>;
+      /** Reads a Mac app's signed entitlements; the system's codesign unless a test stands in. */
+      readMacEntitlements?: MacEntitlementsReader;
       /** A development stand's own CA file, which every CLI run trusts beside the system's. */
       ca?: string;
       /** A development stand's game host, where a publish there tests its draft (`stagingLink`). */
@@ -687,6 +698,7 @@ export class GenexTools {
     this.#cloudSleep = options.cloudSleep ?? ((ms, signal) => sleep(ms, undefined, { signal }).catch(() => {}));
     this.#notarize =
       options.notarize ?? ((app, signing, signal) => notarizeMacApp(app, signing, { run: systemNotarizeRun }, signal));
+    this.#readMacEntitlements = options.readMacEntitlements;
     this.#ca = options.ca;
     this.#standGames = options.standGames;
   }
@@ -1003,13 +1015,15 @@ export class GenexTools {
    * Publish a game that has only apps, no web build: send each with `genex native publish` and list
    * the game in the gallery under `title` with the first that goes, creating its hosted project the
    * first time. Runs as a publish job, so the dialog shows it like one. Once the apps are recorded,
-   * the kept cover is sent as a gallery publish's is.
+   * the kept cover is sent as a gallery publish's is. `roomStage` (the host's `export.room`) stages
+   * a server-authoritative game's room module, which goes live before any app does.
    */
   async publishAppsOnly(
     project: string,
     apps: readonly NativeUpload[],
     title?: unknown,
     remix: RemixChoice = {},
+    roomStage?: () => Promise<unknown>,
   ): Promise<GenexPublishState> {
     return this.#account(async () => {
       if (!this.#sendsApps || apps.length === 0) throw new Error(PUBLISH_MESSAGE.NoAppsRefusal());
@@ -1031,8 +1045,10 @@ export class GenexTools {
         startedAt: new Date().toISOString(),
         title: cleanGenexTitle(title) ?? state.renamed ?? state.title ?? defaultGenexTitle(project),
       };
+      const unread = await this.#stageAppsOnline(project, { state, job, dir, apps }, roomStage);
       state.job = job;
       delete state.warnings;
+      if (unread.length > 0) state.warnings = unread;
       delete state.lastError;
       await this.#savePublishState(project, state);
       const done = this.#runAppsJob(project, job, apps, remix);
@@ -1058,6 +1074,7 @@ export class GenexTools {
       const meta = await this.#ensureHostedProject(project, dir, path.join(dir, "home"), job, controller.signal);
       job.phase = GenexPublishPhase.Uploading;
       await this.#persistJob(project, job);
+      await this.#releaseRoom(project, job, dir, controller.signal);
       const started = job.title;
       const sending = this.#sendApps(project, job.id, apps, controller.signal, { title: started ?? project });
       step.done = sending.then(() => {});
@@ -1078,6 +1095,81 @@ export class GenexTools {
       this.#controllers.delete(controller);
       if (this.#nativeSteps.get(project) === step) this.#nativeSteps.delete(project);
     }
+  }
+  /**
+   * Stage an apps-only publish's room module inside the invocation that asked (a detached step gets
+   * no answer from host services): the room beside the copy, the manifest the CLI reads its
+   * `authority` block from, Studio's toolchain, and the job's first record of the room. A game with
+   * no room block keeps the copy it always published its apps from. True when the game plays online:
+   * it has a room or carries Genex's multiplayer.
+   */
+  async #stageAppsRoom(
+    project: string,
+    state: GenexPublishState,
+    job: GenexPublishJob,
+    dir: string,
+    roomStage: () => Promise<unknown>,
+  ): Promise<boolean> {
+    try {
+      const manifest = ((await roomStage()) as { genex?: GenexGameManifest } | null)?.genex;
+      await linkAuthorityToolchain(dir, authorityDevDir(), manifest);
+      const room = await roomBeforeUpload(dir, manifest);
+      if (!room) return manifestUsesMultiplayer(manifest);
+      await this.#writeWorkspaceManifest(dir, project, job, manifest, false);
+      job.room = room;
+      return true;
+    } catch (error) {
+      finishJob(job, GenexPublishJobState.Failed, new Date().toISOString());
+      job.error = errorMessage(error).slice(-PUBLISH_ERROR_TAIL_CHARS);
+      state.job = job;
+      await this.#savePublishState(project, state);
+      throw error;
+    }
+  }
+  /**
+   * Stages an apps-only publish's room (when the host can) and refuses an online game's offline Mac
+   * app; answers the warnings of Mac apps whose signature couldn't be read.
+   */
+  async #stageAppsOnline(
+    project: string,
+    publish: { state: GenexPublishState; job: GenexPublishJob; dir: string; apps: readonly NativeUpload[] },
+    roomStage: (() => Promise<unknown>) | undefined,
+  ): Promise<string[]> {
+    if (!roomStage) return [];
+    const online = await this.#stageAppsRoom(project, publish.state, publish.job, publish.dir, roomStage);
+    return online ? this.#refuseOfflineMacApps(publish.apps) : [];
+  }
+  /**
+   * Refuses an online game's apps before any upload when a Mac app among them is sandboxed without
+   * the network (Unreal's Shipping default): none of its players could connect. Only a positive
+   * finding refuses; a Mac app whose signature can't be read goes, and the warnings answered name it.
+   */
+  async #refuseOfflineMacApps(apps: readonly NativeUpload[]): Promise<string[]> {
+    const { offline, unread } = await offlineMacApps(apps, this.#readMacEntitlements ?? systemMacSigner.read);
+    const first = offline[0];
+    if (first)
+      throw new AppsRefusedError(
+        GenexAppRefusal.MacAppOffline,
+        PUBLISH_MESSAGE.MacAppOfflineRefusal(path.basename(first.target)),
+      );
+    return unread.map((app) => PUBLISH_MESSAGE.MacAppUnreadWarning(path.basename(app.target)));
+  }
+  /**
+   * Bundle, check, upload and release the room module to the rooms the apps join (`genex native
+   * module`) before any app goes: an app whose room is missing is refused on every join. A refusal
+   * ends the publish in the CLI's words, with the room's record of what the gate said.
+   */
+  async #releaseRoom(project: string, job: GenexPublishJob, dir: string, signal: AbortSignal): Promise<void> {
+    const room = job.room;
+    if (!room) return;
+    try {
+      await this.#cliText(dir, [...NATIVE_MODULE_ARGS], signal, path.join(dir, "home"));
+    } catch (error) {
+      job.room = await roomAfterUpload(dir, room, false);
+      throw error;
+    }
+    job.room = await roomAfterUpload(dir, room, true);
+    await this.#persistJob(project, job);
   }
   /** What an apps-only publish did, on the record: listed (or held, or refused), or nothing sent. */
   async #recordApps(project: string, job: GenexPublishJob, meta: HostedMeta, sent: NativeSaved): Promise<void> {
@@ -1197,6 +1289,8 @@ export class GenexTools {
       const connect = !bringsOwnSdk(exported?.genex);
       await this.#writeWorkspaceManifest(dir, project, job, exported?.genex, connect);
       await linkAuthorityToolchain(dir, authorityDevDir(), exported?.genex);
+      const room = await roomBeforeUpload(dir, exported?.genex);
+      if (room) job.room = room;
       job.deployment = await markDeployment(path.join(dir, "dist"), job.id);
       job.phase = startPhase;
       return connect;
@@ -1334,12 +1428,21 @@ export class GenexTools {
     for (;;) {
       run.job.uploads = (run.job.uploads ?? 0) + 1;
       try {
-        return await this.#runStep(run, GenexPublishPhase.Uploading);
+        const out = await this.#runStep(run, GenexPublishPhase.Uploading);
+        await this.#noteRoom(run, true);
+        return out;
       } catch (error) {
+        await this.#noteRoom(run, false);
         const again = (run.job.uploads ?? 0) < MAX_UPLOADS && (await this.#nothingLanded(run));
         if (!again) throw error;
       }
     }
+  }
+  /** What this upload made of the game's room module (`roomAfterUpload`), persisted with the job. */
+  async #noteRoom(run: PublishRun, landed: boolean): Promise<void> {
+    if (!run.job.room) return;
+    run.job.room = await roomAfterUpload(run.dir, run.job.room, landed);
+    await this.#persistJob(run.project, run.job);
   }
   /** Whether Genex's record is as it was before the failed upload: nothing reached it. */
   async #nothingLanded(run: PublishRun): Promise<boolean> {
@@ -1736,7 +1839,10 @@ export class GenexTools {
     const native = await this.#nativeRecord(project);
     const remix = { ...(await this.#remixRecord(project)), sending: this.#remixSends.has(project) };
     const hosted = await this.#hostedOf(project, state);
-    return { ...state, ...(warnings.length ? { warnings } : {}), cover, native, remix, ...hosted };
+    // The tested draft's own address (`preview--<slug>`): anyone with it plays the draft, as a guest
+    // or signed in. The draft page (`draftUrl`) is the owner's and asks for their sign-in.
+    const draftPlay = state.readyDraft ? { draftPlayUrl: state.readyDraft.url } : {};
+    return { ...state, ...(warnings.length ? { warnings } : {}), cover, native, remix, ...hosted, ...draftPlay };
   }
   /**
    * Whether Genex's page for the game plays a web version (its owner read names a public build),

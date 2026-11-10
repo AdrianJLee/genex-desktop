@@ -88,7 +88,7 @@ as listed, for example
 `genex__publish {"operation":"gallery"}`; both carry the room module (above). Other commands map
 onto Studio tools as the `genex` skill describes (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-authoritative-multiplayer/SKILL.md v1.40.0 sha256 956e9e2600339ce919fadee720d61e6aa018fb778068fd10acc735be7472a002 -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-authoritative-multiplayer/SKILL.md v1.41.0 sha256 30b8627e994af2a9d221ee97dc0016bcbe8432c003b0dfe0cc4476fc40d13c35 -->
 ---
 name: genex-authoritative-multiplayer
 description: Server-authoritative multiplayer for Genex games — the game's own room module runs on Genex's servers, players only send input, and the server decides every move and hit (lag-compensated). Use for competitive play where cheating matters: ranked PvP, arenas, shooters (first-person, hitscan or dodgeable projectiles), car football, "so nobody can cheat". Casual co-op and hangouts use genex-threejs-multiplayer instead. Load before writing the room module or any networking code.
@@ -113,7 +113,7 @@ everything else 100 ms in the past, and reconciles when the server's truth arriv
 | Who runs the rules | Each player's browser; Genex's relay passes messages | Genex's servers run the game's room module |
 | Cheating | A modified client can say where it is and what it hit | The server decides every move and every hit |
 | Fits | Co-op, hangouts, party, turn-based, casual races | Competitive shooters, arenas, ranked play — anything with a winner worth faking |
-| On Genex's servers | Free | Needs Genex Pro for the game's owner |
+| On Genex's servers | Free | Needs Genex Pro for the game's owner, unless Genex's free tier is on (smaller limits) |
 | Building and testing | Free | Free, on this machine, with no account |
 
 "Competitive", "ranked", "PvP", "esports", "so nobody can cheat" or "server-authoritative" mean
@@ -187,9 +187,12 @@ and no shared objects — the server owns all state.
 
 `firstperson` and `vehicle` move through a fixed collision world the module exports
 (`defineRoom({ world })`) and the client hands its session (`connectAuthority({ …, world })`),
-from one file both import: the session predicts only while the two hash the same. Their inputs,
+from one file both import: the session predicts only while the two hash the same. A level made in
+an editor gets that file from an exporter and `genex world fit`, on any engine:
+[references/levels.md](references/levels.md). Their inputs,
 parameters, units and CPU budget are in [references/presets.md](references/presets.md); read it
-before writing either side. A ball the cars knock about is one projectile the module re-launches
+before writing either side. An Unreal level becomes that file by a bake (`Genex.FitCollisionWorld`, "An art level"
+in presets.md), not by hand. A ball the cars knock about is one projectile the module re-launches
 (template 3, and "Running a ball" in presets.md).
 
 ## Feel settings: contacts, inputs, lifts, tick rate, regions, fast channel
@@ -210,7 +213,9 @@ and crate stacks.
 ## Shots: hitscan or projectile
 
 - **Instant** (a rifle, a laser): `ctx.rewind.hitscan` in `onInput`, lag-compensated with
-  `config.lagComp`. Template 1.
+  `config.lagComp`. Template 1. A world's walls stop it with `ctx.world.ray`:
+  [references/presets.md](references/presets.md#a-shot-and-the-world). Where bullets differ from
+  bodies, a shot world and the shooter's own stop: [references/levels.md](references/levels.md#what-bullets-meet).
 - **Something players see travel and can dodge** (a bolt, a rocket, a grenade, an arrow, a
   dodgeball): a projectile. The module launches it once with `ctx.projectiles.launch` and judges it
   with `ctx.projectiles.sweep`; the shooter's client calls `session.predictProjectile` while staging
@@ -247,8 +252,16 @@ function loop(now: number) {
 }
 requestAnimationFrame(loop);
 session.on("shot", (data) => showTracer(data)); // an event the room module emitted
-session.on("disconnect", (code) => showLeft(code));
+session.on("rejoining", () => showBanner("Reconnecting…")); // a deploy or a dead server: the SDK is on it
+session.on("rejoined", () => hideBanner()); // a new seat in a new room, on the same session object
+session.on("disconnect", (code) => showLeft(code)); // over for good
 ```
+
+**Deploys never end a game.** When a server is updated, your players get a `draining` event, keep
+playing for a minute, and are moved by the SDK to a fresh room, together. You write nothing for that.
+The new room starts from `init` unless your module hands its state on: add `onDrain(ctx)` and read
+`ctx.handoff` in `init`, keyed by uid ([references/module-api.md](references/module-api.md)). `disconnect`
+now means it is really over: a kick, a fault, or no server for three minutes.
 
 A refused join rejects with a `code`: 402 (the owner's plan does not include Genex servers — final),
 424 (no room module is published for this build yet), 426 (the SDK is too old), 429 (the owner's
@@ -266,9 +279,11 @@ ship one that is not ready:
   the deploy and prints its typed reason; the full report is kept at `.genex/authority/report.json`.
 - **Before any game file uploads**, the module and its report go to a private store that the game's
   address never serves, and `server/` is left out of the public build.
-- **On Genex's servers the owner needs Genex Pro.** A free account is refused with
-  `authority_requires_pro` and nothing is uploaded; it can still build and test everything locally.
-  Say so before the person publishes.
+- **On Genex's servers the owner needs Genex Pro, unless Genex's free tier is on.** With it off a
+  free account is refused with `authority_requires_pro` and nothing is uploaded; it can still build
+  and test everything locally. With it on a free account publishes too, under smaller limits (fewer
+  players, rooms and room-hours, at most 60 Hz by default), and once its monthly room time is used
+  new rooms are refused until the next period. Say so before the person publishes.
 - A preview link plays in rooms apart from the live game, as casual multiplayer's does, and
   `npx genex promote` / `npx genex rollback` move the module together with the build — a rollback can
   restore the previous module alone when only `server/` changed.

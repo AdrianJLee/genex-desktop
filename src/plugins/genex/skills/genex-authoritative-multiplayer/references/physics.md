@@ -138,7 +138,7 @@ every update and the rest in turns. A body that has not updated for a while is h
 ## Costs and limits
 
 The server measures physics time apart from your module's. A tick over 8 ms per 1/60 s of game
-time, or an average over 1 ms per 1/60 s, is a strike; the third ends the room. At 120 Hz a tick
+time, or an average over 1 ms per 1/60 s, is a strike; the third inside 1,200 ticks ends the room. At 120 Hz a tick
 gets a 60 Hz tick's 8 ms and 1 ms average, and the room counts twice toward the server's capacity. Asleep bodies cost
 almost nothing, so let piles settle: `canSleep` is on by default.
 

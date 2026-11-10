@@ -186,9 +186,18 @@ safe_arch 1.2.0, ordered-float 5.5.0, serde 1.0.229, serde_json 1.0.151, postcar
 libm 0.2.16, hashbrown, indexmap 2.14.2, smallvec 1.16.2, arrayvec 0.7.8, bytemuck 1.25.2,
 num-traits 0.2.19 and the num, heapless, approx and small utility crates they pull in.
 
-The Colyseus native core (`colyseus/native-sdk` 0.18.10, MIT) the plugin links is not shipped in
-the app: `unreal__multiplayer` downloads its pinned release into the game's plugin with its
-license (`src/plugins/unreal/multiplayer/COLYSEUS-LICENSE`) beside it.
+The Colyseus native core (`colyseus/native-sdk` 0.18.10, MIT, license in
+`src/plugins/unreal/multiplayer/COLYSEUS-LICENSE`) the plugin links: on a Mac `unreal__multiplayer`
+downloads its pinned release into the game's plugin with that license beside it. For Windows the app
+ships `src/plugins/unreal/multiplayer/colyseus-win64` (`colyseus.dll`, `colyseus.lib` and the
+release's headers), built by Genex from the release's source with zig 0.15.2
+(genex-demo `sdks/unreal/scripts/build-colyseus-win64.sh`; provenance and sha256 in its
+`vendor.json`). The dll statically links cJSON (MIT), wslay (MIT), sds (BSD-2-Clause), uthash 2.3.0
+(BSD-1-Clause), zig-msgpack (MIT), Zig 0.15.2's standard library and compiler-rt (MIT), MinGW-w64
+startup objects (public domain) and Mbed TLS 3.6.4 (Apache-2.0 OR GPL-2.0-or-later, distributed
+under Apache-2.0). Their license texts are in
+`src/plugins/unreal/multiplayer/COLYSEUS-WIN64-NOTICES`, which `unreal__multiplayer` places beside
+the dll as `THIRD-PARTY-NOTICES-Win64`.
 
 ## Cover orb shaders from orbkit
 

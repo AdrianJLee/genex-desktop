@@ -2729,12 +2729,17 @@ for relay and server-authoritative rooms, the `GenexMultiplayer` plugin the app 
 `sdks/unreal/GenexMultiplayer` at the commit `vendor.json` pins, by `npm run unreal:multiplayer --
 --from <genex-demo>`; `unreal-multiplayer-vendor.test.ts` recomputes its git tree id), copied into
 the linked project's `Plugins/GenexMultiplayer` and turned on in the .uproject. The plugin links the
-official Colyseus native core, which nobody commits: on a Mac the backend downloads the pinned
-release once into its storage (`COLYSEUS_UNREAL_CORE`, sha256-checked before it is unpacked; a
-sandboxed job never fetches it) and places its macOS library, headers and license in the plugin's
-`Source/ThirdParty/ColyseusNative`; Windows has no published Win64 core yet, so there the plugin goes
-in and the answer says the core is missing. A link anywhere on the way refuses the call before
-anything is written. The `unreal-multiplayer` skill takes the builder from there: the room module
+official Colyseus native core in the plugin's `Source/ThirdParty/ColyseusNative`: on a Mac the
+backend downloads the pinned release once into its storage (`COLYSEUS_UNREAL_CORE`, sha256-checked
+before it is unpacked; a sandboxed job never fetches it) and places its macOS library, headers and
+license. Colyseus publishes no MSVC build, so on Windows it places the Win64 core the app ships under
+`plugins/unreal/multiplayer/colyseus-win64/` (`colyseus.dll`, its import library `colyseus.lib` and
+the headers: the Genex SDK's reproducible zig build of the same release, `COLYSEUS_WIN64_CORE`,
+vendored from genex-demo's `win64-core` CI artifact by `scripts/vendor-unreal-colyseus-win64.ts`, whose
+`vendor.json` records the provenance and every file's sha256), checking each file against its pin before
+any is written, with its license and the notices of what the dll links statically; nothing is
+downloaded. A core that isn't the pinned one, or a link in its way, is a note in `core.why`, never a
+refusal; a link anywhere on the plugin's way refuses the call before anything is written. The `unreal-multiplayer` skill takes the builder from there: the room module
 and `genex.json`'s `authority` block, the `Genex Authority Subsystem` client, `genex__room` with bots
 (Play joins it through `.studio/authority.json`) and publish, which stages the room as for any game.
 Any Unreal game also gets `unreal__package-game {stop?, system?}` and `unreal__package-status {system?}`

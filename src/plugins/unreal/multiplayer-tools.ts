@@ -7,12 +7,13 @@
  * channel, identity). Its editor module joins Play to the room `genex__room` runs (named in the
  * game's `.studio/authority.json`).
  *
- * The plugin links the official Colyseus native core, which Genex never commits: on a Mac the
- * pinned release (the core's own xcframework, checked by sha256 before anything is unpacked) is
- * downloaded once into the plugin's storage by this backend, never by a sandboxed job, and its
- * macOS library and headers placed in the plugin's `Source/ThirdParty/ColyseusNative`. Windows has
- * no published Win64 core yet: there the plugin goes in and the answer says the core is missing.
- * A core that couldn't be added is a note, never a refusal.
+ * The plugin links the official Colyseus native core, placed in the plugin's
+ * `Source/ThirdParty/ColyseusNative`. On a Mac the pinned release (the core's own xcframework,
+ * checked by sha256 before anything is unpacked) is downloaded once into the plugin's storage by
+ * this backend, never by a sandboxed job. Colyseus publishes no MSVC build, so on Windows the core is
+ * Genex's reproducible Win64 build of the same release, which the app ships (`multiplayer/colyseus-win64`,
+ * vendored by `scripts/vendor-unreal-colyseus-win64.ts`): every file is checked against its sha256
+ * before any is placed, and nothing is downloaded. A core that couldn't be added is a note, never a refusal.
  *
  * Every file is the person's: nothing is written through a link, and a folder on the way that is
  * a link refuses the whole call before anything is written.
@@ -28,7 +29,7 @@ import { fileURLToPath } from "node:url";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { downloadFile } from "../../substrate/app-install.ts";
-import { ensureDirBelow, writeFileNoFollow } from "../../substrate/fsx.ts";
+import { ensureDirBelow, isJsonObject, writeFileNoFollow } from "../../substrate/fsx.ts";
 import { enableProjectPlugin } from "./cpp-module.ts";
 
 /** The tool, by its name after `unreal__`. */
@@ -51,6 +52,39 @@ export const COLYSEUS_UNREAL_CORE = {
   sha256: "66eb6f4ebd662e81f20e63a3c42c515159f523246238055ff55fdf6d09b09982",
 } as const;
 export type ColyseusCoreRelease = { version: string; url: string; sha256: string };
+/**
+ * The pinned Win64 core a Windows game's plugin links: Genex's reproducible zig build of v0.18.10's
+ * source release (genex-demo `sdks/unreal/scripts/build-colyseus-win64.sh`, pinned in `fetch-colyseus.sh`).
+ */
+export const COLYSEUS_WIN64_CORE = {
+  version: "0.18.10",
+  dll: "d19d0daf7c28d6caecf5cc236af74367938239b7d1638290f2d472f2332f4bce",
+  lib: "0e11320c53ae587c0ba56a4fb32ac1050f096174e59d8809eaef41a4c7534d87",
+} as const;
+/** The Win64 library and its import library, where `ColyseusNative.Build.cs` links them. */
+export const WIN64_CORE_FILES = { Dll: "lib/Win64/colyseus.dll", Lib: "lib/Win64/colyseus.lib" } as const;
+/** What the shipped Win64 core's `vendor.json` records: its provenance and each file's sha256. */
+export type ColyseusWin64Pin = {
+  version: string;
+  source: { url: string; sha256: string };
+  build: {
+    repository: string;
+    script: string;
+    pinnedBy: string;
+    workflow: string;
+    job: string;
+    artifact: string;
+    run: number;
+  };
+  files: Record<string, string>;
+};
+/** The shipped Win64 core's folder, beside the plugin. */
+const WIN64_FOLDER = "colyseus-win64";
+/** The notices of what the Win64 library links statically, placed beside the core's license. */
+const WIN64_NOTICES = "COLYSEUS-WIN64-NOTICES";
+const WIN64_NOTICES_NAME = "THIRD-PARTY-NOTICES-Win64";
+/** A header the Win64 pin may name: below `include/`, each name plain (never `..`). */
+const WIN64_HEADER = /^include(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)+\.h$/;
 /** The xcframework's macOS slice (universal arm64 + x86_64): its library and headers. */
 const MAC_SLICE = "Colyseus.xcframework/macos-arm64_x86_64";
 const MAC_LIBRARY = "libcolyseus.a";
@@ -63,9 +97,9 @@ const UNZIP_MS = 2 * MINUTE_MS;
 const MESSAGE = {
   Checksum: "The Colyseus core Genex downloaded isn't the one it pins, so it was not used.",
   Link: (rel: string) => `${rel} in the Unreal project is a link, so Genex won't write through it.`,
-  NoWindowsCore:
-    "Genex has no Windows build of the Colyseus core to give yet, so this PC can't compile the plugin; build and play the game's multiplayer on a Mac.",
-  NoCore: (platform: string) => `Genex has no Colyseus core for ${platform}; the plugin compiles on a Mac.`,
+  Win64Checksum: "The Windows Colyseus core in Genex isn't the one it pins, so it was not used; reinstall Genex.",
+  NoCore: (platform: string) =>
+    `Genex has no Colyseus core for ${platform}; the plugin compiles on a Mac or a Windows PC.`,
   NoUnzip: "The Colyseus core's archive held no macOS library.",
 } as const;
 
@@ -105,6 +139,9 @@ export type MultiplayerAnswer = {
   core: { ready: true } | { ready: false; why: string };
   next: string;
 };
+
+/** Bytes' sha256, hex. */
+const sha256OfBytes = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** A file's sha256, hex. */
 async function sha256Of(file: string): Promise<string> {
@@ -195,6 +232,54 @@ async function placeCore(slice: string, plugin: string, shipped: string): Promis
   await writeFileNoFollow(path.join(core, "LICENSE"), await readFile(path.join(shipped, CORE_LICENSE)));
 }
 
+/** Whether a Win64 pin names Genex's core: the pinned dll and lib, and only headers besides. */
+function pinsGenexWin64Core(files: unknown): files is Record<string, string> {
+  if (!isJsonObject(files)) return false;
+  const named = (rel: string) => rel === WIN64_CORE_FILES.Dll || rel === WIN64_CORE_FILES.Lib || WIN64_HEADER.test(rel);
+  const libraries =
+    files[WIN64_CORE_FILES.Dll] === COLYSEUS_WIN64_CORE.dll && files[WIN64_CORE_FILES.Lib] === COLYSEUS_WIN64_CORE.lib;
+  return libraries && Object.entries(files).every(([rel, sha]) => named(rel) && typeof sha === "string");
+}
+
+/** The shipped Win64 core's files by path, each checked against its pinned sha256; refuses, having only read, otherwise. */
+async function shippedWin64Core(shipped: string): Promise<Map<string, Buffer>> {
+  const folder = path.join(shipped, WIN64_FOLDER);
+  const pin: unknown = JSON.parse(await readFile(path.join(folder, PIN_FILE), "utf8"));
+  const files = isJsonObject(pin) ? pin.files : undefined;
+  if (!pinsGenexWin64Core(files)) throw new UnrealMultiplayerError(MESSAGE.Win64Checksum);
+  const out = new Map<string, Buffer>();
+  for (const [rel, sha] of Object.entries(files)) {
+    const bytes = await readFile(path.join(folder, ...rel.split("/"))).catch(() => null);
+    if (!bytes || sha256OfBytes(bytes) !== sha) throw new UnrealMultiplayerError(MESSAGE.Win64Checksum);
+    out.set(rel, bytes);
+  }
+  return out;
+}
+
+/**
+ * The shipped Win64 core into the project's plugin: `lib/Win64/colyseus.dll` and `colyseus.lib`, the
+ * headers under `include`, its license and notices beside them. Every file is checked and every
+ * path is clear of links before the first is written.
+ */
+async function placeWin64Core(shipped: string, plugin: string): Promise<void> {
+  const files = await shippedWin64Core(shipped);
+  const core = await ensureDirBelow(plugin, CORE_FOLDER);
+  await assertNoLinkOnTheWay(core, [...files.keys(), "LICENSE", WIN64_NOTICES_NAME], "ColyseusNative");
+  for (const [rel, bytes] of files) {
+    const parts = rel.split("/");
+    const dir = await ensureDirBelow(core, parts.slice(0, -1));
+    await writeFileNoFollow(path.join(dir, parts.at(-1) ?? ""), bytes);
+  }
+  await writeFileNoFollow(path.join(core, "LICENSE"), await readFile(path.join(shipped, CORE_LICENSE)));
+  await writeFileNoFollow(path.join(core, WIN64_NOTICES_NAME), await readFile(path.join(shipped, WIN64_NOTICES)));
+}
+
+/** The pinned Mac release, downloaded once, into the plugin. */
+async function addMacCore(deps: UnrealMultiplayerDeps, storage: string, plugin: string, signal: AbortSignal) {
+  const slice = await colyseusCore(deps, storage, signal);
+  await placeCore(slice, plugin, deps.shipped ?? SHIPPED_MULTIPLAYER);
+}
+
 /** The Colyseus core into the plugin where Genex has one for this system; why not otherwise. */
 async function addCore(
   deps: UnrealMultiplayerDeps,
@@ -202,11 +287,11 @@ async function addCore(
   plugin: string,
   signal: AbortSignal,
 ): Promise<MultiplayerAnswer["core"]> {
-  if (deps.platform === "win32") return { ready: false, why: MESSAGE.NoWindowsCore };
-  if (deps.platform !== "darwin") return { ready: false, why: MESSAGE.NoCore(deps.platform) };
+  if (deps.platform !== "darwin" && deps.platform !== "win32")
+    return { ready: false, why: MESSAGE.NoCore(deps.platform) };
   try {
-    const slice = await colyseusCore(deps, storage, signal);
-    await placeCore(slice, plugin, deps.shipped ?? SHIPPED_MULTIPLAYER);
+    if (deps.platform === "win32") await placeWin64Core(deps.shipped ?? SHIPPED_MULTIPLAYER, plugin);
+    else await addMacCore(deps, storage, plugin, signal);
     return { ready: true };
   } catch (error) {
     return { ready: false, why: errorMessage(error) };

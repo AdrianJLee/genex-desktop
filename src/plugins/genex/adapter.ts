@@ -56,7 +56,7 @@ import {
   REVIEW_NOTE_CHARS,
 } from "../../shared/genex-review.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { t } from "../../shared/i18n.ts";
+import { formatList, t } from "../../shared/i18n.ts";
 import { isBlankStill } from "../../shared/preview-contract.ts";
 import { GenexCliStopped, authorityDevDir, runGenexCli, genexCliPath } from "./cli.ts";
 import { linkAuthorityToolchain, roomAfterUpload, roomBeforeUpload } from "./authority-toolchain.ts";
@@ -2564,7 +2564,10 @@ export class GenexTools {
   async #refuseCloudEngine(gameDir: string): Promise<void> {
     const engine = await unrealEngineOf(gameDir);
     if (engine === null || CLOUD_UNREAL_VERSIONS.has(engine)) return;
-    throw new Error(engine ? PUBLISH_MESSAGE.CloudEngineRefusal(engine) : PUBLISH_MESSAGE.CloudNoEngineRefusal());
+    const builds = formatList([...CLOUD_UNREAL_VERSIONS]);
+    throw new Error(
+      engine ? PUBLISH_MESSAGE.CloudEngineRefusal(engine, builds) : PUBLISH_MESSAGE.CloudNoEngineRefusal(builds),
+    );
   }
   /**
    * Ask Genex to build the game's `platform` app on its own computers, from the project in

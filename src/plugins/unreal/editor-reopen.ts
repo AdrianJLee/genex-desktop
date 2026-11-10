@@ -88,7 +88,8 @@ export type ProcessEnv = {
 /** What reopening needs from the computer, the editor and the clock. */
 export type ReopenDeps = RestartDeps & {
   platform: NodeJS.Platform;
-  engine(): Promise<{ version: string; directory: string } | undefined>;
+  /** The installed engine `game`'s tools run with: its project's own, else the newest supported one. */
+  engine(storage: string, game: string): Promise<{ version: string; directory: string } | undefined>;
   project(storage: string, game: string): Promise<string | undefined>;
   xcode(engineDir: string | undefined): Promise<Pick<XcodeStatus, "state"> & Partial<Pick<XcodeStatus, "app">>>;
   /** Where Microsoft's C++ tools stand on Windows, which build the module there; none off Windows. */
@@ -154,7 +155,7 @@ const MESSAGE = {
 /** The project's name, as Unreal names its log and its crash folders. */
 const projectName = (project: string) => path.parse(project).name;
 
-/** The folders Unreal writes this project's crash reports in: the installed engine's, and the project's own. */
+/** The folders Unreal writes this project's crash reports in: its engine's (by `version`), and the project's own. */
 function crashFolders(home: string, version: string | undefined, project: string): string[] {
   const own = path.join(path.dirname(project), "Saved", "Crashes");
   if (version === undefined) return [own];
@@ -365,7 +366,7 @@ async function startReopen(
   if (await answering(deps, { storage, game }).catch(() => false)) return { answering: true };
   // Another call may have started the job while this one asked.
   if (jobs.get(project)?.state === ReopenState.Reopening) return { started: true };
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   const target = { storage, game, project, engine, helper, build };
   runJob(jobs, project, REOPEN_STATES, deps.now, () => reopenNow(deps, target, unbuilt));
   return { started: true };
@@ -429,7 +430,7 @@ async function endEditor(
   const project = await deps.project(storage, game);
   if (!project) throw new Error(MESSAGE.NoProjectToEnd);
   if (reopeningOf(jobs, project, restarting).state === ReopenState.Reopening) throw new Error(MESSAGE.Reopening);
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   const ended = await endOwn(deps, { storage, game, project, engine }, MESSAGE.EditorNotEnded);
   if (!(await silent(deps, storage, game))) throw new Error(MESSAGE.StillAnswers);
   return { ended };

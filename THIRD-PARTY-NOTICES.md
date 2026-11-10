@@ -29,7 +29,7 @@ licenses and terms of included third-party software.
   self-edit type gate runs keep their license and notice files under `dist/resources/tsc`.
 - The Genex asset CLI (`@genex-ai/cli-demo`, MIT) and its dependencies keep their license files
   in the Genex plugin payload under `dist/resources/plugins/genex/node_modules`.
-- Genex's room-module toolchain (`@genex-ai/authority-dev` 0.1.6, MIT), which a publish copy and a
+- Genex's room-module toolchain (`@genex-ai/authority-dev` 0.1.7, MIT), which a publish copy and a
   local room use, ships in the same payload with its dependencies and the peers they import
   (Colyseus, express, esbuild-wasm, QuickJS and `@genex-ai/physics`: MIT, ISC, BSD-3-Clause and
   0BSD), each keeping its license files there. The two that ship none have sections below.
@@ -394,7 +394,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-### @genex-ai/authority-dev 0.1.6
+### @genex-ai/authority-dev 0.1.7
 
 Shipped in the Genex plugin payload (`plugins/genex/node_modules`), the toolchain that bundles,
 validates and runs a server-authoritative game's room module on this machine. Its package and

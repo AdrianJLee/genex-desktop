@@ -3950,7 +3950,7 @@ export const PUBLISH_PLATFORM_WORDS = {
   players: { [PublishTarget.Mac]: "Mac", [PublishTarget.Windows]: "Windows", [PublishTarget.Linux]: "Linux" },
   webReady: t("Plays right away"),
   webMissing: t("Not set up for the web"),
-  /** An Unreal game: Unreal has no web export. */
+  /** An Unreal game with no web build: nothing here makes one, so its row is left out. */
   webUnavailable: t("Unreal games don’t run in a browser"),
   /** What a build runs on, by its processors. */
   arch: {
@@ -6279,6 +6279,11 @@ export const NATIVE_WORDS = {
   shots: t("Shots"),
   about: tc("game page", "About"),
   install: t("Install"),
+  /** Play for a game's web build where its app is offered beside it. */
+  playInBrowser: t("Play in browser"),
+  playInBrowserLabel: (title: string) => t("Play {title} in the browser", { title }),
+  /** The web among the systems a game runs on. */
+  web: t("Web"),
   installLabel: (title: string, size: string) => t("Install {title}, {size}", { title, size }),
   installing: (percent: number) => t("Installing… {percent}%", { percent }),
   installingLabel: (title: string) => t("Installing {title}", { title }),
@@ -6427,7 +6432,7 @@ export const UNREAL_WORDS = {
   opening: t("Opening…"),
   /** The Live card for each step of the game's own project (`stage-status`). */
   stage: {
-    getUnreal: t("Unreal Engine 5.8 isn’t on this computer yet."),
+    getUnreal: t("Unreal Engine isn’t on this computer yet."),
     getUnrealButton: t("Get Unreal Engine"),
     /** The card's Play: the game's own app, or the agent asked to run the game (`game-play.ts`). */
     play: t("Play"),

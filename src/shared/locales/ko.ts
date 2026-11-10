@@ -124,6 +124,7 @@ export default {
     "모델을 다운로드하는 중이에요. 다운로드가 끝나면 이 모델을 삭제해 주세요.",
   "A mountain rescue game with a dog and a sled": "개와 썰매로 산에서 구조하는 게임",
   "A museum guard game where the exhibits come alive": "전시품이 살아 움직이는 박물관 경비원 게임",
+  "Agents get Unreal {to}’s tools.": "에이전트가 Unreal {to}의 도구를 쓸 수 있어요.",
   "An arcade shooter where your bullets bounce off the walls": "총알이 벽에 튕기는 아케이드 슈팅 게임",
   "A new build is ready to play.": "새 빌드를 플레이할 수 있어요.",
   "A new build is ready — reload to play it": "새 빌드가 준비됐어요 — 새로 고침해서 플레이하세요",
@@ -521,6 +522,7 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "{title}의 {players} 앱을 다시 빌드해 주세요. 게시하고 싶어요.",
   "Build updated": "빌드가 업데이트됐어요",
+  "Build with Genex": "Genex로 만들기",
   "Build with the Cursor plan you already have.": "이미 있는 Cursor 요금제로 만들어요.",
   "Build with the Grok account you already have.": "이미 있는 Grok 계정으로 만들어요.",
   "Changes Harness made to its own instructions. Undo any of them.":
@@ -528,6 +530,13 @@ export default {
   "Checking that Microsoft signed the installer…": "설치 프로그램에 Microsoft 서명이 있는지 확인하고 있어요…",
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "Microsoft에서 Visual Studio Build Tools 설치 프로그램을 내려받고 있어요…",
+  "Genex keeps a copy of the project file first. What Unreal {to} saves won’t open in {from}.":
+    "Genex가 먼저 프로젝트 파일 사본을 남겨요. Unreal {to}에서 저장한 것은 {from}에서 열리지 않아요.",
+  "Genex makes a save point of this game first. What Unreal {to} saves won’t open in {from}.":
+    "Genex가 먼저 이 게임의 저장 지점을 만들어요. Unreal {to}에서 저장한 것은 {from}에서 열리지 않아요.",
+  "Genex makes new games with Unreal {to}. Agents get its tools.":
+    "Genex는 새 게임을 Unreal {to}(으)로 만들어요. 에이전트가 그 도구를 쓸 수 있어요.",
+  "Get {version}": "{version} 받기",
   "Install Visual Studio Build Tools": "Visual Studio Build Tools 설치",
   "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "Microsoft의 Visual Studio Build Tools 2022를 'C++를 사용한 데스크톱 개발', .NET Framework 4.8 SDK와 함께 설치하세요.",
@@ -545,15 +554,26 @@ export default {
     "Microsoft 설치 프로그램을 내려받지 못했어요. 인터넷 연결을 확인하고 다시 시도하세요.",
   "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
     "Microsoft 설치 프로그램은 끝났지만, 설치된 것으로는 Unreal이 아직 C++를 빌드할 수 없어요. Visual Studio Build Tools 2022를 'C++를 사용한 데스크톱 개발', .NET Framework 4.8 SDK와 함께 직접 설치하세요.",
+  "Move to {version}": "{version}(으)로 이동",
+  "Move {name} to Unreal {to}?": "{name}을(를) Unreal {to}(으)로 옮길까요?",
+  "Move {project} to Unreal {to}": "{project}을(를) Unreal {to}(으)로 옮기기",
+  "Play in browser": "브라우저에서 플레이",
+  "Play {title} in the browser": "{title} 브라우저에서 플레이",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
     "추천해요. Microsoft의 무료 C++ 도구예요. 이게 있으면 에이전트가 게임 로직을 C++로 쓰고, C++가 들어간 게임이나 플러그인을 Unreal로 패키징할 수 있어요. 약 7GB예요. '대신 해 주기'로 설치할 수 있어요. Windows가 물어보면 '예'를 고르세요.",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "추천해요. Microsoft의 무료 C++ 도구예요. 이게 있으면 에이전트가 게임 로직을 C++로 쓰고, C++가 들어간 게임이나 플러그인을 Unreal로 패키징할 수 있어요. Visual Studio Build Tools를 'C++를 사용한 데스크톱 개발', .NET Framework 4.8 SDK와 함께 설치하세요.",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "자기 개선이 꺼져 있어요. Harness가 자기 지침을 그대로 둬요.",
+  "This project isn't on an older Unreal that Genex moves to {version}.":
+    "이 프로젝트는 Genex가 {version}(으)로 옮기는 이전 Unreal 버전이 아니에요.",
   "Unreal can build C++ on this PC.": "이 PC에서 Unreal이 C++를 빌드할 수 있어요.",
   "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
     "Unreal {engine}은 이 PC의 C++ 도구로 빌드할 수 없어요. '대신 해 주기'로 업데이트할 수 있어요. Windows가 물어보면 '예'를 고르세요.",
+  "Unreal {to} isn’t on this computer yet: about {gb} GB, beside Unreal {from}.":
+    "Unreal {to}이(가) 아직 이 컴퓨터에 없어요. 약 {gb}GB, Unreal {from} 옆에 설치돼요.",
+  "Unreal {version} isn't on this computer yet. Install it first, then move the project.":
+    "Unreal {version}이(가) 아직 이 컴퓨터에 없어요. 먼저 설치한 다음 프로젝트를 옮기세요.",
   "Update Visual Studio Build Tools": "Visual Studio Build Tools 업데이트",
   "Visual Studio Build Tools are installed.": "Visual Studio Build Tools를 설치했어요.",
   "Visual Studio's C++ tools are ready": "Visual Studio C++ 도구가 준비됐어요",
@@ -1191,8 +1211,8 @@ export default {
   "Dismiss remaining imports": "남은 커넥터 닫기",
   Dividers: "구분선",
   "Do it for me": "대신 해 주기",
-  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
-    "'대신 해 주기'를 누르면 런처가 열리고, 이 채팅이 컴퓨터를 조작해 Unreal을 설치해요. 약 45GB예요. Epic 로그인을 요청하면 본인이 직접 로그인하세요.",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About {gb} GB. Only you sign in to Epic, when it asks.":
+    "'대신 해 주기'를 누르면 런처가 열리고, 이 채팅이 컴퓨터를 조작해 Unreal을 설치해요. 약 {gb}GB예요. Epic 로그인을 요청하면 본인이 직접 로그인하세요.",
   "Does it feel alive? {score} of {max}": "살아 있는 느낌이 나나요? {score}/{max}",
   "Don't allow": "허용 안 함",
   "Don't ask again for this action in {source}.": "{source}에서 이 작업은 다시 묻지 않아요.",
@@ -1573,6 +1593,8 @@ export default {
   "Genex leaves it open until the Loop ends.": "Genex는 Loop가 끝날 때까지 열어 둬요.",
   "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}), or make the project in Unreal's own New Project dialog and choose it from the Unreal button.":
     "Genex는 새 Unreal 프로젝트를 Unreal {versions} 버전으로 만드는데, 이 컴퓨터에는 Unreal {version} 버전이 있어요. Epic Games Launcher에서 {wanted} 버전을 함께 설치하거나({clickPath}), Unreal의 New Project 대화 상자에서 프로젝트를 만든 뒤 Unreal 버튼에서 고르세요.",
+  "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}).":
+    "Genex는 새 Unreal 프로젝트를 Unreal {versions} 버전으로 만드는데, 이 컴퓨터에는 Unreal {version} 버전이 있어요. Epic Games Launcher에서 {wanted} 버전을 함께 설치하세요({clickPath}).",
   "Genex needs your OK to set up": "Genex 설정에 허락이 필요해요",
   "Genex plugin": "Genex 플러그인",
   "Genex plugin, Credits": "Genex 플러그인, 크레딧",
@@ -1775,8 +1797,8 @@ export default {
   "In the background: {title}": "백그라운드: {title}",
   "In the build · not in your game folder yet": "빌드에 있음 · 아직 게임 폴더에는 없음",
   "In the game's folder": "게임 폴더에서",
-  "In the launcher, sign in, then {clickPath}. About 45 GB. Only you can sign in to Epic.":
-    "런처에서 로그인한 다음 {clickPath} 순서로 진행하세요. 약 45GB예요. Epic 로그인은 본인만 할 수 있어요.",
+  "In the launcher, sign in, then {clickPath}. About {gb} GB. Only you can sign in to Epic.":
+    "런처에서 로그인한 다음 {clickPath} 순서로 진행하세요. 약 {gb}GB예요. Epic 로그인은 본인만 할 수 있어요.",
   "In the reviewers' words: {words}": "리뷰어의 말: {words}",
   "In this game’s folder. Workers load them from there.": "이 게임 폴더에 있어요. 작업자가 여기서 불러와요.",
   "In total": "전체",
@@ -2468,6 +2490,8 @@ export default {
   "On this Mac · {size}": "이 Mac에 있음 · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "켜면 Genex의 다음 시점에 실행돼요: {steps}. 이 단계들은 미리 확인을 요청하지 않아요.",
+  "One account for frontier AI models and game dev tools. Pay with Genex credits.":
+    "계정 하나로 최신 AI 모델과 게임 개발 도구를 써요. Genex 크레딧으로 결제해요.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "계정 하나로 수백 개 모델을 써요. 쓴 만큼만 OpenRouter에 내요.",
   "One key for hundreds of models. Pay as you go.": "키 하나로 수백 개 모델을 써요. 쓴 만큼만 내요.",
@@ -4237,7 +4261,7 @@ export default {
   Unpublish: "게시 취소",
   "Unpublish {title}?": "{title} 게시를 취소할까요?",
   "Unpublishing…": "게시 취소 중…",
-  "Unreal Engine 5.8 isn’t on this computer yet.": "이 컴퓨터에 아직 Unreal Engine 5.8이 없어요.",
+  "Unreal Engine isn’t on this computer yet.": "이 컴퓨터에 아직 Unreal Engine이 없어요.",
   "Unreal Engine {version} isn't on this computer yet. The Unreal button above the game shows how to get it free from Epic, and notices when it's installed.":
     "Unreal Engine {version} 버전이 아직 이 컴퓨터에 없어요. 게임 위의 Unreal 버튼에서 Epic에서 무료로 받는 방법을 볼 수 있고, 설치되면 자동으로 알아채요.",
   "Unreal couldn't use the port Genex gave {name}. Quit Unreal and open it again from the Unreal button.":
@@ -5481,6 +5505,7 @@ export default {
   "{name} isn’t on this computer any more.": "{name} 파일은 이제 이 컴퓨터에 없어요.",
   "{name} needs Studio {version} or newer": "{name}에는 Studio {version} 이상이 필요해요",
   "{name} needs a sign-in": "{name} 로그인 필요",
+  "{name} opens in Unreal {to} from now on.": "{name}은(는) 이제부터 Unreal {to}에서 열려요.",
   "{name} settings": "{name} 설정",
   "{name} was never saved to a file, so Genex can't open it. Open it in Roblox Studio, or choose another place.":
     "{name} 플레이스는 파일로 저장된 적이 없어서 Genex가 열 수 없어요. Roblox Studio에서 열거나 다른 플레이스를 고르세요.",
@@ -6104,12 +6129,12 @@ export default {
   "Raising…": "늘리는 중…",
   "The chat now uses {model}. Send your message again.": "이제 채팅이 {model}을 사용해요. 메시지를 다시 보내 주세요.",
   "Couldn’t send the project to Genex: {error}": "프로젝트를 Genex로 보내지 못했어요: {error}",
-  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
-    "지금은 Genex가 Unreal 5.8 게임만 만들 수 있는데, 이 프로젝트에는 버전이 없어요. Unreal 5.8에서 열어 저장한 뒤 다시 만들어 보세요.",
+  "Genex builds Unreal {builds} games for now, and this project names no version of it. Open it in Unreal, save it, then build again.":
+    "지금은 Genex가 Unreal {builds} 게임만 만들 수 있는데, 이 프로젝트에는 버전이 없어요. Unreal에서 열어 저장한 뒤 다시 만들어 보세요.",
   "Sending the project to Genex stopped": "프로젝트를 Genex로 보내는 작업이 멈췄어요",
   "Sending to Genex. Keep Genex open": "Genex로 보내는 중. Genex를 열어 두세요",
-  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
-    "이 게임은 Unreal {version}을 써요. 지금은 Genex가 Unreal 5.8 게임만 만들 수 있어요. 5.8로 업그레이드한 뒤 다시 만들어 보세요.",
+  "This game uses Unreal {version}. Genex builds Unreal {builds} games for now, so it can’t build this one yet.":
+    "이 게임은 Unreal {version} 버전을 써요. 지금은 Genex가 Unreal {builds} 게임만 만들 수 있어서, 이 게임은 아직 만들 수 없어요.",
   "Run the game": "게임 실행해 줘",
   "The agent is packaging the game. It starts it once the package is ready.":
     "에이전트가 게임을 패키징하고 있어요. 완성되면 실행해요.",

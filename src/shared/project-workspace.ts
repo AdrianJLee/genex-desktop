@@ -398,10 +398,11 @@ const holdsEngineProject = (game: GameKind): boolean => game.facts.some((fact) =
 
 /**
  * The folder of a game's web game when it has none at its root, which Live plays and Publish puts
- * online in the root's place: an engine's game's own web export (a Unity or Godot game's `web/`,
- * `engineWebFolderOf`), or, for a game of no engine, the first web game in a folder of it. A page
- * anyone else left in an engine's game (an agent's design mockups, a plugin's help) is never its web
- * game, and an Unreal game has none. Null for a game served as a web game at its root, or with none.
+ * online in the root's place: an engine's game's own web export (a Unity or Godot game's `web/`, an
+ * Unreal game's `web/` while it holds the build Unreal staged; `engineWebFolderOf`), or, for a game
+ * of no engine, the first web game in a folder of it. A page anyone else left in an engine's game
+ * (an agent's design mockups, a plugin's help) is never its web game. Null for a game served as a
+ * web game at its root, or with none.
  */
 export function webFolderOf(game: GameKind): string | null {
   if (servedAsWebGame(game)) return null;

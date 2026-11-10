@@ -80,11 +80,16 @@ const QUIT_SCRIPT = [
   'run script "ignoring application responses\ntell application id \\"com.epicgames.UnrealEditor\\" to quit\nend ignoring"',
   "end if",
 ];
-/** Epic's 5.8 and the unsupported 5.7, as the launcher lists them. */
+/**
+ * Epic's 5.8, which a game made with it stays on, and the unsupported 5.7, as the launcher lists
+ * them: the computer of someone whose games are older than the Unreal new ones are made with.
+ */
 const ENGINES: Array<[string, string]> = [
   ["UE_5.8", "5.8.3-58210709+++UE5+Release-5.8-Mac"],
   ["UE_5.7", "5.7.1-48512491+++UE5+Release-5.7-Mac"],
 ];
+/** The same computer once Unreal 5.9, which new games are made with, is installed beside them. */
+const WITH_NEW_GAMES_ENGINE: Array<[string, string]> = [["UE_5.9", "5.9.0-60000001+++UE5+Release-5.9-Mac"], ...ENGINES];
 const READY_XCODE: XcodeStatus = {
   state: XcodeState.Ready,
   app: "/Applications/Xcode.app",
@@ -226,7 +231,7 @@ async function launchFixture(
   const drift = await project(path.join(root, "Projects"), "Drift");
   const computer = fakeComputer(home, options.platform ?? "darwin");
   const launched: Launch[] = [];
-  /** What a build, a game snapshot and a launch did, in order. */
+  /** What a build, a game snapshot, a card offered in the game's chat and a launch did, in order. */
   const events: string[] = [];
   /** Each build's options; `outcome.build` is what it answers (built unless a test says otherwise). */
   const compiles: CompileOptions[] = [];
@@ -236,6 +241,8 @@ async function launchFixture(
   const outcome: {
     build?: CompileResult;
     snapshotError?: Error;
+    /** The game has no chat to show a card in: the host's `game.engine.steps` answers false. */
+    noChat?: boolean;
     onLaunch?: () => void;
     runs?: Array<{ game: string; title: string; project: string }>;
   } = {};
@@ -284,19 +291,23 @@ async function launchFixture(
     },
   });
   const helperNow = async () => (await inspectProject(drift, { env: computer.env, helper: HELPER, storage })).helper;
-  const context = {
-    signal: new AbortController().signal,
-    callId: 1,
-    host: (async (method: string) => {
+  /** Genex's side of a call made while `game` is open (none: outside a game). */
+  const hostFor = (game?: string) =>
+    (async (method: string) => {
       if (method === "storage.root") return storage;
       if (method === "game.engine.runs" && outcome.runs) return outcome.runs;
+      if (method === "game.engine.read" && game) return links.read("unreal", gameBinding(game));
+      if (method === "game.engine.steps") {
+        events.push("card");
+        return !outcome.noChat;
+      }
       if (method !== "game.snapshot") throw new Error(`unexpected host call ${method}`);
       events.push("snapshot");
       snapshots.push(await helperNow());
       if (outcome.snapshotError) throw outcome.snapshotError;
       return { snapshotId: `snapshot-${snapshots.length}` };
-    }) as never,
-  };
+    }) as never;
+  const context = { signal: new AbortController().signal, callId: 1, host: hostFor() };
   // biome-ignore lint/suspicious/noExplicitAny: action results are the panel's JSON
   const act = async (name: string, args: Record<string, unknown> = {}): Promise<any> => {
     const run = backend.action?.(name, args, context);
@@ -321,6 +332,8 @@ async function launchFixture(
     catalog: () => ENGINE_CATALOG,
   });
   const gameBinding = (game: string) => ({ project: game, directory: gameDir(game) });
+  /** A call's context while `game` is open. */
+  const contextIn = (game: string) => ({ ...context, ...gameBinding(game), host: hostFor(game) });
   const linkGame = async (game: string, file: string) => {
     await mkdir(gameDir(game), { recursive: true });
     return links.link("unreal", gameBinding(game), { project: file });
@@ -328,14 +341,17 @@ async function launchFixture(
   const unlinkGame = (game: string, linkedAt: string) => links.undo("unreal", game, linkedAt);
   /** What the button says while `game` is open. */
   const toolbarOf = async (game: string) =>
-    (await backend.action?.("toolbar-status", {}, { ...context, ...gameBinding(game) })) as PluginToolbarStatus;
+    (await backend.action?.("toolbar-status", {}, contextIn(game))) as PluginToolbarStatus;
   /** An action pressed while `game` is open, as the stage and the panel in a game send it. */
   // biome-ignore lint/suspicious/noExplicitAny: action results are the panel's JSON
   const actIn = async (game: string, name: string, args: Record<string, unknown> = {}): Promise<any> =>
-    backend.action?.(name, args, { ...context, ...gameBinding(game) });
+    backend.action?.(name, args, contextIn(game));
+  /** A confirmation asked while `game` is open. */
+  const reviewIn = async (game: string, name: string, args: Record<string, unknown>) =>
+    backend.review?.(name, args, contextIn(game));
   /** A Loop tool the runner calls for `game`. */
   const toolIn = async (game: string, name: string, args: Record<string, PluginScalar> = {}): Promise<unknown> =>
-    backend.tool?.(name, args, { ...context, ...gameBinding(game) });
+    backend.tool?.(name, args, contextIn(game));
   return {
     root,
     home,
@@ -354,6 +370,7 @@ async function launchFixture(
     unlinkGame,
     toolbarOf,
     actIn,
+    reviewIn,
     toolIn,
     events,
     compiles,
@@ -1044,6 +1061,7 @@ describe("The Unreal toolbar button for the open game", () => {
     const f = await launchFixture();
     const set = await f.act("setup", { project: f.drift });
     await f.linkGame("valley", f.drift);
+    f.live.running = true;
     f.live.answering = true;
     Object.assign(f.touched, { scans: 0, xcode: 0, disk: 0 });
     f.asked.length = 0;
@@ -1497,6 +1515,19 @@ describe("A project made with an older Unreal", () => {
     assert.equal(JSON.parse(await readFile(cave, "utf8")).EngineAssociation, "5.7");
   });
 
+  it("with 5.8 and 5.9 both installed, setup switches it to 5.9, the newest, and it opens in the 5.9 editor", async () => {
+    const f = await launchFixture({ engines: WITH_NEW_GAMES_ENGINE });
+    const cave = await project(path.join(f.root, "Projects"), "Cave", "5.7");
+    assert.equal((await f.act("status", { project: cave })).next, "set-up");
+    assert.match((await f.review("setup", { project: cave }))?.detail ?? "", /from Unreal 5\.7 to 5\.9/);
+    await f.act("setup", { project: cave });
+    assert.equal(JSON.parse(await readFile(cave, "utf8")).EngineAssociation, "5.9");
+    await f.act("open-editor", { project: cave });
+    assert.deepEqual(f.launched, [macOpen(f, cave, "UE_5.9")]);
+    await f.act("undo-setup", { project: cave });
+    assert.equal(JSON.parse(await readFile(cave, "utf8")).EngineAssociation, "5.7");
+  });
+
   it("a project of a source-built engine keeps its association", async () => {
     const f = await launchFixture();
     const custom = await project(path.join(f.root, "Projects"), "Custom", "{8D4F2C1A-0000-0000-0000-000000000000}");
@@ -1505,6 +1536,246 @@ describe("A project made with an older Unreal", () => {
       JSON.parse(await readFile(custom, "utf8")).EngineAssociation,
       "{8D4F2C1A-0000-0000-0000-000000000000}",
     );
+  });
+});
+
+describe("A game made with Unreal 5.8, where 5.9 is installed beside it", () => {
+  it("is set up without a change of Unreal and opens in the 5.8 editor", async () => {
+    const f = await launchFixture({ engines: WITH_NEW_GAMES_ENGINE });
+    const before = await f.act("status", { project: f.drift });
+    assert.deepEqual([before.next, before.engineMatch, before.engine.version], ["set-up", "installed", "5.8"]);
+    assert.doesNotMatch((await f.review("setup", { project: f.drift }))?.detail ?? "", /from Unreal|5\.9/);
+    await f.act("setup", { project: f.drift });
+    assert.equal(JSON.parse(await readFile(f.drift, "utf8")).EngineAssociation, "5.8");
+    assert.equal((await f.act("status", { project: f.drift })).next, "open");
+    await f.act("open-editor", { project: f.drift });
+    assert.deepEqual(f.launched, [macOpen(f, f.drift, "UE_5.8")]);
+  });
+
+  it("a game made with 5.9 on the same computer opens in the 5.9 editor", async () => {
+    const f = await launchFixture({ engines: WITH_NEW_GAMES_ENGINE });
+    const lantern = await project(path.join(f.root, "Projects"), "Lantern", "5.9");
+    await f.act("setup", { project: lantern });
+    assert.equal(JSON.parse(await readFile(lantern, "utf8")).EngineAssociation, "5.9");
+    await f.act("open-editor", { project: lantern });
+    assert.deepEqual(f.launched, [macOpen(f, lantern, "UE_5.9")]);
+  });
+});
+
+describe("Move to the Unreal new games are made with, from the panel", () => {
+  const association = async (file: string) => JSON.parse(await readFile(file, "utf8")).EngineAssociation;
+  /** Drift, made with 5.8 and set up, on a computer with the engines given. */
+  async function setUpDrift(engines = WITH_NEW_GAMES_ENGINE) {
+    const f = await launchFixture({ engines });
+    await f.act("setup", { project: f.drift });
+    return f;
+  }
+
+  it("status offers it for a 5.8 project, says whether 5.9 is installed, and offers a 5.9 project nothing", async () => {
+    const both = await setUpDrift();
+    assert.deepEqual((await both.act("status", { project: both.drift })).move, {
+      from: "5.8",
+      to: "5.9",
+      installed: true,
+    });
+    const lantern = await project(path.join(both.root, "Projects"), "Lantern", "5.9");
+    assert.equal((await both.act("status", { project: lantern })).move, null);
+    const only = await setUpDrift(ENGINES);
+    assert.equal((await only.act("status", { project: only.drift })).move.installed, false);
+  });
+
+  it("a project that isn't set up yet is offered no move: setup comes first, with its own confirmation", async () => {
+    const f = await launchFixture({ engines: WITH_NEW_GAMES_ENGINE });
+    assert.equal((await f.act("status", { project: f.drift })).move, null);
+  });
+
+  it("the confirmation names the project and both versions, and what keeps the game as it was", async () => {
+    const f = await setUpDrift();
+    const outside = await f.review("move-engine", { project: f.drift });
+    assert.equal(outside?.message, "Move Drift to Unreal 5.9?");
+    assert.deepEqual(outside?.detail?.split("\n"), [
+      "• Drift opens in Unreal 5.9 from now on.",
+      "• Agents get Unreal 5.9’s tools.",
+      "Genex keeps a copy of the project file first. What Unreal 5.9 saves won’t open in 5.8.",
+    ]);
+    await f.linkGame("valley", f.drift);
+    const inGame = await f.reviewIn("valley", "move-engine", { project: f.drift });
+    assert.equal(
+      inGame?.detail?.split("\n").at(-1),
+      "Genex makes a save point of this game first. What Unreal 5.9 saves won’t open in 5.8.",
+    );
+  });
+
+  it("in the project's game: a save point first, then the move; the project opens in the 5.9 editor", async () => {
+    const f = await setUpDrift();
+    await f.linkGame("valley", f.drift);
+    const moved = await f.actIn("valley", "move-engine", { project: f.drift });
+    assert.deepEqual([f.events, moved.engine, moved.ready], [["snapshot"], "5.9", true]);
+    assert.equal(await association(f.drift), "5.9");
+    await f.actIn("valley", "open-editor", { project: f.drift });
+    assert.deepEqual(f.launched, [macOpen(f, f.drift, "UE_5.9")]);
+    assert.equal((await f.actIn("valley", "status", { project: f.drift })).move, null);
+  });
+
+  it("outside a game, and for a project that isn't the open game's own, it moves with no save point", async () => {
+    const f = await setUpDrift();
+    await f.act("move-engine", { project: f.drift });
+    assert.deepEqual([f.events, await association(f.drift)], [[], "5.9"]);
+    const rally = await project(path.join(f.root, "Projects"), "Rally");
+    await f.act("setup", { project: rally });
+    await f.linkGame("valley", f.drift);
+    await f.actIn("valley", "move-engine", { project: rally });
+    assert.deepEqual([f.events, await association(rally)], [[], "5.9"]);
+  });
+
+  const refusals: Array<[string, (f: Awaited<ReturnType<typeof setUpDrift>>) => void | Promise<void>, RegExp]> = [
+    [
+      "a save point that fails",
+      (f) => {
+        f.outcome.snapshotError = new Error("Genex couldn't take a snapshot of this game.");
+      },
+      /snapshot/,
+    ],
+    [
+      "Unreal has the project open",
+      (f) => {
+        f.live.running = true;
+        f.live.answering = true;
+      },
+      /Unreal/,
+    ],
+  ];
+  for (const [name, arrange, words] of refusals)
+    it(`refuses, changing nothing, when ${name}`, async () => {
+      const f = await setUpDrift();
+      await f.linkGame("valley", f.drift);
+      await arrange(f);
+      const witness = await tree(path.dirname(f.drift));
+      await assert.rejects(f.actIn("valley", "move-engine", { project: f.drift }), words);
+      assert.deepEqual(await tree(path.dirname(f.drift)), witness);
+    });
+
+  it("refuses, changing nothing, where Unreal 5.9 isn't installed", async () => {
+    const f = await setUpDrift(ENGINES);
+    const witness = await tree(path.dirname(f.drift));
+    await assert.rejects(f.act("move-engine", { project: f.drift }), /5\.9/);
+    assert.deepEqual([f.events, await tree(path.dirname(f.drift))], [[], witness]);
+  });
+});
+
+describe("The move offered in a game's chat, once", () => {
+  /** Drift, made with 5.8 and set up, linked to the game valley, on a computer with the engines given. */
+  async function gameOnOlder(engines = WITH_NEW_GAMES_ENGINE) {
+    const f = await launchFixture({ engines });
+    await f.act("setup", { project: f.drift });
+    await f.linkGame("valley", f.drift);
+    return f;
+  }
+  const cardOf = (f: Fixture) => f.actIn("valley", "steps");
+
+  it("the game's first status with no Unreal running offers the card, and no later one does", async () => {
+    const f = await gameOnOlder();
+    await f.toolbarOf("valley");
+    await f.toolbarOf("valley");
+    assert.deepEqual(f.events, ["card"]);
+    // One question, its two answers the card's own buttons: no rows.
+    assert.deepEqual(await cardOf(f), {
+      title: "Move Drift to Unreal 5.9",
+      intro: "Genex makes new games with Unreal 5.9. Agents get its tools.",
+      steps: [],
+      open: true,
+      primary: { name: "move-engine", args: { project: f.drift }, label: "Move to 5.9" },
+      secondary: { name: "move-later", args: {}, label: "Not now" },
+    });
+  });
+
+  it("where 5.9 isn't installed the row gets it first, and becomes the move once it is", async () => {
+    const f = await gameOnOlder(ENGINES);
+    await f.toolbarOf("valley");
+    const card = await cardOf(f);
+    assert.deepEqual(
+      [card.title, card.intro, card.steps, card.primary],
+      [
+        "Move Drift to Unreal 5.9",
+        "Unreal 5.9 isn’t on this computer yet: about 47 GB, beside Unreal 5.8.",
+        [],
+        { name: "get-unreal", args: {}, label: "Get 5.9" },
+      ],
+    );
+    await fakeEngines(f.root, f.home, WITH_NEW_GAMES_ENGINE, true);
+    assert.equal((await cardOf(f)).primary.name, "move-engine");
+  });
+
+  it("is not offered while Unreal runs, and is once it quit", async () => {
+    const f = await gameOnOlder();
+    f.live.running = true;
+    await f.toolbarOf("valley");
+    assert.deepEqual(f.events, []);
+    f.live.running = false;
+    await f.toolbarOf("valley");
+    assert.deepEqual(f.events, ["card"]);
+  });
+
+  it("a chat that can't show it yet is asked again the next time", async () => {
+    const f = await gameOnOlder();
+    f.outcome.noChat = true;
+    await f.toolbarOf("valley");
+    f.outcome.noChat = false;
+    await f.toolbarOf("valley");
+    await f.toolbarOf("valley");
+    assert.deepEqual(f.events, ["card", "card"]);
+  });
+
+  it("is never offered for a game on 5.9, a game with no project, or with no game open", async () => {
+    const f = await launchFixture({ engines: WITH_NEW_GAMES_ENGINE });
+    const lantern = await project(path.join(f.root, "Projects"), "Lantern", "5.9");
+    await f.act("setup", { project: lantern });
+    await f.linkGame("harbor", lantern);
+    await mkdir(path.join(f.root, "games", "empty"), { recursive: true });
+    await f.toolbarOf("harbor");
+    await f.toolbarOf("empty");
+    await f.toolbar();
+    assert.deepEqual(f.events, []);
+  });
+
+  it("Not now puts the setup card back and ends the offer for good", async () => {
+    const f = await gameOnOlder();
+    await f.toolbarOf("valley");
+    await f.actIn("valley", "move-later");
+    assert.equal((await cardOf(f)).title, "Unreal setup");
+    await f.toolbarOf("valley");
+    assert.deepEqual(f.events, ["card"]);
+  });
+
+  it("once the game moved the card closes, telling the agent nothing, and no setup card takes its place", async () => {
+    const f = await gameOnOlder();
+    f.live.xcode = { ...READY_XCODE, state: XcodeState.Missing };
+    await f.toolbarOf("valley");
+    await f.actIn("valley", "move-engine", { project: f.drift });
+    const card = await cardOf(f);
+    assert.deepEqual([card.steps, card.open, card.doneSays], [[], false, undefined]);
+    assert.notEqual(card.title, "Unreal setup");
+  });
+
+  it("the agent's own show-steps brings the setup card, not the offer", async () => {
+    const f = await gameOnOlder();
+    f.live.xcode = { ...READY_XCODE, state: XcodeState.Missing };
+    await f.toolbarOf("valley");
+    await f.toolIn("valley", "show-steps");
+    assert.equal((await cardOf(f)).title, "Unreal setup");
+  });
+});
+
+describe("A game made with Unreal 5.8, where it is the only Unreal installed", () => {
+  it("is set up and offered to open on 5.8: the panel and the toolbar ask for no other Unreal", async () => {
+    const f = await launchFixture();
+    await f.act("setup", { project: f.drift });
+    assert.equal(JSON.parse(await readFile(f.drift, "utf8")).EngineAssociation, "5.8");
+    const status = await f.act("status", { project: f.drift });
+    assert.deepEqual([status.next, status.engine.version, status.launcher], ["open", "5.8", null]);
+    assert.notEqual((await f.toolbar()).badge, "Not installed");
+    await f.act("open-editor", { project: f.drift });
+    assert.deepEqual(f.launched, [macOpen(f, f.drift, "UE_5.8")]);
   });
 });
 
@@ -1728,13 +1999,52 @@ describe("A Loop counts as using Unreal", () => {
 });
 
 describe("The panel's disk note", () => {
-  const rows: Array<{ name: string; engines: Array<[string, string]>; free: number; low: boolean; need: number }> = [
-    { name: "no Unreal, 30 GB free: warns with the install budget", engines: [], free: 30, low: true, need: 65 },
-    { name: "no Unreal, 64 GB free: warns", engines: [], free: 64, low: true, need: 65 },
-    { name: "no Unreal, 70 GB free: fine", engines: [], free: 70, low: false, need: 65 },
-    { name: "only 5.7, 30 GB free: warns", engines: [ENGINES[1]], free: 30, low: true, need: 65 },
-    { name: "5.8 installed, 30 GB free: fine", engines: ENGINES, free: 30, low: false, need: 20 },
-    { name: "5.8 installed, 12 GB free: warns with the project need", engines: ENGINES, free: 12, low: true, need: 20 },
+  /** `low` and `need` judge the shown project's disk; `install`, whether the Unreal new games are made with still has to fit too. */
+  type Row = {
+    name: string;
+    engines: Array<[string, string]>;
+    free: number;
+    low: boolean;
+    need: number;
+    install: boolean;
+  };
+  const rows: Row[] = [
+    {
+      name: "no Unreal, 30 GB free: warns with the install budget",
+      engines: [],
+      free: 30,
+      low: true,
+      need: 67,
+      install: true,
+    },
+    { name: "no Unreal, 66 GB free: warns", engines: [], free: 66, low: true, need: 67, install: true },
+    { name: "no Unreal, 67 GB free: fine", engines: [], free: 67, low: false, need: 67, install: false },
+    { name: "only 5.7, 30 GB free: warns", engines: [ENGINES[1]], free: 30, low: true, need: 67, install: true },
+    {
+      name: "only 5.8, 30 GB free: fine for its own game, short for the 5.9 a new game needs",
+      engines: ENGINES,
+      free: 30,
+      low: false,
+      need: 20,
+      install: true,
+    },
+    { name: "only 5.8, 67 GB free: fine for both", engines: ENGINES, free: 67, low: false, need: 20, install: false },
+    {
+      name: "only 5.8, 12 GB free: warns with the project need",
+      engines: ENGINES,
+      free: 12,
+      low: true,
+      need: 20,
+      install: true,
+    },
+    {
+      name: "5.9 beside 5.8, 30 GB free: fine, nothing to install",
+      engines: WITH_NEW_GAMES_ENGINE,
+      free: 30,
+      low: false,
+      need: 20,
+      install: false,
+    },
   ];
   for (const row of rows)
     it(row.name, async () => {
@@ -1743,8 +2053,9 @@ describe("The panel's disk note", () => {
       const status = await f.act("status", { project: f.drift });
       assert.deepEqual(
         [status.lowDisk, status.diskNeedBytes / GIB, status.installBytes / GIB],
-        [row.low, row.need, 45],
+        [row.low, row.need, 47],
       );
+      assert.deepEqual([status.installLowDisk, status.installNeedBytes / GIB], [row.install, 67]);
     });
 });
 

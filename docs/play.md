@@ -299,7 +299,12 @@ is.
   engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
   Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;
   quitting Genex ends every game, and the next start ends a leftover only while it is the same
-  process. A web game's Mac app is offered in the viewer's bar (install, progress, play: the viewer
+  process. A game with a web build and an app opens its page from its card, as an app-only game
+  does (`opensPage`), and the page offers both (`webPlayOn`, `WebPlay`): **Play in browser** leads
+  with Install and its size beside it while the app isn't installed, and steps back beside the
+  installed app's Play; with no app for this computer the page has the one Play, and while the app
+  installs, runs, waits for an update or failed, the block is the app's alone. Its Runs on tile
+  names Web first. The app is also offered in the viewer's bar (install, progress, play: the viewer
   gives way), and opening a game whose app runs brings the app forward.
 - Genex from a native game (`main/play/genex-gateway.ts`).
   - **The gateway.** Each launch opens a gateway on 127.0.0.1: one port for Genex's API, six for

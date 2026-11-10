@@ -50,11 +50,32 @@ export const THROTTLE = "bThrottleCPUWhenNotForeground";
 /** The console variable that says whether the editor ray-traces. */
 const RAY_TRACING = "r.RayTracing";
 
+/** The helper's own throttle tools over a stand-in's state, and Epic's write refusing as Unreal 5.9's does. */
+function helperThrottle(state: { throttle: boolean; rayTracing: boolean }) {
+  return {
+    [LoopTool.RunSettings]: () => ({ throttle: state.throttle, rayTracing: state.rayTracing }),
+    [LoopTool.SetThrottle]: (a: Record<string, unknown>) => {
+      state.throttle = a.on === true;
+      return { throttle: state.throttle };
+    },
+    [LoopTool.SetProperties]: () => {
+      throw new Error("EditorPerformanceSettings is class default data, which is not a Blueprint class.");
+    },
+  };
+}
+
 /** Like the Genex editor helper, a probe answers only during play and refuses otherwise. */
 const NO_PLAY = { error: "No play session is running; start one first." };
 
-/** A stand-in editor: records every call and answers like the Genex editor helper would. */
-export function standIn(overrides: Partial<Record<string, (args: Record<string, unknown>) => unknown>> = {}) {
+/**
+ * A stand-in editor: records every call and answers like the Genex editor helper would. With
+ * `helperThrottle` its helper reads and sets the background throttle itself, and Epic's object
+ * tools refuse to write an editor setting, as Unreal 5.9's do.
+ */
+export function standIn(
+  overrides: Partial<Record<string, (args: Record<string, unknown>) => unknown>> = {},
+  options: { helperThrottle?: boolean } = {},
+) {
   const calls: Call[] = [];
   // Unreal's default: an editor in the background throttles itself.
   const state = {
@@ -122,6 +143,7 @@ export function standIn(overrides: Partial<Record<string, (args: Record<string, 
       state.throttle = values[THROTTLE];
       return true;
     },
+    ...(options.helperThrottle ? helperThrottle(state) : {}),
     ...overrides,
   };
   const port: EditorPort = {

@@ -13,6 +13,8 @@ import {
   gameStanding,
   installPercent,
   opensPage,
+  WebPlay,
+  webPlayOn,
 } from "../../src/renderer/play/native-model.ts";
 import {
   type InstalledGame,
@@ -170,10 +172,31 @@ describe("a native game's page", () => {
     });
   });
 
-  it("opens its page only for a game with no web build", () => {
+  it("opens its page for a game with an app to install, with a web build too or not; a web game plays at once", () => {
     assert.equal(opensPage(game()), true);
-    assert.equal(opensPage(game([build()], true)), false);
+    assert.equal(opensPage(game([build()], true)), true, "its page offers the browser and the app");
+    assert.equal(opensPage(game([], false)), true, "no web build: the page says where it stands");
+    assert.equal(opensPage(game([], true)), false);
     assert.equal(opensPage({}), false);
+  });
+
+  it("offers a game's web build beside its app: first while the app isn't installed, second once it is", () => {
+    const both = game([build()], true);
+    const on = (parts: Partial<NativeInstalls> = {}, sessions: NativeSession[] = []) =>
+      webPlayOn(both, gameStanding(both, installs(parts), sessions));
+    assert.equal(on(), WebPlay.First);
+    assert.equal(on({ installed: [installed()] }), WebPlay.Second);
+    // No app for this computer: the browser is the one way to play.
+    const windowsOnly = game([build({ platform: NativePlatform.Windows, arch: NativeArch.X64 })], true);
+    assert.equal(webPlayOn(windowsOnly, gameStanding(windowsOnly, installs(), [])), WebPlay.Only);
+    // While the app is on its way, running, out of date or failed, the block is the app's alone.
+    assert.equal(on({ progress: [progress(InstallPhase.Downloading)] }), WebPlay.None);
+    assert.equal(on({ installed: [installed("1.2")] }), WebPlay.None);
+    assert.equal(on({ installed: [installed()] }, [session(NativeSessionPhase.Running)]), WebPlay.None);
+    assert.equal(on({ progress: [progress(InstallPhase.Failed, { failure: InstallFailure.NoSpace })] }), WebPlay.None);
+    // A game with no web build has nothing to play in a browser.
+    const appOnly = game();
+    assert.equal(webPlayOn(appOnly, gameStanding(appOnly, installs(), [])), WebPlay.None);
   });
 });
 

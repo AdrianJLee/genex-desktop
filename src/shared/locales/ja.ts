@@ -123,6 +123,7 @@ export default {
     "モデルをダウンロード中です。ダウンロードが終わってから、このモデルを削除してください。",
   "A mountain rescue game with a dog and a sled": "犬とそりで山の救助をするゲーム",
   "A museum guard game where the exhibits come alive": "展示品が動き出す博物館の警備員ゲーム",
+  "Agents get Unreal {to}’s tools.": "エージェントが Unreal {to} のツールを使えるようになります。",
   "An arcade shooter where your bullets bounce off the walls": "弾が壁で跳ね返るアーケードシューティング",
   "A new build is ready to play.": "新しいビルドをプレイできます。",
   "A new build is ready — reload to play it": "新しいビルドができました。再読み込みでプレイできます",
@@ -527,6 +528,7 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "{title}の{players}アプリをもう一度ビルドしてください。公開したいです。",
   "Build updated": "ビルドを更新しました",
+  "Build with Genex": "Genexでつくる",
   "Build with the Cursor plan you already have.": "すでに契約しているCursorのプランでつくります。",
   "Build with the Grok account you already have.": "すでに持っているGrokアカウントでつくります。",
   "Changes Harness made to its own instructions. Undo any of them.":
@@ -534,6 +536,13 @@ export default {
   "Checking that Microsoft signed the installer…": "インストーラーにMicrosoftの署名があるか確認しています…",
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "MicrosoftからVisual Studio Build Toolsのインストーラーをダウンロードしています…",
+  "Genex keeps a copy of the project file first. What Unreal {to} saves won’t open in {from}.":
+    "Genex は先にプロジェクトファイルのコピーを残します。Unreal {to} で保存したものは {from} では開けません。",
+  "Genex makes a save point of this game first. What Unreal {to} saves won’t open in {from}.":
+    "Genex は先にこのゲームのセーブポイントを作ります。Unreal {to} で保存したものは {from} では開けません。",
+  "Genex makes new games with Unreal {to}. Agents get its tools.":
+    "Genex は新しいゲームを Unreal {to} で作ります。エージェントはそのツールを使えます。",
+  "Get {version}": "{version}を入手",
   "Install Visual Studio Build Tools": "Visual Studio Build Toolsをインストール",
   "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "MicrosoftのVisual Studio Build Tools 2022を「C++ によるデスクトップ開発」と .NET Framework 4.8 SDK 付きでインストールしてください。",
@@ -551,15 +560,26 @@ export default {
     "Microsoftのインストーラーをダウンロードできませんでした。インターネット接続を確認して、もう一度試してください。",
   "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
     "Microsoftのインストーラーは終わりましたが、インストールされたものではまだUnrealがC++をビルドできません。Visual Studio Build Tools 2022を「C++ によるデスクトップ開発」と .NET Framework 4.8 SDK 付きでご自身でインストールしてください。",
+  "Move to {version}": "{version} に移行",
+  "Move {name} to Unreal {to}?": "{name} を Unreal {to} に移行しますか？",
+  "Move {project} to Unreal {to}": "{project} を Unreal {to} に移行",
+  "Play in browser": "ブラウザでプレイ",
+  "Play {title} in the browser": "{title}をブラウザでプレイ",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
     "おすすめ。Microsoftの無料のC++ツールです。これがあるとエージェントがゲームのロジックをC++で書けて、C++を使うゲームやプラグインをUnrealでパッケージできます。約7 GB。「おまかせ」でインストールできます。Windowsに聞かれたら「はい」を選んでください。",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "おすすめ。Microsoftの無料のC++ツールです。これがあるとエージェントがゲームのロジックをC++で書けて、C++を使うゲームやプラグインをUnrealでパッケージできます。Visual Studio Build Toolsを「C++ によるデスクトップ開発」と .NET Framework 4.8 SDK 付きでインストールしてください。",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "自己改善はオフです。Harnessは自分の指示をそのままにします。",
+  "This project isn't on an older Unreal that Genex moves to {version}.":
+    "このプロジェクトは、Genex が {version} に移行できる古い Unreal のものではありません。",
   "Unreal can build C++ on this PC.": "このPCでUnrealがC++をビルドできます。",
   "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
     "Unreal {engine}はこのPCのC++ツールではビルドできません。「おまかせ」で更新できます。Windowsに聞かれたら「はい」を選んでください。",
+  "Unreal {to} isn’t on this computer yet: about {gb} GB, beside Unreal {from}.":
+    "Unreal {to} はまだこのコンピューターにありません。約 {gb} GB、Unreal {from} と並べて入ります。",
+  "Unreal {version} isn't on this computer yet. Install it first, then move the project.":
+    "Unreal {version} はまだこのコンピューターにありません。先にインストールしてから、プロジェクトを移行してください。",
   "Update Visual Studio Build Tools": "Visual Studio Build Toolsを更新",
   "Visual Studio Build Tools are installed.": "Visual Studio Build Toolsをインストールしました。",
   "Visual Studio's C++ tools are ready": "Visual StudioのC++ツールの準備ができました",
@@ -1219,8 +1239,8 @@ export default {
   "Dismiss remaining imports": "残りのインポートを閉じる",
   Dividers: "区切り線",
   "Do it for me": "おまかせ",
-  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
-    "「おまかせ」でランチャーを開き、このチャットがコンピューター操作でUnrealをインストールします。約45 GB。Epicにサインインを求められたら、あなたがサインインしてください。",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About {gb} GB. Only you sign in to Epic, when it asks.":
+    "「おまかせ」でランチャーを開き、このチャットがコンピューター操作でUnrealをインストールします。約{gb} GB。Epicにサインインを求められたら、あなたがサインインしてください。",
   "Does it feel alive? {score} of {max}": "生き生きしている？{score}/{max}",
   "Don't allow": "許可しない",
   "Don't ask again for this action in {source}.": "{source}では今後この操作を確認しません。",
@@ -1609,6 +1629,8 @@ export default {
   "Genex leaves it open until the Loop ends.": "Loopが終わるまでGenexは開いたままにします。",
   "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}), or make the project in Unreal's own New Project dialog and choose it from the Unreal button.":
     "GenexはUnreal {versions}で新しいUnrealプロジェクトを作りますが、このコンピューターにはUnreal {version}が入っています。Epic Games Launcherで{wanted}も追加でインストールする（{clickPath}）か、Unreal自身のNew Projectダイアログでプロジェクトを作り、Unrealボタンから選んでください。",
+  "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}).":
+    "GenexはUnreal {versions}で新しいUnrealプロジェクトを作りますが、このコンピューターにはUnreal {version}が入っています。Epic Games Launcherで{wanted}も追加でインストールしてください（{clickPath}）。",
   "Genex needs your OK to set up": "Genexのセットアップには許可が必要です",
   "Genex plugin": "Genexプラグイン",
   "Genex plugin, Credits": "Genexプラグイン、クレジット",
@@ -1817,8 +1839,8 @@ export default {
   "In the background: {title}": "バックグラウンド：{title}",
   "In the build · not in your game folder yet": "ビルド内 · まだゲームフォルダーにはありません",
   "In the game's folder": "ゲームのフォルダー内",
-  "In the launcher, sign in, then {clickPath}. About 45 GB. Only you can sign in to Epic.":
-    "ランチャーでサインインしてから、{clickPath}の順に進みます。約45 GB。Epicにサインインできるのはあなただけです。",
+  "In the launcher, sign in, then {clickPath}. About {gb} GB. Only you can sign in to Epic.":
+    "ランチャーでサインインしてから、{clickPath}の順に進みます。約{gb} GB。Epicにサインインできるのはあなただけです。",
   "In the reviewers' words: {words}": "レビュアーの言葉：{words}",
   "In this game’s folder. Workers load them from there.":
     "このゲームのフォルダーにあります。ワーカーはここから読み込みます。",
@@ -2532,6 +2554,8 @@ export default {
   "On this Mac · {size}": "このMac · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "オンにすると、Genexの次のタイミングで実行されます：{steps}。これらのステップは事前に確認しません。",
+  "One account for frontier AI models and game dev tools. Pay with Genex credits.":
+    "1つのアカウントで最先端のAIモデルとゲーム開発ツールが使えます。Genexのクレジットで支払います。",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "1つのアカウントで数百のモデルが使えます。使った分だけOpenRouterに支払います。",
   "One key for hundreds of models. Pay as you go.": "1つのキーで数百のモデルが使えます。料金は使った分だけ。",
@@ -4349,7 +4373,7 @@ export default {
   Unpublish: "公開を取り消す",
   "Unpublish {title}?": "{title}の公開をやめますか？",
   "Unpublishing…": "公開をやめています…",
-  "Unreal Engine 5.8 isn’t on this computer yet.": "Unreal Engine 5.8はまだこのコンピューターにありません。",
+  "Unreal Engine isn’t on this computer yet.": "Unreal Engineはまだこのコンピューターにありません。",
   "Unreal Engine {version} isn't on this computer yet. The Unreal button above the game shows how to get it free from Epic, and notices when it's installed.":
     "Unreal Engine {version}はまだこのコンピューターにありません。ゲームの上にあるUnrealボタンで、Epicから無料で入手する方法を確認できます。インストールされると自動で認識します。",
   "Unreal couldn't use the port Genex gave {name}. Quit Unreal and open it again from the Unreal button.":
@@ -5611,6 +5635,7 @@ export default {
   "{name} isn’t on this computer any more.": "{name}はもうこのコンピューターにありません。",
   "{name} needs Studio {version} or newer": "{name}にはStudio {version}以降が必要です",
   "{name} needs a sign-in": "{name}へのサインインが必要です",
+  "{name} opens in Unreal {to} from now on.": "{name} は今後 Unreal {to} で開きます。",
   "{name} settings": "{name}の設定",
   "{name} was never saved to a file, so Genex can't open it. Open it in Roblox Studio, or choose another place.":
     "{name}は一度もファイルに保存されていないので、Genexは開けません。Roblox Studioで開くか、別のプレイスを選んでください。",
@@ -6246,12 +6271,12 @@ export default {
   "The chat now uses {model}. Send your message again.":
     "チャットは {model} を使うようになりました。メッセージをもう一度送ってください。",
   "Couldn’t send the project to Genex: {error}": "プロジェクトをGenexに送れませんでした：{error}",
-  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
-    "今のところGenexがつくれるのはUnreal 5.8のゲームです。このプロジェクトにはバージョンの指定がありません。Unreal 5.8で開いて保存してから、もう一度つくってください。",
+  "Genex builds Unreal {builds} games for now, and this project names no version of it. Open it in Unreal, save it, then build again.":
+    "今のところGenexがつくれるのはUnreal {builds}のゲームです。このプロジェクトにはバージョンの指定がありません。Unrealで開いて保存してから、もう一度つくってください。",
   "Sending the project to Genex stopped": "プロジェクトのGenexへの送信が止まりました",
   "Sending to Genex. Keep Genex open": "Genexに送信中。Genexは開いたままにしてください",
-  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
-    "このゲームはUnreal {version}です。今のところGenexがつくれるのはUnreal 5.8のゲームです。5.8にアップグレードしてから、もう一度つくってください。",
+  "This game uses Unreal {version}. Genex builds Unreal {builds} games for now, so it can’t build this one yet.":
+    "このゲームはUnreal {version}です。今のところGenexがつくれるのはUnreal {builds}のゲームなので、このゲームはまだつくれません。",
   "Run the game": "ゲームを起動して",
   "The agent is packaging the game. It starts it once the package is ready.":
     "エージェントがゲームをパッケージしています。完成したら起動します。",

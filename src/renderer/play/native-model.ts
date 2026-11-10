@@ -137,8 +137,30 @@ export function cardBadge(game: Pick<PlayGame, "slug" | "native">, installs: Nat
   return { kind: CardBadge.Platforms, platforms: platformsOf(game) };
 }
 
-/** Whether pressing `game`'s card opens its page rather than the viewer: it has no web build. */
-export const opensPage = (game: Pick<PlayGame, "native">): boolean => !hasWebBuild(game);
+/**
+ * Whether pressing `game`'s card opens its page rather than the viewer: it has an app to install
+ * (its page offers the app, and the browser too when it has a web build), or no web build at all.
+ */
+export const opensPage = (game: Pick<PlayGame, "native">): boolean =>
+  !hasWebBuild(game) || (game.native?.builds.length ?? 0) > 0;
+
+/**
+ * How a game's page offers its web build: not at all; as the one way to play here; first, with the
+ * app to install beside it; or second, beside the installed app's Play.
+ */
+export const WebPlay = { None: "none", Only: "only", First: "first", Second: "second" } as const;
+export type WebPlay = (typeof WebPlay)[keyof typeof WebPlay];
+
+/** Where each resting phase puts the web build; in every other phase the block is the app's alone. */
+const WEB_PLAY_IN: Partial<Record<GamePhase, WebPlay>> = {
+  [GamePhase.Elsewhere]: WebPlay.Only,
+  [GamePhase.Install]: WebPlay.First,
+  [GamePhase.Ready]: WebPlay.Second,
+};
+
+/** How the page offers `game`'s web build while it stands as `standing` on this computer ({@link WebPlay}). */
+export const webPlayOn = (game: Pick<PlayGame, "native">, standing: GameStanding): WebPlay =>
+  hasWebBuild(game) ? (WEB_PLAY_IN[standing.phase] ?? WebPlay.None) : WebPlay.None;
 
 /** Whole minutes since `startedAt` at `now`. */
 export const minutesSince = (startedAt: string, now: number): number =>

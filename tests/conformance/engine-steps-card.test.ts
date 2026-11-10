@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import { setImmediate as settle } from "node:timers/promises";
 import {
   finishedSays,
+  isQuestion,
   parseSteps,
   runStep,
   type StepsCard,
@@ -124,6 +125,27 @@ describe("the plugin's steps", () => {
     assert.equal(plain?.secondary, undefined);
     assert.equal(plain?.primary, undefined, "a malformed card button is dropped");
     assert.equal(plain?.doneSays, undefined);
+  });
+});
+
+describe("a card with no rows", () => {
+  it("is one question whose answers are the card's own buttons; a card with rows is a list of steps", () => {
+    const question = parseSteps({
+      title: "Move Drift to Unreal 5.9",
+      intro: "Agents get its tools.",
+      steps: [],
+      open: true,
+      primary: { name: "move-engine", args: { project: "/p/Drift.uproject" }, label: "Move to 5.9" },
+      secondary: { name: "move-later", args: {}, label: "Not now" },
+    });
+    assert.equal(question !== null && isQuestion(question), true);
+    const list = parseSteps({
+      title: "Unreal setup",
+      intro: "One step left.",
+      steps: [{ id: "install-xcode", label: "Install Xcode", detail: "", done: false }],
+      open: true,
+    });
+    assert.equal(list !== null && isQuestion(list), false);
   });
 });
 

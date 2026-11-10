@@ -1,8 +1,9 @@
 /**
  * New game from a template: Genex makes an Unreal project from one of five Blueprint templates the
  * way Epic's own New Project dialog does (GameProjectUtils::CreateProjectFromTemplate, read from the
- * UE 5.8.3 source), then sets it up for Genex. These tests use a small fake engine whose templates mimic Epic's
- * TemplateDefs.ini; nothing here reads the real engine.
+ * UE 5.8.3 source and compared again with 5.9's), then sets it up for Genex. New games are made with
+ * one Unreal release only: an older one games stay on, or a newer one, makes none. These tests use a
+ * small fake engine whose templates mimic Epic's TemplateDefs.ini; nothing here reads the real engine.
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -23,6 +24,8 @@ import {
 } from "../../src/plugins/unreal/create-project.ts";
 import type { LaunchEnv } from "../../src/plugins/unreal/editor-launch.ts";
 import { listSetUpProjects } from "../../src/plugins/unreal/editor-port.ts";
+import { EngineReadiness } from "../../src/plugins/unreal/editor-wait.ts";
+import { NEW_GAMES_ENGINE, OLDEST_ENGINE } from "../../src/plugins/unreal/engine-line.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { type Engine, HelperState, inspectProject, type SetupEnv } from "../../src/plugins/unreal/setup.ts";
 import { type XcodeStatus, XcodeState } from "../../src/plugins/unreal/xcode.ts";
@@ -51,6 +54,14 @@ const SEPARATE_LINKS = process.platform === "win32" && "links need privileges on
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
 
 const tab = (value: unknown) => JSON.stringify(value, null, "\t");
+
+/** The fake engine's build, and the entry Epic's launcher lists it by at `folder`. */
+const ENGINE_BUILD = `${NEW_GAMES_ENGINE}.0`;
+const listedEngine = (folder: string) => ({
+  InstallLocation: folder,
+  AppVersion: `${ENGINE_BUILD}-60000001+++UE5+Release-${NEW_GAMES_ENGINE}-Mac`,
+  AppName: `UE_${NEW_GAMES_ENGINE}`,
+});
 
 const VEHICLE_DEFS = [
   `${BOM}[/Script/GameProjectGeneration.TemplateProjectDefs]`,
@@ -211,9 +222,12 @@ async function fakePack(root: string, level: string, mount: string, files: Recor
   for (const [file, text] of Object.entries(files)) await put(path.join(pack, file), text);
 }
 
-/** A fake UE 5.8 with the Vehicle and Blank templates, their shared packs, and a template Genex ignores. */
+/**
+ * A fake UE, the release Genex makes new games with, with the Vehicle and Blank templates, their
+ * shared packs, and a template Genex ignores.
+ */
 async function fakeEngine(root: string): Promise<Engine> {
-  const directory = path.join(root, "UE_5.8");
+  const directory = path.join(root, `UE_${NEW_GAMES_ENGINE}`);
   const vehicle = path.join(directory, "Templates", "TP_VehicleAdvBP");
   await put(
     path.join(vehicle, "TP_VehicleAdvBP.uproject"),
@@ -286,7 +300,7 @@ async function fakeEngine(root: string): Promise<Engine> {
     path.join(directory, "Engine", "Platforms", "Zebra", "Config", "DataDrivenPlatformInfo.ini"),
     "[DataDrivenPlatformInfo]\n",
   );
-  return { version: "5.8", build: "5.8.3", directory, supported: true };
+  return { version: NEW_GAMES_ENGINE, build: ENGINE_BUILD, directory, supported: true };
 }
 
 /** Every file under `dir` with a hash of its bytes (links named, not followed): a no-side-effect witness. */
@@ -425,7 +439,7 @@ describe("A new game from a template", () => {
     const file = await create(f, BlueprintTemplate.Vehicle, "GxCar");
     assert.equal(
       await readFile(file, "utf8"),
-      tab({ FileVersion: 3, EngineAssociation: "5.8", Category: "", Description: "", Plugins: VEHICLE_PLUGINS }),
+      tab({ FileVersion: 3, EngineAssociation: "5.9", Category: "", Description: "", Plugins: VEHICLE_PLUGINS }),
     );
   });
 
@@ -490,7 +504,7 @@ describe("A new game from a template", () => {
       await readFile(file, "utf8"),
       tab({
         FileVersion: 3,
-        EngineAssociation: "5.8",
+        EngineAssociation: "5.9",
         Category: "",
         Description: "",
         Plugins: [{ Name: "ModelingToolsEditorMode", Enabled: true, TargetAllowList: ["Editor"] }],
@@ -852,14 +866,26 @@ const hostile: HostileRow[] = [
     says: /Documents/,
     arrange: async (f) => ({ parent: await parentOfLength(f, 127), name: "A", platform: "win32" }),
   },
-  ...["5.9", "6.0"].map(
+  ...["5.10", "6.0"].map(
     (version): HostileRow => ({
-      name: `an engine (${version}) whose creation steps weren't compared with Epic's`,
+      name: `a newer engine (${version}) whose creation steps weren't compared with Epic's`,
       code: CreateErrorCode.UnverifiedEngine,
-      says: new RegExp(`Unreal ${version.replace(".", "\\.")}`),
+      says: new RegExp(`this computer has Unreal ${version.replace(".", "\\.")}\\. Install 5\\.9 beside it`),
       arrange: async (f) => ({ engine: { ...f.engine, version, build: `${version}.0` } }),
     }),
   ),
+  {
+    name: "the older engine (5.8) games made with it stay on",
+    code: CreateErrorCode.UnverifiedEngine,
+    says: /this computer has Unreal 5\.8\. Install 5\.9 beside it/,
+    arrange: async (f) => ({ engine: { ...f.engine, version: OLDEST_ENGINE, build: "5.8.3" } }),
+  },
+  {
+    name: "an engine (5.7) older than Genex works with",
+    code: CreateErrorCode.UnverifiedEngine,
+    says: /this computer has Unreal 5\.7\./,
+    arrange: async (f) => ({ engine: { ...f.engine, version: "5.7", build: "5.7.1", supported: false } }),
+  },
   ...["TP_VirtualRealityBP", "TP_ThirdPerson", "../TP_BlankBP", "TP_BlankBP/..", "", "tp_blankbp"].map(
     (template): HostileRow => ({
       name: `the template ${JSON.stringify(template)}`,
@@ -957,18 +983,7 @@ describe("The Unreal plugin's create action", () => {
     const home = path.join(f.root, "home");
     const storage = path.join(f.root, "storage");
     const dat = path.join(home, "Library/Application Support/Epic/UnrealEngineLauncher/LauncherInstalled.dat");
-    await put(
-      dat,
-      JSON.stringify({
-        InstallationList: [
-          {
-            InstallLocation: f.engine.directory,
-            AppVersion: "5.8.3-58210709+++UE5+Release-5.8-Mac",
-            AppName: "UE_5.8",
-          },
-        ],
-      }),
-    );
+    await put(dat, JSON.stringify({ InstallationList: [listedEngine(f.engine.directory)] }));
     const env: SetupEnv = {
       home,
       platform: "darwin",
@@ -1204,7 +1219,7 @@ describe("The Unreal plugin's create action", () => {
     await b.backend.action?.("undo-setup", { project: made.project }, b.context);
     assert.equal(
       await readFile(made.project, "utf8"),
-      tab({ FileVersion: 3, EngineAssociation: "5.8", Category: "", Description: "", Plugins: VEHICLE_PLUGINS }),
+      tab({ FileVersion: 3, EngineAssociation: "5.9", Category: "", Description: "", Plugins: VEHICLE_PLUGINS }),
     );
     const state = await inspectProject(made.project, { env: b.env, helper: HELPER, storage: b.storage });
     assert.deepEqual(
@@ -1251,43 +1266,96 @@ describe("The Unreal plugin's create action", () => {
     await writeFile(dat, JSON.stringify({ InstallationList: list }));
   }
 
-  it("makes a new game with Unreal 5.8 even when a newer, unverified engine is installed beside it", async () => {
-    const b = await backendFixture();
-    await installed(b, [
-      ["5.8", "5.8.3", b.engine.directory],
-      ["5.9", "5.9.0", path.join(b.root, "Engines", "UE_5.9")],
-    ]);
-    const offer = (await b.backend.action?.("templates", {}, b.context)) as { templates: Array<{ id: string }> };
-    assert.deepEqual(
-      offer.templates.map((t) => t.id),
-      [BlueprintTemplate.Vehicle, BlueprintTemplate.Blank],
-    );
-    const made = (await b.backend.action?.(
-      "create",
-      { template: BlueprintTemplate.Blank, name: "GxBlank" },
-      b.context,
-    )) as {
-      project: string;
-    };
-    assert.equal(JSON.parse(await readFile(made.project, "utf8")).EngineAssociation, "5.8");
-  });
+  /** A second engine's folder beside the fixture's own. */
+  const engineFolder = (b: Awaited<ReturnType<typeof backendFixture>>, version: string) =>
+    path.join(b.root, "Engines", `UE_${version}`);
+  /** The engine New game makes projects with, as the launcher lists it. */
+  const newGamesEngine = (b: Awaited<ReturnType<typeof backendFixture>>): [string, string, string] => [
+    NEW_GAMES_ENGINE,
+    ENGINE_BUILD,
+    b.engine.directory,
+  ];
 
-  it("with only a newer, unverified engine, creates nothing and says which version it is", async () => {
-    const b = await backendFixture();
-    await installed(b, [["5.9", "5.9.0", path.join(b.root, "Engines", "UE_5.9")]]);
-    await assert.rejects(
-      b.backend.action?.("create", { template: BlueprintTemplate.Blank, name: "GxBlank" }, b.context) ??
-        Promise.reject(),
-      { code: CreateErrorCode.UnverifiedEngine },
-    );
-    assert.deepEqual(await readdir(b.parent), []);
-    assert.deepEqual(await tree(b.storage), {});
-    const offer = (await b.backend.action?.("templates", {}, b.context)) as {
-      templates: unknown[];
-      newestUnverified: string | null;
-    };
-    assert.deepEqual([offer.templates, offer.newestUnverified], [[], "5.9"]);
-  });
+  const besides: Array<[string, [string, string]]> = [
+    ["a newer, unverified engine", ["6.0", "6.0.0"]],
+    ["Unreal 5.8, which games made with it stay on,", [OLDEST_ENGINE, "5.8.3"]],
+  ];
+  for (const [what, [version, build]] of besides)
+    it(`makes a new game with Unreal 5.9 even when ${what} is installed beside it`, async () => {
+      const b = await backendFixture();
+      await installed(b, [newGamesEngine(b), [version, build, engineFolder(b, version)]]);
+      const offer = (await b.backend.action?.("templates", {}, b.context)) as {
+        templates: Array<{ id: string }>;
+        newestUnverified: string | null;
+      };
+      assert.deepEqual(
+        [offer.templates.map((t) => t.id), offer.newestUnverified],
+        [[BlueprintTemplate.Vehicle, BlueprintTemplate.Blank], null],
+      );
+      const made = (await b.backend.action?.(
+        "create",
+        { template: BlueprintTemplate.Blank, name: "GxBlank" },
+        b.context,
+      )) as {
+        project: string;
+      };
+      assert.equal(JSON.parse(await readFile(made.project, "utf8")).EngineAssociation, "5.9");
+    });
+
+  /** Unreal's own New Project dialog, which the refusal offers only where it makes a game Genex wouldn't. */
+  const OWN_DIALOG = /Unreal's own New Project dialog/;
+  const makesNone: Array<{
+    what: string;
+    engine: [string, string];
+    says: RegExp;
+    readiness: string;
+    ownDialog: boolean;
+  }> = [
+    {
+      what: "a newer, unverified engine",
+      engine: ["6.0", "6.0.0"],
+      says: /this computer has Unreal 6\.0\. Install 5\.9 beside it/,
+      readiness: EngineReadiness.NewerOnly,
+      ownDialog: true,
+    },
+    {
+      what: "Unreal 5.8, which games made with it stay on",
+      engine: [OLDEST_ENGINE, "5.8.3"],
+      says: /this computer has Unreal 5\.8\. Install 5\.9 beside it/,
+      readiness: EngineReadiness.OlderOnly,
+      ownDialog: false,
+    },
+  ];
+  for (const {
+    what,
+    engine: [version, build],
+    says,
+    readiness,
+    ownDialog,
+  } of makesNone)
+    it(`with only ${what}, creates nothing anywhere and says which version it is`, async () => {
+      const b = await backendFixture();
+      // The engine folder still holds the templates: only its version keeps Genex from making a game with it.
+      await installed(b, [[version, build, b.engine.directory]]);
+      const before = await tree(b.root);
+      await assert.rejects(
+        b.backend.action?.("create", { template: BlueprintTemplate.Blank, name: "GxBlank" }, b.context) ??
+          Promise.reject(),
+        (error: { code?: string; message?: string }) =>
+          error.code === CreateErrorCode.UnverifiedEngine &&
+          says.test(error.message ?? "") &&
+          OWN_DIALOG.test(error.message ?? "") === ownDialog,
+      );
+      const offer = (await b.backend.action?.("templates", {}, b.context)) as {
+        templates: unknown[];
+        newestUnverified: string | null;
+        readiness: string;
+      };
+      assert.deepEqual([offer.templates, offer.newestUnverified, offer.readiness], [[], version, readiness]);
+      assert.deepEqual(await readdir(b.parent), []);
+      assert.deepEqual(await tree(b.storage), {});
+      assert.deepEqual(await tree(b.root), before, "no project, no record, no engine file changed");
+    });
 
   it("suggests a name that fits a long Windows folder", async () => {
     const f = await fixture();
@@ -1404,26 +1472,24 @@ describe("The Windows Documents folder", () => {
 
 type Launched = { command: string; args: readonly string[] };
 /**
- * A Genex game open in the chat (`valley`, with its own ignore file), a fake Unreal 5.8 whose editor
- * app is there, and every launch the tool asked for, recorded instead of run.
+ * A Genex game open in the chat (`valley`, with its own ignore file), the fake Unreal new games are
+ * made with (listed by Epic's launcher as the `[version, build]` of `listed` instead, when given),
+ * its editor app there, and every launch the tool asked for, recorded instead of run.
  */
-async function newGameFixture(options: { game?: boolean; open?: LaunchEnv["open"]; xcode?: XcodeStatus } = {}) {
+async function newGameFixture(
+  options: { game?: boolean; open?: LaunchEnv["open"]; xcode?: XcodeStatus; listed?: [string, string] } = {},
+) {
   const f = await fixture();
   const home = path.join(f.root, "home");
   const storage = path.join(f.root, "storage");
   const dat = path.join(home, "Library/Application Support/Epic/UnrealEngineLauncher/LauncherInstalled.dat");
-  await put(
-    dat,
-    JSON.stringify({
-      InstallationList: [
-        {
-          InstallLocation: f.engine.directory,
-          AppVersion: "5.8.3-58210709+++UE5+Release-5.8-Mac",
-          AppName: "UE_5.8",
-        },
-      ],
-    }),
-  );
+  const [version, build] = options.listed ?? [NEW_GAMES_ENGINE, ENGINE_BUILD];
+  const entry = {
+    InstallLocation: f.engine.directory,
+    AppVersion: `${build}-1+++UE5+Release-${version}-Mac`,
+    AppName: `UE_${version}`,
+  };
+  await put(dat, JSON.stringify({ InstallationList: [entry] }));
   await mkdir(path.join(f.engine.directory, "Engine", "Binaries", "Mac", "UnrealEditor.app"), { recursive: true });
   const env: SetupEnv = {
     home,
@@ -1462,6 +1528,9 @@ async function newGameFixture(options: { game?: boolean; open?: LaunchEnv["open"
   const newGame = (args: Record<string, unknown>) =>
     // A hostile call sends any JSON, whatever the SDK's scalar type says.
     backend.tool?.("new-game", args as never, context) ?? Promise.reject(new Error("no tools"));
+  /** Whether the game's stage strip shows the Unreal button, as the toolbar's status says. */
+  const buttonOut = async () =>
+    ((await backend.action?.("toolbar-status", {}, context)) as { shown?: boolean } | undefined)?.shown === true;
   return {
     ...f,
     storage,
@@ -1469,6 +1538,7 @@ async function newGameFixture(options: { game?: boolean; open?: LaunchEnv["open"
     linked,
     launches,
     newGame,
+    buttonOut,
     get stepsShown() {
       return shown.steps;
     },
@@ -1569,6 +1639,32 @@ describe("The Unreal plugin's new-game tool", () => {
     assert.deepEqual([...(tool.parameters.required ?? [])].sort(), ["name", "template"]);
     assert.equal(tool.confirmation, undefined, "no card: nothing that exists changes, as the panel's New game");
   });
+
+  const makesNoGame: Array<[string, [string, string]]> = [
+    ["Unreal 5.8, which games made with it stay on", [OLDEST_ENGINE, "5.8.3"]],
+    ["an Unreal newer than Genex makes games with", ["6.0", "6.0.0"]],
+  ];
+  for (const [what, listed] of makesNoGame)
+    it(`with only ${what}, makes no game: nothing in the game's folder, linked or opened, and the Unreal button comes out`, async () => {
+      const g = await newGameFixture({ listed });
+      const witness = async () => ({
+        game: await tree(g.dir),
+        documents: await tree(g.parent),
+        outside: await tree(g.outside),
+        engine: await tree(g.engine.directory),
+      });
+      const before = await witness();
+      assert.equal(await g.buttonOut(), false);
+      await assert.rejects(
+        g.newGame(GOOD),
+        new RegExp(`this computer has Unreal ${listed[0].replace(".", "\\.")}\\. Install 5\\.9 beside it`),
+      );
+      assert.deepEqual(await witness(), before, "nothing made, written or moved");
+      assert.deepEqual(await listSetUpProjects(g.storage), [], "no project set up");
+      assert.deepEqual(g.linked, [], "the game keeps its engine");
+      assert.deepEqual(g.launches, [], "Unreal is not opened");
+      assert.equal(await g.buttonOut(), true, "the game's chat chose Unreal: its button shows how to get 5.9");
+    });
 
   describe("is refused, changing nothing anywhere,", () => {
     for (const row of refusals)

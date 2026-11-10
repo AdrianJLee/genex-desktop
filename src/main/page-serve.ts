@@ -16,11 +16,12 @@
  */
 
 import { createReadStream } from "node:fs";
-import { realpath, stat } from "node:fs/promises";
+import { lstat, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { createBrotliDecompress, createGunzip } from "node:zlib";
 import type { ShimOptions } from "../substrate/preview-port.ts";
+import { UNREAL_WEB_BUILD_MARKER } from "../shared/project-facts.ts";
 import { isInside } from "../substrate/paths.ts";
 import type { ContractReach } from "../substrate/game-page.ts";
 
@@ -578,6 +579,31 @@ export function unpackedResponse(file: string, packed: PackedBuildFile): Respons
     status: HttpStatus.Ok,
     headers: { "content-type": packed.type, "Cache-Control": "no-store" },
   });
+}
+
+/**
+ * The headers that make a page cross-origin isolated, which a web build Unreal staged needs for its
+ * threads: the page keeps its window to itself and loads only what its own origin serves.
+ */
+export const ISOLATION_HEADERS = {
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Embedder-Policy": "require-corp",
+  "Cross-Origin-Resource-Policy": "same-origin",
+} as const;
+
+/** Whether a plain file (never a link) is at `file`. */
+const isPlainFile = async (file: string): Promise<boolean> => (await lstat(file).catch(() => null))?.isFile() === true;
+
+/**
+ * Whether `relative`, served from the game folder `root`, is a file of a web build Unreal staged:
+ * its first folder holds the file Unreal writes at such a build's root, or the root itself does (a
+ * build served as the root). Any other page of the game is served as it always was.
+ */
+export async function isolatedBuildFile(root: string, relative: string): Promise<boolean> {
+  const parts = relative.split("/");
+  const folder = parts.length > 1 ? path.join(root, parts[0] ?? "") : root;
+  if (await isPlainFile(path.join(folder, UNREAL_WEB_BUILD_MARKER))) return true;
+  return folder !== root && isPlainFile(path.join(root, UNREAL_WEB_BUILD_MARKER));
 }
 
 export type Served =

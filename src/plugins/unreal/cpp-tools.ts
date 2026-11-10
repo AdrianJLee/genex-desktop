@@ -84,7 +84,8 @@ export type AddCppAnswer = { started: true } | { module: string; already: true }
 /** What the C++ tools need from the computer, the editor and the clock. */
 export type CppToolsDeps = RestartDeps & {
   platform: NodeJS.Platform;
-  engine(): Promise<Engine | undefined>;
+  /** The installed engine `game`'s tools run with: its project's own, else the newest supported one. */
+  engine(storage: string, game: string): Promise<Engine | undefined>;
   project(storage: string, game: string): Promise<string | undefined>;
   xcode(engineDir: string | undefined): Promise<Pick<XcodeStatus, "state"> & Partial<Pick<XcodeStatus, "app">>>;
   /** Where Microsoft's C++ tools stand on Windows; none off Windows. */
@@ -266,7 +267,7 @@ export async function landPartCpp(part: string, code: PartCode): Promise<string[
   return files.map((file) => file.inner).sort();
 }
 
-/** The supported engine: its version and folder. */
+/** The engine a game's tools run with: its version and folder. */
 type Engine = { version: string; directory: string };
 /** One add job: the game, its project, the engine and the Xcode app UBT may read. */
 type AddTarget = { storage: string; game: string; project: string; engine: Engine; xcodeApp: string | null };
@@ -386,7 +387,7 @@ async function startAdding(deps: CppToolsDeps, jobs: Jobs, storage: string, game
   if (jobs.get(project)?.state === CppAddState.Adding) return { started: true };
   const module = await projectModule(project);
   if (module) return { module, already: true };
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   if (!engine) throw new Error(MESSAGE.NoEngine);
   const tools = await toolsFor(deps, engine.directory);
   if (!canCompileCpp(tools, deps.platform)) throw new Error(cannotCompile(deps.platform, tools));
@@ -400,7 +401,7 @@ async function startAdding(deps: CppToolsDeps, jobs: Jobs, storage: string, game
 
 /** `cpp-status` for a game: whether C++ compiles here, Xcode's and Microsoft's tools' states, the platform, its module and its add job. */
 async function cppStatus(deps: CppToolsDeps, jobs: Jobs, storage: string, game: string): Promise<CppStatus> {
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   const tools = await toolsFor(deps, engine?.directory);
   const project = await deps.project(storage, game).catch(() => undefined);
   const module = project ? ((await projectModule(project)) ?? null) : null;

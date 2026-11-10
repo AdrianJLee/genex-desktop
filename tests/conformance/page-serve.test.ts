@@ -15,6 +15,8 @@ import {
   cspNote,
   findMetaCsp,
   gameRequestAllowed,
+  ISOLATION_HEADERS,
+  isolatedBuildFile,
   packedBuildFile,
   previewNavigationAllowed,
   rewriteGameHtml,
@@ -543,5 +545,50 @@ describe("a Unity WebGL build packed with Brotli or gzip", () => {
     fs.writeFileSync(gzipped, zlib.gzipSync(Buffer.from("the arena's data")));
     const data = unpackedResponse(gzipped, { packing: "gzip", type: "application/octet-stream" });
     assert.equal(await data.text(), "the arena's data");
+  });
+});
+
+describe("a file of an Unreal web build", () => {
+  /** A game folder with Unreal's web build in `web/`, a page of mockups, and a build served as the root itself. */
+  async function game() {
+    const root = await tmpDir("isolated-build-");
+    for (const file of ["web/index.html", "web/wasm-manifest.json", "web/Dust/Binaries/Wasm/Dust.wasm"]) {
+      fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+      fs.writeFileSync(path.join(root, file), "x");
+    }
+    fs.mkdirSync(path.join(root, "ui_design"));
+    fs.writeFileSync(path.join(root, "ui_design", "index.html"), "x");
+    fs.writeFileSync(path.join(root, "index.html"), "x");
+    return root;
+  }
+
+  it("is served with the headers that isolate its page, which Unreal's threads need", () => {
+    assert.deepEqual(ISOLATION_HEADERS, {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+      "Cross-Origin-Resource-Policy": "same-origin",
+    });
+  });
+
+  it("is any file in a folder of the game that holds Unreal's own build file, or in a root that does", async () => {
+    const root = await game();
+    const rows: Array<[string, boolean]> = [
+      ["web/index.html", true],
+      ["web/Dust/Binaries/Wasm/Dust.wasm", true],
+      ["web/wasm-manifest.json", true],
+      ["index.html", false],
+      ["ui_design/index.html", false],
+      ["missing/index.html", false],
+    ];
+    for (const [relative, isolated] of rows) assert.equal(await isolatedBuildFile(root, relative), isolated, relative);
+    assert.equal(await isolatedBuildFile(path.join(root, "web"), "index.html"), true, "the build served as the root");
+  });
+
+  it("is not told by a link named like Unreal's build file", async () => {
+    const root = await game();
+    fs.mkdirSync(path.join(root, "fake"));
+    fs.writeFileSync(path.join(root, "fake", "index.html"), "x");
+    fs.symlinkSync(path.join(root, "web", "wasm-manifest.json"), path.join(root, "fake", "wasm-manifest.json"));
+    assert.equal(await isolatedBuildFile(root, "fake/index.html"), false);
   });
 });

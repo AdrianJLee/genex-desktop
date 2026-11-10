@@ -409,7 +409,7 @@ window probe's `raise` on a PC), and again before an action that finds Genex in 
 app reopened behind Genex), since
   nothing else it may click (the Dock, Stage Manager) could. A computer with no driver (Linux, a development build without one) answers `unavailable`,
   and `game.engine.canAssist` tells a plugin so beforehand, so it shows its click path instead of the button. Unreal's
-  install card hands the install of Unreal 5.8 in Epic's launcher this way: its `engine.apps` names
+  install card hands the install of Unreal in Epic's launcher this way: its `engine.apps` names
   Epic's launcher, never Unreal's editor ([plugins](plugins.md)). Roblox Studio's
   publishing is the one assist that is not a setup click ([plugins](plugins.md)): the person
   presses Publish to Roblox or Publish an update (no card: the press is the go-ahead), or approves the agent's `first-publish` card

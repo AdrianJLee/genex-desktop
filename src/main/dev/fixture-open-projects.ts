@@ -67,7 +67,7 @@ const GODOT_FILES: Readonly<Record<string, string>> = {
 
 /** The plugin project as the Unreal plugin's `new-plugin` lays it out: a host project and the plugin in it. */
 const PLUGIN_FILES: Readonly<Record<string, string>> = {
-  "unreal/LevelToolsHost.uproject": `${JSON.stringify({ FileVersion: 3, EngineAssociation: "5.8" }, null, 2)}\n`,
+  "unreal/LevelToolsHost.uproject": `${JSON.stringify({ FileVersion: 3, EngineAssociation: "5.9" }, null, 2)}\n`,
   "unreal/Plugins/LevelTools/LevelTools.uplugin": `${JSON.stringify({ FileVersion: 3, FriendlyName: "Level Tools", Version: 1 }, null, 2)}\n`,
 };
 
@@ -80,14 +80,14 @@ const NEW_PLUGIN_TOOL = "new-plugin";
 const BOTH_FILES: Readonly<Record<string, string>> = {
   "index.html":
     '<!doctype html><html><body style="margin:0;background:#1b1530"><canvas width="800" height="500"></canvas><script>const x=document.querySelector("canvas").getContext("2d");x.fillStyle="#f2b84b";x.fillRect(120,300,560,24);x.fillStyle="#ffffff";x.font="32px sans-serif";x.fillText("Lantern racer",280,200);</script></body></html>\n',
-  "unreal/LanternRacer.uproject": `${JSON.stringify({ FileVersion: 3, EngineAssociation: "5.8" }, null, 2)}\n`,
+  "unreal/LanternRacer.uproject": `${JSON.stringify({ FileVersion: 3, EngineAssociation: "5.9" }, null, 2)}\n`,
 };
 
 /** A web game ported to Unreal: the web files stay as the reference beside the new project. */
 const PORTED_FILES: Readonly<Record<string, string>> = {
   "index.html":
     '<!doctype html><html><body style="margin:0;background:#bfe3f5"><canvas width="800" height="500"></canvas></body></html>\n',
-  "unreal/PaperPlane.uproject": `${JSON.stringify({ FileVersion: 3, EngineAssociation: "5.8" }, null, 2)}\n`,
+  "unreal/PaperPlane.uproject": `${JSON.stringify({ FileVersion: 3, EngineAssociation: "5.9" }, null, 2)}\n`,
 };
 
 /** A Unity project as Unity leaves one: the version it was saved with, and one scene. */

@@ -27,9 +27,12 @@ folder listing wins. Rules for tests are in [tests/AGENTS.md](../AGENTS.md).
 - `snapshot-fixtures.ts`: dirty, untracked and nested user repositories.
 - `unreal-moment-bus.ts`: a fake of Genex's hook bus that plans each moment from a plugin manifest;
   `unreal-editor-stand-in.ts`: the editor the Unreal plugin's queue talks to;
-  `unreal-fake-engine.ts`: a small fake Unreal (the Blank template and Epic's three plugin
-  templates) and the Unreal plugin's backend on it in an open game, launches and host calls recorded,
-  a game link kept as the host keeps it, and stand-in programs for a plugin's build, tests and package.
+  `unreal-fake-engine.ts`: a small fake Unreal, the release new games are made with (the Blank
+  template and Epic's three plugin templates; with `older`, the oldest Unreal a game may stay on
+  installed beside it) and the Unreal plugin's backend on it in an open game, launches and host calls
+  recorded, a game link kept as the host keeps it (`linkProject` gives the game a project naming an
+  engine), and stand-in programs for a plugin's build, tests and package; `engineByGame` is a tool's
+  `engine` dep on a computer with two engines.
 - `godot-fake-engine.ts`: a fake Mac with Godot apps where the test puts them, a runner that
   records each Godot job and answers with Godot's recorded words (`fixtures/godot-cli/`), and the
   Godot plugin's backend on both in an open game, its host calls recorded; and a fake Windows PC

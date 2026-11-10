@@ -1,8 +1,10 @@
 /**
  * Unreal's "Use Less CPU when in Background" (`bThrottleCPUWhenNotForeground`): while it is on, an
  * editor behind Genex plays at a few frames per second, so a play test measures a slow game. The
- * bridge and the Unreal Loop's editor queue read and write it through Epic's ObjectTools on the
- * settings' class default object, which changes the running editor and never its saved config.
+ * bridge and the Unreal Loop's editor queue read and write it on the settings' class default
+ * object, which changes the running editor and never its saved config: through the Genex editor
+ * helper's own tools ({@link ThrottleTool}), and for an editor whose helper is older than those,
+ * through Epic's ObjectTools, which Unreal 5.8 has (5.9's refuse to write an editor setting).
  *
  * On a Mac, Genex lifts it only for an editor whose hardware ray tracing is off: UE 5.8 rendering
  * a ray-traced level at full speed behind another app hangs the GPU (an M4 Max crashed within a few
@@ -75,3 +77,49 @@ export function mayLiftThrottle(platform: NodeJS.Platform, rayTracing: boolean |
 
 /** Whether a `set_properties` answer says the editor took the values. */
 export const tookValues = (answer: unknown): boolean => answer === true;
+
+/** The Genex editor helper's own tools for the throttle, in its Loop toolset, by their wire names. */
+export const ThrottleTool = { RunSettings: "run_settings", SetThrottle: "set_background_throttle" } as const;
+export type ThrottleTool = (typeof ThrottleTool)[keyof typeof ThrottleTool];
+
+/**
+ * One call of a tool that reads or writes the throttle, answering its return value (parsed, or as
+ * the JSON text Epic hands over); it may throw, or answer anything else, when the editor refuses.
+ */
+export type ThrottleAsk = (
+  tool: ThrottleTool | ObjectTool | CVarTool,
+  args: Record<string, unknown>,
+) => Promise<unknown>;
+
+/** An editor's throttle and ray tracing as read, each undefined when it couldn't be; `helper` when the helper's own tools answered. */
+export type RunSettings = { throttle: boolean | undefined; rayTracing: boolean | undefined; helper: boolean };
+
+/** The throttle and ray tracing in the helper's `run_settings` answer; undefined when the answer isn't one. */
+function helperSettings(answer: unknown): Omit<RunSettings, "helper"> | undefined {
+  const values = answerValues(answer);
+  if (!values || typeof values !== "object" || !("throttle" in values)) return undefined;
+  const [throttle, rayTracing]: unknown[] = [Reflect.get(values, "throttle"), Reflect.get(values, "rayTracing")];
+  return {
+    throttle: typeof throttle === "boolean" ? throttle : undefined,
+    rayTracing: typeof rayTracing === "boolean" ? rayTracing : undefined,
+  };
+}
+
+/**
+ * Reads an editor's throttle and whether it ray-traces: from the helper's own tool, else from Epic's
+ * (ray tracing only when the throttle is on, since nothing else asks). Never throws.
+ */
+export async function readRunSettings(ask: ThrottleAsk): Promise<RunSettings> {
+  const own = helperSettings(await ask(ThrottleTool.RunSettings, {}).catch(() => undefined));
+  if (own) return { ...own, helper: true };
+  const throttle = throttleIn(await ask(ObjectTool.GetProperties, readThrottleArgs()).catch(() => undefined));
+  if (throttle !== true) return { throttle, rayTracing: undefined, helper: false };
+  const rayTracing = rayTracingIn(await ask(CVarTool.Search, rayTracingArgs()).catch(() => undefined));
+  return { throttle, rayTracing, helper: false };
+}
+
+/** Sets the throttle for the editor's current run, the way it was read (`helper`); true when the editor took it. */
+export async function writeThrottle(ask: ThrottleAsk, helper: boolean, on: boolean): Promise<boolean> {
+  if (!helper) return tookValues(await ask(ObjectTool.SetProperties, writeThrottleArgs(on)));
+  return helperSettings(await ask(ThrottleTool.SetThrottle, { on }))?.throttle === on;
+}

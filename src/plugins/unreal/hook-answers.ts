@@ -20,7 +20,8 @@
  */
 import type { HookAnswer, HookContext, HookImage } from "../../shared/plugin-hooks.ts";
 import { EngineReadiness } from "./editor-wait.ts";
-import { HelperState } from "./setup.ts";
+import { NEW_GAMES_ENGINE_GB } from "./engine-line.ts";
+import { HelperState, installEngineVersion } from "./setup.ts";
 
 /** How many of the names left unsaved an answer lists, and how many new log errors a note names. */
 const NAMED_UNSAVED = 3;
@@ -277,17 +278,17 @@ const toUnrealButton = (how: string) =>
 
 /** How the engine question offers Unreal beside an Unreal that makes no new games here. */
 const beside = (version: string) =>
-  `offer it as "Unreal Engine 5.8" with the description "Needs 5.8 installed beside your ${version}, about 45 GB".`;
+  `offer it as "Unreal Engine ${installEngineVersion()}" with the description "Needs ${installEngineVersion()} installed beside your ${version}, about ${NEW_GAMES_ENGINE_GB} GB".`;
 
 /** The engine question's words for this computer's Unreal: ready to make a game with, or what it needs first. */
 function readinessNote(readiness: Readiness): string {
   const version = readiness.version ?? "";
   if (readiness.engine === EngineReadiness.None)
-    return `Unreal Engine isn't installed on this computer yet, so offer it as "Unreal Engine" with the description "Plays in Epic's free editor on this computer; needs a 45 GB install first". ${toUnrealButton("get Unreal 5.8 free from Epic")}`;
+    return `Unreal Engine isn't installed on this computer yet, so offer it as "Unreal Engine" with the description "Plays in Epic's free editor on this computer; needs a ${NEW_GAMES_ENGINE_GB} GB install first". ${toUnrealButton(`get Unreal ${installEngineVersion()} free from Epic`)}`;
   if (readiness.engine === EngineReadiness.NewerOnly)
-    return `This computer has Unreal ${version}, and Genex makes new Unreal projects with 5.8 only, so ${beside(version)} ${toUnrealButton(`install 5.8 beside ${version} in the Epic Games Launcher`)}`;
+    return `This computer has Unreal ${version}, and Genex makes new Unreal projects with ${installEngineVersion()} only, so ${beside(version)} ${toUnrealButton(`install ${installEngineVersion()} beside ${version} in the Epic Games Launcher`)}`;
   if (readiness.engine === EngineReadiness.OlderOnly)
-    return `This computer has Unreal ${version}, older than the 5.8 Genex makes Unreal games with, so ${beside(version)} ${toUnrealButton("get 5.8 free from Epic")}`;
+    return `This computer has Unreal ${version}, older than the ${installEngineVersion()} Genex makes new Unreal games with, so ${beside(version)} ${toUnrealButton(`get ${installEngineVersion()} free from Epic`)}`;
   return `Offer ${OPTION}; when the answer (or the request) is Unreal Engine, call ${NEW_GAME} with a template and a name: it makes the game's Unreal project in this folder, links this game to it and opens it in Unreal; then build the game there through the Unreal tools, never as a web page.`;
 }
 

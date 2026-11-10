@@ -21,14 +21,23 @@ const MARK: Record<NativePlatform, "apple" | "windows" | "linux"> = {
   [NativePlatform.Linux]: "linux",
 };
 
-/** The systems' names as one phrase: "Mac and Windows". */
-export const platformNames = (platforms: readonly NativePlatform[]): string =>
-  WORDS.platforms(platforms.map((platform) => WORDS.platform[platform]));
+/** The systems' names as one phrase: "Mac and Windows"; with `web`, the browser first: "Web, Mac and Windows". */
+export const platformNames = (platforms: readonly NativePlatform[], web = false): string =>
+  WORDS.platforms([...(web ? [WORDS.web] : []), ...platforms.map((platform) => WORDS.platform[platform])]);
 
-/** The marks of `platforms`, side by side; the phrase is the caller's to say. */
-export function PlatformMarks({ platforms, size = 15 }: { platforms: readonly NativePlatform[]; size?: number }) {
+/** The marks of `platforms`, side by side, the web's first with `web`; the phrase is the caller's to say. */
+export function PlatformMarks({
+  platforms,
+  web = false,
+  size = 15,
+}: {
+  platforms: readonly NativePlatform[];
+  web?: boolean;
+  size?: number;
+}) {
   return (
     <span className="native-marks" aria-hidden="true">
+      {web && <Icon name="globe" size={size} />}
       {platforms.map((platform) => (
         <Icon key={platform} name={MARK[platform]} size={size} />
       ))}

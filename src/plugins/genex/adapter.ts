@@ -5,6 +5,8 @@ import { recordGenexUse, type GenexObserver } from "../../substrate/genex-outcom
 import { fileURLToPath } from "node:url";
 import { SessionCredentials } from "../../substrate/session-credentials.ts";
 import { SecretStore } from "../../substrate/secrets.ts";
+import { manifestUsesMultiplayer } from "../../substrate/genex-game-manifest.ts";
+import { systemMacSigner } from "../../substrate/mac-entitlements.ts";
 import { deliverGenexFiles } from "../../substrate/genex-delivery.ts";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
@@ -13,7 +15,10 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { writeFile } from "node:fs/promises";
 import {
+  GenexAppRefusal,
+  CloudBuildState,
   CloudSendState,
+  type GenexCloudBuild,
   cleanGenexTitle,
   defaultGenexTitle,
   genexSlug,
@@ -51,9 +56,10 @@ import {
   REVIEW_NOTE_CHARS,
 } from "../../shared/genex-review.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { t } from "../../shared/i18n.ts";
+import { formatList, t } from "../../shared/i18n.ts";
 import { isBlankStill } from "../../shared/preview-contract.ts";
-import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
+import { GenexCliStopped, authorityDevDir, runGenexCli, genexCliPath } from "./cli.ts";
+import { linkAuthorityToolchain, roomAfterUpload, roomBeforeUpload } from "./authority-toolchain.ts";
 import { stageBuildSource, unrealEngineOf } from "./remix-source.ts";
 import {
   type MacSigning,
@@ -71,10 +77,16 @@ import {
   CLOUD_UNREAL_VERSIONS,
   type CloudBuildDeps,
   forgetCloudBuilds,
+  isHeld,
+  isKeptApp,
   isRunning,
   loadCloudBuilds,
   loadCloudSend,
+  newestHeld,
   pinnedCliBuildsApps,
+  pollDelayMs,
+  refreshCloudBuild,
+  releaseCloudBuild,
   sendCloudBuild,
   watchCloudBuild,
 } from "./cloud-build.ts";
@@ -94,10 +106,14 @@ import {
   toldOf,
 } from "./native-review.ts";
 import {
+  AppsRefusedError,
   appClipCommit,
   listingOf,
+  type MacEntitlementsReader,
+  NATIVE_MODULE_ARGS,
   type NativeUpload,
   nativePublishArgs,
+  offlineMacApps,
   pinnedCliReplacesNativePage,
   pinnedCliSendsApps,
   sendNativeBuild,
@@ -279,6 +295,8 @@ const SESSION_CACHE_MS = 2 * MINUTE_MS;
 const HOSTED_WEB_FRESH_MS = MINUTE_MS;
 /** How many names a finished publish gives Genex when the game is renamed in Studio meanwhile. */
 const SETTLE_NAME_TRIES = 3;
+/** How many times Genex is asked to give players a build a publish asked for while its project was still going up. */
+const CLOUD_RELEASE_TRIES = 4;
 /** What the person reads when Genex refuses Remove, by its refusal code; any other failure says itself. */
 const REMOVE_WEB_REFUSAL: Readonly<Record<string, () => string>> = {
   [GenexWebRefusal.NoNativeBuild]: PUBLISH_MESSAGE.OnlyWebRefusal,
@@ -497,6 +515,44 @@ function recordKeeping(jobId: string, kept: NativeSaved | undefined, apps: reado
   };
 }
 
+/** One game's send to Genex for one system, as `#cloudReleases` names it. */
+const cloudKey = (project: string, platform: string): string => `${project}\n${platform}`;
+
+/** A game's project on its way to Genex for a build of `platform`, until Genex names its build or it stops. */
+interface CloudSend {
+  platform: string;
+  done: Promise<void>;
+}
+
+/** How giving players the apps Genex keeps went: the systems whose app went or goes once built, and the ones refused. */
+interface CloudReleased {
+  went: string[];
+  failed: Array<{ platform: string; error: string }>;
+  /** Genex's answer to listing the game with the first build that was ready; absent when none was asked. */
+  listing?: NativeSaved["listing"];
+}
+
+/** What an apps-only publish did of its own, apart from what the record keeps of the game's other apps. */
+interface AppsOutcome {
+  /** How many of its apps and of Genex's kept builds went, or go once built. */
+  went: number;
+  /** Why the first that didn't go, didn't. */
+  error?: string;
+  /** Genex's answer to the listing this publish asked for; absent when it asked for none. */
+  listing?: NativeSaved["listing"];
+}
+
+/** The outcome of a publish of `apps` and of kept builds, from the record `sent` it left and how the builds went. */
+function appsOutcome(apps: readonly NativeUpload[], sent: NativeSaved, released: CloudReleased): AppsOutcome {
+  const own = new Set<string>(apps.map((app) => app.platform));
+  const mine = (entry: { platform: string }) => own.has(entry.platform);
+  const went = sent.sent.filter(mine).length + released.went.length;
+  const error = sent.failed.find(mine)?.error ?? released.failed[0]?.error;
+  // With no app of its own and no build that was ready, the record's listing is an earlier publish's.
+  const asked = apps.length > 0 || released.listing !== undefined;
+  return { went, ...(error ? { error } : {}), ...(asked && sent.listing ? { listing: sent.listing } : {}) };
+}
+
 /** How long the cover's own steps may take; tests shorten them. */
 interface CoverTimeouts {
   shotMs: number;
@@ -600,10 +656,18 @@ export class GenexTools {
   readonly #buildsApps: boolean;
   readonly #cloudSleep: CloudBuildDeps["sleep"];
   readonly #notarize: (app: string, signing: MacSigning, signal: AbortSignal) => Promise<NotarizeOutcome>;
+  /** Reads a Mac app's signed entitlements, to keep an online game's offline Mac app from going. */
+  readonly #readMacEntitlements: MacEntitlementsReader | undefined;
   /** The builds on Genex being followed, by game and job: one watch each. */
   #cloudWatches = new Map<string, Promise<void>>();
+  /** The apps Genex keeps that were read again since Studio started, by game and job: once each. */
+  #cloudRechecks = new Set<string>();
   /** Each game's project on its way to Genex, by game: one at a time, and it outlives the press. */
-  #cloudSends = new Map<string, Promise<void>>();
+  #cloudSends = new Map<string, CloudSend>();
+  /** The sends a publish asked for the app of (`cloudKey`): the build each becomes goes to players once built. */
+  #cloudReleases = new Set<string>();
+  /** The systems whose kept app was asked for while a publish of the game ran, by game: each goes once it is done. */
+  #releasesWaiting = new Map<string, Set<string>>();
   /** A development stand's own CA file the CLI runs trust (`createGenexPlugin`); absent on genex.games. */
   readonly #ca: string | undefined;
   /** A development stand's game host (`createGenexPlugin`); absent on genex.games. */
@@ -657,6 +721,8 @@ export class GenexTools {
       cloudSleep?: CloudBuildDeps["sleep"];
       /** Signs and notarizes a Mac app under the creator's Apple ID; the system tools unless a test stands in. */
       notarize?: (app: string, signing: MacSigning, signal: AbortSignal) => Promise<NotarizeOutcome>;
+      /** Reads a Mac app's signed entitlements; the system's codesign unless a test stands in. */
+      readMacEntitlements?: MacEntitlementsReader;
       /** A development stand's own CA file, which every CLI run trusts beside the system's. */
       ca?: string;
       /** A development stand's game host, where a publish there tests its draft (`stagingLink`). */
@@ -686,6 +752,7 @@ export class GenexTools {
     this.#cloudSleep = options.cloudSleep ?? ((ms, signal) => sleep(ms, undefined, { signal }).catch(() => {}));
     this.#notarize =
       options.notarize ?? ((app, signing, signal) => notarizeMacApp(app, signing, { run: systemNotarizeRun }, signal));
+    this.#readMacEntitlements = options.readMacEntitlements;
     this.#ca = options.ca;
     this.#standGames = options.standGames;
   }
@@ -1002,22 +1069,31 @@ export class GenexTools {
    * Publish a game that has only apps, no web build: send each with `genex native publish` and list
    * the game in the gallery under `title` with the first that goes, creating its hosted project the
    * first time. Runs as a publish job, so the dialog shows it like one. Once the apps are recorded,
-   * the kept cover is sent as a gallery publish's is.
+   * the kept cover is sent as a gallery publish's is. `roomStage` (the host's `export.room`) stages
+   * a server-authoritative game's room module, which goes live before any app does. `release` names
+   * the systems whose app Genex built on its own computers and keeps (`cloudBuild` with `keep`):
+   * players get each with this publish, or as soon as it is built.
    */
   async publishAppsOnly(
     project: string,
     apps: readonly NativeUpload[],
     title?: unknown,
     remix: RemixChoice = {},
+    roomStage?: () => Promise<unknown>,
+    release: readonly string[] = [],
   ): Promise<GenexPublishState> {
     return this.#account(async () => {
-      if (!this.#sendsApps || apps.length === 0) throw new Error(PUBLISH_MESSAGE.NoAppsRefusal());
+      const fromCloud = this.#keptToRelease(apps, release);
       const state = await this.publishStatus(project);
       if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
       if (!(await this.#termsAccepted(project, state))) return state;
       const busy =
         state.job?.state === GenexPublishJobState.Running || state.job?.state === GenexPublishJobState.Unresolved;
-      if (busy) return state;
+      if (busy) {
+        // The publish under way (the web build of the same press) goes first: the kept apps follow it.
+        if (this.#publishJobs.has(project)) this.#releaseAfterPublish(project, fromCloud);
+        return state;
+      }
       await this.#stopCoverStep(project);
       await this.#stopNativeStep(project);
       const dir = await this.#publishWorkspace(project);
@@ -1030,23 +1106,45 @@ export class GenexTools {
         startedAt: new Date().toISOString(),
         title: cleanGenexTitle(title) ?? state.renamed ?? state.title ?? defaultGenexTitle(project),
       };
+      const unread = await this.#stageAppsOnline(project, { state, job, dir, apps }, roomStage);
       state.job = job;
       delete state.warnings;
+      if (unread.length > 0) state.warnings = unread;
       delete state.lastError;
       await this.#savePublishState(project, state);
-      const done = this.#runAppsJob(project, job, apps, remix);
+      const done = this.#runAppsJob(project, job, { apps, release: fromCloud }, remix);
       this.#publishJobs.set(project, { job, done });
-      void done.finally(() => {
-        if (this.#publishJobs.get(project)?.job === job) this.#publishJobs.delete(project);
-      });
+      void done.finally(() => this.#publishJobEnded(project, job));
       return this.#withCover(project, { ...state, job });
     });
   }
-  /** The apps-only publish itself, detached from the press: hosted project, apps, listing, record. */
+  /** Remember that `platforms`' kept apps were asked for while a publish of the game runs (`#releasesWaiting`). */
+  #releaseAfterPublish(project: string, platforms: readonly string[]): void {
+    if (platforms.length === 0) return;
+    const waiting = this.#releasesWaiting.get(project) ?? new Set<string>();
+    for (const platform of platforms) waiting.add(platform);
+    this.#releasesWaiting.set(project, waiting);
+  }
+  /** The kept apps asked for while the game's publish ran, each named once; they wait no longer. */
+  #releasesAsked(project: string): string[] {
+    const waiting = [...(this.#releasesWaiting.get(project) ?? [])];
+    this.#releasesWaiting.delete(project);
+    return waiting;
+  }
+  /** A publish job ended: it is no longer the game's, and kept apps that waited for one that failed wait no more. */
+  #publishJobEnded(project: string, job: GenexPublishJob): void {
+    if (this.#publishJobs.get(project)?.job !== job) return;
+    this.#publishJobs.delete(project);
+    this.#releasesWaiting.delete(project);
+  }
+  /**
+   * The apps-only publish itself, detached from the press: hosted project, apps, then the apps Genex
+   * keeps for `release`, listing, record. What the record says of the game's other apps stays.
+   */
   async #runAppsJob(
     project: string,
     job: GenexPublishJob,
-    apps: readonly NativeUpload[],
+    { apps, release }: { apps: readonly NativeUpload[]; release: readonly string[] },
     remix: RemixChoice,
   ): Promise<void> {
     const dir = this.#publishDir(project);
@@ -1054,14 +1152,24 @@ export class GenexTools {
     this.#controllers.set(controller, { project });
     const step: NativeStep = { jobId: job.id, controller, done: Promise.resolve() };
     try {
+      const linked = await readJsonOr<HostedMeta>(metaFile(dir));
       const meta = await this.#ensureHostedProject(project, dir, path.join(dir, "home"), job, controller.signal);
       job.phase = GenexPublishPhase.Uploading;
       await this.#persistJob(project, job);
+      await this.#releaseRoom(project, job, dir, controller.signal);
       const started = job.title;
-      const sending = this.#sendApps(project, job.id, apps, controller.signal, { title: started ?? project });
+      const gallery = { title: started ?? project };
+      // A game made anew on Genex has none of the apps the record names.
+      const sameGame = Boolean(meta.id) && linked?.id === meta.id;
+      const kept = sameGame ? await this.#keptApps(dir, apps.length > 0) : undefined;
+      const sending = this.#sendApps(project, job.id, apps, controller.signal, gallery, kept).then((sent) => {
+        const listed = apps.length > 0 && sent.listing !== undefined;
+        return this.#releaseKept(project, release, sent, controller.signal, listed ? undefined : gallery);
+      });
       step.done = sending.then(() => {});
       this.#nativeSteps.set(project, step);
-      await this.#recordApps(project, job, meta, await sending);
+      const { sent, released } = await sending;
+      await this.#recordApps(project, job, meta, appsOutcome(apps, sent, released));
       // The cover goes once the game is on Genex, as a gallery publish's does: never instead of an app.
       if (job.state === GenexPublishJobState.Done) {
         await this.#settleName(project, job, started);
@@ -1077,17 +1185,113 @@ export class GenexTools {
       this.#controllers.delete(controller);
       if (this.#nativeSteps.get(project) === step) this.#nativeSteps.delete(project);
     }
+    // Kept apps asked for while this publish ran go now that the game is on Genex.
+    if (job.state === GenexPublishJobState.Done)
+      void this.publishApps(project, job.id, [], this.#releasesAsked(project));
+  }
+  /**
+   * What the record says of the game's apps, for a publish of some of them to keep. With `lists` (the
+   * publish lists the game with an app of its own) Genex's answer to an earlier listing is left out:
+   * it is asked again, and what an earlier publish was told is no answer to this one.
+   */
+  async #keptApps(dir: string, lists: boolean): Promise<NativeSaved> {
+    const kept = readNativeSaved(await readJsonOr(path.join(dir, NATIVE_FILE)));
+    if (!lists) return kept;
+    const { listing: _earlier, ...rest } = kept;
+    return rest;
+  }
+  /** The systems whose kept build a publish of `apps` gives players; refuses a publish with nothing to give. */
+  #keptToRelease(apps: readonly NativeUpload[], release: readonly string[]): readonly string[] {
+    const fromCloud = this.#buildsApps ? release : [];
+    for (const platform of fromCloud) assertCloudPlatform(platform);
+    if (!this.#sendsApps || apps.length + fromCloud.length === 0) throw new Error(PUBLISH_MESSAGE.NoAppsRefusal());
+    return fromCloud;
+  }
+  /**
+   * Stage an apps-only publish's room module inside the invocation that asked (a detached step gets
+   * no answer from host services): the room beside the copy, the manifest the CLI reads its
+   * `authority` block from, Studio's toolchain, and the job's first record of the room. A game with
+   * no room block keeps the copy it always published its apps from. True when the game plays online:
+   * it has a room or carries Genex's multiplayer.
+   */
+  async #stageAppsRoom(
+    project: string,
+    state: GenexPublishState,
+    job: GenexPublishJob,
+    dir: string,
+    roomStage: () => Promise<unknown>,
+  ): Promise<boolean> {
+    try {
+      const manifest = ((await roomStage()) as { genex?: GenexGameManifest } | null)?.genex;
+      await linkAuthorityToolchain(dir, authorityDevDir(), manifest);
+      const room = await roomBeforeUpload(dir, manifest);
+      if (!room) return manifestUsesMultiplayer(manifest);
+      await this.#writeWorkspaceManifest(dir, project, job, manifest, false);
+      job.room = room;
+      return true;
+    } catch (error) {
+      finishJob(job, GenexPublishJobState.Failed, new Date().toISOString());
+      job.error = errorMessage(error).slice(-PUBLISH_ERROR_TAIL_CHARS);
+      state.job = job;
+      await this.#savePublishState(project, state);
+      throw error;
+    }
+  }
+  /**
+   * Stages an apps-only publish's room (when the host can) and refuses an online game's offline Mac
+   * app; answers the warnings of Mac apps whose signature couldn't be read.
+   */
+  async #stageAppsOnline(
+    project: string,
+    publish: { state: GenexPublishState; job: GenexPublishJob; dir: string; apps: readonly NativeUpload[] },
+    roomStage: (() => Promise<unknown>) | undefined,
+  ): Promise<string[]> {
+    if (!roomStage) return [];
+    const online = await this.#stageAppsRoom(project, publish.state, publish.job, publish.dir, roomStage);
+    return online ? this.#refuseOfflineMacApps(publish.apps) : [];
+  }
+  /**
+   * Refuses an online game's apps before any upload when a Mac app among them is sandboxed without
+   * the network (Unreal's Shipping default): none of its players could connect. Only a positive
+   * finding refuses; a Mac app whose signature can't be read goes, and the warnings answered name it.
+   */
+  async #refuseOfflineMacApps(apps: readonly NativeUpload[]): Promise<string[]> {
+    const { offline, unread } = await offlineMacApps(apps, this.#readMacEntitlements ?? systemMacSigner.read);
+    const first = offline[0];
+    if (first)
+      throw new AppsRefusedError(
+        GenexAppRefusal.MacAppOffline,
+        PUBLISH_MESSAGE.MacAppOfflineRefusal(path.basename(first.target)),
+      );
+    return unread.map((app) => PUBLISH_MESSAGE.MacAppUnreadWarning(path.basename(app.target)));
+  }
+  /**
+   * Bundle, check, upload and release the room module to the rooms the apps join (`genex native
+   * module`) before any app goes: an app whose room is missing is refused on every join. A refusal
+   * ends the publish in the CLI's words, with the room's record of what the gate said.
+   */
+  async #releaseRoom(project: string, job: GenexPublishJob, dir: string, signal: AbortSignal): Promise<void> {
+    const room = job.room;
+    if (!room) return;
+    try {
+      await this.#cliText(dir, [...NATIVE_MODULE_ARGS], signal, path.join(dir, "home"));
+    } catch (error) {
+      job.room = await roomAfterUpload(dir, room, false);
+      throw error;
+    }
+    job.room = await roomAfterUpload(dir, room, true);
+    await this.#persistJob(project, job);
   }
   /** What an apps-only publish did, on the record: listed (or held, or refused), or nothing sent. */
-  async #recordApps(project: string, job: GenexPublishJob, meta: HostedMeta, sent: NativeSaved): Promise<void> {
+  async #recordApps(project: string, job: GenexPublishJob, meta: HostedMeta, outcome: AppsOutcome): Promise<void> {
     const now = new Date().toISOString();
     const state = await this.#publishState(project);
     mergeMeta(state, meta);
     state.job = job;
-    const listing = sent.listing;
-    if (sent.sent.length === 0) {
+    const listing = outcome.listing;
+    if (outcome.went === 0) {
       finishJob(job, GenexPublishJobState.Failed, now);
-      job.error = sent.failed[0]?.error ?? PUBLISH_MESSAGE.NoApps;
+      job.error = outcome.error ?? PUBLISH_MESSAGE.NoApps;
     } else if (listing?.state === GenexListingState.Refused) {
       finishJob(job, GenexPublishJobState.Failed, now);
       job.error = listing.detail ?? PUBLISH_MESSAGE.ListingRefused;
@@ -1167,9 +1371,7 @@ export class GenexTools {
     const done = this.#runPublishJob(project, kind, job, { cover, connect, apps, remix, replaceNativePage });
     this.#publishJobs.set(project, { job, done });
     this.#exporting.delete(project);
-    void done.finally(() => {
-      if (this.#publishJobs.get(project)?.job === job) this.#publishJobs.delete(project);
-    });
+    void done.finally(() => this.#publishJobEnded(project, job));
     return this.#withCover(project, { ...state, job });
   }
   /**
@@ -1195,6 +1397,9 @@ export class GenexTools {
       if (Number.isSafeInteger(files)) job.export = { files: files as number };
       const connect = !bringsOwnSdk(exported?.genex);
       await this.#writeWorkspaceManifest(dir, project, job, exported?.genex, connect);
+      await linkAuthorityToolchain(dir, authorityDevDir(), exported?.genex);
+      const room = await roomBeforeUpload(dir, exported?.genex);
+      if (room) job.room = room;
       job.deployment = await markDeployment(path.join(dir, "dist"), job.id);
       job.phase = startPhase;
       return connect;
@@ -1299,7 +1504,8 @@ export class GenexTools {
       await this.#settleName(project, job, listing.title);
       if (cover && coverRides(kind, await this.#pages(project))) this.#startCoverStep(project, job.id);
       // The apps go once the web build is public: a draft is not for players, and apps are live at once.
-      if (kind === GenexPublishKind.Gallery && apps.length > 0) void this.publishApps(project, job.id, apps);
+      // So do the apps Genex keeps that the same press asked for (`#releasesWaiting`).
+      if (kind === GenexPublishKind.Gallery) void this.publishApps(project, job.id, apps, this.#releasesAsked(project));
     } catch (error) {
       await this.#failPublishJob(project, job, run.attempt, error);
     } finally {
@@ -1332,12 +1538,21 @@ export class GenexTools {
     for (;;) {
       run.job.uploads = (run.job.uploads ?? 0) + 1;
       try {
-        return await this.#runStep(run, GenexPublishPhase.Uploading);
+        const out = await this.#runStep(run, GenexPublishPhase.Uploading);
+        await this.#noteRoom(run, true);
+        return out;
       } catch (error) {
+        await this.#noteRoom(run, false);
         const again = (run.job.uploads ?? 0) < MAX_UPLOADS && (await this.#nothingLanded(run));
         if (!again) throw error;
       }
     }
+  }
+  /** What this upload made of the game's room module (`roomAfterUpload`), persisted with the job. */
+  async #noteRoom(run: PublishRun, landed: boolean): Promise<void> {
+    if (!run.job.room) return;
+    run.job.room = await roomAfterUpload(run.dir, run.job.room, landed);
+    await this.#persistJob(run.project, run.job);
   }
   /** Whether Genex's record is as it was before the failed upload: nothing reached it. */
   async #nothingLanded(run: PublishRun): Promise<boolean> {
@@ -1393,12 +1608,15 @@ export class GenexTools {
       await sleep(wait, undefined, { signal: run.signal });
     }
   }
-  /** The hosted project this workspace publishes to, created on the first upload. */
+  /**
+   * The hosted project this workspace publishes to, created on the first upload, or before it for an
+   * app Genex builds and keeps (no `job` then: nothing is being published).
+   */
   async #ensureHostedProject(
     project: string,
     dir: string,
     home: string,
-    job: GenexPublishJob,
+    job: GenexPublishJob | undefined,
     signal: AbortSignal,
   ): Promise<HostedMeta> {
     const existing = await readJsonOr<HostedMeta>(metaFile(dir));
@@ -1414,8 +1632,10 @@ export class GenexTools {
     if (existing?.slug) await this.#unlink(dir);
     const restored = await this.#relinkOwn(dir, signal);
     if (restored) return restored;
-    job.phase = GenexPublishPhase.CreatingProject;
-    await this.#persistJob(project, job);
+    if (job) {
+      job.phase = GenexPublishPhase.CreatingProject;
+      await this.#persistJob(project, job);
+    }
     // Without `--no-auth` the fd-3 token satisfies the CLI, so the hosted project is created here
     // and nowhere near the user's game folder.
     await this.#cliText(dir, ["init", project, "--dir", path.join(dir, ".genex-agent")], signal, home);
@@ -1734,7 +1954,10 @@ export class GenexTools {
     const native = await this.#nativeRecord(project);
     const remix = { ...(await this.#remixRecord(project)), sending: this.#remixSends.has(project) };
     const hosted = await this.#hostedOf(project, state);
-    return { ...state, ...(warnings.length ? { warnings } : {}), cover, native, remix, ...hosted };
+    // The tested draft's own address (`preview--<slug>`): anyone with it plays the draft, as a guest
+    // or signed in. The draft page (`draftUrl`) is the owner's and asks for their sign-in.
+    const draftPlay = state.readyDraft ? { draftPlayUrl: state.readyDraft.url } : {};
+    return { ...state, ...(warnings.length ? { warnings } : {}), cover, native, remix, ...hosted, ...draftPlay };
   }
   /**
    * Whether Genex's page for the game plays a web version (its owner read names a public build),
@@ -2312,20 +2535,26 @@ export class GenexTools {
     const read = (file: string) => readJsonOr(file);
     const builds = await loadCloudBuilds(dir, read);
     for (const build of builds.filter(isRunning)) this.#watchCloud(project, build.jobId);
+    for (const build of builds.filter(isKeptApp)) this.#recheckKept(project, build.jobId);
     const send = await loadCloudSend(dir, read);
     if (!send) return { supported: true, builds };
     const stopped = send.state === CloudSendState.Sending && !this.#cloudSends.has(project);
-    return { supported: true, builds, send: stopped ? { ...send, state: CloudSendState.Failed } : send };
+    if (stopped) return { supported: true, builds, send: { ...send, state: CloudSendState.Failed } };
+    // A publish asked for this send's app: it is on its way to players, not only being made.
+    const released = this.#cloudReleases.has(cloudKey(project, send.platform));
+    return { supported: true, builds, send: released ? { ...send, released: true } : send };
   }
   /** What a build on Genex runs on: the CLI in the game's publish workspace, the game's Unreal project staged alone. */
   #cloudDeps(
     project: string,
     timeoutMs = NATIVE_PUBLISH_TIMEOUT_MS,
+    answerExitCodes?: readonly number[],
   ): CloudBuildDeps & { read: (file: string) => Promise<unknown> } {
     const dir = this.#publishDir(project);
+    const home = path.join(dir, "home");
+    const answers = answerExitCodes ? { answerExitCodes } : {};
     return {
-      cli: (args, signal) =>
-        this.#spawnCli(dir, args, signal, { timeoutMs, parse: true, home: path.join(dir, "home") }),
+      cli: (args, signal) => this.#spawnCli(dir, args, signal, { timeoutMs, parse: true, home, ...answers }),
       stage: (gameDir, dest) => stageBuildSource(gameDir, dest),
       sleep: this.#cloudSleep,
       read: (file) => readJsonOr(file),
@@ -2335,68 +2564,219 @@ export class GenexTools {
   async #refuseCloudEngine(gameDir: string): Promise<void> {
     const engine = await unrealEngineOf(gameDir);
     if (engine === null || CLOUD_UNREAL_VERSIONS.has(engine)) return;
-    throw new Error(engine ? PUBLISH_MESSAGE.CloudEngineRefusal(engine) : PUBLISH_MESSAGE.CloudNoEngineRefusal());
+    const builds = formatList([...CLOUD_UNREAL_VERSIONS]);
+    throw new Error(
+      engine ? PUBLISH_MESSAGE.CloudEngineRefusal(engine, builds) : PUBLISH_MESSAGE.CloudNoEngineRefusal(builds),
+    );
   }
   /**
    * Ask Genex to build the game's `platform` app on its own computers, from the project in
-   * `gameDir`. Refused while the CLI can't ask, before the game has a page on Genex for the app to
-   * go on, or for an Unreal Genex doesn't build; a send or a build of that platform still running is
-   * answered as it is. The answer doesn't wait for the project to go up: a big one takes far longer
-   * than a plugin call may run. The dialog reads how the send and then the build go in the record.
+   * `gameDir`. With `keep` (the Publish card's Build), Genex keeps what it builds until a publish asks
+   * for it (`publishAppsOnly`'s `release`): players get nothing, and a game that was never published
+   * gets its hosted project here, a draft nobody sees. Without it the app goes on the game's page once
+   * built, so the game needs a page. Refused while the CLI can't ask, or for an Unreal Genex doesn't
+   * build; a send or a build of that platform still running is answered as it is. The answer doesn't
+   * wait for the project to go up: a big one takes far longer than a plugin call may run. The dialog
+   * reads how the send and then the build go in the record.
    */
-  async cloudBuild(project: string, platform: unknown, gameDir: string | undefined): Promise<GenexNativeRecord> {
+  async cloudBuild(
+    project: string,
+    platform: unknown,
+    gameDir: string | undefined,
+    keep = false,
+  ): Promise<GenexNativeRecord> {
     if (!this.#buildsApps) throw new Error(PUBLISH_MESSAGE.CloudBuildsUnavailableRefusal());
     if (!gameDir) throw new Error(PUBLISH_MESSAGE.NoGameFolderRefusal());
-    if (!(await this.#linkedPublishState(project)).slug) throw new Error(PUBLISH_MESSAGE.NotOnGenexRefusal());
+    if (!keep && !(await this.#linkedPublishState(project)).slug) throw new Error(PUBLISH_MESSAGE.NotOnGenexRefusal());
     assertCloudPlatform(platform);
     await this.#refuseCloudEngine(gameDir);
     await this.#publishWorkspace(project);
+    // Genex's terms are still to accept: the record says so, and nothing is sent.
+    if (keep && !(await this.#hostForBuild(project))) return this.#nativeRecord(project);
     const running = (await this.#cloud(project)).builds.find(
       (build) => build.platform === platform && isRunning(build),
     );
-    if (!running && !this.#cloudSends.has(project)) await this.#sendCloud(project, String(platform), gameDir);
+    if (!running && !this.#cloudSends.has(project)) await this.#sendCloud(project, String(platform), gameDir, keep);
     return this.#nativeRecord(project);
   }
+  /**
+   * Put the game on Genex for a build Genex keeps: signed in, its terms accepted, and the game's hosted
+   * project made when it has none. False when the terms are still to accept, which the record then says.
+   */
+  #hostForBuild(project: string): Promise<boolean> {
+    return this.#account(async () => {
+      const state = await this.publishStatus(project);
+      if (!state.connected) throw new Error(PUBLISH_MESSAGE.ConnectFirstRefusal());
+      if (!(await this.#termsAccepted(project, state))) return false;
+      const dir = this.#publishDir(project);
+      // A publish under way makes the game's project itself: until it has, there is nowhere to send a build.
+      if (this.#publishJobs.has(project)) {
+        if ((await readJsonOr<HostedMeta>(metaFile(dir)))?.slug) return true;
+        throw new Error(PUBLISH_MESSAGE.StillRunning());
+      }
+      const controller = new AbortController();
+      this.#controllers.set(controller, { project });
+      try {
+        await this.#ensureHostedProject(project, dir, path.join(dir, "home"), undefined, controller.signal);
+      } finally {
+        this.#controllers.delete(controller);
+      }
+      return true;
+    });
+  }
   /** Start sending the game's project, said in the record before this answers; it goes on behind the press. */
-  async #sendCloud(project: string, platform: string, gameDir: string): Promise<void> {
+  async #sendCloud(project: string, platform: string, gameDir: string, keep: boolean): Promise<void> {
     const dir = this.#publishDir(project);
     const deps = this.#cloudDeps(project, CLOUD_SEND_TIMEOUT_MS);
     // Taken before anything is awaited, so a second press joins this send.
-    this.#cloudSends.set(project, Promise.resolve());
-    const send = await beginCloudSend(dir, platform, deps.read).catch((error: unknown) => {
+    const going: CloudSend = { platform, done: Promise.resolve() };
+    this.#cloudSends.set(project, going);
+    const send = await beginCloudSend(dir, platform, deps.read, keep).catch((error: unknown) => {
       this.#cloudSends.delete(project);
+      this.#cloudReleases.delete(cloudKey(project, platform));
       throw error;
     });
     const controller = new AbortController();
     this.#controllers.set(controller, { project });
-    const sent = sendCloudBuild(dir, send, gameDir, deps, controller.signal)
-      .then((build) => {
-        if (build) this.#watchCloud(project, build.jobId);
-      })
+    going.done = sendCloudBuild(dir, send, gameDir, deps, controller.signal, keep)
+      .catch(() => null)
+      .then((build) => this.#cloudSent(project, going, build))
       .catch(() => {})
       .finally(() => {
         this.#controllers.delete(controller);
-        this.#cloudSends.delete(project);
+        if (this.#cloudSends.get(project) === going) this.#cloudSends.delete(project);
       });
-    this.#cloudSends.set(project, sent);
   }
-  /** Follow build `jobId` of `project` until it ends, once; signing out or disconnecting stops it. */
-  #watchCloud(project: string, jobId: string): void {
-    const key = `${project}\n${jobId}`;
+  /**
+   * A send ended, with the build Genex started or none: the build is followed, and given to players
+   * when a publish asked for it while its project was going up. The send ends and whether one asked is
+   * read in one step with no wait between: a publish that comes after reads the build in the record,
+   * and a press that comes after starts a new send.
+   */
+  #cloudSent(project: string, going: CloudSend, build: GenexCloudBuild | null): void {
+    if (this.#cloudSends.get(project) === going) this.#cloudSends.delete(project);
+    const asked = this.#cloudReleases.delete(cloudKey(project, going.platform));
+    if (!build) return;
+    const { jobId } = build;
+    this.#watchCloud(project, jobId);
+    if (asked)
+      this.#followCloud(`${project}\n${jobId}\nrelease`, project, (signal) =>
+        this.#releaseSent(project, jobId, signal),
+      );
+  }
+  /**
+   * Give players build `jobId` once it is built, asking again a few times when Genex can't be reached.
+   * A refusal is an answer: once the record says Genex has nothing of the build to give, nothing more is asked.
+   */
+  async #releaseSent(project: string, jobId: string, signal: AbortSignal): Promise<void> {
+    const dir = this.#publishDir(project);
+    // A refusal exits 1 with its answer, which the record then keeps.
+    const deps = this.#cloudDeps(project, NATIVE_PUBLISH_TIMEOUT_MS, [0, 1]);
+    for (let attempt = 0; attempt < CLOUD_RELEASE_TRIES && !signal.aborted; attempt += 1) {
+      const released = await releaseCloudBuild(dir, jobId, deps, signal).catch(() => null);
+      if (released) return;
+      const kept = (await loadCloudBuilds(dir, deps.read)).find((build) => build.jobId === jobId);
+      if (!kept || !isHeld(kept)) return;
+      await deps.sleep(pollDelayMs(attempt), signal);
+    }
+  }
+  /**
+   * Give players the apps Genex keeps for `platforms`: each one's newest kept build, at once when it
+   * is built, else as soon as it is. A project still on its way up is remembered, and its build asked
+   * for the moment Genex names it. With `gallery` (no app of this publish listed the game), the game
+   * is listed with the first build that is ready, and the record `sent` keeps Genex's answer.
+   */
+  async #releaseKept(
+    project: string,
+    platforms: readonly string[],
+    sent: NativeSaved,
+    signal: AbortSignal,
+    gallery: { title: string } | undefined,
+  ): Promise<{ sent: NativeSaved; released: CloudReleased }> {
+    const released: CloudReleased = { went: [], failed: [] };
+    for (const platform of platforms) {
+      if (signal.aborted) break;
+      await this.#releaseOne(project, platform, signal, released, released.listing ? undefined : gallery);
+    }
+    if (!released.listing || signal.aborted) return { sent, released };
+    const listed = { ...sent, listing: released.listing };
+    await atomicWriteJson(path.join(this.#publishDir(project), NATIVE_FILE), listed);
+    return { sent: listed, released };
+  }
+  /** One system's kept app to players (`#releaseKept`): how it went is added to `released`. */
+  async #releaseOne(
+    project: string,
+    platform: string,
+    signal: AbortSignal,
+    released: CloudReleased,
+    gallery: { title: string } | undefined,
+  ): Promise<void> {
+    // Its project is still going up: the newest app is the one on its way (`#cloudSent` reads this once the send ends).
+    if (this.#cloudSends.get(project)?.platform === platform) {
+      this.#cloudReleases.add(cloudKey(project, platform));
+      released.went.push(platform);
+      return;
+    }
+    const dir = this.#publishDir(project);
+    // A refused listing exits 1 with its answer: the build itself went.
+    const deps = this.#cloudDeps(project, NATIVE_PUBLISH_TIMEOUT_MS, [0, 1]);
+    const build = newestHeld(await loadCloudBuilds(dir, deps.read), platform);
+    if (!build) return;
+    try {
+      const ready = build.state === CloudBuildState.Built;
+      const answer = await releaseCloudBuild(dir, build.jobId, deps, signal, ready ? gallery : undefined);
+      if (isRunning(answer.build)) this.#watchCloud(project, answer.build.jobId);
+      released.went.push(platform);
+      const listing = listingOf(answer);
+      if (listing) released.listing = listing;
+    } catch (error) {
+      released.failed.push({ platform, error: errorMessage(error).slice(-PUBLISH_ERROR_TAIL_CHARS) });
+    }
+  }
+  /** Run `follow` for `project` under `key`, one at a time; signing out or disconnecting stops it. */
+  #followCloud(key: string, project: string, follow: (signal: AbortSignal) => Promise<unknown>): void {
     if (this.#cloudWatches.has(key)) return;
     const controller = new AbortController();
     this.#controllers.set(controller, { project });
-    const watch = watchCloudBuild(this.#publishDir(project), jobId, this.#cloudDeps(project), controller.signal)
+    const going = follow(controller.signal)
+      .then(() => {})
       .catch(() => {})
       .finally(() => {
         this.#controllers.delete(controller);
         this.#cloudWatches.delete(key);
       });
-    this.#cloudWatches.set(key, watch);
+    this.#cloudWatches.set(key, going);
+  }
+  /** Follow build `jobId` of `project` until it ends, once. */
+  #watchCloud(project: string, jobId: string): void {
+    this.#followCloud(`${project}\n${jobId}`, project, (signal) =>
+      watchCloudBuild(this.#publishDir(project), jobId, this.#cloudDeps(project), signal),
+    );
+  }
+  /**
+   * Read the app Genex keeps of build `jobId` again, once since Studio started: it rests until a
+   * publish asks, and Genex stops keeping one after a while. The record learns that here, so the
+   * dialog says the app is not built before anyone presses Publish. A read Genex didn't answer
+   * (offline, signed out) doesn't count: after a wait, the next read of the record asks again.
+   */
+  #recheckKept(project: string, jobId: string): void {
+    const key = `${project}\n${jobId}\nkept`;
+    if (this.#cloudRechecks.has(key)) return;
+    this.#cloudRechecks.add(key);
+    this.#followCloud(key, project, async (signal) => {
+      const deps = this.#cloudDeps(project);
+      const read = await refreshCloudBuild(this.#publishDir(project), jobId, deps, signal).catch(() => false);
+      if (read) return;
+      try {
+        await deps.sleep(pollDelayMs(0), signal);
+      } finally {
+        this.#cloudRechecks.delete(key);
+      }
+    });
   }
   /** Settles once every send to Genex and every build being followed has ended; for tests. */
   async cloudSettled(): Promise<void> {
-    await Promise.all(this.#cloudSends.values());
+    await Promise.all([...this.#cloudSends.values()].map((send) => send.done));
     await Promise.all(this.#cloudWatches.values());
   }
   /**
@@ -2404,16 +2784,30 @@ export class GenexTools {
    * newer publish stops them. Nothing goes while the CLI has no `genex native`. Settles when the last
    * app went or failed.
    */
-  async publishApps(project: string, jobId: string, apps: readonly NativeUpload[]): Promise<void> {
-    if (!this.#sendsApps || apps.length === 0) return;
+  async publishApps(
+    project: string,
+    jobId: string,
+    apps: readonly NativeUpload[],
+    release: readonly string[] = [],
+  ): Promise<void> {
+    if (!this.#sendsApps || apps.length + release.length === 0) return;
     await this.#stopNativeStep(project);
-    await this.#startNativeStep(project, jobId, apps).done;
+    // With no app of its own, what the record says of the game's apps stays.
+    const kept = apps.length === 0 ? await this.#keptApps(this.#publishDir(project), false) : undefined;
+    await this.#startNativeStep(project, jobId, apps, kept, release).done;
   }
-  #startNativeStep(project: string, jobId: string, apps: readonly NativeUpload[], kept?: NativeSaved): NativeStep {
+  #startNativeStep(
+    project: string,
+    jobId: string,
+    apps: readonly NativeUpload[],
+    kept?: NativeSaved,
+    release: readonly string[] = [],
+  ): NativeStep {
     const controller = new AbortController();
     this.#controllers.set(controller, { project });
     const step: NativeStep = { jobId, controller, done: Promise.resolve() };
     step.done = this.#sendApps(project, jobId, apps, controller.signal, undefined, kept)
+      .then((sent) => this.#releaseKept(project, release, sent, controller.signal, undefined))
       .then(() => {})
       .catch(() => {})
       .finally(() => {
@@ -2427,8 +2821,8 @@ export class GenexTools {
    * Each app through `genex native publish`, recorded as it goes: what went live and what did not.
    * With `gallery`, the game is listed under its title with the first app that goes (a game with only
    * apps); the record then keeps Genex's answer. With `kept`, the record keeps what it says of the
-   * other platforms (an app sent again on its own). The game's review (`review.json`) is never
-   * touched: only a read of Genex writes it.
+   * other platforms (an app sent again on its own, or a publish of some of the game's apps). The
+   * game's review (`review.json`) is never touched: only a read of Genex writes it.
    */
   async #sendApps(
     project: string,

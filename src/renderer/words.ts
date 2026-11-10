@@ -3950,7 +3950,7 @@ export const PUBLISH_PLATFORM_WORDS = {
   players: { [PublishTarget.Mac]: "Mac", [PublishTarget.Windows]: "Windows", [PublishTarget.Linux]: "Linux" },
   webReady: t("Plays right away"),
   webMissing: t("Not set up for the web"),
-  /** An Unreal game: Unreal has no web export. */
+  /** An Unreal game with no web build: nothing here makes one, so its row is left out. */
   webUnavailable: t("Unreal games don’t run in a browser"),
   /** What a build runs on, by its processors. */
   arch: {
@@ -4017,7 +4017,8 @@ export const PUBLISH_PLATFORM_WORDS = {
     [CloudBuildFailure.SourceTooBig]: t("The project is too big for Genex to build"),
     [CloudBuildFailure.NotOnGenex]: t("Publish the game first, then Genex can build it"),
     [CloudBuildFailure.Failed]: t("The build on Genex failed"),
-  } satisfies Record<CloudBuildFailure, string>,
+    // A build Genex kept and then dropped is never a row's words: it reads as no build (`newestCloudBuild`).
+  } satisfies Record<Exclude<CloudBuildFailure, typeof CloudBuildFailure.Expired>, string>,
   cloudBuild: t("Build on Genex"),
   cloudBuildLabel: (name: string) => t("Build the {app} on Genex", { app: name }),
   cloudRetry: t("Try again"),
@@ -4127,7 +4128,12 @@ export const PUBLISH_CARD_WORDS = {
   live: t("Live"),
   liveCurrent: t("Live · up to date"),
   liveOlder: t("Live · older than your game"),
-  notPublished: t("Not published"),
+  /** Players have an older one, and a newer one is built: Publish gives it to them. */
+  liveUpdateReady: t("Live · update ready"),
+  /** Players don't have it. No app of it is made, one is made but the game changed since, or one waits for Publish. */
+  notBuilt: t("Not built"),
+  builtOlder: t("Built · older than your game"),
+  readyToPublish: t("Ready to publish"),
   inReview: t("In review"),
   notApproved: t("Not approved"),
   sendFailed: t("Couldn’t send"),
@@ -4162,7 +4168,7 @@ export const PUBLISH_CARD_WORDS = {
     t("Update {platforms} and take {down} down", { platforms, down }),
   publishAndTakeDown: (platforms: string, down: string) =>
     t("Publish to {platforms} and take {down} down", { platforms, down }),
-  /** The button when apps must be built first: the agent builds them, and a second press publishes them. */
+  /** The button when apps must be built first, here and on Genex Cloud at once: a second press publishes them. */
   build: (platforms: string) => t("Build {platforms}", { platforms }),
   buildCount: (count: number) => t("Build {count} apps", { count }),
   /** The button while it works. */
@@ -4171,10 +4177,14 @@ export const PUBLISH_CARD_WORDS = {
   publishing: (platforms: string) => t("Publishing to {platforms}", { platforms }),
   /** Under the button while Genex Cloud builds: so a long wait doesn't scare anyone. */
   cloudTakesLong: t("It can take up to an hour."),
+  /** The same, when the button names more than the app Genex Cloud builds: "Windows can take up to an hour." */
+  cloudTakesLongFor: (platforms: string) => t("{platforms} can take up to an hour.", { platforms }),
   /** A row's switch, for a screen reader. */
   switchLabel: (name: string) => t("Publish to {name}", { name }),
   /** An error block under the rows: what failed, never the log itself. */
   buildError: (platform: string) => t("{platform} build error", { platform }),
+  /** The game's project never reached Genex Cloud, or it refused it: nothing is being built. */
+  startError: (platform: string) => t("{platform} build didn’t start", { platform }),
   sendError: (platform: string) => t("{platform} app didn’t send", { platform }),
   /** The block once the agent has the error: its clock is at its end. */
   fixing: (platform: string) => t("Agent is fixing the {platform} build", { platform }),
@@ -6269,6 +6279,11 @@ export const NATIVE_WORDS = {
   shots: t("Shots"),
   about: tc("game page", "About"),
   install: t("Install"),
+  /** Play for a game's web build where its app is offered beside it. */
+  playInBrowser: t("Play in browser"),
+  playInBrowserLabel: (title: string) => t("Play {title} in the browser", { title }),
+  /** The web among the systems a game runs on. */
+  web: t("Web"),
   installLabel: (title: string, size: string) => t("Install {title}, {size}", { title, size }),
   installing: (percent: number) => t("Installing… {percent}%", { percent }),
   installingLabel: (title: string) => t("Installing {title}", { title }),
@@ -6417,7 +6432,7 @@ export const UNREAL_WORDS = {
   opening: t("Opening…"),
   /** The Live card for each step of the game's own project (`stage-status`). */
   stage: {
-    getUnreal: t("Unreal Engine 5.8 isn’t on this computer yet."),
+    getUnreal: t("Unreal Engine isn’t on this computer yet."),
     getUnrealButton: t("Get Unreal Engine"),
     /** The card's Play: the game's own app, or the agent asked to run the game (`game-play.ts`). */
     play: t("Play"),

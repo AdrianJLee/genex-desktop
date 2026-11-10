@@ -38,13 +38,20 @@ import { editorLogPath, readEditorLog } from "../../src/plugins/unreal/editor-lo
 import { chosenProject, derivedPort, listSetUpProjects, SetupStorage } from "../../src/plugins/unreal/editor-port.ts";
 import {
   addToolsetPlugins,
+  type Engine,
+  engineOfProject,
   findEngines,
   HelperState,
   helperVersion,
   inspectProject,
+  installEngineText,
+  installEngineVersion,
+  moveProject,
+  planMove,
   planSetup,
   recentProjects,
   type SetupEnv,
+  SetupError,
   SetupErrorCode,
   SetupStep,
   setUpProject,
@@ -199,11 +206,29 @@ async function fakeRecordsOnly(home: string, records: Record<string, unknown>) {
   return fakeRecords(home, "win32", records);
 }
 
-async function fakeProject(root: string, name = "Drift", options: { ini?: string } = {}) {
+/** Unreal 5.9 installed on a Mac beside the engines `fakeEpic` lists, in an install record of its own; its folder. */
+async function installNewerUnreal(home: string): Promise<string> {
+  const folder = path.join(home, "Engines", "UE_5.9");
+  await mkdir(folder, { recursive: true });
+  const record = launcherRecord("UE_5.9", "5.9.0-60000001+++UE5+Release-5.9-Mac", folder);
+  await fakeRecords(home, "darwin", { "UE_5.9.item": record });
+  return folder;
+}
+
+/** A source build's `EngineAssociation`: the id Unreal registers it by, never a version. */
+const SOURCE_BUILD = "{2E6C4A1B-0D4F-4B63-9B5E-0F3C1A7D9E52}";
+
+/** The Unreal 5.9 names Epic's MCP settings section by, and a project made with 5.9. */
+const MCP_SECTION_5_9 = "[/Script/ModelContextProtocol.ModelContextProtocolSettings]";
+const UNREAL_5_9 = "5.9";
+
+type ProjectOptions = { ini?: string; engine?: string };
+
+async function fakeProject(root: string, name = "Drift", options: ProjectOptions = {}) {
   const directory = path.join(root, name);
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, `${name}.uproject`);
-  await writeFile(file, UPROJECT);
+  await writeFile(file, options.engine ? UPROJECT.replace('"5.8"', JSON.stringify(options.engine)) : UPROJECT);
   if (options.ini !== undefined) {
     await mkdir(path.dirname(path.join(directory, SETTINGS_INI)), { recursive: true });
     await writeFile(path.join(directory, SETTINGS_INI), options.ini);
@@ -226,7 +251,7 @@ async function tree(dir: string): Promise<Record<string, string>> {
   return out;
 }
 
-async function setupFixture(options: { ini?: string } = {}) {
+async function setupFixture(options: ProjectOptions = {}) {
   const root = await tmpDir("studio-unreal-setup-");
   const home = path.join(root, "home");
   const storage = path.join(root, "storage");
@@ -268,6 +293,26 @@ describe("Set up Unreal finds", () => {
         ["5.7", "5.7.1", false],
       ],
     );
+  });
+
+  it("finds Unreal 5.9 beside 5.8, newest first, both supported: a game stays on the one it was made with", async () => {
+    const home = await tmpDir("studio-unreal-home-");
+    await fakeEpic(home, "darwin", []);
+    await installNewerUnreal(home);
+    const engines = await findEngines(fakeEnv(home));
+    assert.deepEqual(
+      engines.map((e) => [e.version, e.build, e.supported]),
+      [
+        ["5.9", "5.9.0", true],
+        ["5.8", "5.8.3", true],
+        ["5.7", "5.7.1", false],
+      ],
+    );
+  });
+
+  it("names Unreal 5.9 as the one a newcomer installs", () => {
+    assert.equal(installEngineVersion(), "5.9");
+    assert.match(installEngineText(), /^Unreal Engine 5\.9 isn't on this computer yet\./);
   });
 
   it("lists recently opened projects from the engine's own list, newest first, skipping files that are gone", async () => {
@@ -415,6 +460,250 @@ describe("Set up Unreal finds", () => {
     });
 });
 
+describe("The installed engine a project's own tools run with", () => {
+  const installed = (version: string, supported = true): Engine => ({
+    version,
+    build: `${version}.0`,
+    directory: `/Engines/UE_${version}`,
+    supported,
+  });
+  const [newer, older, tooOld] = [installed("5.9"), installed("5.8"), installed("5.7", false)];
+  /** What the project names, the engines installed (newest first), and the one its tools run with. */
+  const rows: Array<[string, string, Engine[], Engine | undefined]> = [
+    ["the engine the project names, though a newer one is installed", "5.8", [newer, older, tooOld], older],
+    ["the engine the project names when that is the newest", "5.9", [newer, older], newer],
+    ["the engine the project names when only that one is installed", "5.8", [older, tooOld], older],
+    ["the newest supported engine when the one it names isn't installed", "5.8", [newer, tooOld], newer],
+    [
+      "the newest supported engine for an installed Unreal older than Genex works with",
+      "5.7",
+      [newer, older, tooOld],
+      newer,
+    ],
+    ["the newest supported engine for a source build's id", SOURCE_BUILD, [newer, older], newer],
+    ["the newest supported engine for a project that names none", "", [newer, older], newer],
+    ["none when only an Unreal older than Genex works with is installed", "5.7", [tooOld], undefined],
+    ["none when no engine is installed", "5.8", [], undefined],
+  ];
+  for (const [what, association, engines, expected] of rows)
+    it(`is ${what}`, () => {
+      assert.equal(engineOfProject(association, engines), expected);
+    });
+});
+
+/** A project's per-user settings file, as text. */
+const settingsOf = (directory: string) => readFile(path.join(directory, SETTINGS_INI), "utf8");
+/** Epic's MCP section as setup writes it: the server starting by itself on `port`. */
+const started = (section: string, port: number | string) =>
+  `${section}\nbAutoStartServer=True\nServerPortNumber=${port}\n`;
+
+describe("Moving a game made with an older Unreal to the one new games are made with", () => {
+  /** Drift, made with `association` and set up, on a Mac with Unreal 5.8, and 5.9 too when `both`. */
+  async function setUpOn(association: string, both: boolean) {
+    const f = await setupFixture({ ini: USER_INI, engine: association });
+    await fakeEpic(f.home, "darwin", []);
+    if (both) await installNewerUnreal(f.home);
+    await setUpProject(f.project.file, f.options);
+    return f;
+  }
+  const descriptor = async (file: string) => JSON.parse(await readFile(file, "utf8"));
+  const names = (json: { Plugins: PluginEntry[] }) => json.Plugins.map((p) => p.Name);
+
+  it("offers the move for a 5.8 game: to 5.9, and whether 5.9 is installed", async () => {
+    const both = await setUpOn("5.8", true);
+    assert.deepEqual(await planMove(both.project.file, both.options), { from: "5.8", to: "5.9", installed: true });
+    const only = await setUpOn("5.8", false);
+    assert.deepEqual(await planMove(only.project.file, only.options), { from: "5.8", to: "5.9", installed: false });
+    const newest = await setUpOn("5.9", true);
+    assert.equal(await planMove(newest.project.file, newest.options), undefined, "nothing newer to move to");
+  });
+
+  it("moves it: the project names 5.9, a toolset 5.9 lacks goes, 5.9's own come, and its port and helper stay", async () => {
+    const f = await setUpOn("5.8", true);
+    const before = await inspectProject(f.project.file, f.options);
+    const state = await moveProject(f.project.file, f.options);
+    assert.deepEqual([state.engine, state.ready, state.port], ["5.9", true, before.port]);
+    const json = await descriptor(f.project.file);
+    assert.equal(json.EngineAssociation, "5.9");
+    assert.ok(
+      !names(json).includes("UMGToolSet"),
+      "Unreal 5.9 has no UMGToolSet: naming it would stop the project opening",
+    );
+    for (const toolset of TOOLSETS_5_9) assert.ok(names(json).includes(toolset), toolset);
+    assert.equal(
+      await settingsOf(f.project.directory),
+      `${USER_INI}${started(MCP_SECTION, f.port)}`,
+      "the section Unreal 5.9 still reads stays as it is",
+    );
+    assert.equal(await planMove(f.project.file, f.options), undefined);
+  });
+
+  it("undo setup after a move gives the project back as it was before Genex, on 5.8", async () => {
+    const f = await setupFixture({ ini: USER_INI, engine: "5.8" });
+    await fakeEpic(f.home, "darwin", []);
+    await installNewerUnreal(f.home);
+    const original = await readFile(f.project.file, "utf8");
+    await setUpProject(f.project.file, f.options);
+    await moveProject(f.project.file, f.options);
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await readFile(f.project.file, "utf8"), original);
+    assert.equal((await settingsOf(f.project.directory)).trimEnd(), USER_INI.trimEnd());
+  });
+
+  it("keeps a toolset entry of the user's own that 5.9 has, and drops one it lacks whoever added it", async () => {
+    const f = await setupFixture({ ini: USER_INI, engine: "5.8" });
+    await fakeEpic(f.home, "darwin", []);
+    await installNewerUnreal(f.home);
+    const json = JSON.parse(await readFile(f.project.file, "utf8"));
+    json.Plugins.push({ Name: "UMGToolSet", Enabled: true }, { Name: "NiagaraToolsets", Enabled: false });
+    await writeFile(f.project.file, `${JSON.stringify(json, null, "\t")}\n`);
+    await setUpProject(f.project.file, f.options);
+    await moveProject(f.project.file, f.options);
+    const moved = await descriptor(f.project.file);
+    assert.ok(!names(moved).includes("UMGToolSet"));
+    assert.deepEqual(
+      moved.Plugins.filter((p: PluginEntry) => p.Name === "NiagaraToolsets"),
+      [{ Name: "NiagaraToolsets", Enabled: false }],
+    );
+  });
+
+  /** A C++ target naming an Unreal's build settings and include order, as Genex and Epic's templates write one. */
+  const target = (name: string, settings: string, order: string, eol = "\n") =>
+    [
+      `public class ${name}Target : TargetRules`,
+      "{",
+      `\tDefaultBuildSettings = BuildSettingsVersion.${settings};`,
+      `\tIncludeOrderVersion = EngineIncludeOrderVersion.${order};`,
+      "}",
+      "",
+    ].join(eol);
+
+  /** Drift on 5.8 with a game and an editor target of 5.8's settings, and a third with settings of its own. */
+  async function withTargets() {
+    const f = await setUpOn("5.8", true);
+    const source = path.join(f.project.directory, "Source");
+    await mkdir(source, { recursive: true });
+    const files = {
+      game: path.join(source, "Drift.Target.cs"),
+      editor: path.join(source, "DriftEditor.Target.cs"),
+      own: path.join(source, "DriftServer.Target.cs"),
+    };
+    await writeFile(files.game, target("Drift", "V7", "Unreal5_8"));
+    await writeFile(files.editor, target("DriftEditor", "V7", "Unreal5_8", "\r\n"));
+    await writeFile(files.own, target("DriftServer", "Latest", "Latest"));
+    return { f, files };
+  }
+  const text = (file: string) => readFile(file, "utf8");
+
+  it("gives the game's C++ targets 5.9's build settings: 5.9 builds no game target that names 5.8's", async () => {
+    const { f, files } = await withTargets();
+    await moveProject(f.project.file, f.options);
+    assert.equal(await text(files.game), target("Drift", "V8", "Unreal5_9"));
+    assert.equal(await text(files.editor), target("DriftEditor", "V8", "Unreal5_9", "\r\n"), "its line ends stay");
+    assert.equal(await text(files.own), target("DriftServer", "Latest", "Latest"), "settings of its own stay");
+  });
+
+  it("undo setup gives the targets the move changed their 5.8 settings back", async () => {
+    const { f, files } = await withTargets();
+    await moveProject(f.project.file, f.options);
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await text(files.game), target("Drift", "V7", "Unreal5_8"));
+    assert.equal(await text(files.editor), target("DriftEditor", "V7", "Unreal5_8", "\r\n"));
+    assert.equal(await text(files.own), target("DriftServer", "Latest", "Latest"));
+  });
+
+  const noLinks = process.platform === "win32" && "links need privileges on Windows";
+  it("never writes a target through a link, or one in a linked Source folder", { skip: noLinks }, async () => {
+    const outside = await tmpDir("unreal-move-outside-");
+    const elsewhere = path.join(outside, "Elsewhere.Target.cs");
+    await writeFile(elsewhere, target("Elsewhere", "V7", "Unreal5_8"));
+    const linkedFile = await setUpOn("5.8", true);
+    await mkdir(path.join(linkedFile.project.directory, "Source"), { recursive: true });
+    await symlink(elsewhere, path.join(linkedFile.project.directory, "Source", "Drift.Target.cs"));
+    await moveProject(linkedFile.project.file, linkedFile.options);
+    const linkedFolder = await setUpOn("5.8", true);
+    await symlink(outside, path.join(linkedFolder.project.directory, "Source"));
+    await moveProject(linkedFolder.project.file, linkedFolder.options);
+    assert.equal(await text(elsewhere), target("Elsewhere", "V7", "Unreal5_8"));
+  });
+
+  const refused: Array<[string, string, boolean, (f: Awaited<ReturnType<typeof setupFixture>>) => unknown]> = [
+    ["Unreal 5.9 isn't installed", "5.8", false, () => undefined],
+    ["the game is already on 5.9", "5.9", true, () => undefined],
+    ["the game's Unreal is a source build", "{2E6C4A1B-0D4F-4B63-9B5E-0F3C1A7D9E52}", true, () => undefined],
+    [
+      "Unreal has the project open",
+      "5.8",
+      true,
+      (f) => {
+        f.env.editorRunning = async () => true;
+        f.env.editorAnswers = async () => true;
+      },
+    ],
+  ];
+  for (const [why, association, both, arrange] of refused)
+    it(`refuses, changing nothing, when ${why}`, async () => {
+      const f = await setUpOn(association, both);
+      arrange(f);
+      const witness = [await tree(f.project.directory), await tree(f.storage)];
+      await assert.rejects(moveProject(f.project.file, f.options), SetupError);
+      assert.deepEqual([await tree(f.project.directory), await tree(f.storage)], witness);
+    });
+});
+
+describe("The Unreal a project is set up on", () => {
+  /** Drift, made with `association`, on a Mac with Unreal 5.8 and the unsupported 5.7, and 5.9 too when `both`. */
+  async function madeWith(association: string, both: boolean) {
+    const f = await setupFixture({ ini: USER_INI, engine: association });
+    await fakeEpic(f.home, "darwin", []);
+    if (both) await installNewerUnreal(f.home);
+    return f;
+  }
+  const namedBy = async (file: string) => JSON.parse(await readFile(file, "utf8")).EngineAssociation;
+
+  /** What the game was made with, whether 5.9 is installed beside 5.8, and why it stays. */
+  const stays: Array<[string, boolean, string]> = [
+    ["5.8", true, "where 5.9 is installed beside it"],
+    ["5.8", false, "where 5.8 is the only Unreal Genex works with"],
+    ["5.9", true, "the Unreal new games are made with"],
+  ];
+  for (const [association, both, where] of stays)
+    it(`setup leaves a game made with ${association} on ${association}, ${where}: no engine step, and it is ready`, async () => {
+      const f = await madeWith(association, both);
+      const plan = await planSetup(f.project.file, f.options);
+      assert.equal(plan.engine, undefined);
+      assert.equal(plan.steps.includes(SetupStep.Engine), false);
+      const state = await setUpProject(f.project.file, f.options);
+      assert.deepEqual([state.ready, state.engine], [true, association]);
+      assert.equal(await namedBy(f.project.file), association);
+    });
+
+  /** Whether 5.9 is installed beside 5.8, and the Unreal a game made with 5.7 is then switched to. */
+  const switches: Array<[boolean, string, string]> = [
+    [true, "5.9", "the newest installed where 5.8 and 5.9 both are"],
+    [false, "5.8", "where it is the only Unreal Genex works with"],
+  ];
+  for (const [both, to, where] of switches)
+    it(`setup switches a game made with 5.7 to ${to}, ${where}, and undo gives 5.7 back`, async () => {
+      const f = await madeWith("5.7", both);
+      const plan = await planSetup(f.project.file, f.options);
+      assert.deepEqual([plan.steps[0], plan.engine], [SetupStep.Engine, { from: "5.7", to }]);
+      const state = await setUpProject(f.project.file, f.options);
+      assert.deepEqual([state.ready, state.engine], [true, to]);
+      assert.equal(await namedBy(f.project.file), to);
+      await undoSetup(f.project.file, f.options);
+      assert.equal(await namedBy(f.project.file), "5.7");
+    });
+
+  it("setup switches nothing where no Unreal Genex works with is installed", async () => {
+    const f = await setupFixture({ ini: USER_INI, engine: "5.7" });
+    const plan = await planSetup(f.project.file, f.options);
+    assert.equal(plan.engine, undefined);
+    await setUpProject(f.project.file, f.options);
+    assert.equal(await namedBy(f.project.file), "5.7");
+  });
+});
+
 describe("Set up Unreal on a project", () => {
   it("sets a project up: Epic's plugins on, the MCP server starting on its own port, the helper installed", async () => {
     const f = await setupFixture({ ini: USER_INI });
@@ -483,6 +772,26 @@ const TOOLSETS = [
   "AutomationTestToolset",
 ];
 
+/** The ones a game on Unreal 5.9 gets: that release's own, with no UMGToolSet, which 5.9 doesn't have. */
+const TOOLSETS_5_9 = [
+  "BlueprintToolsets",
+  "NiagaraToolsets",
+  "StateTreeToolset",
+  "AIModuleToolset",
+  "AnimationAssistantToolset",
+  "PCGToolset",
+  "PhysicsToolsets",
+  "GameplayTagsToolset",
+  "AutomationTestToolset",
+  "InputToolset",
+  "SceneCaptureToolset",
+  "ConsoleToolset",
+  "WidgetAnimationToolset",
+  "WidgetStaticAnalysisToolset",
+  "NavMeshToolset",
+  "MetaSoundToolset",
+];
+
 type PluginEntry = { Name: string; Enabled: boolean; TargetAllowList?: string[] };
 const pluginsOf = async (file: string): Promise<PluginEntry[]> => JSON.parse(await readFile(file, "utf8")).Plugins;
 
@@ -520,6 +829,26 @@ describe("Epic's toolsets for games", () => {
     );
     await undoSetup(f.project.file, f.options);
     assert.equal(await readFile(f.project.file, "utf8"), UPROJECT, "the .uproject as it was before Genex");
+  });
+
+  it("a game on Unreal 5.9 gets that release's toolsets, and undo takes them back out", async () => {
+    const f = await setupFixture({ ini: USER_INI, engine: UNREAL_5_9 });
+    const before = await readFile(f.project.file, "utf8");
+    const after = await setUpProject(f.project.file, f.options);
+    assert.deepEqual([after.toolsets, after.ready], [true, true]);
+    const plugins = await pluginsOf(f.project.file);
+    assert.deepEqual(
+      plugins.filter((p) => TOOLSETS_5_9.includes(p.Name)),
+      TOOLSETS_5_9.map((name) => ({ Name: name, Enabled: true, TargetAllowList: ["Editor"] })),
+    );
+    assert.deepEqual(
+      plugins.filter((p) => p.Name === "UMGToolSet"),
+      [],
+      "no plugin Unreal 5.9 lacks",
+    );
+    assert.deepEqual(await addToolsetPlugins(f.project.file, f.options), [], "nothing left to add");
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await readFile(f.project.file, "utf8"), before, "the .uproject as it was before Genex");
   });
 
   it("a toolset the project already names stays as the user left it, turned off included", async () => {
@@ -776,6 +1105,90 @@ describe("Undo setup", () => {
 const handIni = (port: string) => `${USER_INI}${MCP_SECTION}\nbAutoStartServer=True\nServerPortNumber=${port}\n`;
 const iniPort = async (directory: string) =>
   /ServerPortNumber=(\d+)/.exec(await readFile(path.join(directory, SETTINGS_INI), "utf8"))?.[1];
+
+describe("Epic's MCP settings by Unreal release", () => {
+  it("a 5.9 project gets the section 5.9 saves, and undo takes it back out", async () => {
+    const f = await setupFixture({ ini: USER_INI, engine: UNREAL_5_9 });
+    const state = await setUpProject(f.project.file, f.options);
+    assert.equal(state.ready, true);
+    assert.equal(await settingsOf(f.project.directory), `${USER_INI}${started(MCP_SECTION_5_9, f.port)}`);
+    await undoSetup(f.project.file, f.options);
+    assert.equal((await settingsOf(f.project.directory)).trimEnd(), USER_INI.trimEnd());
+  });
+
+  it("a 5.9 project is set up whichever name its section has: 5.9 reads both", async () => {
+    for (const section of [MCP_SECTION, MCP_SECTION_5_9]) {
+      const f = await setupFixture({ engine: UNREAL_5_9 });
+      const ini = `${USER_INI}${started(section, f.port)}`;
+      await mkdir(path.dirname(path.join(f.project.directory, SETTINGS_INI)), { recursive: true });
+      await writeFile(path.join(f.project.directory, SETTINGS_INI), ini);
+      const state = await inspectProject(f.project.file, f.options);
+      assert.deepEqual([state.autoStart, state.port], [true, f.port], section);
+      await setUpProject(f.project.file, f.options);
+      assert.equal(await settingsOf(f.project.directory), ini, "setup leaves the section it found");
+    }
+  });
+
+  it("a 5.8 project is not started by the section only 5.9 reads: setup adds its own, and undo removes that one", async () => {
+    const f = await setupFixture();
+    const ini = `${USER_INI}${started(MCP_SECTION_5_9, f.port)}`;
+    await mkdir(path.dirname(path.join(f.project.directory, SETTINGS_INI)), { recursive: true });
+    await writeFile(path.join(f.project.directory, SETTINGS_INI), ini);
+    assert.equal((await inspectProject(f.project.file, f.options)).autoStart, false);
+    const state = await setUpProject(f.project.file, f.options);
+    assert.equal(state.autoStart, true);
+    assert.equal(await settingsOf(f.project.directory), `${ini}\n${started(MCP_SECTION, f.port)}`);
+    await undoSetup(f.project.file, f.options);
+    assert.equal((await settingsOf(f.project.directory)).trimEnd(), ini.trimEnd());
+  });
+
+  it("a file with the section under both names gets the port in both, and undo gives both theirs back", async () => {
+    const f = await setupFixture({ engine: UNREAL_5_9 });
+    const ini = `${started(MCP_SECTION, 9000)}\n${started(MCP_SECTION_5_9, 9000)}`;
+    await mkdir(path.dirname(path.join(f.project.directory, SETTINGS_INI)), { recursive: true });
+    await writeFile(path.join(f.project.directory, SETTINGS_INI), ini);
+    await setUpProject(f.project.file, f.options);
+    assert.equal(
+      await settingsOf(f.project.directory),
+      `${started(MCP_SECTION, f.port)}\n${started(MCP_SECTION_5_9, f.port)}`,
+    );
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await settingsOf(f.project.directory), ini);
+  });
+
+  it("a 5.9 project stays set up once its editor saves the section with the port alone: 5.9 starts the server unless a setting says no", async () => {
+    const f = await setupFixture({ ini: USER_INI, engine: UNREAL_5_9 });
+    await setUpProject(f.project.file, f.options);
+    const saved = `${USER_INI}${MCP_SECTION_5_9}\nServerPortNumber=${f.port}\n`;
+    await writeFile(path.join(f.project.directory, SETTINGS_INI), saved);
+    const state = await inspectProject(f.project.file, f.options);
+    assert.deepEqual([state.autoStart, state.port, state.ready], [true, f.port, true]);
+    assert.deepEqual((await planSetup(f.project.file, f.options)).steps, []);
+    await setUpProject(f.project.file, f.options);
+    assert.equal(await settingsOf(f.project.directory), saved, "setup leaves the file as Unreal saved it");
+    await undoSetup(f.project.file, f.options);
+    assert.equal((await settingsOf(f.project.directory)).trimEnd(), USER_INI.trimEnd());
+  });
+
+  it("a port alone starts nothing where the server is off: a 5.9 project that says no, and any 5.8 project", async () => {
+    const off = await setupFixture({ engine: UNREAL_5_9 });
+    const refused = `${MCP_SECTION_5_9}\nbAutoStartServer=False\nServerPortNumber=${off.port}\n`;
+    await mkdir(path.dirname(path.join(off.project.directory, SETTINGS_INI)), { recursive: true });
+    await writeFile(path.join(off.project.directory, SETTINGS_INI), refused);
+    assert.equal((await inspectProject(off.project.file, off.options)).autoStart, false);
+    const older = await setupFixture({ ini: `${MCP_SECTION}\nServerPortNumber=9000\n` });
+    assert.equal((await inspectProject(older.project.file, older.options)).autoStart, false);
+  });
+
+  it("a section a 5.8 setup wrote and 5.9 saved under its new name is still taken out by undo", async () => {
+    const f = await setupFixture({ ini: USER_INI });
+    await setUpProject(f.project.file, f.options);
+    const renamed = (await settingsOf(f.project.directory)).replace(MCP_SECTION, MCP_SECTION_5_9);
+    await writeFile(path.join(f.project.directory, SETTINGS_INI), renamed);
+    await undoSetup(f.project.file, f.options);
+    assert.equal((await settingsOf(f.project.directory)).trimEnd(), USER_INI.trimEnd());
+  });
+});
 
 describe("A project's own port", () => {
   it("goes into the setup record, where the bridge finds it, and undo takes it away", async () => {
@@ -1373,6 +1786,30 @@ describe("the Unreal plugin's setup actions", () => {
     assert.deepEqual(asked, [path.join(b.home, "Engines", "UE_5.8")]);
   });
 
+  it("with two Unreals installed, status names the one the shown project names and judges Xcode against it, else the newest", async () => {
+    const asked: Array<string | undefined> = [];
+    const b = await backendFixture({
+      xcode: async (engine) => {
+        asked.push(engine);
+        return NO_XCODE;
+      },
+    });
+    const newer = await installNewerUnreal(b.home);
+    const older = path.join(b.home, "Engines", "UE_5.8");
+    const rows: Array<[string, string, string]> = [
+      ["5.8", "5.8", older],
+      ["5.9", "5.9", newer],
+      ["5.10", "5.9", newer],
+      [SOURCE_BUILD, "5.9", newer],
+    ];
+    for (const [association, version, folder] of rows) {
+      await writeFile(b.project.file, UPROJECT.replace('"5.8"', JSON.stringify(association)));
+      asked.length = 0;
+      const status = (await b.backend.action?.("status", {}, b.context)) as { engine: { version: string } };
+      assert.deepEqual([status.engine.version, asked], [version, [folder]], association);
+    }
+  });
+
   it("set up and undo run through the actions, with the project's own port", async () => {
     const b = await backendFixture();
     const review = await b.backend.review?.("setup", { project: b.project.file }, b.context);
@@ -1751,6 +2188,25 @@ describe("a game's own Unreal project and the steps card", () => {
     const windows = await linkFixture({ platform: "win32" });
     await assert.rejects(windows.backend.action!("get-xcode", { step: XcodeStep.Install }, windows.context), /Mac/);
     assert.deepEqual(windows.launched, []);
+  });
+
+  it("with two Unreals installed, a game's steps card and Get Xcode judge Xcode against the Unreal its project names", async () => {
+    const asked: Array<string | undefined> = [];
+    const b = await linkFixture({
+      xcode: async (engine) => {
+        asked.push(engine);
+        return { ...READY_XCODE, state: XcodeState.FirstLaunch };
+      },
+    });
+    await installNewerUnreal(b.home);
+    await b.backend.action!("setup", { project: b.project.file }, b.context);
+    await b.backend.action!("use-project", { project: b.project.file }, b.context);
+    asked.length = 0;
+    const card = (await b.backend.action!("steps", {}, b.context)) as { steps: Array<{ id: string; label: string }> };
+    await b.backend.action!("get-xcode", { step: XcodeStep.Open }, b.context);
+    const older = path.join(b.home, "Engines", "UE_5.8");
+    assert.deepEqual(asked, [older, older], "the card, then the app Get Xcode opens");
+    assert.equal(card.steps.find((s) => s.id === UnrealStepId.SetUp)?.label, "Unreal 5.8 is set up for Drift");
   });
 
   it("the agent's use-project switches by project name or file, and show-steps says when nothing is open", async () => {
@@ -2467,7 +2923,8 @@ describe("Updating the Genex editor helper refuses, writing nothing,", () => {
 
 describe("The Unreal setup card for a Mac without Unreal", () => {
   it("asks for Epic's launcher, then the person's install of Unreal in it, with Don't use Unreal", () => {
-    const none = unrealInstallCard({ launcher: false, version: "5.8", installed: false, skipped: false });
+    const version = installEngineVersion();
+    const none = unrealInstallCard({ launcher: false, version, installed: false, skipped: false });
     assert.equal(none.open, true);
     assert.deepEqual(
       none.steps.map((step) => [step.id, step.done]),
@@ -2477,20 +2934,22 @@ describe("The Unreal setup card for a Mac without Unreal", () => {
       ],
     );
     assert.equal(none.steps[0]?.action?.name, "get-unreal");
+    assert.equal(none.steps[1]?.label, "Install Unreal 5.9");
     assert.equal(none.steps[1]?.you, true, "only the person signs in to Epic and installs in its launcher");
     assert.equal(none.steps[1]?.action, undefined, "no launcher to open yet");
     assert.deepEqual(none.secondary, { name: "skip", args: {}, label: "Don't use Unreal" });
-    const launcher = unrealInstallCard({ launcher: true, version: "5.8", installed: false, skipped: false });
+    const launcher = unrealInstallCard({ launcher: true, version, installed: false, skipped: false });
     assert.equal(launcher.steps[0]?.done, true);
     assert.equal(launcher.steps[1]?.action?.label, "Open the Epic Games Launcher");
   });
 
   it("closes with what the agent is told: Unreal is there, or the person chose not to use it", () => {
-    const ready = unrealInstallCard({ launcher: true, version: "5.8", installed: true, skipped: false });
+    const version = installEngineVersion();
+    const ready = unrealInstallCard({ launcher: true, version, installed: true, skipped: false });
     assert.equal(ready.open, false);
-    assert.match(String(ready.doneSays), /Unreal 5\.8 is installed/);
+    assert.match(String(ready.doneSays), /Unreal 5\.9 is installed/);
     assert.match(String(ready.doneSays), /unreal__new-game/);
-    const skipped = unrealInstallCard({ launcher: false, version: "5.8", installed: false, skipped: true });
+    const skipped = unrealInstallCard({ launcher: false, version, installed: false, skipped: true });
     assert.equal(skipped.open, false);
     assert.match(String(skipped.doneSays), /web game/);
   });

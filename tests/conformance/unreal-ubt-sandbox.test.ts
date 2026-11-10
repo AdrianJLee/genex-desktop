@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -26,6 +26,8 @@ type World = {
   unreal: string;
   engine: string;
   moved: string;
+  /** A stand-in for the build accelerator's lock folder (`/private/tmp/uba_shm_locks`). */
+  locks: string;
   sandbox: BuildSandbox & { dispose(): Promise<void> };
 };
 
@@ -36,6 +38,7 @@ async function makeWorld(): Promise<World> {
   const unreal = path.join(home, "AI Games", "rush-copy", "unreal");
   const engine = path.join(root, "engine");
   const moved = path.join(root, "moved-claude-home");
+  const locks = path.join(root, "uba_shm_locks");
   const ubtLog = path.join(home, "Library", "Application Support", "Epic", "UnrealBuildTool");
   for (const dir of [path.join(unreal, "Source"), path.join(unreal, "Intermediate"), engine, moved, ubtLog])
     await mkdir(dir, { recursive: true });
@@ -55,8 +58,9 @@ async function makeWorld(): Promise<World> {
     xcodeApp: null,
     home,
     denied: [moved],
+    acceleratorLocks: locks,
   });
-  return { root, home, unreal, engine, moved, sandbox };
+  return { root, home, unreal, engine, moved, locks, sandbox };
 }
 
 /** Runs a shell script in the sandbox; its exit code and output. */
@@ -145,6 +149,29 @@ describe("UnrealBuildTool's sandbox", { skip: SKIP }, () => {
     assert.equal(await readFile(path.join(moved, "token"), "utf8"), `${MARK}-moved`);
   });
 
+  it("makes folders, never files, under the engine's own build folder, and nothing elsewhere in the engine", async () => {
+    // UnrealBuildTool makes a module's generated-code folder there before it builds; a fresh
+    // Unreal 5.9 from Epic's launcher doesn't ship those folders, so the first build needs to.
+    const { engine } = world;
+    const build = path.join(engine, "Engine", "Intermediate", "Build");
+    const made = path.join(build, "Mac", "arm64", "UnrealEditor", "Development", "BuildSettings", "Gen");
+    await mkdir(build, { recursive: true });
+    assert.equal((await confined(world.sandbox, `mkdir -p "${made}"`)).code, 0, "a module's folder is made");
+    assert.ok(existsSync(made));
+    const refused: Array<[string, string]> = [
+      ["a file in the build folder", `echo planted > "${path.join(made, "Planted.gen.cpp")}"`],
+      ["a link in the build folder", `ln -s /etc/hosts "${path.join(made, "link")}"`],
+      ["a folder beside the build folder", `mkdir "${path.join(engine, "Engine", "Intermediate", "Planted")}"`],
+      ["a folder elsewhere in the engine", `mkdir "${path.join(engine, "Planted")}"`],
+      ["removing a folder it made", `rmdir "${made}"`],
+    ];
+    for (const [label, script] of refused) assert.notEqual((await confined(world.sandbox, script)).code, 0, label);
+    assert.deepEqual(await readdir(made), [], "no file in the folder it made");
+    assert.ok(
+      !existsSync(path.join(engine, "Planted")) && !existsSync(path.join(engine, "Engine", "Intermediate", "Planted")),
+    );
+  });
+
   it("has no network, not even this computer's own", async () => {
     const server = createServer((socket) => socket.end("hello"));
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -191,11 +218,81 @@ describe("UnrealBuildTool's sandbox", { skip: SKIP }, () => {
 
 describe("the build sandbox's profile", () => {
   it("sends no Apple Events and reaches no service that acts outside the build", () => {
-    const rules = buildSandboxProfile({ home: "/h", reads: [], writes: [], createOnly: [], denied: [] }).split("\n");
+    const rules = buildSandboxProfile({
+      home: "/h",
+      reads: [],
+      writes: [],
+      createOnly: [],
+      foldersOnly: [],
+      denied: [],
+    }).split("\n");
     assert.ok(rules.includes("(deny appleevent-send)"), "no Apple Event leaves the build (osascript, System Events)");
     const deniedMach = rules.find((rule) => rule.startsWith("(deny mach-lookup")) ?? "";
     for (const name of ["com.apple.coreservices.appleevents", "com.apple.lsd.open", "com.apple.pasteboard.1"])
       assert.ok(deniedMach.includes(`"${name}"`), `the build cannot reach ${name}`);
+  });
+});
+
+describe("the build accelerator's lock folder", { skip: SKIP }, () => {
+  let world: World;
+  before(async () => {
+    world = await makeWorld();
+  });
+  after(async () => {
+    await world?.sandbox.dispose();
+  });
+
+  it("lets UnrealBuildTool's build accelerator make its lock folder and take a lock file in it", async () => {
+    // UBT 5.8 starts the accelerator's trace even with -NoUBA, and its libUbaHost retries a lock
+    // file it can't create forever: the build stalls before it compiles anything.
+    const lock = path.join(world.locks, "0100000000000000");
+    const outcome = await confined(world.sandbox, `mkdir "${world.locks}" && (set -C; : > "${lock}") && rm "${lock}"`);
+    assert.equal(outcome.code, 0, outcome.output);
+  });
+
+  it("never writes outside the accelerator's lock folder through a link it plants there", async () => {
+    const { home, locks, root } = world;
+    const notes = path.join(home, "notes.txt");
+    await mkdir(locks, { recursive: true });
+    const rows: Array<[string, string]> = [
+      ["a symbolic link to a home file", `ln -s "${notes}" "${locks}/soft" && echo planted > "${locks}/soft"`],
+      ["a hard link to a home file", `ln "${notes}" "${locks}/hard" && echo planted > "${locks}/hard"`],
+      ["a folder beside the lock folder", `echo planted > "${locks}-evil"`],
+    ];
+    for (const [label, script] of rows) {
+      const outcome = await confined(world.sandbox, script);
+      assert.notEqual(outcome.code, 0, label);
+    }
+    assert.equal(await readFile(notes, "utf8"), `${MARK}-notes`);
+    for (const file of [
+      path.join(locks, "soft"),
+      path.join(locks, "hard"),
+      `${locks}-evil`,
+      path.join(root, "planted"),
+    ])
+      assert.ok(!existsSync(file), `nothing at ${file}`);
+  });
+
+  it("is macOS's shared /private/tmp/uba_shm_locks unless a test names another", async () => {
+    const root = await realpath(await tmpDir("studio-ubt-sandbox-locks-"));
+    const unreal = path.join(root, "home", "unreal");
+    await mkdir(unreal, { recursive: true });
+    const sandbox = await prepareBuildSandbox({
+      projectDir: unreal,
+      engineDir: path.join(root, "engine"),
+      xcodeApp: null,
+      home: path.join(root, "home"),
+      denied: [],
+    });
+    try {
+      // The profile is the sandbox's output; the real folder is shared with the person's own builds, so no test writes it.
+      assert.match(
+        await readFile(sandbox.profile, "utf8"),
+        /\(allow file-write\* [^\n]*\(subpath "\/private\/tmp\/uba_shm_locks"\)/,
+      );
+    } finally {
+      await sandbox.dispose();
+    }
   });
 });
 

@@ -9,8 +9,11 @@
  * writes its plugins' build output (`Plugins/<Name>/Intermediate`, `Binaries`), nothing else of theirs,
  * and a plugin's package writes its own folder (`extraWrites`). UBT finds its per-user
  * folders from the account, not from HOME, so they are named here; its configuration there is
- * read only, so a build can't plant settings for the user's own builds. A sandboxed full build
- * takes as long as an unconfined one.
+ * read only, so a build can't plant settings for the user's own builds. UnrealBuildTool 5.8 starts
+ * its build accelerator's trace on every build, `-NoUBA` or not, and that takes a lock file in the
+ * accelerator's fixed lock folder (`/private/tmp/uba_shm_locks`, whatever TMPDIR says), retrying one
+ * it can't create forever: the build writes there too, files only, never a link. A sandboxed full
+ * build takes as long as an unconfined one.
  */
 import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -44,6 +47,8 @@ export type BuildSandboxRequest = {
   pluginDirs?: string[];
   /** Further folders the build writes (BuildPlugin's package folder): each a real folder inside the project. */
   extraWrites?: string[];
+  /** The build accelerator's lock folder: {@link ACCELERATOR_LOCKS} unless a test names a stand-in. */
+  acceleratorLocks?: string;
 };
 
 /** The folders of a project UBT writes: its build output. */
@@ -59,8 +64,20 @@ const UBT_SETTINGS = [
   [...APP_SUPPORT, "Unreal Engine", "UnrealBuildTool"],
   [...EPIC, "UnrealEngine", "Intermediate"],
 ];
+/**
+ * The engine's own build folder. UBT makes a module's generated-code folder there before it builds
+ * (`<platform>/<arch>/UnrealEditor/Development/BuildSettings/Gen`), and a fresh Unreal 5.9 from
+ * Epic's launcher ships without those folders, so a first build makes them: folders only, never a
+ * file in them.
+ */
+const ENGINE_BUILD = ["Engine", "Intermediate", "Build"];
 /** .NET keeps its named mutexes (UBT's configuration lock) here, whatever TMPDIR says. */
 const DOTNET_SHARED = "/private/tmp/.dotnet";
+/**
+ * The build accelerator's lock folder, shared with the person's own builds: libUbaHost names it
+ * outright, and loops on a lock file it can't create there (UBT's trace starts it even with -NoUBA).
+ */
+export const ACCELERATOR_LOCKS = "/private/tmp/uba_shm_locks";
 const DEVICES = ["/dev/null", "/dev/zero", "/dev/tty", "/dev/dtracehelper"];
 /**
  * Services a build never needs that act outside it: opening apps, Apple Events (another app's
@@ -102,6 +119,10 @@ type ProfilePaths = {
   reads: string[];
   writes: string[];
   createOnly: string[];
+  /** Folders the build may make folders in, at any depth, and nothing else. */
+  foldersOnly: string[];
+  /** Folders written with files only: no symbolic or hard link is made in them. */
+  linkless?: string[];
   denied: string[];
 };
 
@@ -111,12 +132,14 @@ const literals = (values: readonly string[]) => values.map((v) => `(literal ${qu
 
 /**
  * The Seatbelt profile: everything a process may do by default, then the home folder's contents
- * closed, the named folders opened, every write refused but the named ones, the sign-in homes
- * closed again whatever was opened, signals only within the build, no network, and no Apple Events:
+ * closed, the named folders opened, every write refused but the named ones and new folders in the
+ * engine's build folder, the sign-in homes closed again whatever was opened, signals only within
+ * the build, no network, and no Apple Events:
  * a build's rules can't script another app, or type into one through System Events, with the grants
  * Genex holds.
  */
 export function buildSandboxProfile(p: ProfilePaths): string {
+  const linkless = p.linkless ?? [];
   return [
     "(version 1)",
     "(allow default)",
@@ -128,7 +151,18 @@ export function buildSandboxProfile(p: ProfilePaths): string {
     `(deny ${READ} (subpath ${quote(p.home)}))`,
     `(allow ${READ} ${subpaths(p.reads)} ${literals([path.join(p.home, ...APP_SUPPORT)])})`,
     `(deny ${WRITE})`,
-    `(allow ${WRITE} ${subpaths(p.writes)} ${literals([...p.createOnly, ...DEVICES])})`,
+    `(allow ${WRITE} ${subpaths([...p.writes, ...linkless])} ${literals([...p.createOnly, ...DEVICES])})`,
+    ...(p.foldersOnly.length
+      ? [`(allow file-write-create (require-all (vnode-type DIRECTORY) (require-any ${subpaths(p.foldersOnly)})))`]
+      : []),
+    // A link planted in a shared folder would let a later write there land on a file elsewhere.
+    // A rule's filters match any one of them, so the link type and the folders go in require-all.
+    ...(linkless.length
+      ? [
+          `(deny file-write-create (require-all (vnode-type SYMLINK) (require-any ${subpaths(linkless)})))`,
+          `(deny file-link ${subpaths(linkless)})`,
+        ]
+      : []),
     ...(p.denied.length ? [`(deny ${READ} ${subpaths(p.denied)})`, `(deny ${WRITE} ${subpaths(p.denied)})`] : []),
   ].join("\n");
 }
@@ -210,6 +244,9 @@ async function profilePaths(request: BuildSandboxRequest, scratch: string): Prom
     writes: [...output, scratch, inHome(UBT_LOG), ...(await spellings(DOTNET_SHARED))],
     // A first build makes Epic/ for UBT's log folder: the folder itself, nothing in it.
     createOnly: [inHome(EPIC)],
+    foldersOnly: engine.map((folder) => path.join(folder, ...ENGINE_BUILD)),
+    // Spelled as given, never by its real path: a link planted in its place gains no write.
+    linkless: [path.resolve(request.acceleratorLocks ?? ACCELERATOR_LOCKS)],
     denied: (await Promise.all(denied.map(spellings))).flat(),
   };
 }

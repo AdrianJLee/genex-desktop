@@ -10,18 +10,15 @@
 import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
 import { SECOND_MS } from "../../shared/duration.ts";
-import { isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
 import { isInside } from "../../substrate/paths.ts";
 import { chosenProject, listSetUpProjects } from "./editor-port.ts";
-import { isProjectPath, projectName } from "./project-file.ts";
+import { engineAssociation, isProjectPath, projectName } from "./project-file.ts";
 import { type Engine, type ReadEntries, readEntries, recentProjects, type SetupEnv } from "./setup.ts";
 
 /** How long one scan of the Unreal Projects folder answers the panel's refreshes. */
 export const SCAN_KEEP_MS = 10 * SECOND_MS;
 /** The panel's list is a choice, not an archive. */
 const PROJECTS_CAP = 12;
-/** A `.uproject` is a few hundred bytes; a larger file is not read for its engine. */
-const UPROJECT_MAX_BYTES = 1024 * 1024;
 /** Epic's FDateTime text in the Recent Projects list (`2026.01.01-12.00.00`), written in UTC. */
 const EPIC_TIME = /^(\d{4})\.(\d{2})\.(\d{2})-(\d{2})\.(\d{2})\.(\d{2})$/;
 
@@ -46,16 +43,6 @@ function epicTime(text: string): number | null {
   return Date.UTC(year, month - 1, day, hour, minute, second);
 }
 
-/** The engine a `.uproject` names, or "" when it can't be read as a small JSON object. */
-async function association(file: string): Promise<string> {
-  try {
-    const json: unknown = JSON.parse((await readRegularFile(file, UPROJECT_MAX_BYTES)).toString("utf8"));
-    return isJsonObject(json) && typeof json.EngineAssociation === "string" ? json.EngineAssociation : "";
-  } catch {
-    return "";
-  }
-}
-
 /** A project file as the list shows it, or undefined unless it is an absolute `.uproject` that is a plain file. */
 async function readProject(file: string): Promise<ScannedProject | undefined> {
   if (!isProjectPath(file)) return undefined;
@@ -65,7 +52,7 @@ async function readProject(file: string): Promise<ScannedProject | undefined> {
   // A plain file (checked above), so realpath only gives its name the case it has on disk.
   const real = await realpath(file).catch(() => null);
   if (!directory || !real || path.dirname(real) !== directory) return undefined;
-  return { file: real, name: projectName(real), engine: await association(real), modified: info.mtimeMs };
+  return { file: real, name: projectName(real), engine: await engineAssociation(real), modified: info.mtimeMs };
 }
 
 /**

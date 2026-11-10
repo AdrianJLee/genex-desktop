@@ -5,9 +5,15 @@ actors the Loop checks inside it: the parts' (GenexPart:<part>) and the live bui
 import unreal
 
 from genex_loop import editor, paths
+from genex_loop.errors import Refused
 from genex_play import motion, play
 
 ACTORS_CAP = 200
+# The editor's performance settings, as their class default object: Unreal gives that class no
+# Python name, so it is found by its path and its property read by Unreal's own name for it.
+PERFORMANCE_SETTINGS = '/Script/UnrealEd.Default__EditorPerformanceSettings'
+BACKGROUND_THROTTLE = 'bThrottleCPUWhenNotForeground'
+RAY_TRACING = 'r.RayTracing'
 # The live builder tags what each feature adds genex:<feature> (genex:terrain, genex:route).
 GENEX_TAG_PREFIX = 'genex:'
 
@@ -18,6 +24,25 @@ def play_state() -> dict:
     if world is None:
         return {'pie': False, 'world': None, 'gameSeconds': None, 'fps': None}
     return {'pie': True, 'world': world.get_name(), 'gameSeconds': round(play.game_seconds(), 2), 'fps': play.fps()}
+
+
+def run_settings() -> dict:
+    """{throttle, rayTracing}: whether this editor slows down behind other apps (Unreal's "Use Less
+    CPU when in Background"; None where it keeps no such setting), and whether it ray-traces."""
+    settings = unreal.find_object(None, PERFORMANCE_SETTINGS)
+    throttle = None if settings is None else bool(settings.get_editor_property(BACKGROUND_THROTTLE))
+    return {'throttle': throttle,
+            'rayTracing': unreal.SystemLibrary.get_console_variable_int_value(RAY_TRACING) != 0}
+
+
+def set_background_throttle(on: bool) -> dict:
+    """Turns the background throttle on or off for this run of the editor: nothing is saved, so the
+    person's own preference is there again the next time Unreal starts."""
+    settings = unreal.find_object(None, PERFORMANCE_SETTINGS)
+    if settings is None:
+        raise Refused('This editor keeps no background throttle setting.')
+    settings.set_editor_property(BACKGROUND_THROTTLE, bool(on))
+    return {'throttle': bool(settings.get_editor_property(BACKGROUND_THROTTLE))}
 
 
 def stop_play() -> dict:

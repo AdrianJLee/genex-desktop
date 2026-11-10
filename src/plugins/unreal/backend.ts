@@ -1,4 +1,4 @@
-import { mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { agentsSetting, setAgentsSetting } from "../../substrate/engine-agents.ts";
 import path from "node:path";
@@ -53,6 +53,7 @@ import {
   systemLaunchEnv,
 } from "./editor-launch.ts";
 import { addCppModule, enableProjectPlugin, projectModule } from "./cpp-module.ts";
+import { NEW_GAMES_ENGINE, NEW_GAMES_ENGINE_GB } from "./engine-line.ts";
 import {
   assertPluginName,
   planPlugin,
@@ -84,6 +85,9 @@ import {
   type ForMeWork,
   InstallCardAction,
   launcherInstallPath,
+  MoveCardAction,
+  type MoveOffer,
+  moveCard,
   opensByItself,
   UnrealStepId,
   type UnrealSteps,
@@ -112,7 +116,7 @@ import {
   readGameIgnore,
   undoGameProjectFolder,
 } from "./game-folder.ts";
-import { isProjectPath, UPROJECT_EXTENSION } from "./project-file.ts";
+import { engineAssociation, isProjectPath, UPROJECT_EXTENSION } from "./project-file.ts";
 import { BuildToolsPlan, VisualStudioState, type VisualStudioStatus, visualStudioLacking } from "./visual-studio.ts";
 import { xcodeDownloadsLaunch } from "./xcode.ts";
 import { EditorWait, EngineReadiness, engineReadiness, waitForEditor } from "./editor-wait.ts";
@@ -140,6 +144,7 @@ import {
   type Engine,
   EngineMatch,
   engineMatch,
+  engineOfProject,
   findEngines,
   installEngineVersion,
   HELPER_FOLDER,
@@ -147,6 +152,8 @@ import {
   helperNeedsInstall,
   helperVersion,
   inspectProject,
+  moveProject,
+  planMove,
   editorHasProject,
   type ProjectState,
   planSetup,
@@ -191,6 +198,10 @@ const UnrealAction = {
   Setup: "setup",
   /** Also what a link's Undo runs, with `ifSetUp`, when the link set its project up. */
   UndoSetup: EngineHostAction.UndoSetUp,
+  /** The panel's and the chat card's Move: a game made with an older Unreal goes to the one new games are made with. */
+  MoveEngine: MoveCardAction.Move,
+  /** The chat card's Not now: the game's move is offered in its chat no more. */
+  MoveLater: MoveCardAction.Later,
   Templates: "templates",
   Create: "create",
   OpenEditor: "open-editor",
@@ -254,10 +265,16 @@ export type PanelStep = (typeof PanelStep)[keyof typeof PanelStep];
 const GIB = 1024 ** 3;
 /** The plugin storage folder holding each game's Don't use Unreal. */
 const SKIPPED_FOLDER = path.join("engine-setup", "skipped");
+/** Where each game's move offer is kept: one small file per game, in the plugin's storage. */
+const MOVE_OFFERS_FOLDER = path.join("engine-setup", "move-offers");
+/** Where a game's move offer stands: its card is the chat's, or the offer is over (Not now, or the setup card took its place). */
+const MoveOfferState = { Offered: "offered", Over: "over" } as const;
+type MoveOfferState = (typeof MoveOfferState)[keyof typeof MoveOfferState];
+const MOVE_OFFER_STATES: ReadonlySet<string> = new Set(Object.values(MoveOfferState));
 /** Below this much free disk an Unreal project soon runs out of room (shaders, caches, builds). */
 const LOW_DISK_BYTES = 20 * GIB;
-/** Epic's 5.8 install size, as the Get Unreal view's step 2 says. */
-const UNREAL_INSTALL_BYTES = 45 * GIB;
+/** What Epic's launcher asks for to install Unreal with its default parts. */
+const UNREAL_INSTALL_BYTES = NEW_GAMES_ENGINE_GB * GIB;
 /** Unreal writes a project's LastOpenTime about 14 s into the start Genex launched; this much earlier is still that start. */
 const FIRST_START_SKEW_MS = SECOND_MS;
 /** Epic's minimum memory for the editor. */
@@ -295,13 +312,13 @@ const MESSAGE = {
     `The Unreal setup card is in the chat, and the Unreal button is above the game: its Do it for me gets Epic's launcher and installs Unreal ${version} in it with computer control (only the user signs in to Epic). Call unreal__install-unreal to start that yourself, or tell them in one line; then end your reply. The chat tells you when Unreal is installed.`,
   /** The task Do it for me hands the game's chat: one plain line, at most 300 characters. */
   InstallTask: (version: string) =>
-    `Install Unreal Engine ${version} in the Epic Games Launcher Genex opened: Unreal Engine › Library › + beside Engine Versions › ${version} (not a newer one) › Install, default folder. Ask the person only for Epic's password or a two-step code; click the rest yourself.`,
+    `Install Unreal Engine ${version} in the Epic Games Launcher Genex opened: Unreal Engine › Library › + beside Engine Versions › ${version} in the new slot's version list (a preview says so) › Install, confirm, default folder. Ask the person only for Epic's password or a two-step code.`,
   ForMeLauncher: (version: string) =>
     `Genex is downloading Epic's launcher from Epic and installing it (Windows asks the person for permission); the setup card shows where it stands. End your reply now. Once the card says the launcher is installed, call unreal__install-unreal again to install Unreal ${version} in it.`,
   ForMeDownloadPage:
     "Epic's download page is open in the person's browser: on this computer they install Epic's launcher themselves. Tell them in one line and end your reply; once it is installed, call unreal__install-unreal again.",
   ForMeEngine: (version: string) =>
-    `Genex opened the Epic Games Launcher and handed the install to this chat: the message "Unreal Engine asks: Install Unreal Engine ${version}…" is done by the turn that answers it, with the desktop tool on the launcher. End your reply now. Unreal is about 45 GB; the chat tells you when it is installed.`,
+    `Genex opened the Epic Games Launcher and handed the install to this chat: the message "Unreal Engine asks: Install Unreal Engine ${version}…" is done by the turn that answers it, with the desktop tool on the launcher. End your reply now. Unreal is about ${NEW_GAMES_ENGINE_GB} GB; the chat tells you when it is installed.`,
   ForMeEngineRefused: (version: string, reason: string) =>
     `Genex couldn't hand the install to this chat (${reason}). The Epic Games Launcher is open: with the desktop tool, install Unreal ${version} there yourself (Library, + beside Engine Versions, ${version}, Install); without it, tell the person in one line to. Then end your reply; the chat tells you when it is installed.`,
   ForMeRuntime:
@@ -334,6 +351,8 @@ const MESSAGE = {
     "This game's Unreal project isn't set up for Genex here. Call unreal__open-editor: it sets the project up (quitting Unreal first when it has it open) and opens it.",
   /** The reason of the game snapshot Open takes before it updates the helper or adds Epic's toolsets, as Rewind lists it; kept in the snapshot as written. */
   SnapshotBeforeUpdate: "Before Genex updated the Unreal project",
+  /** The reason of the game snapshot a move to a newer Unreal takes first, as Rewind lists it. */
+  SnapshotBeforeMove: (to: string) => `Before the move to Unreal ${to}`,
 } as const;
 
 /**
@@ -348,6 +367,14 @@ const WORDS = {
   SetupQuestion: (name: string) => t("Set up {name} for Genex?", { name }),
   SetupIntro: (name: string, file: string) => t("Genex will change {name} ({file}):", { name, file }),
   UndoQuestion: (name: string) => t("Undo setup for {name}?", { name }),
+  MoveQuestion: (name: string, to: string) => t("Move {name} to Unreal {to}?", { name, to }),
+  MoveOpens: (name: string, to: string) => t("{name} opens in Unreal {to} from now on.", { name, to }),
+  MoveTools: (to: string) => t("Agents get Unreal {to}’s tools.", { to }),
+  /** What keeps the game as it was, then what can't be taken back inside Unreal. */
+  MoveKeeps: (savePoint: boolean, from: string, to: string) =>
+    savePoint
+      ? t("Genex makes a save point of this game first. What Unreal {to} saves won’t open in {from}.", { from, to })
+      : t("Genex keeps a copy of the project file first. What Unreal {to} saves won’t open in {from}.", { from, to }),
   RayTracingQuestion: (name: string) => t("Turn off ray tracing in {name}?", { name }),
   RayTracingDetail: (name: string) =>
     t(
@@ -577,7 +604,7 @@ function connection(deps: UnrealBackendDeps, state: ProjectState | undefined, ed
   return { connection: current, opening };
 }
 
-/** What decides the panel's next step: the supported engine, the shown project and where it stands. */
+/** What decides the panel's next step: the shown project's engine, the shown project and where it stands. */
 type StepFacts = {
   engine: Engine | undefined;
   state: ProjectState | undefined;
@@ -686,21 +713,32 @@ async function editorFacts(deps: UnrealBackendDeps, state: ProjectState | undefi
 /**
  * The computer's notes for the panel: free disk where the project is, memory, and where Xcode
  * stands. Xcode is recommended on every Mac, C++ project or not: without it Genex works in
- * Blueprints only. It is judged by the supported engine's own Xcode range. Without a supported
- * Unreal the disk must also fit the engine (`installBytes`): `diskNeedBytes` is what the disk note
- * is measured against.
+ * Blueprints only. It is judged by the Xcode range of `engine`, the shown project's own. Without a
+ * supported Unreal the disk must also fit the engine (`installBytes`): `diskNeedBytes` is what the
+ * disk note is measured against. A new game needs the Unreal new games are made with: while none
+ * such is installed (`makesGames`), `installLowDisk` says the disk can't fit it (`installNeedBytes`).
  */
-async function computerNotes(env: SetupEnv, state: ProjectState | undefined, engine: Engine | undefined) {
+async function computerNotes(
+  env: SetupEnv,
+  state: ProjectState | undefined,
+  engine: Engine | undefined,
+  makesGames: boolean,
+) {
   const [freeBytes, xcode] = await Promise.all([
     // The project's disk; before one is shown, the engine's (where shaders and builds go too), else home's.
     env.freeBytes(state?.directory ?? engine?.directory ?? env.home).catch(() => null),
     env.xcode(engine?.directory),
   ]);
-  const diskNeedBytes = engine ? LOW_DISK_BYTES : UNREAL_INSTALL_BYTES + LOW_DISK_BYTES;
+  const installNeedBytes = UNREAL_INSTALL_BYTES + LOW_DISK_BYTES;
+  const diskNeedBytes = engine ? LOW_DISK_BYTES : installNeedBytes;
   return {
     lowDisk: freeBytes !== null && freeBytes < diskNeedBytes,
     diskNeedBytes,
+    installLowDisk: !makesGames && freeBytes !== null && freeBytes < installNeedBytes,
+    installNeedBytes,
     installBytes: UNREAL_INSTALL_BYTES,
+    /** The Unreal a newcomer installs and new games are made with, as the panel names it. */
+    installVersion: installEngineVersion(),
     lowMemory: env.totalMemory() < LOW_MEMORY_BYTES,
     freeBytes,
     memoryBytes: env.totalMemory(),
@@ -767,11 +805,18 @@ async function crashReporterOn(env: SetupEnv, state: ProjectState | undefined, e
 }
 
 /**
+ * The installed engine the tools of the project in `state` run with ({@link engineOfProject}); the
+ * newest supported one while there is no project.
+ */
+const engineOfState = (state: ProjectState | undefined, engines: readonly Engine[]) =>
+  engineOfProject(state?.engine ?? "", engines);
+
+/**
  * Where a project stands and the one step it needs, as the panel and the Live card both read it:
- * the editor's facts, the engine match, the connection, a taken or blocked port, another set-up
- * project Unreal has open, the next step, and what holds Unreal when that step names it. Only the
- * project's own port is asked, so it stays cheap; the other set-up projects are asked only while
- * its editor runs unanswered and isn't loading.
+ * the editor's facts, the project's own engine, the engine match, the connection, a taken or
+ * blocked port, another set-up project Unreal has open, the next step, and what holds Unreal when
+ * that step names it. Only the project's own port is asked, so it stays cheap; the other set-up
+ * projects are asked only while its editor runs unanswered and isn't loading.
  */
 async function whereItStands(
   deps: UnrealBackendDeps,
@@ -782,7 +827,7 @@ async function whereItStands(
   const { env } = deps;
   const port = state?.port ?? null;
   const editor = await editorFacts(deps, state, storage);
-  const engine = engines.find((e) => e.supported);
+  const engine = engineOfState(state, engines);
   const match = state ? engineMatch(state.engine, engines) : null;
   const where = connection(deps, state, editor);
   const crashed = await crashReporterOn(env, state, editor);
@@ -951,6 +996,12 @@ async function status(
     helperOutdated: helperBehind(state),
     /** The shown project's Genex editor helper is newer than the shipped one, so setup leaves it as it is. */
     helperNewer: state?.helper === HelperState.Newer,
+    /**
+     * The move to the Unreal new games are made with that the shown project is offered, and whether
+     * that Unreal is installed; else null. Only a set-up project is offered it: the move's
+     * confirmation names no setup changes.
+     */
+    move: (isSetUp(state) && real ? await planMove(real, options, engines) : undefined) ?? null,
     firstStart: firstStart(opened, where.opening),
     /** Whether Epic's launcher is installed, asked only while no supported Unreal is (the Get Unreal view); else null. */
     launcher: engine ? null : Boolean(await findLauncher(env.platform, deps.launch)),
@@ -975,7 +1026,7 @@ async function status(
     next,
     /** Whether to offer turning ray tracing off: the shown project ray-traces, on a Mac. */
     rayTracingRisk: await rayTracingRisk(env, state),
-    ...(await computerNotes(env, state, engine)),
+    ...(await computerNotes(env, state, engine, engines.some(canCreateWith))),
   };
 }
 
@@ -1091,6 +1142,17 @@ async function gameCrashCheck(deps: UnrealBackendDeps, storage: string, game: st
   return startCrashCheck(log, project, { running: deps.env.editorRunning, ...(module ? { module } : {}) });
 }
 
+/**
+ * The installed engine a game's tools run with: the one its linked project names
+ * ({@link engineOfProject}), or the newest supported one for a game with no linked project or whose
+ * `.uproject` can't be read; undefined when none is installed.
+ */
+async function gameEngine(env: SetupEnv, storage: string, game: string | undefined): Promise<Engine | undefined> {
+  const project = await linkedProject(storage, game);
+  const association = project ? await engineAssociation(project) : "";
+  return engineOfProject(association, await findEngines(env));
+}
+
 /** The Loop's tools over the real editor; adding a game's C++ module and reopening it quit and open Unreal as the panel does. */
 function loopTools(deps: UnrealBackendDeps) {
   const launch = (storage: string): LaunchOptions => ({
@@ -1101,11 +1163,12 @@ function loopTools(deps: UnrealBackendDeps) {
   });
   return createLoopTools({
     platform: deps.env.platform,
-    engine: async () => (await findEngines(deps.env)).find((e) => e.supported),
+    engine: (storage, game) => gameEngine(deps.env, storage, game),
     project: (storage, game) => linkedProject(storage, game),
     xcode: (engineDir) => deps.env.xcode(engineDir),
     visualStudio: (engineDir) => visualStudioOf(deps.env, engineDir),
     linuxToolchain: async () => deps.env.linuxToolchain?.(),
+    emsdk: async () => deps.env.emsdk?.(),
     editorCall: async (storage, game, tool: AnyLoopTool, args, timeoutMs, signal) => {
       const call = { toolset: TOOLSET_OF[tool], tool, args, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
       return parsedAnswer(await callProjectTool(await gameEditor(deps, storage, game), call, undefined, signal));
@@ -1130,15 +1193,19 @@ function loopTools(deps: UnrealBackendDeps) {
     },
     ...(deps.processes ? { processes: deps.processes } : {}),
     ...(deps.stopped ? { stopped: deps.stopped } : {}),
+    ...(deps.install ? { multiplayer: { fetch: deps.install.fetch, platform: deps.env.platform } } : {}),
     ...deps.programs,
     now: deps.launch.now,
     sleep: (ms, signal) => sleep(ms, undefined, signal ? { signal } : undefined),
   });
 }
 
-/** The supported engine and where Xcode stands against it. */
-async function engineAndXcode(env: SetupEnv) {
-  const engine = (await findEngines(env)).find((e) => e.supported);
+/**
+ * The engine a game using `state` builds with (the newest supported one before it has a project)
+ * and where Xcode stands against it.
+ */
+async function engineAndXcode(env: SetupEnv, state: ProjectState | undefined) {
+  const engine = engineOfState(state, await findEngines(env));
   return { engine, xcode: await env.xcode(engine?.directory) };
 }
 
@@ -1165,7 +1232,7 @@ async function stepsFor(
   state: ProjectState | undefined,
   reach: BuildToolsReach = { forMe: false },
 ): Promise<UnrealSteps> {
-  const { engine, xcode } = await engineAndXcode(env);
+  const { engine, xcode } = await engineAndXcode(env, state);
   const buildTools = state ? { ...reach, status: await visualStudioOf(env, engine?.directory) } : undefined;
   return unrealSteps(state?.name ?? null, engine?.version ?? "", xcode, buildTools);
 }
@@ -1330,17 +1397,20 @@ async function namedProject(asked: string, storage: string): Promise<string> {
 }
 
 /**
- * Opens Xcode's App Store page, the Xcode app the probes found, or Apple's developer downloads;
- * never a path or address from the caller.
+ * Opens Xcode's App Store page, the Xcode app the probes found for the engine the steps card judged
+ * (the calling game's project's), or Apple's developer downloads; never a path or address from the
+ * caller.
  */
-async function getXcode(deps: UnrealBackendDeps, args: Record<string, unknown>) {
+async function getXcode(deps: UnrealBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   if (deps.env.platform !== "darwin") throw new Error(WORDS.XcodeMacOnly());
   if (args.step === XcodeStep.Downloads) {
     await deps.launch.open(xcodeDownloadsLaunch());
     return { opened: XcodeStep.Downloads };
   }
   const step = args.step === XcodeStep.Open ? XcodeStep.Open : XcodeStep.Install;
-  const { xcode } = await engineAndXcode(deps.env);
+  // A game whose link can't be read now is judged as one with no project: Xcode is still opened.
+  const project = await gameProject(deps, context).catch(() => undefined);
+  const { xcode } = await engineAndXcode(deps.env, project);
   await deps.launch.open(getXcodeLaunch(step, xcode.app));
   return { opened: step };
 }
@@ -1441,6 +1511,8 @@ type ForMeAnswer = {
   started: boolean;
   message: string;
   reason?: ForMeMiss | PluginEngineAssistRefusal;
+  /** The Unreal a `done` answer found here: the game's own. */
+  version?: string;
 };
 
 const isRunning = (job: ForMeJob | undefined): job is ForMeJob =>
@@ -1454,27 +1526,48 @@ const installsHere = (deps: UnrealBackendDeps): deps is UnrealBackendDeps & { in
 const runtimeReady = async (deps: UnrealBackendDeps): Promise<boolean> =>
   deps.env.platform !== "win32" || !deps.runtime || (await deps.runtime());
 
-/** Where Microsoft's C++ tools stand against the supported engine, and that engine's folder. */
-async function buildToolsNow(deps: UnrealBackendDeps) {
-  const engine = (await findEngines(deps.env)).find((e) => e.supported);
+/**
+ * Where Microsoft's C++ tools stand against the engine the game's `project` builds with (the newest
+ * supported one for a game with none), and that engine's folder.
+ */
+async function buildToolsNow(deps: UnrealBackendDeps, project: ProjectState | undefined) {
+  const engine = engineOfState(project, await findEngines(deps.env));
   return { engineDir: engine?.directory, status: await visualStudioOf(deps.env, engine?.directory) };
 }
 
-/** Whether Microsoft's C++ tools are still to install here: Windows, judged by the supported engine. */
-async function buildToolsMissing(deps: UnrealBackendDeps): Promise<boolean> {
+/** Whether Microsoft's C++ tools are still to install here: Windows, judged by the engine of the game's `project`. */
+async function buildToolsMissing(deps: UnrealBackendDeps, project: ProjectState): Promise<boolean> {
   if (deps.env.platform !== "win32") return false;
-  return visualStudioLacking((await buildToolsNow(deps)).status);
+  return visualStudioLacking((await buildToolsNow(deps, project)).status);
 }
 
 /**
- * The step Do it for me runs next, read now. Microsoft's C++ tools come last, and only in a game
- * with an Unreal project, where the steps card shows them: a new game in Blueprints needs none.
+ * The installed Unreal a game works with: the one its `project`'s tools run with
+ * ({@link engineOfState}), or for a game with no project the one Genex makes new games with.
+ * Undefined while that Unreal is still to install.
  */
-async function nextForMe(deps: UnrealBackendDeps, inProject: boolean): Promise<ForMeStep> {
-  if (!(await canMakeGames(deps)))
+async function unrealOfGame(deps: UnrealBackendDeps, project: ProjectState | undefined): Promise<Engine | undefined> {
+  const engines = await findEngines(deps.env);
+  return project ? engineOfState(project, engines) : engines.find(canCreateWith);
+}
+
+/** All there: nothing left for Do it for me, naming the Unreal the game works with. */
+async function allThere(deps: UnrealBackendDeps, project: ProjectState | undefined): Promise<ForMeAnswer> {
+  const version = (await unrealOfGame(deps, project))?.version ?? installEngineVersion();
+  return { step: ForMeStep.Done, started: false, message: FOR_ME_WORDS.AllThere(version), version };
+}
+
+/**
+ * The step Do it for me runs next, read now. Unreal is installed only where the game has none to
+ * work with ({@link unrealOfGame}): a game made with an older Unreal that is here asks for no other.
+ * Microsoft's C++ tools come last, and only in a game with an Unreal project (`project`), where
+ * the steps card shows them: a new game in Blueprints needs none.
+ */
+async function nextForMe(deps: UnrealBackendDeps, project: ProjectState | undefined): Promise<ForMeStep> {
+  if (!(await unrealOfGame(deps, project)))
     return (await findLauncher(deps.env.platform, deps.launch)) ? ForMeStep.Engine : ForMeStep.Launcher;
   if (!(await runtimeReady(deps))) return ForMeStep.Runtime;
-  return inProject && (await buildToolsMissing(deps)) ? ForMeStep.BuildTools : ForMeStep.Done;
+  return project && (await buildToolsMissing(deps, project)) ? ForMeStep.BuildTools : ForMeStep.Done;
 }
 
 /**
@@ -1540,9 +1633,13 @@ async function engineForMe(deps: UnrealBackendDeps, context: PluginContext, deci
   return { step: ForMeStep.Engine, started: false, message, reason: answer.reason ?? ForMeMiss.NotStarted };
 }
 
-/** Microsoft's runtime, from the installed engine's own copy, on Windows. */
-async function runtimeForMe(deps: UnrealBackendDeps, slot: ForMeSlot): Promise<ForMeAnswer> {
-  const engine = (await findEngines(deps.env)).find(canCreateWith);
+/** Microsoft's runtime, from the copy in the Unreal the game's `project` works with, on Windows. */
+async function runtimeForMe(
+  deps: UnrealBackendDeps,
+  slot: ForMeSlot,
+  project: ProjectState | undefined,
+): Promise<ForMeAnswer> {
+  const engine = await unrealOfGame(deps, project);
   if (!installsHere(deps) || !engine)
     return {
       step: ForMeStep.Runtime,
@@ -1561,10 +1658,14 @@ async function runtimeForMe(deps: UnrealBackendDeps, slot: ForMeSlot): Promise<F
 const planLeft = (plan: BuildToolsPlan | undefined, ran: ReadonlySet<BuildToolsPlan>): plan is BuildToolsPlan =>
   plan !== undefined && !ran.has(plan) && !ran.has(BuildToolsPlan.Install);
 /**
- * Microsoft's Visual Studio Build Tools on Windows, for the plan where they stand says: installed,
- * given what they lack, or updated by Microsoft's own installer.
+ * Microsoft's Visual Studio Build Tools on Windows, for the plan where they stand against the engine
+ * of the game's `project` says: installed, given what they lack, or updated by Microsoft's own installer.
  */
-async function buildToolsForMe(deps: UnrealBackendDeps, slot: ForMeSlot): Promise<ForMeAnswer> {
+async function buildToolsForMe(
+  deps: UnrealBackendDeps,
+  slot: ForMeSlot,
+  project: ProjectState | undefined,
+): Promise<ForMeAnswer> {
   if (!installsHere(deps) || leftToPerson(slot.job))
     return {
       step: ForMeStep.BuildTools,
@@ -1572,9 +1673,8 @@ async function buildToolsForMe(deps: UnrealBackendDeps, slot: ForMeSlot): Promis
       message: FOR_ME_WORDS.BuildToolsYourself(),
       reason: ForMeMiss.Yourself,
     };
-  const { engineDir, status } = await buildToolsNow(deps);
-  if (!visualStudioLacking(status))
-    return { step: ForMeStep.Done, started: false, message: FOR_ME_WORDS.AllThere(installEngineVersion()) };
+  const { engineDir, status } = await buildToolsNow(deps, project);
+  if (!visualStudioLacking(status)) return allThere(deps, project);
   const { install } = deps;
   const job = startInstall(deps, slot, EpicInstallKind.BuildTools, async (options) => {
     // An update brings the compiler up to date but adds nothing the install never had (the .NET
@@ -1621,12 +1721,13 @@ async function pressForMe(
 ): Promise<ForMeAnswer> {
   if (isRunning(slot.job))
     return { step: ForMeStep.Done, started: false, message: slot.job.message, reason: ForMeMiss.Running };
-  const step = await nextForMe(deps, Boolean(await gameProject(deps, context)));
+  const project = await gameProject(deps, context);
+  const step = await nextForMe(deps, project);
   if (step === ForMeStep.Launcher) return launcherForMe(deps, slot);
   if (step === ForMeStep.Engine) return engineForMe(deps, context, decided);
-  if (step === ForMeStep.Runtime) return runtimeForMe(deps, slot);
-  if (step === ForMeStep.BuildTools) return buildToolsForMe(deps, slot);
-  return { step, started: false, message: FOR_ME_WORDS.AllThere(installEngineVersion()) };
+  if (step === ForMeStep.Runtime) return runtimeForMe(deps, slot, project);
+  if (step === ForMeStep.BuildTools) return buildToolsForMe(deps, slot, project);
+  return allThere(deps, project);
 }
 
 /** Stop: ends the download or check under way; an installer Windows already runs finishes on its own. */
@@ -1648,7 +1749,7 @@ function forMeSays(answer: ForMeAnswer): string {
   if (answer.step === ForMeStep.Runtime) return answer.started ? MESSAGE.ForMeRuntime : MESSAGE.ForMeRuntimeYourself;
   if (answer.step === ForMeStep.BuildTools)
     return answer.started ? MESSAGE.ForMeBuildTools : MESSAGE.ForMeBuildToolsYourself;
-  return MESSAGE.ForMeDone(version);
+  return MESSAGE.ForMeDone(answer.version ?? version);
 }
 
 /** The card's row of each install Do it for me runs. */
@@ -1681,6 +1782,70 @@ async function stepsCard(deps: UnrealBackendDeps, project: ProjectState | undefi
   return stuckJob(job) ? { ...card, stuckSays: MESSAGE.ForMeStuck(job.message) } : card;
 }
 
+const moveOfferFile = (storage: string, game: string) =>
+  path.join(storage, MOVE_OFFERS_FOLDER, encodeURIComponent(game));
+
+/** Where a game's move offer stands; undefined while it was never made. */
+async function moveOfferState(storage: string, game: string): Promise<MoveOfferState | undefined> {
+  const kept = (await readFile(moveOfferFile(storage, game), "utf8").catch(() => "")).trim();
+  return MOVE_OFFER_STATES.has(kept) ? (kept as MoveOfferState) : undefined;
+}
+
+async function keepMoveOffer(storage: string, game: string, state: MoveOfferState): Promise<void> {
+  await mkdir(path.join(storage, MOVE_OFFERS_FOLDER), { recursive: true });
+  await writeFile(moveOfferFile(storage, game), state);
+}
+
+/** The move the open game's own set-up project is offered; undefined with no game, no such project or nothing to move. */
+async function gameMove(deps: UnrealBackendDeps, context: PluginContext): Promise<MoveOffer | undefined> {
+  const options = await setupOptions(deps, context);
+  const linked = context.project ? await linkedProject(options.storage, context.project) : undefined;
+  const state = linked ? await inspectProject(linked, options).catch(() => undefined) : undefined;
+  if (!isSetUp(state)) return undefined;
+  const file = realProjectFile(state);
+  const move = await planMove(file, options);
+  return move ? { project: state.name, file, ...move } : undefined;
+}
+
+/**
+ * Offers a game made with an older Unreal its move in the game's chat, once per game: when the game
+ * is open and no Unreal runs (the move waits for a closed project). A chat that can't show the card
+ * yet is asked again the next time.
+ */
+async function offerMoveOnce(deps: UnrealBackendDeps, context: PluginContext): Promise<void> {
+  const game = context.project;
+  if (!game) return;
+  const { storage } = await setupOptions(deps, context);
+  if (await moveOfferState(storage, game)) return;
+  if ((await deps.env.editorRunning()) || !(await gameMove(deps, context))) return;
+  // Kept before the card is asked for, so two status reads at once offer it once.
+  await keepMoveOffer(storage, game, MoveOfferState.Offered);
+  const shown = await context.host(HostService.EngineSteps).catch(() => false);
+  if (!shown) await rm(moveOfferFile(storage, game), { force: true });
+}
+
+/** The move card while the game's offer is the chat's card; undefined otherwise. */
+async function moveOfferCard(deps: UnrealBackendDeps, context: PluginContext): Promise<UnrealSteps | undefined> {
+  if (!context.project) return undefined;
+  const { storage } = await setupOptions(deps, context);
+  if ((await moveOfferState(storage, context.project)) !== MoveOfferState.Offered) return undefined;
+  return moveCard(await gameMove(deps, context));
+}
+
+/** Ends a game's move offer, so the chat's card is the setup card again; a game never offered stays so. */
+async function endMoveOffer(deps: UnrealBackendDeps, context: PluginContext): Promise<void> {
+  if (!context.project) return;
+  const { storage } = await setupOptions(deps, context);
+  if (await moveOfferState(storage, context.project))
+    await keepMoveOffer(storage, context.project, MoveOfferState.Over);
+}
+
+/** Shows the setup card in the game's chat, in the move offer's place when that was the chat's card. */
+async function showSetupCard(deps: UnrealBackendDeps, context: PluginContext): Promise<boolean> {
+  await endMoveOffer(deps, context);
+  return (await context.host(HostService.EngineSteps)) === true;
+}
+
 /**
  * The card the chat reads: in a game with no Unreal project, the install card while no Unreal that
  * makes games is here, or its Windows runtime is missing (or once they came, when this game's chat
@@ -1688,6 +1853,8 @@ async function stepsCard(deps: UnrealBackendDeps, project: ProjectState | undefi
  * can do the next step, and a stopped install is told to the agent once.
  */
 async function cardFor(deps: UnrealBackendDeps, context: PluginContext, slot: ForMeSlot): Promise<UnrealSteps> {
+  const offer = await moveOfferCard(deps, context);
+  if (offer) return offer;
   const project = await gameProject(deps, context);
   if (project || !context.project) return stepsCard(deps, project, slot);
   const installed = await canMakeGames(deps);
@@ -1744,19 +1911,20 @@ async function showSteps(deps: UnrealBackendDeps, context: PluginContext): Promi
   if (!project && context.project && !(await readyToMake(deps))) {
     await rememberChoiceOfUnreal(deps, context);
     await rm(await skipFile(deps, context), { force: true });
-    const shown = await context.host(HostService.EngineSteps);
+    const shown = await showSetupCard(deps, context);
     return shown ? MESSAGE.InstallCardShown(installEngineVersion()) : MESSAGE.ButtonOut(installEngineVersion());
   }
   const steps = await stepsFor(deps.env, project);
   if (!steps.open) return MESSAGE.StepsDone;
-  return (await context.host(HostService.EngineSteps)) ? MESSAGE.StepsShown : MESSAGE.StepsNoChat;
+  return (await showSetupCard(deps, context)) ? MESSAGE.StepsShown : MESSAGE.StepsNoChat;
 }
 
 /**
  * The New game form's choices: the template cards, a free name, and where the game will be saved
  * (`folder`, and `place` as the panel names it, such as Documents › Unreal Projects). Cards come
- * only from an engine whose creation steps Genex compared with Epic's; with only a newer one,
- * `newestUnverified` names it so the panel can say to use Unreal's own dialog.
+ * only from an engine whose creation steps Genex compared with Epic's; with only another one,
+ * `newestUnverified` names it and `readiness` says whether it is newer, so the panel can say which
+ * Unreal to install, and for a newer one that its own dialog makes a project too.
  */
 async function templates(deps: UnrealBackendDeps, context: PluginContext) {
   const engines = await findEngines(deps.env);
@@ -1768,6 +1936,8 @@ async function templates(deps: UnrealBackendDeps, context: PluginContext) {
   return {
     templates: engine ? await listTemplates(engine) : [],
     newestUnverified: !engine && newest ? newest.version : null,
+    /** Whether a game can be made here, or which way the installed Unreal misses the one that makes them. */
+    readiness: engineReadiness(engines).engine,
     name: await suggestName(folder, deps.env.platform),
     folder,
     place,
@@ -1916,10 +2086,46 @@ async function helperUpdateFor(
   storage: string,
   context: PluginContext,
 ): Promise<HelperUpdateOnOpen | undefined> {
-  const linked = await linkedProject(storage, context.project);
-  if (!context.project || !linked || (await realOr(linked)) !== (await realOr(file))) return undefined;
+  if (!(await isGamesOwn(file, storage, context))) return undefined;
   const reason = MESSAGE.SnapshotBeforeUpdate;
   return { snapshot: () => context.host(HostService.GameSnapshot, { reason }) };
+}
+
+/** Whether `file` is the open game's own linked project: the one a snapshot of that game holds. */
+async function isGamesOwn(file: string, storage: string, context: PluginContext): Promise<boolean> {
+  const linked = await linkedProject(storage, context.project);
+  return Boolean(context.project && linked) && (await realOr(linked ?? "")) === (await realOr(file));
+}
+
+/**
+ * The panel's Move: the project goes to the Unreal new games are made with. The open game's own
+ * project gets a save point of that game first, and a save point that fails stops the move.
+ */
+async function moveEngine(deps: UnrealBackendDeps, file: string, context: PluginContext): Promise<ProjectState> {
+  const options = await setupOptions(deps, context);
+  const own = await isGamesOwn(file, options.storage, context);
+  const reason = MESSAGE.SnapshotBeforeMove(NEW_GAMES_ENGINE);
+  const state = await moveProject(
+    file,
+    options,
+    own ? () => context.host(HostService.GameSnapshot, { reason }) : undefined,
+  );
+  await rememberChoice(options.storage, realProjectFile(state));
+  return state;
+}
+
+/** Studio's confirmation before a move: what changes, what keeps the game as it was, and what can't be taken back. */
+async function describeMove(file: string, options: SetupOptions, context: PluginContext): Promise<PluginReview> {
+  const state = await inspectProject(file, options);
+  const move = await planMove(file, options);
+  if (!move) return { message: WORDS.NothingToChange(state.name) };
+  const own = await isGamesOwn(file, options.storage, context);
+  const detail = [
+    `• ${WORDS.MoveOpens(state.name, move.to)}`,
+    `• ${WORDS.MoveTools(move.to)}`,
+    WORDS.MoveKeeps(own, move.from, move.to),
+  ];
+  return { message: WORDS.MoveQuestion(state.name, move.to), detail: detail.join("\n") };
 }
 
 /** A user's own Open in Unreal: the panel's, the stage's and the agent's New game; never the Loop's restarts. */
@@ -1953,7 +2159,7 @@ async function newGame(deps: UnrealBackendDeps, args: Record<string, unknown>, c
     (error: unknown) => errorMessage(error),
   );
   // The setup card in the chat while a step (Xcode, for C++) is still open.
-  if (opensByItself(await stepsFor(deps.env, made.state))) await context.host(HostService.EngineSteps);
+  if (opensByItself(await stepsFor(deps.env, made.state))) await showSetupCard(deps, context);
   const project = realProjectFile(made.state);
   return opened === undefined ? MESSAGE.NewGame(project) : MESSAGE.NewGameNotOpened(project, opened);
 }
@@ -1977,7 +2183,7 @@ async function newPlugin(deps: UnrealBackendDeps, args: Record<string, unknown>,
   const host = `${name}${HOST_SUFFIX}`;
   const state = await makePluginHost(deps, context, { game, engine, name, host, template });
   // The setup card in the chat while a step (Xcode, or on Windows the Build Tools, which build the plugin) is open.
-  if ((await stepsFor(deps.env, state)).open) await context.host(HostService.EngineSteps);
+  if ((await stepsFor(deps.env, state)).open) await showSetupCard(deps, context);
   return MESSAGE.NewPlugin(name, host);
 }
 
@@ -2073,20 +2279,25 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
     [UnrealAction.Setup]: async (args, context) => setUp(projectArg(args), await setupOptions(deps, context)),
     [UnrealAction.UndoSetup]: async (args, context) =>
       undo(projectArg(args), await setupOptions(deps, context), args.ifSetUp === true),
+    [UnrealAction.MoveEngine]: (args, context) => moveEngine(deps, projectArg(args), context),
     [UnrealAction.Templates]: (_args, context) => templates(deps, context),
     [UnrealAction.Create]: (args, context) => create(deps, args, context),
     [UnrealAction.OpenEditor]: (args, context) => openForUser(deps, projectArg(args), context),
     [UnrealAction.QuitEditor]: async (args, context) =>
       quitEditor(projectArg(args), await launchOptions(deps, context)),
     [UnrealAction.GetUnreal]: () => getUnreal(deps.env, deps.launch),
-    [UnrealAction.ToolbarStatus]: async (_args, context) =>
-      toolbarStatus(deps.env, (await setupOptions(deps, context)).storage, deps.launch.now(), context.project),
+    [UnrealAction.ToolbarStatus]: async (_args, context) => {
+      // The strip reads this while a game is open: the moment its move is offered. A failed offer never costs the status.
+      await offerMoveOnce(deps, context).catch(() => undefined);
+      return toolbarStatus(deps.env, (await setupOptions(deps, context)).storage, deps.launch.now(), context.project);
+    },
+    [UnrealAction.MoveLater]: (_args, context) => endMoveOffer(deps, context),
     [UnrealAction.UseProject]: (args, context) => linkGame(deps, projectArg(args), context),
     [UnrealAction.Steps]: async (_args, context) => cardFor(deps, context, forMe),
     [UnrealAction.Skip]: async (_args, context) => skip(deps, context),
     [UnrealAction.ForMe]: (_args, context) => doItForMe(deps, context, forMe),
     [UnrealAction.StopForMe]: async () => stopForMe(forMe),
-    [UnrealAction.GetXcode]: (args) => getXcode(deps, args),
+    [UnrealAction.GetXcode]: (args, context) => getXcode(deps, args, context),
     [UnrealAction.StageStatus]: (_args, context) => stageStatus(deps, context, scanned),
     [UnrealAction.RayTracingOff]: async (args, context) =>
       rayTracingOff(projectArg(args), await setupOptions(deps, context)),
@@ -2130,6 +2341,7 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
         const project = (await inspectProject(projectArg(args), options)).name;
         return { message: WORDS.UndoQuestion(project), detail: WORDS.Undo(project) };
       }
+      if (name === UnrealAction.MoveEngine) return describeMove(projectArg(args), options, context);
       if (name === UnrealAction.RayTracingOff) {
         const project = (await inspectProject(projectArg(args), options)).name;
         return { message: WORDS.RayTracingQuestion(project), detail: WORDS.RayTracingDetail(project) };

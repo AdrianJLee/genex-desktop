@@ -116,6 +116,7 @@ export default {
     "有模型正在下载。请等下载完成后再删除这个模型。",
   "A mountain rescue game with a dog and a sled": "带着狗和雪橇的山地救援游戏",
   "A museum guard game where the exhibits come alive": "展品会活过来的博物馆保安游戏",
+  "Agents get Unreal {to}’s tools.": "智能体可以使用 Unreal {to} 的工具。",
   "An arcade shooter where your bullets bounce off the walls": "子弹会在墙上反弹的街机射击游戏",
   "A new build is ready to play.": "新构建已可以游玩。",
   "A new build is ready — reload to play it": "新构建已就绪——重新加载即可游玩",
@@ -441,6 +442,7 @@ export default {
   Better: "改进",
   Beta: "测试版",
   "Between builds": "构建间隙",
+  "Bigger than the graphics card, so part of it runs on the CPU": "超出显卡显存，部分在 CPU 上运行",
   "Billed by each provider you use": "由你使用的各提供方分别计费",
   "Billed by each provider you use.": "由你使用的各提供方分别计费。",
   "Billed by each provider you use. Free models stay in the model menu too.":
@@ -499,6 +501,7 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "重新构建 {title} 的 {players} 应用，这样我就能发布它。",
   "Build updated": "构建已更新",
+  "Build with Genex": "用 Genex 制作",
   "Build with the Cursor plan you already have.": "用你已有的 Cursor 套餐来制作。",
   "Build with the Grok account you already have.": "用你已有的 Grok 账号来制作。",
   "Changes Harness made to its own instructions. Undo any of them.":
@@ -506,6 +509,13 @@ export default {
   "Checking that Microsoft signed the installer…": "正在确认安装程序由 Microsoft 签名…",
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "正在从 Microsoft 下载 Visual Studio Build Tools 安装程序…",
+  "Genex keeps a copy of the project file first. What Unreal {to} saves won’t open in {from}.":
+    "Genex 会先保留一份项目文件的副本。Unreal {to} 保存的内容无法在 {from} 中打开。",
+  "Genex makes a save point of this game first. What Unreal {to} saves won’t open in {from}.":
+    "Genex 会先为这个游戏创建一个存档点。Unreal {to} 保存的内容无法在 {from} 中打开。",
+  "Genex makes new games with Unreal {to}. Agents get its tools.":
+    "Genex 用 Unreal {to} 制作新游戏。智能体可以使用它的工具。",
+  "Get {version}": "获取 {version}",
   "Install Visual Studio Build Tools": "安装 Visual Studio Build Tools",
   "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "从 Microsoft 安装 Visual Studio Build Tools 2022，并勾选“使用 C++ 的桌面开发”和 .NET Framework 4.8 SDK。",
@@ -523,15 +533,26 @@ export default {
     "没能下载 Microsoft 的安装程序。请检查网络连接后再试一次。",
   "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
     "Microsoft 的安装程序已完成，但 Unreal 仍无法用它安装的内容编译 C++。请自行安装 Visual Studio Build Tools 2022，并勾选“使用 C++ 的桌面开发”和 .NET Framework 4.8 SDK。",
+  "Move to {version}": "迁移到 {version}",
+  "Move {name} to Unreal {to}?": "把 {name} 迁移到 Unreal {to}？",
+  "Move {project} to Unreal {to}": "把 {project} 迁移到 Unreal {to}",
+  "Play in browser": "在浏览器中游玩",
+  "Play {title} in the browser": "在浏览器中游玩 {title}",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
     "推荐。Microsoft 免费的 C++ 工具：有了它们，代理就能用 C++ 编写游戏逻辑，Unreal 也能打包含 C++ 的游戏或插件。约 7 GB。“帮我完成”会自动安装：Windows 询问时请选“是”。",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "推荐。Microsoft 免费的 C++ 工具：有了它们，代理就能用 C++ 编写游戏逻辑，Unreal 也能打包含 C++ 的游戏或插件。请安装 Visual Studio Build Tools，并勾选“使用 C++ 的桌面开发”和 .NET Framework 4.8 SDK。",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "自我改进已关闭。Harness 会保持自己的指令不变。",
+  "This project isn't on an older Unreal that Genex moves to {version}.":
+    "这个项目不在 Genex 可迁移到 {version} 的旧版 Unreal 上。",
   "Unreal can build C++ on this PC.": "Unreal 可以在这台电脑上编译 C++。",
   "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
     "Unreal {engine} 无法用这台电脑上的 C++ 工具编译。“帮我完成”会更新它们：Windows 询问时请选“是”。",
+  "Unreal {to} isn’t on this computer yet: about {gb} GB, beside Unreal {from}.":
+    "这台电脑上还没有 Unreal {to}：约 {gb} GB，与 Unreal {from} 并排安装。",
+  "Unreal {version} isn't on this computer yet. Install it first, then move the project.":
+    "这台电脑上还没有 Unreal {version}。请先安装，再迁移项目。",
   "Update Visual Studio Build Tools": "更新 Visual Studio Build Tools",
   "Visual Studio Build Tools are installed.": "Visual Studio Build Tools 已安装。",
   "Visual Studio's C++ tools are ready": "Visual Studio 的 C++ 工具已就绪",
@@ -1096,6 +1117,7 @@ export default {
   "Delete every row shared from this computer?": "要删除从这台电脑分享的所有数据行吗？",
   "Delete game": "删除游戏",
   "Delete it from this Mac? You can download it again.": "要从这台 Mac 中删除吗？你可以再次下载。",
+  "Delete it from this PC? You can download it again.": "要从这台电脑中删除吗？你可以再次下载。",
   "Delete what I shared": "删除我分享的内容",
   "Delete your comment": "删除你的评论",
   "Delete {model}": "删除 {model}",
@@ -1125,6 +1147,7 @@ export default {
   Details: "详情",
   "Details for MCP {name}": "MCP {name} 的详情",
   "Detecting this Mac…": "正在检测这台 Mac…",
+  "Detecting this PC…": "正在检测这台电脑…",
   Developer: "开发者",
   "Development build": "开发版本",
   "Development builds and builds packaged under another name update from source.":
@@ -1143,8 +1166,8 @@ export default {
   "Dismiss remaining imports": "忽略其余导入",
   Dividers: "分隔线",
   "Do it for me": "帮我完成",
-  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
-    "“帮我完成”会打开启动器，由这个对话通过电脑控制在里面安装 Unreal。约 45 GB。需要登录 Epic 时，只有你本人能登录。",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About {gb} GB. Only you sign in to Epic, when it asks.":
+    "“帮我完成”会打开启动器，由这个对话通过电脑控制在里面安装 Unreal。约 {gb} GB。需要登录 Epic 时，只有你本人能登录。",
   "Does it feel alive? {score} of {max}": "感觉有生气吗？{score}/{max}",
   "Don't allow": "不允许",
   "Don't ask again for this action in {source}.": "在 {source} 中不再询问此操作。",
@@ -1511,6 +1534,8 @@ export default {
   "Genex leaves it open until the Loop ends.": "Genex 会让它保持打开，直到 Loop 结束。",
   "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}), or make the project in Unreal's own New Project dialog and choose it from the Unreal button.":
     "Genex 使用 Unreal {versions} 创建新的 Unreal 项目，而这台电脑上是 Unreal {version}。请在 Epic Games Launcher 中另外安装 {wanted}（{clickPath}），或在 Unreal 自己的 New Project 对话框中创建项目，然后通过 Unreal 按钮选择它。",
+  "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}).":
+    "Genex 使用 Unreal {versions} 创建新的 Unreal 项目，而这台电脑上是 Unreal {version}。请在 Epic Games Launcher 中另外安装 {wanted}（{clickPath}）。",
   "Genex needs your OK to set up": "Genex 需要你的同意才能完成设置",
   "Genex plugin": "Genex 插件",
   "Genex plugin, Credits": "Genex 插件，积分",
@@ -1706,8 +1731,8 @@ export default {
   "In the background: {title}": "后台：{title}",
   "In the build · not in your game folder yet": "在构建中 · 尚未进入你的游戏文件夹",
   "In the game's folder": "在游戏文件夹中",
-  "In the launcher, sign in, then {clickPath}. About 45 GB. Only you can sign in to Epic.":
-    "在启动器中登录，然后依次点击 {clickPath}。约 45 GB。只有你本人能登录 Epic。",
+  "In the launcher, sign in, then {clickPath}. About {gb} GB. Only you can sign in to Epic.":
+    "在启动器中登录，然后依次点击 {clickPath}。约 {gb} GB。只有你本人能登录 Epic。",
   "In the reviewers' words: {words}": "审查员原话：{words}",
   "In this game’s folder. Workers load them from there.": "在此游戏的文件夹中。助手从这里加载它们。",
   "In total": "总计",
@@ -2162,6 +2187,7 @@ export default {
   "Needs a key": "需要密钥",
   "Needs a {ram} GB Mac": "需要 {ram} GB 内存的 Mac",
   "Needs setup": "需要设置",
+  "Needs ~{need} GB to run": "运行需要约 {need} GB",
   "Neon rings": "霓虹环",
   "Never asks, stays sandboxed": "从不询问，始终在沙盒中",
   "Never asks, works anywhere": "从不询问，可在任意位置操作",
@@ -2237,6 +2263,8 @@ export default {
   "No published games yet.": "还没有已发布的游戏。",
   "No recommended model fits this Mac. More models lists what bigger Macs can run.":
     "没有适合这台 Mac 的推荐模型。“更多模型”中列出了配置更高的 Mac 可运行的模型。",
+  "No recommended model fits this PC. More models lists what each one needs.":
+    "没有适合这台电脑的推荐模型。“更多模型”中列出了每个模型的需求。",
   "No reviewer compared it": "没有审查员对比过",
   "No reviewer saw it; the lead merged the part's work into your build.":
     "没有审查员看过；主智能体把这个部分的工作合入了你的构建。",
@@ -2373,6 +2401,8 @@ export default {
   "On this Mac · {size}": "在这台 Mac 上 · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "启用后，它会在 Genex 的这些时刻运行：{steps}；这些步骤不会事先询问你。",
+  "One account for frontier AI models and game dev tools. Pay with Genex credits.":
+    "一个账号，用上前沿 AI 模型和游戏开发工具。用 Genex 积分付费。",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "一个账号，数百个模型。用多少就付给 OpenRouter 多少。",
   "One key for hundreds of models. Pay as you go.": "一个密钥，数百个模型。按量付费。",
@@ -4075,7 +4105,7 @@ export default {
   Unpublish: "取消发布",
   "Unpublish {title}?": "要取消发布 {title} 吗？",
   "Unpublishing…": "正在取消发布…",
-  "Unreal Engine 5.8 isn’t on this computer yet.": "这台电脑上还没有 Unreal Engine 5.8。",
+  "Unreal Engine isn’t on this computer yet.": "这台电脑上还没有 Unreal Engine。",
   "Unreal Engine {version} isn't on this computer yet. The Unreal button above the game shows how to get it free from Epic, and notices when it's installed.":
     "这台电脑上还没有 Unreal Engine {version}。游戏上方的 Unreal 按钮会告诉你如何从 Epic 免费获取，并在安装好后自动识别。",
   "Unreal couldn't use the port Genex gave {name}. Quit Unreal and open it again from the Unreal button.":
@@ -4642,6 +4672,15 @@ export default {
   "in {game} and {count} more": "在 {game} 及另外 {count} 款游戏中",
   "install and run the apps it names, such as Blender": "安装并运行它指定的应用，例如 Blender",
   "installs Genex packages in the game": "在游戏中安装 Genex 依赖包",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "房间模块导入了 {file}，它位于发布副本自留的文件夹中；请把它移到 src/",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "房间模块导入了 {file}，它在游戏文件夹之外；请把共享代码放在 src/ 这样的文件夹中",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "房间模块通过链接访问 {file}；发布需要真实文件",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "房间模块的 server/ 文件夹及其导入内容过大，无法作为房间模块发布",
+  "runs the game's multiplayer room on this computer": "在这台电脑上运行游戏的多人房间",
   integrations: "集成",
   "it finished": "已结束",
   "it landed": "已进入游戏",
@@ -4808,6 +4847,7 @@ export default {
   "since {when}": "{when}起",
   sixth: "第六",
   slit: "细缝",
+  slower: "较慢",
   squint: "眯眼",
   started: "开始时间",
   "started a new game": "创建了新游戏",
@@ -5153,6 +5193,8 @@ export default {
   "{count} selected": "已选择 {count} 个",
   "{cpu} · {memory} GB memory · about {usable} GB available for models":
     "{cpu} · {memory} GB 内存 · 约 {usable} GB 可用于模型",
+  "{cpu} · {memory} GB memory · {gpu} ({gpuMemory} GB) · about {usable} GB available for models":
+    "{cpu} · {memory} GB 内存 · {gpu}（{gpuMemory} GB） · 约 {usable} GB 可用于模型",
   "{days} days": "{days} 天",
   "{days}d": "{days} 天",
   "{day} {value}": "{day}：{value}",
@@ -5283,6 +5325,7 @@ export default {
   "{name} isn’t on this computer any more.": "{name} 已不在这台电脑上。",
   "{name} needs Studio {version} or newer": "{name} 需要 Studio {version} 或更高版本",
   "{name} needs a sign-in": "{name} 需要登录",
+  "{name} opens in Unreal {to} from now on.": "{name} 今后会在 Unreal {to} 中打开。",
   "{name} settings": "{name} 设置",
   "{name} was never saved to a file, so Genex can't open it. Open it in Roblox Studio, or choose another place.":
     "{name} 从未保存为文件，所以 Genex 无法打开它。请在 Roblox Studio 中打开它，或选择其他地点。",
@@ -5879,12 +5922,12 @@ export default {
   "Raising…": "正在提升…",
   "The chat now uses {model}. Send your message again.": "对话现在使用 {model}。请再发送一次消息。",
   "Couldn’t send the project to Genex: {error}": "无法把项目发送到 Genex：{error}",
-  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
-    "目前 Genex 只能构建 Unreal 5.8 游戏，而这个项目没有写明版本。请在 Unreal 5.8 中打开并保存，然后再构建一次。",
+  "Genex builds Unreal {builds} games for now, and this project names no version of it. Open it in Unreal, save it, then build again.":
+    "目前 Genex 只能构建 Unreal {builds} 游戏，而这个项目没有写明版本。请在 Unreal 中打开并保存，然后再构建一次。",
   "Sending the project to Genex stopped": "项目发送到 Genex 已停止",
   "Sending to Genex. Keep Genex open": "正在发送到 Genex。请保持 Genex 打开",
-  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
-    "这个游戏使用 Unreal {version}。目前 Genex 只能构建 Unreal 5.8 游戏：请升级到 5.8，然后再构建一次。",
+  "This game uses Unreal {version}. Genex builds Unreal {builds} games for now, so it can’t build this one yet.":
+    "这个游戏使用 Unreal {version}。目前 Genex 只能构建 Unreal {builds} 游戏，所以还不能构建这个游戏。",
   "Run the game": "运行游戏",
   "The agent is packaging the game. It starts it once the package is ready.": "智能体正在打包游戏，打包好后就会启动。",
   "Genex can’t play this game’s app on this computer.": "Genex 无法在这台电脑上运行这个游戏的应用。",
@@ -6064,4 +6107,22 @@ export default {
   "Send to agent": "发给代理",
   "{platform} app didn’t send": "{platform} 应用未发送",
   "{platform} build error": "{platform} 构建错误",
+  "Genex reads no settings of this game, so genex.json's authority block is ignored: it needs an index.html, a package.json, or Genex's multiplayer in its engine project":
+    "Genex 读不到这个游戏的任何设置，所以 genex.json 里的 authority 块会被忽略：需要 index.html、package.json，或引擎项目里的 Genex 多人联机",
+  "Genex reads this game's package.json, not its genex.json, so genex.json's authority block is ignored. Move the block into package.json as genex.authority, or remove package.json":
+    "Genex 读取的是这个游戏的 package.json，而不是 genex.json，所以 genex.json 里的 authority 块会被忽略。把这个块移到 package.json 的 genex.authority，或者删掉 package.json",
+  "package.json's genex is not an object, so no authority block reaches Genex and the game would publish with no room":
+    "package.json 里的 genex 不是对象，所以没有 authority 块能到达 Genex，游戏会在没有房间的情况下发布",
+  "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
+    "{file} 不是 JSON 对象，所以它的 authority 块永远到不了 Genex，游戏会在没有房间的情况下发布。请修复 {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex 无法读取 Mac 应用 {app} 是否可以使用网络。如果玩家无法连接，请在 Genex 中重新打包并发布。",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "Mac 应用 {app} 无法连接互联网：它在没有网络权限的沙盒中运行，因此任何玩家都无法连接。请在 Genex 中重新打包，然后发布。没有发送任何内容。",
+  "Live · update ready": "已上线 · 更新已就绪",
+  "Not built": "未构建",
+  "Built · older than your game": "已构建 · 比你的游戏旧",
+  "Ready to publish": "可以发布",
+  "{platforms} can take up to an hour.": "{platforms} 最多可能需要一小时。",
+  "{platform} build didn’t start": "{platform} 构建未开始",
 } satisfies LocaleCatalog;

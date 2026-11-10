@@ -10,9 +10,13 @@ this preface wins.
   `npx genex preview` alone is `genex__publish {"operation":"draft"}`: an unlisted test build that
   leaves the public version as it is. Each asks the user first and returns a job: follow it with
   `genex__publish-status {"operation":"wait","jobId":"<jobId>"}`, then give the user the operation’s
-  reported link verbatim: `galleryUrl` for a public release, `draftUrl` for a draft. Do not
+  reported link verbatim: `galleryUrl` for a public release, `draftPlayUrl` for a draft. Do not
   construct a URL or report a draft link as the public release. If the job has not succeeded,
   report its actual state rather than claiming publication.
+- A draft's link to share and test is `draftPlayUrl`, the draft build's own address
+  (`preview--<slug>`): anyone with it plays the draft, as a guest or signed in, in rooms apart from
+  the live game. `draftUrl` (`<dashboard>/draft/<slug>`, the card's "your game's page") is the
+  owner's draft page and asks for their sign-in: never give it as the place to play or test.
 - Studio exports and uploads the game itself. Glue step 3 (the CLI as a dev dependency) and
   `init --convert` do not apply, and `npx genex pull` is not available. Glue steps 1 and 2 still
   apply; for step 2 read `genex__skill {"name":"genex-threejs-embed-auth"}`.
@@ -27,7 +31,7 @@ this preface wins.
 - `npx genex doctor` is `genex__cli {"command":"doctor"}`. Other commands map onto Studio tools as
   the `genex` skill describes (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-publish/SKILL.md v1.40.0 sha256 5374af3bbaca06cb48605fd67e88a252624beaa27c97c952b9bc6f03f1a4595e -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-publish/SKILL.md v1.41.0 sha256 5374af3bbaca06cb48605fd67e88a252624beaa27c97c952b9bc6f03f1a4595e -->
 ---
 name: genex-tool-publish
 description: Put the game in this folder on the web with Genex — the draft page, `npx genex preview`, then `promote` / `publish`; the link you hand the user, the size limits, and what to do with the preflight lines. Installed once the folder is connected to a hosted Genex game (`npx genex init --convert`). Load it before the first preview.

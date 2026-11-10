@@ -2,7 +2,10 @@
  * Packaging an Unreal game as the app its players install: `package-game` runs Epic's
  * `BuildCookRun` (build, cook, stage and pak, Shipping) for a system this computer packages for, a
  * Mac app on a Mac, a Windows program on Windows, and on Windows a Linux program too, into
- * `unreal/Builds/<Mac|Windows|Linux>/`, where Publish finds it (`main/core/native-builds.ts`). Unreal
+ * `unreal/Builds/<Mac|Windows|Linux>/`, where Publish finds it (`main/core/native-builds.ts`). A web
+ * build (`system: "web"`, Unreal's Wasm platform) is the whole site, staged in `unreal/Builds/Wasm/`
+ * and then made the game's web version in `web/`, on either system by an engine that builds for the
+ * web (`web-build.ts`), from a game with a C++ module, with the emsdk the person installed. Unreal
  * makes a Mac app only on a Mac and a Windows one only on Windows; Linux it cross-compiles from
  * Windows with Epic's Linux toolchain, which the person installs (Epic's installer sets
  * `LINUX_MULTIARCH_ROOT`, read from the registry so no restart is needed) and RunUAT is handed.
@@ -16,6 +19,9 @@
  * of its own whose whole tree ends on Stop, past its deadline or when the backend stops. On Windows
  * RunUAT.bat runs through cmd.exe with every path whole inside quotes (`quotedScriptLine`); a game
  * whose path cmd.exe can't carry is refused before anything is touched.
+ *
+ * A Mac app is let onto the network once packaged (`substrate/mac-entitlements.ts`): Unreal's Shipping
+ * default sandboxes it with no network, which no online game survives.
  *
  * Before packaging, the person's open Unreal saves its work (play is ended first), so the app is
  * what they see; an Unreal that answers but can't save leaves nothing packaged. One package runs
@@ -34,7 +40,22 @@ import { killProcessTree } from "../../substrate/process-tree.ts";
 import { editorCmdPath, type ProgramOutcome } from "./automation-tests.ts";
 import { uatEnv } from "./program-env.ts";
 import { projectModule } from "./cpp-module.ts";
+import { letAppReachNetwork, type MacSigner, systemMacSigner } from "../../substrate/mac-entitlements.ts";
 import { LINUX_TOOLCHAIN_VARIABLE } from "./setup.ts";
+import {
+  EMSDK_VARIABLE,
+  emscriptenFor,
+  emsdkHolds,
+  engineBuildsWeb,
+  ensureWebIsolation,
+  GAME_WEB_FOLDER,
+  holdsWebBuild,
+  placeWebBuild,
+  WEB_PAGE,
+  WEB_PLATFORM,
+  WebFolder,
+  webFolderOf,
+} from "./web-build.ts";
 import { canCompileCpp, cmdCarries, outputCollector, pathScrubber } from "./ubt.ts";
 import { type VisualStudioStatus, visualStudioLacking } from "./visual-studio.ts";
 import type { XcodeStatus } from "./xcode.ts";
@@ -80,7 +101,7 @@ const MAC = "darwin";
 const WINDOWS = "win32";
 
 /** The systems a package is for. Wire values: `package-game`'s and `package-status`'s `system`. */
-export const PackageSystem = { Mac: "mac", Windows: "windows", Linux: "linux" } as const;
+export const PackageSystem = { Mac: "mac", Windows: "windows", Linux: "linux", Web: "web" } as const;
 export type PackageSystem = (typeof PackageSystem)[keyof typeof PackageSystem];
 
 /** Each system's package: UAT's platform, and the folder its stage makes under `Builds/`. */
@@ -88,11 +109,13 @@ const SYSTEMS: Readonly<Record<PackageSystem, { platform: string; folder: string
   [PackageSystem.Mac]: { platform: "Mac", folder: "Mac" },
   [PackageSystem.Windows]: { platform: "Win64", folder: "Windows" },
   [PackageSystem.Linux]: { platform: "Linux", folder: "Linux" },
+  // UAT stages the whole site into a folder it names for the platform.
+  [PackageSystem.Web]: { platform: WEB_PLATFORM, folder: WEB_PLATFORM },
 };
 /** What each computer packages for, its own system first: Windows cross-compiles Linux with Epic's toolchain. */
 const HOST_SYSTEMS: Partial<Record<NodeJS.Platform, readonly PackageSystem[]>> = {
-  [MAC]: [PackageSystem.Mac],
-  [WINDOWS]: [PackageSystem.Windows, PackageSystem.Linux],
+  [MAC]: [PackageSystem.Mac, PackageSystem.Web],
+  [WINDOWS]: [PackageSystem.Windows, PackageSystem.Linux, PackageSystem.Web],
 };
 
 /**
@@ -103,6 +126,7 @@ const HOST_SYSTEMS: Partial<Record<NodeJS.Platform, readonly PackageSystem[]>> =
 const LINUX_TOOLCHAINS: Readonly<Record<string, string>> = {
   "5.7": "v26_clang-20.1.8-rockylinux8",
   "5.8": "v26_clang-20.1.8-rockylinux8",
+  "5.9": "v26_clang-20.1.8-rockylinux8",
 };
 const LINUX_TOOLCHAIN_DOWNLOADS = "https://cdn.unrealengine.com/CrossToolchain_Linux/";
 /** A trailing slash or backslash, as the installer writes the folder. */
@@ -130,7 +154,7 @@ const MESSAGE = {
   NoEngine: "No supported Unreal is installed, so Genex can't package the game.",
   Unsupported: "Genex packages Unreal games on a Mac or on Windows.",
   CannotPackage: (asked: string) =>
-    `This computer can't package ${asked ? `"${asked.slice(0, 24)}"` : "that"}: Genex packages a Mac app on a Mac, and Windows and Linux apps on Windows (system: "windows" or "linux").`,
+    `This computer can't package ${asked ? `"${asked.slice(0, 24)}"` : "that"}: Genex packages a Mac app on a Mac, Windows and Linux apps on Windows (system: "windows" or "linux"), and a web build on either (system: "web").`,
   NoToolchainKnown: (version: string) =>
     `Genex doesn't know Epic's Linux toolchain for Unreal ${version} yet, so it can't package for Linux here.`,
   NeedsToolchain: (version: string, name: string, url: string) =>
@@ -146,13 +170,27 @@ const MESSAGE = {
   NotAFolder: (where: string) => `${where} isn't a plain folder in the project, so Genex packaged nothing.`,
   NotSaved: (why: string) =>
     `Unreal couldn't save its open work (${why}), so Genex packaged nothing: the app would miss it. Save in Unreal, or quit it, then package again.`,
+  NoWebPlatform: (version: string) =>
+    `Unreal ${version} on this computer can't build for the web: its install has no web (Wasm) platform, which Unreal has from 5.9 in installs that include it. Genex packaged nothing; say so to the user and offer this computer's own app instead.`,
+  WebNeedsCpp:
+    "A web build needs the game's C++ module: Unreal builds web games from C++ projects only. Call unreal__add-cpp-module (the user confirms it), then package again. Genex packaged nothing.",
+  NeedsEmsdk: (version: string) =>
+    `A web build needs emscripten ${version}, exactly, in an emsdk folder this computer names. Give the user these steps: clone https://github.com/emscripten-core/emsdk to a plain local folder, run "emsdk install ${version}" and "emsdk activate ${version}" in it, and set the ${EMSDK_VARIABLE} environment variable to that folder; then package again. Genex packaged nothing.`,
+  WebFolderTaken:
+    "The game's web/ folder holds other files, and a web build is the game's whole web/ folder. Move or remove what is in web/ (ask the user first), then package again. Genex packaged nothing.",
   Packaged: (system: string, seconds: number) => `The ${system} app was packaged in ${seconds} s.`,
+  WebPackaged: (seconds: number) => `The web build was made in ${seconds} s.`,
+  /** The site was made, but `web/` came to hold other files meanwhile, so it stays where Unreal staged it. */
+  WebStaged: (seconds: number) =>
+    `The web build was made in ${seconds} s, but the game's web/ folder now holds other files, so the site stays in the build folder.`,
   NoApp: (system: string) => `BuildCookRun said it succeeded, but no ${system} app is in the build folder.`,
   Failed: (count: number) =>
     count === 0 ? "BuildCookRun failed." : `BuildCookRun failed: ${count} error line${count === 1 ? "" : "s"}.`,
   TimedOut: `The package was stopped after ${GAME_PACKAGE_TIMEOUT_MS / MINUTE_MS} minutes.`,
   Stopped: "Stopped.",
   NotStarted: (code: string) => `AutomationTool couldn't start (${code}).`,
+  NoNetwork: (why: string) =>
+    `The Mac app was packaged, but Genex couldn't let it reach the network (${why}): Unreal's Shipping sandbox would keep it offline, so package again.`,
 } as const;
 
 /** Runs RunUAT to its end; ends its whole tree when `signal` aborts or the deadline passes. Tests stand in. */
@@ -170,13 +208,16 @@ export type UatLaunch = { file: string; args: string[]; verbatim: boolean; env?:
 /** What the tools need from the computer, the editor and the clock. */
 export type GamePackageDeps = {
   platform: NodeJS.Platform;
-  engine(): Promise<{ version: string; directory: string } | undefined>;
+  /** The installed engine `game` is packaged with: its project's own, else the newest supported one. */
+  engine(storage: string, game: string): Promise<{ version: string; directory: string } | undefined>;
   project(storage: string, game: string): Promise<string | undefined>;
   xcode(engineDir: string | undefined): Promise<Pick<XcodeStatus, "state">>;
   /** Where Microsoft's C++ tools stand on Windows, which a game with C++ is packaged with; none off Windows. */
   visualStudio?(engineDir: string | undefined): Promise<Pick<VisualStudioStatus, "state">>;
   /** Windows: `LINUX_MULTIARCH_ROOT` as Epic's installer set it, or undefined; none means no toolchain. */
   linuxToolchain?(): Promise<string | undefined>;
+  /** The emsdk folder this computer names for Unreal's web builds (`EMSDK_VARIABLES`), or undefined. */
+  emsdk?(): Promise<string | undefined>;
   /** Whether the game's own Unreal answers now. */
   editorAnswers(storage: string, game: string): Promise<boolean>;
   /** Saves the game's open Unreal (ending play first): whether all of it saved, and what didn't. */
@@ -184,6 +225,8 @@ export type GamePackageDeps = {
   now(): number;
   /** RunUAT's runner; the product's own unless a test stands in. */
   runUat?: RunUat;
+  /** Reads and re-signs a packaged Mac app's entitlements; the computer's codesign unless a test stands in. */
+  macSigner?: MacSigner;
   /** Aborts once the backend stops: a running package ends with it. */
   stopped?: AbortSignal;
 };
@@ -227,6 +270,15 @@ export function linuxToolchainFor(version: string): { name: string; url: string 
 }
 
 /**
+ * What a web build asks of BuildCookRun beyond an app's: IoStore containers, as Epic's own command
+ * line for the platform has; the package step, the only one that writes the page's file list
+ * (`wasm-manifest.json`, without which the page never starts) and moves the files no host may serve
+ * (the symbol map, UAT's manifests) out of the site; and no Brotli copy beside each file, which
+ * helps only on a host that serves it in the file's place, and Genex's serve each file as it is.
+ */
+const WEB_ONLY_ARGS = ["-iostore", "-package", "-WasmNoBrotli"] as const;
+
+/**
  * BuildCookRun's arguments: Shipping for `system` (this computer's own when none), built, cooked,
  * staged into paks and staged under `stagingDir`, the cook run by this computer's own command-line
  * editor (a project with no editor target of its own has none to build).
@@ -238,7 +290,8 @@ export function buildCookRunArgs(o: {
   platform: NodeJS.Platform;
   system?: PackageSystem;
 }): string[] {
-  const target = SYSTEMS[packageSystemOf(o.platform, o.system)];
+  const system = packageSystemOf(o.platform, o.system);
+  const target = SYSTEMS[system];
   return [
     "BuildCookRun",
     `-project=${o.projectFile}`,
@@ -248,6 +301,7 @@ export function buildCookRunArgs(o: {
     "-cook",
     "-stage",
     "-pak",
+    ...(system === PackageSystem.Web ? WEB_ONLY_ARGS : []),
     `-stagingdirectory=${o.stagingDir}`,
     `-unrealexe=${editorCmdPath(o.engineDir, o.platform)}`,
     "-nocompileeditor",
@@ -334,7 +388,7 @@ async function targetOf(
   if (!linked) throw new Error(MESSAGE.NoProject);
   const [gameDir, projectFile] = await Promise.all([realpath(context.directory), realpath(linked)]);
   if (!isInside(gameDir, projectFile)) throw new Error(MESSAGE.OutsideGame);
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   if (!engine) throw new Error(MESSAGE.NoEngine);
   return {
     game,
@@ -352,14 +406,34 @@ async function targetOf(
  * a Linux package without Epic's toolchain for this Unreal. Answers what RunUAT's environment adds.
  */
 async function assertRunnable(deps: GamePackageDeps, target: Target): Promise<Record<string, string>> {
-  if (deps.platform === WINDOWS) {
-    if (!cmdCarries([target.engineDir, target.projectFile])) throw new Error(MESSAGE.Uncarried);
+  const windows = deps.platform === WINDOWS;
+  if (windows && !cmdCarries([target.engineDir, target.projectFile])) throw new Error(MESSAGE.Uncarried);
+  if (target.system.id === PackageSystem.Web) return assertWeb(deps, target);
+  if (windows) {
     if (target.system.id !== PackageSystem.Linux) return assertBuildTools(deps, target);
     return { [LINUX_TOOLCHAIN_VARIABLE]: await linuxToolchainRoot(deps, target.engineVersion) };
   }
   const xcode = await deps.xcode(target.engineDir);
   if (!canCompileCpp({ xcode }, deps.platform)) throw new Error(MESSAGE.NoXcode(xcode.state));
   return {};
+}
+
+/**
+ * Refuses a web build this computer can't make, each with what would let it: an engine whose install
+ * builds for the web, the game's C++ module (Unreal builds web games from C++ projects only), and an
+ * emsdk folder with exactly the emscripten that engine names, which RunUAT is handed in the first
+ * variable Unreal's build tool reads; and a `web/` folder in the game that holds other files. Emscripten compiles the game, so neither Xcode nor Microsoft's
+ * tools are asked for.
+ */
+async function assertWeb(deps: GamePackageDeps, target: Target): Promise<Record<string, string>> {
+  const wanted = (await engineBuildsWeb(target.engineDir)) ? await emscriptenFor(target.engineDir) : undefined;
+  if (!wanted) throw new Error(MESSAGE.NoWebPlatform(target.engineVersion));
+  if (!(await projectModule(target.projectFile).catch(() => undefined))) throw new Error(MESSAGE.WebNeedsCpp);
+  if ((await webFolderOf(target.gameDir)) === WebFolder.Taken) throw new Error(MESSAGE.WebFolderTaken);
+  const root = ((await deps.emsdk?.().catch(() => undefined)) ?? "").replace(TRAILING_SEPARATORS, "");
+  const carried = deps.platform !== WINDOWS || cmdCarries([root]);
+  if (!carried || !(await emsdkHolds(root, wanted))) throw new Error(MESSAGE.NeedsEmsdk(wanted));
+  return { [EMSDK_VARIABLE]: root };
 }
 
 /**
@@ -422,6 +496,7 @@ const APP_AT_ROOT: Readonly<Record<PackageSystem, { extension: string; folder: b
   [PackageSystem.Mac]: { extension: APP_EXTENSION, folder: true },
   [PackageSystem.Windows]: { extension: EXE_EXTENSION, folder: false },
   [PackageSystem.Linux]: { extension: SH_EXTENSION, folder: false },
+  [PackageSystem.Web]: { extension: WEB_PAGE, folder: false },
 };
 
 /** The app the stage holds for `system`: the one entry at its package's root that starts the game. */
@@ -465,12 +540,32 @@ async function runPackage(
   if (outcome.timedOut) throw new PackageFailed(MESSAGE.TimedOut, [], seconds);
   const app =
     outcome.code === 0 && SUCCEEDED.test(outcome.output) ? await appIn(dirs.dir, target.system.id) : undefined;
-  if (app) return { line: MESSAGE.Packaged(target.system.folder, seconds), app: shownIn(target.gameDir, app), seconds };
+  if (app && target.system.id === PackageSystem.Web) return webPackaged(target, dirs.dir, app, seconds);
+  if (app) {
+    if (target.system.id === PackageSystem.Mac) await networkedMacApp(deps, app, seconds);
+    return { line: MESSAGE.Packaged(target.system.folder, seconds), app: shownIn(target.gameDir, app), seconds };
+  }
   const scrub = await pathScrubber(target.projectDir, target.engineDir);
   const errors = packageErrors(outcome.output, scrub);
   const succeeded = outcome.code === 0 && SUCCEEDED.test(outcome.output);
   const line = succeeded ? MESSAGE.NoApp(target.system.folder) : MESSAGE.Failed(errors.length);
   throw new PackageFailed(line, errors, seconds);
+}
+
+/** A finished web build made the game's web version (`web/`), named by its page; left staged when `web/` is taken. */
+async function webPackaged(target: Target, staged: string, page: string, seconds: number) {
+  // A staged page without its file list never starts, and as web/ it would read as someone else's folder.
+  if (!(await holdsWebBuild(staged))) throw new PackageFailed(MESSAGE.NoApp(target.system.folder), [], seconds);
+  const placed = await placeWebBuild(target.gameDir, staged);
+  const line = placed ? MESSAGE.WebPackaged(seconds) : MESSAGE.WebStaged(seconds);
+  return { line, app: shownIn(target.gameDir, placed ?? page), seconds };
+}
+
+/** Lets the packaged Mac app reach the network, or fails the package: an app that stays offline is not offered to Publish. */
+async function networkedMacApp(deps: GamePackageDeps, app: string, seconds: number): Promise<void> {
+  await letAppReachNetwork(app, deps.macSigner ?? systemMacSigner).catch((failure: unknown) => {
+    throw new PackageFailed(MESSAGE.NoNetwork(errorMessage(failure)), [], seconds);
+  });
 }
 
 /** A package that failed with lines to read. */
@@ -553,6 +648,8 @@ export function createGamePackageTools(deps: GamePackageDeps) {
     try {
       if (context.signal?.aborted) throw new Error(MESSAGE.Stopped);
       await saveFirst(deps, storage, target.game);
+      // Genex's hosts send no isolation headers, so the page adds them itself.
+      if (target.system.id === PackageSystem.Web) await ensureWebIsolation(target.projectDir);
       return await freshStage(target);
     } catch (failure) {
       stops.delete(target.projectFile);
@@ -591,7 +688,12 @@ export function createGamePackageTools(deps: GamePackageDeps) {
     const target = await targetOf(deps, storage, context, args.system);
     const record = records.get(recordKey(target));
     if (record) return { ...record, jobRunning: record.state === GamePackageState.Running };
-    const dir = path.join(target.projectDir, BUILDS_FOLDER, target.system.folder);
+    const web = target.system.id === PackageSystem.Web;
+    const ours = web && (await webFolderOf(target.gameDir)) === WebFolder.Ours;
+    // A web build is the game's own web/ folder; an app stays in its system's build folder.
+    const dir = ours
+      ? path.join(target.gameDir, GAME_WEB_FOLDER)
+      : path.join(target.projectDir, BUILDS_FOLDER, target.system.folder);
     const app = (await isPlain(dir)) ? await appIn(dir, target.system.id) : undefined;
     return {
       state: GamePackageState.Idle,

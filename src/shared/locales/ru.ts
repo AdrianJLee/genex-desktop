@@ -135,6 +135,7 @@ export default {
     "Сейчас скачивается модель. Удали эту, когда загрузка закончится.",
   "A mountain rescue game with a dog and a sled": "Спасение в горах с собакой и санями",
   "A museum guard game where the exhibits come alive": "Игра про охранника музея, где оживают экспонаты",
+  "Agents get Unreal {to}’s tools.": "Агенты получат инструменты Unreal {to}.",
   "An arcade shooter where your bullets bounce off the walls": "Аркадный шутер, где пули отскакивают от стен",
   "A new build is ready to play.": "Новая сборка готова — можно играть.",
   "A new build is ready — reload to play it": "Новая сборка готова — перезагрузи, чтобы поиграть",
@@ -488,6 +489,8 @@ export default {
   Better: "Улучшение",
   Beta: "Бета",
   "Between builds": "Между сборками",
+  "Bigger than the graphics card, so part of it runs on the CPU":
+    "Больше памяти видеокарты, поэтому часть работает на процессоре",
   "Billed by each provider you use": "Оплата — отдельно у каждого провайдера",
   "Billed by each provider you use.": "Оплата у каждого провайдера, которым пользуешься.",
   "Billed by each provider you use. Free models stay in the model menu too.":
@@ -546,6 +549,7 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "Пересобери приложение «{title}» для {players}, чтобы его можно было опубликовать.",
   "Build updated": "Сборка обновлена",
+  "Build with Genex": "Собирать с Genex",
   "Build with the Cursor plan you already have.": "Собирай на тарифе Cursor, который у тебя уже есть.",
   "Build with the Grok account you already have.": "Собирай на аккаунте Grok, который у тебя уже есть.",
   "Changes Harness made to its own instructions. Undo any of them.":
@@ -553,6 +557,13 @@ export default {
   "Checking that Microsoft signed the installer…": "Проверяем, что установщик подписан Microsoft…",
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "Скачиваем установщик Visual Studio Build Tools с сайта Microsoft…",
+  "Genex keeps a copy of the project file first. What Unreal {to} saves won’t open in {from}.":
+    "Сначала Genex сохранит копию файла проекта. То, что сохранит Unreal {to}, не откроется в {from}.",
+  "Genex makes a save point of this game first. What Unreal {to} saves won’t open in {from}.":
+    "Сначала Genex сделает точку сохранения этой игры. То, что сохранит Unreal {to}, не откроется в {from}.",
+  "Genex makes new games with Unreal {to}. Agents get its tools.":
+    "Новые игры Genex делает на Unreal {to}. Агенты получат его инструменты.",
+  "Get {version}": "Скачать {version}",
   "Install Visual Studio Build Tools": "Установить Visual Studio Build Tools",
   "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "Установи Visual Studio Build Tools 2022 от Microsoft с набором «Разработка классических приложений на C++» и .NET Framework 4.8 SDK.",
@@ -570,15 +581,26 @@ export default {
     "Установщик Microsoft не скачался. Проверь интернет и попробуй ещё раз.",
   "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
     "Установщик Microsoft закончил, но Unreal всё ещё не может собирать C++ с тем, что он поставил. Установи Visual Studio Build Tools 2022 с набором «Разработка классических приложений на C++» и .NET Framework 4.8 SDK сам.",
+  "Move to {version}": "Перенести на {version}",
+  "Move {name} to Unreal {to}?": "Перенести {name} на Unreal {to}?",
+  "Move {project} to Unreal {to}": "Перенести {project} на Unreal {to}",
+  "Play in browser": "Играть в браузере",
+  "Play {title} in the browser": "Играть в «{title}» в браузере",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
     "Рекомендуем. Бесплатные инструменты C++ от Microsoft: с ними агент пишет логику твоей игры на C++, а Unreal собирает игру или плагин с C++. Около 7 ГБ. «Сделать за меня» установит их: нажми «Да», когда Windows спросит.",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "Рекомендуем. Бесплатные инструменты C++ от Microsoft: с ними агент пишет логику твоей игры на C++, а Unreal собирает игру или плагин с C++. Установи Visual Studio Build Tools с набором «Разработка классических приложений на C++» и .NET Framework 4.8 SDK.",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "Самоулучшение выключено. Harness не меняет свои инструкции.",
+  "This project isn't on an older Unreal that Genex moves to {version}.":
+    "Этот проект не на старой версии Unreal, которую Genex переносит на {version}.",
   "Unreal can build C++ on this PC.": "Unreal может собирать C++ на этом ПК.",
   "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
     "Unreal {engine} не работает с инструментами C++ на этом ПК. «Сделать за меня» обновит их: нажми «Да», когда Windows спросит.",
+  "Unreal {to} isn’t on this computer yet: about {gb} GB, beside Unreal {from}.":
+    "Unreal {to} ещё нет на этом компьютере: около {gb} ГБ, рядом с Unreal {from}.",
+  "Unreal {version} isn't on this computer yet. Install it first, then move the project.":
+    "Unreal {version} ещё нет на этом компьютере. Сначала установи его, потом перенеси проект.",
   "Update Visual Studio Build Tools": "Обновить Visual Studio Build Tools",
   "Visual Studio Build Tools are installed.": "Visual Studio Build Tools установлены.",
   "Visual Studio's C++ tools are ready": "Инструменты C++ из Visual Studio готовы",
@@ -1179,6 +1201,7 @@ export default {
   "Delete every row shared from this computer?": "Удалить все строки, отправленные с этого компьютера?",
   "Delete game": "Удалить игру",
   "Delete it from this Mac? You can download it again.": "Удалить модель с этого Mac? Её можно скачать снова.",
+  "Delete it from this PC? You can download it again.": "Удалить модель с этого ПК? Её можно скачать снова.",
   "Delete what I shared": "Удалить отправленное",
   "Delete your comment": "Удалить свой комментарий",
   "Delete {model}": "Удалить {model}",
@@ -1210,6 +1233,7 @@ export default {
   Details: "Подробности",
   "Details for MCP {name}": "Подробнее об MCP {name}",
   "Detecting this Mac…": "Проверяем этот Mac…",
+  "Detecting this PC…": "Проверяем этот ПК…",
   Developer: "Разработчик",
   "Development build": "Сборка для разработки",
   "Development builds and builds packaged under another name update from source.":
@@ -1228,8 +1252,8 @@ export default {
   "Dismiss remaining imports": "Скрыть оставшиеся импорты",
   Dividers: "Разделители",
   "Do it for me": "Сделать за меня",
-  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
-    "«Сделать за меня» откроет лаунчер, а чат установит Unreal там, управляя компьютером. Около 45 ГБ. Войти в Epic, когда попросят, можешь только ты.",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About {gb} GB. Only you sign in to Epic, when it asks.":
+    "«Сделать за меня» откроет лаунчер, а чат установит Unreal там, управляя компьютером. Около {gb} ГБ. Войти в Epic, когда попросят, можешь только ты.",
   "Does it feel alive? {score} of {max}": "Чувствуется жизнь? {score} из {max}",
   "Don't allow": "Не разрешать",
   "Don't ask again for this action in {source}.": "Больше не спрашивать об этом действии в {source}.",
@@ -1614,6 +1638,8 @@ export default {
   "Genex leaves it open until the Loop ends.": "Genex не закроет Unreal, пока Loop не закончится.",
   "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}), or make the project in Unreal's own New Project dialog and choose it from the Unreal button.":
     "Genex создаёт новые проекты на Unreal {versions}, а на этом компьютере стоит Unreal {version}. Установи рядом ещё {wanted} в Epic Games Launcher ({clickPath}) или создай проект в окне New Project самого Unreal и выбери его кнопкой Unreal.",
+  "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}).":
+    "Genex создаёт новые проекты на Unreal {versions}, а на этом компьютере стоит Unreal {version}. Установи рядом ещё {wanted} в Epic Games Launcher ({clickPath}).",
   "Genex needs your OK to set up": "Genex нужно твоё разрешение для настройки",
   "Genex plugin": "Плагин Genex",
   "Genex plugin, Credits": "Плагин Genex, кредиты",
@@ -1822,8 +1848,8 @@ export default {
   "In the background: {title}": "В фоне: {title}",
   "In the build · not in your game folder yet": "В сборке · ещё не в папке игры",
   "In the game's folder": "В папке игры",
-  "In the launcher, sign in, then {clickPath}. About 45 GB. Only you can sign in to Epic.":
-    "В лаунчере войди в аккаунт, затем {clickPath}. Около 45 ГБ. Войти в Epic можешь только ты.",
+  "In the launcher, sign in, then {clickPath}. About {gb} GB. Only you can sign in to Epic.":
+    "В лаунчере войди в аккаунт, затем {clickPath}. Около {gb} ГБ. Войти в Epic можешь только ты.",
   "In the reviewers' words: {words}": "Словами проверяющих: {words}",
   "In this game’s folder. Workers load them from there.": "В папке этой игры. Помощники загружают их оттуда.",
   "In total": "Всего",
@@ -2295,6 +2321,7 @@ export default {
   "Needs a key": "Нужен ключ",
   "Needs a {ram} GB Mac": "Нужен Mac с {ram} ГБ",
   "Needs setup": "Нужна настройка",
+  "Needs ~{need} GB to run": "Для запуска нужно ~{need} ГБ",
   "Neon rings": "Неоновые кольца",
   "Never asks, stays sandboxed": "Не спрашивает, работает в песочнице",
   "Never asks, works anywhere": "Не спрашивает, работает везде",
@@ -2372,6 +2399,8 @@ export default {
   "No published games yet.": "Опубликованных игр пока нет.",
   "No recommended model fits this Mac. More models lists what bigger Macs can run.":
     "Ни одна из рекомендуемых моделей не подходит для этого Mac. В разделе «Ещё модели» — те, что пойдут на Mac помощнее.",
+  "No recommended model fits this PC. More models lists what each one needs.":
+    "Ни одна из рекомендуемых моделей не подходит для этого ПК. В разделе «Ещё модели» видно, сколько нужно каждой.",
   "No reviewer compared it": "Проверяющие не сравнивали",
   "No reviewer saw it; the lead merged the part's work into your build.":
     "Проверяющие это не видели; главный агент добавил работу части в твою сборку.",
@@ -2514,6 +2543,8 @@ export default {
   "On this Mac · {size}": "На этом Mac · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "После включения он срабатывает в определённые моменты работы Genex: {steps}; в эти моменты он тебя не спрашивает.",
+  "One account for frontier AI models and game dev tools. Pay with Genex credits.":
+    "Один аккаунт для передовых ИИ-моделей и инструментов для геймдева. Платишь кредитами Genex.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Один аккаунт — сотни моделей. Платишь OpenRouter за то, что используешь.",
   "One key for hundreds of models. Pay as you go.": "Один ключ — сотни моделей. Платишь только за то, что используешь.",
@@ -4308,7 +4339,7 @@ export default {
   Unpublish: "Снять с публикации",
   "Unpublish {title}?": "Снять «{title}» с публикации?",
   "Unpublishing…": "Снимаем с публикации…",
-  "Unreal Engine 5.8 isn’t on this computer yet.": "Unreal Engine 5.8 на этом компьютере пока нет.",
+  "Unreal Engine isn’t on this computer yet.": "Unreal Engine на этом компьютере пока нет.",
   "Unreal Engine {version} isn't on this computer yet. The Unreal button above the game shows how to get it free from Epic, and notices when it's installed.":
     "Unreal Engine {version} ещё нет на этом компьютере. Кнопка Unreal над игрой покажет, как бесплатно получить его у Epic, и заметит, когда он установится.",
   "Unreal couldn't use the port Genex gave {name}. Quit Unreal and open it again from the Unreal button.":
@@ -4895,6 +4926,16 @@ export default {
   "install and run the apps it names, such as Blender":
     "устанавливать и запускать нужные ему приложения, например Blender",
   "installs Genex packages in the game": "устанавливает пакеты Genex в игру",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "Модуль комнаты импортирует {file} из папки, которую копия для публикации оставляет себе; перенесите файл в src/",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "Модуль комнаты импортирует {file} вне папок игры; держите общий код в папке вроде src/",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "Модуль комнаты получает {file} через ссылку; для публикации нужен настоящий файл",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "Папка server/ модуля комнаты и её импорты слишком велики, чтобы опубликовать их как модуль комнаты",
+  "runs the game's multiplayer room on this computer":
+    "запускает многопользовательскую комнату игры на этом компьютере",
   integrations: "слияния",
   "it finished": "работа завершена",
   "it landed": "шаг попал в игру",
@@ -5064,6 +5105,7 @@ export default {
   "since {when}": "в друзьях: {when}",
   sixth: "шестую",
   slit: "щёлки",
+  slower: "медленнее",
   squint: "прищур",
   started: "начато",
   "started a new game": "создал новую игру",
@@ -5491,6 +5533,8 @@ export default {
   "{count} selected": "Выбрано: {count}",
   "{cpu} · {memory} GB memory · about {usable} GB available for models":
     "{cpu} · {memory} ГБ памяти · для моделей доступно около {usable} ГБ",
+  "{cpu} · {memory} GB memory · {gpu} ({gpuMemory} GB) · about {usable} GB available for models":
+    "{cpu} · {memory} ГБ памяти · {gpu} ({gpuMemory} ГБ) · для моделей доступно около {usable} ГБ",
   "{days} days": "{days, plural, one {# день} few {# дня} many {# дней} other {# дня}}",
   "{days}d": "{days} дн.",
   "{day} {value}": "{day}: {value}",
@@ -5628,6 +5672,7 @@ export default {
   "{name} isn’t on this computer any more.": "Файла {name} больше нет на этом компьютере.",
   "{name} needs Studio {version} or newer": "Для {name} нужна Studio версии {version} или новее",
   "{name} needs a sign-in": "{name}: нужен вход",
+  "{name} opens in Unreal {to} from now on.": "{name} теперь будет открываться в Unreal {to}.",
   "{name} settings": "Настройки {name}",
   "{name} was never saved to a file, so Genex can't open it. Open it in Roblox Studio, or choose another place.":
     "Плейс {name} ни разу не сохраняли в файл, поэтому Genex не может его открыть. Открой его в Roblox Studio или выбери другой плейс.",
@@ -6269,12 +6314,12 @@ export default {
   "Raising…": "Поднимаю…",
   "The chat now uses {model}. Send your message again.": "Теперь чат работает на {model}. Отправь сообщение ещё раз.",
   "Couldn’t send the project to Genex: {error}": "Не получилось отправить проект в Genex: {error}",
-  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
-    "Пока Genex собирает игры на Unreal 5.8, а этот проект не указывает версию. Открой его в Unreal 5.8, сохрани и собери снова.",
+  "Genex builds Unreal {builds} games for now, and this project names no version of it. Open it in Unreal, save it, then build again.":
+    "Пока Genex собирает игры на Unreal {builds}, а этот проект не указывает версию. Открой его в Unreal, сохрани и собери снова.",
   "Sending the project to Genex stopped": "Отправка проекта в Genex остановилась",
   "Sending to Genex. Keep Genex open": "Отправка в Genex. Не закрывай Genex",
-  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
-    "Эта игра на Unreal {version}. Пока Genex собирает игры на Unreal 5.8: обнови её до 5.8 и собери снова.",
+  "This game uses Unreal {version}. Genex builds Unreal {builds} games for now, so it can’t build this one yet.":
+    "Эта игра на Unreal {version}. Пока Genex собирает игры на Unreal {builds}, поэтому эту собрать пока не может.",
   "Run the game": "Запусти игру",
   "The agent is packaging the game. It starts it once the package is ready.":
     "Агент собирает игру. Запустит её, как только сборка будет готова.",
@@ -6468,4 +6513,22 @@ export default {
   "Send to agent": "Отправить агенту",
   "{platform} app didn’t send": "Приложение {platform} не отправилось",
   "{platform} build error": "Ошибка сборки {platform}",
+  "Genex reads no settings of this game, so genex.json's authority block is ignored: it needs an index.html, a package.json, or Genex's multiplayer in its engine project":
+    "Genex не читает настройки этой игры, поэтому блок authority в genex.json не учитывается: нужен index.html, package.json или мультиплеер Genex в проекте движка",
+  "Genex reads this game's package.json, not its genex.json, so genex.json's authority block is ignored. Move the block into package.json as genex.authority, or remove package.json":
+    "Genex читает package.json этой игры, а не genex.json, поэтому блок authority в genex.json не учитывается. Перенеси блок в package.json как genex.authority или удали package.json",
+  "package.json's genex is not an object, so no authority block reaches Genex and the game would publish with no room":
+    "Поле genex в package.json — не объект, поэтому блок authority не доходит до Genex и игра опубликуется без комнаты",
+  "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
+    "{file} — не JSON-объект, поэтому его блок authority не доходит до Genex и игра опубликуется без комнаты. Исправь {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex не смог прочитать, может ли приложение для Mac {app} пользоваться сетью. Если игроки не могут подключиться, упакуйте его в Genex заново и опубликуйте.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "Приложение для Mac {app} не может выйти в интернет: оно работает в песочнице без доступа к сети, поэтому ни один игрок не сможет подключиться. Упакуйте его в Genex заново, затем опубликуйте. Ничего не отправлено.",
+  "Live · update ready": "В игре · обновление готово",
+  "Not built": "Не собрано",
+  "Built · older than your game": "Собрано · старее твоей игры",
+  "Ready to publish": "Готово к публикации",
+  "{platforms} can take up to an hour.": "{platforms} может занять до часа.",
+  "{platform} build didn’t start": "Сборка {platform} не началась",
 } satisfies LocaleCatalog;

@@ -1,7 +1,7 @@
 /**
  * New game from a template: Genex makes an Unreal project from one of five Blueprint templates
- * exactly as Unreal's New Project dialog does (GameProjectUtils::CreateProjectFromTemplate in UE
- * 5.8.3, followed step by step). Epic's dialog defaults apply: Desktop, Maximum quality, and no
+ * exactly as Unreal's New Project dialog does (GameProjectUtils::CreateProjectFromTemplate,
+ * followed step by step in UE 5.8.3 and compared again with 5.9's, which changed none of it). Epic's dialog defaults apply: Desktop, Maximum quality, and no
  * variant unless the third-person template's Combat variant is chosen, whose shared pack is added
  * after the template's as the dialog's AddSharedContentToProject does. One step is Genex's own: on a
  * Mac the game is made without hardware ray tracing ({@link MAC_VALUES}).
@@ -28,6 +28,7 @@ import {
   saveEpicText,
   setConfigValue,
 } from "./epic-files.ts";
+import { atLeast, NEW_GAMES_ENGINE } from "./engine-line.ts";
 import { type Engine, installEngineText, type Runner, type SetupEnv, windowsSystemTool } from "./setup.ts";
 import { UPROJECT_EXTENSION } from "./project-file.ts";
 import {
@@ -162,6 +163,17 @@ const MESSAGE = {
         clickPath: LAUNCHER_ADD_ENGINE,
       },
     ),
+  /** {@link CreateErrorCode.UnverifiedEngine} for an older Unreal, whose own dialog would make a game on it. */
+  OlderEngine: (version: string) =>
+    t(
+      "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}).",
+      {
+        versions: orList(VERIFIED_CREATE_ENGINES),
+        version,
+        wanted: VERIFIED_CREATE_ENGINES[0],
+        clickPath: LAUNCHER_ADD_ENGINE,
+      },
+    ),
   // A template Genex can't replicate, each reason its own sentence.
   NoDefs: () => t("This Unreal template can't be used: it has no Config/TemplateDefs.ini."),
   CustomDefs: () => t("This Unreal template can't be used: it needs its own C++ setup code."),
@@ -194,7 +206,7 @@ export const noEngineError = () => new CreateError(CreateErrorCode.NoEngine, MES
  * and the ProjectDescriptor FileVersion). Epic changes these between releases, so each new version
  * needs that comparison again before it is added here; until then, Unreal's own dialog makes it.
  */
-export const VERIFIED_CREATE_ENGINES = ["5.8"] as const;
+export const VERIFIED_CREATE_ENGINES = [NEW_GAMES_ENGINE] as const;
 const verified: readonly string[] = VERIFIED_CREATE_ENGINES;
 
 /** Whether Genex makes new games with this engine: its version's creation steps were compared with Epic's. */
@@ -203,8 +215,11 @@ export function canCreateWith(engine: Engine): boolean {
 }
 
 /** The refusal for a supported engine whose creation steps Genex hasn't compared with Epic's. */
-export const unverifiedEngineError = (version: string) =>
-  new CreateError(CreateErrorCode.UnverifiedEngine, MESSAGE[CreateErrorCode.UnverifiedEngine](version));
+export function unverifiedEngineError(version: string): CreateError {
+  const newer = atLeast(version, NEW_GAMES_ENGINE);
+  const words = newer ? MESSAGE[CreateErrorCode.UnverifiedEngine] : MESSAGE.OlderEngine;
+  return new CreateError(CreateErrorCode.UnverifiedEngine, words(version));
+}
 
 /**
  * A template card for the New game form: Epic's English name, Genex's line and the thumbnail; a

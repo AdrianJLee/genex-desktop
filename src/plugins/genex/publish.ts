@@ -82,6 +82,18 @@ export const MESSAGE = {
   DraftFailedTest:
     "The new build did not pass its test on the draft page, so it was not made public. Players still get the previous version.",
   NoApps: "This game has no Mac, Windows or Linux app ready to publish.",
+  /** An online game's Mac app whose sandbox keeps it off the network: nothing was sent. */
+  MacAppOfflineRefusal: (app: string) =>
+    t(
+      "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.",
+      { app },
+    ),
+  /** An online game's Mac app whose signature couldn't be read: it goes, with this said. */
+  MacAppUnreadWarning: (app: string) =>
+    t(
+      "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.",
+      { app },
+    ),
   /** {@link MESSAGE.NoApps} as Publish's refusal. */
   NoAppsRefusal: () => t("This game has no Mac, Windows or Linux app ready to publish."),
   /** The Publish card switched off something that is no app: only a Mac, Windows or Linux app can be taken off. */
@@ -91,15 +103,17 @@ export const MESSAGE = {
   NotOnGenexRefusal: () => t("Publish the game first, then Genex can build it"),
   /** A build on Genex asked through a CLI without `genex native build`. */
   CloudBuildsUnavailableRefusal: () => t("This version of Genex can’t build apps on Genex yet"),
-  /** A build on Genex asked of a game on an Unreal its build computers don't have. */
-  CloudEngineRefusal: (version: string) =>
-    t("This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.", {
+  /** A build on Genex asked of a game on an Unreal its build computers don't have; `builds` names the ones they do. */
+  CloudEngineRefusal: (version: string, builds: string) =>
+    t("This game uses Unreal {version}. Genex builds Unreal {builds} games for now, so it can’t build this one yet.", {
       version,
+      builds,
     }),
   /** {@link PUBLISH_MESSAGE.CloudEngineRefusal} for a project that names no version Genex knows. */
-  CloudNoEngineRefusal: () =>
+  CloudNoEngineRefusal: (builds: string) =>
     t(
-      "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.",
+      "Genex builds Unreal {builds} games for now, and this project names no version of it. Open it in Unreal, save it, then build again.",
+      { builds },
     ),
   /** A build on Genex asked without the game's folder to stage its project from. */
   NoGameFolderRefusal: () => t("Open the game to build its app on Genex"),

@@ -164,8 +164,10 @@ export async function publishFromDialog(
 /**
  * Publish a game that has only apps, no web build (a Unity or Unreal game built for the Mac), from
  * the dialog: its ready apps go to Genex and the game is listed under `title`. The rows the dialog
- * lists above its press name exactly these apps, so the press is the consent. Refused when the game
- * has no ready app, or Studio's Genex CLI cannot send apps.
+ * lists above its press name exactly these apps, so the press is the consent. `release` names the
+ * platforms whose app Genex built on its own computers and keeps, or still builds: players get each
+ * with this publish, or as soon as it is built. Refused when the game has no ready app and none to
+ * release, or Studio's Genex CLI cannot send apps.
  */
 export async function publishAppsFromDialog(
   core: DialogCore,
@@ -174,29 +176,49 @@ export async function publishAppsFromDialog(
   sendsApps = pinnedCliSendsApps(),
   remix?: unknown,
   platforms?: unknown,
+  release?: unknown,
 ): Promise<void> {
   const binding = await boundGame(core, project);
   const native = await publishedApps(core, binding.project, sendsApps, platformsChoice(platforms));
-  if (native.length === 0) throw new Error(MESSAGE.NoApps());
+  const released = cloudPlatforms(release);
+  if (native.length === 0 && released.length === 0) throw new Error(MESSAGE.NoApps());
   const name = cleanGenexTitle(title);
   await core.plugins.action(
     GENEX_PLUGIN_ID,
     GenexAction.PublishApps,
-    { native, ...(name ? { title: name } : {}), ...remixArg(remix) },
+    {
+      native,
+      ...(released.length > 0 ? { release: released } : {}),
+      ...(name ? { title: name } : {}),
+      ...remixArg(remix),
+    },
     binding,
   );
+}
+
+/** The systems in `platforms` that Genex builds apps for, each once; none when it is no list. */
+function cloudPlatforms(platforms: unknown): string[] {
+  if (!Array.isArray(platforms)) return [];
+  return [...new Set(platforms.filter((one): one is string => typeof one === "string" && CLOUD_PLATFORMS.has(one)))];
 }
 
 /**
  * Ask Genex, from the dialog, to build `project`'s `platform` app on its own computers: the app this
  * computer can't make (an Unreal game's Windows app on a Mac). The row's press is the consent to send
- * the game's project privately for it, as Publish's is to send its apps. Refused for a system Genex
+ * the game's project privately for it, as Publish's is to send its apps. With `keep` (the Publish
+ * card's Build), Genex keeps what it builds until a publish asks for it. Refused for a system Genex
  * builds no app for, before Genex is asked anything.
  */
-export async function cloudBuildFromDialog(core: DialogCore, project: unknown, platform: unknown): Promise<void> {
+export async function cloudBuildFromDialog(
+  core: DialogCore,
+  project: unknown,
+  platform: unknown,
+  keep?: unknown,
+): Promise<void> {
   if (typeof platform !== "string" || !CLOUD_PLATFORMS.has(platform)) throw new Error(MESSAGE.NoCloudPlatform());
   const binding = await boundGame(core, project);
-  await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.CloudBuild, { platform }, binding);
+  const args = { platform, ...(keep === true ? { keep: true } : {}) };
+  await core.plugins.action(GENEX_PLUGIN_ID, GenexAction.CloudBuild, args, binding);
 }
 
 /**

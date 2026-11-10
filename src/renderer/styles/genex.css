@@ -1430,7 +1430,8 @@ button.genex-publish-banner-name:hover {
   line-height: 18px;
   white-space: nowrap;
 }
-/* The dot speaks the banner chip's language: green live, amber older than the game, hollow not on Genex. */
+/* The dot speaks the banner chip's language: green live, amber older than the game, hollow not on
+   Genex; filled in the text's own colour once its app is built and waits for Publish. */
 .genex-publish-card-dot {
   flex: none;
   width: 7px;
@@ -1440,6 +1441,10 @@ button.genex-publish-banner-name:hover {
 }
 [data-tone="live"] .genex-publish-card-dot {
   background: var(--green);
+  box-shadow: none;
+}
+[data-tone="ready"] .genex-publish-card-dot {
+  background: var(--ink);
   box-shadow: none;
 }
 [data-tone="old"] .genex-publish-card-dot {

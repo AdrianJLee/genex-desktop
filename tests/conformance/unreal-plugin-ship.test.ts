@@ -43,7 +43,7 @@ import { VisualStudioState } from "../../src/plugins/unreal/visual-studio.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";
 import { running } from "../helpers/processes.ts";
 import { tmpDir } from "../helpers/tmp.ts";
-import { tree } from "../helpers/unreal-fake-engine.ts";
+import { engineByGame, tree } from "../helpers/unreal-fake-engine.ts";
 
 const PLUGIN = "LevelTools";
 const HOST = "LevelToolsHost";
@@ -120,6 +120,8 @@ type Options = {
   gameName?: string;
   /** Where Microsoft's C++ tools stand on Windows; none: the computer can't tell. */
   visualStudio?: VisualStudioState;
+  /** A newer Unreal is installed beside the game's own, which answers only when asked for this game. */
+  newerUnreal?: boolean;
 };
 
 /** Settles a background job: yields until `done` says so. */
@@ -210,9 +212,11 @@ async function shipWorld(options: Options = {}) {
       };
     });
   const stopped = new AbortController();
+  const own = { version: "5.8", directory: engineDir };
+  const newer = { version: "5.9", directory: path.join(root, "engine-5.9") };
   const deps = {
     platform: options.platform ?? "darwin",
-    engine: async () => ({ version: "5.8", directory: engineDir }),
+    engine: options.newerUnreal ? engineByGame("level-tools", own, newer) : async () => own,
     project: async () => projectFile,
     xcode: async () =>
       options.platform === "win32" ? { state: XcodeState.NotApplicable } : { state: XcodeState.Ready, app: XCODE_APP },
@@ -387,6 +391,23 @@ describe("plugin-build", () => {
       assert.deepEqual(w.events, [], `${visualStudio}: Unreal is neither saved nor closed`);
       assert.equal((await w.status()).build.state, ShipState.Idle);
     }
+  });
+});
+
+describe("a plugin's jobs where two Unreals are installed", () => {
+  it("plugin-build builds the host with the game's own Unreal, and plugin-test runs that Unreal's headless editor", async () => {
+    const w = await shipWorld({ newerUnreal: true });
+    assert.deepEqual(await w.call(ShipToolName.PluginBuild), { started: true });
+    const built = await w.settled("build");
+    assert.equal(built.build.state, ShipState.Done, built.build.error);
+    assert.deepEqual(
+      w.compiles.map((compiled) => compiled.engineDir),
+      [w.engineDir],
+    );
+    assert.deepEqual(await w.call(ShipToolName.PluginTest), { started: true, filter: PLUGIN });
+    await w.settled("test");
+    const [run] = w.programs;
+    assert.equal(run?.file, path.posix.join(w.engineDir, "Engine", "Binaries", "Mac", "UnrealEditor-Cmd"));
   });
 });
 

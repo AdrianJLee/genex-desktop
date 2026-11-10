@@ -2,10 +2,12 @@
  * Packaging an Unreal game as the app its players install (`unreal__package-game`): BuildCookRun's
  * words for this computer's system, RunUAT.bat's line on Windows with every path whole in quotes,
  * Unreal's work saved before the package, the app found where Publish looks, and a failed package's
- * error lines with none of the computer's paths. RunUAT and the editor are stand-ins.
+ * error lines with none of the computer's paths; and, with two Unreals installed, the package made
+ * by the one the game's own project names. RunUAT and the editor are stand-ins.
  */
 import assert from "node:assert/strict";
-import { mkdir, readdir, symlink, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { copyFile, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
@@ -16,15 +18,19 @@ import {
   createGamePackageTools,
   type GamePackageDeps,
   GamePackageState,
+  GamePackageToolName,
   type GamePackageAnswer,
   packageErrors,
   type RunUat,
+  type UatLaunch,
   uatLaunch,
 } from "../../src/plugins/unreal/game-package.ts";
+import { MacEntitlement, type MacEntitlements, systemMacSigner } from "../../src/substrate/mac-entitlements.ts";
 import { uatEnv } from "../../src/plugins/unreal/program-env.ts";
 import { VisualStudioState } from "../../src/plugins/unreal/visual-studio.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+import { unrealBackendFixture } from "../helpers/unreal-fake-engine.ts";
 
 const ENGINE = "/Users/Shared/Epic Games/UE_5.8";
 const PACKAGED = "BuildCookRun time: 12.00 s\nBUILD SUCCESSFUL\nAutomationTool exiting with ExitCode=0 (Success)";
@@ -52,15 +58,24 @@ function depsFor(
     platform?: NodeJS.Platform;
     toolchain?: string;
     visualStudio?: VisualStudioState;
+    /** The engine the game is packaged with, where a test needs one whose files it wrote. */
+    engine?: { version: string; directory: string };
+    /** The emsdk folder the computer's variables name. */
+    emsdk?: string;
+    /** The packaged Mac app's entitlements as its signature reads, or the failure reading them. */
+    entitlements?: MacEntitlements | Error;
   } = {},
 ) {
   const launches: string[][] = [];
+  const signed: Array<{ app: string; entitlements: MacEntitlements }> = [];
+  let current = options.entitlements ?? {};
   const envs: Array<Record<string, string> | undefined> = [];
   const saves: string[] = [];
   const deps: GamePackageDeps = {
     platform: options.platform ?? "darwin",
-    engine: async () => ({ version: "5.8", directory: ENGINE }),
+    engine: async () => options.engine ?? { version: "5.8", directory: ENGINE },
     linuxToolchain: async () => options.toolchain,
+    emsdk: async () => options.emsdk,
     project: async () => project,
     xcode: async () => ({ state: XcodeState.Ready }),
     visualStudio: async () => ({ state: options.visualStudio ?? VisualStudioState.Ready }),
@@ -75,8 +90,18 @@ function depsFor(
       envs.push(launch.env);
       return runUat(launch, run);
     },
+    macSigner: {
+      read: async () => {
+        if (current instanceof Error) throw current;
+        return current;
+      },
+      sign: async (app, entitlements) => {
+        signed.push({ app, entitlements });
+        current = entitlements;
+      },
+    },
   };
-  return { deps, launches, saves, envs };
+  return { deps, launches, saves, envs, signed };
 }
 
 /** `package-status` until the job is no longer running. */
@@ -171,6 +196,61 @@ describe("packaging an Unreal game", () => {
       app: "unreal/Builds/Mac/Dust-Mac-Shipping.app",
       jobRunning: false,
     });
+  });
+
+  // The owner's published Mac build said "Couldn't reach the arena" forever: Unreal 5.8 signs a
+  // Shipping Mac app with Sandbox.NoNet.entitlements (App Sandbox, no network), so macOS refused every
+  // DNS lookup ("Sandbox restriction") and the sign-in and the join never left the computer.
+  it("lets a sandboxed Mac app reach the network, and leaves an app that already can as it is", async () => {
+    const stagesMac: RunUat = async (launch) => {
+      const staging = launch.args.find((arg) => arg.startsWith("-stagingdirectory="))?.split("=")[1] ?? "";
+      await mkdir(path.join(staging, "Mac", "Dust-Mac-Shipping.app", "Contents"), { recursive: true });
+      return { code: 0, output: PACKAGED, timedOut: false };
+    };
+    const sandboxOnly = { [MacEntitlement.AppSandbox]: true, [MacEntitlement.GetTaskAllow]: true };
+    const cases: Array<[string, MacEntitlements, MacEntitlements | null]> = [
+      ["Unreal's Shipping default", sandboxOnly, { ...sandboxOnly, [MacEntitlement.NetworkClient]: true }],
+      [
+        "a sandbox that turns the network off",
+        { ...sandboxOnly, [MacEntitlement.NetworkClient]: false },
+        { ...sandboxOnly, [MacEntitlement.NetworkClient]: true },
+      ],
+      ["no sandbox", {}, null],
+      ["a sandbox with the network", { [MacEntitlement.AppSandbox]: true, [MacEntitlement.NetworkClient]: true }, null],
+    ];
+    for (const [why, entitlements, expected] of cases) {
+      const { game, project } = await gameWithProject();
+      const { deps, signed } = depsFor(project, stagesMac, { entitlements });
+      const tools = createGamePackageTools(deps);
+      const context = contextIn(game);
+      await tools.handlers["package-game"]({}, context, "/s");
+      const done = await settled(() => tools.handlers["package-status"]({}, context, "/s"));
+      assert.equal(done.state, GamePackageState.Done, `${why}: ${done.line}`);
+      assert.equal(done.app, "unreal/Builds/Mac/Dust-Mac-Shipping.app", why);
+      assert.deepEqual(
+        signed.map((one) => one.entitlements),
+        expected ? [expected] : [],
+        why,
+      );
+      for (const one of signed) assert.equal(path.basename(one.app), "Dust-Mac-Shipping.app", why);
+    }
+  });
+
+  it("fails a Mac package loudly when its app can't be given the network", async () => {
+    const stagesMac: RunUat = async (launch) => {
+      const staging = launch.args.find((arg) => arg.startsWith("-stagingdirectory="))?.split("=")[1] ?? "";
+      await mkdir(path.join(staging, "Mac", "Dust-Mac-Shipping.app", "Contents"), { recursive: true });
+      return { code: 0, output: PACKAGED, timedOut: false };
+    };
+    const { game, project } = await gameWithProject();
+    const { deps } = depsFor(project, stagesMac, { entitlements: new Error("codesign exited 1") });
+    const tools = createGamePackageTools(deps);
+    const context = contextIn(game);
+    await tools.handlers["package-game"]({}, context, "/s");
+    const failed = await settled(() => tools.handlers["package-status"]({}, context, "/s"));
+    assert.equal(failed.state, GamePackageState.Failed);
+    assert.match(failed.line ?? "", /network/);
+    assert.equal(failed.app, undefined, "an app that can't go online is not offered to Publish");
   });
 
   it("packages nothing when Unreal answers but can't save, or when the Mac has no Xcode", async () => {
@@ -340,13 +420,18 @@ describe("packaging an Unreal game for Linux on Windows", () => {
     assert.throws(() => buildCookRunArgs({ ...windows, system: PackageSystem.Mac }), /can't package/);
   });
 
-  it("knows Epic's Linux toolchain for each Unreal Genex makes games with", () => {
-    for (const version of ["5.7", "5.8"])
-      assert.deepEqual(linuxToolchainFor(version), {
-        name: "v26_clang-20.1.8-rockylinux8",
-        url: "https://cdn.unrealengine.com/CrossToolchain_Linux/v26_clang-20.1.8-rockylinux8.exe",
-      });
-    for (const version of ["5.9", "4.27", "", "5.8.1"]) assert.equal(linuxToolchainFor(version), null, version);
+  it("knows Epic's Linux toolchain for each Unreal a game is packaged with, and none for any other", () => {
+    for (const version of ["5.7", "5.8", "5.9"])
+      assert.deepEqual(
+        linuxToolchainFor(version),
+        {
+          name: "v26_clang-20.1.8-rockylinux8",
+          url: "https://cdn.unrealengine.com/CrossToolchain_Linux/v26_clang-20.1.8-rockylinux8.exe",
+        },
+        version,
+      );
+    for (const version of ["6.0", "5.10", "4.27", "", "5.8.1", "5.9.0"])
+      assert.equal(linuxToolchainFor(version), null, version);
   });
 
   it("packages the Linux app with the toolchain handed to RunUAT, staged where Publish looks", async () => {
@@ -424,5 +509,274 @@ describe("packaging an Unreal game for Linux on Windows", () => {
       assert.deepEqual([launches, saves], [[], []], `${why}: nothing saved or launched`);
     }
     assert.deepEqual(await readdir(path.join(game, "unreal")), ["Dust.uproject"], "no build folder was made");
+  });
+});
+
+/** RunUAT's program in an engine's folder on a Mac, and the headless editor BuildCookRun cooks with. */
+const uatOf = (engineDir: string) => [
+  path.join(engineDir, "Engine", "Build", "BatchFiles", "RunUAT.sh"),
+  `-unrealexe=${path.join(engineDir, "Engine", "Binaries", "Mac", "UnrealEditor-Cmd")}`,
+];
+
+/**
+ * The open game packaged through the plugin's backend on a Mac with Unreal 5.8 and 5.9: its project's
+ * `.uproject` is `uproject` when given, else names `association`. Answers how RunUAT was started.
+ */
+/** An engine folder as an Unreal 5.9 install that lists the web platform (or, with `web` false, only a Mac). */
+async function engineFor(web: boolean) {
+  const directory = await tmpDir("unreal-package-engine-");
+  const line = (platform: string) =>
+    `+InstalledPlatformConfigurations=(PlatformName="${platform}", Configuration="Shipping", PlatformType="Game", ProjectType="Any")`;
+  await mkdir(path.join(directory, "Engine", "Config"), { recursive: true });
+  await writeFile(
+    path.join(directory, "Engine", "Config", "BaseEngine.ini"),
+    `[InstalledPlatforms]\nHasInstalledPlatformInfo=true\n${line("Mac")}\n${web ? line("Wasm") : ""}\n`,
+  );
+  await mkdir(path.join(directory, "Engine", "Platforms", "Wasm", "Config"), { recursive: true });
+  await writeFile(
+    path.join(directory, "Engine", "Platforms", "Wasm", "Config", "Wasm_SDK.json"),
+    '{ "MainVersion": "6.0.10", "MinVersion": "6.0.10", "MaxVersion": "6.0.10" }',
+  );
+  return { version: "5.9", directory };
+}
+
+/** An emsdk folder whose emscripten is `version`. */
+async function emsdkOf(version: string) {
+  const root = await tmpDir("unreal-package-emsdk-");
+  await mkdir(path.join(root, "upstream", "emscripten"), { recursive: true });
+  await writeFile(path.join(root, "upstream", "emscripten", "emscripten-version.txt"), `"${version}"\n`);
+  return root;
+}
+
+/** A RunUAT stand-in that stages Dust's web build: the page, its scripts and the game's module. */
+const stagesWeb: RunUat = async (launch) => {
+  const line = launch.args.join(" ");
+  const found = /-stagingdirectory=(?:"([^"]+)"|(\S+))/.exec(line);
+  const site = path.join(found?.[1] ?? found?.[2] ?? "", "Wasm");
+  await mkdir(path.join(site, "Dust", "Binaries", "Wasm"), { recursive: true });
+  await writeFile(path.join(site, "index.html"), "<!doctype html>");
+  await writeFile(path.join(site, "wasm-manifest.json"), "{}");
+  await writeFile(path.join(site, "Dust", "Binaries", "Wasm", "Dust.wasm"), "\0asm");
+  return { code: 0, output: PACKAGED, timedOut: false };
+};
+
+/** Dust with its C++ module, as a web build needs. */
+async function gameWithCpp() {
+  const made = await gameWithProject();
+  await writeFile(made.project, JSON.stringify({ FileVersion: 3, Modules: [{ Name: "Dust", Type: "Runtime" }] }));
+  return made;
+}
+
+describe("packaging an Unreal game for the web", () => {
+  const web = { system: PackageSystem.Web };
+
+  it("asks BuildCookRun for a Shipping web build with IoStore containers, from a Mac or Windows", () => {
+    const mac = { projectFile: "/g/unreal/Dust.uproject", stagingDir: "/g/unreal/Builds", engineDir: ENGINE };
+    for (const platform of ["darwin", "win32"] as const) {
+      const args = buildCookRunArgs({ ...mac, platform, system: PackageSystem.Web });
+      for (const word of ["-platform=Wasm", "-clientconfig=Shipping", "-build", "-cook", "-stage", "-pak", "-iostore"])
+        assert.ok(args.includes(word), `${platform} ${word}`);
+    }
+    assert.ok(!buildCookRunArgs({ ...mac, platform: "darwin" }).includes("-iostore"), "a Mac app stays as it was");
+  });
+
+  it("asks for the package step, which writes the page's file list, and for no Brotli copies", () => {
+    const game = { projectFile: "/g/unreal/Dust.uproject", stagingDir: "/g/unreal/Builds", engineDir: ENGINE };
+    for (const platform of ["darwin", "win32"] as const) {
+      const args = buildCookRunArgs({ ...game, platform, system: PackageSystem.Web });
+      // Unreal writes wasm-manifest.json and moves the files no host may serve only in its package step.
+      assert.ok(args.includes("-package"), `${platform} -package`);
+      // Genex's hosts serve each file as it is, so a .br copy of each would only double the upload.
+      assert.ok(args.includes("-WasmNoBrotli"), `${platform} -WasmNoBrotli`);
+      const own = buildCookRunArgs({ ...game, platform });
+      assert.deepEqual(
+        own.filter((word) => word === "-package" || word === "-WasmNoBrotli"),
+        [],
+        `${platform}'s own app is packaged as before`,
+      );
+    }
+  });
+
+  it("makes the site the game's web version in web/, with the checked emsdk handed to RunUAT", async () => {
+    const { game, project } = await gameWithCpp();
+    const emsdk = await emsdkOf("6.0.10");
+    const { deps, launches, envs } = depsFor(project, stagesWeb, { engine: await engineFor(true), emsdk });
+    const tools = createGamePackageTools(deps);
+    const context = contextIn(game);
+    assert.deepEqual(await tools.handlers["package-game"](web, context, "/s"), { started: true, system: "Wasm" });
+    const done = await settled(() => tools.handlers["package-status"](web, context, "/s"));
+    assert.equal(done.state, GamePackageState.Done, done.line);
+    assert.equal(done.app, "web/index.html");
+    assert.equal(done.line, "The web build was made in 0 s.");
+    assert.ok(launches[0]?.includes("-platform=Wasm"));
+    assert.deepEqual(envs[0], { WASM_EMSDK_ROOT: emsdk });
+    assert.deepEqual((await readdir(path.join(game, "web"))).sort(), ["Dust", "index.html", "wasm-manifest.json"]);
+    // The project says its page adds the isolation headers itself: Genex's hosts send none.
+    assert.match(
+      await readFile(path.join(game, "unreal", "Config", "DefaultEngine.ini"), "utf8"),
+      /\[\/Script\/WasmTargetPlatform\.WasmTargetSettings\]\nbInjectIsolationHeaders=True/,
+    );
+    // After a restart the build in web/ is still named.
+    const later = await createGamePackageTools(deps).handlers["package-status"](web, context, "/s");
+    assert.deepEqual([later.state, later.app], [GamePackageState.Idle, "web/index.html"]);
+  });
+
+  it("never makes a staged page without its file list the game's web version", async () => {
+    const { game, project } = await gameWithCpp();
+    const pageOnly: RunUat = async (launch) => {
+      const found = /-stagingdirectory=(?:"([^"]+)"|(\S+))/.exec(launch.args.join(" "));
+      const site = path.join(found?.[1] ?? found?.[2] ?? "", "Wasm");
+      await mkdir(site, { recursive: true });
+      await writeFile(path.join(site, "index.html"), "<!doctype html>");
+      return { code: 0, output: PACKAGED, timedOut: false };
+    };
+    const emsdk = await emsdkOf("6.0.10");
+    const { deps } = depsFor(project, pageOnly, { engine: await engineFor(true), emsdk });
+    const tools = createGamePackageTools(deps);
+    const context = contextIn(game);
+    await tools.handlers["package-game"](web, context, "/s");
+    const done = await settled(() => tools.handlers["package-status"](web, context, "/s"));
+    assert.equal(done.state, GamePackageState.Failed, done.line);
+    assert.match(done.line ?? "", /no Wasm app is in the build folder/);
+    // A web/ with no file list would read as someone else's folder and refuse every later build.
+    assert.deepEqual(await readdir(game), ["unreal"]);
+  });
+
+  it("refuses, saving and running nothing, while web/ holds anything but an Unreal web build", async () => {
+    const { game, project } = await gameWithCpp();
+    await mkdir(path.join(game, "web"));
+    await writeFile(path.join(game, "web", "index.html"), "<p>a mockup</p>");
+    const emsdk = await emsdkOf("6.0.10");
+    const { deps, launches, saves } = depsFor(project, stagesWeb, {
+      answers: true,
+      engine: await engineFor(true),
+      emsdk,
+    });
+    await assert.rejects(
+      createGamePackageTools(deps).handlers["package-game"](web, contextIn(game), "/s"),
+      /web\/ folder holds other files/,
+    );
+    assert.deepEqual([launches, saves], [[], []]);
+    assert.equal(await readFile(path.join(game, "web", "index.html"), "utf8"), "<p>a mockup</p>");
+  });
+
+  const refusals: Array<{
+    name: string;
+    cpp?: boolean;
+    engine?: boolean;
+    emsdk?: () => Promise<string | undefined>;
+    says: RegExp;
+  }> = [
+    {
+      name: "an Unreal whose install has no web platform",
+      engine: false,
+      says: /Unreal 5\.9 on this computer can't build for the web/,
+    },
+    {
+      name: "a game in Blueprints only",
+      cpp: false,
+      says: /needs the game's C\+\+ module.*unreal__add-cpp-module/,
+    },
+    {
+      name: "no emsdk named",
+      emsdk: async () => undefined,
+      says: /emscripten 6\.0\.10.*emsdk install 6\.0\.10.*WASM_EMSDK_ROOT/,
+    },
+    {
+      name: "an emsdk of another emscripten",
+      emsdk: () => emsdkOf("6.0.11"),
+      says: /emscripten 6\.0\.10/,
+    },
+  ];
+  for (const refusal of refusals)
+    it(`refuses, saving and running nothing, with ${refusal.name}`, async () => {
+      const { game, project } = refusal.cpp === false ? await gameWithProject() : await gameWithCpp();
+      const emsdk = refusal.emsdk ? await refusal.emsdk() : await emsdkOf("6.0.10");
+      const engine = await engineFor(refusal.engine !== false);
+      const { deps, launches, saves } = depsFor(project, stagesWeb, { answers: true, engine, emsdk });
+      await assert.rejects(
+        createGamePackageTools(deps).handlers["package-game"](web, contextIn(game), "/s"),
+        refusal.says,
+      );
+      assert.deepEqual([launches, saves], [[], []]);
+      assert.deepEqual(await readdir(path.join(game, "unreal")), ["Dust.uproject"], "no build folder was made");
+    });
+
+  it("an Unreal older than the web platform is told so, not sent for emscripten", async () => {
+    const { game, project } = await gameWithCpp();
+    const { deps } = depsFor(project, stagesWeb, { emsdk: await emsdkOf("6.0.10") });
+    await assert.rejects(
+      createGamePackageTools(deps).handlers["package-game"](web, contextIn(game), "/s"),
+      /Unreal 5\.8 on this computer can't build for the web/,
+    );
+  });
+});
+
+async function packagedWithTwoUnreals(association: string, uproject?: string) {
+  const launches: UatLaunch[] = [];
+  const runUat: RunUat = async (launch) => {
+    launches.push(launch);
+    return { code: 0, output: PACKAGED, timedOut: false };
+  };
+  const f = await unrealBackendFixture({ older: true, programs: { runUat } });
+  const project = await f.linkProject(association);
+  if (uproject !== undefined) await writeFile(project, uproject);
+  await f.call(GamePackageToolName.PackageGame, {});
+  await settled(() => f.call(GamePackageToolName.PackageStatus, {}) as Promise<GamePackageAnswer>);
+  const [launch] = launches;
+  const cooksWith = launch?.args.find((arg) => arg.startsWith("-unrealexe="));
+  return { older: f.older?.directory ?? "", newer: f.engine.directory, started: [launch?.file, cooksWith] };
+}
+
+describe("packaging an Unreal game where two Unreals are installed", () => {
+  it("packages a game with the Unreal its own project names, the older one or the newer", async () => {
+    const older = await packagedWithTwoUnreals("5.8");
+    assert.deepEqual(older.started, uatOf(older.older), "a 5.8 game is built and cooked by 5.8");
+    const newer = await packagedWithTwoUnreals("5.9");
+    assert.deepEqual(newer.started, uatOf(newer.newer), "a 5.9 game by 5.9");
+  });
+
+  const newest: Array<[string, string, string?]> = [
+    ["names an Unreal that isn't installed", "5.10"],
+    ["names a source build by its id", "{2E6C4A1B-0D4F-4B63-9B5E-0F3C1A7D9E52}"],
+    ["names no engine", ""],
+    ["can't be read", "5.8", "not a project file"],
+  ];
+  for (const [why, association, uproject] of newest)
+    it(`packages with the newest Unreal a game whose project ${why}`, async () => {
+      const packaged = await packagedWithTwoUnreals(association, uproject);
+      assert.deepEqual(packaged.started, uatOf(packaged.newer));
+    });
+});
+
+describe("a Mac app's network entitlement, through codesign", () => {
+  it("adds network.client to an ad hoc sandboxed app and keeps its other entitlements", {
+    skip: process.platform !== "darwin" && "codesign is macOS's",
+  }, async () => {
+    const app = path.join(await tmpDir("unreal-entitlements-"), "Mini.app");
+    await mkdir(path.join(app, "Contents", "MacOS"), { recursive: true });
+    await copyFile("/usr/bin/true", path.join(app, "Contents", "MacOS", "mini"));
+    await writeFile(
+      path.join(app, "Contents", "Info.plist"),
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>CFBundleIdentifier</key><string>games.genex.mini</string><key>CFBundleExecutable</key><string>mini</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>\n`,
+    );
+    const noNet = path.join(path.dirname(app), "NoNet.entitlements");
+    await writeFile(
+      noNet,
+      `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>\n`,
+    );
+    const signedNoNet = spawnSync("codesign", ["--force", "--sign", "-", "--entitlements", noNet, app], {
+      encoding: "utf8",
+    });
+    assert.equal(signedNoNet.status, 0, signedNoNet.stderr);
+    assert.deepEqual(await systemMacSigner.read(app), { [MacEntitlement.AppSandbox]: true });
+
+    await systemMacSigner.sign(app, { [MacEntitlement.AppSandbox]: true, [MacEntitlement.NetworkClient]: true });
+    assert.deepEqual(await systemMacSigner.read(app), {
+      [MacEntitlement.AppSandbox]: true,
+      [MacEntitlement.NetworkClient]: true,
+    });
+    const verify = spawnSync("codesign", ["--verify", "--strict", app], { encoding: "utf8" });
+    assert.equal(verify.status, 0, verify.stderr);
   });
 });

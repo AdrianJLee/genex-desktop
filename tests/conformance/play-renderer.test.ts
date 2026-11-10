@@ -12,7 +12,13 @@
  * when Play draws it again, remembering the most recent covers only.
  */
 import assert from "node:assert/strict";
-import { NativeSessionPhase, NO_INSTALLS, SessionAction } from "../../src/shared/play-native.ts";
+import {
+  NativeArch,
+  NativePlatform,
+  NativeSessionPhase,
+  NO_INSTALLS,
+  SessionAction,
+} from "../../src/shared/play-native.ts";
 import { describe, it } from "node:test";
 import {
   BAR_AT_TOP,
@@ -1434,6 +1440,34 @@ describe("Play store: a native game's own page", () => {
     assert.equal(store.getState().view.page, PlayPage.Game);
     await store.open(entry("lost-cathedral"));
     assert.deepEqual(calls.open, ["lost-cathedral"], "a web game still plays in the viewer");
+  });
+
+  it("a game with a web build and an app opens its page from its card, and the page's Play in browser opens the viewer", async () => {
+    const macApp = {
+      platform: NativePlatform.Mac,
+      arch: NativeArch.Universal,
+      version: "2.1",
+      sizeBytes: 1_200,
+      installedBytes: 1_400,
+      sha256: "a".repeat(64),
+      url: "https://builds.genex.invalid/skate/2.1/mac.zip",
+      entry: "SKATE.app",
+      publishedAt: "2026-10-19T00:00:00.000Z",
+    };
+    const both = game("skate", { native: { web: true, engine: "unity", builds: [macApp] } });
+    const { api, calls } = fakeApi({
+      playFeed: async () => page([both]),
+      playGame: async (slug) => ({ ...both, slug, likes: 0, liked: false, comments: 0, shots: [], updatedAt: null }),
+    });
+    const store = createPlayStore(api, memory(), manualClock().now);
+    await store.loadFeed(PlayCategory.Featured);
+    await store.open(entry("skate"));
+    assert.deepEqual([store.getState().view.page, calls.open], [PlayPage.Game, []], "the card opens the page");
+    await store.openViewer(entry("skate"));
+    assert.deepEqual(calls.open, ["skate"], "the page's own button plays the web build");
+    // Recent still leads to the page, where both ways to play are.
+    await store.open(store.getState().recent[0] ?? entry("skate"));
+    assert.deepEqual(calls.open, ["skate"]);
   });
 
   it("goes back from a profile opened on a game's page to that page, and from the page to where it came from", () => {

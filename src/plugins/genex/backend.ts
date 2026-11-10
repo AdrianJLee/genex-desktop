@@ -378,11 +378,15 @@ const ACTIONS: Record<string, Action> = {
   [GenexAction.PublishApps]: async (genex, args, ctx, service) => {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
     const apps = await appsToSend(ctx, args.native, service);
-    return genex.publishAppsOnly(ctx.project, apps, args.title, remixChoice(args, ctx));
+    // The room is staged inside this invocation: a detached upload gets no answer from host services.
+    const roomStage = () => service(PluginService.ExportRoom, {});
+    // The systems whose app Genex built and keeps: players get each with this publish.
+    const release = Array.isArray(args.release) ? args.release.filter((one) => typeof one === "string") : [];
+    return genex.publishAppsOnly(ctx.project, apps, args.title, remixChoice(args, ctx), roomStage, release);
   },
   [GenexAction.CloudBuild]: async (genex, args, ctx) => {
     if (!ctx.project) throw new Error(MESSAGE.OpenProject());
-    return genex.cloudBuild(ctx.project, args.platform, ctx.directory);
+    return genex.cloudBuild(ctx.project, args.platform, ctx.directory, args.keep === true);
   },
   [GenexAction.PublishRemoveWeb]: withProject((genex, project) => genex.publishRemoveWeb(project)),
   [GenexAction.PublishRemoveApp]: withProject((genex, project, args) => genex.publishRemoveApp(project, args.platform)),

@@ -79,10 +79,11 @@ const GAMES: FixtureGame[] = [
     online: 8,
     private: true,
     mobileSupport: PlayMobileSupport.DesktopOnly,
-    // A web game with a Mac app beside it: its card plays the web build, the bar offers the app.
-    native: { web: true, engine: "unity", builds: [macApp("SKATE", "2.1", LARGE)] },
+    // A web game with Mac and Windows apps beside it: its card opens its page, which offers the
+    // browser and the app; the viewer's bar offers the app too.
+    native: { web: true, engine: "unity", builds: [macApp("SKATE", "2.1", LARGE), windowsApp("SKATE", "2.1", LARGE)] },
   },
-  // Native games: no web build, so a card opens the game's page.
+  // Native games: no web build, so the page offers the app alone.
   {
     slug: "dust-runners",
     title: "Dust Runners",

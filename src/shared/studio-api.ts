@@ -177,13 +177,31 @@ export interface LocalModelChoice {
   about: string;
   fits: boolean;
   needGb: number;
+  /** On a Mac, the smallest common Mac memory size that holds it; null when none does, and on a PC. */
   needsRamGb: number | null;
+  /** It fits only split between a PC's graphics card and RAM: it runs, slower. */
+  split: boolean;
   reason: string;
+}
+
+/** One graphics card a local model can run on (`HardwareReport.hardware.gpus`). */
+export interface GraphicsCard {
+  name: string;
+  memoryGb: number;
 }
 
 /** This Mac's hardware and the local models it can run (`StudioApi.hardware`, harness `engine.hardware`). */
 export interface HardwareReport {
-  hardware: { cpu: string; ramGb: number; usableModelGb: number };
+  hardware: {
+    cpu: string;
+    ramGb: number;
+    /** The model budget: RAM's share plus `gpuModelGb`. */
+    usableModelGb: number;
+    /** A PC's graphics cards a model can run on, largest first; empty on a Mac or without one. */
+    gpus: GraphicsCard[];
+    /** The part of `usableModelGb` on those cards: a model within it runs entirely there. */
+    gpuModelGb: number;
+  };
   recommendation: {
     tier: { label: string; expectation: string };
     defaultModel: string | null;
@@ -250,10 +268,22 @@ export interface StudioApi {
    * Publish a game that has only apps (no web build) from Studio's Publish dialog: its ready Mac and
    * Windows apps go to Genex and the game is listed under `title`. The press, under the rows it names,
    * is the consent; `remix` is its Allow remixing, whether the game's project goes once they are live.
+   * `release` names the platforms whose app Genex Cloud built and keeps, or still builds: players get
+   * each now, or as soon as it is built.
    */
-  genexPublishApps(project: string, title?: string, remix?: boolean, platforms?: string[]): Promise<void>;
-  /** Ask Genex to build the game's `platform` app on its own computers (an Unreal game's Windows app on a Mac). */
-  genexCloudBuild(project: string, platform: string): Promise<void>;
+  genexPublishApps(
+    project: string,
+    title?: string,
+    remix?: boolean,
+    platforms?: string[],
+    release?: string[],
+  ): Promise<void>;
+  /**
+   * Ask Genex to build the game's `platform` app on its own computers (an Unreal game's Windows app on
+   * a Mac). With `keep`, Genex keeps what it builds and players get nothing until a publish asks
+   * (`genexPublishApps`' `release`), so a game with no page on Genex yet can be built too.
+   */
+  genexCloudBuild(project: string, platform: string, keep?: boolean): Promise<void>;
   /**
    * Genex's review of a game's apps and its takedown, as the Genex plugin keeps it. With `refresh`
    * (the Publish dialog while something is open) Genex is asked again, at most once a 30 s.
@@ -875,10 +905,16 @@ export interface StudioApi {
   cliInstallStatus(): Promise<import("./cli-install.ts").CliInstallJob[]>;
   pullModel(model: string): Promise<boolean>;
   /** Add from Ollama: an exact tag's download size and fit on this Mac, from the public registry. */
-  lookupModel(
-    model: string,
-  ): Promise<
-    | { ok: true; id: string; sizeGb: number; fits: boolean; needGb: number; needsRamGb: number | null }
+  lookupModel(model: string): Promise<
+    | {
+        ok: true;
+        id: string;
+        sizeGb: number;
+        fits: boolean;
+        needGb: number;
+        needsRamGb: number | null;
+        split: boolean;
+      }
     | { ok: false; reason: "invalid" | "not_found" | "unavailable"; id?: string; error?: string }
   >;
   cancelModelDownload(): Promise<boolean>;

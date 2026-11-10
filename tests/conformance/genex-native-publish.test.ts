@@ -584,6 +584,46 @@ describe("a game with only apps, published", () => {
     assert.deepEqual(await readdir(path.join(workspace, ".genex")), ["project.json"], "nothing set aside");
   });
 
+  it("keeps what the record says of the game's other apps when one app is published on its own", async () => {
+    // The Publish card sends only the apps its switches name: the Windows app players already have
+    // stayed theirs on Genex, and the record forgot it, so its row read as never published.
+    const { genex } = await toolsWithStandIn(true, await fixtureApi());
+    await genex.publishAppsOnly("dust", [app("Dust Runners"), WINDOWS], "Dust Runners");
+    await genex.publishWait("dust");
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    assert.equal(state.job?.state, "done", JSON.stringify(state.job));
+    assert.deepEqual(
+      state.native?.sent.map((sent) => sent.platform),
+      ["windows", "mac"],
+    );
+    assert.deepEqual(state.native?.listing, { state: "published", detail: null }, "listed again with this publish");
+  });
+
+  it("starts the record anew when the game is made anew on Genex: the old game's apps are not this one's", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/deleted")) return reply.json({ error: "Not found" }, 404);
+    });
+    servers.push(server);
+    const { genex } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "deleted", id: "p-old", status: "published" });
+    const old = {
+      platform: "windows",
+      arch: "x64",
+      version: "1",
+      sizeBytes: 1,
+      publishedAt: "2026-10-01T00:00:00.000Z",
+    };
+    await writeFile(path.join(workspace, "native.json"), JSON.stringify({ jobId: "old", sent: [old], failed: [] }));
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    assert.deepEqual(
+      state.native?.sent.map((sent) => sent.platform),
+      ["mac"],
+    );
+  });
+
   /** Genex holding the listed game "dust-runners" (p1), keeping each title it is given. */
   async function listedGame() {
     const titles: string[] = [];

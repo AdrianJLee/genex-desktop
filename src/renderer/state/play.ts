@@ -266,7 +266,7 @@ function readGame(state: PlayState, slug: string): PlayGame | null {
   return null;
 }
 
-/** Whether a game Play has read opens its page: a native game with no web build. */
+/** Whether a game Play has read opens its page: one with an app to install, or with no web build. */
 export function opensItsPage(state: PlayState, slug: string): boolean {
   const game = readGame(state, slug);
   return game ? opensPage(game) : false;
@@ -611,8 +611,10 @@ export interface PlayStore extends StoreApi<PlayState> {
   loadFeed(category: PlayCategory, options?: { more?: boolean; force?: boolean }): Promise<void>;
   /** Count the players in a tab's multiplayer games. */
   countOnline(category: PlayCategory): Promise<void>;
-  /** Open a game in the viewer. */
+  /** Open a game: in the viewer, or on its own page when it has an app to install or no web build. */
   open(game: PlayRecentEntry): Promise<void>;
+  /** Play a game's web build in the viewer, whatever its card opens: its page's own Play in browser. */
+  openViewer(game: PlayRecentEntry): Promise<void>;
   close(): Promise<void>;
   retry(): Promise<void>;
   /** Copy a card's game into a new game of the person's own; its name or its failure waits for the shell. */
@@ -802,7 +804,7 @@ export function createPlayStore(
   };
 
   const native = nativeActions(api, set);
-  const { open, close } = opening(api, store, set, native.showGame);
+  const { open, openViewer, close } = opening(api, store, set, native.showGame);
 
   /** Make a game a new one of the person's own: shown from the press, its name or its failure kept for the shell. */
   const remix = async (game: PlayRecentEntry): Promise<void> => {
@@ -835,10 +837,12 @@ export function createPlayStore(
     countOnline,
     findCover: coverFinder(native.loadGame),
     open,
+    openViewer,
     close,
+    // The viewer's own Try again: the viewer again, whatever the game's card opens.
     retry: async () => {
       const shown = store.getState().viewer;
-      if (shown) await open(shown);
+      if (shown) await openViewer(shown);
     },
     remix,
     checkRemix,
@@ -873,8 +877,9 @@ function coverFinder(loadGame: (slug: string) => Promise<void>): (slug: string) 
 }
 
 /**
- * Opening a game and closing its viewer. A native game with no web build opens its own page, never
- * a viewer with nothing to play; any other game's cover shows at once and leads Recent.
+ * Opening a game and closing its viewer. A game with an app to install, or with no web build, opens
+ * its own page (never a viewer with nothing to play); any other game's cover shows at once and leads
+ * Recent. That page's Play in browser opens the viewer itself (`openViewer`).
  */
 function opening(
   api: Pick<PlayApi, "playOpen" | "playClose" | "playSession">,
@@ -882,13 +887,9 @@ function opening(
   set: (change: (state: PlayState) => PlayState) => void,
   showGame: (slug: string) => void,
 ) {
-  const open = async (game: PlayRecentEntry): Promise<void> => {
+  const openViewer = async (game: PlayRecentEntry): Promise<void> => {
     // One copy of a game at a time: its native app being played comes forward instead.
     if (beingPlayed(store.getState(), game.slug)) return api.playSession(game.slug, SessionAction.Show);
-    if (game.page || opensItsPage(store.getState(), game.slug)) {
-      set((state) => ({ ...state, recent: withRecent(state.recent, { ...game, page: true }) }));
-      return showGame(game.slug);
-    }
     set((state) => gameOpened(state, game));
     try {
       await api.playOpen(game.slug, game.title);
@@ -896,11 +897,19 @@ function opening(
       set((state) => openRefused(state, game.slug));
     }
   };
+  const open = async (game: PlayRecentEntry): Promise<void> => {
+    if (beingPlayed(store.getState(), game.slug)) return api.playSession(game.slug, SessionAction.Show);
+    if (game.page || opensItsPage(store.getState(), game.slug)) {
+      set((state) => ({ ...state, recent: withRecent(state.recent, { ...game, page: true }) }));
+      return showGame(game.slug);
+    }
+    return openViewer(game);
+  };
   const close = async (): Promise<void> => {
     set(unansweredClosed);
     await api.playClose();
   };
-  return { open, close };
+  return { open, openViewer, close };
 }
 
 /** The Assets shelf's reads: the person's library page by page, and the whole catalog. */

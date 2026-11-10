@@ -150,6 +150,7 @@ export default {
     "Un modèle est en cours de téléchargement. Supprime celui-ci une fois le téléchargement terminé.",
   "A mountain rescue game with a dog and a sled": "Un jeu de sauvetage en montagne avec un chien et un traîneau",
   "A museum guard game where the exhibits come alive": "Un jeu de gardien de musée où les œuvres prennent vie",
+  "Agents get Unreal {to}’s tools.": "Les agents ont les outils d’Unreal {to}.",
   "An arcade shooter where your bullets bounce off the walls":
     "Un shooter d'arcade où tes balles rebondissent sur les murs",
   "A new build is ready to play.": "Un nouveau build est prêt à jouer.",
@@ -518,6 +519,8 @@ export default {
   Better: "Amélioration",
   Beta: "Bêta",
   "Between builds": "Entre deux builds",
+  "Bigger than the graphics card, so part of it runs on the CPU":
+    "Plus gros que la carte graphique : une partie tourne sur le CPU",
   "Billed by each provider you use": "Facturé par chaque fournisseur que tu utilises",
   "Billed by each provider you use.": "Facturé par chaque fournisseur que tu utilises.",
   "Billed by each provider you use. Free models stay in the model menu too.":
@@ -577,6 +580,7 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "Recrée l’app {players} de {title} pour que je puisse la publier.",
   "Build updated": "Build mis à jour",
+  "Build with Genex": "Créer avec Genex",
   "Build with the Cursor plan you already have.": "Crée avec le forfait Cursor que tu as déjà.",
   "Build with the Grok account you already have.": "Crée avec le compte Grok que tu as déjà.",
   "Changes Harness made to its own instructions. Undo any of them.":
@@ -584,6 +588,13 @@ export default {
   "Checking that Microsoft signed the installer…": "On vérifie que Microsoft a signé l’installeur…",
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "Téléchargement de l’installeur de Visual Studio Build Tools depuis Microsoft…",
+  "Genex keeps a copy of the project file first. What Unreal {to} saves won’t open in {from}.":
+    "Genex garde d’abord une copie du fichier du projet. Ce qu’Unreal {to} enregistre ne s’ouvrira pas dans {from}.",
+  "Genex makes a save point of this game first. What Unreal {to} saves won’t open in {from}.":
+    "Genex crée d’abord un point de sauvegarde de ce jeu. Ce qu’Unreal {to} enregistre ne s’ouvrira pas dans {from}.",
+  "Genex makes new games with Unreal {to}. Agents get its tools.":
+    "Genex crée les nouveaux jeux avec Unreal {to}. Les agents ont ses outils.",
+  "Get {version}": "Installer {version}",
   "Install Visual Studio Build Tools": "Installer Visual Studio Build Tools",
   "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "Installe Visual Studio Build Tools 2022 de Microsoft avec « Développement Desktop en C++ » et le SDK .NET Framework 4.8.",
@@ -601,15 +612,26 @@ export default {
     "L’installeur de Microsoft ne s’est pas téléchargé. Vérifie ta connexion internet et réessaie.",
   "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
     "L’installeur de Microsoft a terminé, mais Unreal ne peut toujours pas compiler de C++ avec ce qu’il a installé. Installe toi-même Visual Studio Build Tools 2022 avec « Développement Desktop en C++ » et le SDK .NET Framework 4.8.",
+  "Move to {version}": "Passer à {version}",
+  "Move {name} to Unreal {to}?": "Passer {name} à Unreal {to} ?",
+  "Move {project} to Unreal {to}": "Passer {project} à Unreal {to}",
+  "Play in browser": "Jouer dans le navigateur",
+  "Play {title} in the browser": "Jouer à {title} dans le navigateur",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
     "Recommandé. Les outils C++ gratuits de Microsoft : avec eux, l'agent écrit la logique de ton jeu en C++, et Unreal empaquette un jeu ou un plugin en C++. Environ 7 Go. « Fais-le pour moi » les installe : choisis Oui quand Windows le demande.",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "Recommandé. Les outils C++ gratuits de Microsoft : avec eux, l'agent écrit la logique de ton jeu en C++, et Unreal empaquette un jeu ou un plugin en C++. Installe Visual Studio Build Tools avec « Développement Desktop en C++ » et le SDK .NET Framework 4.8.",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "L’auto-amélioration est désactivée. Harness garde ses instructions telles quelles.",
+  "This project isn't on an older Unreal that Genex moves to {version}.":
+    "Ce projet n’est pas sur un Unreal plus ancien que Genex passe à {version}.",
   "Unreal can build C++ on this PC.": "Unreal peut compiler du C++ sur ce PC.",
   "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
     "Unreal {engine} ne compile pas avec les outils C++ de ce PC. « Fais-le pour moi » les met à jour : choisis Oui quand Windows le demande.",
+  "Unreal {to} isn’t on this computer yet: about {gb} GB, beside Unreal {from}.":
+    "Unreal {to} n’est pas encore sur cet ordinateur : environ {gb} Go, à côté d’Unreal {from}.",
+  "Unreal {version} isn't on this computer yet. Install it first, then move the project.":
+    "Unreal {version} n’est pas encore sur cet ordinateur. Installe-le d’abord, puis passe le projet.",
   "Update Visual Studio Build Tools": "Mettre à jour Visual Studio Build Tools",
   "Visual Studio Build Tools are installed.": "Visual Studio Build Tools est installé.",
   "Visual Studio's C++ tools are ready": "Les outils C++ de Visual Studio sont prêts",
@@ -1223,6 +1245,7 @@ export default {
   "Delete every row shared from this computer?": "Supprimer toutes les lignes partagées depuis cet ordinateur ?",
   "Delete game": "Supprimer le jeu",
   "Delete it from this Mac? You can download it again.": "Le supprimer de ce Mac ? Tu pourras le retélécharger.",
+  "Delete it from this PC? You can download it again.": "Le supprimer de ce PC ? Tu pourras le retélécharger.",
   "Delete what I shared": "Supprimer ce que j’ai partagé",
   "Delete your comment": "Supprimer ton commentaire",
   "Delete {model}": "Supprimer {model}",
@@ -1254,6 +1277,7 @@ export default {
   Details: "Détails",
   "Details for MCP {name}": "Détails du MCP {name}",
   "Detecting this Mac…": "Détection de ce Mac…",
+  "Detecting this PC…": "Détection de ce PC…",
   Developer: "Développeur",
   "Development build": "Build de développement",
   "Development builds and builds packaged under another name update from source.":
@@ -1272,8 +1296,8 @@ export default {
   "Dismiss remaining imports": "Ignorer les imports restants",
   Dividers: "Séparateurs",
   "Do it for me": "Fais-le pour moi",
-  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
-    "« Fais-le pour moi » ouvre le launcher, et ce chat y installe Unreal en contrôlant l’ordinateur. Environ 45 Go. Toi seul te connectes à Epic, quand il le demande.",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About {gb} GB. Only you sign in to Epic, when it asks.":
+    "« Fais-le pour moi » ouvre le launcher, et ce chat y installe Unreal en contrôlant l’ordinateur. Environ {gb} Go. Toi seul te connectes à Epic, quand il le demande.",
   "Does it feel alive? {score} of {max}": "Ça a l’air vivant ? {score} sur {max}",
   "Don't allow": "Ne pas autoriser",
   "Don't ask again for this action in {source}.": "Ne plus demander pour cette action dans {source}.",
@@ -1662,6 +1686,8 @@ export default {
   "Genex leaves it open until the Loop ends.": "Genex le laisse ouvert jusqu’à la fin du Loop.",
   "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}), or make the project in Unreal's own New Project dialog and choose it from the Unreal button.":
     "Genex crée les nouveaux projets Unreal avec Unreal {versions}, et cet ordinateur a Unreal {version}. Installe aussi {wanted} dans Epic Games Launcher ({clickPath}), ou crée le projet dans la fenêtre New Project d’Unreal et choisis-le avec le bouton Unreal.",
+  "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}).":
+    "Genex crée les nouveaux projets Unreal avec Unreal {versions}, et cet ordinateur a Unreal {version}. Installe aussi {wanted} dans Epic Games Launcher ({clickPath}).",
   "Genex needs your OK to set up": "Genex a besoin de ton accord pour se configurer",
   "Genex plugin": "Plugin Genex",
   "Genex plugin, Credits": "Plugin Genex, Crédits",
@@ -1875,8 +1901,8 @@ export default {
   "In the background: {title}": "En arrière-plan : {title}",
   "In the build · not in your game folder yet": "Dans le build · pas encore dans le dossier de ton jeu",
   "In the game's folder": "Dans le dossier du jeu",
-  "In the launcher, sign in, then {clickPath}. About 45 GB. Only you can sign in to Epic.":
-    "Dans le launcher, connecte-toi, puis {clickPath}. Environ 45 Go. Personne d’autre que toi ne peut se connecter à Epic.",
+  "In the launcher, sign in, then {clickPath}. About {gb} GB. Only you can sign in to Epic.":
+    "Dans le launcher, connecte-toi, puis {clickPath}. Environ {gb} Go. Personne d’autre que toi ne peut se connecter à Epic.",
   "In the reviewers' words: {words}": "Selon les vérificateurs : {words}",
   "In this game’s folder. Workers load them from there.":
     "Dans le dossier de ce jeu. Les assistants les chargent depuis là.",
@@ -2350,6 +2376,7 @@ export default {
   "Needs a key": "Clé nécessaire",
   "Needs a {ram} GB Mac": "Nécessite un Mac de {ram} Go",
   "Needs setup": "À configurer",
+  "Needs ~{need} GB to run": "Nécessite ~{need} Go pour tourner",
   "Neon rings": "Anneaux néon",
   "Never asks, stays sandboxed": "Ne demande jamais, reste dans le bac à sable",
   "Never asks, works anywhere": "Ne demande jamais, agit partout",
@@ -2430,6 +2457,8 @@ export default {
   "No published games yet.": "Aucun jeu publié pour l’instant.",
   "No recommended model fits this Mac. More models lists what bigger Macs can run.":
     "Aucun modèle recommandé ne tient sur ce Mac. « Plus de modèles » liste ce que des Mac plus puissants peuvent faire tourner.",
+  "No recommended model fits this PC. More models lists what each one needs.":
+    "Aucun modèle recommandé ne tient sur ce PC. « Plus de modèles » indique ce qu’il faut à chacun.",
   "No reviewer compared it": "Aucun vérificateur ne l’a comparé",
   "No reviewer saw it; the lead merged the part's work into your build.":
     "Aucun vérificateur ne l’a vu ; l’agent principal a ajouté le travail de la partie à ton build.",
@@ -2580,6 +2609,8 @@ export default {
   "On this Mac · {size}": "Sur ce Mac · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "Une fois activé, il s’exécute à certains moments de Genex : {steps} ; ces étapes ne te demandent rien avant.",
+  "One account for frontier AI models and game dev tools. Pay with Genex credits.":
+    "Un compte pour les modèles d’IA de pointe et les outils de création de jeux. Tu paies avec des crédits Genex.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Un compte pour des centaines de modèles. Tu paies OpenRouter selon ton usage.",
   "One key for hundreds of models. Pay as you go.": "Une clé pour des centaines de modèles. Tu paies à l’usage.",
@@ -4403,7 +4434,7 @@ export default {
   Unpublish: "Dépublier",
   "Unpublish {title}?": "Retirer {title} de la publication ?",
   "Unpublishing…": "Retrait de la publication…",
-  "Unreal Engine 5.8 isn’t on this computer yet.": "Unreal Engine 5.8 n’est pas encore sur cet ordinateur.",
+  "Unreal Engine isn’t on this computer yet.": "Unreal Engine n’est pas encore sur cet ordinateur.",
   "Unreal Engine {version} isn't on this computer yet. The Unreal button above the game shows how to get it free from Epic, and notices when it's installed.":
     "Unreal Engine {version} n’est pas encore sur cet ordinateur. Le bouton Unreal au-dessus du jeu montre comment l’obtenir gratuitement chez Epic, et détecte quand il est installé.",
   "Unreal couldn't use the port Genex gave {name}. Quit Unreal and open it again from the Unreal button.":
@@ -4992,6 +5023,15 @@ export default {
   "in {game} and {count} more": "dans {game} et {count, plural, one {# autre} other {# autres}}",
   "install and run the apps it names, such as Blender": "installer et lancer les apps qu’il indique, comme Blender",
   "installs Genex packages in the game": "installe des paquets Genex dans le jeu",
+  "The room module imports {file}, in a folder the publish copy keeps for itself; move it to src/":
+    "Le module de salle importe {file}, dans un dossier que la copie de publication garde pour elle ; déplace-le dans src/",
+  "The room module imports {file}, outside the game's folders; keep shared code in a folder like src/":
+    "Le module de salle importe {file}, hors des dossiers du jeu ; range le code partagé dans un dossier comme src/",
+  "The room module reaches {file} through a link; publish needs the real file":
+    "Le module de salle atteint {file} par un lien ; la publication a besoin du vrai fichier",
+  "The room module's server/ folder and imports are too large to publish as a room module":
+    "Le dossier server/ du module de salle et ses imports sont trop volumineux pour être publiés comme module de salle",
+  "runs the game's multiplayer room on this computer": "exécute la salle multijoueur du jeu sur cet ordinateur",
   integrations: "intégrations",
   "it finished": "c’est terminé",
   "it landed": "c’est dans le jeu",
@@ -5162,6 +5202,7 @@ export default {
   "since {when}": "depuis {when}",
   sixth: "sixième",
   slit: "fendus",
+  slower: "plus lent",
   squint: "plissés",
   started: "lancé",
   "started a new game": "a créé un nouveau jeu",
@@ -5556,6 +5597,8 @@ export default {
   "{count} selected": "{count, plural, one {# sélectionnée} other {# sélectionnées}}",
   "{cpu} · {memory} GB memory · about {usable} GB available for models":
     "{cpu} · {memory} Go de mémoire · environ {usable} Go disponibles pour les modèles",
+  "{cpu} · {memory} GB memory · {gpu} ({gpuMemory} GB) · about {usable} GB available for models":
+    "{cpu} · {memory} Go de mémoire · {gpu} ({gpuMemory} Go) · environ {usable} Go disponibles pour les modèles",
   "{days} days": "{days} jours",
   "{days}d": "{days} j",
   "{day} {value}": "{day} : {value}",
@@ -5692,6 +5735,7 @@ export default {
   "{name} isn’t on this computer any more.": "{name} n’est plus sur cet ordinateur.",
   "{name} needs Studio {version} or newer": "{name} nécessite Studio {version} ou plus récent",
   "{name} needs a sign-in": "{name} demande une connexion",
+  "{name} opens in Unreal {to} from now on.": "{name} s’ouvre désormais dans Unreal {to}.",
   "{name} settings": "Réglages de {name}",
   "{name} was never saved to a file, so Genex can't open it. Open it in Roblox Studio, or choose another place.":
     "{name} n’a jamais été enregistré dans un fichier, donc Genex ne peut pas l’ouvrir. Ouvre-le dans Roblox Studio ou choisis un autre lieu.",
@@ -6336,12 +6380,12 @@ export default {
   "Raising…": "En cours…",
   "The chat now uses {model}. Send your message again.": "Le chat utilise maintenant {model}. Renvoie ton message.",
   "Couldn’t send the project to Genex: {error}": "Impossible d’envoyer le projet à Genex : {error}",
-  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
-    "Pour l’instant, Genex crée les jeux Unreal 5.8, et ce projet n’indique aucune version. Ouvre-le dans Unreal 5.8, enregistre-le, puis relance.",
+  "Genex builds Unreal {builds} games for now, and this project names no version of it. Open it in Unreal, save it, then build again.":
+    "Pour l’instant, Genex crée les jeux Unreal {builds}, et ce projet n’indique aucune version. Ouvre-le dans Unreal, enregistre-le, puis relance.",
   "Sending the project to Genex stopped": "L’envoi du projet à Genex s’est arrêté",
   "Sending to Genex. Keep Genex open": "Envoi à Genex. Garde Genex ouvert",
-  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
-    "Ce jeu utilise Unreal {version}. Pour l’instant, Genex crée les jeux Unreal 5.8 : passe-le en 5.8, puis relance.",
+  "This game uses Unreal {version}. Genex builds Unreal {builds} games for now, so it can’t build this one yet.":
+    "Ce jeu utilise Unreal {version}. Pour l’instant, Genex crée les jeux Unreal {builds} et ne peut donc pas encore créer celui-ci.",
   "Run the game": "Lance le jeu",
   "The agent is packaging the game. It starts it once the package is ready.":
     "L’agent empaquette le jeu. Il le lance dès que le paquet est prêt.",
@@ -6532,4 +6576,22 @@ export default {
   "Send to agent": "Envoyer à l’agent",
   "{platform} app didn’t send": "L’app {platform} n’est pas partie",
   "{platform} build error": "Erreur de compilation {platform}",
+  "Genex reads no settings of this game, so genex.json's authority block is ignored: it needs an index.html, a package.json, or Genex's multiplayer in its engine project":
+    "Genex ne lit aucun réglage de ce jeu, donc le bloc authority de genex.json est ignoré : il faut un index.html, un package.json ou le multijoueur de Genex dans le projet du moteur",
+  "Genex reads this game's package.json, not its genex.json, so genex.json's authority block is ignored. Move the block into package.json as genex.authority, or remove package.json":
+    "Genex lit le package.json de ce jeu, pas son genex.json, donc le bloc authority de genex.json est ignoré. Déplace le bloc dans package.json en tant que genex.authority, ou supprime package.json",
+  "package.json's genex is not an object, so no authority block reaches Genex and the game would publish with no room":
+    "Le champ genex de package.json n'est pas un objet, donc aucun bloc authority n'atteint Genex et le jeu serait publié sans salon",
+  "{file} is not a JSON object, so its authority block never reaches Genex and the game would publish with no room. Fix {file}":
+    "{file} n'est pas un objet JSON, donc son bloc authority n'atteint jamais Genex et le jeu serait publié sans salon. Corrige {file}",
+  "Genex couldn't read whether the Mac app {app} may use the network. If players can't connect, package it again in Genex and publish.":
+    "Genex n’a pas pu lire si l’app Mac {app} peut utiliser le réseau. Si les joueurs ne peuvent pas se connecter, réempaquette-la dans Genex et publie-la.",
+  "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
+    "L’app Mac {app} ne peut pas accéder à internet : elle est dans un bac à sable sans accès réseau, donc aucun joueur ne pourrait se connecter. Réempaquette-la dans Genex, puis publie. Rien n’a été envoyé.",
+  "Live · update ready": "En ligne · mise à jour prête",
+  "Not built": "Non compilée",
+  "Built · older than your game": "Compilée · plus ancienne que ton jeu",
+  "Ready to publish": "Prête à publier",
+  "{platforms} can take up to an hour.": "{platforms} peut prendre jusqu’à une heure.",
+  "{platform} build didn’t start": "La compilation {platform} n’a pas démarré",
 } satisfies LocaleCatalog;

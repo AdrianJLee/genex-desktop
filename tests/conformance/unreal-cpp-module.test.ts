@@ -208,25 +208,26 @@ describe("making a Blueprint project a C++ project", () => {
     }
   });
 
-  it("picks the include order of the engine the project names, else Unreal 5.8's", async () => {
-    const rows: Array<[string, string | undefined, string]> = [
-      ["5.8", undefined, "Unreal5_8"],
-      ["5.9", undefined, "Unreal5_9"],
-      ["5.8", "5.10.1", "Unreal5_10"],
-      ["", undefined, "Unreal5_8"],
-      ["{8C1E2E52-4E19-4E22-9C1C-0A4D3F2A9B11}", undefined, "Unreal5_8"],
-      ["5.3", undefined, "Unreal5_8"],
-      ["6.0", undefined, "Unreal5_8"],
+  it("picks the include order and build settings of the engine the project names, else Unreal 5.8's", async () => {
+    // Unreal 5.9's own C++ templates name V8: a launcher build refuses a target whose settings differ from its own.
+    const rows: Array<[string, string | undefined, string, string]> = [
+      ["5.8", undefined, "Unreal5_8", "V7"],
+      ["5.9", undefined, "Unreal5_9", "V8"],
+      ["5.8", "5.9.0", "Unreal5_9", "V8"],
+      ["5.8", "5.10.1", "Unreal5_10", "V8"],
+      ["", undefined, "Unreal5_8", "V7"],
+      ["{8C1E2E52-4E19-4E22-9C1C-0A4D3F2A9B11}", undefined, "Unreal5_8", "V7"],
+      ["5.3", undefined, "Unreal5_8", "V7"],
     ];
-    for (const [association, engineVersion, order] of rows) {
+    for (const [association, engineVersion, order, settings] of rows) {
       const json = { ...JSON.parse(BLUEPRINT_UPROJECT), EngineAssociation: association };
       const { dir, file } = await blueprintProject("Order", JSON.stringify(json, null, "\t"));
       await addCppModule(file, engineVersion === undefined ? {} : { engineVersion });
-      for (const target of ["Source/Order.Target.cs", "Source/OrderEditor.Target.cs"])
-        assert.ok(
-          (await read(dir, target)).includes(`EngineIncludeOrderVersion.${order};`),
-          `${association} ${target}`,
-        );
+      for (const target of ["Source/Order.Target.cs", "Source/OrderEditor.Target.cs"]) {
+        const text = await read(dir, target);
+        assert.ok(text.includes(`EngineIncludeOrderVersion.${order};`), `${association} ${target}`);
+        assert.ok(text.includes(`BuildSettingsVersion.${settings};`), `${association} ${target}`);
+      }
     }
   });
 

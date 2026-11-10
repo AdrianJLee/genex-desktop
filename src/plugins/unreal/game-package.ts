@@ -17,6 +17,9 @@
  * RunUAT.bat runs through cmd.exe with every path whole inside quotes (`quotedScriptLine`); a game
  * whose path cmd.exe can't carry is refused before anything is touched.
  *
+ * A Mac app is let onto the network once packaged (`mac-entitlements.ts`): Unreal's Shipping
+ * default sandboxes it with no network, which no online game survives.
+ *
  * Before packaging, the person's open Unreal saves its work (play is ended first), so the app is
  * what they see; an Unreal that answers but can't save leaves nothing packaged. One package runs
  * per project; what reaches an agent names paths relative to the game, never the computer's.
@@ -34,6 +37,7 @@ import { killProcessTree } from "../../substrate/process-tree.ts";
 import { editorCmdPath, type ProgramOutcome } from "./automation-tests.ts";
 import { uatEnv } from "./program-env.ts";
 import { projectModule } from "./cpp-module.ts";
+import { letAppReachNetwork, type MacSigner, systemMacSigner } from "./mac-entitlements.ts";
 import { LINUX_TOOLCHAIN_VARIABLE } from "./setup.ts";
 import { canCompileCpp, cmdCarries, outputCollector, pathScrubber } from "./ubt.ts";
 import { type VisualStudioStatus, visualStudioLacking } from "./visual-studio.ts";
@@ -153,6 +157,8 @@ const MESSAGE = {
   TimedOut: `The package was stopped after ${GAME_PACKAGE_TIMEOUT_MS / MINUTE_MS} minutes.`,
   Stopped: "Stopped.",
   NotStarted: (code: string) => `AutomationTool couldn't start (${code}).`,
+  NoNetwork: (why: string) =>
+    `The Mac app was packaged, but Genex couldn't let it reach the network (${why}): Unreal's Shipping sandbox would keep it offline, so package again.`,
 } as const;
 
 /** Runs RunUAT to its end; ends its whole tree when `signal` aborts or the deadline passes. Tests stand in. */
@@ -184,6 +190,8 @@ export type GamePackageDeps = {
   now(): number;
   /** RunUAT's runner; the product's own unless a test stands in. */
   runUat?: RunUat;
+  /** Reads and re-signs a packaged Mac app's entitlements; the computer's codesign unless a test stands in. */
+  macSigner?: MacSigner;
   /** Aborts once the backend stops: a running package ends with it. */
   stopped?: AbortSignal;
 };
@@ -465,12 +473,22 @@ async function runPackage(
   if (outcome.timedOut) throw new PackageFailed(MESSAGE.TimedOut, [], seconds);
   const app =
     outcome.code === 0 && SUCCEEDED.test(outcome.output) ? await appIn(dirs.dir, target.system.id) : undefined;
-  if (app) return { line: MESSAGE.Packaged(target.system.folder, seconds), app: shownIn(target.gameDir, app), seconds };
+  if (app) {
+    if (target.system.id === PackageSystem.Mac) await networkedMacApp(deps, app, seconds);
+    return { line: MESSAGE.Packaged(target.system.folder, seconds), app: shownIn(target.gameDir, app), seconds };
+  }
   const scrub = await pathScrubber(target.projectDir, target.engineDir);
   const errors = packageErrors(outcome.output, scrub);
   const succeeded = outcome.code === 0 && SUCCEEDED.test(outcome.output);
   const line = succeeded ? MESSAGE.NoApp(target.system.folder) : MESSAGE.Failed(errors.length);
   throw new PackageFailed(line, errors, seconds);
+}
+
+/** Lets the packaged Mac app reach the network, or fails the package: an app that stays offline is not offered to Publish. */
+async function networkedMacApp(deps: GamePackageDeps, app: string, seconds: number): Promise<void> {
+  await letAppReachNetwork(app, deps.macSigner ?? systemMacSigner).catch((failure: unknown) => {
+    throw new PackageFailed(MESSAGE.NoNetwork(errorMessage(failure)), [], seconds);
+  });
 }
 
 /** A package that failed with lines to read. */

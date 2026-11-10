@@ -2751,7 +2751,11 @@ leaves nothing packaged), then `RunUAT BuildCookRun -platform=Mac|Win64|Linux -c
 -cook -stage -pak -stagingdirectory=…` stages into `unreal/Builds/<Mac|Windows|Linux>/` (emptied first, never
 through a link; ignored by the game's history; never `-archive`, which copies a Mac app without its
 cooked content), the cook run by the engine's `UnrealEditor-Cmd`, within 120
-minutes. A Mac needs Xcode: a template's plugins make even a Blueprint game build code there. Like
+minutes. A Mac needs Xcode: a template's plugins make even a Blueprint game build code there. A
+packaged Mac app is then let onto the network (`mac-entitlements.ts`): Unreal 5.8 signs Shipping with
+`Sandbox.NoNet.entitlements` (App Sandbox, no network), under which macOS refuses the game every DNS
+lookup, so a sandboxed app without `com.apple.security.network.client` is signed again ad hoc with it
+added and read back; one that can't be fails the package. Like
 `plugin-test` it runs outside ProcessSandbox, with the small environment and its own process group:
 AutomationTool rewrites its per-user config cache for each new project and the cook needs the
 editor's derived data, Zen store and shader workers, all of which UnrealBuildTool's profile denies.

@@ -1,6 +1,6 @@
 ---
 name: harness-incident-fix
-description: Fix a bug in the in-app harness loop (src/harness-seed/**) test-first - write the incident row that reproduces it, see it fail, fix, then run the harness gate. Use for any director, facet, gauntlet, autopilot, judge, merge or review defect found in a run or postmortem.
+description: Fix a bug in the in-app harness loop (src/harness-seed/**) test-first - write the incident row that reproduces it, see it fail, fix, then run the harness gate. Use for any defect of the Loop found in a run or postmortem - the director's lead turns and wakes, the chat during a build, Stop and resume, a lost provider, a judge's second opinion, finish and close.
 ---
 
 # Fix a harness incident test-first
@@ -14,10 +14,10 @@ No fix there lands without an incident row that would have failed on the inciden
 Add an `it(...)` to `tests/conformance/harness-incidents.test.ts`, named after the incident
 ("<id>. <symptom>: <expected behaviour>"), in the `describe` that matches its area.
 
-- Pure bug (a function in `src/harness-seed/loop/*.ts` such as `merge.ts`, `judge.ts`,
-  `replan.ts`, `review.ts`, `checks.ts`): import it at the top of the file and assert on
-  its output with the smallest input that reproduces the incident.
-- Loop bug: use the real rig, as the numbered D1-D6 rows do:
+- Pure bug (a function in `src/harness-seed/loop/*.ts` such as `live-chat.ts`,
+  `provider-loss.ts`, `message-queue.ts`, `chat-steer.ts`): import it at the top of the file
+  and assert on its output with the smallest input that reproduces the incident.
+- Loop bug: use the real rig, as the rows that call `registerFakeEngine` do:
 
 ```ts
 it("N. <incident>: <what must happen instead>", async () => {

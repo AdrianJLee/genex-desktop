@@ -1960,6 +1960,11 @@ Available services are capability checked and scoped to the calling plugin:
   (`.genex/authority/report.json` in the publish copy, with `moduleSha256`, or the gate's
   `failures`), `uploaded` once that upload finished, which the CLI refuses unless Genex stored the
   module and named its sha.
+- `export.room` (capability `export`): the bound game's room alone, staged into
+  `publish/<project>` as `export.stage` stages it, with no web export and no `assertPublishable`,
+  for a game whose apps go without a web build (an Unreal game's). It answers `{genex}` as
+  `export.stage` does (nothing for a game whose package.json names no Genex part), refuses the
+  same hostile rooms with the copy untouched, and clears the last stage for a game with no block.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
   the bound game to a project file of the engine the plugin declares (an Unreal `.uproject`, a
   Godot project's `project.godot`, a Roblox place), read its link, or show the plugin's steps card
@@ -3567,6 +3572,12 @@ Genex:
   `assertPublishable`) → the plugin's `publish-apps` (`publishAppsOnly`): the hosted project is made
   the first time, each app goes with `genex native publish`, the first that goes carrying
   `--gallery --title <name>` (a refused listing exits 1 with its answer; the app is live either way).
+  A server-authoritative game's room goes first: inside the press the plugin asks the host's
+  `export.room`, writes the block into the copy's package.json and links Studio's toolchain, and
+  once the hosted project exists `genex native module --channel production` bundles, validates,
+  stores and releases the module to the live rooms installed apps join. A module the gate refuses
+  fails the publish and no app goes; `job.room` records it as a web publish's does. A game with no
+  block publishes its apps from the copy it always did.
   Listed, the record turns public with the game's genex.games page as its link; held for review or
   not listed, a line under the rows says so; refused, the publish fails in Genex's words. A listing
   whose app Genex still reviews counts as held (`listingForPlayers`): the game shows nowhere until

@@ -366,6 +366,7 @@ export class PluginServices {
     [PluginService.CredentialsClear]: async ({ id, root }) => (await credentialStore(root)).delete(id),
     [PluginService.AssetsDeliver]: (call) => this.#deliver(call),
     [PluginService.ExportStage]: (call) => this.#exportStage(call),
+    [PluginService.ExportRoom]: (call) => this.#exportRoom(call),
     [PluginService.Observe]: (call) => this.#observeFiles(call),
     [PluginService.ProjectRead]: readProjectFile,
     [PluginService.ProjectWrite]: writeProjectFile,
@@ -530,6 +531,20 @@ export class PluginServices {
     const genex = await readGenexGameManifest(bound.directory);
     await stageRoomFor(bound.directory, path.dirname(target), genex);
     return genex ? { ...result, genex } : result;
+  }
+  /**
+   * The room module alone, staged into the publish copy as `export.stage` stages it, with no web
+   * export: for a game whose apps go without a web build. A game with no room block clears the last
+   * stage; the answer is what the game's package.json tells Genex, as `export.stage`'s `genex`.
+   */
+  async #exportRoom({ root, binding }: ServiceCall): Promise<{ genex?: GenexGameManifest }> {
+    const bound = requireBinding(binding);
+    if (!PROJECT_NAME.test(bound.project)) throw new Error(MESSAGE.InvalidProjectName);
+    const workspace = path.join(root, "publish", bound.project);
+    await mkdir(workspace, { recursive: true, mode: 0o700 });
+    const genex = await readGenexGameManifest(bound.directory);
+    await stageRoomFor(bound.directory, workspace, genex);
+    return genex ? { genex } : {};
   }
   /**
    * `observe`: every argument is checked before the host looks: the bound game's own project and

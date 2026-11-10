@@ -611,6 +611,8 @@ export interface PluginHostCall {
   (method: "project.write", args: { path: string; text: string }): Promise<{ file: string }>;
   (method: "assets.deliver", args: { output: string; jobId: string }): Promise<string[]>;
   (method: "export.stage"): Promise<PluginExportResult>;
+  /** The bound game's room module alone, staged beside where its public copy would go, with no web export. */
+  (method: "export.room"): Promise<Pick<PluginExportResult, "genex">>;
   (method: "jobs.read", args: { id: string }): Promise<unknown>;
   (method: "jobs.write", args: { id: string; value: unknown }): Promise<true>;
   (method: "events.emit", args: PluginEvent): Promise<true>;

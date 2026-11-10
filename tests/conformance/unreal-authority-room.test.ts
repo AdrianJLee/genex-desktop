@@ -19,6 +19,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { GenexRoomService, type RoomStatus } from "../../src/main/core/genex-room.ts";
 import { authorityDevDir } from "../../src/plugins/genex/cli.ts";
 import { workspaceManifest } from "../../src/plugins/genex/publish.ts";
+import { ExportRefusal } from "../../src/shared/game-library.ts";
 import { GENEX_GAME_PACKAGES } from "../../src/shared/genex.ts";
 import { PluginService } from "../../src/shared/plugins.ts";
 import { readGenexGameManifest } from "../../src/substrate/genex-game-manifest.ts";
@@ -148,6 +149,59 @@ describe("an Unreal game with Genex multiplayer declares its room", () => {
     assert.equal(await readFile(path.join(workspace, "server", "rules.ts"), "utf8"), "export const SPEED = 4;");
     assert.deepEqual(await readdir(path.join(workspace, "dist")), ["index.html"], "server code is never public");
     assert.equal(await lstat(path.join(workspace, "unreal")).catch(() => null), null, "the Unreal project stays out");
+  });
+});
+
+describe("export.room stages an Unreal game's room for its apps, with no web export", () => {
+  it("stages the room into the publish copy while Studio exports nothing", async () => {
+    const dir = await unrealGame("apps");
+    // No host exporter at all: an Unreal game has no web build, and export.stage refuses it.
+    const services = new PluginServices(path.join(root, "data-apps"), {}, async () => null);
+    const binding = { project: "apps", directory: dir };
+    const staged = (await services.call("genex", PluginService.ExportRoom, {}, binding)) as { genex?: unknown };
+    const workspace = path.join(services.root("genex"), "publish", "apps");
+    assert.deepEqual((staged.genex as { genex?: unknown }).genex, { authority: ROOM });
+    assert.equal(await readFile(path.join(workspace, "server", "room.ts"), "utf8"), ROOM_TS);
+    assert.equal(await readFile(path.join(workspace, "server", "rules.ts"), "utf8"), "export const SPEED = 4;");
+    assert.deepEqual((await readdir(workspace)).sort(), [".genex", "server"], "no dist, no Unreal project");
+  });
+
+  it("refuses a hostile game and leaves the publish copy as it was", async () => {
+    const outside = await tmpDir("studio-unreal-room-outside-");
+    await writeFile(path.join(outside, "rules.ts"), "export const SPEED = 9;");
+    const cases: Array<[string, string, string | undefined, (dir: string) => Promise<void>]> = [
+      ["a project name that is a path", "../apps", undefined, async () => {}],
+      [
+        "a module file that is a link out of the game",
+        "linked-module",
+        ExportRefusal.RoomLink,
+        async (dir) => {
+          const { rm } = await import("node:fs/promises");
+          await rm(path.join(dir, "server", "rules.ts"));
+          await symlink(path.join(outside, "rules.ts"), path.join(dir, "server", "rules.ts"));
+        },
+      ],
+      [
+        "a room that imports a file outside the game",
+        "imports-outside",
+        ExportRefusal.RoomOutside,
+        (dir) => writeFile(path.join(dir, "server", "room.ts"), 'import "../../../../etc/hosts";\nexport default {};'),
+      ],
+    ];
+    for (const [index, [name, project, code, arrange]] of cases.entries()) {
+      const dir = await unrealGame(`hostile-${index}`);
+      await arrange(dir);
+      const services = new PluginServices(path.join(root, `data-hostile-${index}`), {}, async () => null);
+      const publish = path.join(services.root("genex"), "publish");
+      const refused = services.call("genex", PluginService.ExportRoom, {}, { project, directory: dir });
+      await assert.rejects(refused, (error: { code?: unknown }) => code === undefined || error.code === code, name);
+      const left = await readdir(publish, { recursive: true }).catch(() => []);
+      assert.ok(
+        left.every((file) => !String(file).includes("server")),
+        `${name}: nothing staged`,
+      );
+      assert.equal(await readFile(path.join(outside, "rules.ts"), "utf8"), "export const SPEED = 9;", name);
+    }
   });
 });
 

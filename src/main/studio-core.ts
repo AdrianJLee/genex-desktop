@@ -1300,13 +1300,13 @@ export class StudioCore {
     // A Finder-launched app has a bare PATH: Genex's publish found no git-lfs from Homebrew there.
     this.plugins.toolPath = async () => (await toolchain()).path;
     this.#wirePluginPrograms();
-    this.pluginServices.exportStage = async (binding, target, pluginId) => {
+    this.pluginServices.exportStage = async (binding, target, pluginId, call) => {
       // A panel's or toolbar's own publish reaches only here: refused as the dialog and agent tool refuse it.
       await assertPublishable(this, binding.project);
       const result = await this.exportPublicCopy(binding.project, target);
       // The person saw and approved exactly these files in Studio's Publish dialog moments ago.
       if (!this.#exportApprovals.take(pluginId, binding.project, result))
-        await this.#pluginTools.reviewExport(pluginId, binding, result);
+        await this.#pluginTools.reviewExport(pluginId, binding, result, call);
       return result;
     };
     await this.#initPlugins();

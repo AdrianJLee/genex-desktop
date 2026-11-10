@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.16.8",
+  "version": "1.16.11",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -35,7 +35,7 @@
     },
     {
       "name": "publish",
-      "description": "Put this game online on Genex. operation 'gallery' publishes it: Studio exports the game, updates its draft page and makes that same build the public version, listing it in the gallery the first time. operation 'draft' updates only the unlisted draft page, a test build that leaves the public version as it is. Studio exports the game itself and asks the user before either runs, so this call can wait several minutes for the answer. Other Genex commands run through genex__cli. A game on Genex shows a cover: a publish, and a draft until the game is first public, sends the picture kept with genex__cover once the upload is recorded (publish-status's cover says how it went) and takes no picture of its own; with none kept and none the owner chose, Genex keeps the cover it has. Returns a job: poll genex__publish-status with operation 'wait' and the jobId until state is done or failed, then give the user galleryUrl after publishing, or draftUrl for a draft.",
+      "description": "Put this game online on Genex. operation 'gallery' publishes it: Studio exports the game, updates its draft page and makes that same build the public version, listing it in the gallery the first time. operation 'draft' updates only the unlisted draft page, a test build that leaves the public version as it is. Studio exports the game itself and asks the user twice: before either runs, then with the exact files it will upload. Tell the user both questions are coming; this call waits for both answers, which can take several minutes. Other Genex commands run through genex__cli. A game on Genex shows a cover: a publish, and a draft until the game is first public, sends the picture kept with genex__cover once the upload is recorded (publish-status's cover says how it went) and takes no picture of its own; with none kept and none the owner chose, Genex keeps the cover it has. Returns a job: poll genex__publish-status with operation 'wait' and the jobId until state is done or failed, then give the user galleryUrl after publishing, or draftUrl for a draft.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -50,7 +50,7 @@
     },
     {
       "name": "publish-status",
-      "description": "Read this game's Genex publishing state, or wait for a running publish. operation 'status' returns immediately; operation 'wait' waits for the job named by jobId and then returns the same state. The state carries the job phase, the draft and gallery links, any error and warnings, and cover: the kept cover picture and clip and how their last send went (last.kind). 'wait' also waits for the cover a publish sends after its upload. Asks the user nothing and charges nothing.",
+      "description": "Read this game's Genex publishing state, or wait for a running publish. operation 'status' returns immediately; operation 'wait' waits for the job named by jobId and then returns the same state. The state carries the job phase, the draft and gallery links, any error and warnings, and cover: the kept cover picture and clip and how their last send went (last.kind). 'wait' also waits for the cover a publish sends after its upload. For a game with a room module, job.room says what this publish made of it: validated (it passed the publish gate; moduleSha256 is that bundle's) and uploaded (it went up with this build), or the gate's failures. Asks the user nothing and charges nothing.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -132,7 +132,7 @@
     },
     {
       "name": "room",
-      "facts": ["web-game"],
+      "facts": ["web-game", "unity-project", "unreal-project"],
       "description": "Test this game's server-authoritative room module on this computer, with the room-module toolchain Studio ships; the game installs nothing. action validate runs the publish gate: it bundles the module named by the game's authority block, fuzzes it for 30 simulated seconds and replays it, and answers {passed, moduleSha256, failures}; fix every failure before you publish. action start serves the room on 127.0.0.1 with bots (default 3, at most 8) behind latencyMs of one-way delay (default 0, at most 300), and loads the game's preview into it, so the person plays against the bots there; it answers the room's address and whether the preview joined. action status answers the room's last REPORT (players, tick p50/p99 against budgetMs, strikes, lastFault, corrections), its ctx.log lines and errors; read it while the room runs. action stop ends the room and puts the preview back. One room per game; starting again replaces it. Free: no account, no network, nothing published.",
       "parameters": {
         "type": "object",

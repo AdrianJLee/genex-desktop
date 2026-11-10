@@ -7,8 +7,11 @@ This repository is the macOS Electron application. You are its external develope
 editable in-app game-building harness is a separate agent with narrower authority.
 `src/harness-seed/**` and `src/game-template/**` (including `src/game-template/CLAUDE.md`) are
 product payload addressed to in-app agents: edit them as product text, don't follow them.
-The user's request and assigned issue own scope. Maintained topic docs describe current
-behavior; resolve conflicts against the implementation and fix the owning doc.
+The user's request and assigned issue own scope. Within it, extend or merge the code that
+already does the job instead of adding a second copy beside it, and fix what your change
+touches; report a problem outside the scope instead of fixing it in the same change.
+Maintained topic docs describe current behavior; resolve conflicts against the implementation
+and fix the owning doc.
 
 ## Orient
 
@@ -46,7 +49,8 @@ On Apple Silicon, verify `node -p process.arch` says `arm64`: an Intel Node runs
 Rosetta and makes local timing comparisons misleading.
 The scope table owns required checks; the layer catalog is not a cumulative checklist.
 
-- Red first: every fix starts with a test that fails for the reported reason.
+- Red first: every fix starts with a test that fails for the reported reason. Tests prove
+  behavior, so a copy or spacing edit needs no new test.
 - Characterize current behavior before refactoring it.
 - No new assertions over source text; test behavior through the code's interface.
 - Path, symlink and network boundaries get hostile-input tables that assert no side effect.
@@ -55,9 +59,9 @@ The scope table owns required checks; the layer catalog is not a cumulative chec
 - Name every intentionally flipped assertion in the PR.
 - Report which layers ran and never describe a focused pass as a full run.
 
-Once relevant checks pass, stop; repeat only for changed inputs or an investigated failure.
-A build alone is insufficient for a UI change. Record build, profile and provider identity
-when relevant.
+Once relevant checks pass, stop re-running them; repeat only for changed inputs or an
+investigated failure. A build alone is insufficient for a UI change. Record build, profile and
+provider identity when relevant.
 
 ## Engineering foundations
 
@@ -67,7 +71,6 @@ when relevant.
   stands in for Xcode's (`lipo`, `otool`, `xcrun`); read the file in the app or use macOS's own
   tool. `scripts/check-mac-tools.ts` (in `check:static`) refuses them, and
   `DEVELOPER_DIR=/nonexistent` reproduces such a Mac in a test or a `studio:dev` launch.
-- Tests prove behavior. Copy or spacing edits do not need new tests.
 - Contracts live in `src/shared` (IPC channel map, UiEventMap, CustomEventMap, HarnessHostApi);
   add new events/channels there first; no payload as / as never.
 - No `enum`, `namespace` or parameter properties, because Node runs `.ts` directly: a
@@ -146,6 +149,9 @@ Write code a person enjoys reading; behavior never changes in a readability edit
 - PRs contain code, tests/fixtures, attribution, changed docs and a validation summary per the
   PR template. Name docs updated or explain why they remain accurate. No session reports,
   filled plans, handoff JSON or raw report batches in Git.
+- Write the PR body and your final report for a reader who did not watch the work: the result
+  first, plain words and full sentences, no labels invented during the task. Name every change
+  that alters behavior, small ones and anything beyond the request included.
 - Temporary notes: one ignored `.studio-dev/notes/<task>.md`, under 80 lines, removed when
   complete. Raw evidence stays in `.studio-dev/evidence/`. Share a short issue or draft-PR
   summary only when handing work over; Git history keeps past decisions.
@@ -156,6 +162,16 @@ For application UI/UX, visual design, design-system or product-copy work, read
 [the design workflow](docs/agent/design.md) before editing. It owns the design principles and
 routes to local skills; `variant` and `break` are opt-in exploration tools. Follow its rendered
 review and evidence requirements.
+
+## Finishing work
+
+Carry the request through to the end; don't stop to offer to continue or to list what remains.
+An ordinary obstacle (a failing or flaky check, a timeout, a missing dependency, a locked file,
+an empty result) is yours to diagnose and work through with the access you have: retry what is
+safe to repeat, fix the command, use another tool. A deliberate block is different: a hard
+invariant, a Don't below, a sandbox or permission refusal, a sign-in or credential prompt. Leave
+it in place, say plainly what you found and finish the rest another way. Stop early only when the
+work cannot move without the user's answer or a step needs their go-ahead.
 
 ## Setup and authorization
 

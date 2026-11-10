@@ -97,6 +97,7 @@ import {
 import {
   appClipCommit,
   listingOf,
+  NATIVE_MODULE_ARGS,
   type NativeUpload,
   nativePublishArgs,
   pinnedCliReplacesNativePage,
@@ -1003,13 +1004,15 @@ export class GenexTools {
    * Publish a game that has only apps, no web build: send each with `genex native publish` and list
    * the game in the gallery under `title` with the first that goes, creating its hosted project the
    * first time. Runs as a publish job, so the dialog shows it like one. Once the apps are recorded,
-   * the kept cover is sent as a gallery publish's is.
+   * the kept cover is sent as a gallery publish's is. `roomStage` (the host's `export.room`) stages
+   * a server-authoritative game's room module, which goes live before any app does.
    */
   async publishAppsOnly(
     project: string,
     apps: readonly NativeUpload[],
     title?: unknown,
     remix: RemixChoice = {},
+    roomStage?: () => Promise<unknown>,
   ): Promise<GenexPublishState> {
     return this.#account(async () => {
       if (!this.#sendsApps || apps.length === 0) throw new Error(PUBLISH_MESSAGE.NoAppsRefusal());
@@ -1031,6 +1034,7 @@ export class GenexTools {
         startedAt: new Date().toISOString(),
         title: cleanGenexTitle(title) ?? state.renamed ?? state.title ?? defaultGenexTitle(project),
       };
+      if (roomStage) await this.#stageAppsRoom(project, state, job, dir, roomStage);
       state.job = job;
       delete state.warnings;
       delete state.lastError;
@@ -1058,6 +1062,7 @@ export class GenexTools {
       const meta = await this.#ensureHostedProject(project, dir, path.join(dir, "home"), job, controller.signal);
       job.phase = GenexPublishPhase.Uploading;
       await this.#persistJob(project, job);
+      await this.#releaseRoom(project, job, dir, controller.signal);
       const started = job.title;
       const sending = this.#sendApps(project, job.id, apps, controller.signal, { title: started ?? project });
       step.done = sending.then(() => {});
@@ -1078,6 +1083,51 @@ export class GenexTools {
       this.#controllers.delete(controller);
       if (this.#nativeSteps.get(project) === step) this.#nativeSteps.delete(project);
     }
+  }
+  /**
+   * Stage an apps-only publish's room module inside the invocation that asked (a detached step gets
+   * no answer from host services): the room beside the copy, the manifest the CLI reads its
+   * `authority` block from, Studio's toolchain, and the job's first record of the room. A game with
+   * no room block keeps the copy it always published its apps from.
+   */
+  async #stageAppsRoom(
+    project: string,
+    state: GenexPublishState,
+    job: GenexPublishJob,
+    dir: string,
+    roomStage: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      const manifest = ((await roomStage()) as { genex?: GenexGameManifest } | null)?.genex;
+      await linkAuthorityToolchain(dir, authorityDevDir(), manifest);
+      const room = await roomBeforeUpload(dir, manifest);
+      if (!room) return;
+      await this.#writeWorkspaceManifest(dir, project, job, manifest, false);
+      job.room = room;
+    } catch (error) {
+      finishJob(job, GenexPublishJobState.Failed, new Date().toISOString());
+      job.error = errorMessage(error).slice(-PUBLISH_ERROR_TAIL_CHARS);
+      state.job = job;
+      await this.#savePublishState(project, state);
+      throw error;
+    }
+  }
+  /**
+   * Bundle, check, upload and release the room module to the rooms the apps join (`genex native
+   * module`) before any app goes: an app whose room is missing is refused on every join. A refusal
+   * ends the publish in the CLI's words, with the room's record of what the gate said.
+   */
+  async #releaseRoom(project: string, job: GenexPublishJob, dir: string, signal: AbortSignal): Promise<void> {
+    const room = job.room;
+    if (!room) return;
+    try {
+      await this.#cliText(dir, [...NATIVE_MODULE_ARGS], signal, path.join(dir, "home"));
+    } catch (error) {
+      job.room = await roomAfterUpload(dir, room, false);
+      throw error;
+    }
+    job.room = await roomAfterUpload(dir, room, true);
+    await this.#persistJob(project, job);
   }
   /** What an apps-only publish did, on the record: listed (or held, or refused), or nothing sent. */
   async #recordApps(project: string, job: GenexPublishJob, meta: HostedMeta, sent: NativeSaved): Promise<void> {

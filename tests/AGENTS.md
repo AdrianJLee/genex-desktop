@@ -51,8 +51,8 @@ listing wins. Three rules from it apply to every test:
   `running(pid)` from `processes.ts`, not `process.kill(pid, 0)`, whether a process still runs.
 
 Characterization so far: the `api()` keys and `StudioCore` surface (`core-surface`, `rpc-surface`),
-the seed contracts the app keeps its own copy of (`seed-contracts`), spike snapshot/worktree
-sequences (`loop-sequences`), snapshots of a user's own repository (`snapshots`), which loop runs a
+the seed contracts the app keeps its own copy of (`seed-contracts`), a chat turn, Stop and the
+build a chat turn launched (`loop-sequences`), snapshots of a user's own repository (`snapshots`), which loop runs a
 run and the one Loop's calls, events, graph and journal on an Unreal game (`loop-survival`), the one Loop on a project of any kind (`one-loop`), which
 Loop a run gets (`one-loop-dispatch`), a whole Loop through the real studio on a plugin's project
 and on a folder with no plugin (`one-loop-projects`, L3), and the ten use cases of any project

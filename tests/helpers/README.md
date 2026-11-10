@@ -94,8 +94,9 @@ folder listing wins. Rules for tests are in [tests/AGENTS.md](../AGENTS.md).
 - `seed-upgrade-fixture.ts`: a per-process initialized snapshot for immutable vintage inputs;
   each upgrade case gets independent physical workspace and manifest copies and unique import paths.
 - `claude-rules.ts`: whether Claude Code would deny a path by an absolute rule, matched as CLI
-  2.1.281 does (node-ignore, case-blind) for the shapes `claude-permissions.ts` writes.
-- `leftover-children.ts`: the runners' per-file check for child processes left running (above).
+  2.1.281 does (node-ignore, case-blind) for the shapes `src/substrate/engines/claude-permissions.ts` writes.
+- `leftover-children.ts`: the runners' per-file check for child processes left running
+  ([tests/AGENTS.md](../AGENTS.md#runner)).
 - `pe-image.ts`: minimal Windows PE images naming the DLLs a test gives (import and delay-load
   tables, a machine type), for the package's Visual C++ runtime checks.
 - `failure-codes.ts`: the analytics failure-code suites' hostile inputs (words, paths, Node codes

@@ -1025,7 +1025,9 @@ Then it compiles the copy with UnrealBuildTool (`ubt.ts`, at most two at once; t
 as `<file>:<line>: <message>`; an error in a file outside the game and the engine names only where
 it is. UBT runs under `sandbox-exec` (`ubt-sandbox.ts`): of the home folder it reads only the copy,
 the engine, Xcode and its own folders (its configuration read-only), it writes only the copy's
-`Intermediate/`, `Binaries/` and `Saved/`, its log folder and a private scratch, never a sign-in home,
+`Intermediate/`, `Binaries/` and `Saved/`, its log folder, a private scratch and the build accelerator's
+lock folder `/private/tmp/uba_shm_locks` (files only, no link: UBT 5.8 starts the accelerator's trace
+even with `-NoUBA`, and its lock loop never ends where it can't create one), never a sign-in home,
 with no network, no Apple Events (no scripting or typing into another app) and a fresh environment. It builds with `-NoUBA`: the build accelerator lists the
 folders above the copy, which the sandbox closes in the home folder (a full build took 26.7 s). On
 Windows `Build.bat <Target> Win64 Development -Project=… -NoMutex -NoUBA -NoHotReloadFromIDE` runs through `cmd.exe`
@@ -2193,8 +2195,8 @@ refused when a folder is `/`, the home folder or a folder holding it, `~/Library
 inside a login or Genex's own data (`~/.claude`, `~/.codex`, `~/.genex`, `~/.ssh`, `~/.aws`,
 `~/Library/Keychains`, `~/Library/HTTPStorages`, `~/Library/Roblox`,
 `~/Library/Application Support/Genex`), compared case-blind. The Unreal
-plugin names the two its build tool writes: `~/Library/Application Support/Epic/UnrealBuildTool`
-and `/private/tmp/.dotnet`.
+plugin names the three its build tool writes: `~/Library/Application Support/Epic/UnrealBuildTool`,
+`/private/tmp/.dotnet` and `/private/tmp/uba_shm_locks`.
 
 ### Hooks: Genex's moments
 

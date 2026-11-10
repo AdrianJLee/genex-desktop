@@ -104,8 +104,9 @@ score sit on top of that map.
 
 ## Testing and support
 
-- Multiplayer runs on the Genex draft link. Testing it as two different players (a normal window
-  and an incognito window, or a friend) exercises what one player cannot; until then, saying
+- Multiplayer runs on the Genex draft link (`draftPlayUrl` in `genex__publish-status`, which a
+  guest can play). Testing it as two different players (a normal window and an incognito window,
+  or a friend) exercises what one player cannot; until then, saying
   plainly that multiplayer has not been tried with two players keeps expectations honest.
 - A build id shown somewhere quiet (a menu corner) and a compact status line (room, players, host,
   ping) in a debug overlay make player reports much easier to act on.

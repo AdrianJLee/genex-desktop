@@ -102,7 +102,7 @@ export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
  * room check runs for a game that installed nothing.
  */
 export const GENEX_STUDIO_TOOLS = {
-  "@genex-ai/authority-dev": "0.1.5",
+  "@genex-ai/authority-dev": "0.1.6",
 } as const;
 /** A Genex tool Studio ships. */
 export type GenexStudioTool = keyof typeof GENEX_STUDIO_TOOLS;
@@ -697,6 +697,11 @@ export interface GenexPublishState {
   galleryUrl?: string;
   playUrl?: string;
   readyDraft?: { revision: string; url: string; digest: string; verifiedAt: string };
+  /**
+   * The tested draft's own address, answered beside the record: anyone with it plays the draft (in
+   * rooms of its own, as a guest or signed in). `draftUrl` is the owner's draft page, behind sign-in.
+   */
+  draftPlayUrl?: string;
   lastExportAt?: string;
   lastPreviewAt?: string;
   lastPublishAt?: string;

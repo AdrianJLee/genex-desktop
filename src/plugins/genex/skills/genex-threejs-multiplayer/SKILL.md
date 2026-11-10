@@ -39,7 +39,8 @@ serve web, Godot and Unity players.
   are one player: the newer tab takes the seat (close code 4409).
 - `genex__package {"package":"@genex-ai/multiplayer"}` adds both SDKs in one call (it includes
   embed-sdk; nobody is asked). `genex__publish {"operation":"draft"}` puts a draft online and
-  `genex__publish-status` gives its link.
+  `genex__publish-status` gives its link, `draftPlayUrl`. Open that link in a normal and a private
+  window to be two players; `draftUrl` is the owner's draft page, behind their sign-in.
 - Nobody can save or buy on the draft link, the owner included: saves and purchases work once the
   game is published.
 - Studio installs the version it pins, which satisfies the card's `^0.17.0`. Never run

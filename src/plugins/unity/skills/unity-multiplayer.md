@@ -151,9 +151,10 @@ the damage to its own state.
 - **WebGL:** build into `web/` at the game's root with **Compression Format: Disabled**, because
   Genex hosting serves no compressed files. The published page gives the build its player; in
   Genex's preview there is none, so online play says it's unavailable and offline play stays.
-- **Testing on the web:** publish a draft (`genex__publish`) and test on the draft link as two
-  *different* players: a normal and a private window, or a friend. Draft players meet only draft
-  players.
+- **Testing on the web:** publish a draft (`genex__publish`) and open its `draftPlayUrl` (from
+  `genex__publish-status`) as two *different* players: a normal and a private window, or a friend.
+  Anyone with that link plays as a guest; `draftUrl` is the owner's draft page, behind sign-in.
+  Draft players meet only draft players.
 - **Native builds** (Mac, Windows) join only the *published* game: as a guest, or as the signed-in
   player when Genex's Play starts them.
 - **Testing two players on this Mac:** once the game is published, start two copies of the Mac

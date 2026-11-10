@@ -3871,9 +3871,11 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   preview takes one seat and the builder's own test client needs another, so with the authority
   block's `maxPlayers` a start's default is min(3, maxPlayers - 2) bots and a bot count that leaves
   no seat free is refused by name (`room_no_free_seat`); without it, 3 bots. `status` answers the
-  room's `bots`, `seatsPerRoom` (that `maxPlayers`, or null) and `rooms` (the REPORT's count), and a
-  `warning` (`rooms_split`) while the room server holds more than one room, as it does when a module
-  seats fewer than its bots: the toolchain's REPORT counts rooms and players, not each room's seats.
+  room's `bots`, `seatsPerRoom` (the REPORT's `perRoom` seats once it reports, before that that
+  `maxPlayers`, or null) and `rooms` (the REPORT's count), and a `warning` (`rooms_split`) naming each
+  room's seats, players and bots while the room server holds more than one room, as it does when a
+  module seats fewer than its bots. `start` takes the `matchKey` the game's client joins with and
+  passes it as `--bot-match-key`, so the bots share the preview's pool.
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
   its description says which (the `model` lanes are Tripo; `character` and `creature` are Meshy;

@@ -278,6 +278,20 @@ describe("publishing tests the build before players get it", () => {
     }
   });
 
+  it("hands a tested draft out by its own address, which plays without the owner's sign-in", async (t) => {
+    if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
+    const fx = await genexFixture();
+    try {
+      const done = await fx.draft();
+      assert.equal(done.job?.phase, "ready", done.job?.checkError);
+      // The CLI prints the staging channel's address Genex answered; guests may play a draft there.
+      assert.equal(done.draftPlayUrl, `${fx.server.url}/live`);
+      assert.equal(done.draftUrl, `https://genex.games/draft/${SLUG}`, "the draft page stays the owner's own");
+    } finally {
+      await fx.close();
+    }
+  });
+
   it("lists a listed game again only when its name changes, and never asks Genex to repaint its cover", async (t) => {
     if (!hasGit) return t.skip("git is not installed on this machine; the Genex publish path requires it");
     const fx = await genexFixture();

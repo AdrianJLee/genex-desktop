@@ -59,6 +59,7 @@ describe("the editor queue", () => {
         .filter((tool) => tool !== LoopTool.EditorActivity && tool !== LoopTool.PlayState),
       [
         LoopTool.ApplyPart,
+        LoopTool.RunSettings,
         LoopTool.GetProperties,
         LoopTool.SearchCVars,
         LoopTool.SetProperties,
@@ -250,6 +251,33 @@ describe("the editor queue's play tests run unthrottled", () => {
     assert.deepEqual(written(silent.calls), []);
   });
 
+  it("lifts and gives back through the Genex helper where it has the throttle's tools, never through Epic's", async () => {
+    const editor = standIn({}, { helperThrottle: true });
+    const run = await runLantern(editor.port);
+    assert.equal(run.state, PartRunState.Done);
+    assert.equal(editor.state.throttleAtPlay, false, "full speed in play");
+    assert.equal(editor.state.throttle, true, "the editor has its setting back");
+    const tools = sequence(editor.calls);
+    for (const epic of [LoopTool.GetProperties, LoopTool.SearchCVars, LoopTool.SetProperties])
+      assert.ok(!tools.includes(epic), `${epic} is never asked`);
+    assert.deepEqual(
+      editor.calls.filter(([tool]) => tool === LoopTool.SetThrottle).map(([, args]) => args.on),
+      [false, true],
+    );
+    assert.ok(tools.indexOf(LoopTool.SetThrottle) < tools.indexOf(LoopTool.StartPlay), "lifted before play");
+  });
+
+  it("on a Mac, an editor whose helper says it ray-traces keeps its throttle", async () => {
+    const traced = standIn({}, { helperThrottle: true });
+    traced.state.rayTracing = true;
+    await runLantern(traced.port, "darwin");
+    assert.equal(traced.state.throttleAtPlay, true);
+    assert.ok(!sequence(traced.calls).includes(LoopTool.SetThrottle), "nothing written");
+    const plain = standIn({}, { helperThrottle: true });
+    await runLantern(plain.port, "darwin");
+    assert.equal(plain.state.throttleAtPlay, false, "no ray tracing: full speed");
+  });
+
   it("leaves a throttle that is already off alone (the user's choice, or the bridge's own play session)", async () => {
     const editor = standIn();
     editor.state.throttle = false;
@@ -360,6 +388,7 @@ describe("a C++ part in the editor queue", () => {
       COPY,
       LoopTool.RecompileModule,
       LoopTool.ApplyPart,
+      LoopTool.RunSettings,
       LoopTool.GetProperties,
       LoopTool.SearchCVars,
       LoopTool.SetProperties,
@@ -711,6 +740,7 @@ describe("a play-check in the editor queue (the live builder's checkpoint)", () 
     assert.equal(run.state, PartRunState.Done, run.error);
     assert.equal(run.part, "play-check");
     assert.deepEqual(played(world.editor.calls), [
+      LoopTool.RunSettings,
       LoopTool.GetProperties,
       LoopTool.SearchCVars,
       LoopTool.SetProperties,

@@ -13,6 +13,7 @@
 import { lstat, mkdir, readdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { atomicWriteText, isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
+import { traitsOf } from "./engine-line.ts";
 import { isProjectPath, projectName } from "./project-file.ts";
 
 /** Why Genex refused to add the module; nothing was written. */
@@ -119,8 +120,6 @@ const ENGINE_VERSION = /^(\d+)\.(\d+)(?:\.\d+)?$/;
  * keeps the two before it), else 5.8's, the version this file was compared against.
  */
 const INCLUDE_ORDER = { major: 5, minor: 8 } as const;
-/** UE 5.8's latest build settings, as its own C++ templates name them; later engines keep it. */
-const BUILD_SETTINGS = "V7";
 const VEHICLE_PLUGIN = "ChaosVehiclesPlugin";
 /** What every game module may use: gameplay, Enhanced Input, and UMG and Slate for HUDs. */
 const DEPENDENCIES = ["Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "Slate", "SlateCore"];
@@ -427,7 +426,16 @@ function vehiclesEnabled(json: Record<string, unknown>): boolean {
   return listOf(json[PLUGINS_KEY]).some((p) => isJsonObject(p) && p.Name === VEHICLE_PLUGIN && p.Enabled === true);
 }
 
-function targetText(module: string, kind: TargetKind, includeOrder: string): string {
+/**
+ * The build settings an engine's targets name: its release's own (`LineTraits.buildSettings`), the
+ * oldest supported release's for a version this file can't read.
+ */
+function buildSettingsFor(version: unknown): string {
+  const match = typeof version === "string" ? ENGINE_VERSION.exec(version) : null;
+  return traitsOf(match ? `${match[1]}.${match[2]}` : "").buildSettings;
+}
+
+function targetText(module: string, kind: TargetKind, engine: { includeOrder: string; buildSettings: string }): string {
   const target = `${kind === TargetKind.Editor ? `${module}${EDITOR_SUFFIX}` : module}Target`;
   return [
     "using UnrealBuildTool;",
@@ -438,8 +446,8 @@ function targetText(module: string, kind: TargetKind, includeOrder: string): str
     `\tpublic ${target}(TargetInfo Target) : base(Target)`,
     "\t{",
     `\t\tType = TargetType.${kind};`,
-    `\t\tDefaultBuildSettings = BuildSettingsVersion.${BUILD_SETTINGS};`,
-    `\t\tIncludeOrderVersion = EngineIncludeOrderVersion.${includeOrder};`,
+    `\t\tDefaultBuildSettings = BuildSettingsVersion.${engine.buildSettings};`,
+    `\t\tIncludeOrderVersion = EngineIncludeOrderVersion.${engine.includeOrder};`,
     `\t\tExtraModuleNames.Add("${module}");`,
     "\t}",
     "}",
@@ -467,14 +475,15 @@ function buildText(module: string, dependencies: readonly string[]): string {
 
 /** The module's files, as Unreal lays a C++ project out. */
 function moduleFiles(module: string, json: Record<string, unknown>, engineVersion: string | undefined): ModuleFile[] {
-  const includeOrder = includeOrderFor(engineVersion ?? json.EngineAssociation);
+  const version = engineVersion ?? json.EngineAssociation;
+  const engine = { includeOrder: includeOrderFor(version), buildSettings: buildSettingsFor(version) };
   const dependencies = vehiclesEnabled(json) ? [...DEPENDENCIES, ...VEHICLE_DEPENDENCIES] : DEPENDENCIES;
   const folder = `${SOURCE_FOLDER}/${module}`;
   return [
-    { relative: `${SOURCE_FOLDER}/${module}${TARGET_SUFFIX}`, text: targetText(module, TargetKind.Game, includeOrder) },
+    { relative: `${SOURCE_FOLDER}/${module}${TARGET_SUFFIX}`, text: targetText(module, TargetKind.Game, engine) },
     {
       relative: `${SOURCE_FOLDER}/${module}${EDITOR_SUFFIX}${TARGET_SUFFIX}`,
-      text: targetText(module, TargetKind.Editor, includeOrder),
+      text: targetText(module, TargetKind.Editor, engine),
     },
     { relative: `${folder}/${module}.Build.cs`, text: buildText(module, dependencies) },
     { relative: `${folder}/${module}.h`, text: '#pragma once\n\n#include "CoreMinimal.h"\n' },
@@ -610,4 +619,63 @@ export async function enableProjectPlugin(projectFile: string, name: string): Pr
   if (enabled) return false;
   await atomicWriteText(project.file, withPlugin(project, name));
   return true;
+}
+
+/** How a target file names the build settings and the include order of the Unreal `version`. */
+const targetSettings = (version: string) => [
+  `BuildSettingsVersion.${buildSettingsFor(version)}`,
+  `EngineIncludeOrderVersion.${includeOrderFor(version)}`,
+];
+
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** `text` with each of `from`'s names replaced by the one at the same place in `to`, whole names only. */
+function renamed(text: string, from: readonly string[], to: readonly string[]): string {
+  return from.reduce(
+    (result, name, index) => result.replace(new RegExp(`\\b${escaped(name)}\\b`, "g"), to[index] ?? name),
+    text,
+  );
+}
+
+/** The project's own target files: plain `.Target.cs` files right in its plain `Source` folder, never a link. */
+async function targetFiles(projectFile: string): Promise<string[]> {
+  const source = path.join(path.dirname(projectFile), SOURCE_FOLDER);
+  if (!(await lstat(source).catch(() => null))?.isDirectory()) return [];
+  const entries = await readdir(source, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(TARGET_SUFFIX))
+    .map((entry) => `${SOURCE_FOLDER}/${entry.name}`)
+    .sort();
+}
+
+/**
+ * Gives the project's targets that name the build settings and include order of the Unreal `from`
+ * those of the Unreal `to`: an installed Unreal builds no game target whose build settings differ
+ * from the ones it was built with, so a game moved to another Unreal can't be packaged until its
+ * targets name that one's. Only the files in `only` when given (the ones an earlier call changed),
+ * and never through a link. Every other byte of a file stays, and a target that names anything else
+ * is left as it is. Answers the files it changed, relative to the project and `/`-separated.
+ */
+export async function retargetProject(
+  projectFile: string,
+  from: string,
+  to: string,
+  only?: readonly string[],
+): Promise<string[]> {
+  const [old, wanted] = [targetSettings(from), targetSettings(to)];
+  const changed: string[] = [];
+  for (const relative of await targetFiles(projectFile)) {
+    if (only && !only.includes(relative)) continue;
+    const file = path.join(path.dirname(projectFile), relative);
+    const text = await readRegularFile(file, TARGET_MAX_BYTES).then(
+      (bytes) => bytes.toString("utf8"),
+      () => undefined,
+    );
+    if (text === undefined) continue;
+    const next = renamed(text, old, wanted);
+    if (next === text) continue;
+    await atomicWriteText(file, next);
+    changed.push(relative);
+  }
+  return changed;
 }

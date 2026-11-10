@@ -60,7 +60,7 @@ export type PlatformEnd = (typeof PlatformEnd)[keyof typeof PlatformEnd];
 export const WebOffer = {
   /** The agent makes it: Unity's WebGL build, Godot's Web export. */
   Make: "make",
-  /** It cannot have one: Unreal has no web export. */
+  /** Nothing here makes one: an Unreal game's web build comes from its own package tool, asked for in the chat. */
   Unavailable: "unavailable",
   /** Nothing to offer: a web game, or one Genex does not know. */
   Quiet: "quiet",

@@ -37,6 +37,8 @@ import { pathToFileURL } from "node:url";
 import {
   HttpRouteKind,
   HttpStatus,
+  ISOLATION_HEADERS,
+  isolatedBuildFile,
   MAX_REWRITE_BYTES,
   packedBuildFile,
   gameRequestAllowed,
@@ -562,6 +564,8 @@ export class GamePreview {
     const target = served.path;
     const packed = packedBuildFile(relative);
     if (packed) return unpackedResponse(target, packed);
+    // A web build Unreal staged runs only on an isolated page.
+    const isolated = await isolatedBuildFile(this.#gameRoot(project), relative);
     try {
       const response = await net.fetch(pathToFileURL(target).toString());
       // Never cached: these are local files a contractor is actively rewriting. The first kiosk
@@ -569,6 +573,7 @@ export class GamePreview {
       // and served it through every checkpoint and every Reload click.
       const headers = new Headers(response.headers);
       headers.set("Cache-Control", "no-store");
+      if (isolated) for (const [name, value] of Object.entries(ISOLATION_HEADERS)) headers.set(name, value);
       const documentUrl = request?.url ?? `${SCHEME}://${project}/${relative}`;
       const rewritten = await this.#rewriteDocument(response, relative, target, documentUrl, request);
       if (rewritten !== null) {

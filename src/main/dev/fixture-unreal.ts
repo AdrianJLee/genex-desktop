@@ -16,9 +16,9 @@ import { runDir } from "../core/run-shots.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { FIXTURE_MODEL, fixtureRun, gradientShot, type Rgb } from "./fixture-kit.ts";
 
-/** The stand-in project: an Unreal project file as Unreal 5.8 writes a new Blueprint one. */
+/** The stand-in project: an Unreal project file as Unreal 5.9 writes a new Blueprint one. */
 const PROJECT_FILE = path.join("unreal", "FixtureGame.uproject");
-const PROJECT = { FileVersion: 3, EngineAssociation: "5.8", Category: "", Description: "" };
+const PROJECT = { FileVersion: 3, EngineAssociation: "5.9", Category: "", Description: "" };
 
 /** The finished run whose save point kept the viewport's shot. */
 const RUN_ID = "fixture-unreal-run";

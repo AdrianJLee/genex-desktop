@@ -27,11 +27,10 @@ import {
   CVarTool,
   mayLiftThrottle,
   ObjectTool,
-  rayTracingArgs,
-  rayTracingIn,
-  readThrottleArgs,
-  throttleIn,
-  writeThrottleArgs,
+  readRunSettings,
+  type ThrottleAsk,
+  ThrottleTool,
+  writeThrottle,
 } from "./editor-throttle.ts";
 import { type DriveStep, frameName, type PartCheck, type PartStep, PartStepKind, type PartTest } from "./part-test.ts";
 
@@ -68,6 +67,8 @@ export const LoopTool = {
   GetProperties: ObjectTool.GetProperties,
   SetProperties: ObjectTool.SetProperties,
   SearchCVars: CVarTool.Search,
+  RunSettings: ThrottleTool.RunSettings,
+  SetThrottle: ThrottleTool.SetThrottle,
 } as const;
 export type LoopTool = (typeof LoopTool)[keyof typeof LoopTool];
 
@@ -695,14 +696,13 @@ const NOTHING_OWED: GiveBack = async () => {};
  * already off (the user's choice, or the bridge's own play session) is left as it is.
  */
 export async function liftThrottle(port: EditorPort, platform: NodeJS.Platform = process.platform): Promise<GiveBack> {
-  const read = await port.call(LoopTool.GetProperties, readThrottleArgs()).catch(() => undefined);
-  if (throttleIn(read) !== true) return NOTHING_OWED;
-  const traced = await port.call(LoopTool.SearchCVars, rayTracingArgs()).catch(() => undefined);
-  if (!mayLiftThrottle(platform, rayTracingIn(traced))) return NOTHING_OWED;
-  await port.call(LoopTool.SetProperties, writeThrottleArgs(false)).catch(() => undefined);
+  const ask: ThrottleAsk = (tool, args) => port.call(tool, args);
+  const settings = await readRunSettings(ask);
+  if (settings.throttle !== true || !mayLiftThrottle(platform, settings.rayTracing)) return NOTHING_OWED;
+  await writeThrottle(ask, settings.helper, false).catch(() => undefined);
   // Writing the value it had is safe even when the write above was refused or half-done.
   return async () => {
-    await port.call(LoopTool.SetProperties, writeThrottleArgs(true)).catch(() => undefined);
+    await writeThrottle(ask, settings.helper, true).catch(() => undefined);
   };
 }
 

@@ -15,7 +15,7 @@ import time
 
 import unreal
 
-from genex_loop import blueprints, editor, paths
+from genex_loop import blueprints, editor, epic_blueprints, paths
 from genex_loop.errors import Refused, short_message
 
 REF_FOLDER = '/Game/__GenexRef'
@@ -32,13 +32,11 @@ ENGINE_VERSION = re.compile(r'\d+\.\d+\.\d+')
 
 
 def _cache():
-    from editor_toolset.toolsets.blueprint import _BlueprintCache
-    return _BlueprintCache
+    return epic_blueprints.node_cache()
 
 
 def _tools():
-    from editor_toolset.toolsets.blueprint import BlueprintTools
-    return BlueprintTools
+    return epic_blueprints.tools()
 
 
 def engine_version() -> str:

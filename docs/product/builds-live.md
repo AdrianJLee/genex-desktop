@@ -21,7 +21,7 @@ game has content, Full screen (hold Esc), plugin actions, Multiplayer, Publish. 
 Play/Reload. An empty scaffold shows “Ready for your first idea”, or
 “Building your game” with Watch progress, then Play latest; the first healthy build shows itself.
 Opening a game starts nothing: Live keeps its game. Otherwise only the user changes Live (Play,
-Reload, Make live) or a finished Unity/Godot `web/` build. A changed game folder or a broken shown
+Reload, Make live) or a finished engine `web/` build. A changed game folder or a broken shown
 build lights Reload; hidden and not stopped, they go in at once. The
 preview's network is open, as a web page's. Other folders' views:
 [projects](projects-engines.md#lives-views).

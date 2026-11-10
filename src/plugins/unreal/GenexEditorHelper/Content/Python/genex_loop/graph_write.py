@@ -52,6 +52,7 @@ import functools
 import sys
 import typing
 
+from genex_loop import epic_blueprints
 from genex_loop.errors import Refused
 
 # The most nodes one graph's text may make (variable reads not counted).
@@ -411,8 +412,8 @@ def clear_unlinked(graph) -> int:
 
 def epic_tools():
     """Epic's own BlueprintTools, never the stand-in a build script sees."""
-    from editor_toolset.toolsets.blueprint import BlueprintTools
-    return getattr(BlueprintTools, EPIC_ATTR, BlueprintTools)
+    tools = epic_blueprints.tools()
+    return getattr(tools, EPIC_ATTR, tools)
 
 
 def graph_name(graph) -> str:

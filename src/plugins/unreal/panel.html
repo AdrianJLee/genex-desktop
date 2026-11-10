@@ -214,14 +214,14 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
   <p id="checking" class="quiet" role="status" data-t>Checking Unreal…</p>
 
   <section id="get" hidden aria-labelledby="get-title">
-    <div class="intro" data-panel-head><h2 id="get-title" class="title" data-t>Get Unreal Engine 5.8</h2><p id="get-text" class="quiet"></p></div>
+    <div class="intro" data-panel-head><h2 id="get-title" class="title" data-t>Get Unreal Engine</h2><p id="get-text" class="quiet"></p></div>
     <div class="group">
       <div id="get-block" class="block">
         <ol id="get-steps" class="steps">
           <li id="step-launcher" class="step"><span class="mark"><span id="launcher-done" class="sr-only"></span></span><div class="step-body"><span class="step-name">Epic Games Launcher</span><span id="step-launcher-text" class="quiet small"></span></div></li>
-          <li id="step-unreal" class="step"><span class="mark"></span><div class="step-body"><span class="step-name">Unreal Engine 5.8</span><span id="step-install" class="quiet small">In the Launcher: Unreal Engine, then Library. Click + beside Engine Versions and pick 5.8, not a newer one. About 45 GB.</span></div><button type="button" id="get-unreal" class="primary external">Open Launcher</button></li>
+          <li id="step-unreal" class="step"><span class="mark"></span><div class="step-body"><span id="step-unreal-name" class="step-name">Unreal Engine</span><span id="step-install" class="quiet small"></span></div><button type="button" id="get-unreal" class="primary external">Open Launcher</button></li>
         </ol>
-        <p class="foot-line"><span class="orb" aria-hidden="true"></span><span data-t>Waiting for Unreal 5.8. This page moves on by itself.</span></p>
+        <p class="foot-line"><span class="orb" aria-hidden="true"></span><span id="get-waiting"></span></p>
       </div>
       <p id="get-opened" class="quiet small" role="status"></p>
     </div>
@@ -286,7 +286,7 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
           <div id="use-row" class="actions" hidden><button type="button" id="use-here"></button></div>
           <p id="kept" class="quiet small" role="status"></p>
         </div>
-        <div id="fact-engine" class="fact" hidden><span class="k" data-t>Engine</span><span id="project-engine" class="v"></span></div>
+        <div id="fact-engine" class="fact" hidden><span class="k" data-t>Engine</span><span id="project-engine" class="v"></span><button type="button" id="move-engine" hidden></button></div>
         <div id="fact-reach" class="fact" hidden><span class="k" data-t>Rewind and Loops</span><span id="project-reach" class="v"></span></div>
         <section id="ray-tracing" class="xcode" hidden aria-label="Ray tracing" data-t="aria-label">
           <div class="xcode-row"><p id="ray-tracing-text"></p><div class="actions"><button type="button" id="ray-tracing-off"></button></div></div>
@@ -367,6 +367,7 @@ const Action = {
   Status: "status",
   Setup: "setup",
   UndoSetup: "undo-setup",
+  MoveEngine: "move-engine",
   Templates: "templates",
   Create: "create",
   OpenEditor: "open-editor",
@@ -405,9 +406,11 @@ const WAITS = { [Action.OpenEditor]: { timeoutMs: OPEN_WAIT_MS } };
 const PanelAct = { Switch: "switch" };
 /** Why a request failed, as Studio's bridge names it (PanelErrorCode): the person cancelled Studio's confirmation. Wire values: never rename. */
 const ErrorCode = { Cancelled: "cancelled" };
+/** Which way the installed Unreal misses the one new games are made with, as the backend names it (EngineReadiness). Wire values: never rename. */
+const Readiness = { NewerOnly: "newer-only" };
 /** How the project's engine compares with the installed ones, as the backend names it (EngineMatch). Wire values: never rename. */
 const EngineMatch = { Installed: "installed", TooOld: "too-old" };
-/** A project opens right after setup with its own engine, or with an older one setup switches to 5.8. */
+/** A project opens right after setup with its own engine, or with an older one setup switches to a supported one. */
 const OPENS_AFTER_SETUP = [EngineMatch.Installed, EngineMatch.TooOld];
 /** What Get Unreal opened, as the backend names it (UnrealSource). Wire values: never rename. */
 const UnrealSource = { Launcher: "launcher", Download: "download" };
@@ -441,14 +444,20 @@ const WORDS = {
   getLauncher: t("Download"),
   openLauncher: t("Open Launcher"),
   stepLauncher: t("Download it from Epic's page, open it and sign in. An Epic account is free."),
-  stepInstall: (gb) =>
+  getTitle: (version) => t("Get Unreal Engine {version}", { version }),
+  /** Epic's name and a version: the same in every language. */
+  stepUnreal: (version) => `Unreal Engine ${version}`,
+  stepInstall: (version, gb) =>
     t(
-      "In the Launcher: Unreal Engine, then Library. Click + beside Engine Versions and pick 5.8, not a newer one. About {gb} GB.",
-      { gb },
+      "In the Launcher: Unreal Engine, then Library. Click + beside Engine Versions and pick {version}, not another one. About {gb} GB.",
+      { version, gb },
     ),
+  waiting: (version) => t("Waiting for Unreal {version}. This page moves on by itself.", { version }),
   /** Read before the step's name by a screen reader, a space between them. */
   done: `${t("Done:")} `,
   version: (v) => `Unreal ${v}`,
+  moveTo: (version) => t("Move to {version}", { version }),
+  getNewer: (version) => t("Get {version}", { version }),
   pickerTitle: t("Choose a project"),
   pickTitle: t("Choose a project"),
   /** The New project row's line: in a game, its folder; with none open, the game Genex makes for it. */
@@ -475,13 +484,15 @@ const WORDS = {
   nameHintNewGame: t("Genex makes a game for it too, so agents can build it in Loops."),
   madeGame: (name) =>
     t("Genex made the game {name} for it too. Open it from the sidebar to build it with agents.", { name }),
-  noTemplates: t(
-    "Unreal 5.8's templates are missing. In the Epic Games Launcher, open Library, click ⋯ next to 5.8, then Verify.",
-  ),
-  unverifiedEngine: (version, gb) =>
+  noTemplates: (version) =>
     t(
-      "Genex makes Unreal projects with 5.8; this computer has {version}. Install 5.8 beside it: in Library, click + next to Engine Versions and choose 5.8. About {gb} GB.",
-      { version, gb },
+      "Unreal {version}'s templates are missing. In the Epic Games Launcher, open Library, click ⋯ next to {version}, then Verify.",
+      { version },
+    ),
+  unverifiedEngine: (version, needed, gb) =>
+    t(
+      "Genex makes new Unreal games with {needed}; this computer has {version}. Install {needed} beside it: in Library, click + next to Engine Versions and choose {needed}. About {gb} GB.",
+      { version, needed, gb },
     ),
   unverifiedHint: (version) =>
     t("A project made in Unreal {version}'s New Project dialog works in chats, not in Loops.", { version }),
@@ -604,10 +615,10 @@ const WORDS = {
       "This disk has {free} GB free; Unreal needs about 20 GB for shaders and builds. Free up space before you open it.",
       { free },
     ),
-  installDisk: (free, need) =>
+  installDisk: (version, free, need) =>
     t(
-      "Unreal 5.8 and a first game need about {need} GB; this disk has {free} GB free. Free up space before you install it.",
-      { free, need },
+      "Unreal {version} and a first game need about {need} GB; this disk has {free} GB free. Free up space before you install it.",
+      { version, free, need },
     ),
   memory: (gb) => t("This computer has {gb} GB of memory; Unreal needs 16 GB to run well.", { gb }),
   webFine: t("Web games run fine."),
@@ -679,12 +690,14 @@ function renderEngine(s) {
   setText($("engine"), s.engine?.build ?? "");
 }
 
-/** The version Genex makes projects with, as the Get view names it. */
-const NEEDED_VERSION = "5.8";
-
 function renderGet(s) {
   const older = s.engines.map((e) => e.build).join(", ");
-  setText($("get-text"), s.engines.length ? WORDS.oldUnreal(older, NEEDED_VERSION) : WORDS.needUnreal);
+  // The version new games are made with, which a newcomer installs.
+  const version = s.installVersion;
+  setText($("get-title"), WORDS.getTitle(version));
+  setText($("step-unreal-name"), WORDS.stepUnreal(version));
+  setText($("get-waiting"), WORDS.waiting(version));
+  setText($("get-text"), s.engines.length ? WORDS.oldUnreal(older, version) : WORDS.needUnreal);
   // The one button sits in the step it serves: without Epic's launcher, getting it; with it (that step done), opening it at Library.
   const noLauncher = s.launcher === false;
   const hasLauncher = s.launcher === true;
@@ -694,7 +707,7 @@ function renderGet(s) {
   const step = noLauncher ? $("step-launcher") : $("step-unreal");
   if ($("get-unreal").parentElement !== step) step.append($("get-unreal"));
   setText($("get-unreal"), noLauncher ? WORDS.getLauncher : WORDS.openLauncher);
-  if (s.installBytes) setText($("step-install"), WORDS.stepInstall(Math.round(s.installBytes / GIB)));
+  setText($("step-install"), WORDS.stepInstall(version, Math.round(s.installBytes / GIB)));
   $("get-unreal").disabled = ui.busy;
   setText($("get-opened"), ui.gotUnreal ? WORDS.opened[ui.gotUnreal] : "");
   $("get-opened").hidden = !ui.gotUnreal;
@@ -832,24 +845,26 @@ function renderAbout() {
   setText($("about"), card?.description ?? "");
 }
 
-/** Why the New form can't make a project: only a newer Unreal than 5.8, or 5.8 without its templates; else "". */
+/** Why the New form can't make a project: only another Unreal than the one new games are made with, or that one without its templates; else "". */
 function cannotCreate(offer, s) {
   if (!offer?.loaded) return "";
-  if (offer.newestUnverified) return WORDS.unverifiedEngine(offer.newestUnverified, Math.round(s.installBytes / GIB));
-  return offer.templates.length ? "" : WORDS.noTemplates;
+  if (offer.newestUnverified)
+    return WORDS.unverifiedEngine(offer.newestUnverified, s.installVersion, Math.round(s.installBytes / GIB));
+  return offer.templates.length ? "" : WORDS.noTemplates(s.installVersion);
 }
 
 /**
  * When Genex can't make a project here, the form gives way to the fix: installing (or verifying)
- * 5.8 in Epic's launcher leads, and choosing a project you made yourself follows, quieter. With
- * only a newer Unreal, its own New Project dialog makes one that works in chats, not in Loops.
+ * the Unreal new games are made with in Epic's launcher leads, and choosing a project you made
+ * yourself follows, quieter. With only a newer Unreal, its own New Project dialog makes one that
+ * works in chats, not in Loops; an older one's dialog isn't offered, since new games aren't made on it.
  */
 function renderUnverified(offer, s) {
   const why = cannotCreate(offer, s);
   $("unverified").hidden = !why;
   for (const id of ["cards", "about", "name-block"]) $(id).hidden = Boolean(why);
   setText($("unverified-text"), why);
-  const newer = why ? offer.newestUnverified : null;
+  const newer = why && offer.readiness === Readiness.NewerOnly ? offer.newestUnverified : null;
   setText($("unverified-hint"), newer ? WORDS.unverifiedHint(newer) : "");
   $("unverified-hint").hidden = !newer;
   setText($("unverified-get"), WORDS.getUnreal);
@@ -1081,6 +1096,20 @@ function renderHead(s) {
 const reachWords = (entry) => (entry.outside ? WORDS.reachOutside : WORDS.reachInside);
 
 /**
+ * The Engine row's button for a project made with an older Unreal: move it to the one new games are
+ * made with, or get that Unreal first where it isn't installed (the Launcher opens).
+ */
+function renderMove(move) {
+  const button = $("move-engine");
+  button.hidden = !move;
+  if (!move) return;
+  setText(button, move.installed ? WORDS.moveTo(move.to) : WORDS.getNewer(move.to));
+  button.classList.toggle("external", !move.installed);
+  button.dataset.act = move.installed ? Action.MoveEngine : Action.GetUnreal;
+  button.disabled = ui.busy;
+}
+
+/**
  * The project's facts: where it is (short, the whole path in its tooltip), the Unreal it was made
  * with, and in an open game whether Rewind and Loops reach it.
  */
@@ -1092,6 +1121,7 @@ function renderFacts(s) {
   const version = isVersion(p.engine) ? WORDS.version(p.engine) : "";
   $("fact-engine").hidden = !version;
   setText($("project-engine"), version);
+  renderMove(s.move);
   const reach = s.game && entry ? reachWords(entry) : "";
   $("fact-reach").hidden = !reach;
   setText($("project-reach"), reach);
@@ -1265,9 +1295,11 @@ function notesAnchor(view) {
 
 function renderNotes(s, view) {
   const notes = [];
-  // Without Unreal the disk must fit the engine as well as a first project.
+  // Where the Unreal new games are made with is still to install, the disk must fit it as well as a first project.
   const free = Math.floor(s.freeBytes / GIB);
-  if (s.lowDisk && view === View.Get) notes.push(WORDS.installDisk(free, Math.round(s.diskNeedBytes / GIB)));
+  const installing = view === View.Get || (view === View.New && Boolean(ui.offer?.newestUnverified));
+  if (installing && s.installLowDisk)
+    notes.push(WORDS.installDisk(s.installVersion, free, Math.round(s.installNeedBytes / GIB)));
   else if (s.lowDisk) notes.push(WORDS.disk(free));
   // Only where installing Unreal is the question does the memory note add that web games need none of it.
   const memory = WORDS.memory(Math.round(s.memoryBytes / GIB));
@@ -1584,6 +1616,11 @@ $("unverified-get").onclick = () => void getUnreal();
 $("use-here").onclick = () => void run(Action.UseProject);
 $("xcode-act").onclick = () => void run(Action.GetXcode, { step: $("xcode-act").dataset.step });
 $("ray-tracing-off").onclick = () => void run(Action.RayTracingOff);
+$("move-engine").onclick = async () => {
+  if ($("move-engine").dataset.act === Action.MoveEngine) return void (await run(Action.MoveEngine));
+  const got = await getUnreal();
+  setText($("kept"), got ? WORDS.opened[got.opened] : "");
+};
 $("xcode-copy").onclick = () => void copyCommand();
 /** What the project view's primary or second button sends: its action, or the panel's own sequence. */
 async function press(button) {

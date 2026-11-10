@@ -20,7 +20,6 @@ import { type PlayGameDetail, PlayNote, playPageUrl, PlayShelf } from "../../sha
 import {
   hasWebBuild,
   InstallFailure,
-  InstallPhase,
   NativeArch,
   NativeEngine,
   NativePlatform,
@@ -43,6 +42,7 @@ import {
   GamePhase,
   type GameStanding,
   gameStanding,
+  installLine,
   installPercent,
   minutesSince,
   WebPlay,
@@ -112,11 +112,7 @@ function usePlayedMinutes(startedAt: string | null): number {
 function Installing({ game, standing }: { game: PlayGameDetail; standing: GameStanding }): JSX.Element {
   const progress = standing.progress;
   const percent = progress ? installPercent(progress) : 0;
-  const label = (() => {
-    if (progress?.phase === InstallPhase.Queued) return WORDS.waiting;
-    if (progress?.phase === InstallPhase.Downloading) return WORDS.installing(percent);
-    return WORDS.checking;
-  })();
+  const label = WORDS.installLine(installLine(progress));
   return (
     <div
       className="game-installing"

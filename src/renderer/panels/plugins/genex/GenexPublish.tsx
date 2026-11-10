@@ -40,6 +40,7 @@ import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { StatusOrb } from "../../../ui/StatusOrb.tsx";
 import { StepBar } from "../../../ui/StepBar.tsx";
+import { SendProgress } from "./SendProgress.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { useCopy } from "../../../use-copy.ts";
 import { richText } from "../../../rich-text.tsx";
@@ -1552,6 +1553,13 @@ function Hint({
             {again.label}
           </TextButton>
         )}
+      </p>
+    );
+  // A send that says how far it is reads better than the standing line: it shows the wait is moving.
+  if (publishing && view.progress)
+    return (
+      <p className="genex-publish-hint" data-publish-progress>
+        <SendProgress progress={view.progress} />
       </p>
     );
   if (publishing) return <p className="genex-publish-hint">{WORDS.keepsGoing}</p>;

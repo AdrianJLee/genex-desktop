@@ -102,6 +102,49 @@ export function gameStanding(
 export const installPercent = (progress: InstallProgress): number =>
   progress.totalBytes > 0 ? Math.min(100, Math.floor((progress.receivedBytes / progress.totalBytes) * 100)) : 0;
 
+/** What the game page's install line says. */
+export const InstallLine = {
+  Waiting: "waiting",
+  Downloading: "downloading",
+  Verifying: "verifying",
+  Unpacking: "unpacking",
+} as const;
+export type InstallLine = (typeof InstallLine)[keyof typeof InstallLine];
+
+/** The install line and what it tells: a download's percent, with its speed and minutes left once both are known. */
+export type InstallLineView =
+  | { line: typeof InstallLine.Waiting }
+  | { line: typeof InstallLine.Verifying }
+  | { line: typeof InstallLine.Unpacking }
+  | {
+      line: typeof InstallLine.Downloading;
+      percent: number;
+      bytesPerSecond: number | null;
+      minutesLeft: number | null;
+    };
+
+/** The steps after the download, each its own line. */
+const STEP_LINE: Partial<Record<InstallPhase, InstallLineView>> = {
+  [InstallPhase.Queued]: { line: InstallLine.Waiting },
+  [InstallPhase.Verifying]: { line: InstallLine.Verifying },
+  [InstallPhase.Unpacking]: { line: InstallLine.Unpacking },
+};
+
+/** What the install line says for `progress`: waiting, the download with its speed and time left, verifying or unpacking. */
+export function installLine(progress: InstallProgress | null | undefined): InstallLineView {
+  const step = progress && STEP_LINE[progress.phase];
+  if (step) return step;
+  const speed = progress?.bytesPerSecond ?? null;
+  const etaMs = progress?.etaMs ?? null;
+  const known = speed !== null && speed > 0 && etaMs !== null;
+  return {
+    line: InstallLine.Downloading,
+    percent: progress ? installPercent(progress) : 0,
+    bytesPerSecond: known ? speed : null,
+    minutesLeft: known ? Math.ceil(etaMs / MINUTE_MS) : null,
+  };
+}
+
 /** What a card shows over its cover's corner for a native game. */
 export const CardBadge = {
   /** Not installed: which systems it was built for. */

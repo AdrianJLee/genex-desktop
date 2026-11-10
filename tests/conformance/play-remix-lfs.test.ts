@@ -7,9 +7,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { downloadLfsFiles, findLfsPointers, type LfsDownloadDeps, parseLfsPointer } from "../../src/main/play/lfs.ts";
+import { setTimeout as sleep } from "node:timers/promises";
+import {
+  downloadLfsFiles,
+  findLfsPointers,
+  keptObjectPath,
+  LFS_RESERVE_BYTES,
+  type LfsDownloadDeps,
+  LfsNoSpaceError,
+  parseLfsPointer,
+} from "../../src/main/play/lfs.ts";
 import { DOWNLOAD_STALL_MS, type StallClock, stallGuard } from "../../src/main/play/remix.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -81,6 +90,8 @@ function depsOn(fetch: LfsDownloadDeps["fetch"]) {
     },
     guard: () => stallGuard({ setTimeout: () => null, clearTimeout: () => {} }),
     routed: async (files) => new Set(files),
+    now: () => 0,
+    freeBytes: async () => Number.MAX_SAFE_INTEGER,
   };
   return { deps, heard };
 }
@@ -398,6 +409,365 @@ describe("Remix's Git LFS files over https", () => {
     timers.advance(DOWNLOAD_STALL_MS);
     await assert.rejects(download, /stopped moving/);
     assert.equal(await readFile(path.join(dir, "a.glb"), "utf8"), pointerOf(MODEL));
+  });
+});
+
+/** A link the fake batch API signs: each answer's links carry the number of the batch that gave them. */
+const signedHref = (oid: string, batch: number): string => `${STORAGE}/${oid}?sig=${batch}`;
+
+/**
+ * Genex's git whose links carry the number of the batch that signed them (`?sig=<n>`), with `link`
+ * added to each answer's download; storage answers `refuse(url)`'s status when it names one.
+ */
+function signingNetwork(
+  store: Map<string, Buffer>,
+  options: { link?: (batch: number) => Record<string, unknown>; refuse?: (url: string) => number | undefined } = {},
+) {
+  const seen: Array<{ method: string; url: string; oids: string[] }> = [];
+  let batches = 0;
+  const fetch: LfsDownloadDeps["fetch"] = async (input, init) => {
+    const url = String(input);
+    if (url === BATCH) {
+      batches += 1;
+      const { objects } = JSON.parse(String(init?.body)) as { objects: Seen["objects"] };
+      seen.push({ method: "POST", url, oids: objects.map((object) => object.oid) });
+      const batch = batches;
+      const answered = objects.map((object) => ({
+        ...object,
+        actions: { download: { href: signedHref(object.oid, batch), ...options.link?.(batch) } },
+      }));
+      return Response.json({ objects: answered });
+    }
+    seen.push({ method: "GET", url, oids: [] });
+    const status = options.refuse?.(url);
+    if (status) return new Response("no", { status });
+    const bytes = store.get(new URL(url).pathname.slice(1));
+    return bytes ? new Response(new Uint8Array(bytes)) : new Response("no", { status: 404 });
+  };
+  return { fetch, seen };
+}
+
+/** How often, and how many times, a test looks for a file another download is writing. */
+const KEPT_LOOK_MS = 5;
+const KEPT_LOOKS = 200;
+
+const isThere = async (target: string): Promise<boolean> =>
+  lstat(target).then(
+    () => true,
+    () => false,
+  );
+
+describe("Remix's Git LFS files of a big game", () => {
+  it("asks for a batch's links only when its objects are next, never all of them up front", async () => {
+    const files: Record<string, Buffer> = {};
+    const store = new Map<string, Buffer>();
+    for (let index = 0; index < 205; index += 1) {
+      const bytes = Buffer.from(`model ${index}`);
+      files[`models/${index}.glb`] = Buffer.from(pointerOf(bytes));
+      store.set(oidOf(bytes), bytes);
+    }
+    const dir = await cloneWith(files);
+    const { fetch, seen } = signingNetwork(store);
+    await downloadLfsFiles(dir, REPO, depsOn(fetch).deps);
+    // Each run of downloads follows the batch that named them: links are short-lived.
+    const runs: string[] = [];
+    for (const { method } of seen) {
+      const last = runs.at(-1);
+      if (method === "POST" || !last?.startsWith("GET")) runs.push(`${method} 1`);
+      else runs[runs.length - 1] = `GET ${Number(last.split(" ")[1]) + 1}`;
+    }
+    assert.deepEqual(runs, ["POST 1", "GET 100", "POST 1", "GET 100", "POST 1", "GET 5"]);
+    const signedBy = seen
+      .filter(({ method }) => method === "GET")
+      .map(({ url }) => new URL(url).searchParams.get("sig"));
+    assert.deepEqual([signedBy[0], signedBy[100], signedBy[200]], ["1", "2", "3"], "by its own batch's links");
+  });
+
+  it("asks again for a link storage refuses as expired, once, and downloads with the new one", async () => {
+    for (const status of [401, 403]) {
+      const dir = await cloneWith({ "a.glb": pointerOf(MODEL) });
+      const oid = oidOf(MODEL);
+      const { fetch, seen } = signingNetwork(new Map([[oid, MODEL]]), {
+        refuse: (url) => (url === signedHref(oid, 1) ? status : undefined),
+      });
+      await downloadLfsFiles(dir, REPO, depsOn(fetch).deps);
+      assert.deepEqual(await readFile(path.join(dir, "a.glb")), MODEL, String(status));
+      assert.deepEqual(
+        seen.map(({ method, url, oids }) => [method, url, oids]),
+        [
+          ["POST", BATCH, [oid]],
+          ["GET", signedHref(oid, 1), []],
+          ["POST", BATCH, [oid]],
+          ["GET", signedHref(oid, 2), []],
+        ],
+        String(status),
+      );
+    }
+  });
+
+  it("takes a second refusal as the failure it is, and any other answer at once", async () => {
+    const oid = oidOf(MODEL);
+    const cases: Array<{ status: number; requests: string[] }> = [
+      { status: 403, requests: ["POST", "GET", "POST", "GET"] },
+      { status: 401, requests: ["POST", "GET", "POST", "GET"] },
+      { status: 404, requests: ["POST", "GET"] },
+      { status: 500, requests: ["POST", "GET"] },
+    ];
+    for (const { status, requests } of cases) {
+      const dir = await cloneWith({ "a.glb": pointerOf(MODEL) });
+      const { fetch, seen } = signingNetwork(new Map([[oid, MODEL]]), { refuse: () => status });
+      await assert.rejects(
+        downloadLfsFiles(dir, REPO, depsOn(fetch).deps),
+        new RegExp(`didn’t download \\(${status}\\)`),
+      );
+      assert.deepEqual(
+        seen.map(({ method }) => method),
+        requests,
+        String(status),
+      );
+      assert.equal(await readFile(path.join(dir, "a.glb"), "utf8"), pointerOf(MODEL), String(status));
+    }
+  });
+
+  it("asks again before using a link whose time has passed, by the answer's expires_in or expires_at", async () => {
+    const start = Date.UTC(2026, 0, 1);
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ["expires_in", { expires_in: 120 }],
+      ["expires_at", { expires_at: new Date(start + 120_000).toISOString() }],
+    ];
+    for (const [name, link] of cases) {
+      const dir = await cloneWith({ "a.glb": pointerOf(MODEL) });
+      const oid = oidOf(MODEL);
+      let now = start;
+      // The first answer's link is three minutes old by the time its object's turn comes.
+      const { fetch, seen } = signingNetwork(new Map([[oid, MODEL]]), {
+        link: (batch) => {
+          if (batch === 1) now += 180_000;
+          return link;
+        },
+      });
+      await downloadLfsFiles(dir, REPO, { ...depsOn(fetch).deps, now: () => now });
+      assert.deepEqual(await readFile(path.join(dir, "a.glb")), MODEL, name);
+      assert.deepEqual(
+        seen.map(({ method, url }) => [method, url]),
+        [
+          ["POST", BATCH],
+          ["POST", BATCH],
+          ["GET", signedHref(oid, 2)],
+        ],
+        `${name}: the stale link is never requested`,
+      );
+    }
+    const fresh = await cloneWith({ "a.glb": pointerOf(MODEL) });
+    const { fetch, seen } = signingNetwork(new Map([[oidOf(MODEL), MODEL]]), { link: () => ({ expires_in: 120 }) });
+    await downloadLfsFiles(fresh, REPO, { ...depsOn(fetch).deps, now: () => start });
+    assert.deepEqual(
+      seen.map(({ method }) => method),
+      ["POST", "GET"],
+      "a link still in its time is used as it is",
+    );
+  });
+
+  it("refuses before downloading anything when the disk can't hold the files and a reserve", async () => {
+    // The files themselves, and as much again: the remixed game's first save copies every one
+    // of them into its history (Studio's git runs no LFS filter).
+    const files = MODEL.length * 2 + SOUND.length;
+    const total = files * 2;
+    const cases: Array<{ free: number; fits: boolean }> = [
+      { free: 0, fits: false },
+      { free: files + LFS_RESERVE_BYTES, fits: false },
+      { free: total + LFS_RESERVE_BYTES - 1, fits: false },
+      { free: total + LFS_RESERVE_BYTES, fits: true },
+    ];
+    for (const { free, fits } of cases) {
+      // The model is in two places: both copies take room.
+      const dir = await cloneWith({ "a.glb": pointerOf(MODEL), "b.glb": pointerOf(MODEL), "c.mp3": pointerOf(SOUND) });
+      const store = new Map([
+        [oidOf(MODEL), MODEL],
+        [oidOf(SOUND), SOUND],
+      ]);
+      const { fetch, seen } = signingNetwork(store);
+      const asked: string[] = [];
+      const deps: LfsDownloadDeps = {
+        ...depsOn(fetch).deps,
+        freeBytes: async (at) => {
+          asked.push(at);
+          return free;
+        },
+      };
+      if (fits) {
+        await downloadLfsFiles(dir, REPO, deps);
+        assert.deepEqual(await readFile(path.join(dir, "b.glb")), MODEL);
+        assert.deepEqual(asked, [dir], "the clone's own disk is the one asked about");
+        continue;
+      }
+      await assert.rejects(
+        downloadLfsFiles(dir, REPO, deps),
+        (error: unknown) =>
+          error instanceof LfsNoSpaceError && error.needed === total + LFS_RESERVE_BYTES && error.free === free,
+        String(free),
+      );
+      assert.deepEqual(seen, [], `${free}: nothing is asked of the network`);
+      assert.equal(await readFile(path.join(dir, "a.glb"), "utf8"), pointerOf(MODEL));
+      assert.deepEqual(await readdir(path.join(dir, ".git")), [], `${free}: nothing written`);
+    }
+  });
+
+  it("keeps what downloaded whole when another file fails, and the next attempt downloads only the rest", async () => {
+    const kept = path.join(await tmpDir("studio-remix-kept-"), "kept");
+    const pointers = { "a.glb": pointerOf(MODEL), "b/c.mp3": pointerOf(SOUND) };
+    const store = new Map([
+      [oidOf(MODEL), MODEL],
+      [oidOf(SOUND), SOUND],
+    ]);
+    const first = await cloneWith(pointers);
+    // The sound is refused only once the model is kept (or was given long enough), so what is kept
+    // is the same every run.
+    const modelKept = async () => {
+      for (let look = 0; look < KEPT_LOOKS && !(await isThere(path.join(kept, oidOf(MODEL)))); look += 1)
+        await sleep(KEPT_LOOK_MS);
+    };
+    const failing = signingNetwork(store);
+    const fetch: LfsDownloadDeps["fetch"] = async (input, init) => {
+      if (!String(input).startsWith(`${STORAGE}/${oidOf(SOUND)}`)) return failing.fetch(input, init);
+      await modelKept();
+      return new Response("gone", { status: 500 });
+    };
+    const deps: LfsDownloadDeps = { ...depsOn(fetch).deps, kept };
+    await assert.rejects(downloadLfsFiles(first, REPO, deps), /didn’t download \(500\)/);
+    assert.equal(await readFile(path.join(first, "a.glb"), "utf8"), pointerOf(MODEL), "no pointer is replaced");
+    assert.deepEqual(await readdir(kept), [oidOf(MODEL)], "the whole model is kept, by its SHA-256, and no half file");
+    assert.deepEqual(await readFile(path.join(kept, oidOf(MODEL))), MODEL);
+
+    const second = await cloneWith(pointers);
+    const { fetch: working, seen } = signingNetwork(store);
+    const { deps: again, heard } = depsOn(working);
+    const free: number[] = [];
+    await downloadLfsFiles(second, REPO, {
+      ...again,
+      kept,
+      freeBytes: async () => {
+        // What is kept is not downloaded again: only the sound is still to come. The game's first
+        // save copies both files once more, and the reserve stays free.
+        const room = SOUND.length + MODEL.length + SOUND.length + LFS_RESERVE_BYTES;
+        free.push(room);
+        return room;
+      },
+    });
+    assert.deepEqual(await readFile(path.join(second, "a.glb")), MODEL);
+    assert.deepEqual(await readFile(path.join(second, "b/c.mp3")), SOUND);
+    assert.deepEqual(
+      seen.map(({ method, url, oids }) => [method, url, oids]),
+      [
+        ["POST", BATCH, [oidOf(SOUND)]],
+        ["GET", signedHref(oidOf(SOUND), 1), []],
+      ],
+      "only the sound is asked for and downloaded",
+    );
+    const total = MODEL.length + SOUND.length;
+    assert.deepEqual(
+      [heard[0], heard.at(-1)],
+      [
+        [0, total],
+        [total, total],
+      ],
+    );
+    assert.ok(
+      heard.some(([done]) => done === MODEL.length),
+      "the kept model counts as soon as it is checked",
+    );
+    assert.equal(free.length, 1);
+    assert.equal(await isThere(kept), false, "nothing is kept once every file is in place");
+  });
+
+  it("never trusts what is kept: only a plain file of the right name, size and SHA-256 is used", async () => {
+    const oid = oidOf(MODEL);
+    const wrong = Buffer.from(MODEL);
+    wrong[0] = (wrong[0] ?? 0) ^ 1;
+    const outsideModel = "outside.glb";
+    type Plant = (kept: string, outside: string) => Promise<unknown>;
+    const cases: Array<[string, Plant]> = [
+      ["the right size, other bytes", (kept) => writeFile(path.join(kept, oid), wrong)],
+      ["fewer bytes", (kept) => writeFile(path.join(kept, oid), MODEL.subarray(0, 10))],
+      ["more bytes", (kept) => writeFile(path.join(kept, oid), Buffer.concat([MODEL, MODEL]))],
+      ["a half download", (kept) => writeFile(path.join(kept, `${oid}.part`), MODEL)],
+      [
+        "a link to the right bytes elsewhere",
+        (kept, outside) => symlink(path.join(outside, outsideModel), path.join(kept, oid)),
+      ],
+      ["a folder by its name", (kept) => mkdir(path.join(kept, oid, "x"), { recursive: true })],
+      ["its name in capitals", (kept) => writeFile(path.join(kept, oid.toUpperCase()), MODEL)],
+      ["another version's object", (kept) => writeFile(path.join(kept, oidOf(SOUND)), SOUND)],
+      ["a link out of the folder", (kept, outside) => symlink(outside, path.join(kept, "elsewhere"))],
+    ];
+    for (const [name, plant] of cases) {
+      const home = await tmpDir("studio-remix-kept-hostile-");
+      const kept = path.join(home, "kept");
+      const outside = path.join(home, "outside");
+      await mkdir(kept);
+      await mkdir(outside);
+      await writeFile(path.join(outside, outsideModel), MODEL);
+      await plant(kept, outside);
+      const dir = await cloneWith({ "a.glb": pointerOf(MODEL) });
+      const { fetch, seen } = signingNetwork(new Map([[oid, MODEL]]));
+      await downloadLfsFiles(dir, REPO, { ...depsOn(fetch).deps, kept });
+      assert.deepEqual(await readFile(path.join(dir, "a.glb")), MODEL, name);
+      assert.deepEqual(
+        seen.map(({ method }) => method),
+        ["POST", "GET"],
+        `${name}: the model is downloaded, not taken from there`,
+      );
+      assert.deepEqual(await readdir(outside), [outsideModel], `${name}: nothing outside is removed or written`);
+      assert.deepEqual(await readFile(path.join(outside, outsideModel)), MODEL, name);
+      assert.equal(await isThere(kept), false, `${name}: what was planted goes with the folder`);
+    }
+  });
+
+  it("writes through no link standing where the kept folder goes", async () => {
+    const home = await tmpDir("studio-remix-kept-link-");
+    const outside = path.join(home, "outside");
+    await mkdir(outside);
+    await writeFile(path.join(outside, oidOf(MODEL)), MODEL);
+    const kept = path.join(home, "kept");
+    await symlink(outside, kept);
+    const dir = await cloneWith({ "a.glb": pointerOf(MODEL), "b.mp3": pointerOf(SOUND) });
+    const store = new Map([
+      [oidOf(MODEL), MODEL],
+      [oidOf(SOUND), SOUND],
+    ]);
+    const { fetch, seen } = signingNetwork(store);
+    await downloadLfsFiles(dir, REPO, { ...depsOn(fetch).deps, kept });
+    assert.deepEqual(await readFile(path.join(dir, "a.glb")), MODEL);
+    assert.equal(seen.filter(({ method }) => method === "GET").length, 2, "nothing is taken through the link");
+    assert.deepEqual(await readdir(outside), [oidOf(MODEL)], "the folder it led to is as it was");
+  });
+
+  it("names a kept object only by a SHA-256, inside its folder", async () => {
+    const kept = await tmpDir("studio-remix-kept-names-");
+    const oid = oidOf(MODEL);
+    assert.equal(keptObjectPath(kept, oid), path.join(kept, oid));
+    const hostile = [
+      "",
+      ".",
+      "..",
+      "../x",
+      `../${oid}`,
+      `${oid}/../../x`,
+      `${oid}/x`,
+      `x\\${oid}`,
+      path.join(kept, "..", oid),
+      `/${oid}`,
+      oid.toUpperCase(),
+      oid.slice(1),
+      `${oid}0`,
+      `${oid}.part`,
+      `${oid}\0`,
+      `${oid}\n`,
+      ` ${oid}`,
+      `${oid.slice(0, 63)}g`,
+    ];
+    for (const name of hostile) assert.throws(() => keptObjectPath(kept, name), /refused/, JSON.stringify(name));
+    assert.deepEqual(await readdir(kept), [], "naming one makes nothing");
   });
 });
 

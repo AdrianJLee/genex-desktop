@@ -343,6 +343,8 @@ export type RemixStep = (typeof RemixStep)[keyof typeof RemixStep];
 export const PlayRemixRefusal = {
   /** The game's source on Genex holds no game: its creator never shared its project. */
   NoProject: "no-project",
+  /** The disk has no room for the game's files and a reserve: nothing was downloaded. */
+  NoSpace: "no-space",
 } as const;
 export type PlayRemixRefusal = (typeof PlayRemixRefusal)[keyof typeof PlayRemixRefusal];
 

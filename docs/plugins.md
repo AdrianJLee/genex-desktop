@@ -2821,7 +2821,8 @@ takes it only as a plain local folder named for that toolchain (never a link, a 
 cmd.exe can't carry), and hands it to RunUAT; without it the call refuses with the installer's link
 for the agent to give the person. One package runs per game at a time. The person's open Unreal saves first (play ended; one that answers but can't save
 leaves nothing packaged), then `RunUAT BuildCookRun -platform=Mac|Win64|Linux -clientconfig=Shipping -build
--cook -stage -pak -stagingdirectory=…` stages into `unreal/Builds/<Mac|Windows|Linux>/` (emptied first, never
+-cook -stage -pak -compressed -nodebuginfo -stagingdirectory=…` (compressed paks and no debug files:
+the staged app is what players download) stages into `unreal/Builds/<Mac|Windows|Linux>/` (emptied first, never
 through a link; ignored by the game's history; never `-archive`, which copies a Mac app without its
 cooked content), the cook run by the engine's `UnrealEditor-Cmd`, within 120
 minutes. A Mac needs Xcode: a template's plugins make even a Blueprint game build code there. A
@@ -3677,8 +3678,14 @@ Genex:
   each with `genex native publish <the .app, or the .exe's folder> --json` in the publish workspace
   (a Linux build: its folder with `--platform linux --entry <its program>`, which the CLI cannot
   tell from the files; `nativePublishArgs`)
-  (`publishApps`, `native-publish.ts`, one hour each), one at a time, after resolving each by real
-  path inside the game folder. An app that fails never fails the publish; its row says "Not sent"
+  (`publishApps`, `native-publish.ts`), one at a time, after resolving each by real
+  path inside the game folder. Each send (a web build's upload, an app, a project to Genex Cloud)
+  runs the CLI with `GENEX_PROGRESS=json` and reads its `@genex-progress` lines off stderr
+  (`send-progress.ts`): the row or the dialog shows a bar with bytes, speed and time left
+  (`GenexSendProgress`, in memory only, never in a record), and the run's time limit (20 minutes
+  for a web publish, one hour for an app) counts from the last byte that moved, so a long send
+  that still moves is never cut. A CLI older than 1.42 writes no lines: the rows show their clock
+  alone and the limits count from the start, as before. An app that fails never fails the publish; its row says "Not sent"
   and a line under the rows says why in the CLI's words. Each result is kept in the workspace's
   `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). An app sent by
   someone other than a Genex admin waits for Genex's review: the CLI's answer carries the build's

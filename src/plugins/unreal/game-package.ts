@@ -279,8 +279,15 @@ export function linuxToolchainFor(version: string): { name: string; url: string 
 const WEB_ONLY_ARGS = ["-iostore", "-package", "-WasmNoBrotli"] as const;
 
 /**
+ * What an app asks of BuildCookRun beyond a web build's: its paks compressed and no debug files
+ * staged beside the program. The staged app is what players download, so both make it smaller;
+ * a web build's files are compressed by the host that serves them.
+ */
+const APP_ONLY_ARGS = ["-compressed", "-nodebuginfo"] as const;
+
+/**
  * BuildCookRun's arguments: Shipping for `system` (this computer's own when none), built, cooked,
- * staged into paks and staged under `stagingDir`, the cook run by this computer's own command-line
+ * staged into paks (an app's compressed, with no debug files) and staged under `stagingDir`, the cook run by this computer's own command-line
  * editor (a project with no editor target of its own has none to build).
  */
 export function buildCookRunArgs(o: {
@@ -301,7 +308,7 @@ export function buildCookRunArgs(o: {
     "-cook",
     "-stage",
     "-pak",
-    ...(system === PackageSystem.Web ? WEB_ONLY_ARGS : []),
+    ...(system === PackageSystem.Web ? WEB_ONLY_ARGS : APP_ONLY_ARGS),
     `-stagingdirectory=${o.stagingDir}`,
     `-unrealexe=${editorCmdPath(o.engineDir, o.platform)}`,
     "-nocompileeditor",

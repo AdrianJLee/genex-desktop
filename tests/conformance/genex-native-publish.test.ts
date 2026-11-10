@@ -359,6 +359,13 @@ if (target.includes("Broken")) {
   process.stderr.write("› Zipping…\\n✗ Couldn't get an upload token (HTTP 413).\\n");
   process.exit(1);
 }
+if (target.includes("Slow")) {
+  // Says how far it is, when asked to, then waits to be let go: the test reads the record meanwhile.
+  const asked = process.env.GENEX_PROGRESS === "json";
+  if (asked) process.stderr.write('@genex-progress {"stage":"upload","doneBytes":4,"totalBytes":10,"target":"mac-universal"}\\n');
+  const { existsSync } = await import("node:fs");
+  while (!existsSync(${JSON.stringify(log + ".go")})) await new Promise((resolve) => setTimeout(resolve, 20));
+}
 const windows = !target.endsWith(".app");
 const listing = !args.includes("--gallery")
   ? undefined
@@ -387,13 +394,38 @@ process.exit(listing?.state === "refused" ? 1 : 0);
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line) as { args: string[]; cwd: string; home: string });
-  return { genex, runs };
+  /** Lets a "Slow" app's send go on to its end. */
+  const letGo = () => writeFile(`${log}.go`, "");
+  return { genex, runs, letGo };
 }
 
 describe("a publish's apps sent through the CLI", () => {
   const MAC_APP = { target: "/game/Builds/Mac/Dust Runners.app", platform: "mac" as const };
   const BROKEN = { target: "/game/Builds/Windows Broken", platform: "windows" as const };
   const LINUX = { target: "/game/Builds/Linux", platform: "linux" as const, entry: "Dust.x86_64" };
+
+  it("says how far the app on its way is, while it is on its way and no longer", async () => {
+    const { genex, letGo } = await toolsWithStandIn();
+    const slow = { target: "/game/Builds/Mac/Slow Runners.app", platform: "mac" as const };
+    const sending = genex.publishApps("dust", "job-1", [slow]);
+    let progress = (await genex.publishView("dust")).native?.progress;
+    for (let tries = 0; !progress && tries < 200; tries++) {
+      await sleep(20);
+      progress = (await genex.publishView("dust")).native?.progress;
+    }
+    assert.ok(progress, "the record carries the send's progress");
+    assert.deepEqual(
+      { ...progress, at: 0 },
+      { stage: "upload", doneBytes: 4, totalBytes: 10, target: "mac-universal", at: 0 },
+    );
+    await letGo();
+    await sending;
+    const { native } = await genex.publishView("dust");
+    assert.equal(native?.progress, undefined, "a finished send has none");
+    assert.equal(native?.sent.length, 1);
+    const saved = await readFile(path.join(genex.root, "publish", "dust", "native.json"), "utf8");
+    assert.ok(!saved.includes("doneBytes"), "progress is never written to the record");
+  });
 
   it("sends each app with `genex native publish` in the publish workspace and records how it went", async () => {
     const { genex, runs } = await toolsWithStandIn();

@@ -16,6 +16,7 @@ import type { GenexNativeRecord } from "../../../../shared/genex.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { type BusyPress, type CardRow, CardTone, type PressPlan, switchedOn } from "./publish-card-view.ts";
 import { failureLines } from "./publish-platforms-view.ts";
+import { SendProgress } from "./SendProgress.tsx";
 import type { ErrorBlock, usePublishCard } from "./use-publish-card.ts";
 import { useCopy } from "../../../use-copy.ts";
 
@@ -77,6 +78,7 @@ function Row({
             row.status
           )}
         </span>
+        {working && <SendProgress progress={row.progress} />}
       </span>
       {row.side && !working && <span className="genex-publish-card-side">{row.side}</span>}
       <RowEnd row={row} on={on} onSwitch={onSwitch} />

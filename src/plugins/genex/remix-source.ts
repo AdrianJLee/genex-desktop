@@ -23,10 +23,14 @@ import { HOST_GIT_CONFIG, hostGitEnv } from "../../substrate/git-policy.ts";
 
 const exec = promisify(execFile);
 
-/** The most Genex keeps of a game's source by default, all files together (its source store's limit for an account). */
-export const SOURCE_MAX_BYTES = 15 * 1024 ** 3;
-/** The most files Genex keeps of a game's source by default. */
-export const SOURCE_MAX_FILES = 5_000;
+/**
+ * The most of a game's source Studio stages, all files together. genex.games' own limit for an
+ * account reaches only the CLI (with its push token), never Studio, so this one is the most Genex
+ * keeps for anyone: it never refuses what Genex would take, and Genex refuses what an account may not.
+ */
+export const SOURCE_MAX_BYTES = 100 * 1024 ** 3;
+/** The most files of a game's source Studio stages: as with the bytes, never fewer than Genex keeps. */
+export const SOURCE_MAX_FILES = 50_000;
 /** A file at least this big goes to Git LFS by its own name: the upload refuses requests near 100 MB. */
 export const LFS_FILE_BYTES = 50 * 1024 ** 2;
 /** Unreal's packages and levels: binary, and most of an Unreal project's size. */
@@ -61,6 +65,8 @@ export interface StagedSource {
 /** How a staging lists the game's own files: paths relative to the folder, with `/` between parts. */
 export interface RemixSourceDeps {
   listFiles(gameDir: string): Promise<string[]>;
+  /** The most a remix's source may be; {@link SOURCE_MAX_FILES} and {@link SOURCE_MAX_BYTES} when not given. */
+  limits?: { files: number; bytes: number };
 }
 
 /** Folders that are never a game's own, wherever they are: history, Studio's, Genex's, packages, agent settings. */
@@ -266,7 +272,8 @@ export async function stageRemixSource(
   const files = await projectFiles(root, await deps.listFiles(root));
   const bytes = totalBytes(files);
   if (files.length === 0) throw new RemixSourceError(GenexRemixProblem.Empty);
-  if (files.length > SOURCE_MAX_FILES || bytes > SOURCE_MAX_BYTES) throw new RemixSourceError(GenexRemixProblem.TooBig);
+  const limits = deps.limits ?? { files: SOURCE_MAX_FILES, bytes: SOURCE_MAX_BYTES };
+  if (files.length > limits.files || bytes > limits.bytes) throw new RemixSourceError(GenexRemixProblem.TooBig);
   await writeStaged(dest, files);
   await routeBigFiles(
     dest,

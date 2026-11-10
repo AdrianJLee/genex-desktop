@@ -2018,8 +2018,10 @@ export default {
     "Пакеты ещё не установлены — «{install}» запускается одним нажатием.",
   "Its packages aren’t installed yet.": "Пакеты игры ещё не установлены.",
   "Its project didn’t go, so no one can remix it yet.": "Проект не отправился, поэтому ремиксить игру пока нельзя.",
-  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
-    "Проект слишком большой для ремикса: Genex хранит до 5 ГБ и 5 000 файлов.",
+  "Its project is too big to remix: Genex keeps up to 100 GB and 50,000 files.":
+    "Проект слишком большой для ремикса: Genex хранит до 100 ГБ и 50 000 файлов.",
+  "There isn’t enough free space on this computer to remix this game.":
+    "На этом компьютере не хватает свободного места, чтобы сделать ремикс этой игры.",
   "Its session failed before it delivered anything.": "Сессия упала, ничего не доставив.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "Исходники лежат в твоём собственном репозитории: чтобы разрешить ремиксы, запусти genex make-remixable в папке игры.",
@@ -6531,4 +6533,20 @@ export default {
   "Ready to publish": "Готово к публикации",
   "{platforms} can take up to an hour.": "{platforms} может занять до часа.",
   "{platform} build didn’t start": "Сборка {platform} не началась",
+  "Checking the archive": "Проверяем архив",
+  Packing: "Упаковываем",
+  "Sending the project for Remix": "Отправляем проект для Remix",
+  "{done} of {total} · {speed}/s": "{done} из {total} · {speed}/с",
+  "{done} of {total} · {speed}/s · under a minute left": "{done} из {total} · {speed}/с · меньше минуты",
+  "{done} of {total} · {speed}/s · about {minutes} min left": "{done} из {total} · {speed}/с · ещё около {minutes} мин",
+  "{done} of {total} · {speed}/s · about {hours} h left": "{done} из {total} · {speed}/с · ещё около {hours} ч",
+  "{done} of {total} · {speed}/s · about {hours} h {minutes} min left":
+    "{done} из {total} · {speed}/с · ещё около {hours} ч {minutes} мин",
+  "{size} MB/s": "{size} МБ/с",
+  "{size} KB/s": "{size} КБ/с",
+  "Verifying…": "Проверка…",
+  "Unpacking…": "Распаковка…",
+  "Installing… {percent}% · {speed} · about {minutes} min left":
+    "Установка… {percent}% · {speed} · осталось около {minutes} мин",
+  "Installing… {percent}% · {speed} · under a minute left": "Установка… {percent}% · {speed} · осталось меньше минуты",
 } satisfies LocaleCatalog;

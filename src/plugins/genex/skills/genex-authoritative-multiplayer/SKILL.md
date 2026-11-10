@@ -28,7 +28,9 @@ preface, this preface wins.
     the default is that less 2 bots (at most 3), and a `bots` count that leaves no seat free is
     refused by name. `genex__room {"action":"status"}` answers the room's last REPORT, its `ctx.log`
     lines and errors, and `rooms`: more than 1 (its `warning`) means players did not all fit and
-    opened another room, so start with fewer bots. Read it while the room runs, as the card's testing reference describes. Stop it with
+    opened another room, so start with fewer bots; the REPORT's `perRoom` lists each room's seats,
+    players and bots. A client that joins with a `matchKey` needs the same `"matchKey"` on `start`,
+    or the bots play in the game's other pool. Read it while the room runs, as the card's testing reference describes. Stop it with
     `genex__room {"action":"stop"}`. The preview hands the game the room's address through the
     embed SDK's local test mode (`getAuthorityUrls()`): never write the address into the game.
 - Before a publish, validate, then play it in a local room with bots, and say what you saw. Never

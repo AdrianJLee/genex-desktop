@@ -103,13 +103,16 @@ const ROOM_KEPT_LINES = 20;
 /** The most a validation's output is read. */
 const ROOM_OUTPUT_MAX_BYTES = 1024 * 1024;
 /** Keys a call may carry. */
-const CALL_KEYS = new Set(["action", "bots", "latencyMs"]);
+const CALL_KEYS = new Set(["action", "bots", "latencyMs", "matchKey"]);
+/** A client's `matchKey` as the toolchain takes it for its bots: 1 to 32 of a-z 0-9 . _ : -, a letter or digit first. */
+const MATCH_KEY = /^[a-z0-9][a-z0-9._:-]{0,31}$/;
 
 const MESSAGE = {
   Action: `genex__room's action is one of ${Object.values(GenexRoomAction).join(", ")}`,
   UnknownKey: (key: string) => `genex__room takes no ${JSON.stringify(key)}`,
   Bots: `bots is a whole number from 0 to ${ROOM_MAX_BOTS}`,
   Latency: `latencyMs is a whole number from 0 to ${ROOM_MAX_LATENCY_MS}`,
+  MatchKey: "matchKey is the one the game's client asks for: 1 to 32 of a-z 0-9 . _ : -, a letter or digit first",
   NoRoom:
     'This game declares no room module: put {"authority":{"module":"server/room.js"}} in genex.json (package.json genex.authority for a game with one), with the module in server/',
   NoModule: (module: string) => `The room module ${module} is not a file in this game`,
@@ -125,8 +128,9 @@ const MESSAGE = {
     `No port in ${range.join("-")} is free for the room: close another game's room and try again`,
   NoFreeSeat: (bots: number, seats: number, most: number) =>
     `${bots} bots leave no seat free: this game's authority block has maxPlayers ${seats}, the preview takes one seat and your own test client needs another, or it opens a second room the bots are not in. Start with at most ${most} bots`,
-  Split: (rooms: number, seats: number | null) =>
-    `The room server holds ${rooms} rooms${seats === null ? "" : ` of ${seats} seats`}: players who did not fit opened another room, so not everyone meets. Start with fewer bots`,
+  Split: (rooms: number, seats: number | null, each: readonly ReportedRoom[]) =>
+    `The room server holds ${rooms} rooms${seats === null ? "" : ` of ${seats} seats`}${each.length ? ` (${each.map(MESSAGE.RoomSeats).join("; ")})` : ""}: players who did not fit opened another room, so not everyone meets. Start with fewer bots`,
+  RoomSeats: (room: ReportedRoom) => `${room.id}: ${room.players} of ${room.seats} seats (${room.bots} bots)`,
 } as const;
 
 /** A validation's verdict, as the toolchain printed it (`passed`, `moduleSha256`, typed `failures`). */
@@ -148,7 +152,10 @@ export interface RoomStatus {
   errors: unknown[];
   /** The bots it was started with. */
   bots: number;
-  /** Seats in each room: the authority block's `maxPlayers`; null where only the module's config names them. */
+  /**
+   * Seats in each room: its REPORT's `perRoom` once the room reports, before that the authority
+   * block's `maxPlayers`; null where neither has said yet.
+   */
   seatsPerRoom: number | null;
   /** How many rooms the room server holds now, from its last REPORT; null before the first. */
   rooms: number | null;
@@ -228,6 +235,16 @@ interface RoomCall {
   /** The bots the call names; null for the default, which depends on the room's seats. */
   bots: number | null;
   latencyMs: number;
+  /** The pool the bots join, as the game's client names it (`--bot-match-key`); absent for the game's one pool. */
+  matchKey?: string;
+}
+
+/** One running room in a REPORT's `perRoom`: its id (a session's code), seats, players and how many are bots. */
+interface ReportedRoom {
+  id: string;
+  seats: number;
+  players: number;
+  bots: number;
 }
 
 /** The room module a game declares, and the seats of each of its rooms where the block names them. */
@@ -249,7 +266,10 @@ export function roomCall(args: Record<string, unknown>): RoomCall {
   const latencyMs = args.latencyMs ?? 0;
   if (bots !== null && !isWhole(bots, ROOM_MAX_BOTS)) throw new Error(MESSAGE.Bots);
   if (!isWhole(latencyMs, ROOM_MAX_LATENCY_MS)) throw new Error(MESSAGE.Latency);
-  return { action, bots, latencyMs };
+  const { matchKey } = args;
+  if (matchKey === undefined) return { action, bots, latencyMs };
+  if (typeof matchKey !== "string" || !MATCH_KEY.test(matchKey)) throw new Error(MESSAGE.MatchKey);
+  return { action, bots, latencyMs, matchKey };
 }
 
 /**
@@ -275,6 +295,23 @@ function declaredSeats(block: unknown): number | null {
 function reportedRooms(report: unknown): number | null {
   const rooms = typeof report === "object" && report !== null ? Reflect.get(report, "rooms") : undefined;
   return typeof rooms === "number" && Number.isInteger(rooms) && rooms >= 0 ? rooms : null;
+}
+
+const isCount = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
+
+/** One `perRoom` entry, when it is whole. */
+function reportedRoom(entry: unknown): ReportedRoom | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  const [id, seats, players, bots] = ["id", "seats", "players", "bots"].map((key) => Reflect.get(entry, key));
+  const whole = typeof id === "string" && isCount(seats) && isCount(players) && isCount(bots);
+  return whole ? { id, seats, players, bots } : null;
+}
+
+/** Each running room a REPORT lists (`perRoom`, authority-dev 0.1.6), or none from an older one. */
+function reportedPerRoom(report: unknown): ReportedRoom[] {
+  const each = typeof report === "object" && report !== null ? Reflect.get(report, "perRoom") : undefined;
+  if (!Array.isArray(each)) return [];
+  return each.map(reportedRoom).filter((room): room is ReportedRoom => room !== null);
 }
 
 /** A protocol line's kind and its JSON (or text) value; null for any other line. */
@@ -401,10 +438,13 @@ export class GenexRoomService {
         rooms: null,
         warning: null,
       };
-    const { url, reachable, previewJoined, report, logs, errors, bots, seatsPerRoom } = room;
+    const { url, reachable, previewJoined, report, logs, errors, bots } = room;
     const rooms = reportedRooms(report);
+    const each = reportedPerRoom(report);
+    // The rooms' own seats once the toolchain reports them: the module's config decides, not only the block.
+    const seatsPerRoom = each[0]?.seats ?? room.seatsPerRoom;
     const split = rooms !== null && rooms > 1;
-    const warning = split ? { code: RoomWarning.Split, detail: MESSAGE.Split(rooms, seatsPerRoom) } : null;
+    const warning = split ? { code: RoomWarning.Split, detail: MESSAGE.Split(rooms, seatsPerRoom, each) } : null;
     return {
       running: true,
       url,
@@ -549,6 +589,7 @@ export class GenexRoomService {
       String(ROOM_REPORT_EVERY_MS),
       "--stop-on-stdin-close",
       ...listeners,
+      ...(call.matchKey === undefined ? [] : ["--bot-match-key", call.matchKey]),
     ]);
     // The toolchain writes nothing of the game's; the module itself runs in QuickJS with no files at all.
     // Its own clients (the bots) reach it directly, never through the sandbox's proxy, which Node's

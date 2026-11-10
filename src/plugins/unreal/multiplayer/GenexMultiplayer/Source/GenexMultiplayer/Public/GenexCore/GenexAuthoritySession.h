@@ -137,10 +137,23 @@ struct AuthorityOptions {
    *  neither, GENEX_AUTHORITY_URL (Studio's local server); with none of the three the join is refused. */
   std::vector<std::string> urls;
   /** The cluster's regions (EmbedIdentity::AuthorityRegions(), §17.1 *Regions*): one url per sample of each
-   *  region is probed (3 samples, 4 s ceiling, 1 s grace after the first answer), the nearest region is
-   *  joined, and a join refused 503 twice there moves to the next-best one at once. Each region is its own
-   *  matchmaking pool. Empty: `urls` are the regions. */
+   *  region is probed (3 samples, 4 s ceiling, 1 s grace after the first answer), a pool join looks for players
+   *  in the regions in reach first (`regionRule`), then the nearest region is joined, and a join refused 503
+   *  twice there moves to the next-best one at once. Each region is its own matchmaking pool. Empty: `urls` are
+   *  the regions. */
   std::vector<regions::Region> regions;
+  /** How a pool join picks its region (§17.1 *Finding players*). Players (the default): the regions in reach are
+   *  asked for a room that already has players (Colyseus's plain join), nearest first, and a room is opened in the
+   *  nearest one only when none has. Nearest: the nearest region, whoever is elsewhere. A join by code, a private
+   *  create, a rejoin and `url` never search. */
+  regions::RegionRule regionRule = regions::RegionRule::Players;
+  /** The farthest region asked for players, as a probe's round trip in ms; anything but a finite number >= 0 is
+   *  regions::kMaxPingMs (350). */
+  double maxPingMs = regions::kMaxPingMs;
+  /** The one region to play in, by its name in `regions` (a player's own choice; without `regions` a flat url is its
+   *  own name): no other is joined or created in. Empty, or a name the cluster does not have, is no pin. A join by
+   *  code ignores it and still walks every region. */
+  std::string region;
   /** The game's slug: everyone who passes the same id shares a room. Must equal the token's `slug`. */
   std::string gameId;
   /** Display-name fallback; the verified token's name wins. */

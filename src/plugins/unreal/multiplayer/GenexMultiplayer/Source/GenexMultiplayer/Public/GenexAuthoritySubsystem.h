@@ -44,6 +44,16 @@ struct GENEXMULTIPLAYER_API FGenexAuthorityOptions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") FString Url;
 	/** The authority cluster; empty = the sign-in answer's authorityUrls. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") TArray<FString> Urls;
+	/** How the join picks its region (PROTOCOL.md §17.1 *Finding players*). Players (default): the regions in reach
+	 *  (MaxPingMs) are asked for a room that already has players, nearest first, and a room is opened in the nearest
+	 *  one only when none has, so players in different regions meet. Nearest: the nearest region, whoever is
+	 *  elsewhere. Url always joins that one server. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Regions") EGenexRegionRule RegionRule = EGenexRegionRule::Players;
+	/** The farthest region asked for players, as a probe's round trip in ms; anything but a finite number >= 0 is 350. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Regions", meta = (ClampMin = "0")) float MaxPingMs = 350.f;
+	/** The one region to play in, by its name in the sign-in answer's regions (a player's own choice; a Urls entry is
+	 *  its own name): no other is joined or created in. Empty, or a name the cluster does not have, is no pin. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Regions") FString Region;
 	/** Predict your own entity with the room's preset (off: draw it from the server's state). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") bool bPredict = true;
 	/** Predict a predicting physics room's bodies near you with the plugin's physics core (PROTOCOL.md

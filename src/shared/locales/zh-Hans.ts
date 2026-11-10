@@ -6119,4 +6119,10 @@ export default {
     "Genex 无法读取 Mac 应用 {app} 是否可以使用网络。如果玩家无法连接，请在 Genex 中重新打包并发布。",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "Mac 应用 {app} 无法连接互联网：它在没有网络权限的沙盒中运行，因此任何玩家都无法连接。请在 Genex 中重新打包，然后发布。没有发送任何内容。",
+  "Live · update ready": "已上线 · 更新已就绪",
+  "Not built": "未构建",
+  "Built · older than your game": "已构建 · 比你的游戏旧",
+  "Ready to publish": "可以发布",
+  "{platforms} can take up to an hour.": "{platforms} 最多可能需要一小时。",
+  "{platform} build didn’t start": "{platform} 构建未开始",
 } satisfies LocaleCatalog;

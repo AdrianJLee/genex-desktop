@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.16.15",
+  "version": "1.16.16",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -232,7 +232,8 @@
         "skills/genex-authoritative-multiplayer/references/projectiles.md",
         "skills/genex-authoritative-multiplayer/references/room-template.md",
         "skills/genex-authoritative-multiplayer/references/settings.md",
-        "skills/genex-authoritative-multiplayer/references/testing.md"
+        "skills/genex-authoritative-multiplayer/references/testing.md",
+        "skills/genex-authoritative-multiplayer/references/levels.md"
       ]
     },
     {

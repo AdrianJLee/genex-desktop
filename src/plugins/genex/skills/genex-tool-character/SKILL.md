@@ -24,7 +24,7 @@ this preface wins.
 - These lanes are Meshy; Studio has no provider option. A prop, vehicle or building is the model
   card's lane (Tripo), or Local Blender's.
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-character/SKILL.md v1.40.0 sha256 524f750abfb0ae62d4053fe453a3a364648e1d87c761c7e5c13e35c32a091baf -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-tool-character/SKILL.md v1.41.0 sha256 71593811f2d7c72736b130523548742b26b53f0e8fe85c9d470f2155c56ed795 -->
 ---
 name: genex-tool-character
 description: Generate a rigged, animated 3D character or creature with `npx genex character` and `npx genex creature`, then give it any move in plain words with `npx genex character animate`. Covers the guided concept-to-final flow, the one-shot direct path, the 8-way locomotion set, and searching the ready-made animation library. Files download to ./assets.
@@ -75,7 +75,7 @@ Each step needs the previous step's generation id. The approval flags are not
 ceremony: they record that a person actually looked and chose, and each step
 costs credits.
 
-## The knobs (Meshy 7 on every lane)
+## The knobs (Meshy 7.1 on every lane)
 
 Ultra and 4k textures are the defaults; every knob is priced in the quote:
 

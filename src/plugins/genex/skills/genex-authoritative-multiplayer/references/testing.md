@@ -71,14 +71,17 @@ where the module itself ended or faulted:
 |---|---|---|
 | `build_failed` | The bundler could not build it: a syntax error, a missing file, a package import, a Node built-in. | Import only your own files; the module gets everything else through `ctx`. |
 | `outside_root` | The bundle reads a file outside the game folder (or outside `--root`). | Keep every import inside the game; pass `--root .` for shared files in `src/`. |
-| `too_large` | The bundle is over 1 MiB. | Move data out of the module; generate it in `init`. |
+| `too_large` | The bundle is over 2 MiB. | Move data out of the module; generate it in `init`. |
 | `unavailable_global` | It uses something the sandbox does not have (`Date`, `setTimeout`, `fetch`, …). | Use `ctx.tick` and `ctx.dt` for time, `ctx.random()` for randomness. |
 | `global_object` | It reaches `globalThis` instead of `ctx`. | Pass what it needs through `ctx` and `ctx.state`. |
 | `load_failed` | Its top level or `init` failed (the code says how: an error, a timeout). | Keep the top level to constants and functions; make `init` small. |
 | `module_ended` | The fuzz run ended the room: a timeout, too much memory, too many faults, a CPU budget broken. | Bound every loop by entities or players; never grow state without limit. |
-| `module_fault` | It faulted at least once and survived: a hook threw, or its output broke a limit. | Fix the throw or the output; validation allows none. |
+| `module_fault` | It faulted at least once and survived: a hook threw, or its output broke a limit, or (code `physics_budget`) its physics went over the servers' bound; `physicsTick` in the report says what it read. | Fix the throw or the output; for physics, have fewer bodies awake or spawn them over more ticks. Validation allows none. |
 | `nondeterministic` | Two replays of the same run gave different states. | Remove every source of difference: a clock, unordered iteration, state outside `ctx.state`. |
-| `tick_budget` | Its tick time p99 is over the local budget. | Do less per tick; move setup to `init` and `onJoin`. |
+| `tick_budget` | The p99 of its own code's CPU a tick is over the local budget (physics and a world's steps are not counted here: each has its own bound, below). | Do less per tick; move setup to `init` and `onJoin`. |
+| `world_cost` | A `world` costs more operations a step than a room can afford, counted the same on every machine. The detail names the world and the count; the report's `world` holds it. | Fewer solids where bodies walk and stand: fine overlapping boxes cost most, a large map of plain ones little. |
+| `shot_world_missing` | The module calls `ctx.world.claim` or asks `world: "shot"` and has no shot world for that room, or its `worlds` and `shotWorlds` do not cover each other. | Export `shotWorld` from `genex world shots`, with a `shotWorlds` entry for each name in `worlds`; the room's own world never answers in its place. |
+| `shot_world_cost` | A ray through the module's `shotWorld` costs more than a room's budget holds: many solids on one line, or a pile in one place. | Fit it again with `genex world shots`, or take out what overlaps. |
 | `orphan_entity` | After a tick, an entity was owned by a player who had left. | Remove (or disown) a player's entities in `onLeave`. |
 | `log_flood` | One tick logged more lines, or longer lines, than a room keeps. | Log on events, not every tick. |
 | `short_run` | The fuzz ran fewer than 30 simulated seconds (`--duration`). | Run it with the default duration; a short run never passes. |
@@ -100,9 +103,9 @@ nothing:
 | `bundle_failed` | The bundler's reason is printed beside it (a reason from the table above). |
 | `validate_failed` | Each validation failure is printed; the full report is at `.genex/authority/report.json`. Reproduce with `npx genex-authority-dev validate`. |
 | `sha_disagrees` | The report passed a different bundle than the one to upload: update `@genex-ai/authority-dev` and deploy again. |
-| `too_large` | The module is over 1 MiB, or its report over 64 KiB. |
+| `too_large` | The module is over 2 MiB, or its report over 64 KiB. |
 | `config_out_of_range` | The tick rate or player count is one Genex does not run (20, 30, 60 or 120 Hz, 120 only with physics; 1 to 64 players). |
-| `requires_pro` | The game's owner needs Genex Pro for Genex's servers. Testing on this machine stays free. |
+| `requires_pro` | The game's owner needs Genex Pro for Genex's servers (Genex's free tier is off). Testing on this machine stays free. |
 | `upload_failed` | The module store refused the upload or could not be reached; try again. |
 
 ## Before calling it done

@@ -148,11 +148,11 @@ export function registerPluginsIpc(handle: IpcHandle, deps: PluginsIpcDeps): voi
     publishFromDialog(core, p?.project, p?.review, p?.title, undefined, p?.remix, p?.replaceNativePage, p?.platforms),
   );
   handle("studio:plugins.genex-publish-apps", async (p) => {
-    await publishAppsFromDialog(core, p?.project, p?.title, undefined, p?.remix, p?.platforms);
+    await publishAppsFromDialog(core, p?.project, p?.title, undefined, p?.remix, p?.platforms, p?.release);
     // Genex holds what the press sends: the review watch follows the publish to its check.
     core.genexReviewFollow(p?.project);
   });
-  handle("studio:plugins.genex-cloud-build", async (p) => cloudBuildFromDialog(core, p?.project, p?.platform));
+  handle("studio:plugins.genex-cloud-build", async (p) => cloudBuildFromDialog(core, p?.project, p?.platform, p?.keep));
   handle("studio:plugins.genex-review-status", async (p) => core.genexReviewStatus(p?.project, p?.refresh));
   handle("studio:plugins.genex-review-lines", async () => core.genexReviewLines());
   // A review card's Fix with agent and Request human review: the press is the consent to what it sends.

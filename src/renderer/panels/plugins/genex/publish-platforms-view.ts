@@ -200,12 +200,15 @@ export const RUNNING_CLOUD: ReadonlySet<CloudBuildState> = new Set([
   CloudBuildState.Publishing,
 ]);
 
+/** Whether Genex still has something to say of a build: one it kept and then dropped is as if never made. */
+const stillCounts = (build: GenexCloudBuild): boolean => build.failure !== CloudBuildFailure.Expired;
+
 /** The newest build Genex made, or makes, of `row`'s app; none before the first. */
 export function newestCloudBuild(
   row: PublishPlatform,
   native: GenexNativeRecord | undefined,
 ): GenexCloudBuild | undefined {
-  const builds = (native?.cloud?.builds ?? []).filter(forRow(row));
+  const builds = (native?.cloud?.builds ?? []).filter(forRow(row)).filter(stillCounts);
   return builds.reduce<GenexCloudBuild | undefined>(
     (newest, build) => (!newest || Date.parse(build.startedAt) > Date.parse(newest.startedAt) ? build : newest),
     undefined,
@@ -235,7 +238,8 @@ export function cloudErrors(
 /** What a failed build on Genex says, and whether trying again can help. */
 function cloudFailureWords(build: GenexCloudBuild): { detail: string; end: PlatformEnd } {
   const failure = build.failure ?? CloudBuildFailure.Failed;
-  const detail = WORDS.cloudFailed[failure] ?? WORDS.cloudFailed[CloudBuildFailure.Failed];
+  const said = failure === CloudBuildFailure.Expired ? CloudBuildFailure.Failed : failure;
+  const detail = WORDS.cloudFailed[said] ?? WORDS.cloudFailed[CloudBuildFailure.Failed];
   return { detail, end: failure === CloudBuildFailure.Quota ? PlatformEnd.None : PlatformEnd.CloudRetry };
 }
 

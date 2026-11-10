@@ -1316,7 +1316,15 @@ function PressSection({
 >): JSX.Element | null {
   const { card } = parts;
   if (moment.press)
-    return <PublishCardPress plan={card.plan} busy={card.busy} pressing={card.acting} onPress={card.press} />;
+    return (
+      <PublishCardPress
+        plan={card.plan}
+        busy={card.busy}
+        note={card.note}
+        pressing={card.acting}
+        onPress={card.press}
+      />
+    );
   if (!moment.dialogPress || !shown) return null;
   const apps = parts.apps !== null;
   return (

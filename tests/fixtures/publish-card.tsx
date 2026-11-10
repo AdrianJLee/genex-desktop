@@ -1,9 +1,12 @@
 /**
  * Test-owned production Publish dialog over a fake `window.studio`, for the Publish card of a game
  * made in an engine (canvas "Publish to every platform", round 4): an Unreal game on a Mac whose Mac
- * app is made here and whose Windows app Genex Cloud builds, and a Unity game with all four platforms.
- * Each scene is a moment of the card: apps older than the game, built, building, done, failed, a first
- * publish, a switch turned off, and the rows while the folder is still read.
+ * app is made here and whose Windows app Genex Cloud builds, the same game on a PC, and a Unity game
+ * with all four platforms. Each scene is a moment of the card (canvas "Publish: Mac and Windows
+ * together", flow A): nothing built, both building, the Mac app built while Windows builds, Windows
+ * following by itself, both built, done, apps older than the game, a newer one ready, a failed build,
+ * a build that didn't start, a send that failed, a switch turned off, and the rows while the folder
+ * is still read.
  */
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -18,6 +21,7 @@ import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import {
   CloudBuildFailure,
   CloudBuildState,
+  CloudSendState,
   GenexAction,
   type GenexCloudBuild,
   type GenexNativeRecord,
@@ -44,7 +48,24 @@ async function settle(frames = 10) {
 }
 
 /** The moments of the card. */
-type Scene = "old" | "built" | "building" | "done" | "failed" | "sendFailed" | "first" | "unity" | "loading";
+type Scene =
+  | "first"
+  | "startFails"
+  | "macBuilt"
+  | "following"
+  | "bothBuilt"
+  | "windowsBuilt"
+  | "old"
+  | "built"
+  | "updateReady"
+  | "building"
+  | "done"
+  | "failed"
+  | "failedFirst"
+  | "sendFailed"
+  | "pc"
+  | "unity"
+  | "loading";
 
 const ago = (ms: number): string => new Date(Date.now() - ms).toISOString();
 const CHANGED = (): string => ago(HOUR);
@@ -71,14 +92,22 @@ const unreal = (mac: PublishPlatformState, builtAgo: number): PublishPlatform[] 
 ];
 
 const PLATFORMS: Record<Scene, () => PublishPlatform[]> = {
+  first: () => unreal(Missing, 0),
+  startFails: () => unreal(Missing, 0),
+  macBuilt: () => unreal(Ready, 2 * MINUTE),
+  following: () => unreal(Ready, 30 * MINUTE),
+  bothBuilt: () => unreal(Ready, 40 * MINUTE),
+  windowsBuilt: () => unreal(Missing, 0),
   old: () => unreal(Stale, 2 * DAY),
   // Built after the agent was asked in `old`: the new Mac app has landed.
   built: () => unreal(Ready, 0),
+  updateReady: () => unreal(Ready, 2 * MINUTE),
   building: () => unreal(Ready, 30 * MINUTE),
   done: () => unreal(Ready, 30 * MINUTE),
   failed: () => unreal(Ready, 30 * MINUTE),
+  failedFirst: () => unreal(Ready, 10 * MINUTE),
   sendFailed: () => unreal(Ready, 10 * MINUTE),
-  first: () => unreal(Ready, 10 * MINUTE),
+  pc: () => unreal(Missing, 0),
   loading: () => unreal(Ready, 30 * MINUTE),
   unity: () => [
     row(PublishTarget.Web, Ready),
@@ -93,9 +122,16 @@ const cloud = (state: CloudBuildState, startedAgo: number, extra: Partial<GenexC
   jobId: `job-${startedAgo}`,
   state,
   startedAt: ago(startedAgo),
-  ...(state === CloudBuildState.Done ? { finishedAt: ago(startedAgo - 20 * MINUTE) } : {}),
+  ...(state === CloudBuildState.Done || state === CloudBuildState.Built
+    ? { finishedAt: ago(startedAgo - 20 * MINUTE) }
+    : {}),
   ...extra,
 });
+/** A Windows app Genex Cloud built and keeps for the publish. */
+const kept = (startedAgo: number): GenexCloudBuild =>
+  cloud(CloudBuildState.Built, startedAgo, { held: true, installedBytes: Math.round(2.9 * 1024 ** 3) });
+/** A Windows app Genex Cloud still builds and keeps. */
+const keeping = (startedAgo: number): GenexCloudBuild => cloud(CloudBuildState.Building, startedAgo, { held: true });
 const sent = (platform: string, sentAgo: number) => ({
   platform,
   arch: platform === "mac" ? "universal" : "x64",
@@ -115,8 +151,16 @@ function appsOf(of: Scene): GenexNativeRecord {
   });
   const COMPILE = ["Source/Strike/Weapon.cpp(88): error C2065: 'FVector': undeclared identifier", "and 3 more"];
   const records: Record<Scene, () => GenexNativeRecord> = {
+    first: () => record([], []),
+    startFails: () => record([], []),
+    macBuilt: () => record([], [keeping(20 * MINUTE)]),
+    // Published while Genex Cloud still built it: it goes to players as soon as it is built.
+    following: () => record([sent("mac", 5 * MINUTE)], [cloud(CloudBuildState.Building, 26 * MINUTE)]),
+    bothBuilt: () => record([], [kept(HOUR)]),
+    windowsBuilt: () => record([], [kept(HOUR)]),
     old: () => record([sent("mac", 2 * DAY)], [cloud(CloudBuildState.Done, 13 * HOUR)]),
     built: () => record([sent("mac", 2 * DAY)], [cloud(CloudBuildState.Done, 13 * HOUR)]),
+    updateReady: () => record([sent("mac", 2 * DAY)], [cloud(CloudBuildState.Done, 13 * HOUR), kept(50 * MINUTE)]),
     building: () => record([sent("mac", 20 * MINUTE)], [cloud(CloudBuildState.Done, DAY), cloud(CloudBuildState.Building, 8 * MINUTE)]),
     done: () => record([sent("mac", 20 * MINUTE)], [cloud(CloudBuildState.Done, 40 * MINUTE)]),
     failed: () =>
@@ -124,20 +168,39 @@ function appsOf(of: Scene): GenexNativeRecord {
         [sent("mac", 20 * MINUTE)],
         [cloud(CloudBuildState.Done, DAY), cloud(CloudBuildState.Failed, 10 * MINUTE, { failure: CloudBuildFailure.Compile, errors: COMPILE })],
       ),
+    failedFirst: () =>
+      record([], [cloud(CloudBuildState.Failed, 10 * MINUTE, { failure: CloudBuildFailure.Compile, errors: COMPILE })]),
     sendFailed: () => ({
       ...record([], [cloud(CloudBuildState.Done, 40 * MINUTE)]),
       failed: [{ platform: "mac", arch: "universal", error: "Couldn't get an upload token (HTTP 413)." }],
     }),
-    first: () => record([], []),
+    pc: () => ({ ...record([], []), cloud: { supported: true, builds: [] } }),
     loading: () => record([sent("mac", 20 * MINUTE)], [cloud(CloudBuildState.Done, 40 * MINUTE)]),
     unity: () => record([sent("mac", 40 * MINUTE)], []),
   };
-  return records[of]();
+  const made = records[of]();
+  if (!cloudSend || !made.cloud) return made;
+  return { ...made, cloud: { ...made.cloud, send: cloudSend } };
 }
+
+/** The scenes of a game that has no page on Genex yet. */
+const NOT_ON_GENEX: ReadonlySet<Scene> = new Set([
+  "first",
+  "startFails",
+  "macBuilt",
+  "bothBuilt",
+  "windowsBuilt",
+  "failedFirst",
+  "pc",
+]);
+/** What Genex Cloud refuses a build with in `startFails`: never shown, only copied. */
+const REFUSED = "This account has used its Genex Cloud builds for this month.";
 
 let scene: Scene = "old";
 /** The agent's Mac build has landed in the folder while the card stays open (`land`). */
 let landed = false;
+/** The game's project on its way to Genex Cloud since the card's Build, or the one that didn't arrive. */
+let cloudSend: NonNullable<GenexNativeRecord["cloud"]>["send"];
 /**
  * The game each scene opens: the Mac app the agent builds in `old` lands in `built`, so those two share
  * one game (the card remembers its ask per game); every other scene is a game of its own.
@@ -145,7 +208,7 @@ let landed = false;
 let game = GAME;
 const composed: ComposeInChat[] = [];
 window.addEventListener(COMPOSE_IN_CHAT_EVENT, (event) => composed.push((event as CustomEvent<ComposeInChat>).detail));
-const onGenex = (): boolean => scene !== "first";
+const onGenex = (): boolean => !NOT_ON_GENEX.has(scene);
 const state = (): GenexPublishState => ({
   version: 1,
   project: game,
@@ -174,14 +237,21 @@ fake.stub("genexPublishPlatforms", async () => {
   if (scene === "loading") await new Promise<void>((resolve) => (release = resolve));
   return landed ? PLATFORMS.built() : PLATFORMS[scene]();
 });
-fake.stub("genexPublishApps", async (_project, _title, _remix, platforms) => {
+fake.stub("genexPublishApps", async (_project, _title, _remix, platforms, release) => {
   asked.push(`apps:${(platforms ?? []).join("+")}`);
+  if (release?.length) asked.push(`release:${release.join("+")}`);
 });
 fake.stub("genexPublish", async (_project, _review, _title, _remix, _replace, platforms) => {
   asked.push(`web:${(platforms ?? []).join("+")}`);
 });
-fake.stub("genexCloudBuild", async (_project, platform) => {
-  asked.push(`cloud:${platform}`);
+fake.stub("genexCloudBuild", async (_project, platform, keep) => {
+  asked.push(`cloud:${platform}${keep ? ":keep" : ""}`);
+  const startedAt = new Date().toISOString();
+  // The record says at once how the project's way up goes: on its way, or refused.
+  cloudSend =
+    scene === "startFails"
+      ? { platform, startedAt, state: CloudSendState.Failed, error: REFUSED }
+      : { platform, startedAt, state: CloudSendState.Sending };
 });
 fake.stub("genexPublishReview", async () => ({ included: ["index.html"], excluded: [] }));
 const NOTHING: GenexReviewStatus = {
@@ -198,7 +268,6 @@ fake.stub("assetLibraryStates", async () => ({ project: game, states: [], unread
 fake.stub("projectAssets", async () => ({ project: game, assets: [], truncated: false, skipped: [] }));
 fake.stub("assetLibrary", async () => ({ assets: [], nextCursor: null }));
 window.studio = fake.api;
-document.documentElement.dataset.platform = "darwin";
 initializeAppearance();
 const genex = { manifest, source: "bundled", enabled: true, removed: false, state: "enabled" } as unknown as PluginInfo;
 
@@ -254,6 +323,9 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   }));
   scene = options.scene ?? "old";
   landed = false;
+  cloudSend = undefined;
+  // The computer the game is made on: a Mac, or the PC of the `pc` scene.
+  document.documentElement.dataset.platform = scene === "pc" ? "win32" : "darwin";
   game = scene === "old" || scene === "built" ? GAME : `${GAME}-${scene}`;
   asked.length = 0;
   composed.length = 0;

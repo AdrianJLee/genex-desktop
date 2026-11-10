@@ -877,8 +877,10 @@ export const CloudBuildState = {
   /** Asked for, waiting for a computer. */
   Queued: "queued",
   Building: "building",
-  /** Built and checked: Genex is putting it on the game's page. */
+  /** Built: Genex is checking it, then puts it on the game's page or keeps it (`held`). */
   Publishing: "publishing",
+  /** Built, checked and kept by Genex: players get it once a publish asks (`genex native build-release`). */
+  Built: "built",
   /** On the game's page for its players. */
   Done: "done",
   Failed: "failed",
@@ -901,6 +903,8 @@ export const CloudBuildFailure = {
   SourceTooBig: "source-too-big",
   /** The game has no page on Genex for the app to go on. */
   NotOnGenex: "not-on-genex",
+  /** Built and kept, but no publish asked for it in time: Genex no longer has it. */
+  Expired: "expired",
   /** Anything else, or a code this Studio does not know. */
   Failed: "failed",
 } as const;
@@ -918,6 +922,14 @@ export interface GenexCloudBuild {
   failure?: CloudBuildFailure;
   /** What its log says went wrong, in the project's own paths; on a failed compile or cook only. */
   errors?: string[];
+  /**
+   * Genex keeps what it builds until a publish asks for it: players get nothing of it before. Absent
+   * once a publish asked (it then goes on the game's page as soon as it is built), and on a build
+   * that was asked to go there by itself.
+   */
+  held?: boolean;
+  /** How big the app it built is once installed, in bytes; absent until it is built. */
+  installedBytes?: number;
 }
 
 /** How sending a game's project to Genex for a build stands. Kept in the publish workspace: never rename one. */
@@ -937,6 +949,8 @@ export interface GenexCloudSend {
   state: CloudSendState;
   /** Why it stopped, in the CLI's words; absent when it was stopped here or Studio closed. */
   error?: string;
+  /** A publish asked for the app while its project was still on its way: its build goes to players once built. */
+  released?: boolean;
 }
 
 /**

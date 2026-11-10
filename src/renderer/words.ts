@@ -4017,7 +4017,8 @@ export const PUBLISH_PLATFORM_WORDS = {
     [CloudBuildFailure.SourceTooBig]: t("The project is too big for Genex to build"),
     [CloudBuildFailure.NotOnGenex]: t("Publish the game first, then Genex can build it"),
     [CloudBuildFailure.Failed]: t("The build on Genex failed"),
-  } satisfies Record<CloudBuildFailure, string>,
+    // A build Genex kept and then dropped is never a row's words: it reads as no build (`newestCloudBuild`).
+  } satisfies Record<Exclude<CloudBuildFailure, typeof CloudBuildFailure.Expired>, string>,
   cloudBuild: t("Build on Genex"),
   cloudBuildLabel: (name: string) => t("Build the {app} on Genex", { app: name }),
   cloudRetry: t("Try again"),
@@ -4127,7 +4128,12 @@ export const PUBLISH_CARD_WORDS = {
   live: t("Live"),
   liveCurrent: t("Live · up to date"),
   liveOlder: t("Live · older than your game"),
-  notPublished: t("Not published"),
+  /** Players have an older one, and a newer one is built: Publish gives it to them. */
+  liveUpdateReady: t("Live · update ready"),
+  /** Players don't have it. No app of it is made, one is made but the game changed since, or one waits for Publish. */
+  notBuilt: t("Not built"),
+  builtOlder: t("Built · older than your game"),
+  readyToPublish: t("Ready to publish"),
   inReview: t("In review"),
   notApproved: t("Not approved"),
   sendFailed: t("Couldn’t send"),
@@ -4162,7 +4168,7 @@ export const PUBLISH_CARD_WORDS = {
     t("Update {platforms} and take {down} down", { platforms, down }),
   publishAndTakeDown: (platforms: string, down: string) =>
     t("Publish to {platforms} and take {down} down", { platforms, down }),
-  /** The button when apps must be built first: the agent builds them, and a second press publishes them. */
+  /** The button when apps must be built first, here and on Genex Cloud at once: a second press publishes them. */
   build: (platforms: string) => t("Build {platforms}", { platforms }),
   buildCount: (count: number) => t("Build {count} apps", { count }),
   /** The button while it works. */
@@ -4171,10 +4177,14 @@ export const PUBLISH_CARD_WORDS = {
   publishing: (platforms: string) => t("Publishing to {platforms}", { platforms }),
   /** Under the button while Genex Cloud builds: so a long wait doesn't scare anyone. */
   cloudTakesLong: t("It can take up to an hour."),
+  /** The same, when the button names more than the app Genex Cloud builds: "Windows can take up to an hour." */
+  cloudTakesLongFor: (platforms: string) => t("{platforms} can take up to an hour.", { platforms }),
   /** A row's switch, for a screen reader. */
   switchLabel: (name: string) => t("Publish to {name}", { name }),
   /** An error block under the rows: what failed, never the log itself. */
   buildError: (platform: string) => t("{platform} build error", { platform }),
+  /** The game's project never reached Genex Cloud, or it refused it: nothing is being built. */
+  startError: (platform: string) => t("{platform} build didn’t start", { platform }),
   sendError: (platform: string) => t("{platform} app didn’t send", { platform }),
   /** The block once the agent has the error: its clock is at its end. */
   fixing: (platform: string) => t("Agent is fixing the {platform} build", { platform }),

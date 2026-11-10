@@ -6452,4 +6452,10 @@ export default {
     "Macアプリ {app} がネットワークを使えるかどうかをGenexで読み取れませんでした。プレイヤーが接続できない場合は、Genexでもう一度パッケージ化して公開してください。",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "Macアプリ {app} はインターネットに接続できません。ネットワークアクセスのないサンドボックスで動くため、どのプレイヤーも接続できません。Genexでもう一度パッケージ化してから公開してください。何も送信されていません。",
+  "Live · update ready": "公開中 · 更新の準備完了",
+  "Not built": "未ビルド",
+  "Built · older than your game": "ビルド済み · ゲームより古い版",
+  "Ready to publish": "公開できます",
+  "{platforms} can take up to an hour.": "{platforms}は最大1時間ほどかかることがあります。",
+  "{platform} build didn’t start": "{platform}のビルドを開始できませんでした",
 } satisfies LocaleCatalog;

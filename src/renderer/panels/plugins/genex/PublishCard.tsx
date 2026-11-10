@@ -126,11 +126,14 @@ export function PublishCardRows({
 export function PublishCardPress({
   plan,
   busy,
+  note,
   pressing,
   onPress,
 }: {
   plan: PressPlan | null;
   busy: BusyPress | null;
+  /** The line under the button while Genex Cloud works. */
+  note: string | null;
   /** A press is being sent now. */
   pressing: boolean;
   onPress: (plan: PressPlan) => void;
@@ -148,7 +151,7 @@ export function PublishCardPress({
             </span>
           )}
         </Button>
-        {busy.cloud && <p className="genex-publish-card-note">{WORDS.cloudTakesLong}</p>}
+        {note && <p className="genex-publish-card-note">{note}</p>}
       </div>
     );
   if (!plan) return null;
@@ -166,7 +169,7 @@ export function PublishCardPress({
       >
         {plan.label}
       </Button>
-      {busy?.cloud && <p className="genex-publish-card-note">{WORDS.cloudTakesLong}</p>}
+      {note && <p className="genex-publish-card-note">{note}</p>}
     </div>
   );
 }
@@ -234,7 +237,7 @@ function ErrorBlockRow({ block }: { block: ErrorBlock }): JSX.Element {
           {WORDS.tryAgain}
         </button>
       )}
-      <CopyError text={block.text} />
+      {block.text !== "" && <CopyError text={block.text} />}
     </div>
   );
 }

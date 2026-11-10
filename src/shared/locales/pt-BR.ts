@@ -6529,4 +6529,10 @@ export default {
     "O Genex não conseguiu ler se o app de Mac {app} pode usar a rede. Se os jogadores não conseguirem se conectar, empacote-o de novo no Genex e publique.",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "O app de Mac {app} não consegue acessar a internet: ele está em um sandbox sem acesso à rede, então nenhum jogador conseguiria se conectar. Empacote-o de novo no Genex e depois publique. Nada foi enviado.",
+  "Live · update ready": "No ar · atualização pronta",
+  "Not built": "Não gerada",
+  "Built · older than your game": "Gerada · mais antiga que o seu jogo",
+  "Ready to publish": "Pronta para publicar",
+  "{platforms} can take up to an hour.": "{platforms} pode levar até uma hora.",
+  "{platform} build didn’t start": "A geração de {platform} não começou",
 } satisfies LocaleCatalog;

@@ -300,6 +300,29 @@ async function listFilesTool(args: ToolArgs, context: ToolContext): Promise<Live
     .join("\n");
 }
 
+/** Match oldText against file source, falling back to matching CRLF/LF line ending differences while preserving file endings. */
+function matchTargetText(
+  source: string,
+  oldText: string,
+  newText: string,
+): { targetOld: string; targetNew: string; at: number } {
+  let at = source.indexOf(oldText);
+  if (at >= 0) return { targetOld: oldText, targetNew: newText, at };
+  const isCrlf = source.includes("\r\n");
+  if (isCrlf && !oldText.includes("\r\n") && oldText.includes("\n")) {
+    const crlfOld = oldText.replace(/\r?\n/g, "\r\n");
+    if (source.indexOf(crlfOld) >= 0) {
+      return { targetOld: crlfOld, targetNew: newText.replace(/\r?\n/g, "\r\n"), at: source.indexOf(crlfOld) };
+    }
+  } else if (!isCrlf && oldText.includes("\r\n")) {
+    const lfOld = oldText.replace(/\r\n/g, "\n");
+    if (source.indexOf(lfOld) >= 0) {
+      return { targetOld: lfOld, targetNew: newText.replace(/\r\n/g, "\n"), at: source.indexOf(lfOld) };
+    }
+  }
+  return { targetOld: oldText, targetNew: newText, at: -1 };
+}
+
 async function editFileTool(args: ToolArgs, context: ToolContext): Promise<LiveToolResult> {
   const file = await context.resolveFile(args.path, true);
   const { oldText, newText } = args;
@@ -307,9 +330,9 @@ async function editFileTool(args: ToolArgs, context: ToolContext): Promise<LiveT
   if (!validEdit) throw new Error(MESSAGE.InvalidEdit);
   if ((await stat(file)).size > LOCAL_TOOL_LIMITS.maxFileBytes) throw new Error(MESSAGE.TooLargeToEdit);
   const source = await readFile(file, "utf8");
-  const at = source.indexOf(oldText);
-  if (at < 0 || source.indexOf(oldText, at + 1) >= 0) throw new Error(MESSAGE.AmbiguousEdit);
-  await writeFile(file, source.slice(0, at) + newText + source.slice(at + oldText.length));
+  const { targetOld, targetNew, at } = matchTargetText(source, oldText, newText);
+  if (at < 0 || source.indexOf(targetOld, at + 1) >= 0) throw new Error(MESSAGE.AmbiguousEdit);
+  await writeFile(file, source.slice(0, at) + targetNew + source.slice(at + targetOld.length));
   return "Edited one matching block";
 }
 

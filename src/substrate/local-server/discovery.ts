@@ -375,17 +375,25 @@ function merged(first: ModelFacts, later: ModelFacts | undefined): ModelFacts {
 
 /** A model as a picker row: unknown context planned for, tool calling taken as given unless refused. */
 function modelRow(id: string, facts: ModelFacts, override?: ModelOverride): EngineModel {
-  const contextTokens = facts.context?.tokens ?? override?.contextWindow ?? UNKNOWN_CONTEXT_TOKENS;
+  const isContextReported = facts.context !== undefined;
+  const isVisionReported = facts.vision !== undefined;
+  const isToolsReported = facts.tools !== undefined;
+
+  const contextTokens = isContextReported ? facts.context!.tokens : (override?.contextWindow ?? UNKNOWN_CONTEXT_TOKENS);
   const contextSource =
     facts.context?.source ?? (override?.contextWindow ? ModelContextSource.Configured : ModelContextSource.Unknown);
-  const supportsVision = facts.vision ?? override?.supportsVision ?? false;
-  const supportsTools = facts.tools ?? override?.supportsTools ?? true;
+
+  const supportsVision = isVisionReported ? facts.vision! : (override?.supportsVision ?? false);
+  const supportsTools = isToolsReported ? facts.tools! : (override?.supportsTools ?? true);
 
   return {
     id,
     label: facts.label ?? id,
     contextWindow: contextTokens,
     contextSource,
+    reportedContextWindow: facts.context?.tokens,
+    reportedVision: facts.vision,
+    reportedTools: facts.tools,
     maxTokens: Math.min(MAX_REPLY_TOKENS, Math.floor(contextTokens / 4)),
     supportsTools,
     supportsVision,
@@ -393,7 +401,6 @@ function modelRow(id: string, facts: ModelFacts, override?: ModelOverride): Engi
     installed: true,
     ...(facts.context || override?.contextWindow ? {} : { note: MESSAGE.UnknownContext() }),
   };
-}  };
 }
 
 /** The server's models as picker rows, each with what the server says about its context, vision and tools. */

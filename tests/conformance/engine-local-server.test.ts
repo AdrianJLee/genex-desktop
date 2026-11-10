@@ -13,7 +13,10 @@ import { LocalServerEngine } from "../../src/substrate/engines/local-server.ts";
 import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
 import { EngineError } from "../../src/substrate/engines/types.ts";
 import {
+  memoryModelOverridesStore,
   memoryServerSettings,
+  type ModelOverridesStore,
+  sanitizeModelOverride,
   serverSettings,
   type ServerSettings,
 } from "../../src/substrate/local-server/settings.ts";
@@ -52,6 +55,7 @@ const lookup = async (host: string) => {
 interface Setup {
   settings?: ServerSettings;
   keys?: ApiKeyStore;
+  overrides?: ModelOverridesStore;
   ollamaHost?: string;
   findPorts?: number[];
 }
@@ -62,6 +66,7 @@ async function engine(setup: Setup = {}) {
     root: path.join(root, "engine"),
     settings: setup.settings ?? memoryServerSettings(),
     keys: setup.keys ?? memoryKeyStore(),
+    ...(setup.overrides ? { overridesStore: setup.overrides } : {}),
     lookup,
     ...(setup.ollamaHost ? { ollamaHost: setup.ollamaHost } : {}),
     ...(setup.findPorts ? { findPorts: setup.findPorts } : {}),
@@ -286,6 +291,37 @@ describe("reading each server's models", () => {
       messages: [{ role: "user", content: "w ".repeat(60_000) }],
     });
     assert.equal(response.message.content, "ok", "the server's own limit decides");
+  });
+
+  it("uses model overrides from models.json when server does not report context or vision", async () => {
+    const server = await fake();
+    const overrides = memoryModelOverridesStore();
+    await overrides.write("my-model", { contextWindow: 200_000, supportsVision: true });
+    const local = await connected(server, { overrides });
+    const [row] = await local.models();
+    assert.equal(row?.contextWindow, 200_000);
+    assert.equal(row?.contextSource, "configured");
+    assert.equal(row?.supportsVision, true);
+  });
+
+  it("server reported context and vision win over models.json overrides", async () => {
+    const server = await fake({ flavor: "tabbyapi", props: { nCtx: 131_072, vision: false } });
+    const overrides = memoryModelOverridesStore();
+    await overrides.write(FAKE_MODEL, { contextWindow: 65_536, supportsVision: true });
+    const local = await connected(server, { overrides });
+    const [row] = await local.models();
+    assert.equal(row?.contextWindow, 131_072, "what the server reports always wins");
+    assert.equal(row?.supportsVision, false, "what the server reports always wins");
+  });
+
+  it("sanitizes invalid entries in models.json overrides", () => {
+    assert.equal(sanitizeModelOverride(null), null);
+    assert.equal(sanitizeModelOverride({ contextWindow: "huge" }), null);
+    assert.equal(sanitizeModelOverride({ contextWindow: 100 }), null);
+    assert.deepEqual(sanitizeModelOverride({ contextWindow: 65536, supportsVision: true, extra: "drop" }), {
+      contextWindow: 65536,
+      supportsVision: true,
+    });
   });
 });
 

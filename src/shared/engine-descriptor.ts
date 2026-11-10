@@ -96,6 +96,9 @@ export interface EngineDescriptor {
     contextWindow: number;
     /** The window is the engine's guess, not a figure the provider reported (an Ollama model not loaded yet). */
     contextEstimated?: boolean;
+    reportedContextWindow?: number;
+    reportedVision?: boolean;
+    reportedTools?: boolean;
     supportsFast?: boolean;
     supportsTools: boolean;
     supportsVision: boolean;

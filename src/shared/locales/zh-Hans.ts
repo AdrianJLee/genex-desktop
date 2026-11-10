@@ -1999,7 +1999,8 @@ export default {
   "Local server options": "本地服务器选项",
   "Open model settings (models.json)…": "打开模型配置 (models.json)…",
   "Edit context and vision configuration file": "编辑上下文与视觉支持配置文件",
-  "Configure: {name}": "配置模型：{name}",
+  Configure: "配置",
+  "Reported by server": "服务端已报告",
   "Custom context length and vision for this model on your local server. Saved to models.json.":
     "为此本地服务器模型自定义上下文长度和视觉支持。已保存至 models.json。",
   "Context window (tokens)": "上下文大小 (Tokens)",

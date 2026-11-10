@@ -81,6 +81,9 @@ export interface EngineModel {
   contextWindow: number;
   supportsFast?: boolean;
   contextSource?: ModelContextSource;
+  reportedContextWindow?: number;
+  reportedVision?: boolean;
+  reportedTools?: boolean;
   hardLimitTokens?: number;
   maxTokens: number;
   /** Agentic use requires tool calling; models without it are offered for chat/judging only. */

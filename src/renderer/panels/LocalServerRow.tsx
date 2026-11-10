@@ -60,10 +60,7 @@ function ServerMenu({ act }: { act: RowActions }): JSX.Element {
     >
       <>
         <DropdownMenuItem onSelect={() => void window.studio.localServerOpenConfig()}>
-          <ItemWords
-            title={t("Open model settings (models.json)…")}
-            line={t("Edit context and vision configuration file")}
-          />
+          <ItemWords title={WORDS.openModelSettings} line={t("Edit context and vision configuration file")} />
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={act.change}>
           <ItemWords title={WORDS.change} line={WORDS.changeLine} />
@@ -316,6 +313,10 @@ function ModelConfigDialog({
   onClose: () => void;
   onSave: (override: ModelOverride | null) => Promise<void>;
 }): JSX.Element {
+  const isContextReported = model.reportedContextWindow !== undefined;
+  const isVisionReported = model.reportedVision !== undefined;
+  const isToolsReported = model.reportedTools !== undefined;
+
   const [contextWindow, setContextWindow] = useState(String(model.contextWindow || 131072));
   const [supportsVision, setSupportsVision] = useState(Boolean(model.supportsVision));
   const [supportsTools, setSupportsTools] = useState(model.supportsTools !== false);
@@ -325,11 +326,17 @@ function ModelConfigDialog({
     setSaving(true);
     try {
       const parsed = Number.parseInt(contextWindow, 10);
-      await onSave({
-        contextWindow: Number.isFinite(parsed) && parsed > 0 ? parsed : 131072,
-        supportsVision,
-        supportsTools,
-      });
+      const override: ModelOverride = {};
+      if (!isContextReported && Number.isFinite(parsed) && parsed > 0) {
+        override.contextWindow = parsed;
+      }
+      if (!isVisionReported) {
+        override.supportsVision = supportsVision;
+      }
+      if (!isToolsReported) {
+        override.supportsTools = supportsTools;
+      }
+      await onSave(Object.keys(override).length ? override : null);
       onClose();
     } finally {
       setSaving(false);
@@ -348,59 +355,103 @@ function ModelConfigDialog({
 
   return (
     <DialogSurface
-      title={t("Configure: {name}", { name: model.label })}
-      description={t("Custom context length and vision for this model on your local server. Saved to models.json.")}
+      title={WORDS.configure}
+      titleIcon={
+        /* Model identifiers are user-configured on their own server and may name private projects: mask them in analytics */
+        <span data-analytics-mask className="font-mono text-xs text-ink-2 truncate max-w-[200px]">
+          ({model.label || model.id})
+        </span>
+      }
+      description={WORDS.configureLine}
       onDismiss={onClose}
       size="md"
     >
       <div className="flex flex-col gap-4 py-2">
         <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-medium text-foreground">{t("Context window (tokens)")}</label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-foreground">{WORDS.contextTokens}</label>
+            {isContextReported && (
+              <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">
+                {WORDS.reportedByServer}
+              </span>
+            )}
+          </div>
           <input
             type="number"
             min={1024}
-            max={2097152}
+            max={10000000}
             step={1024}
+            disabled={isContextReported}
             value={contextWindow}
             onChange={(e) => setContextWindow(e.target.value)}
-            className="h-8 rounded border border-input bg-field px-2.5 font-mono text-xs text-foreground focus:outline-none focus:border-accent-ink"
+            className={`h-8 rounded border border-input bg-field px-2.5 font-mono text-xs text-foreground focus:outline-none focus:border-accent-ink ${
+              isContextReported ? "opacity-60 cursor-not-allowed" : ""
+            }`}
           />
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            {PRESET_CONTEXTS.map((preset) => (
-              <button
-                type="button"
-                key={preset.value}
-                onClick={() => setContextWindow(String(preset.value))}
-                className={`rounded border px-2 py-0.5 text-micro transition-colors ${
-                  contextWindow === String(preset.value)
-                    ? "border-accent bg-accent/10 font-medium text-accent"
-                    : "border-input bg-surface-raised text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
+          {!isContextReported && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {PRESET_CONTEXTS.map((preset) => (
+                <button
+                  type="button"
+                  key={preset.value}
+                  onClick={() => setContextWindow(String(preset.value))}
+                  className={`rounded border px-2 py-0.5 text-micro transition-colors ${
+                    contextWindow === String(preset.value)
+                      ? "border-accent bg-accent/10 font-medium text-accent"
+                      : "border-input bg-surface-raised text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2.5 pt-2 border-t border-line">
-          <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground select-none">
-            <Checkbox checked={supportsVision} onChange={(e) => setSupportsVision(e.target.checked)} />
-            <span>{t("Supports vision (image understanding)")}</span>
+          <label
+            className={`flex items-center justify-between gap-2 text-xs text-foreground select-none ${isVisionReported ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <span className="flex items-center gap-2">
+              <Checkbox
+                checked={supportsVision}
+                disabled={isVisionReported}
+                onChange={(e) => setSupportsVision(e.target.checked)}
+              />
+              <span>{WORDS.supportsVision}</span>
+            </span>
+            {isVisionReported && (
+              <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">
+                {WORDS.reportedByServer}
+              </span>
+            )}
           </label>
-          <label className="flex items-center gap-2 cursor-pointer text-xs text-foreground select-none">
-            <Checkbox checked={supportsTools} onChange={(e) => setSupportsTools(e.target.checked)} />
-            <span>{t("Supports tool calling (file editing, terminal)")}</span>
+          <label
+            className={`flex items-center justify-between gap-2 text-xs text-foreground select-none ${isToolsReported ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <span className="flex items-center gap-2">
+              <Checkbox
+                checked={supportsTools}
+                disabled={isToolsReported}
+                onChange={(e) => setSupportsTools(e.target.checked)}
+              />
+              <span>{WORDS.supportsTools}</span>
+            </span>
+            {isToolsReported && (
+              <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">
+                {WORDS.reportedByServer}
+              </span>
+            )}
           </label>
         </div>
 
         <div className="flex items-center justify-between gap-2 pt-4 border-t border-line">
           <Button variant="ghost" size="sm" onClick={reset} disabled={saving}>
-            {t("Reset to default")}
+            {WORDS.resetDefault}
           </Button>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
-              {t("Cancel")}
+              {WORDS.cancel}
             </Button>
             <Button variant="default" size="sm" onClick={save} disabled={saving}>
               {saving ? t("Saving…") : t("Save")}
@@ -412,7 +463,6 @@ function ModelConfigDialog({
   );
 }
 
-/** The saved server's models: each with its context, and whether it sees or cannot build. */
 function ServerModels({
   models,
   onConfigure,
@@ -433,7 +483,7 @@ function ServerModels({
           key={model.id}
           className="group flex min-h-8 flex-wrap items-center justify-between gap-x-2.5 px-2.5 py-1.5 rounded-md hover:bg-surface-raised cursor-pointer transition-colors"
           onClick={() => onConfigure(model)}
-          title={t("Click to configure context window and vision")}
+          title={WORDS.clickToConfigure}
         >
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2.5">
             <span className="min-w-0 break-all font-mono text-xs text-ink">{model.label}</span>

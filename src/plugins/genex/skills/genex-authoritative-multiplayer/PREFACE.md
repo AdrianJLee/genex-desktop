@@ -13,8 +13,11 @@ preface, this preface wins.
   ships `@genex-ai/authority-dev` itself, stages `server/` and every file the module imports beside
   the public copy (never in it), and the publish bundles and validates the module before any game
   file moves. A module that fails stops the publish with each typed reason in the job's error; fix
-  the module and publish again. On Genex's servers the owner needs Genex Pro: a free account is
-  refused with `authority_requires_pro` after validation, and nothing is uploaded.
+  the module and publish again. The job's `room` (in `genex__publish-status`) says it plainly:
+  `validated` and `uploaded` with the module's `moduleSha256` once it passed and went up with this
+  build, or the gate's `failures`; tell the person from it. On Genex's servers the owner needs
+  Genex Pro: a free account is refused with `authority_requires_pro` after validation, and nothing
+  is uploaded.
 - Testing it on this computer works, with `genex__room` in place of the card's
   `npx genex-authority-dev` commands (a game's commands cannot download it):
   - `genex__room {"action":"validate"}` is the publish gate's own check: `{passed, failures}`.

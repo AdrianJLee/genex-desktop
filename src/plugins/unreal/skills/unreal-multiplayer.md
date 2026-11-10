@@ -71,8 +71,13 @@ Say what you saw. Never report the game as online before a published draft of it
 
 ## 5. Publish
 
-The room module travels with the game: `genex__publish` stages `server/` (and every game file it
-imports) beside the build and uploads it to Genex's private module store, after the same validation
-as `genex__room`. The owner needs Genex Pro for server-authoritative rooms. The first publish names
-the game's slug (`genex__publish-status`): put it in `Slug` above, then `unreal__package-game` and
-publish again so the app players install joins its rooms.
+Players install an Unreal game as an app, so the person publishes it from the stage strip's
+Publish with the app `unreal__package-game` made; `genex__publish` refuses an Unreal game, so never
+call it. That Publish carries the room module: before any app goes, Genex stages `server/` (and
+every game file it imports), runs the same validation as `genex__room`, stores the module in
+Genex's private module store and makes it what the game's live rooms run. A module that fails the
+gate fails the publish and no app goes. `genex__publish-status` reports it in `job.room`: validated,
+uploaded and the module's sha, or the gate's failures. The owner needs Genex Pro for
+server-authoritative rooms. The first publish names the game's slug (`genex__publish-status`): put
+it in `Slug` above, then `unreal__package-game` and ask the person to publish again so the app
+players install joins its rooms.

@@ -33,6 +33,9 @@ preface, this preface wins.
     embed SDK's local test mode (`getAuthorityUrls()`): never write the address into the game.
 - Before a publish, validate, then play it in a local room with bots, and say what you saw. Never
   report a server-authoritative game as online before a draft of it passed.
+- A passed draft's `draftPlayUrl` (in `genex__publish-status`) is where two people test the rooms:
+  a guest joins there with no account, and the owner's Genex Pro pays for the rooms. `draftUrl` is
+  the owner's draft page, behind their sign-in.
 
 ## Packages
 

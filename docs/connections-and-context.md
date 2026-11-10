@@ -824,8 +824,9 @@ build game after consent, opening the npm registry for that one install. A Studi
 gets player identity by mapping Studio's copy in its import map instead, and Studio then calls
 `initEmbed()` for it; multiplayer cannot be added there yet. Studio connects every web game it
 publishes that brings no SDK of its own, so genex.games can sign its players in. Multiplayer is tested only on the published draft: build,
-add the package, publish a draft with `genex__publish`, then play the draft link. Studio's
-preview stays single-player. Fixture profiles refuse the CLI and package tools.
+add the package, publish a draft with `genex__publish`, then play the tested draft's own address
+(`draftPlayUrl` in `genex__publish-status`, `preview--<slug>`), which a guest can open; `draftUrl`
+is the owner's draft page on genex.games, behind sign-in. Studio's preview stays single-player. Fixture profiles refuse the CLI and package tools.
 
 ### The game's Genex cover
 

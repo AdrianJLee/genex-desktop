@@ -1797,7 +1797,10 @@ export class GenexTools {
     const native = await this.#nativeRecord(project);
     const remix = { ...(await this.#remixRecord(project)), sending: this.#remixSends.has(project) };
     const hosted = await this.#hostedOf(project, state);
-    return { ...state, ...(warnings.length ? { warnings } : {}), cover, native, remix, ...hosted };
+    // The tested draft's own address (`preview--<slug>`): anyone with it plays the draft, as a guest
+    // or signed in. The draft page (`draftUrl`) is the owner's and asks for their sign-in.
+    const draftPlay = state.readyDraft ? { draftPlayUrl: state.readyDraft.url } : {};
+    return { ...state, ...(warnings.length ? { warnings } : {}), cover, native, remix, ...hosted, ...draftPlay };
   }
   /**
    * Whether Genex's page for the game plays a web version (its owner read names a public build),

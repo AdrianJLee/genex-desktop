@@ -3544,7 +3544,10 @@ Genex:
   after it. Then "Update Mac and Windows" / "Publish to Mac and Windows" ("… 3 platforms" from three)
   sends the switched-on ready apps (`platforms` on `genex-publish-apps` and `genex-publish`,
   `publishedApps`' `platforms` choice) and gives players the app Genex Cloud keeps (`CardWork.Release`,
-  `release` on `genex-publish-apps`). One Genex Cloud still builds goes with them and reaches players
+  `release` on `genex-publish-apps`). A kept app built before the game's last change is no such app:
+  like a build in the folder that is older than the game it stays where it is, its row says "Built ·
+  older than your game" and the button builds it again (`keptBuild`, `builtBeforeChange`). One Genex
+  Cloud still builds goes with them and reaches players
   as soon as it is built (`sendingRows`: only beside an app that is made, or for a game players have
   already, and not while the agent still builds here); its row then stays at work and the busy
   button names only what is on its way to players (`busyWords`). A live platform switched off is
@@ -3736,11 +3739,18 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   each platform; with no app of its own to list the game, the publish lists it with the first build
   that is ready (`--gallery --title`). A publish that comes while the project is still going up is
   remembered while Studio runs (`#cloudReleases`, `send.released`) and asked for the moment Genex
-  names the build. Genex keeps an app for a while only: a release it refuses
+  names the build (`#releaseSent`: a few times while Genex can't be reached, never again once it
+  refused); the send's record says whether Genex keeps what it builds (`send.held`), so only a kept
+  one is offered to Publish. Kept apps asked for while another publish of the game runs (a web build
+  of the same press) wait for it and go once it is done (`#releasesWaiting`, `publishApps`'
+  `release`); a build asked for while a publish is still making the game's project is refused.
+  Genex keeps an app for a while only: a release it refuses
   (`cloud_build_not_releasable`) is said in Genex's words and the record then calls the build failed
   (`CloudBuildFailure.Expired`, or `failed`), which the rows read as no build, so the next press
-  builds; and each kept app is read again once after Studio starts (`#recheckKept`,
-  `refreshCloudBuild`), so the row says "Not built" before anyone presses Publish. A release Genex
+  builds (an older build's failure is no news once a newer one was dropped: `newestCloudBuild`); and
+  each kept app is read again once after Studio starts (`#recheckKept`, `refreshCloudBuild`; a read
+  Genex didn't answer is tried again at a later read of the record), so the row says "Not built"
+  before anyone presses Publish. A release Genex
   can't do right now (it can't read the build, or the build is changing) is said in Genex's words
   too and changes nothing: the build is still kept (`unansweredRelease`). Two answers about
   one build never take it back a step (`latestOf`). Each job is kept in the workspace's

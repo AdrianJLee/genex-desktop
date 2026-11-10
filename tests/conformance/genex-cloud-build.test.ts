@@ -9,6 +9,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
+import { setTimeout as wait } from "node:timers/promises";
 import {
   buildReleaseArgs,
   buildStatusArgs,
@@ -410,6 +411,14 @@ async function toolsWithBuildCli(options: { buildsApps?: boolean; engine?: strin
   const fail = path.join(root, "fail-send");
   /** While this file exists Genex no longer keeps the build: a release is refused, and its status says expired. */
   const refuse = path.join(root, "refuse-release");
+  /** While these files exist the game's project is still being made, an app is still going up, a release is still being answered. */
+  const holdInit = path.join(root, "hold-init");
+  const holdPublish = path.join(root, "hold-publish");
+  const holdRelease = path.join(root, "hold-release");
+  /** While this file exists Genex can't be read: `build-status` fails. */
+  const failStatus = path.join(root, "fail-status");
+  /** While this file exists the build is changing under a release: Genex says to ask again. */
+  const busy = path.join(root, "busy-release");
   const kept = path.join(root, "kept-build");
   const standIn = path.join(root, "build-cli.mjs");
   await writeFile(
@@ -423,15 +432,24 @@ const say = (answer) => {
   process.stdout.write(JSON.stringify(answer));
   process.exit(0);
 };
+const held = async (file) => {
+  while (existsSync(file)) await new Promise((go) => setTimeout(go, 20));
+};
 if (args[0] === "init") {
+  await held(${JSON.stringify(holdInit)});
   mkdirSync(".genex", { recursive: true });
   writeFileSync(".genex/project.json", JSON.stringify({ slug: "seyda-neen", id: "p1", status: "draft" }));
   process.exit(0);
 }
 if (args[0] === "cover") say({ coverUrl: null, coverSource: null });
+if (args[1] === "build-status" && existsSync(${JSON.stringify(failStatus)})) {
+  process.stderr.write("✗ Couldn't reach Genex.\\n");
+  process.exit(1);
+}
 const listing = args.includes("--gallery") ? { listing: { state: "published", slug: "seyda-neen" } } : {};
 const ended = "2026-10-23T10:21:00.000Z";
 if (args[1] === "publish") {
+  await held(${JSON.stringify(holdPublish)});
   const app = { platform: "mac", arch: "universal", version: "1.0+3f2a9c1d0e4b", sizeBytes: 10, publishedAt: ended };
   say({ build: { ...app, sha256: "3f".repeat(32) }, engine: "unreal", ...listing });
 }
@@ -448,6 +466,11 @@ if (args[1] === "build") {
   say({ build: { ...build, state: "queued", ...(keep ? { held: true } : {}) } });
 }
 if (args[1] === "build-release") {
+  await held(${JSON.stringify(holdRelease)});
+  if (existsSync(${JSON.stringify(busy)})) {
+    process.stdout.write(JSON.stringify({ error: "cloud_build_busy", message: "The build changed. Try again." }));
+    process.exit(1);
+  }
   if (existsSync(${JSON.stringify(refuse)})) {
     const message = "Genex no longer keeps this build. Build the app again, then publish it.";
     process.stderr.write("✗ " + message + "\\n");
@@ -493,7 +516,21 @@ say({ build: existsSync(${JSON.stringify(kept)}) ? keeping : { ...build, state: 
       JSON.stringify({ version: 1, project: "seyda", connected: true, slug: "seyda-neen" }),
     );
   };
-  return { make, runs, game, onGenex, hold, fail, refuse, workspace: path.join(root, "host", "publish", "seyda") };
+  const workspace = path.join(root, "host", "publish", "seyda");
+  const holds = { hold, holdInit, holdPublish, holdRelease };
+  return { make, runs, game, onGenex, ...holds, fail, refuse, failStatus, busy, workspace };
+}
+
+/** How long `until` waits for what it was told to see before the test fails. */
+const UNTIL_MS = 15_000;
+
+/** Wait until `seen` says so: for what happens behind a press, which no call answers for. */
+async function until(seen: () => Promise<boolean>): Promise<void> {
+  const deadline = Date.now() + UNTIL_MS;
+  while (!(await seen())) {
+    if (Date.now() > deadline) throw new Error("what the test waited for never happened");
+    await wait(20);
+  }
 }
 
 const servers: GenexFixtureApi[] = [];
@@ -599,6 +636,7 @@ describe("the Genex plugin's builds on Genex", () => {
     const pressed = await genex.cloudBuild("seyda", "windows", game);
     assert.equal(pressed.cloud?.send?.state, CloudSendState.Sending, "the press answers while the upload runs");
     assert.equal(pressed.cloud?.send?.platform, "windows");
+    assert.equal(pressed.cloud?.send?.held, undefined, "its app goes on the game's page once built");
     const again = await genex.cloudBuild("seyda", "windows", game);
     assert.equal(again.cloud?.send?.state, CloudSendState.Sending, "a second press joins the send under way");
     await rm(hold);
@@ -691,7 +729,11 @@ describe("an app Genex builds and keeps for a publish", () => {
     const { make, runs, game } = await toolsWithBuildCli({ api: await fixtureApi() });
     const genex = make();
     const started = await genex.cloudBuild("seyda", "windows", game, true);
-    assert.equal(started.cloud?.send?.state, CloudSendState.Sending);
+    assert.deepEqual(
+      [started.cloud?.send?.state, started.cloud?.send?.held],
+      [CloudSendState.Sending, true],
+      "on its way, and the record says Genex keeps what it builds",
+    );
     await genex.cloudSettled();
     assert.deepEqual(words(await runs()), ["init", "build --hold", "build-status"]);
     const view = await genex.publishView("seyda");
@@ -803,6 +845,161 @@ describe("an app Genex builds and keeps for a publish", () => {
     await genex.cloudSettled();
     assert.equal(words(await runs()).includes("build-release"), false);
     assert.equal((await genex.publishView("seyda")).native?.cloud?.builds[0]?.state, CloudBuildState.Built);
+  });
+
+  it("asks once for a build a publish wanted when Genex refuses it for good, and the record says it is not built", async () => {
+    const { make, runs, game, hold, refuse } = await toolsWithBuildCli({ api: await fixtureApi() });
+    await writeFile(hold, "");
+    const genex = make();
+    await genex.cloudBuild("seyda", "windows", game, true);
+    await genex.publishAppsOnly("seyda", [MAC_APP], "Seyda Neen", {}, undefined, ["windows"]);
+    await genex.publishWait("seyda");
+    // Genex has nothing of the build to give by the time its project is up.
+    await writeFile(refuse, "");
+    await rm(hold);
+    await genex.cloudSettled();
+    assert.equal(
+      words(await runs()).filter((run) => run === "build-release").length,
+      1,
+      "a refusal is an answer: asking again changes nothing",
+    );
+    const view = await genex.publishView("seyda");
+    assert.deepEqual(
+      view.native?.cloud?.builds.map((build) => [build.state, build.failure, build.held]),
+      [[CloudBuildState.Failed, CloudBuildFailure.Expired, undefined]],
+    );
+  });
+
+  it("asks again for a build a publish wanted while Genex can't release it right now, and the build stays kept", async () => {
+    const { make, runs, game, hold, busy } = await toolsWithBuildCli({ api: await fixtureApi() });
+    await writeFile(hold, "");
+    const genex = make();
+    await genex.cloudBuild("seyda", "windows", game, true);
+    await genex.publishAppsOnly("seyda", [MAC_APP], "Seyda Neen", {}, undefined, ["windows"]);
+    await genex.publishWait("seyda");
+    await writeFile(busy, "");
+    await rm(hold);
+    await genex.cloudSettled();
+    assert.equal(
+      words(await runs()).filter((run) => run === "build-release").length,
+      4,
+      "asked a few times, then no more",
+    );
+    const view = await genex.publishView("seyda");
+    assert.deepEqual(
+      view.native?.cloud?.builds.map((build) => [build.state, build.held]),
+      [[CloudBuildState.Built, true]],
+      "still kept: the next Publish gives it to players",
+    );
+  });
+
+  it("starts a new build when asked while Genex is still answering the release of the one before", async () => {
+    const { make, runs, game, hold, holdRelease } = await toolsWithBuildCli({ api: await fixtureApi() });
+    await writeFile(hold, "");
+    const genex = make();
+    await genex.cloudBuild("seyda", "windows", game, true);
+    await genex.publishAppsOnly("seyda", [MAC_APP], "Seyda Neen", {}, undefined, ["windows"]);
+    await genex.publishWait("seyda");
+    await writeFile(holdRelease, "");
+    await rm(hold);
+    // The project is up and its app built; the release a publish asked for is still under way.
+    await until(
+      async () => (await genex.publishView("seyda")).native?.cloud?.builds[0]?.state === CloudBuildState.Built,
+    );
+    await until(async () => words(await runs()).includes("build-release"));
+    const pressed = await genex.cloudBuild("seyda", "windows", game, true);
+    assert.equal(pressed.cloud?.send?.state, CloudSendState.Sending, "the press starts a send: none is under way");
+    await rm(holdRelease);
+    await genex.cloudSettled();
+    assert.equal(words(await runs()).filter((run) => run === "build --hold").length, 2);
+  });
+
+  it("refuses a build while a publish is still making the game's project, and sends nothing", async () => {
+    const { make, runs, game, holdInit } = await toolsWithBuildCli({ api: await fixtureApi() });
+    await writeFile(holdInit, "");
+    const genex = make();
+    await genex.publishAppsOnly("seyda", [MAC_APP], "Seyda Neen");
+    await until(async () => words(await runs()).includes("init"));
+    await assert.rejects(genex.cloudBuild("seyda", "windows", game, true), /still running/);
+    assert.equal(words(await runs()).includes("build --hold"), false, "nothing is sent to a project that isn't there");
+    await rm(holdInit);
+    assert.equal((await genex.publishWait("seyda")).job?.state, "done");
+    await genex.cloudBuild("seyda", "windows", game, true);
+    await genex.cloudSettled();
+    assert.deepEqual(
+      words(await runs()).filter((run) => run === "init" || run === "build --hold"),
+      ["init", "build --hold"],
+      "once the publish made the project, the build goes to it",
+    );
+  });
+
+  it("gives players a kept build asked for while another publish runs, once that publish is done", async () => {
+    const { make, runs, game, holdPublish } = await toolsWithBuildCli({ api: await fixtureApi() });
+    const genex = make();
+    await genex.cloudBuild("seyda", "windows", game, true);
+    await genex.cloudSettled();
+    // A publish is under way (a web build's, or the Mac app's here) when the kept Windows app is asked for.
+    await writeFile(holdPublish, "");
+    await genex.publishAppsOnly("seyda", [MAC_APP], "Seyda Neen");
+    const asked = await genex.publishAppsOnly("seyda", [], "Seyda Neen", {}, undefined, ["windows"]);
+    assert.equal(asked.job?.state, "running", "the publish under way goes on");
+    assert.equal(words(await runs()).includes("build-release"), false, "nothing is asked of Genex yet");
+    await rm(holdPublish);
+    assert.equal((await genex.publishWait("seyda")).job?.state, "done");
+    await until(async () => words(await runs()).includes("build-release"));
+    await genex.appsSent("seyda");
+    const view = await genex.publishView("seyda");
+    assert.deepEqual(
+      view.native?.cloud?.builds.map((build) => [build.state, build.held]),
+      [[CloudBuildState.Done, undefined]],
+      "players have the Windows app",
+    );
+    assert.deepEqual(
+      view.native?.sent.map((sent) => sent.platform),
+      ["mac"],
+      "and the record still says the Mac app went",
+    );
+  });
+
+  it("gives players a kept build behind a web publish's apps, keeping what the record says of the others", async () => {
+    const { make, runs, game } = await toolsWithBuildCli({ api: await fixtureApi() });
+    const genex = make();
+    await genex.cloudBuild("seyda", "windows", game, true);
+    await genex.cloudSettled();
+    await genex.publishAppsOnly("seyda", [MAC_APP], "Seyda Neen");
+    await genex.publishWait("seyda");
+    await genex.publishApps("seyda", "web-job", [], ["windows"]);
+    assert.equal(words(await runs()).filter((run) => run === "build-release").length, 1);
+    const view = await genex.publishView("seyda");
+    assert.equal(view.native?.cloud?.builds[0]?.state, CloudBuildState.Done);
+    assert.deepEqual(
+      view.native?.sent.map((sent) => sent.platform),
+      ["mac"],
+    );
+  });
+
+  it("reads a kept app again when Genex couldn't be read the first time", async () => {
+    const { make, runs, onGenex, refuse, failStatus, workspace } = await toolsWithBuildCli();
+    await onGenex();
+    await writeFile(path.join(workspace, CLOUD_BUILD_FILE), JSON.stringify({ builds: [{ ...KEPT, jobId: "job_7" }] }));
+    await writeFile(failStatus, "");
+    const genex = make();
+    await genex.publishView("seyda");
+    await genex.cloudSettled();
+    assert.equal((await genex.publishView("seyda")).native?.cloud?.builds[0]?.state, CloudBuildState.Built);
+    await genex.cloudSettled();
+    // Back online: Genex stopped keeping the app meanwhile.
+    await rm(failStatus);
+    await writeFile(refuse, "");
+    await genex.publishView("seyda");
+    await genex.cloudSettled();
+    const view = await genex.publishView("seyda");
+    assert.deepEqual(
+      view.native?.cloud?.builds.map((build) => [build.state, build.failure]),
+      [[CloudBuildState.Failed, CloudBuildFailure.Expired]],
+      "the record learns it before anyone presses Publish",
+    );
+    assert.ok(words(await runs()).length >= 2, "asked again after the read that failed");
   });
 
   it("reads a kept app again once when the record is next read: one Genex no longer keeps is not built", async () => {

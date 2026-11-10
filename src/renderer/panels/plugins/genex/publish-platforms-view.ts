@@ -203,16 +203,20 @@ export const RUNNING_CLOUD: ReadonlySet<CloudBuildState> = new Set([
 /** Whether Genex still has something to say of a build: one it kept and then dropped is as if never made. */
 const stillCounts = (build: GenexCloudBuild): boolean => build.failure !== CloudBuildFailure.Expired;
 
-/** The newest build Genex made, or makes, of `row`'s app; none before the first. */
+/**
+ * The newest build Genex made, or makes, of `row`'s app; none before the first, and none once Genex
+ * dropped the newest: an older build's failure is no news of a game that has built since.
+ */
 export function newestCloudBuild(
   row: PublishPlatform,
   native: GenexNativeRecord | undefined,
 ): GenexCloudBuild | undefined {
-  const builds = (native?.cloud?.builds ?? []).filter(forRow(row)).filter(stillCounts);
-  return builds.reduce<GenexCloudBuild | undefined>(
-    (newest, build) => (!newest || Date.parse(build.startedAt) > Date.parse(newest.startedAt) ? build : newest),
+  const builds = (native?.cloud?.builds ?? []).filter(forRow(row));
+  const newest = builds.reduce<GenexCloudBuild | undefined>(
+    (latest, build) => (!latest || Date.parse(build.startedAt) > Date.parse(latest.startedAt) ? build : latest),
     undefined,
   );
+  return newest && stillCounts(newest) ? newest : undefined;
 }
 
 /** What went wrong in the newest build of a row, for the agent to fix. */

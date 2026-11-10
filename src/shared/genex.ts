@@ -949,6 +949,8 @@ export interface GenexCloudSend {
   state: CloudSendState;
   /** Why it stopped, in the CLI's words; absent when it was stopped here or Studio closed. */
   error?: string;
+  /** Genex keeps what it builds of this project until a publish asks for it; absent: the app goes to players once built. */
+  held?: boolean;
   /** A publish asked for the app while its project was still on its way: its build goes to players once built. */
   released?: boolean;
 }

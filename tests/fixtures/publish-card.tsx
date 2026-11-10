@@ -251,7 +251,7 @@ fake.stub("genexCloudBuild", async (_project, platform, keep) => {
   cloudSend =
     scene === "startFails"
       ? { platform, startedAt, state: CloudSendState.Failed, error: REFUSED }
-      : { platform, startedAt, state: CloudSendState.Sending };
+      : { platform, startedAt, state: CloudSendState.Sending, ...(keep ? { held: true } : {}) };
 });
 fake.stub("genexPublishReview", async () => ({ included: ["index.html"], excluded: [] }));
 const NOTHING: GenexReviewStatus = {

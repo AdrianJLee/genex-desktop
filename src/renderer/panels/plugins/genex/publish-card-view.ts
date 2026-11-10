@@ -177,14 +177,28 @@ const makesHere = (row: PublishPlatform, input: CardInput): boolean =>
 const cloudBuilds = (row: PublishPlatform, input: CardInput): boolean =>
   CLOUD_TARGETS.has(row.target) && input.native?.cloud?.supported === true && !makesHere(row, input);
 
-/** The app Genex Cloud built and keeps for a publish, when it is newer than the one players have. */
+/** The app Genex Cloud built and keeps of `row`'s platform, whatever its age; null when it keeps none. */
+function keptApp(row: PublishPlatform, native: GenexNativeRecord | undefined): GenexCloudBuild | null {
+  const build = newestCloudBuild(row, native);
+  return build?.state === CloudBuildState.Built ? build : null;
+}
+
+/** Whether the game changed after Genex Cloud started `build`: what it made is not the game as it is now. */
+const builtBeforeChange = (row: PublishPlatform, build: GenexCloudBuild): boolean =>
+  ms(row.changedAt) - ms(build.startedAt) > SAME_BUILD_MS;
+
+/**
+ * The app Genex Cloud built and keeps for a publish, when it is the game as it is now and newer than
+ * the one players have. One built before the game's last change stays with Genex, as a build in the
+ * folder that is older than the game stays there: the button builds it again.
+ */
 function keptBuild(
   row: PublishPlatform,
   native: GenexNativeRecord | undefined,
   live: Live | null,
 ): GenexCloudBuild | null {
-  const build = newestCloudBuild(row, native);
-  if (build?.state !== CloudBuildState.Built) return null;
+  const build = keptApp(row, native);
+  if (!build || builtBeforeChange(row, build)) return null;
   return live && ms(live.builtAt) >= ms(build.startedAt) ? null : build;
 }
 
@@ -229,7 +243,8 @@ function workingNow(row: PublishPlatform, input: CardInput): RowState | null {
       since: send.startedAt,
       cloud: true,
       here: false,
-      making: send.released !== true,
+      // Only a build Genex keeps is just being made: any other goes to players once built.
+      making: send.held === true && send.released !== true,
     };
   const build = newestCloudBuild(row, native);
   if (build && RUNNING_CLOUD.has(build.state))
@@ -347,7 +362,9 @@ function unpublishedRow(
       on: true,
       work: update.work,
     };
-  const status = row.state === PublishPlatformState.Stale ? WORDS.builtOlder : WORDS.notBuilt;
+  const kept = keptApp(row, input.native);
+  const older = row.state === PublishPlatformState.Stale || (kept !== null && builtBeforeChange(row, kept));
+  const status = older ? WORDS.builtOlder : WORDS.notBuilt;
   const on = startsOn(row, input, update.work, firstPublish);
   return { tone: CardTone.None, status, side: update.side, ...AT_REST, on, work: update.work };
 }

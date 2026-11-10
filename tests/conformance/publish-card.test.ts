@@ -289,6 +289,36 @@ describe("the Publish card's rows", () => {
     );
     assert.deepEqual([windows?.status, windows?.work], ["Not built", CardWork.Cloud]);
   });
+
+  it("says nothing of an older failed build once a newer one was built and then dropped", () => {
+    const failed = cloudBuild(CloudBuildState.Failed, 30 * 24 * HOUR_MS, {
+      failure: CloudBuildFailure.Compile,
+      errors: ["error C2065: 'Health': undeclared identifier"],
+    });
+    const gone = cloudBuild(CloudBuildState.Failed, 20 * 24 * HOUR_MS, { failure: CloudBuildFailure.Expired });
+    const native = record(null, [failed, gone]);
+    const windows = unreal(unrealFolder(MISSING), native).find((row) => row.target === PublishTarget.Windows);
+    assert.deepEqual([windows?.tone, windows?.status, windows?.work], [CardTone.None, "Not built", CardWork.Cloud]);
+    assert.deepEqual(cardErrors(unrealFolder(MISSING), native), [], "the game has built since: its old error is gone");
+  });
+
+  it("says a Windows app Genex Cloud built before the game's last change is older than the game, and builds it again", () => {
+    // The game changed an hour ago; Genex Cloud built its Windows app three hours ago and keeps it.
+    const older = keptBuild(3 * HOUR_MS);
+    assert.deepEqual(said(unreal(unrealFolder(READY, 10 * MINUTE_MS), record(null, [older]))), [
+      ["Mac", CardTone.Ready, "Ready to publish", "3.2 GB", CardWork.Publish],
+      ["Windows", CardTone.None, "Built · older than your game", "builds on Genex Cloud", CardWork.Cloud],
+    ]);
+    const live = record(2 * 24 * HOUR_MS, [cloudBuild(CloudBuildState.Done, 13 * HOUR_MS), older]);
+    const windows = unreal(unrealFolder(READY, 3 * 24 * HOUR_MS), live).find(
+      (row) => row.target === PublishTarget.Windows,
+    );
+    assert.deepEqual(
+      [windows?.tone, windows?.status, windows?.work],
+      [CardTone.Old, "Live · older than your game", CardWork.Cloud],
+      "players keep the app they have until the new one is built",
+    );
+  });
 });
 
 describe("the Publish card's button", () => {
@@ -409,7 +439,12 @@ describe("the Publish card's button", () => {
 
   it("says both are building while they build, and which one is slow", () => {
     const asked = new Map([[PublishTarget.Mac, at(6 * MINUTE_MS)]]);
-    const send = { platform: PublishTarget.Windows, startedAt: at(5 * MINUTE_MS), state: CloudSendState.Sending };
+    const send = {
+      platform: PublishTarget.Windows,
+      startedAt: at(5 * MINUTE_MS),
+      state: CloudSendState.Sending,
+      held: true,
+    };
     const sending = unreal(unrealFolder(MISSING), record(null, [], { cloud: { supported: true, builds: [], send } }), {
       asked,
     });
@@ -444,7 +479,12 @@ describe("the Publish card's button", () => {
   });
 
   it("publishes a game's only app once it is built: a game with nothing to play is never published", () => {
-    const send = { platform: PublishTarget.Windows, startedAt: at(MINUTE_MS), state: CloudSendState.Sending };
+    const send = {
+      platform: PublishTarget.Windows,
+      startedAt: at(MINUTE_MS),
+      state: CloudSendState.Sending,
+      held: true,
+    };
     const rows = unreal(unrealFolder(MISSING), record(null, [], { cloud: { supported: true, builds: [], send } }));
     assert.equal(pressPlan(rows, NO_SWITCHES)?.label, "Build Mac", "an app switched on and not built is built first");
     assert.equal(pressPlan(rows, MAC_OFF), null, "nothing to publish yet");
@@ -504,6 +544,19 @@ describe("the Publish card's button", () => {
     );
     assert.equal(busyPress(going)?.label, "Publishing to Windows");
     assert.equal(pressPlan(going, NO_SWITCHES), null);
+  });
+
+  it("never offers to publish a project on its way up that Genex won't keep: its app goes to players by itself", () => {
+    // A build asked for without keeping (a game with a page, from the platforms list) is no kept app.
+    const send = { platform: PublishTarget.Windows, startedAt: at(MINUTE_MS), state: CloudSendState.Sending };
+    const rows = unreal(
+      unrealFolder(READY, 30 * MINUTE_MS),
+      record(20 * MINUTE_MS, [], { cloud: { supported: true, builds: [], send } }),
+    );
+    const windows = rows.find((row) => row.target === PublishTarget.Windows);
+    assert.deepEqual([windows?.making, windows?.work], [false, null]);
+    assert.equal(pressPlan(rows, NO_SWITCHES), null, "nothing to press: it is on its way to players already");
+    assert.equal(busyPress(rows)?.label, "Publishing to Windows");
   });
 
   it("publishes both once both are built, or only the one switched on", () => {

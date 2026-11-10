@@ -176,7 +176,7 @@ const SEND_STATES: ReadonlySet<unknown> = new Set(Object.values(CloudSendState))
 export function readCloudSend(value: unknown): GenexCloudSend | null {
   const send = isRecord(value) ? value.send : undefined;
   if (!isRecord(send)) return null;
-  const { platform, startedAt, state, error } = send;
+  const { platform, startedAt, state, error, held } = send;
   const known = typeof platform === "string" && CLOUD_PLATFORMS.has(platform);
   if (!known || !SEND_STATES.has(state) || !isTime(startedAt)) return null;
   return {
@@ -184,6 +184,7 @@ export function readCloudSend(value: unknown): GenexCloudSend | null {
     startedAt: String(startedAt),
     state: state as CloudSendState,
     ...(typeof error === "string" ? { error } : {}),
+    ...(held === true ? { held: true } : {}),
   };
 }
 
@@ -309,14 +310,23 @@ async function keepSend(dir: string, send: GenexCloudSend, read: (file: string) 
   await atomicWriteJson(path.join(dir, CLOUD_BUILD_FILE), { builds, send });
 }
 
-/** Say in the record that `platform`'s project is on its way, before the press answers. */
+/**
+ * Say in the record that `platform`'s project is on its way, before the press answers; with `keep`,
+ * that Genex keeps what it builds of it.
+ */
 export async function beginCloudSend(
   dir: string,
   platform: string,
   read: (file: string) => Promise<unknown>,
+  keep = false,
   now = new Date(),
 ): Promise<GenexCloudSend> {
-  const send = { platform, startedAt: now.toISOString(), state: CloudSendState.Sending };
+  const send = {
+    platform,
+    startedAt: now.toISOString(),
+    state: CloudSendState.Sending,
+    ...(keep ? { held: true } : {}),
+  };
   await keepSend(dir, send, read);
   return send;
 }

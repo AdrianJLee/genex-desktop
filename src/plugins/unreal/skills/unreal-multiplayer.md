@@ -37,6 +37,12 @@ Blueprint, on the game instance's `Genex Authority Subsystem`:
 - **Join** with `Genex Authority Options` (leave Url and Urls empty: Genex names the server; set
   `Game Id` only to override the project's Slug). Bind **On Connected**, **On Refused**,
   **On Disconnected** and **On Event** first.
+- **Regions need nothing.** A join first asks every region within reach for a room that already
+  has players, nearest first, and opens a room in the nearest region only when none has one, so a
+  player in Asia joins a friend's room in Europe instead of waiting alone. Three options change it,
+  and most games set none: `Max Ping Ms` (350, the farthest region asked, as round-trip ping),
+  `Region Rule` (`Nearest` keeps a player in their nearest region) and `Region` (a region the
+  player picked by name: `asia`, `eu` or `us`; offer it as a setting when players ask to choose).
 - Every frame: **Set Input** (`Move X/Y/Z`, `Yaw`, `Pitch`, `Buttons`; for `firstperson` use
   **Make Firstperson Input**), then draw from **Get Me** (your own entity, predicted) and
   **Get Entities** (everyone else, 100 ms behind on the server's timeline). Never move a networked

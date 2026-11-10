@@ -29,6 +29,16 @@ enum class EGenexJoinRefusal : uint8
 	Other,
 };
 
+/** How a pool join picks its authority region (PROTOCOL.md §17.1 *Finding players*). */
+UENUM(BlueprintType)
+enum class EGenexRegionRule : uint8
+{
+	/** The default: a room with players in any region in reach, nearest first; else a new room in the nearest region. */
+	Players,
+	/** The nearest region alone, whoever is elsewhere. */
+	Nearest
+};
+
 /** How other entities' samples are timed in a predicting physics room (PROTOCOL.md §17.11 *Drawing other seats*). */
 UENUM(BlueprintType)
 enum class EGenexRemoteSamples : uint8

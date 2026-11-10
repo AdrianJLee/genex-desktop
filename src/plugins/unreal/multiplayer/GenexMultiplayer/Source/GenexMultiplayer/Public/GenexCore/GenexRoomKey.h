@@ -45,8 +45,9 @@ inline bool ValidRoomCode(const std::string& code) {
   return true;
 }
 
-/** The ways into an authority room, by the Colyseus call that makes them. */
-enum class JoinMethod { JoinOrCreate, Create, JoinById };
+/** The ways into an authority room, by the Colyseus call that makes them. Join (an existing room only) is what a pool
+ *  join asks the regions in reach before it opens a room (§17.1 *Finding players*); no target plans it. */
+enum class JoinMethod { JoinOrCreate, Create, JoinById, Join };
 /** Why a client refuses a target before anything reaches the network. */
 enum class TargetRefusal { None, BadMatchKey, BadCode, Conflict };
 

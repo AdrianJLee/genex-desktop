@@ -414,6 +414,10 @@ struct Impl {
   bool selecting = false;
   /** The servers a join tries, nearest region first (empty: the one url picked without regions). */
   std::vector<std::string> targets;
+  /** §17.1 *Finding players*: the servers a pool join asks for a room that already exists, nearest first, before it
+   *  tries `targets`, and the one being asked; the search runs while searchAt < search.size(). */
+  std::vector<std::string> search;
+  std::size_t searchAt = 0;
   /** The region probe in flight (§17.1 *Regions*), until the choice is made. */
   struct RegionProbe {
     std::vector<regions::Region> regions;
@@ -681,18 +685,38 @@ struct Impl {
   }
 
   /** Makes the region choice once every sample settled, the grace after the first answer ran out or the ceiling
-   *  passed; then joins the nearest region. */
+   *  passed; then a pool join asks the regions in reach for players (§17.1 *Finding players*), and any other joins
+   *  the nearest region. */
   void FinishProbe(double now) {
     if (!probe || closed) return;
     if (probe->ceiling < 0.0) probe->ceiling = now + regions::kProbeTimeoutMs;
     const bool due = probe->pending == 0 || now >= probe->ceiling || (probe->grace >= 0.0 && now >= probe->grace);
     if (!due) return;
     selecting = false;
-    targets.clear();
-    for (regions::Pick& p : regions::Rank(probe->regions, probe->best)) targets.push_back(std::move(p.url));
+    regions::SearchPlan plan = regions::PlanSearch(probe->regions, probe->best, SearchOptionsNow());
     probe.reset();
-    UseUrl(targets[0]);
+    targets.clear();
+    for (regions::Pick& p : plan.create) targets.push_back(std::move(p.url));
+    search.clear();
+    for (regions::Pick& p : plan.search) search.push_back(std::move(p.url));
+    searchAt = 0;
+    UseUrl(Searching() ? search[0] : targets[0]);
   }
+
+  /** What this join may do about regions (session.ts joinTargets): only a pool join searches, and a join by code
+   *  walks every region, pinned or not. */
+  regions::SearchOptions SearchOptionsNow() const {
+    const room_key::JoinMethod method =
+        room_key::PlanAuthorityJoin({options.matchKey, options.createPrivate, options.joinCode}).method;
+    regions::SearchOptions o;
+    o.rule = method == room_key::JoinMethod::JoinOrCreate ? options.regionRule : regions::RegionRule::Nearest;
+    o.maxPingMs = options.maxPingMs;
+    if (method != room_key::JoinMethod::JoinById) o.region = options.region;
+    return o;
+  }
+
+  /** A pool join is still asking the regions in reach for a room that already exists. */
+  bool Searching() const { return searchAt < search.size(); }
 
   Ctx* NewCtx() {
     std::unique_ptr<Ctx> ctx(new Ctx());
@@ -731,11 +755,14 @@ struct Impl {
 
   /** One join attempt with FRESH options (§3.2: never cache a token). `protocol` goes last. */
   void JoinRoom() {
-    const room_key::JoinPlan plan = room_key::PlanAuthorityJoin({options.matchKey, options.createPrivate, options.joinCode});
+    room_key::JoinPlan plan = room_key::PlanAuthorityJoin({options.matchKey, options.createPrivate, options.joinCode});
     if (plan.refused != room_key::TargetRefusal::None) {
       Refuse(0, "genex: this room cannot be asked for (a bad matchKey or joinCode, or a joinCode beside either)");
       return;
     }
+    // §17.1 *Finding players*: a region asked for players is asked for a room that already exists, with the options
+    // the join-or-create would send, and never opens one.
+    if (Searching()) plan.method = room_key::JoinMethod::Join;
     JoinSpec spec;
     spec.gameId = options.gameId;
     spec.name = options.name;
@@ -784,6 +811,9 @@ struct Impl {
                              break;
                            case room_key::JoinMethod::JoinById:
                              colyseus_client_join_by_id(client, plan.roomId.c_str(), text.c_str(), CbRoom, CbJoinError, NewCtx());
+                             break;
+                           case room_key::JoinMethod::Join:
+                             colyseus_client_join(client, protocol::room_type::kAuthority, text.c_str(), CbRoom, CbJoinError, NewCtx());
                              break;
                          }
                        });
@@ -972,6 +1002,9 @@ struct Impl {
           if (const authority_wire::AuthorityRoomState* st = State(); st != nullptr && st->matchKey != nullptr) seatMatchKey = st->matchKey;
           status = AuthorityStatus::Connected;
           capacity = regions::CapacityState{};
+          // Seated: the search is over (a region asked for players seated it, or the walk did).
+          search.clear();
+          searchAt = 0;
           readyDeadline = now + kClockWarmupTimeoutMs;
           if (sid.empty()) sid = Str(colyseus_room_get_session_id(room));
           BuildPrediction();
@@ -1069,6 +1102,19 @@ struct Impl {
 
   void OnRefused(int code, const std::string& message, double now) {
     if (closed) return;
+    // §17.1 *Finding players*: no room in a region asked for players (Colyseus's 521), a dead path or a full region
+    // asks the next one, and once none had a room the join itself walks `targets` from the nearest. An answer about
+    // this player or game ends the join: every region would repeat it, and no room is opened.
+    if (Searching() && !leaving) {
+      if (regions::KindOfSearchRefusal(code) == regions::SearchRefusal::Final) {
+        Refuse(code, message);
+        return;
+      }
+      searchAt += 1;
+      capacity = regions::CapacityState{};
+      UseUrl(Searching() ? search[searchAt] : targets[0]);
+      return;
+    }
     // §17.2 *Choosing a room*: a join by code walks the regions, because the room is in exactly one of them.
     if (options.joinCode && !leaving) {
       const auto region = room_key::NextCodeRegion(code, capacity.region, std::max<std::size_t>(targets.size(), 1));

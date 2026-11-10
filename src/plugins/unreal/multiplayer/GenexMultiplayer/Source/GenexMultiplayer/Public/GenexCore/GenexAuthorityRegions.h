@@ -4,6 +4,10 @@
 // join refused 503 goes. Port of packages/multiplayer/src/authority/regions.ts; held to
 // packages/netcode-bench/conformance/authority/authority-regions.json by genex_authority_regions_check, as
 // every SDK is, so every SDK picks the same region from the same probe results.
+// Each region is its own matchmaking pool (the server filters rooms by the region a join entered through), so
+// the order is where a player meets others, not only how far the server is. A pool join therefore looks for
+// players first (§17.1 *Finding players*, PlanSearch): it asks the regions in reach for a room that already
+// exists, nearest first, and opens one in the nearest region only when none has.
 #pragma once
 
 #include "GenexCore/GenexConfig.h"
@@ -28,6 +32,17 @@ inline constexpr int kProbeTimeoutMs = 4000;
 inline constexpr double kProbeGraceMs = 1000.0;
 /** Refusals (503) in a row on one region before the next attempt goes to the next-best region. */
 inline constexpr int kRefusalsPerRegion = 2;
+/** How far a join looks for players by default, as a probe's round trip in ms (§17.1 *Finding players*): far
+ *  enough that a player in one region reaches the others. */
+inline constexpr double kMaxPingMs = 350.0;
+
+/** How a pool join picks its region (§17.1 *Finding players*). */
+enum class RegionRule {
+  /** A room with players in any region in reach, nearest first; else a new room in the nearest region. */
+  Players,
+  /** The nearest region alone, whoever is elsewhere. */
+  Nearest,
+};
 
 /** One region of the authority cluster: its name and the servers a join may enter it through. */
 struct Region {
@@ -40,6 +55,23 @@ struct Region {
 struct Pick {
   std::string region;
   std::string url;
+};
+
+/** What a game or its player chose about regions (§17.1 *Finding players*). */
+struct SearchOptions {
+  RegionRule rule = RegionRule::Players;
+  /** The farthest region asked for players, as a probe's round trip in ms; anything but a finite number >= 0 is
+   *  kMaxPingMs. */
+  double maxPingMs = kMaxPingMs;
+  /** The one region to play in, by name (a player's own choice): no other is joined or created in. Empty, or a name
+   *  the cluster does not have, is no choice. */
+  std::string region;
+};
+
+/** Where a pool join goes: the regions asked for an existing room, then where one is opened. */
+struct SearchPlan {
+  std::vector<Pick> search;
+  std::vector<Pick> create;
 };
 
 /** Where a join stands in its capacity walk: its region, its refusals there in a row, the schedule steps waited. */
@@ -70,6 +102,13 @@ GENEX_CORE_API std::vector<std::string> ProbePlan(const std::vector<std::string>
  *  url (the first on a tie), then the silent regions in list order through their first url. */
 GENEX_CORE_API std::vector<Pick> Rank(const std::vector<Region>& regions, const std::vector<std::vector<std::optional<double>>>& best);
 
+/** Where a pool join goes (§17.1 *Finding players*), from each url's best sample (as Rank reads it): the answered
+ *  regions no farther than the limit are asked for an existing room, nearest first, and the room is opened in the
+ *  ranked order. Fewer than two regions in reach is no search (the join-or-create finds its own region's room), as
+ *  is the rule Nearest. A pinned region is the only one joined and the only one created in, through its best url. */
+GENEX_CORE_API SearchPlan PlanSearch(const std::vector<Region>& regions, const std::vector<std::vector<std::optional<double>>>& best,
+                                     const SearchOptions& options);
+
 /** The attempt after a 503 in `state` over `regionCount` ranked regions and the schedule `delays`, or nullopt when
  *  the join gives up. */
 /** What a refused join does next (§17.1 *Regions*): the schedule on this region (a full region, a process shutting
@@ -81,6 +120,18 @@ inline RefusalKind KindOfRefusal(int code) {
   if (code <= 0 || code == 502 || code == 504 || (code >= 520 && code <= 526) || code == 530) return RefusalKind::NextRegion;
   return code == 503 || code == 4213 ? RefusalKind::Capacity : RefusalKind::Final;
 }
+
+/** What a refused ask for an existing room does next (§17.1 *Finding players*). */
+enum class SearchRefusal {
+  /** No room here (Colyseus's 521, no room matches the criteria), a dead path, a full or draining region: the next
+   *  region is asked. */
+  Next,
+  /** The server's answer about this player or game, which every region would repeat. */
+  Final,
+};
+
+/** What an ask refused with `code` does next; 0 or below is a network that failed. */
+GENEX_CORE_API SearchRefusal KindOfSearchRefusal(int code);
 
 GENEX_CORE_API std::optional<std::pair<Attempt, CapacityState>> NextAttempt(const CapacityState& state, std::size_t regionCount,
                                                                              const std::vector<double>& delays);

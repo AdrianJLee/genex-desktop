@@ -1262,7 +1262,11 @@ Undo setup puts them back) and its own come, the port and the helper stay, and t
 up for it. The open game's own project gets a game snapshot first (`game.snapshot`), and a snapshot
 that fails stops the move; any other project keeps only setup's copy of the descriptor. It is
 refused, changing nothing, while that Unreal isn't installed and while Unreal has the project
-open. A moved game's C++ targets need no change: 5.9 builds 5.8's build settings.
+open. A moved game's C++ targets (`Source/*.Target.cs`) that name 5.8's build settings and include
+order get 5.9's (`retargetProject` in `cpp-module.ts`; the record's `engine.targets` names them, and
+Undo setup gives them back): 5.9 compiles the editor target with 5.8's settings, but its launcher
+build refuses the game target, which every package needs. A target naming anything else stays, and
+none is written through a link.
 
 **New Unreal project** (in a game, "Make this game in Unreal"). `templates` returns the five allowlisted Blueprint templates (Third person, First
 person, Top down, Vehicle, Blank) with Epic's names and thumbnails and a short line of Genex's own
@@ -2850,9 +2854,13 @@ is also refused while the game's `web/` holds anything but an earlier Unreal web
 run the project's `Config/DefaultEngine.ini` gets Epic's `bInjectIsolationHeaders=True`
 (`ensureWebIsolation`, only where the project doesn't say either way): Genex's hosts send no
 isolation headers, so the page's own service worker adds them. BuildCookRun adds `-platform=Wasm
--iostore` and stages the whole site into `unreal/Builds/Wasm/`, which then becomes the game's
+-iostore -package -WasmNoBrotli`: Unreal's package step is the one that writes `wasm-manifest.json`
+(the page starts nothing without it) and moves the files no host may serve to
+`unreal/Builds/Wasm-Debug/`, and Genex's hosts serve each file as it is, so no `.br` copy is made
+beside it. The whole site is staged into `unreal/Builds/Wasm/`, which then becomes the game's
 `web/` in one move (`placeWebBuild`), where Publish and Live find it; `package-status` names
-`web/index.html`. `package-game`, `plugin-build`, `plugin-test`,
+`web/index.html`. A stage with a page but no `wasm-manifest.json` fails the package and never
+becomes `web/`. `package-game`, `plugin-build`, `plugin-test`,
 `plugin-package`, `add-cpp-module` and `add-motion-matching` name their status tool as `jobStatus`,
 and each status answers `jobRunning`, so the chat that started a job is woken when it ends. Publish
 then finds the app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole

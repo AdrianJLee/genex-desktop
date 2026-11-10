@@ -49,6 +49,7 @@ import {
   engineBuildsWeb,
   ensureWebIsolation,
   GAME_WEB_FOLDER,
+  holdsWebBuild,
   placeWebBuild,
   WEB_PAGE,
   WEB_PLATFORM,
@@ -269,6 +270,15 @@ export function linuxToolchainFor(version: string): { name: string; url: string 
 }
 
 /**
+ * What a web build asks of BuildCookRun beyond an app's: IoStore containers, as Epic's own command
+ * line for the platform has; the package step, the only one that writes the page's file list
+ * (`wasm-manifest.json`, without which the page never starts) and moves the files no host may serve
+ * (the symbol map, UAT's manifests) out of the site; and no Brotli copy beside each file, which
+ * helps only on a host that serves it in the file's place, and Genex's serve each file as it is.
+ */
+const WEB_ONLY_ARGS = ["-iostore", "-package", "-WasmNoBrotli"] as const;
+
+/**
  * BuildCookRun's arguments: Shipping for `system` (this computer's own when none), built, cooked,
  * staged into paks and staged under `stagingDir`, the cook run by this computer's own command-line
  * editor (a project with no editor target of its own has none to build).
@@ -291,8 +301,7 @@ export function buildCookRunArgs(o: {
     "-cook",
     "-stage",
     "-pak",
-    // A web build's containers are IoStore ones, as Epic's own command line for the platform asks.
-    ...(system === PackageSystem.Web ? ["-iostore"] : []),
+    ...(system === PackageSystem.Web ? WEB_ONLY_ARGS : []),
     `-stagingdirectory=${o.stagingDir}`,
     `-unrealexe=${editorCmdPath(o.engineDir, o.platform)}`,
     "-nocompileeditor",
@@ -545,6 +554,8 @@ async function runPackage(
 
 /** A finished web build made the game's web version (`web/`), named by its page; left staged when `web/` is taken. */
 async function webPackaged(target: Target, staged: string, page: string, seconds: number) {
+  // A staged page without its file list never starts, and as web/ it would read as someone else's folder.
+  if (!(await holdsWebBuild(staged))) throw new PackageFailed(MESSAGE.NoApp(target.system.folder), [], seconds);
   const placed = await placeWebBuild(target.gameDir, staged);
   const line = placed ? MESSAGE.WebPackaged(seconds) : MESSAGE.WebStaged(seconds);
   return { line, app: shownIn(target.gameDir, placed ?? page), seconds };

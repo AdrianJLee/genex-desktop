@@ -580,6 +580,23 @@ describe("packaging an Unreal game for the web", () => {
     assert.ok(!buildCookRunArgs({ ...mac, platform: "darwin" }).includes("-iostore"), "a Mac app stays as it was");
   });
 
+  it("asks for the package step, which writes the page's file list, and for no Brotli copies", () => {
+    const game = { projectFile: "/g/unreal/Dust.uproject", stagingDir: "/g/unreal/Builds", engineDir: ENGINE };
+    for (const platform of ["darwin", "win32"] as const) {
+      const args = buildCookRunArgs({ ...game, platform, system: PackageSystem.Web });
+      // Unreal writes wasm-manifest.json and moves the files no host may serve only in its package step.
+      assert.ok(args.includes("-package"), `${platform} -package`);
+      // Genex's hosts serve each file as it is, so a .br copy of each would only double the upload.
+      assert.ok(args.includes("-WasmNoBrotli"), `${platform} -WasmNoBrotli`);
+      const own = buildCookRunArgs({ ...game, platform });
+      assert.deepEqual(
+        own.filter((word) => word === "-package" || word === "-WasmNoBrotli"),
+        [],
+        `${platform}'s own app is packaged as before`,
+      );
+    }
+  });
+
   it("makes the site the game's web version in web/, with the checked emsdk handed to RunUAT", async () => {
     const { game, project } = await gameWithCpp();
     const emsdk = await emsdkOf("6.0.10");
@@ -602,6 +619,27 @@ describe("packaging an Unreal game for the web", () => {
     // After a restart the build in web/ is still named.
     const later = await createGamePackageTools(deps).handlers["package-status"](web, context, "/s");
     assert.deepEqual([later.state, later.app], [GamePackageState.Idle, "web/index.html"]);
+  });
+
+  it("never makes a staged page without its file list the game's web version", async () => {
+    const { game, project } = await gameWithCpp();
+    const pageOnly: RunUat = async (launch) => {
+      const found = /-stagingdirectory=(?:"([^"]+)"|(\S+))/.exec(launch.args.join(" "));
+      const site = path.join(found?.[1] ?? found?.[2] ?? "", "Wasm");
+      await mkdir(site, { recursive: true });
+      await writeFile(path.join(site, "index.html"), "<!doctype html>");
+      return { code: 0, output: PACKAGED, timedOut: false };
+    };
+    const emsdk = await emsdkOf("6.0.10");
+    const { deps } = depsFor(project, pageOnly, { engine: await engineFor(true), emsdk });
+    const tools = createGamePackageTools(deps);
+    const context = contextIn(game);
+    await tools.handlers["package-game"](web, context, "/s");
+    const done = await settled(() => tools.handlers["package-status"](web, context, "/s"));
+    assert.equal(done.state, GamePackageState.Failed, done.line);
+    assert.match(done.line ?? "", /no Wasm app is in the build folder/);
+    // A web/ with no file list would read as someone else's folder and refuse every later build.
+    assert.deepEqual(await readdir(game), ["unreal"]);
   });
 
   it("refuses, saving and running nothing, while web/ holds anything but an Unreal web build", async () => {

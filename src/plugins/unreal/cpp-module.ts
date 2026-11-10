@@ -620,3 +620,62 @@ export async function enableProjectPlugin(projectFile: string, name: string): Pr
   await atomicWriteText(project.file, withPlugin(project, name));
   return true;
 }
+
+/** How a target file names the build settings and the include order of the Unreal `version`. */
+const targetSettings = (version: string) => [
+  `BuildSettingsVersion.${buildSettingsFor(version)}`,
+  `EngineIncludeOrderVersion.${includeOrderFor(version)}`,
+];
+
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** `text` with each of `from`'s names replaced by the one at the same place in `to`, whole names only. */
+function renamed(text: string, from: readonly string[], to: readonly string[]): string {
+  return from.reduce(
+    (result, name, index) => result.replace(new RegExp(`\\b${escaped(name)}\\b`, "g"), to[index] ?? name),
+    text,
+  );
+}
+
+/** The project's own target files: plain `.Target.cs` files right in its plain `Source` folder, never a link. */
+async function targetFiles(projectFile: string): Promise<string[]> {
+  const source = path.join(path.dirname(projectFile), SOURCE_FOLDER);
+  if (!(await lstat(source).catch(() => null))?.isDirectory()) return [];
+  const entries = await readdir(source, { withFileTypes: true }).catch(() => []);
+  return entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(TARGET_SUFFIX))
+    .map((entry) => `${SOURCE_FOLDER}/${entry.name}`)
+    .sort();
+}
+
+/**
+ * Gives the project's targets that name the build settings and include order of the Unreal `from`
+ * those of the Unreal `to`: an installed Unreal builds no game target whose build settings differ
+ * from the ones it was built with, so a game moved to another Unreal can't be packaged until its
+ * targets name that one's. Only the files in `only` when given (the ones an earlier call changed),
+ * and never through a link. Every other byte of a file stays, and a target that names anything else
+ * is left as it is. Answers the files it changed, relative to the project and `/`-separated.
+ */
+export async function retargetProject(
+  projectFile: string,
+  from: string,
+  to: string,
+  only?: readonly string[],
+): Promise<string[]> {
+  const [old, wanted] = [targetSettings(from), targetSettings(to)];
+  const changed: string[] = [];
+  for (const relative of await targetFiles(projectFile)) {
+    if (only && !only.includes(relative)) continue;
+    const file = path.join(path.dirname(projectFile), relative);
+    const text = await readRegularFile(file, TARGET_MAX_BYTES).then(
+      (bytes) => bytes.toString("utf8"),
+      () => undefined,
+    );
+    if (text === undefined) continue;
+    const next = renamed(text, old, wanted);
+    if (next === text) continue;
+    await atomicWriteText(file, next);
+    changed.push(relative);
+  }
+  return changed;
+}

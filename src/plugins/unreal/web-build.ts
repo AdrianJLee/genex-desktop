@@ -106,13 +106,20 @@ export const WEB_PAGE = "index.html";
 export const WebFolder = { Free: "free", Ours: "ours", Taken: "taken" } as const;
 export type WebFolder = (typeof WebFolder)[keyof typeof WebFolder];
 
+/**
+ * Whether `folder` holds an Unreal web build: the file list Unreal's package step writes at the
+ * site's root, which the page reads before it starts anything.
+ */
+export const holdsWebBuild = (folder: string): Promise<boolean> =>
+  isPlainFile(path.join(folder, UNREAL_WEB_BUILD_MARKER));
+
 /** Whose the game's `web/` is ({@link WebFolder}); a link or a file of that name is taken. */
 export async function webFolderOf(gameDir: string): Promise<WebFolder> {
   const folder = path.join(gameDir, GAME_WEB_FOLDER);
   const info = await lstat(folder).catch(() => null);
   if (!info) return WebFolder.Free;
   if (!info.isDirectory()) return WebFolder.Taken;
-  return (await isPlainFile(path.join(folder, UNREAL_WEB_BUILD_MARKER))) ? WebFolder.Ours : WebFolder.Taken;
+  return (await holdsWebBuild(folder)) ? WebFolder.Ours : WebFolder.Taken;
 }
 
 /**

@@ -567,6 +567,66 @@ describe("Moving a game made with an older Unreal to the one new games are made 
     );
   });
 
+  /** A C++ target naming an Unreal's build settings and include order, as Genex and Epic's templates write one. */
+  const target = (name: string, settings: string, order: string, eol = "\n") =>
+    [
+      `public class ${name}Target : TargetRules`,
+      "{",
+      `\tDefaultBuildSettings = BuildSettingsVersion.${settings};`,
+      `\tIncludeOrderVersion = EngineIncludeOrderVersion.${order};`,
+      "}",
+      "",
+    ].join(eol);
+
+  /** Drift on 5.8 with a game and an editor target of 5.8's settings, and a third with settings of its own. */
+  async function withTargets() {
+    const f = await setUpOn("5.8", true);
+    const source = path.join(f.project.directory, "Source");
+    await mkdir(source, { recursive: true });
+    const files = {
+      game: path.join(source, "Drift.Target.cs"),
+      editor: path.join(source, "DriftEditor.Target.cs"),
+      own: path.join(source, "DriftServer.Target.cs"),
+    };
+    await writeFile(files.game, target("Drift", "V7", "Unreal5_8"));
+    await writeFile(files.editor, target("DriftEditor", "V7", "Unreal5_8", "\r\n"));
+    await writeFile(files.own, target("DriftServer", "Latest", "Latest"));
+    return { f, files };
+  }
+  const text = (file: string) => readFile(file, "utf8");
+
+  it("gives the game's C++ targets 5.9's build settings: 5.9 builds no game target that names 5.8's", async () => {
+    const { f, files } = await withTargets();
+    await moveProject(f.project.file, f.options);
+    assert.equal(await text(files.game), target("Drift", "V8", "Unreal5_9"));
+    assert.equal(await text(files.editor), target("DriftEditor", "V8", "Unreal5_9", "\r\n"), "its line ends stay");
+    assert.equal(await text(files.own), target("DriftServer", "Latest", "Latest"), "settings of its own stay");
+  });
+
+  it("undo setup gives the targets the move changed their 5.8 settings back", async () => {
+    const { f, files } = await withTargets();
+    await moveProject(f.project.file, f.options);
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await text(files.game), target("Drift", "V7", "Unreal5_8"));
+    assert.equal(await text(files.editor), target("DriftEditor", "V7", "Unreal5_8", "\r\n"));
+    assert.equal(await text(files.own), target("DriftServer", "Latest", "Latest"));
+  });
+
+  const noLinks = process.platform === "win32" && "links need privileges on Windows";
+  it("never writes a target through a link, or one in a linked Source folder", { skip: noLinks }, async () => {
+    const outside = await tmpDir("unreal-move-outside-");
+    const elsewhere = path.join(outside, "Elsewhere.Target.cs");
+    await writeFile(elsewhere, target("Elsewhere", "V7", "Unreal5_8"));
+    const linkedFile = await setUpOn("5.8", true);
+    await mkdir(path.join(linkedFile.project.directory, "Source"), { recursive: true });
+    await symlink(elsewhere, path.join(linkedFile.project.directory, "Source", "Drift.Target.cs"));
+    await moveProject(linkedFile.project.file, linkedFile.options);
+    const linkedFolder = await setUpOn("5.8", true);
+    await symlink(outside, path.join(linkedFolder.project.directory, "Source"));
+    await moveProject(linkedFolder.project.file, linkedFolder.options);
+    assert.equal(await text(elsewhere), target("Elsewhere", "V7", "Unreal5_8"));
+  });
+
   const refused: Array<[string, string, boolean, (f: Awaited<ReturnType<typeof setupFixture>>) => unknown]> = [
     ["Unreal 5.9 isn't installed", "5.8", false, () => undefined],
     ["the game is already on 5.9", "5.9", true, () => undefined],

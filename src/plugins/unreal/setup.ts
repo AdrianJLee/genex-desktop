@@ -32,6 +32,7 @@ import { containedReal } from "../../substrate/paths.ts";
 import { envValue, readRegistryVariable } from "../../substrate/toolchain.ts";
 import { crashReporterHolds, editorHoldsLog, heldProjectNames } from "./editor-holds.ts";
 import { type EditorLog, editorLogPath, readEditorLog } from "./editor-log.ts";
+import { retargetProject } from "./cpp-module.ts";
 import { loadEpicText } from "./epic-files.ts";
 import { isProjectPath, projectName } from "./project-file.ts";
 import {
@@ -325,8 +326,12 @@ type SetupRecord = {
   };
   /** `installed`: each helper file setup wrote, relative to the helper folder, with the sha256 of its bytes. */
   helper?: { existed: boolean; pluginsExisted?: boolean; installed?: Record<string, string> };
-  /** The `EngineAssociation` a project from an older Unreal had, and the one setup switched it to. */
-  engine?: { previous: string; switched: string };
+  /**
+   * The `EngineAssociation` a project from an older Unreal had, and the one setup switched it to.
+   * `targets`: the project's C++ target files a move gave the newer Unreal's build settings
+   * ({@link moveProject}), relative to the project; undo gives those their earlier ones back.
+   */
+  engine?: { previous: string; switched: string; targets?: string[] };
 };
 
 /** A switch of a project from an older Unreal to the newest supported one: from and to, as `EngineAssociation` values. */
@@ -1263,11 +1268,12 @@ function dropLackedToolsets(json: UProject, record: SetupRecord, from: string, t
 
 /**
  * Moves a game made with an older supported Unreal to the one new games are made with: its
- * descriptor names that Unreal, the toolsets it lacks go and its own come, and the project is set
- * up for it (its port and helper stay). One-way inside Unreal: what the newer one saves, the older
- * can't open, so the caller saves a point to rewind to in `before`, which runs once nothing refuses
- * the move and before its first write; a `before` that throws stops it. Undo setup gives the
- * descriptor back as it was before Genex. Refused, changing nothing, for a project with no such
+ * descriptor names that Unreal, the toolsets it lacks go and its own come, its C++ targets that name
+ * the older one's build settings name the newer one's, and the project is set up for it (its port
+ * and helper stay). One-way inside Unreal: what the newer one saves, the older can't open, so the
+ * caller saves a point to rewind to in `before`, which runs once nothing refuses the move and before
+ * its first write; a `before` that throws stops it. Undo setup gives the descriptor back as it was
+ * before Genex, and those targets their earlier settings. Refused, changing nothing, for a project with no such
  * move, while that Unreal isn't installed, and while Unreal has the project open.
  */
 export async function moveProject(
@@ -1292,6 +1298,9 @@ export async function moveProject(
   dropLackedToolsets(json, record, move.from, move.to);
   json.EngineAssociation = move.to;
   await keepCopy(folder, project, path.basename(project.file));
+  // The newer Unreal builds no game target that names the older one's build settings.
+  const targets = await retargetProject(project.file, move.from, move.to);
+  if (targets.length > 0) record.engine.targets = targets;
   await atomicWriteJson(path.join(folder, SetupStorage.Record), record);
   await atomicWriteText(project.file, formatLike(text, json));
   // Setup for the Unreal it names now: that release's toolsets and settings section.
@@ -1562,8 +1571,11 @@ export async function undoSetup(file: string, options: SetupOptions): Promise<Pr
 
   restorePlugins(json, record);
   // Back to its own Unreal, unless the user has since moved it to yet another one.
-  if (record.engine && json.EngineAssociation === record.engine.switched)
+  if (record.engine && json.EngineAssociation === record.engine.switched) {
     json.EngineAssociation = record.engine.previous;
+    const { switched, previous, targets } = record.engine;
+    if (targets?.length) await retargetProject(project.file, switched, previous, targets);
+  }
   const restored = formatLike(text, json);
   if (restored !== text) await atomicWriteText(project.file, restored);
   await restoreSettings(project, record, options.env);

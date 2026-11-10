@@ -28,10 +28,13 @@ import {
   CardTone,
   CardWork,
   cardRows,
+  keptSwitches,
   pressNote,
   pressPlan,
 } from "../../src/renderer/panels/plugins/genex/publish-card-view.ts";
+import { leftOutAfter, readLeftOut, writeLeftOut } from "../../src/renderer/panels/plugins/genex/publish-left-out.ts";
 import { WebOffer } from "../../src/renderer/panels/plugins/genex/publish-platforms-view.ts";
+import { type KeyValueStorage, storageKeyFor } from "../../src/renderer/storage.ts";
 
 const NOW = Date.parse("2026-11-06T20:00:00Z");
 const at = (agoMs: number): string => new Date(NOW - agoMs).toISOString();
@@ -670,6 +673,93 @@ describe("the Publish card's button", () => {
     const rows = unityRows();
     const plan = pressPlan(rows, new Map([[PublishTarget.Web, false]]));
     assert.equal(plan?.label, "Publish to Mac");
+  });
+});
+
+describe("the Publish card's switches", () => {
+  /** An Unreal game on a PC before its first publish: its web build is ready, its Windows app is not built. */
+  const pcRows = (): CardRow[] =>
+    cardRows({
+      platforms: [
+        platform(PublishTarget.Web, READY),
+        platform(PublishTarget.Mac, MISSING),
+        platform(PublishTarget.Windows, MISSING),
+        platform(PublishTarget.Linux, MISSING),
+      ],
+      native: record(null),
+      now: NOW,
+      webOffer: WebOffer.Make,
+      madeHere: new Set([PublishTarget.Windows, PublishTarget.Linux]),
+      hostedWeb: false,
+      mac: false,
+    });
+  /** Nothing switched in this dialog: the card was opened again, or a press just ended. */
+  const NOTHING_CHOSEN = new Map<PublishTarget, boolean>();
+  const WINDOWS_LEFT_OUT = new Set([PublishTarget.Windows]);
+
+  it("keeps a platform the person left out switched off, after the press and when the card opens again", () => {
+    const rows = pcRows();
+    assert.equal(pressPlan(rows, NO_SWITCHES)?.label, "Build Windows", "the Windows app starts switched on");
+    const switches = keptSwitches(rows, WINDOWS_LEFT_OUT, NOTHING_CHOSEN);
+    assert.equal(switches.get(PublishTarget.Windows), false);
+    assert.equal(pressPlan(rows, switches)?.label, "Publish to web", "the web build never waits for it again");
+  });
+
+  it("lets a switch turned in this dialog win over what was kept", () => {
+    const rows = pcRows();
+    const on = keptSwitches(rows, WINDOWS_LEFT_OUT, new Map([[PublishTarget.Windows, true]]));
+    assert.equal(pressPlan(rows, on)?.label, "Build Windows");
+    const webOff = keptSwitches(rows, WINDOWS_LEFT_OUT, new Map([[PublishTarget.Web, false]]));
+    assert.equal(pressPlan(rows, webOff), null, "both are off: nothing to press");
+  });
+
+  it("opens a platform players have switched on whatever was kept: an old choice never offers to take it down", () => {
+    const rows = unreal(
+      unrealFolder(READY, 30 * MINUTE_MS),
+      record(20 * MINUTE_MS, [cloudBuild(CloudBuildState.Done, 40 * MINUTE_MS)]),
+    );
+    assert.equal(pressPlan(rows, keptSwitches(rows, WINDOWS_LEFT_OUT, NOTHING_CHOSEN)), null);
+    const off = keptSwitches(rows, WINDOWS_LEFT_OUT, new Map([[PublishTarget.Windows, false]]));
+    assert.equal(pressPlan(rows, off)?.label, "Take Windows down", "switched off in this dialog, it is taken down");
+  });
+
+  it("keeps a platform that was taken down switched off: its app, still built, is not offered again", () => {
+    // The Mac app is live; the Windows one was taken down, and Genex Cloud still keeps its build.
+    const rows = unreal(unrealFolder(READY, 30 * MINUTE_MS), record(20 * MINUTE_MS, [keptBuild(40 * MINUTE_MS)]));
+    assert.equal(pressPlan(rows, NO_SWITCHES)?.label, "Publish to Windows", "a built app starts switched on");
+    assert.equal(pressPlan(rows, keptSwitches(rows, WINDOWS_LEFT_OUT, NOTHING_CHOSEN)), null);
+  });
+
+  /** A storage of one game's page: what was written, by key. */
+  function memory(start: Record<string, string> = {}): KeyValueStorage & { kept: Map<string, string> } {
+    const kept = new Map(Object.entries(start));
+    return {
+      kept,
+      getItem: (key) => kept.get(key) ?? null,
+      setItem: (key, value) => void kept.set(key, value),
+      removeItem: (key) => void kept.delete(key),
+    };
+  }
+  const KEY = storageKeyFor.publishLeftOut("genex-strike");
+
+  it("remembers per game which platforms were switched off, and forgets one switched on again", () => {
+    const storage = memory();
+    const off = leftOutAfter(readLeftOut("genex-strike", storage), PublishTarget.Windows, false);
+    writeLeftOut("genex-strike", off, storage);
+    assert.deepEqual([...readLeftOut("genex-strike", storage)], [PublishTarget.Windows]);
+    assert.deepEqual([...readLeftOut("another-game", storage)], [], "another game has its own switches");
+    writeLeftOut("genex-strike", leftOutAfter(off, PublishTarget.Windows, true), storage);
+    assert.equal(storage.kept.has(KEY), false, "nothing left out: nothing kept");
+  });
+
+  it("reads anything else that was kept as nothing left out", () => {
+    const hostile = ["", "{", "null", '"windows"', '{"windows":false}', "[1,null,{}]", '["steam","Windows"]'];
+    for (const kept of hostile)
+      assert.deepEqual([...readLeftOut("genex-strike", memory({ [KEY]: kept }))], [], JSON.stringify(kept));
+    const mixed = memory({ [KEY]: '["linux","steam","web"]' });
+    assert.deepEqual([...readLeftOut("genex-strike", mixed)], [PublishTarget.Linux, PublishTarget.Web]);
+    assert.deepEqual([...readLeftOut("genex-strike", null)], [], "no storage: nothing is remembered");
+    assert.doesNotThrow(() => writeLeftOut("genex-strike", new Set([PublishTarget.Mac]), null));
   });
 });
 

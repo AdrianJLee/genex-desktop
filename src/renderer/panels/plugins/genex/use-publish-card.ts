@@ -1,10 +1,11 @@
 /**
  * The Publish card's state and its one press, for a game made in an engine. The rows wait for both
- * the game folder and Genex's record; the switches are the person's until the press; a press does
- * what its plan says. Build: the agent builds apps here and Genex Cloud builds the ones this
- * computer can't, both at once, and players get nothing (Genex Cloud keeps what it builds). Publish:
- * the card sends what is ready, gives players what Genex Cloud built (or still builds, once built),
- * and takes switched-off platforms down.
+ * the game folder and Genex's record; a switch stays where the person left it, after a press and
+ * when the card opens again (`publish-left-out.ts`); a press does what its plan says. Build: the
+ * agent builds apps here and Genex Cloud builds the ones this computer can't, both at once, and
+ * players get nothing (Genex Cloud keeps what it builds). Publish: the card sends what is ready,
+ * gives players what Genex Cloud built (or still builds, once built), and takes switched-off
+ * platforms down.
  */
 import { useState } from "react";
 import { GenexAction, type GenexNativeRecord } from "../../../../shared/genex.ts";
@@ -22,9 +23,11 @@ import {
   cardRows,
   type PressPlan,
   busyPress,
+  keptSwitches,
   pressNote,
   pressPlan,
 } from "./publish-card-view.ts";
+import { leftOutAfter, readLeftOut, writeLeftOut } from "./publish-left-out.ts";
 import {
   appsMadeHere,
   cloudFixAsk,
@@ -105,6 +108,23 @@ function useErrorBlocks(
   });
 }
 
+/**
+ * The card's switches: the ones turned in this dialog, over the platforms the person left out of
+ * `project`'s publishes before. Turning one is kept at once, so it is where it was left after any
+ * press and when the card opens again.
+ */
+function useCardSwitches(project: string, rows: readonly CardRow[] | null) {
+  const [chosen, setChosen] = useState<ReadonlyMap<PublishTarget, boolean>>(() => new Map());
+  const [leftOut, setLeftOut] = useState(() => readLeftOut(project));
+  const onSwitch = (target: PublishTarget, on: boolean): void => {
+    const next = leftOutAfter(leftOut, target, on);
+    setChosen((before) => new Map(before).set(target, on));
+    setLeftOut(next);
+    writeLeftOut(project, next);
+  };
+  return { switches: rows ? keptSwitches(rows, leftOut, chosen) : chosen, onSwitch };
+}
+
 /** What the card shows and does for `project`, from its record and the folder's platforms (null until read). */
 export function usePublishCard({
   project,
@@ -126,7 +146,6 @@ export function usePublishCard({
 }) {
   const facts = useLibrary((s) => s.games.find((g) => g.name === project)?.facts) ?? NO_FACTS;
   const title = useLibrary((s) => s.games.find((g) => g.name === project)?.title) || project;
-  const [switches, setSwitches] = useState<ReadonlyMap<PublishTarget, boolean>>(() => new Map());
   const [asked, setAsked] = useState<ReadonlyMap<PublishTarget, string>>(() => ASKED.get(project) ?? new Map());
   const [acting, setActing] = useState(false);
   const state = record.state;
@@ -144,6 +163,7 @@ export function usePublishCard({
           mac: hostPlatform() === "darwin",
         })
       : null;
+  const { switches, onSwitch } = useCardSwitches(project, rows);
   const remember = (targets: readonly PublishTarget[]): void => {
     const at = new Date().toISOString();
     const next = new Map(asked);
@@ -189,14 +209,10 @@ export function usePublishCard({
   const press = async (plan: PressPlan): Promise<void> => {
     setActing(true);
     try {
-      const built = targetsOf(plan, CardWork.Build);
-      const onCloud = targetsOf(plan, CardWork.Cloud);
-      ask(built);
-      await buildOnCloud(onCloud);
+      ask(targetsOf(plan, CardWork.Build));
+      await buildOnCloud(targetsOf(plan, CardWork.Cloud));
       await takeDown(targetsOf(plan, CardWork.TakeDown));
       await send(plan);
-      // A Build changes nothing for players: the switches stay as the person set them for the Publish after it.
-      if (built.length + onCloud.length === 0) setSwitches(new Map());
     } finally {
       setActing(false);
       await record.refresh();
@@ -211,7 +227,7 @@ export function usePublishCard({
     errors,
     rows,
     switches,
-    onSwitch: (target: PublishTarget, on: boolean) => setSwitches((before) => new Map(before).set(target, on)),
+    onSwitch,
     plan,
     busy,
     /** The line under the button while Genex Cloud works: the active button's, else the busy one's. */

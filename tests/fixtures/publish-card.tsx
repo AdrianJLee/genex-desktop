@@ -5,8 +5,8 @@
  * with all four platforms. Each scene is a moment of the card (canvas "Publish: Mac and Windows
  * together", flow A): nothing built, both building, the Mac app built while Windows builds, Windows
  * following by itself, both built, done, apps older than the game, a newer one ready, a failed build,
- * a build that didn't start, a send that failed, a switch turned off, and the rows while the folder
- * is still read.
+ * a build that didn't start, a send that failed, a switch turned off, a PC whose web build is ready
+ * while its Windows app is not built, and the rows while the folder is still read.
  */
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -16,6 +16,7 @@ import { AppearanceMode } from "../../src/renderer/appearance/themes.ts";
 import { COMPOSE_IN_CHAT_EVENT, type ComposeInChat } from "../../src/renderer/compose-in-chat.ts";
 import { GenexPublishDialog } from "../../src/renderer/panels/plugins/genex/GenexPublish.tsx";
 import { studio } from "../../src/renderer/state/studio.ts";
+import { removeKey, storageKeyFor } from "../../src/renderer/storage.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import {
@@ -64,6 +65,7 @@ type Scene =
   | "failedFirst"
   | "sendFailed"
   | "pc"
+  | "pcWeb"
   | "unity"
   | "loading";
 
@@ -108,6 +110,12 @@ const PLATFORMS: Record<Scene, () => PublishPlatform[]> = {
   failedFirst: () => unreal(Ready, 10 * MINUTE),
   sendFailed: () => unreal(Ready, 10 * MINUTE),
   pc: () => unreal(Missing, 0),
+  pcWeb: () => [
+    row(PublishTarget.Web, Ready),
+    row(PublishTarget.Mac, Missing),
+    row(PublishTarget.Windows, Missing),
+    row(PublishTarget.Linux, Missing),
+  ],
   loading: () => unreal(Ready, 30 * MINUTE),
   unity: () => [
     row(PublishTarget.Web, Ready),
@@ -175,6 +183,7 @@ function appsOf(of: Scene): GenexNativeRecord {
       failed: [{ platform: "mac", arch: "universal", error: "Couldn't get an upload token (HTTP 413)." }],
     }),
     pc: () => ({ ...record([], []), cloud: { supported: true, builds: [] } }),
+    pcWeb: () => record([], []),
     loading: () => record([sent("mac", 20 * MINUTE)], [cloud(CloudBuildState.Done, 40 * MINUTE)]),
     unity: () => record([sent("mac", 40 * MINUTE)], []),
   };
@@ -192,7 +201,10 @@ const NOT_ON_GENEX: ReadonlySet<Scene> = new Set([
   "windowsBuilt",
   "failedFirst",
   "pc",
+  "pcWeb",
 ]);
+/** The scenes on a PC; every other is on a Mac. */
+const ON_A_PC: ReadonlySet<Scene> = new Set(["pc", "pcWeb"]);
 /** What Genex Cloud refuses a build with in `startFails`: never shown, only copied. */
 const REFUSED = "This account has used its Genex Cloud builds for this month.";
 
@@ -315,8 +327,11 @@ function sample() {
   };
 }
 
-/** Open the dialog in `theme` on the scene's game. */
-async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
+/**
+ * Open the dialog in `theme` on the scene's game. A game opens with no switch remembered, unless it is
+ * opened `again`: then the card has what the person left switched off the time before.
+ */
+async function open(options: { theme?: "dark" | "light"; scene?: Scene; again?: boolean } = {}) {
   updateAppearance((appearance) => ({
     ...appearance,
     mode: options.theme === "light" ? AppearanceMode.Light : AppearanceMode.Dark,
@@ -324,9 +339,10 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   scene = options.scene ?? "old";
   landed = false;
   cloudSend = undefined;
-  // The computer the game is made on: a Mac, or the PC of the `pc` scene.
-  document.documentElement.dataset.platform = scene === "pc" ? "win32" : "darwin";
+  // The computer the game is made on: a Mac, or the PC of the `pc` scenes.
+  document.documentElement.dataset.platform = ON_A_PC.has(scene) ? "win32" : "darwin";
   game = scene === "old" || scene === "built" ? GAME : `${GAME}-${scene}`;
+  if (!options.again) removeKey(storageKeyFor.publishLeftOut(game));
   asked.length = 0;
   composed.length = 0;
   studio().people.setState((people) => ({ ...people, account: GenexAccountStatus.SignedIn }), true);

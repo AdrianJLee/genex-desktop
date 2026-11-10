@@ -9,9 +9,10 @@
  * Cloud building an app that was published shows its clock, the busy button and "It can take up to an
  * hour."; a done card has no button; a failed cloud build has its error block and leaves the Mac app
  * free to go; a build that didn't start has a block that tries again; a switch turned off takes that
- * app down with an amber button; the same game on a PC builds its Windows app there; a Unity game
- * lists its four platforms. No row says "Public:", and no Share assets line shows. Dark screens, and
- * the main ones in light.
+ * app down with an amber button; the same game on a PC builds its Windows app there, and a switch
+ * turned off there stays off after the publish and when the card opens again; a Unity game lists its
+ * four platforms. No row says "Public:", and no Share assets line shows. Dark screens, and the main
+ * ones in light.
  */
 import { build } from "esbuild";
 import { spawn } from "node:child_process";
@@ -266,6 +267,25 @@ app.whenReady().then(async()=>{
   assert.equal(pc.primary,'Build Windows');
   clean('pc',pc);
   report.pc=await capture('dark-pc-opens');
+  // Its web build is ready and its Windows app, not built, is switched off: the switch stays where it was
+  // left, after the publish and when the card opens again.
+  const pcWeb=await step('pcWeb','window.cardRig.open({scene:"pcWeb"})');
+  assert.deepEqual(pcWeb.rows.map((row)=>[row.name,row.status,row.on]),[
+   ['Web','Ready to publish',true],
+   ['Windows','Not built',true],
+   ['Linux','Not built',false],
+  ]);
+  const webOnly=await step('pcWebWindowsOff','window.cardRig.toggle("windows")');
+  assert.equal(webOnly.primary,'Publish to web');
+  const webSent=await step('pcWebPublish','window.cardRig.press()');
+  assert.deepEqual(webSent.asked.filter((one)=>!one.startsWith('review:')),['web:']);
+  assert.deepEqual(webSent.rows.map((row)=>[row.name,row.on]),[['Web',true],['Windows',false],['Linux',false]],'the Windows switch stays off after the publish');
+  assert.equal(webSent.primary,'Publish to web');
+  clean('pcWebPublish',webSent);
+  report.pcWebPublished=await capture('dark-pc-web-windows-stays-off');
+  const pcWebAgain=await step('pcWebAgain','window.cardRig.open({scene:"pcWeb",again:true})');
+  assert.deepEqual(pcWebAgain.rows.map((row)=>[row.name,row.on]),[['Web',true],['Windows',false],['Linux',false]],'and when the card opens again');
+  assert.equal(pcWebAgain.primary,'Publish to web');
   // A Unity game with all four platforms.
   for (const theme of ['dark','light']) {
    const unity=await step(theme+'Unity','window.cardRig.open({scene:"unity",theme:"'+theme+'"})');
@@ -282,7 +302,7 @@ app.whenReady().then(async()=>{
   const linux=await step('linuxOn','window.cardRig.toggle("linux")');
   assert.equal(linux.primary,'Build Linux','an app the agent makes is built first, alone');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish card: skeleton rows before the folder answers; one Build makes the Mac app here and the Windows app on Genex Cloud, kept; one Publish gives players what is built and what Genex Cloud still builds once built; both built publish together or one alone; older apps build, then update; Genex Cloud shows its clock and the hour line; done has no button; a switch off takes an app down in amber; a failed cloud build leaves the Mac app free and its block hands the log to the agent, never showing it; a build that did not start and a failed send have blocks that try again; a PC builds its Windows app there; a Unity game lists four platforms; no "Public:", no Share assets');
+  console.log('PASS Publish card: skeleton rows before the folder answers; one Build makes the Mac app here and the Windows app on Genex Cloud, kept; one Publish gives players what is built and what Genex Cloud still builds once built; both built publish together or one alone; older apps build, then update; Genex Cloud shows its clock and the hour line; done has no button; a switch off takes an app down in amber; a failed cloud build leaves the Mac app free and its block hands the log to the agent, never showing it; a build that did not start and a failed send have blocks that try again; a PC builds its Windows app there; a switch turned off stays off after the publish and when the card opens again; a Unity game lists four platforms; no "Public:", no Share assets');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

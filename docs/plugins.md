@@ -3632,8 +3632,10 @@ Genex:
   asked for the ones this computer makes and Genex Cloud for the ones it can't (`buildOnCloud` →
   `genexCloudBuild` with `keep`), both at once. Nothing reaches players: Genex Cloud keeps what it
   builds, so the game needs no page on Genex. The folder is read again until the agent's build lands,
-  an ask nothing came of is let go after two hours, and the switches stay as set for the Publish
-  after it. Then "Update Mac and Windows" / "Publish to Mac and Windows" ("… 3 platforms" from three)
+  an ask nothing came of is let go after two hours. A switch stays where the person left it: a
+  platform switched off is kept per game (`publish-left-out.ts`, `keptSwitches`) and is still off
+  after the press and when the card opens again, while one players have opens switched on whatever
+  was kept, so an old choice never offers to take it down. Then "Update Mac and Windows" / "Publish to Mac and Windows" ("… 3 platforms" from three)
   sends the switched-on ready apps (`platforms` on `genex-publish-apps` and `genex-publish`,
   `publishedApps`' `platforms` choice) and gives players the app Genex Cloud keeps (`CardWork.Release`,
   `release` on `genex-publish-apps`). A kept app built before the game's last change is no such app:

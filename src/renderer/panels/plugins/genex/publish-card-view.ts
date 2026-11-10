@@ -464,6 +464,20 @@ export interface PressPlan {
 export const switchedOn = (row: CardRow, switches: ReadonlyMap<PublishTarget, boolean>): boolean =>
   switches.get(row.target) ?? row.on;
 
+/**
+ * The switches the card has: the ones turned in this dialog, over the platforms the person left out
+ * before (`leftOut`, kept per game). A platform players have opens switched on whatever was kept: a
+ * choice from another day never offers to take it down.
+ */
+export function keptSwitches(
+  rows: readonly CardRow[],
+  leftOut: ReadonlySet<PublishTarget>,
+  chosen: ReadonlyMap<PublishTarget, boolean>,
+): Map<PublishTarget, boolean> {
+  const stillOut = rows.filter((row) => leftOut.has(row.target) && !row.live);
+  return new Map<PublishTarget, boolean>([...stillOut.map((row) => [row.target, false] as const), ...chosen]);
+}
+
 /** "Mac", "Mac and Windows", "Mac, Windows and web". */
 const listed = (rows: readonly CardRow[]): string =>
   NATIVE_WORDS.platforms(rows.map((row) => WORDS.inPress[row.target]));

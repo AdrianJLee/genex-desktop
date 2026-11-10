@@ -3586,8 +3586,12 @@ Genex:
   plugin's own `node` server gets the bare token on fd 3 instead.
 - The MCP launcher seeds `.genex/workspace.json` in a Genex server's working directory.
 - Publish in Studio's own Publish dialog (`main/core/genex-publish.ts`) first lists the files a
-  public copy would hold (`studio:plugins.genex-publish-review`: the same export, into scratch,
-  removed), then `studio:plugins.genex-publish` runs `publish-gallery` with that list approved.
+  public copy would hold (`studio:plugins.genex-publish-review`), then
+  `studio:plugins.genex-publish` runs `publish-gallery` with that list approved. The list comes
+  from the export's own walk, refusals and checks over the files where they are, with nothing
+  copied (`listPublicGame`), so an engine's web export or a build's output is copied once, for the
+  upload. Only a game that carries the vendored library is still exported into scratch, listed and
+  removed: which of the library's files it keeps is settled in the copy.
   Studio draws the dialog, so that press is the consent: no native dialog, and no chat card when
   the staged export holds exactly the approved files (`main/core/export-approvals.ts`: one use,
   only during that publish, five minutes at most). Other files are asked about in chat as usual.

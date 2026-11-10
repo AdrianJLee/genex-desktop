@@ -343,6 +343,8 @@
   "tests/conformance/unreal-first-use.test.ts",
   "tests/conformance/unreal-game-view.test.ts",
   "tests/conformance/unreal-launcher.test.ts",
+  "tests/conformance/unreal-multiplayer-tool.test.ts",
+  "tests/conformance/unreal-multiplayer-vendor.test.ts",
   "tests/conformance/unreal-path-scrub.test.ts",
   "tests/conformance/unreal-plugin-ship.test.ts",
   "tests/conformance/unreal-setup.test.ts",

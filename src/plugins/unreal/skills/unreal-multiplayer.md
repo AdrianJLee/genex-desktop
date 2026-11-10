@@ -12,9 +12,10 @@ first for the module's API, presets and rules. Only the client below is Unreal's
 
 `unreal__multiplayer` copies Genex's `GenexMultiplayer` plugin, shipped with Genex at a pinned
 version, into `unreal/Plugins/GenexMultiplayer`, turns it on in the .uproject, and adds the
-Colyseus core it links (on a Mac, a one-time download Genex checks and keeps). Never download the
-plugin, its core or any SDK yourself, and never edit the plugin's files: a later call replaces them.
-Its answer says whether the core is ready; on Windows it is not yet, so build the client on a Mac.
+Colyseus core it links (on a Mac, a one-time download Genex checks and keeps; on Windows, the
+build Genex ships with itself). Never download the plugin, its core or any SDK yourself, and never
+edit the plugin's files: a later call replaces them. Its answer says whether the core is ready
+(`core.ready`); when it isn't, `core.why` says why and the plugin won't build until it is.
 
 Then `unreal__cpp-status`: a game that uses the plugin must have a C++ module to package
 (`unreal__add-cpp-module` when it has none).

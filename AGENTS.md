@@ -140,9 +140,15 @@ Write code a person enjoys reading; behavior never changes in a readability edit
   page ≤800, the handbook ≤4,000 and at most eight product pages. Shorten or reorganize when
   full; do not raise limits.
 - For now all work integrates into `dev`: base work on `origin/dev` and open PRs against
-  `dev`. Never push or open PRs to `main` unless the owner asks. The owner opens `dev` → `main`
-  PRs by hand; only they run the billed macOS/Windows CI (`check` `fast`, `package`, `windows`,
-  `terminal`), so dispatch one on your branch when a change is platform-sensitive.
+  `dev`. Never push or open PRs to `main` unless the owner asks; no twin `main` PR per fix,
+  the owner opens one batched `dev` → `main` PR by hand. Billed macOS/Windows CI (`check`
+  `fast`, `package`, `windows`, `terminal`) is opt-in: dispatch one on your branch only for a
+  platform-sensitive change.
+- CI is billed per push. One PR per lane of related work, not per fix; follow-ups and review
+  fixes go on its branch. Open it as a draft, mark it ready once, and run the scoped checks
+  locally before each push. Rerun a failed job at most twice, then investigate; never while
+  GitHub refuses to start jobs (billing, outage). Lanes leave versions alone; the lead bumps
+  once at merge.
 - PRs contain code, tests/fixtures, attribution, changed docs and a validation summary per the
   PR template. Name docs updated or explain why they remain accurate. No session reports,
   filled plans, handoff JSON or raw report batches in Git.

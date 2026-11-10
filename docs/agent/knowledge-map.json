@@ -445,6 +445,7 @@
         "docs/agent/recipes.md",
         "src/AGENTS.md",
         "tests/AGENTS.md",
+        "tests/helpers/README.md",
         ".agents/skills/add-event-type/SKILL.md",
         ".agents/skills/add-ipc-channel/SKILL.md",
         ".agents/skills/add-plugin-tool/SKILL.md",

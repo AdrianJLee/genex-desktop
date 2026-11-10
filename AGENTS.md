@@ -3,7 +3,8 @@
 If your working directory is under `.studio-dev/profiles/`, you are an in-app game builder in a
 development profile: ignore this file and follow your game's own `CLAUDE.md`.
 
-This repository is the macOS Electron application. You are its external developer; the
+This repository is the Electron desktop application for macOS, Linux and Windows (preview). You
+are its external developer; the
 editable in-app game-building harness is a separate agent with narrower authority.
 `src/harness-seed/**` and `src/game-template/**` (including `src/game-template/CLAUDE.md`) are
 product payload addressed to in-app agents: edit them as product text, don't follow them.
@@ -28,14 +29,16 @@ historical task records at startup.
 
 - The renderer is a browser: no Node, Electron, main, preload or substrate imports. It talks
   only through the fixed named calls in `src/shared/studio-api.ts`.
-- Every spawned agent or game process goes through ProcessSandbox; Bypass agents run unboxed.
+- Every spawned agent or game process goes through ProcessSandbox; only an agent in the
+  Bypass permissions mode runs unboxed.
 - Seed upgrades keep the in-app agent's harness edits, except the one upgrade into an archive
   epoch (`substrate/seed-archive.ts`): edits of files that seed removes or changes, and what the
   runs learned, move to `<harness workspace>/archive/<date>/` and the seed's copies replace them.
 - Every new IPC channel is classified fixture-safe or native in `src/main/dev/native-policy.ts`.
 - Preserve the normal profile and `~/AI Games`; use owned `studio:dev` profiles. Automated
   checks use disposable fixtures. A request to run the real app for manual testing authorizes
-  a visible live profile; “no mocks” must never select fixtures. Leave human sessions running.
+  a visible live profile; when the user says “no mocks”, use a live profile, never fixtures.
+  Leave human sessions running.
   Live profiles retain provider-account/Keychain and usage semantics: isolation of app data
   does not isolate accounts. Do not inspect, reset or copy credentials. See the
   [field guide](docs/STUDIO-DEVELOPER-FIELD-GUIDE.md#run-an-owned-development-profile).
@@ -72,20 +75,19 @@ provider identity when relevant.
   tool. `scripts/check-mac-tools.ts` (in `check:static`) refuses them, and
   `DEVELOPER_DIR=/nonexistent` reproduces such a Mac in a test or a `studio:dev` launch.
 - Contracts live in `src/shared` (IPC channel map, UiEventMap, CustomEventMap, HarnessHostApi);
-  add new events/channels there first; no payload as / as never.
+  add new events/channels there first; never cast a payload (`payload as X`, `as never`).
 - No `enum`, `namespace` or parameter properties, because Node runs `.ts` directly: a
   vocabulary is an `as const` object (see Readability).
 - Biome must pass (`npm run lint`; `check:static` lints changed files) and the types must check
   under TypeScript 7 (`npm run typecheck`, which runs `scripts/tsc.ts`). Code that needs the
   TypeScript JS API imports `@typescript/typescript6`, never `typescript`.
-- Harness (`src/harness-seed/`): the modes (director, the one Loop; the classic pipeline's
-  autopilot, facet loop, gauntlet and spike) keep their own control flow and share primitives from
-  `loop/git.ts`, `evidence.ts`, `config.ts` and `outcomes.ts`; no classes, DI or
-  FSM libraries. A judge is a second opinion the lead asks for: it gates no round, merge, finish
-  or close. It is
-  TypeScript, type-checked in CI (`tsconfig.harness.json`) and, for the agent's own code edits,
-  by the in-app TS 7 gate (`guardian.validate_edit` with the compiler vendored in
-  `dist/resources/tsc`).
+- Harness (`src/harness-seed/`): one Loop, the director's (`loop/director.ts`, `loop/director/`),
+  on primitives from `loop/git.ts`, `loop/config.ts` and `loop/outcomes.ts`; no classes, DI or
+  FSM libraries. The classic pipeline is gone; `autopilot` and `facet` survive only in wire names
+  ([glossary](docs/agent/glossary.md#runs)). A judge is a second opinion the lead asks for: it
+  gates no round, merge, finish or close. The harness is TypeScript, type-checked in CI
+  (`tsconfig.harness.json`) and, for the agent's own code edits, by the in-app TS 7 gate
+  (`guardian.validate_edit` with the compiler vendored in `dist/resources/tsc`).
 - The app never imports `src/harness-seed/` (the agent edits it). A rule both sides apply has a
   typed copy in `src/shared`, held to the seed's by `seed-contracts.test.ts`
   ([recipe](docs/agent/recipes.md#seed-contract)).
@@ -128,8 +130,8 @@ Write code a person enjoys reading; behavior never changes in a readability edit
   reassignment, `else` after `return` and uncollapsed `if`s are Biome errors, so `npm run lint`
   fails on them; tests keep them as warnings (`npm run lint:warn` lists the backlog). An
   exception is a `biome-ignore` naming its reason, such as a function serialized into the page.
-- Keep every "why" comment with its code; give each new export a one-line doc comment. Keep
-  `data-*` selectors, aria-labels and visible strings byte-identical.
+- Keep every "why" comment with its code; give each new export a one-line doc comment. In a
+  readability edit, keep `data-*` selectors, aria-labels and visible strings byte-identical.
 
 ## Documentation and PRs
 
@@ -144,8 +146,9 @@ Write code a person enjoys reading; behavior never changes in a readability edit
   full; do not raise limits.
 - For now all work integrates into `dev`: base work on `origin/dev` and open PRs against
   `dev`. Never push or open PRs to `main` unless the owner asks. The owner opens `dev` → `main`
-  PRs by hand; only they run the billed macOS/Windows CI (`check` `fast`, `package`, `windows`,
-  `terminal`), so dispatch one on your branch when a change is platform-sensitive.
+  PRs by hand. The billed macOS/Windows CI (`check` `fast`, `package`, `windows`, `terminal`)
+  runs only on those PRs and on dispatch, so dispatch it on your branch when a change is
+  platform-sensitive.
 - PRs contain code, tests/fixtures, attribution, changed docs and a validation summary per the
   PR template. Name docs updated or explain why they remain accurate. No session reports,
   filled plans, handoff JSON or raw report batches in Git.

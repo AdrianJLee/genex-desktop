@@ -44,6 +44,56 @@ function brokenLinks(base: string, file: string): string[] {
   return broken;
 }
 
+/** Files whose backticked paths and `npm run` names are checked: the routed files and the helper catalogue. */
+const NAMED = [...ROUTED, "tests/helpers/README.md"];
+/** Folders the walk skips: installs, build output and local-only state, none of them repository source. */
+const UNWALKED = new Set(["node_modules", ".git", "dist", "out", ".studio-dev", ".vite"]);
+/** A code span that names a repository file (by extension) or folder (trailing slash): no command, glob or placeholder. */
+const PATH_TOKEN = /^\.?[\w@-][\w@.-]*(?:\/[\w@.-]+)*(?:\.(?:ts|tsx|mts|mjs|cjs|js|json|md|css|yml)|\/)$/;
+/** Paths a code span may name that are not in the repository: build output and ignored local state. */
+const OUTSIDE = /^(?:dist|out|\.studio-dev)\//;
+/** Named folders that are right to be absent here: a game's own folder, and one the eval tooling makes on its first promote. */
+const ELSEWHERE = new Set([".genex/items/", "evals/baselines/"]);
+
+/** Every file under `base` as a relative path, and every folder as one with a trailing slash. */
+function repositoryPaths(base: string): string[] {
+  const found: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(base, dir), { withFileTypes: true })) {
+      if (UNWALKED.has(entry.name)) continue;
+      const rel = dir ? `${dir}/${entry.name}` : entry.name;
+      if (!entry.isDirectory()) found.push(rel);
+      else {
+        found.push(`${rel}/`);
+        walk(rel);
+      }
+    }
+  };
+  walk("");
+  return found;
+}
+
+/**
+ * Code spans in `file` that name a file or folder no path in the repository ends with. Instruction
+ * files name paths relative to the folder they talk about (`loop/git.ts`, `words.ts`), so a name
+ * passes when any repository path is it or ends with it.
+ */
+function missingPaths(base: string, file: string, paths = repositoryPaths(base)): string[] {
+  const text = unfenced(fs.readFileSync(path.join(base, file), "utf8"));
+  const named = new Set([...text.matchAll(/`([^`\n]+)`/g)].map((m) => m[1] ?? ""));
+  const exists = (name: string) => paths.some((p) => p === name || p.endsWith(`/${name}`));
+  const checked = (name: string) => PATH_TOKEN.test(name) && !OUTSIDE.test(name) && !ELSEWHERE.has(name);
+  return [...named].filter((name) => checked(name) && !exists(name)).map((name) => `${file}: ${name}`);
+}
+
+/** `npm run <name>` commands in `file` that package.json does not define. */
+function missingScripts(base: string, file: string): string[] {
+  const scripts = JSON.parse(fs.readFileSync(path.join(base, "package.json"), "utf8")).scripts ?? {};
+  const text = fs.readFileSync(path.join(base, file), "utf8");
+  const named = new Set([...text.matchAll(/npm run ([a-z][\w:-]*)/g)].map((m) => m[1] ?? ""));
+  return [...named].filter((name) => !(name in scripts)).map((name) => `${file}: npm run ${name}`);
+}
+
 /** CLAUDE.md files that do not import their sibling AGENTS.md as the first line. */
 function missingImports(base: string, files: string[]): string[] {
   return files.filter((file) => {
@@ -106,6 +156,43 @@ test("every relative link in the developer instructions, glossary and recipes re
   for (const file of ROUTED) assert.ok(fs.existsSync(path.join(root, file)), `${file} is missing`);
   assert.deepEqual(
     ROUTED.flatMap((file) => brokenLinks(root, file)),
+    [],
+  );
+});
+
+test("path check flags a missing file and folder, and passes relative names, globs and build output", (t) => {
+  const dir = scratch(t, {
+    "src/loop/git.ts": "",
+    "src/renderer/words.ts": "",
+    "AGENTS.md": [
+      "`src/loop/git.ts` `loop/git.ts` `words.ts` `src/loop/` `loop/`",
+      "`loop/evidence.ts` `src/gone/` `gone.md`",
+      "`src/**` `prompts/*.md` `<workspace>/archive/<date>/` `~/AI Games` `dist/resources/tsc.js` `.studio-dev/notes/a.md`",
+      "`npm run lint` `payload as X` `data-*`",
+      "```",
+      "`fenced/missing.ts`",
+      "```",
+    ].join("\n"),
+  });
+  assert.deepEqual(missingPaths(dir, "AGENTS.md"), [
+    "AGENTS.md: loop/evidence.ts",
+    "AGENTS.md: src/gone/",
+    "AGENTS.md: gone.md",
+  ]);
+});
+
+test("script check flags an npm run name package.json does not define", (t) => {
+  const dir = scratch(t, {
+    "package.json": JSON.stringify({ scripts: { lint: "x", "verify:context": "y" } }),
+    "AGENTS.md": "Run `npm run lint`, then `npm run verify:context -- --area a` and npm run gone:script.",
+  });
+  assert.deepEqual(missingScripts(dir, "AGENTS.md"), ["AGENTS.md: npm run gone:script"]);
+});
+
+test("every file, folder and npm script the developer instructions name exists", () => {
+  const paths = repositoryPaths(root);
+  assert.deepEqual(
+    NAMED.flatMap((file) => [...missingPaths(root, file, paths), ...missingScripts(root, file)]),
     [],
   );
 });

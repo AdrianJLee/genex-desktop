@@ -276,7 +276,7 @@ A loop failure seen in a real run.
    in. It must fail before the fix.
 2. Fix it in `src/harness-seed/loop/*.ts`. Keep the seed dependency-free and remember that
    existing profiles keep agent-edited files on seed upgrade.
-3. Run `npm run verify:harness` (incidents and scoreboard), then L3 `npm run test:rig` if the
-   fix touches run orchestration.
-4. Prompt text under `src/harness-seed/prompts/`, `judge/` or `skills/` is product copy; edit it
-   as such.
+3. Run `npm run verify:harness` (incidents and scoreboard) and the affected L3 rig suites, as the
+   [scope table](verification.md#choose-the-verification-scope) requires.
+4. Prompt text under `src/harness-seed/prompts/` and in the seed's `*-prompts.ts` files is product
+   copy; edit it as such.

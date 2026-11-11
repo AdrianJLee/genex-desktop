@@ -1372,8 +1372,6 @@ export default {
   "Export target must be an ordinary directory": "エクスポート先は通常のフォルダーにする必要があります",
   "Export validation does not yet support scoped import maps; build this project before export":
     "エクスポートの検証はまだscoped import mapsに対応していません。エクスポートする前にこのプロジェクトをビルドしてください",
-  "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.":
-    "web/にWeb向けにエクスポートしました。ライブの「Webゲーム」タブでプレイでき、「公開」でオンラインにできます。",
   "Exported {count} public files. Included: {included}. Excluded from selected roots: {excluded}.":
     "公開ファイルを{count}個書き出しました。含まれるファイル：{included}。選んだルートから除外：{excluded}。",
   "Exporting…": "エクスポート中…",
@@ -3364,7 +3362,6 @@ export default {
   "Set up the protected workspace": "保護されたワークスペースをセットアップ",
   "Set up this game's Unity project": "このゲームのUnityプロジェクトをセットアップしてください",
   "Set up {name} for Genex.": "{name}をGenex用にセットアップします。",
-  "Set up {name} for Genex?": "{name}をGenex用にセットアップしますか？",
   "Set up {project} after it ends.": "Loopが終わったら{project}をセットアップしてください。",
   "Set up {project} for Genex · {game} now builds in {engine}":
     "{project}をGenex用にセットアップしました · {game}は{engine}でつくるようになりました",
@@ -4321,7 +4318,6 @@ export default {
   "Unclosed TOML string": "TOMLの文字列が閉じられていません",
   "Undid {count, plural, one {# try} other {# tries}} before it": "それまでに{count, plural, other {#回}}取り消し",
   Undo: "元に戻す",
-  "Undo setup for {name}?": "{name}のセットアップを元に戻しますか？",
   "Undo this change": "この変更を元に戻す",
   Undone: "取り消し済み",
   "Undone because {reason}.": "取り消した理由：{reason}。",
@@ -6519,4 +6515,28 @@ export default {
   "Installing… {percent}% · {speed} · under a minute left": "インストール中… {percent}% · {speed} · 残り1分未満",
   "This plugin stopped several times in a row, so it starts again in {seconds, plural, one {# second} other {# seconds}}. Try again then.":
     "このプラグインが何度も続けて止まったため、{seconds, plural, other {#秒}}後に再起動します。そのあとでもう一度試してね。",
+  "Add Genex to {name}?": "{name}にGenexを追加しますか？",
+  "Another Genex game builds in this project too, so it stays where it is.":
+    "このプロジェクトでは別のGenexゲームもつくられているため、そのままにします。",
+  "Exported. Play it in Live's Web game tab, or publish it.":
+    "エクスポートしました。ライブの「Webゲーム」タブでプレイするか、公開してください。",
+  "Genex moves its folder from {from} to {to}. Rewind and Loops reach it there.":
+    "Genexがフォルダーを{from}から{to}に移動します。そこなら巻き戻しとLoopが届きます。",
+  "Genex moves its folder from {from} to {to}. Rewind, Loops and Publish reach it there.":
+    "Genexがフォルダーを{from}から{to}に移動します。そこなら巻き戻し、Loop、公開が届きます。",
+  "Move {name} into this game?": "{name}をこのゲームに移動しますか？",
+  "Only the project this game builds in can move into it.":
+    "移動できるのは、このゲームをつくっているプロジェクトだけです。",
+  "Quit Godot first: a project can't move while it is open.":
+    "先にGodotを終了してください。開いているプロジェクトは移動できません。",
+  "Quit Unreal first: a project can't move while it is open.":
+    "先にUnrealを終了してください。開いているプロジェクトは移動できません。",
+  "Remove Genex from {name}?": "{name}からGenexを削除しますか？",
+  "This game already has a godot folder.": "このゲームにはすでにgodotフォルダーがあります。",
+  "This game already has an unreal folder.": "このゲームにはすでにunrealフォルダーがあります。",
+  "This project is already in this game's folder.": "このプロジェクトはすでにこのゲームのフォルダーにあります。",
+  "This project is on another disk, so Genex leaves it there.":
+    "このプロジェクトは別のディスクにあるため、Genexはそのままにします。",
+  "This project's folder holds other things too, so Genex leaves it where it is.":
+    "このプロジェクトのフォルダーには他のものも入っているため、Genexはそのままにします。",
 } satisfies LocaleCatalog;

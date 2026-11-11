@@ -1385,8 +1385,6 @@ export default {
   "Export target must be an ordinary directory": "Для экспорта нужна обычная папка",
   "Export validation does not yet support scoped import maps; build this project before export":
     "Проверка экспорта пока не поддерживает scoped import maps; сначала собери проект, потом экспортируй",
-  "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.":
-    "Экспортировано для веба в web/: во вкладке «Веб-игра» в Live в неё можно играть, а «Опубликовать» выкладывает её в сеть.",
   "Exported {count} public files. Included: {included}. Excluded from selected roots: {excluded}.":
     "Экспортировано публичных файлов: {count}. Включено: {included}. Исключено из выбранных корневых папок: {excluded}.",
   "Exporting…": "Экспорт…",
@@ -3350,7 +3348,6 @@ export default {
   "Set up the protected workspace": "Настрой защищённое рабочее пространство",
   "Set up this game's Unity project": "Настрой проект Unity для этой игры",
   "Set up {name} for Genex.": "Настроить проект {name} для Genex.",
-  "Set up {name} for Genex?": "Настроить проект {name} для Genex?",
   "Set up {project} after it ends.": "Настрой проект {project}, когда Loop закончится.",
   "Set up {project} for Genex · {game} now builds in {engine}":
     "Проект {project} настроен для Genex · {game} теперь собирается в {engine}",
@@ -4288,7 +4285,6 @@ export default {
   "Undid {count, plural, one {# try} other {# tries}} before it":
     "До этого {count, plural, one {отменена # попытка} few {отменены # попытки} many {отменено # попыток} other {отменено # попытки}}",
   Undo: "Отменить",
-  "Undo setup for {name}?": "Отменить настройку проекта {name}?",
   "Undo this change": "Отменить это изменение",
   Undone: "Отменено",
   "Undone because {reason}.": "Отменено: {reason}.",
@@ -6560,4 +6556,27 @@ export default {
   "Installing… {percent}% · {speed} · under a minute left": "Установка… {percent}% · {speed} · осталось меньше минуты",
   "This plugin stopped several times in a row, so it starts again in {seconds, plural, one {# second} other {# seconds}}. Try again then.":
     "Плагин остановился несколько раз подряд, поэтому запустится снова через {seconds, plural, one {# секунду} few {# секунды} many {# секунд} other {# секунды}}. Попробуй тогда ещё раз.",
+  "Add Genex to {name}?": "Добавить Genex в {name}?",
+  "Another Genex game builds in this project too, so it stays where it is.":
+    "В этом проекте собирается ещё одна игра Genex, поэтому он остаётся на месте.",
+  "Exported. Play it in Live's Web game tab, or publish it.":
+    "Экспорт готов. Играй во вкладке «Веб-игра» в Live или опубликуй.",
+  "Genex moves its folder from {from} to {to}. Rewind and Loops reach it there.":
+    "Genex перенесёт его папку из {from} в {to}. Там до него достают откат и Loop.",
+  "Genex moves its folder from {from} to {to}. Rewind, Loops and Publish reach it there.":
+    "Genex перенесёт его папку из {from} в {to}. Там до него достают откат, Loop и публикация.",
+  "Move {name} into this game?": "Перенести {name} в эту игру?",
+  "Only the project this game builds in can move into it.":
+    "Перенести можно только проект, в котором собирается эта игра.",
+  "Quit Godot first: a project can't move while it is open.": "Сначала закрой Godot: открытый проект нельзя перенести.",
+  "Quit Unreal first: a project can't move while it is open.":
+    "Сначала закрой Unreal: открытый проект нельзя перенести.",
+  "Remove Genex from {name}?": "Убрать Genex из {name}?",
+  "This game already has a godot folder.": "В этой игре уже есть папка godot.",
+  "This game already has an unreal folder.": "В этой игре уже есть папка unreal.",
+  "This project is already in this game's folder.": "Этот проект уже в папке этой игры.",
+  "This project is on another disk, so Genex leaves it there.":
+    "Этот проект на другом диске, поэтому Genex оставит его там.",
+  "This project's folder holds other things too, so Genex leaves it where it is.":
+    "В папке проекта лежит и другое, поэтому Genex оставит его на месте.",
 } satisfies LocaleCatalog;

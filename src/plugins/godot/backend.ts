@@ -929,19 +929,28 @@ async function status(deps: GodotBackendDeps, setup: Setup, context: PluginConte
     webTemplates: install ? await hasWebTemplate(deps.env.dataHome, install) : false,
     projectName: project ? ((await readProject(project))?.name ?? path.basename(project)) : null,
     outside: place?.outside ?? false,
-    /** Whether Move into game can move it now (`move-into-game.ts`); asked only for a project outside the game. */
-    moveIn: project && place?.outside ? "target" in (await moveInPlan(deps, project, context)) : false,
+    /** `moveIn` and `moveInWhy` (`move-into-game.ts`); asked only for a project outside the game. */
+    ...(await moveInStatus(project && place?.outside ? await moveInPlan(deps, project, context) : null)),
     editorOpen: project ? await editorOpen(deps.editor, project) : false,
     setup: project && context.directory ? await addonState(context.directory, project, deps.addon) : null,
     projects: await chooserProjects(deps, context, project),
   };
 }
 
-/** Whether a Loop going now builds in the project in `folder`. */
+/** Status's `moveIn` (Move into game can move it now) and `moveInWhy` (the words for why it can't), from a plan. */
+function moveInStatus(plan: MoveInPlan | null): { moveIn: boolean; moveInWhy: string | null } {
+  if (!plan) return { moveIn: false, moveInWhy: null };
+  return "refusal" in plan
+    ? { moveIn: false, moveInWhy: MESSAGE.MoveInRefused[plan.refusal]() }
+    : { moveIn: true, moveInWhy: null };
+}
+
+/** Whether a Loop going now builds in the project in `folder`; yes when the host can't say, so nothing moves under a Loop. */
 async function loopUses(context: PluginContext, folder: string): Promise<boolean> {
-  const runs: unknown = await context.host(HostService.EngineRuns).catch(() => []);
+  const runs: unknown = await context.host(HostService.EngineRuns).catch(() => null);
+  if (!Array.isArray(runs)) return true;
   const file = path.join(folder, PROJECT_FILE);
-  return Array.isArray(runs) && runs.some((run) => isJsonObject(run) && run.project === file);
+  return runs.some((run) => isJsonObject(run) && run.project === file);
 }
 
 /** What Move into game would do with the game's project in `folder`: its folder and the game's `godot/`, or why it stays. */
@@ -970,7 +979,8 @@ async function moveIn(deps: GodotBackendDeps, context: PluginContext): Promise<{
   const project = await moveIntoGame({ plan, link: (folder) => linkProject(context, folder) });
   if (wasSetUp) {
     const install = usableGodot(await godots(deps, context));
-    await setUpGame(game, project, deps.addon, install?.binary ?? null);
+    // The move is done and linked: a setup that fails here leaves Add Genex on the panel, never an error over a moved project.
+    await setUpGame(game, project, deps.addon, install?.binary ?? null).catch(() => undefined);
   }
   return { project };
 }

@@ -461,11 +461,17 @@ function stepOf(s) {
   return { tone: Tone.Quiet, word: WORDS.notOpen, say: "", act: Action.OpenEditor, label: WORDS.open };
 }
 
+/** The line under the outside row: quit first, what the project misses while it can move, else why it can't. */
+function outsideLine(s) {
+  if (s.editorOpen) return WORDS.outsideQuit;
+  return s.moveIn ? WORDS.outsideSub : (s.moveInWhy ?? WORDS.outsideSub);
+}
+
 /** The row for a project in another folder: what it costs, and Move into game while it can move (Godot closed, on the game's disk). */
 function renderOutside(s) {
   $("outside").hidden = !s.outside;
   if (!s.outside) return;
-  setText($("outside-sub"), s.editorOpen ? WORDS.outsideQuit : WORDS.outsideSub);
+  setText($("outside-sub"), outsideLine(s));
   $("move-in").hidden = !s.moveIn || busy;
 }
 

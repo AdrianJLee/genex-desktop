@@ -1027,8 +1027,8 @@ async function status(
      * confirmation names no setup changes.
      */
     move: (isSetUp(state) && real ? await planMove(real, options, engines) : undefined) ?? null,
-    /** Whether Move into game can move the shown project into the open game's folder now. */
-    moveIn: state ? "target" in (await moveInPlan(deps, state, context, editor.projectOpen)) : false,
+    /** Whether Move into game can move the shown project into the open game's folder now, and the words for why not. */
+    ...moveInStatus(state ? await moveInPlan(deps, state, context, editor.projectOpen) : null),
     firstStart: firstStart(opened, where.opening),
     /** Whether Epic's launcher is installed, asked only while no supported Unreal is (the Get Unreal view); else null. */
     launcher: engine ? null : Boolean(await findLauncher(env.platform, deps.launch)),
@@ -2139,10 +2139,20 @@ async function moveEngine(deps: UnrealBackendDeps, file: string, context: Plugin
   return state;
 }
 
-/** Whether a Loop going now builds in `file`. */
+/** Whether a Loop going now builds in `file`; yes when the host can't say, so nothing moves under a Loop. */
 async function loopUses(context: PluginContext, file: string): Promise<boolean> {
-  for (const run of await engineRuns(context)) if (await sameProject(file, run.project)) return true;
+  const answer: unknown = await context.host(HostService.EngineRuns).catch(() => null);
+  if (!Array.isArray(answer)) return true;
+  for (const run of answer.filter(isEngineRun)) if (await sameProject(file, run.project)) return true;
   return false;
+}
+
+/** Status's `moveIn` (Move into game can move it now) and `moveInWhy` (the words for why it can't), from a plan. */
+function moveInStatus(plan: MoveInPlan | null): { moveIn: boolean; moveInWhy: string | null } {
+  if (!plan) return { moveIn: false, moveInWhy: null };
+  return "refusal" in plan
+    ? { moveIn: false, moveInWhy: WORDS.MoveInRefused[plan.refusal]() }
+    : { moveIn: true, moveInWhy: null };
 }
 
 /**

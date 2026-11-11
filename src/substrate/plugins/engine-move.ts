@@ -61,6 +61,9 @@ export type MoveInRules = {
 /** A move that can go ahead (the project's real folder and where it goes), or why it can't. */
 export type MoveInPlan = { from: string; target: string } | { refusal: MoveInRefusal };
 
+/** The file every Genex game keeps at its folder's root: a folder with one is a game of its own and never moves. */
+const GAME_FILE = "studio.json";
+
 const realOr = (file: string) => realpath(file).catch(() => file);
 const refuse = (refusal: MoveInRefusal): MoveInPlan => ({ refusal });
 
@@ -70,12 +73,14 @@ async function sameDisk(a: string, b: string): Promise<boolean> {
   return one.dev === other.dev;
 }
 
-/** Whether the project's folder may move at all: it holds neither the game nor home, and is only the project's. */
+/** Whether the project's folder may move at all: it holds neither the game nor home, is no game itself, and is only the project's. */
 async function movable(from: string, game: string, home: string, rules: MoveInRules): Promise<MoveInRefusal | null> {
   if (isInside(game, from)) return MoveInRefusal.Inside;
   if (isInside(from, game) || isInside(from, home)) return MoveInRefusal.HoldsGame;
   // A disk's own root is never a project's folder, whatever it holds.
   if (path.dirname(from) === from) return MoveInRefusal.NotProjectFolder;
+  // A game that keeps its project at its own root has no link record, so "shared" never sees it.
+  if (await lstat(path.join(from, GAME_FILE)).catch(() => null)) return MoveInRefusal.NotProjectFolder;
   return (await rules.isProjectFolder(from, home)) ? null : MoveInRefusal.NotProjectFolder;
 }
 

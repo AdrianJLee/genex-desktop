@@ -1056,6 +1056,12 @@ function renderMove(s) {
 /** Whether the shown project lies outside the open game's folder, as the project list marks it. */
 const shownOutside = (s) => s.projects.some((p) => p.outside && isShown(s, p.file));
 
+/** The line under the outside row: quit first, what the project misses while it can move, else why it can't. */
+function outsideLine(open, s) {
+  if (open) return WORDS.outsideQuit;
+  return s.moveIn ? WORDS.outsideSub : (s.moveInWhy ?? WORDS.outsideSub);
+}
+
 /**
  * The row for the open game's own project in another folder, which Rewind, Loops and Publish can't
  * reach: Move into game moves it into the game's folder. The folder can't move while Unreal has the
@@ -1066,7 +1072,7 @@ function renderOutside(s) {
   $("outside").hidden = !shown;
   if (!shown) return;
   const open = Boolean(s.projectOpen);
-  setText($("outside-sub"), open ? WORDS.outsideQuit : WORDS.outsideSub);
+  setText($("outside-sub"), outsideLine(open, s));
   $("move-in").hidden = open || !s.moveIn;
   $("move-in").disabled = ui.busy;
 }

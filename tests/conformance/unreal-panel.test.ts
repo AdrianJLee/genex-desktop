@@ -822,6 +822,24 @@ describe("The Set up Unreal panel", { skip }, () => {
     }
   });
 
+  it("the row about another folder says why the project can't move, with no button, when the game already has an unreal folder", async () => {
+    const c = await computer({ game: "dirt-track" });
+    const game = path.join(path.dirname(path.dirname(c.newGames)), "AI Games", "dirt-track");
+    await mkdir(path.join(game, "unreal"), { recursive: true });
+    Object.assign(c.context, { directory: game });
+    for (const folder of ["Config", "Content"]) await mkdir(path.join(path.dirname(c.drift), folder));
+    await c.act("setup", { project: c.drift });
+    await c.act("use-project", { project: c.drift });
+    const tab = await open(c);
+    try {
+      await tab.waitForSelector("#outside:not([hidden])");
+      assert.equal(await tab.textContent("#outside-sub"), "This game already has an unreal folder.");
+      assert.equal(await tab.isVisible("#move-in"), false, "a button that can't act is hidden");
+    } finally {
+      await tab.close();
+    }
+  });
+
   it("the row about another folder offers no button while Unreal has the project open, and says to quit Unreal", async () => {
     const c = await computer({ game: "dirt-track" });
     const game = path.join(path.dirname(path.dirname(c.newGames)), "AI Games", "dirt-track");

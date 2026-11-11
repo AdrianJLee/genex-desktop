@@ -125,6 +125,14 @@ describe("the plan for Move into game", () => {
         refusal: MoveInRefusal.NotProjectFolder,
       },
       {
+        name: "the folder is another Genex game's own",
+        arrange: async (p) => {
+          await writeFile(path.join(p.project, "studio.json"), "{}\n");
+          return {};
+        },
+        refusal: MoveInRefusal.NotProjectFolder,
+      },
+      {
         name: "the folder doesn't exist",
         arrange: async (p) => ({ directory: path.join(p.home, "gone") }),
         refusal: MoveInRefusal.NotProjectFolder,

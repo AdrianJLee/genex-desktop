@@ -1081,8 +1081,9 @@ folder gets **This project is in another folder** with **Move into game** (actio
 `move-into-game.ts` on `substrate/plugins/engine-move.ts`): with Unreal closed it renames the
 project's folder into the game's `unreal/` and links the game to it there. It is refused, changing
 nothing, when the project is open or used by a run, another game is linked to it, the folder holds
-the game or is no project folder, `unreal/` is taken, or it sits on another disk; a failed link
-moves the folder back. Change project opens
+the game, is another game's own folder or is no project folder, `unreal/` is taken, it sits on
+another disk, or the host can't say which Loops run; the row then shows that reason (status
+`moveInWhy`) and no button. A failed link moves the folder back. Change project opens
 "Choose a project" (in a web game with no Unreal project, "Make this game in Unreal") with Back: a
 New Unreal project row leads (in a web game: what was made for the web stays, and Undo in the chat
 switches back), then the projects on this computer with their count and, past six, a name filter.

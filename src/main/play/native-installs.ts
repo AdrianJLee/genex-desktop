@@ -9,6 +9,7 @@
  */
 import { lstat, mkdir, mkdtemp, readdir, rename, rm, statfs } from "node:fs/promises";
 import path from "node:path";
+import { etaMsAt, type SpeedMeter, speedAfter, speedMeter } from "../../shared/download-speed.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { isPlaySlug, type PlayGameDetail } from "../../shared/play.ts";
 import {
@@ -27,7 +28,7 @@ import {
 } from "../../shared/play-native.ts";
 import { atomicWriteJson, readJsonIfExists } from "../../substrate/fsx.ts";
 import { diskBytes, removeOwnedFolder } from "../../substrate/storage-folders.ts";
-import { downloadArchive, InstallError, verifyArchive } from "./native-download.ts";
+import { discardDownload, downloadArchive, InstallError, verifyArchive } from "./native-download.ts";
 import {
   type ToolRun,
   type UnpackedApp,
@@ -225,6 +226,7 @@ export class NativeInstaller {
       phase: InstallPhase.Queued,
       receivedBytes: before?.receivedBytes ?? 0,
       totalBytes: job.build.sizeBytes,
+      bytesPerSecond: null,
       etaMs: null,
       failure: null,
       ...change,
@@ -260,21 +262,21 @@ export class NativeInstaller {
   async #download(job: Job): Promise<string> {
     await mkdir(path.join(this.folder, DOWNLOADS), { recursive: true });
     const partial = this.#partialOf(job);
-    const started = this.#deps.now();
-    let from: number | null = null;
+    let meter: SpeedMeter | null = null;
     this.#setProgress(job, { phase: InstallPhase.Downloading });
     await this.#push();
     await downloadArchive(this.#deps, job.build, partial, job.stop.signal, (received, total) => {
-      from ??= received;
-      const rate = (received - from) / Math.max(1, this.#deps.now() - started);
-      const etaMs = rate > 0 ? Math.round((total - received) / rate) : null;
-      this.#setProgress(job, { phase: InstallPhase.Downloading, receivedBytes: received, etaMs });
-      if (this.#deps.now() - this.#lastPush >= PROGRESS_EVERY_MS) void this.#push();
+      const now = this.#deps.now();
+      meter = meter ? speedAfter(meter, received, now) : speedMeter(received, now);
+      const { bytesPerSecond } = meter;
+      const etaMs = etaMsAt(meter, total - received);
+      this.#setProgress(job, { phase: InstallPhase.Downloading, receivedBytes: received, bytesPerSecond, etaMs });
+      if (now - this.#lastPush >= PROGRESS_EVERY_MS) void this.#push();
     });
     this.#setProgress(job, { phase: InstallPhase.Verifying, receivedBytes: job.build.sizeBytes, etaMs: null });
     await this.#push();
     if (!(await verifyArchive(partial, job.build))) {
-      await rm(partial, { force: true });
+      await discardDownload(partial);
       throw new InstallError(InstallFailure.Checksum);
     }
     return partial;
@@ -351,7 +353,7 @@ export class NativeInstaller {
       if (!job.stop.signal.aborted)
         return this.#fail(job, error instanceof InstallError ? error.failure : InstallFailure.Failed);
       this.#progress.delete(job.slug);
-      await rm(this.#partialOf(job), { force: true });
+      await discardDownload(this.#partialOf(job));
       await this.#push();
     } finally {
       if (staging) await rm(staging, { recursive: true, force: true });

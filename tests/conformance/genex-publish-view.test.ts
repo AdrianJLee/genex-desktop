@@ -274,6 +274,17 @@ test("a test running past two minutes is Still testing; an earlier step never is
   assert.equal(uploading.phase, "Uploading");
 });
 
+test("a test is slow by how long the test took, not by how long the upload before it did", () => {
+  // A big build took ten minutes to go up; its test began 30 seconds ago.
+  const now = Date.parse("2026-09-30T10:10:30Z");
+  const fresh = job({ phase: "verifying-deployment", uploadedAt: "2026-09-30T10:10:00Z" });
+  const justStarted = publishView(state({ slug: "g", job: fresh }), now);
+  assert.equal(justStarted.slow, false, "the test has run for half a minute");
+  assert.equal(justStarted.phase, "Testing");
+  const later = publishView(state({ slug: "g", job: fresh }), now + 2 * 60_000);
+  assert.equal(later.slow, true, "two and a half minutes of testing is slow");
+});
+
 test("a live game shows its link and when it was updated, on the banner", () => {
   const now = Date.parse("2026-10-06T12:00:00Z");
   const live = publishView(

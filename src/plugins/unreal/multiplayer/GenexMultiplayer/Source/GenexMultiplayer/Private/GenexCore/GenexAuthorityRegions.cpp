@@ -63,7 +63,16 @@ std::vector<std::string> ProbePlan(const std::vector<std::string>& urls, int sam
   return plan;
 }
 
-std::vector<Pick> Rank(const std::vector<Region>& regions, const std::vector<std::vector<std::optional<double>>>& best) {
+namespace {
+
+/** A region in the order it is tried, with its best answered sample (nullopt: nothing answered). */
+struct Ranked {
+  std::optional<double> ms;
+  Pick pick;
+};
+
+/** Rank with each region's latency kept. */
+std::vector<Ranked> RankMs(const std::vector<Region>& regions, const std::vector<std::vector<std::optional<double>>>& best) {
   struct Heard {
     double ms;
     std::size_t index;
@@ -89,10 +98,45 @@ std::vector<Pick> Rank(const std::vector<Region>& regions, const std::vector<std
     }
   }
   std::stable_sort(heard.begin(), heard.end(), [](const Heard& a, const Heard& b) { return a.ms < b.ms; });
-  std::vector<Pick> out;
-  for (Heard& h : heard) out.push_back(std::move(h.pick));
-  for (Pick& p : silent) out.push_back(std::move(p));
+  std::vector<Ranked> out;
+  for (Heard& h : heard) out.push_back(Ranked{h.ms, std::move(h.pick)});
+  for (Pick& p : silent) out.push_back(Ranked{std::nullopt, std::move(p)});
   return out;
+}
+
+}  // namespace
+
+std::vector<Pick> Rank(const std::vector<Region>& regions, const std::vector<std::vector<std::optional<double>>>& best) {
+  std::vector<Pick> out;
+  for (Ranked& r : RankMs(regions, best)) out.push_back(std::move(r.pick));
+  return out;
+}
+
+SearchPlan PlanSearch(const std::vector<Region>& regions, const std::vector<std::vector<std::optional<double>>>& best,
+                      const SearchOptions& options) {
+  const std::vector<Ranked> ranked = RankMs(regions, best);
+  SearchPlan plan;
+  for (const Ranked& r : ranked) plan.create.push_back(r.pick);
+  // An empty name is no pin: Normalize never keeps a region without one.
+  const auto pinned = std::find_if(ranked.begin(), ranked.end(),
+                                   [&](const Ranked& r) { return !options.region.empty() && r.pick.region == options.region; });
+  if (pinned != ranked.end()) {
+    plan.create = {pinned->pick};
+    return plan;
+  }
+  if (options.rule == RegionRule::Nearest) return plan;
+  const double limit = Answered(options.maxPingMs) ? options.maxPingMs : kMaxPingMs;
+  std::vector<Pick> reach;
+  for (const Ranked& r : ranked) {
+    if (r.ms.has_value() && *r.ms <= limit) reach.push_back(r.pick);
+  }
+  // Fewer than two in reach is no search: the join-or-create finds its own region's room itself.
+  if (reach.size() >= 2) plan.search = std::move(reach);
+  return plan;
+}
+
+SearchRefusal KindOfSearchRefusal(int code) {
+  return KindOfRefusal(code) == RefusalKind::Final ? SearchRefusal::Final : SearchRefusal::Next;
 }
 
 std::optional<std::pair<Attempt, CapacityState>> NextAttempt(const CapacityState& state, std::size_t regionCount,

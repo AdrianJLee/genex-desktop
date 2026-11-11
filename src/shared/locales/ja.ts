@@ -2014,8 +2014,10 @@ export default {
   "Its packages aren’t installed yet.": "パッケージがまだインストールされていません。",
   "Its project didn’t go, so no one can remix it yet.":
     "プロジェクトが送れなかったので、まだ誰もリミックスできません。",
-  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
-    "プロジェクトが大きすぎてリミックスできません。Genex に置けるのは 5 GB・5,000 ファイルまでです。",
+  "Its project is too big to remix: Genex keeps up to 100 GB and 50,000 files.":
+    "プロジェクトが大きすぎてリミックスできません。Genex に置けるのは 100 GB・50,000 ファイルまでです。",
+  "There isn’t enough free space on this computer to remix this game.":
+    "このコンピューターの空き容量が足りないため、このゲームをリミックスできません。",
   "Its session failed before it delivered anything.": "何も提出しないうちにセッションが失敗しました。",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "ソースはあなた自身のリポジトリにあります。リミックスを許可するには、ゲームのフォルダーでgenex make-remixableを実行してください。",
@@ -6483,4 +6485,20 @@ export default {
   "Ready to publish": "公開できます",
   "{platforms} can take up to an hour.": "{platforms}は最大1時間ほどかかることがあります。",
   "{platform} build didn’t start": "{platform}のビルドを開始できませんでした",
+  "Checking the archive": "アーカイブを確認中",
+  Packing: "まとめています",
+  "Sending the project for Remix": "Remix用にプロジェクトを送信中",
+  "{done} of {total} · {speed}/s": "{done} / {total} · {speed}/秒",
+  "{done} of {total} · {speed}/s · under a minute left": "{done} / {total} · {speed}/秒 · 残り1分未満",
+  "{done} of {total} · {speed}/s · about {minutes} min left": "{done} / {total} · {speed}/秒 · 残り約{minutes}分",
+  "{done} of {total} · {speed}/s · about {hours} h left": "{done} / {total} · {speed}/秒 · 残り約{hours}時間",
+  "{done} of {total} · {speed}/s · about {hours} h {minutes} min left":
+    "{done} / {total} · {speed}/秒 · 残り約{hours}時間{minutes}分",
+  "{size} MB/s": "{size} MB/s",
+  "{size} KB/s": "{size} KB/s",
+  "Verifying…": "検証中…",
+  "Unpacking…": "展開中…",
+  "Installing… {percent}% · {speed} · about {minutes} min left":
+    "インストール中… {percent}% · {speed} · 残り約{minutes}分",
+  "Installing… {percent}% · {speed} · under a minute left": "インストール中… {percent}% · {speed} · 残り1分未満",
 } satisfies LocaleCatalog;

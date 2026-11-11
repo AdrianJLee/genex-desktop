@@ -14,6 +14,7 @@ import {
   CloudSendState,
   GenexBuildReview,
   type GenexCloudBuild,
+  GenexSendStage,
   type GenexNativeRecord,
 } from "../../src/shared/genex.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
@@ -216,6 +217,53 @@ describe("the Publish card's rows", () => {
       [windows?.status, windows?.since, windows?.cloud],
       ["Sending to Genex Cloud", send.startedAt, true],
     );
+  });
+
+  it("carries how far a project on its way to Genex Cloud is, on its own row only", () => {
+    const progress = { stage: GenexSendStage.Upload, doneBytes: 4, totalBytes: 10, at: NOW, target: "windows" };
+    const send = { platform: PublishTarget.Windows, startedAt: at(MINUTE_MS), state: CloudSendState.Sending, progress };
+    const rows = unreal(
+      unrealFolder(READY, 30 * MINUTE_MS),
+      record(20 * MINUTE_MS, [], { cloud: { supported: true, builds: [], send } }),
+    );
+    assert.deepEqual(
+      rows.map((row) => [row.target, row.progress?.doneBytes]),
+      [
+        [PublishTarget.Mac, undefined],
+        [PublishTarget.Windows, 4],
+      ],
+    );
+  });
+
+  it("carries how far an app being sent is, on the row of the app the CLI names", () => {
+    const folder = [platform(PublishTarget.Mac, READY, MINUTE_MS), platform(PublishTarget.Windows, READY, MINUTE_MS)];
+    const sending = (target: string | undefined) =>
+      unreal(
+        folder,
+        record(null, [], {
+          sending: true,
+          progress: {
+            stage: GenexSendStage.Upload,
+            doneBytes: 7,
+            totalBytes: 10,
+            at: NOW,
+            ...(target ? { target } : {}),
+          },
+        }),
+      ).map((row) => [row.target, row.tone, row.progress?.doneBytes]);
+    assert.deepEqual(sending("windows-x64"), [
+      [PublishTarget.Mac, CardTone.Working, undefined],
+      [PublishTarget.Windows, CardTone.Working, 7],
+    ]);
+    assert.deepEqual(sending("mac-universal"), [
+      [PublishTarget.Mac, CardTone.Working, 7],
+      [PublishTarget.Windows, CardTone.Working, undefined],
+    ]);
+    // An app the CLI did not name is on no row: better no bar than one on the wrong app.
+    assert.deepEqual(sending(undefined), [
+      [PublishTarget.Mac, CardTone.Working, undefined],
+      [PublishTarget.Windows, CardTone.Working, undefined],
+    ]);
   });
 
   it("keeps the older app live when a cloud build fails, and builds again only once the game changed", () => {

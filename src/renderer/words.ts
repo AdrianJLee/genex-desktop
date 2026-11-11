@@ -25,7 +25,7 @@ import type { GameEngine } from "../shared/game-engine.ts";
 import { WorkerStopCode } from "../shared/workers.ts";
 import { type PackageManager, type SandboxProblemCode, type StartStep, StudioPlatform } from "../shared/boot.ts";
 import { ChatFileOpen } from "../shared/chat-files.ts";
-import { sizeWords } from "../shared/byte-size.ts";
+import { sizeWords, speedWords } from "../shared/byte-size.ts";
 import { homePath, pathLeaf } from "../shared/path-label.ts";
 import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from "../shared/storage-space.ts";
 import { DataFolderProblem } from "../shared/data-folder.ts";
@@ -78,6 +78,7 @@ import type { BuildOutcome } from "./run-graph-builds.ts";
 import type { HealthFinding } from "../shared/preview-contract.ts";
 import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
+import { InstallLine, type InstallLineView } from "./play/native-model.ts";
 import { formatList, intlLocale, t, tc } from "../shared/i18n.ts";
 import { JUDGE_PLAY_TOOL_NAME } from "../shared/chat-judge.ts";
 import {
@@ -3741,7 +3742,7 @@ export const PUBLISH_REMIX_WORDS = {
   terms: t("Genex terms, section 4"),
   gotIt: t("Got it"),
   /** Why the last publish's project didn't go: remixing then stays off. */
-  tooBig: t("Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files."),
+  tooBig: t("Its project is too big to remix: Genex keeps up to 100 GB and 50,000 files."),
   notSent: t("Its project didn’t go, so no one can remix it yet."),
 } as const;
 
@@ -5618,6 +5619,7 @@ export const PLAY_WORDS = {
   /** Why Remix made nothing, when Genex's answer named a reason. */
   remixRefused: {
     [PlayRemixRefusal.NoProject]: t("Its creator hasn’t shared this game’s project yet, so it can’t be remixed."),
+    [PlayRemixRefusal.NoSpace]: t("There isn’t enough free space on this computer to remix this game."),
   } satisfies Record<PlayRemixRefusal, string>,
   /** Create while a remix is made (`RemixLayer`): the step bar's names, the line under the loader. */
   making: {
@@ -6285,10 +6287,18 @@ export const NATIVE_WORDS = {
   /** The web among the systems a game runs on. */
   web: t("Web"),
   installLabel: (title: string, size: string) => t("Install {title}, {size}", { title, size }),
-  installing: (percent: number) => t("Installing… {percent}%", { percent }),
   installingLabel: (title: string) => t("Installing {title}", { title }),
-  waiting: t("Waiting for another install…"),
-  checking: t("Checking…"),
+  /** The game page's install line: "Installing… 42% · 38 MB/s · about 2 min left", then each step by name. */
+  installLine: (view: InstallLineView): string => {
+    if (view.line === InstallLine.Waiting) return t("Waiting for another install…");
+    if (view.line === InstallLine.Verifying) return t("Verifying…");
+    if (view.line === InstallLine.Unpacking) return t("Unpacking…");
+    const { percent, bytesPerSecond, minutesLeft } = view;
+    if (bytesPerSecond === null || minutesLeft === null) return t("Installing… {percent}%", { percent });
+    const speed = speedWords(bytesPerSecond);
+    if (minutesLeft <= 1) return t("Installing… {percent}% · {speed} · under a minute left", { percent, speed });
+    return t("Installing… {percent}% · {speed} · about {minutes} min left", { percent, speed, minutes: minutesLeft });
+  },
   cancel: t("Cancel"),
   play: t("Play"),
   playLabel: (title: string) => t("Play {title}", { title }),

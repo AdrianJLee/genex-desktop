@@ -172,7 +172,16 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   LFS files come from the same repository's batch API over https, with no git-lfs needed, and each
   replaces its pointer only once its SHA-256 and size match; a download fails only once it stalls
   for a minute; a failed remix logs why in `studio.log`) into a
-  hidden folder; a source with no game in it (no `studio.json`, root page, npm scripts or engine
+  hidden folder. Download links are short-lived, so `lfs.ts` asks for them a hundred objects at a
+  time, right before those download, and once more for a link that has run out (its `expires_in` or
+  `expires_at` passed, or storage answers 401 or 403); a second refusal fails the remix. Before the
+  first byte the games folder's disk must have room for the files still to come, the files' whole size
+  once more (the copy's first save puts each into its history) and 1 GiB
+  (`LFS_RESERVE_BYTES`), or nothing is made (`PlayRemixRefusal.NoSpace`). When a file fails, the
+  copy goes but the files that came whole stay in `.remix-kept.<slug>` in the games folder, each
+  named by its SHA-256; the next remix of that game checks each one's size and SHA-256 again and
+  downloads only the rest, dropping whatever else is there. The folder goes once the copy is made
+  or when another game is remixed. A source with no game in it (no `studio.json`, root page, npm scripts or engine
   project: a creator who never shared its project, `game-source.ts`) makes nothing and says so
   (`PlayRemixRefusal`). Cards and the viewer offer Remix only once main has looked at the source
   (`studio:play.remix-ready`, `remix-ready.ts`: the head commit by `git ls-remote`, its file names by a
@@ -186,7 +195,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   builds, an Unreal plugin's too, its packaged apps (`Builds/`) included; an engine game whose project
 sits in a folder of its own also leaves out `assets/` (its models, already imported) and `docs/proof/`
 screenshots (`remix-source.ts`; at most
-15 GB and 5,000 files, all files together, as genex.games keeps; every model, picture, sound, video and Unreal package, and
+100 GiB and 50,000 files, all files together: Studio's own ceiling, never below what genex.games keeps, whose limit for the account the CLI enforces; every model, picture, sound, video and Unreal package, and
 any file of 50 MB or more, goes to Git LFS, whose blobs Genex keeps in R2 rather than on the git
 server's disk), and the CLI pushes that folder as the source
   (`--source`; a game with only apps sends it with `make-remixable` once they are live). The copy
@@ -249,8 +258,15 @@ is.
   Linux keep the bar in its own colour above it.
 - Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as
   `UiEvent.PlayInstalls`): one install at a time, the rest queued; a free-space check (download,
-  unpacked game and 1 GiB); the archive streamed to `installed-games/.downloads/` (resumed by
-  range, given up after a minute without a byte), its sha256 checked, its zip directory read before
+  unpacked game and 1 GiB); the archive downloaded to `installed-games/.downloads/`
+  (`native-download.ts`): an archive of two ranges or more as 32 MiB ranges over six connections,
+  each pinned to the archive's ETag (`If-Range`) and written at its offset, the finished ones
+  recorded in `<partial>.ranges.json` so a later try asks only for the rest; a host without ranges,
+  or any answer that is not the range asked for, is not written and the archive starts over as one
+  stream (resumed by range). Each connection is given up after a minute without a byte; a cancel
+  throws the saved bytes away, a failure keeps them. The page's install line says the percent,
+  the smoothed speed and the time left (`shared/download-speed.ts`), then Verifying and Unpacking.
+  Its sha256 is checked, its zip directory read before
   anything is unpacked (`native-zip.ts`: no entry or link outside it, nothing written through a
   link, no more than the stated size), unpacked with `ditto --noqtn`, every link resolved inside it,
   its program made runnable (an app packed on Windows carries no execute bit), the app's signature
@@ -548,10 +564,12 @@ In a game's Assets tab, signed in, cards wear **Saved** or **Shared**; the opene
 (bookmark) and Share (Play's tint) beside Reveal, and Cmd/Shift-click picks several for a bar (Save,
 Share, Clear). Save marks a generation Saved, or sends a file Genex did not make (GLB, PNG/JPEG/WebP,
 MP3/WAV/OGG, MP4) to the library through genex.games' import; such a file can be saved but not
-shared. Share opens one window (a name per asset, one line of what sharing means), then each card shows
-a step line (Send · Check · Live), a bare ✓ On Play, or an orange refusal with Try again or Send a
-report; a shared one offers Open on Play and Stop sharing. genex.games keeps one page per asset: a
-second share answers the page it has and puts back one taken off Play.
+shared. Share opens one window (a name per asset, one line of what sharing means). The name offered
+is the first line of what the asset was made from, shortened to the 40 characters a page's name
+keeps on Play: at its last whole clause that fits, else its last whole phrase or word. Then each
+card shows a step line (Send · Check · Live), a bare ✓ On Play, or an orange refusal with Try again
+or Send a report; a shared one offers Open on Play and Stop sharing. genex.games keeps one page per
+asset: a second share answers the page it has and puts back one taken off Play.
 
 The Assets tab's search answers from the game, My library and Community; Add copies a library asset
 into `assets/library/<id>/` and a shared one into `assets/community/<id>/` (a code-only asset into

@@ -266,6 +266,13 @@ public sealed class Arena : MonoBehaviour
   the room module. Draw them from `Session.Entities` (`Hp`, `Flags`, `Data`) and the module's
   events (`Session.On("shot", data => …)`). Never move your own body yourself: write the stick and
   aim into `Session.Input` and draw `Session.Me`.
+- **Regions need nothing.** A join first asks every region within reach for a room that already
+  has players, nearest first, and opens a room in the nearest region only when none has one, so a
+  player in Asia joins a friend's room in Europe instead of waiting alone. Three fields of
+  `GenexAuthorityOptions` change it, and most games set none: `MaxPingMs` (350, the farthest region
+  asked, as round-trip ping), `RegionRule` (`GenexRegionRule.Nearest` keeps a player in their
+  nearest region) and `Region` (a region the player picked by name: `"asia"`, `"eu"` or `"us"`;
+  offer it as a setting when players ask to choose).
 - **Axes.** The room's ground is x/y and +z is up; Unity is y-up. Draw a room point as
   `new Vector3((float)x, (float)z, (float)y)` and send Unity directions back the same way.
 - **Firstperson and vehicle rooms** move bodies through a collision world of boxes and ramps the

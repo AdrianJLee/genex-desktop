@@ -111,7 +111,8 @@ config: { tickHz: 120, maxPlayers: 4, preset: { name: "vehicle", params: {} }, p
 
 ## Regions
 
-Pass the stand's regions beside its urls and the client joins the nearest one by measured ping:
+Pass the stand's regions beside its urls. The client measures its ping to each and goes where the
+players are:
 
 ```ts
 const session = await connectAuthority({
@@ -119,9 +120,23 @@ const session = await connectAuthority({
 });
 ```
 
-Each region is its own matchmaking pool: players meet others who entered through the same region. A
-region that answers no probe is tried last. A full region (503) is retried, and moves on to the next-best
-after a second refusal. Nothing to configure in the module.
+Each region is its own matchmaking pool: players meet others who entered through the same region. So
+a join first asks every region within reach for a room that already has players, nearest first, and
+opens a new room in the nearest region only when none has one. A player in Asia therefore joins a
+friend's room in Europe instead of waiting alone. A region that answers no probe is never asked. A
+full region (503) is retried, and moves on to the next-best after a second refusal. Nothing to
+configure in the module.
+
+Three options on `connectAuthority` change this, and most games need none:
+
+| Option | Default | What it does |
+|---|---|---|
+| `maxPingMs` | `350` | The farthest region asked for players, as round-trip ping. A twitch-competitive game sets it lower. |
+| `regionRule` | `'players'` | `'nearest'` joins the nearest region only, whoever is elsewhere. |
+| `region` | none | A region the player picked by name (`'asia'`, `'eu'`, `'us'`): only it is joined. Offer it as a setting when players ask to choose. |
+
+`session.url` is the server the player landed on. Two players who start at the same moment in two empty
+regions each open their own room; the next player to join either finds one of them.
 
 ## The fast channel (`fast@1`)
 

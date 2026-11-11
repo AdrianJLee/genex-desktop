@@ -11,6 +11,8 @@ import {
   cardBadge,
   GamePhase,
   gameStanding,
+  InstallLine,
+  installLine,
   installPercent,
   opensPage,
   WebPlay,
@@ -71,6 +73,7 @@ const progress = (phase: InstallProgress["phase"], overrides: Partial<InstallPro
   phase,
   receivedBytes: 456,
   totalBytes: 1_200,
+  bytesPerSecond: 38 * 1024 ** 2,
   etaMs: 120_000,
   failure: null,
   ...overrides,
@@ -244,6 +247,26 @@ describe("a native game's card", () => {
       assert.equal(here.readyToPlay, "Ready to play on this computer.");
       assert.equal(NATIVE_WORDS.installFailed[InstallFailure.NotOffered]("", here), here.notOffered);
     }
+  });
+
+  it("says how an install is going in one line: percent, speed and time left, then each step by name", () => {
+    const line = (phase: InstallProgress["phase"], overrides: Partial<InstallProgress> = {}) =>
+      NATIVE_WORDS.installLine(installLine(progress(phase, overrides)));
+    assert.deepEqual(installLine(progress(InstallPhase.Downloading)), {
+      line: InstallLine.Downloading,
+      percent: 38,
+      bytesPerSecond: 38 * 1024 ** 2,
+      minutesLeft: 2,
+    });
+    assert.equal(line(InstallPhase.Downloading), "Installing… 38% · 38 MB/s · about 2 min left");
+    assert.equal(line(InstallPhase.Downloading, { etaMs: 61_000 }), "Installing… 38% · 38 MB/s · about 2 min left");
+    assert.equal(line(InstallPhase.Downloading, { etaMs: 40_000 }), "Installing… 38% · 38 MB/s · under a minute left");
+    for (const unknown of [{ bytesPerSecond: null }, { etaMs: null }, { bytesPerSecond: 0 }])
+      assert.equal(line(InstallPhase.Downloading, unknown), "Installing… 38%", "no speed or time is said until known");
+    assert.equal(line(InstallPhase.Queued), "Waiting for another install…");
+    assert.equal(line(InstallPhase.Verifying), "Verifying…");
+    assert.equal(line(InstallPhase.Unpacking), "Unpacking…");
+    assert.equal(NATIVE_WORDS.installLine(installLine(undefined)), "Installing… 0%");
   });
 
   it("reads a download's percent whole and never past 100", () => {

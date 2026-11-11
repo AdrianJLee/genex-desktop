@@ -19,6 +19,7 @@ import {
   type GenexCloudBuild,
   type GenexNativeRecord,
   type GenexNativeSent,
+  type GenexSendProgress,
 } from "../../../../shared/genex.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { NATIVE_WORDS, PUBLISH_CARD_WORDS } from "../../../words.ts";
@@ -82,6 +83,8 @@ export interface CardRow {
   side: string | null;
   /** When the work the row shows began, for its clock. */
   since?: string;
+  /** How far the send the row shows is; absent when nothing is being sent or the CLI says nothing of it. */
+  progress?: GenexSendProgress;
   /** Genex Cloud is working on it now: the wait can be long. */
   cloud: boolean;
   /** The agent is building it on this computer now. */
@@ -226,10 +229,21 @@ function updateWork(
 }
 
 /** What a row says, before its switch and work. */
-type RowState = Pick<CardRow, "tone" | "status" | "side" | "since" | "cloud" | "here" | "making">;
+type RowState = Pick<CardRow, "tone" | "status" | "side" | "since" | "progress" | "cloud" | "here" | "making">;
+
+/** The app a send's progress names (`mac-universal`, `windows-x64`) is `row`'s. */
+const namesRow = (progress: GenexSendProgress | undefined, row: PublishPlatform): boolean =>
+  progress?.target?.split("-")[0] === row.target;
 
 /** A row at rest: nothing is under way for it. */
 const AT_REST = { cloud: false, here: false, making: false } as const;
+
+const progressOf = (progress: GenexSendProgress | undefined): Pick<CardRow, "progress"> =>
+  progress ? { progress } : {};
+
+/** How far the app being sent is, when it is `row`'s. */
+const appProgress = (native: GenexNativeRecord, row: PublishPlatform): Pick<CardRow, "progress"> =>
+  namesRow(native.progress, row) ? progressOf(native.progress) : {};
 
 /** The work under way for a native platform now, if any: Genex Cloud's, a send, or the agent's. */
 function workingNow(row: PublishPlatform, input: CardInput): RowState | null {
@@ -241,6 +255,7 @@ function workingNow(row: PublishPlatform, input: CardInput): RowState | null {
       status: WORDS.sendingCloud,
       side: null,
       since: send.startedAt,
+      ...progressOf(send.progress),
       cloud: true,
       here: false,
       // Only a build Genex keeps is just being made: any other goes to players once built.
@@ -258,7 +273,7 @@ function workingNow(row: PublishPlatform, input: CardInput): RowState | null {
       making: build.held === true,
     };
   if (native?.sending && row.uploads && !currentSent(row, native))
-    return { tone: CardTone.Working, status: WORDS.sending, side: null, ...AT_REST };
+    return { tone: CardTone.Working, status: WORDS.sending, side: null, ...appProgress(native, row), ...AT_REST };
   const asked = input.asked?.get(row.target);
   const landed = row.state === PublishPlatformState.Ready && ms(row.builtAt) > ms(asked);
   const waiting = asked !== undefined && input.now - ms(asked) < ASK_HOLD_MS;

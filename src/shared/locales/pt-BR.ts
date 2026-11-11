@@ -2062,8 +2062,10 @@ export default {
   "Its packages aren’t installed yet.": "Os pacotes ainda não estão instalados.",
   "Its project didn’t go, so no one can remix it yet.":
     "O projeto não foi enviado, então ninguém pode fazer remix dele ainda.",
-  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
-    "O projeto é grande demais para remix: a Genex guarda até 5 GB e 5.000 arquivos.",
+  "Its project is too big to remix: Genex keeps up to 100 GB and 50,000 files.":
+    "O projeto é grande demais para remix: a Genex guarda até 100 GB e 50.000 arquivos.",
+  "There isn’t enough free space on this computer to remix this game.":
+    "Não há espaço livre suficiente neste computador para fazer um remix deste jogo.",
   "Its session failed before it delivered anything.": "A sessão falhou antes de entregar qualquer coisa.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "O código-fonte está no seu próprio repositório: execute genex make-remixable na pasta do jogo para permitir remixes.",
@@ -6560,4 +6562,22 @@ export default {
   "Ready to publish": "Pronta para publicar",
   "{platforms} can take up to an hour.": "{platforms} pode levar até uma hora.",
   "{platform} build didn’t start": "A geração de {platform} não começou",
+  "Checking the archive": "Conferindo o arquivo",
+  Packing: "Empacotando",
+  "Sending the project for Remix": "Enviando o projeto para Remix",
+  "{done} of {total} · {speed}/s": "{done} de {total} · {speed}/s",
+  "{done} of {total} · {speed}/s · under a minute left": "{done} de {total} · {speed}/s · menos de um minuto",
+  "{done} of {total} · {speed}/s · about {minutes} min left":
+    "{done} de {total} · {speed}/s · faltam uns {minutes} min",
+  "{done} of {total} · {speed}/s · about {hours} h left": "{done} de {total} · {speed}/s · faltam umas {hours} h",
+  "{done} of {total} · {speed}/s · about {hours} h {minutes} min left":
+    "{done} de {total} · {speed}/s · faltam umas {hours} h {minutes} min",
+  "{size} MB/s": "{size} MB/s",
+  "{size} KB/s": "{size} KB/s",
+  "Verifying…": "Verificando…",
+  "Unpacking…": "Descompactando…",
+  "Installing… {percent}% · {speed} · about {minutes} min left":
+    "Instalando… {percent}% · {speed} · faltam uns {minutes} min",
+  "Installing… {percent}% · {speed} · under a minute left":
+    "Instalando… {percent}% · {speed} · falta menos de um minuto",
 } satisfies LocaleCatalog;

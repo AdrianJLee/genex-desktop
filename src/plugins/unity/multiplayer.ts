@@ -25,7 +25,7 @@ export const MULTIPLAYER_PACKAGE = "com.genex.multiplayer";
  * tests and native physics core): `scripts/refresh-unity-multiplayer.ts` writes it and its
  * `vendor.json`, and refuses anything else.
  */
-export const MULTIPLAYER_PACKAGE_SOURCE = "me-ai-org/genex-demo@b02c47adbbc19c0a47e8c0e7852b20d235d589e6";
+export const MULTIPLAYER_PACKAGE_SOURCE = "me-ai-org/genex-demo@ebb3a538665ff32e79500488963147dc170e97aa";
 /** The Colyseus Unity SDK the Genex package runs on, at the `upm` commit of 0.18.8 it is tested with. */
 export const COLYSEUS_PACKAGE = "io.colyseus.sdk";
 export const COLYSEUS_PACKAGE_URL =

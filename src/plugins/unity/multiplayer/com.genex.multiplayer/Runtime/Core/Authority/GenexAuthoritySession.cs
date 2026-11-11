@@ -82,6 +82,18 @@ namespace Genex.Multiplayer.Authority
         /// Empty: <see cref="Urls"/> are the regions.
         /// </summary>
         public GenexAuthorityRegion[] Regions;
+        /// <summary>How a pool join (the plain join of a game's pool: not a join by code, a private create or an explicit
+        /// <see cref="Url"/>) picks its region (§17.1 *Finding players*). <see cref="GenexRegionRule.Players"/>, the default: the
+        /// regions in reach (<see cref="MaxPingMs"/>) are asked, nearest first, for a room that already exists, and a room is
+        /// opened in the nearest region only when none has one. <see cref="GenexRegionRule.Nearest"/> joins the nearest region
+        /// whoever is elsewhere.</summary>
+        public GenexRegionRule RegionRule = GenexRegionRule.Players;
+        /// <summary>The farthest region asked for players, as a probe's round trip in ms (default
+        /// <see cref="GenexAuthorityRegions.MaxPingMs"/>, 350). A value that is not finite or is below 0 is the default.</summary>
+        public double MaxPingMs = GenexAuthorityRegions.MaxPingMs;
+        /// <summary>The one region to play in, by its name in <see cref="Regions"/> (a player's own choice): no other is joined or
+        /// created in. Null, or a name the cluster does not have: no choice. A join by code still walks every region.</summary>
+        public string Region;
         /// <summary>Connect to THIS exact URL, skipping latency selection: an invitee passes the inviter's
         /// <see cref="GenexAuthoritySession.Url"/> and plays in the inviter's region.</summary>
         public string Url;
@@ -533,7 +545,9 @@ namespace Genex.Multiplayer.Authority
             if (string.IsNullOrEmpty(options.GameId)) throw new ArgumentException("GenexAuthorityOptions.GameId is required");
             var plan = GenexRoomKey.Plan(options.MatchKey, options.CreatePrivate, options.JoinCode);
             if (plan.Refused != GenexTargetRefusal.None) throw new ArgumentException("this room cannot be asked for: " + plan.Refused);
-            var targets = await Targets(options);
+            var (search, targets) = await JoinTargets(options, plan.Method);
+            var found = await JoinWherePlayersAre(options, plan, search, targets);
+            if (found != null) return found;
             var delays = options.CapacityRetryMs ?? Array.Empty<double>();
             var state = new GenexCapacityState(0, 0, 0);
             var url = targets[0];
@@ -552,12 +566,7 @@ namespace Genex.Multiplayer.Authority
                         : plan.Method == GenexJoinMethod.Create
                             ? joining.Create<AuthorityRoomState>(A.RoomType, joinOptions)
                             : joining.JoinOrCreate<AuthorityRoomState>(A.RoomType, joinOptions));
-                    var input = new GenexInput();
-                    var seat = new GenexAuthoritySeat(room, options, input) { Url = url };
-                    await seat.FirstState;
-                    var walk = new List<string> { url };
-                    foreach (var target in targets) if (target != url) walk.Add(target);
-                    return new GenexAuthoritySession(seat, options, input, walk.ToArray(), plan.PrivateRoom || plan.Method == GenexJoinMethod.JoinById);
+                    return await Seated(room, options, plan, url, targets);
                 }
                 catch (GenexJoinException e) when (plan.Method == GenexJoinMethod.JoinById)
                 {
@@ -601,6 +610,55 @@ namespace Genex.Multiplayer.Authority
             }
         }
 
+        /// <summary>The session of a joined <paramref name="room"/> once its first state is in: its url first, then the
+        /// other servers of the walk.</summary>
+        private static async Task<GenexAuthoritySession> Seated(Room<AuthorityRoomState> room, GenexAuthorityOptions options, GenexJoinPlan plan, string url, string[] targets)
+        {
+            var input = new GenexInput();
+            var seat = new GenexAuthoritySeat(room, options, input) { Url = url };
+            await seat.FirstState;
+            var walk = new List<string> { url };
+            foreach (var target in targets) if (target != url) walk.Add(target);
+            return new GenexAuthoritySession(seat, options, input, walk.ToArray(), plan.PrivateRoom || plan.Method == GenexJoinMethod.JoinById);
+        }
+
+        /// <summary>Asks each of <paramref name="search"/> for a room that already exists (§17.1 *Finding players*), with the
+        /// join options the join-or-create would send: the first that has one seats the player; null when none has. A refusal
+        /// that is a server's answer about this player or game ends the join (the way a refused join does), as every region
+        /// would repeat it; an empty region (Colyseus's 521), a dead path or a full region is the next region.</summary>
+        private static async Task<GenexAuthoritySession> JoinWherePlayersAre(GenexAuthorityOptions options, GenexJoinPlan plan, string[] search, string[] targets)
+        {
+            foreach (var url in search)
+            {
+                Room<AuthorityRoomState> room = null;
+                try
+                {
+                    var joinOptions = await BuildJoinOptions(options, options.GetEmbedToken == null && IsLoopbackUrl(url));
+                    if (plan.MatchKey != null) joinOptions[A.JoinOption.MatchKey] = plan.MatchKey;
+                    if (plan.PrivateRoom) joinOptions[A.JoinOption.Private] = true;
+                    var client = new Client(url);
+                    room = await GenexMultiplayer.MapRefusals(() => client.Join<AuthorityRoomState>(A.RoomType, joinOptions));
+                }
+                catch (GenexJoinException e) when (GenexAuthorityRegions.SearchRefusalKind(e.Code) == GenexSearchRefusal.Next)
+                {
+                    // No room here, or a path that is down or full: the next region is asked.
+                }
+                catch (GenexJoinException e)
+                {
+                    Explain(e);
+                    throw;
+                }
+                catch (Exception)
+                {
+                    // A network that failed before any refusal is the next region too (the TypeScript's missing code); the join
+                    // walk after the search meets the same failure and throws it.
+                }
+                // Outside the try: a room that is joined is never left behind for the next region's.
+                if (room != null) return await Seated(room, options, plan, url, targets);
+            }
+            return null;
+        }
+
         /// <summary>One attempt of a rejoin (§17.13 *Drain and rejoin*), through one url: the seat with its first state, or
         /// the refusal thrown. The session's schedule is the ladder.</summary>
         internal static async Task<GenexAuthoritySeat> JoinSeat(GenexAuthorityOptions options, string url, GenexRejoinWay way, string lostRoom, string matchKey, bool closed, GenexInput input)
@@ -621,15 +679,19 @@ namespace Genex.Multiplayer.Authority
             return seat;
         }
 
-        /// <summary>The servers a join tries, in order (§17.1 *Regions*): the override alone, else one per region, nearest
-        /// first, else the environment's local server.</summary>
-        internal static async Task<string[]> Targets(GenexAuthorityOptions options)
+        /// <summary>Where a join goes (§17.1 *Regions*, *Finding players*): <c>Search</c>, the servers asked for a room that
+        /// already exists, and <c>Create</c>, the servers the join itself tries in order (the override alone, else one per
+        /// region, nearest first, else the environment's local server). Only a pool join searches; a join by code walks every
+        /// region, pinned or not. A private create searches nowhere.</summary>
+        internal static async Task<(string[] Search, string[] Create)> JoinTargets(GenexAuthorityOptions options, GenexJoinMethod method)
         {
-            if (!string.IsNullOrEmpty(options.Url)) return new[] { options.Url };
+            if (!string.IsNullOrEmpty(options.Url)) return (Array.Empty<string>(), new[] { options.Url });
             var regions = GenexAuthorityRegions.Normalize(options.Regions, options.Urls);
-            if (regions.Count == 0) return new[] { PickUrl(options) };
-            var ranked = await GenexAuthorityRegions.Select(regions, options.Probe);
-            return ranked.Select(p => p.Url).ToArray();
+            if (regions.Count == 0) return (Array.Empty<string>(), new[] { PickUrl(options) });
+            var pool = method == GenexJoinMethod.JoinOrCreate;
+            var plan = await GenexAuthorityRegions.SelectSearch(regions, pool ? options.RegionRule : GenexRegionRule.Nearest, options.MaxPingMs,
+                method == GenexJoinMethod.JoinById ? null : options.Region, options.Probe);
+            return (plan.Search.Select(p => p.Url).ToArray(), plan.Create.Select(p => p.Url).ToArray());
         }
 
         /// <summary>Whether <paramref name="url"/> names this machine (ws/wss on 127.0.0.1, localhost or [::1]).</summary>

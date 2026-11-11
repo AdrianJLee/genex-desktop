@@ -1,11 +1,11 @@
 {
-  "cliVersion": "1.41.0",
-  "skillMdVersion": "1.41.0",
+  "cliVersion": "1.41.1",
+  "skillMdVersion": "1.41.1",
   "url": "https://genex.games/SKILL.md",
   "files": {
     "genex/SKILL.md": {
       "source": "https://genex.games/SKILL.md",
-      "sha256": "3f25a4a3bf4adc5416d9c1ff060573843e14697cbd1164340ca8d7e47fa86e9a",
+      "sha256": "4e4cce599f4b561ead5aa97aeeb8cbc8fc633dc130f50c908550529d9321ab7e",
       "bytes": 5698
     },
     "genex-threejs-multiplayer/SKILL.md": {
@@ -55,8 +55,8 @@
     },
     "genex-authoritative-multiplayer/references/settings.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-authoritative-multiplayer/references/settings.md",
-      "sha256": "56e3d911f02a91dcfb109cb7953d5c258c289454b9a046240882ca8dda330366",
-      "bytes": 11732
+      "sha256": "818fda58c3503c6ba8b9bdfc3fcec90d942829d632f727aaaa2cb41344272e06",
+      "bytes": 12693
     },
     "genex-authoritative-multiplayer/references/testing.md": {
       "source": "@genex-ai/cli-demo/templates/skills/genex-authoritative-multiplayer/references/testing.md",

@@ -2821,7 +2821,8 @@ takes it only as a plain local folder named for that toolchain (never a link, a 
 cmd.exe can't carry), and hands it to RunUAT; without it the call refuses with the installer's link
 for the agent to give the person. One package runs per game at a time. The person's open Unreal saves first (play ended; one that answers but can't save
 leaves nothing packaged), then `RunUAT BuildCookRun -platform=Mac|Win64|Linux -clientconfig=Shipping -build
--cook -stage -pak -stagingdirectory=…` stages into `unreal/Builds/<Mac|Windows|Linux>/` (emptied first, never
+-cook -stage -pak -compressed -nodebuginfo -stagingdirectory=…` (compressed paks and no debug files:
+the staged app is what players download) stages into `unreal/Builds/<Mac|Windows|Linux>/` (emptied first, never
 through a link; ignored by the game's history; never `-archive`, which copies a Mac app without its
 cooked content), the cook run by the engine's `UnrealEditor-Cmd`, within 120
 minutes. A Mac needs Xcode: a template's plugins make even a Blueprint game build code there. A
@@ -3677,8 +3678,14 @@ Genex:
   each with `genex native publish <the .app, or the .exe's folder> --json` in the publish workspace
   (a Linux build: its folder with `--platform linux --entry <its program>`, which the CLI cannot
   tell from the files; `nativePublishArgs`)
-  (`publishApps`, `native-publish.ts`, one hour each), one at a time, after resolving each by real
-  path inside the game folder. An app that fails never fails the publish; its row says "Not sent"
+  (`publishApps`, `native-publish.ts`), one at a time, after resolving each by real
+  path inside the game folder. Each send (a web build's upload, an app, a project to Genex Cloud)
+  runs the CLI with `GENEX_PROGRESS=json` and reads its `@genex-progress` lines off stderr
+  (`send-progress.ts`): the row or the dialog shows a bar with bytes, speed and time left
+  (`GenexSendProgress`, in memory only, never in a record), and the run's time limit (20 minutes
+  for a web publish, one hour for an app) counts from the last byte that moved, so a long send
+  that still moves is never cut. A CLI older than 1.42 writes no lines: the rows show their clock
+  alone and the limits count from the start, as before. An app that fails never fails the publish; its row says "Not sent"
   and a line under the rows says why in the CLI's words. Each result is kept in the workspace's
   `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). An app sent by
   someone other than a Genex admin waits for Genex's review: the CLI's answer carries the build's
@@ -3845,7 +3852,9 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   before anyone presses Publish. A release Genex
   can't do right now (it can't read the build, or the build is changing) is said in Genex's words
   too and changes nothing: the build is still kept (`unansweredRelease`). Two answers about
-  one build never take it back a step (`latestOf`). Each job is kept in the workspace's
+  one build never take it back a step (`latestOf`), and each change of the record is read and
+  written back in a turn of its own (`changeRecord`), so answers that cross (a status read, a
+  release, a send that starts) never drop one another. Each job is kept in the workspace's
   `cloud-build.json` (apart from `native.json`, which every publish writes anew) and followed with
   `genex native build-status <job> --json`, waiting 15 s, 30 s, 1 and then 2 min between reads; a job
   still running when Studio starts is followed again when the record is next read. The record
@@ -4005,7 +4014,12 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
   profiles too. On Windows srt-win's egress filter lets a sandboxed process reach only its proxies'
   loopback range (60080-60089), machine-wide, so the room listens there (WebSocket and fast@1 on
   the range's highest free ports) for its own bots, takes no delay (the toolchain's delay proxies
-  pick their own ports) and is stopped through the live-input relay; nothing else is opened. On
+  pick their own ports) and is stopped through the live-input relay; nothing else is opened. A port
+  another program took before the room could listen on it (the toolchain's `listen_failed`, two
+  rooms starting at once) starts the room again on the ports free by then, three starts in all
+  (`ROOM_PORT_TRIES`). A start that a stop, the studio's stop or a later start of the game
+  overtakes ends there, on any system: it is not started again for a taken port, and a process
+  of it that comes up afterwards is ended, never left as the game's room. On
   Linux the sandbox gives the room a network namespace of its own, so it listens on ports free on
   this computer too and the loopback bridge opens them here: this computer's connections and
   datagrams go in, the room reaches nothing out. The preview is loaded into a room only once this

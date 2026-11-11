@@ -144,6 +144,22 @@ describe("packaging an Unreal game", () => {
     );
   });
 
+  it("packs an app's content compressed and leaves its debug files out, and a web build as before", () => {
+    const game = { projectFile: "/g/unreal/Dust.uproject", stagingDir: "/g/unreal/Builds", engineDir: ENGINE };
+    for (const platform of ["darwin", "win32"] as const) {
+      const app = buildCookRunArgs({ ...game, platform });
+      // Players download the staged app: compressed paks and no symbol files make it smaller.
+      assert.ok(app.includes("-compressed"), `${platform} -compressed`);
+      assert.ok(app.includes("-nodebuginfo"), `${platform} -nodebuginfo`);
+      const web = buildCookRunArgs({ ...game, platform, system: PackageSystem.Web });
+      assert.deepEqual(
+        web.filter((word) => word === "-compressed" || word === "-nodebuginfo"),
+        [],
+        `${platform}'s web build is packaged as before`,
+      );
+    }
+  });
+
   it("starts RunUAT.bat through cmd.exe with every path whole in quotes, and refuses what quotes can't hold", () => {
     const engine = "C:\\Program Files\\Epic Games\\UE_5.8";
     const args = ["BuildCookRun", "-project=C:\\Games\\Dust & Co\\unreal\\Dust.uproject", "-nop4"];

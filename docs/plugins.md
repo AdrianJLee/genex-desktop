@@ -2906,7 +2906,14 @@ file, 2 GiB a site, 200 files; an account's own limits can differ, and the uploa
 largest file past the file limit by its path in the game with how many more files are past it,
 the site's whole size, its number of files. Such a build is still done and still the game's `web/`, and after a restart the idle status
 of the build in `web/` says the same. A stage with a page but no `wasm-manifest.json` fails the package and never
-becomes `web/`. `package-game`, `plugin-build`, `plugin-test`,
+becomes `web/`. What the game itself needs changed for a browser is the `unreal-web` skill, which
+the `unreal-editor` skill sends an agent to before a game's first web version: the web-only
+`Config/Wasm/` settings beside the ones Genex writes, what a browser build can't run (sockets and
+the online plugins, video, post-process materials that fail to translate, online play through
+`GenexMultiplayer`), the three renderers Unreal's page picks from (no Lumen in a Mac's browser) and
+how to make the site smaller. It records one real port on Unreal 5.9.0 Preview on Windows, built by
+hand with Epic's tools and not through `package-game`, and says where that port left a point
+unchecked. `package-game`, `plugin-build`, `plugin-test`,
 `plugin-package`, `add-cpp-module` and `add-motion-matching` name their status tool as `jobStatus`,
 and each status answers `jobRunning`, so the chat that started a job is woken when it ends. Publish
 then finds the app: `main/core/native-builds.ts` takes an Unreal Windows package's starter at its root as the whole

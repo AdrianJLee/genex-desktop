@@ -3625,7 +3625,8 @@ Genex:
   only what is true now ("Live · up to date", "Live · older than your game" against the folder's
   `changedAt` and, for the web, against when the web build in a folder of the game was made
   (`builtAt`, its newest file: a build put into `web/` is new with no source changed, since that
-  folder is no source), "Live · update ready" once a newer app is made, "Not built", "Built · older than your
+  folder is no source; the web version is live only while Genex lists the game, so the build Genex
+  still serves of a game taken back to a draft reads "Ready to publish"), "Live · update ready" once a newer app is made, "Not built", "Built · older than your
   game", "Ready to publish", "In review", "Not approved", "Couldn't build · the older one is still
   live"; a Windows app Genex Cloud built counts as live once a publish gave it to players), its end
   saying when it went live, its size, or where it gets built ("builds on this Mac", "builds on Genex

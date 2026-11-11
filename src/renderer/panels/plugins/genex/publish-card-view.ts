@@ -112,6 +112,11 @@ export interface CardInput {
   madeHere: ReadonlySet<PublishTarget> | null;
   /** Whether Genex's page plays a web version; absent while unknown. */
   hostedWeb?: boolean | undefined;
+  /**
+   * Whether Genex lists the game (`GenexHostedStatus.Published`); absent while unknown. Genex keeps
+   * serving the build of a game taken back to a draft, on no page players reach.
+   */
+  listed?: boolean | undefined;
   /** When the web version last went out from here (`lastPublishAt`), to tell it from the game's last change. */
   webPublishedAt?: string | undefined;
   /** Apps the agent was asked to build from this card, by when it was asked. */
@@ -419,9 +424,15 @@ function webOlder(row: PublishPlatform, publishedAt: string): boolean {
   return ms(row.changedAt) - published > SAME_BUILD_MS || ms(row.builtAt) - published > SAME_BUILD_MS;
 }
 
+/**
+ * Whether players have the game's web version: Genex plays one on a page it lists. The build of a
+ * game that is a draft again reaches nobody, so its row offers Publish as a first publish would.
+ */
+const webLive = (input: CardInput): boolean => input.hostedWeb === true && input.listed !== false;
+
 /** The web row: live on Genex's page, ready to send, or one the agent can make; null when the game can't have one. */
 function webRow(row: PublishPlatform, input: CardInput): CardRow | null {
-  const live = input.hostedWeb === true;
+  const live = webLive(input);
   const base = { target: row.target, name: WORDS.name[row.target], live, ...AT_REST };
   const ready = row.state === PublishPlatformState.Ready;
   if (live) {
@@ -449,7 +460,7 @@ function webRow(row: PublishPlatform, input: CardInput): CardRow | null {
 /** The card's rows, in the folder's order, leaving out every platform nothing can be done about from here. */
 export function cardRows(input: CardInput): CardRow[] {
   const anyLive = input.platforms.some((row) =>
-    row.target === PublishTarget.Web ? input.hostedWeb === true : liveApp(row, input.native) !== null,
+    row.target === PublishTarget.Web ? webLive(input) : liveApp(row, input.native) !== null,
   );
   return input.platforms
     .map((row) => (row.target === PublishTarget.Web ? webRow(row, input) : nativeRow(row, input, !anyLive)))

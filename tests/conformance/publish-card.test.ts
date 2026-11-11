@@ -695,6 +695,33 @@ describe("the Publish card's button", () => {
     assert.equal(sameBuild?.status, "Live · up to date", "a file written within a minute of the publish is that build");
   });
 
+  it("never calls the web version of a game Genex no longer lists live: the row offers Publish again", () => {
+    // Genex keeps serving the build of a game taken back to a draft, and an upload since stamped the
+    // last publish: the banner says Not published, so the row may not say Live and hide the button.
+    const web = (listed: boolean | undefined) =>
+      cardRows({
+        platforms: [{ ...platform(PublishTarget.Web, READY), changedAt: at(3 * 24 * HOUR_MS) }],
+        native: record(null),
+        now: NOW,
+        webOffer: WebOffer.Make,
+        madeHere: null,
+        hostedWeb: true,
+        ...(listed === undefined ? {} : { listed }),
+        webPublishedAt: at(MINUTE_MS),
+        mac: false,
+      })[0];
+    const draft = web(false);
+    assert.deepEqual(
+      [draft?.status, draft?.live, draft?.work],
+      ["Ready to publish", false, CardWork.Publish],
+      "a draft's web build waits for Publish",
+    );
+    assert.equal(pressPlan(draft ? [draft] : [], NO_SWITCHES)?.label, "Publish to web");
+    const listed = web(true);
+    assert.deepEqual([listed?.status, listed?.side, listed?.work], ["Live · up to date", "1 min ago", null]);
+    assert.equal(web(undefined)?.status, "Live · up to date", "while Genex has not said, the build it plays counts");
+  });
+
   it("leaves a platform off when its switch is off and it isn't live", () => {
     const rows = unityRows();
     const plan = pressPlan(rows, new Map([[PublishTarget.Web, false]]));

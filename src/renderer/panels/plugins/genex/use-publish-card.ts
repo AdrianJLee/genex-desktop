@@ -8,7 +8,7 @@
  * platforms down.
  */
 import { useState } from "react";
-import { GenexAction, type GenexNativeRecord } from "../../../../shared/genex.ts";
+import { GenexAction, GenexHostedStatus, type GenexNativeRecord } from "../../../../shared/genex.ts";
 import type { FactRef } from "../../../../shared/project-facts.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { composeInChat } from "../../../compose-in-chat.ts";
@@ -158,6 +158,7 @@ export function usePublishCard({
           webOffer: webOfferFor(facts),
           madeHere: appsMadeHere(facts, hostPlatform()),
           hostedWeb: state.hostedWeb,
+          ...(state.status ? { listed: state.status === GenexHostedStatus.Published } : {}),
           webPublishedAt: state.lastPublishAt,
           asked,
           mac: hostPlatform() === "darwin",

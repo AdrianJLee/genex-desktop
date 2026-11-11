@@ -6540,37 +6540,54 @@ export default {
     "Genex n’a pas pu créer l’app {players} de « {title} ». Corrige ces erreurs dans le code du jeu pour qu’il se crée là-bas, et garde le jeu tel qu’il marche sur les autres systèmes. Cet ordinateur ne peut pas créer pour {players}, alors vérifie bien chaque correction. Ensuite, dis-moi d’appuyer de nouveau sur Build on Genex.\n\n{errors}",
   "The same project fails the same way: change it first, then try again.":
     "Le même projet échoue de la même façon : modifie-le d’abord, puis réessaie.",
-  "Build {count} apps": "Compiler {count} apps",
-  "Build {platforms}": "Compiler {platforms}",
-  "Building on Genex Cloud": "Compilation sur Genex Cloud",
-  "Building on this Mac": "Compilation sur ce Mac",
-  "Building on this PC": "Compilation sur ce PC",
-  "Building {platforms}": "Compilation de {platforms}",
+  "Build on Genex Cloud": "Compiler sur Genex Cloud",
+  "Build on Mac": "Compiler sur Mac",
+  "Build on PC": "Compiler sur PC",
+  "Builds after {platform}": "Compilée après {platform}",
+  "Builds {platforms} again, then updates {count, plural, one {it} other {them}} by itself.":
+    "Recompile {platforms}, puis {count, plural, one {la met} other {les met}} à jour tout seul.",
+  "Builds {platforms} first. {slow} can take up to an hour.":
+    "Compile d’abord {platforms}. {slow} peut prendre jusqu’à une heure.",
+  "Builds {platforms} too. {slow} can take up to an hour.":
+    "Compile aussi {platforms}. {slow} peut prendre jusqu’à une heure.",
+  "Builds {platforms}, then publishes {count, plural, one {it} other {them}} by itself.":
+    "Compile {platforms}, puis {count, plural, one {la publie} other {les publie}} tout seul.",
+  "Builds {platform} first. It can take up to an hour.":
+    "Compile d’abord {platform}. Ça peut prendre jusqu’à une heure.",
+  "Builds {platform} too. It can take up to an hour.": "Compile aussi {platform}. Ça peut prendre jusqu’à une heure.",
+  "Each one goes live as soon as it’s ready. You can close this window.":
+    "Chacune est mise en ligne dès qu’elle est prête. Tu peux fermer cette fenêtre.",
+  "More for {platform}": "Plus pour {platform}",
+  "On Genex Cloud": "Sur Genex Cloud",
+  "On this PC": "Sur ce PC",
+  "Publish to all platforms": "Publier sur toutes les plateformes",
+  "Publishes {now} now, {later} once {count, plural, one {it is} other {they are}} built.":
+    "Publie {now} maintenant et {later} dès qu’{count, plural, one {elle est compilée} other {elles sont compilées}}.",
+  "Publishes {platforms} once {count, plural, one {it is} other {they are}} built.":
+    "Publie {platforms} dès qu’{count, plural, one {elle est compilée} other {elles sont compilées}}.",
+  "Publishing to all platforms · {live} of {count} live":
+    "Publication sur toutes les plateformes · {live} sur {count} en ligne",
+  "Update all platforms": "Mettre à jour toutes les plateformes",
+  "Updates {now} now, {later} once {count, plural, one {it is} other {they are}} built.":
+    "Met à jour {now} maintenant et {later} dès qu’{count, plural, one {elle est compilée} other {elles sont compilées}}.",
+  "Updates {platforms} once {count, plural, one {it is} other {they are}} built.":
+    "Met à jour {platforms} dès qu’{count, plural, one {elle est compilée} other {elles sont compilées}}.",
+  Updating: "Mise à jour",
+  "Updating all platforms · {done} of {count} updated":
+    "Mise à jour de toutes les plateformes · {done} sur {count} à jour",
+  "{hours}h {minutes}m left": "encore {hours} h {minutes} min",
+  "{minutes}m left": "encore {minutes} min",
   "Couldn’t build": "Compilation impossible",
   "Couldn’t build · the older one is still live": "Compilation impossible · l’ancienne reste en ligne",
   "Couldn’t send": "Envoi impossible",
-  "It can take up to an hour.": "Ça peut prendre jusqu’à une heure.",
   "Live · older than your game": "En ligne · plus ancienne que ton jeu",
   "Live · up to date": "En ligne · à jour",
   "Only a Mac, Windows or Linux app can be taken off Genex this way.":
     "Seule une app Mac, Windows ou Linux peut être retirée de Genex ainsi.",
-  "Publish to {count} platforms": "Publier sur {count} plateformes",
-  "Publish to {name}": "Publier sur {name}",
-  "Publish to {platforms}": "Publier sur {platforms}",
-  "Publish to {platforms} and take {down} down": "Publier sur {platforms} et retirer {down}",
-  "Publishing to {platforms}": "Publication sur {platforms}",
   "Sending to Genex": "Envoi vers Genex",
   "Sending to Genex Cloud": "Envoi vers Genex Cloud",
   "Take {platforms} down": "Retirer {platforms}",
-  "Update {count} platforms": "Mettre à jour {count} plateformes",
-  "Update {platforms}": "Mettre à jour {platforms}",
-  "Update {platforms} and take {down} down": "Mettre à jour {platforms} et retirer {down}",
-  "Updating {platforms}": "Mise à jour de {platforms}",
-  "builds on Genex Cloud": "compilé sur Genex Cloud",
-  "builds on this Mac": "compilé sur ce Mac",
-  "builds on this PC": "compilé sur ce PC",
   "coming soon": "bientôt",
-  web: "web",
   "{minutes} min ago": "il y a {minutes} min",
   "Agent is fixing the {platform} build": "L’agent corrige la version {platform}",
   "Copy the error": "Copier l’erreur",
@@ -6594,7 +6611,6 @@ export default {
   "Not built": "Non compilée",
   "Built · older than your game": "Compilée · plus ancienne que ton jeu",
   "Ready to publish": "Prête à publier",
-  "{platforms} can take up to an hour.": "{platforms} peut prendre jusqu’à une heure.",
   "{platform} build didn’t start": "La compilation {platform} n’a pas démarré",
   "Checking the archive": "Vérification de l’archive",
   Packing: "Compression",

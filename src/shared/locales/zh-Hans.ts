@@ -1291,8 +1291,6 @@ export default {
   "Export target must be an ordinary directory": "导出目标必须是普通文件夹",
   "Export validation does not yet support scoped import maps; build this project before export":
     "导出校验暂不支持 scoped import maps；请先构建此项目再导出",
-  "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.":
-    "已导出网页版到 web/：“实时”中的“网页游戏”标签页可以运行它，“发布”会将其上线。",
   "Exported {count} public files. Included: {included}. Excluded from selected roots: {excluded}.":
     "已导出 {count} 个公开文件。包含：{included}。从所选根目录中排除：{excluded}。",
   "Exporting…": "正在导出…",
@@ -3180,7 +3178,6 @@ export default {
   "Set up the protected workspace": "设置受保护的工作区",
   "Set up this game's Unity project": "设置这个游戏的 Unity 项目",
   "Set up {name} for Genex.": "为 Genex 设置 {name}。",
-  "Set up {name} for Genex?": "要为 Genex 设置 {name} 吗？",
   "Set up {project} after it ends.": "等 Loop 结束后再设置 {project}。",
   "Set up {project} for Genex · {game} now builds in {engine}":
     "已为 Genex 设置 {project} · {game} 现在在 {engine} 中制作",
@@ -4056,7 +4053,6 @@ export default {
   "Unclosed TOML string": "未闭合的 TOML 字符串",
   "Undid {count, plural, one {# try} other {# tries}} before it": "此前撤销了 {count, plural, other {# 次尝试}}",
   Undo: "撤销",
-  "Undo setup for {name}?": "要撤销 {name} 的设置吗？",
   "Undo this change": "撤销这项更改",
   Undone: "已撤销",
   "Undone because {reason}.": "已撤销，原因：{reason}。",
@@ -6154,4 +6150,23 @@ export default {
   "Installing… {percent}% · {speed} · under a minute left": "正在安装… {percent}% · {speed} · 剩余不到 1 分钟",
   "This plugin stopped several times in a row, so it starts again in {seconds, plural, one {# second} other {# seconds}}. Try again then.":
     "这个插件连续停止了好几次，所以会在 {seconds, plural, other {# 秒}}后重新启动。到时候再试一次吧。",
+  "Add Genex to {name}?": "把 Genex 添加到 {name}？",
+  "Another Genex game builds in this project too, so it stays where it is.":
+    "还有一个 Genex 游戏也在这个项目里制作，所以它留在原处。",
+  "Exported. Play it in Live's Web game tab, or publish it.": "已导出。在实时的“网页游戏”标签里游玩，或者发布它。",
+  "Genex moves its folder from {from} to {to}. Rewind and Loops reach it there.":
+    "Genex 会把它的文件夹从 {from} 移到 {to}。在那里回退和 Loop 都能用到它。",
+  "Genex moves its folder from {from} to {to}. Rewind, Loops and Publish reach it there.":
+    "Genex 会把它的文件夹从 {from} 移到 {to}。在那里回退、Loop 和发布都能用到它。",
+  "Move {name} into this game?": "把 {name} 移到这个游戏里？",
+  "Only the project this game builds in can move into it.": "只有这个游戏所用的项目才能移进来。",
+  "Quit Godot first: a project can't move while it is open.": "请先退出 Godot：打开着的项目无法移动。",
+  "Quit Unreal first: a project can't move while it is open.": "请先退出 Unreal：打开着的项目无法移动。",
+  "Remove Genex from {name}?": "从 {name} 移除 Genex？",
+  "This game already has a godot folder.": "这个游戏已经有 godot 文件夹了。",
+  "This game already has an unreal folder.": "这个游戏已经有 unreal 文件夹了。",
+  "This project is already in this game's folder.": "这个项目已经在这个游戏的文件夹里了。",
+  "This project is on another disk, so Genex leaves it there.": "这个项目在另一个磁盘上，所以 Genex 让它留在那里。",
+  "This project's folder holds other things too, so Genex leaves it where it is.":
+    "这个项目的文件夹里还有别的东西，所以 Genex 让它留在原处。",
 } satisfies LocaleCatalog;

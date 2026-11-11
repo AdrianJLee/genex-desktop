@@ -164,7 +164,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
 | `tools[].facts`, `tools[].makes` | 3 | The facts of the games whose sessions get the tool, and (agent tools) the facts it makes in a game's folder; see [Scope by facts](#scope-by-facts) |
 | `skills[]` | 1 | Guidance for agents while the plugin is enabled: inline `{name, text}`, or (API 3) a file skill `{name, summary, file, references?}`, either (API 3) with `facts` (or the older `engines`) and `tools`; see [Skills](#skills) |
-| `panels[]` | 1 | `{id, title, file, placement: settings \| project}` isolated HTML panels |
+| `panels[]` | 1 | `{id, title, file, placement: settings \| project, width?: narrow}` isolated HTML panels; `narrow` opens it in the narrow dialog |
 | `settings[]` | 1 | `{key, label, type, default}` host-owned standard settings |
 | `actions[]` | 1 | `{name, label, confirmation?, native?}` UI-invoked backend actions; never agent tools. `native: true` marks an action that starts, quits or opens a desktop app or the browser, or writes outside the plugin's storage: a fixture profile refuses it in main before the backend runs (`unsupported-in-fixture`); any other value is refused. Sensitive names (`unlock`, `connect`, `disconnect`, `approve`, `allowance`, `enable-paid`, `publish-draft`, `publish-gallery`) must carry a `confirmation` |
 | `network` | 2 | `{hosts: string[]}` (at most 32 hostnames): the hosts the backend talks to, disclosed at install and checked by the static scan |
@@ -1071,12 +1071,19 @@ Types come from `lstat`, never from `readdir`, so Windows OneDrive placeholders 
 and folders while real links are still skipped or refused. There is no path box: **Choose a project
 file…** calls `studioPlugin.chooseFile({title, extensions: ["uproject"]})`.
 
-The panel groups what belongs together in outlined blocks: a quiet label above each, a rule between
-the rows inside, the actions in the block's foot. It opens on the shown project: its block holds the
-name, its place and where it stands (a dot and a word; Ready is the green dot alone, its word for
-screen readers and the tooltip), the step's words, the Engine it was made with and, in a game,
-whether Rewind and Loops reach it, then the step's buttons, **Change project** and ⋯ More; a second
-block, This computer, holds the engine, Xcode and the disk and memory notes. Change project opens
+The panel opens on the shown project as one list ([engine panels](../design/genex/README.md#engine-panels)):
+the head row holds the name, where it stands (a dot and a word, the engine's version beside it), the
+step's button and ⋯ (**Change project**, Remove Genex from this project, Quit Unreal; an action that
+can't run now is hidden and a line in the menu says why). Under it come only the rows that apply:
+the step's lead (Get Unreal, Xcode), Use in this game, the engine update, ray tracing, Xcode, and
+the Agents can use Unreal while you play switch. A game's project that lives outside the game's
+folder gets **This project is in another folder** with **Move into game** (action `move-into-game`,
+`move-into-game.ts` on `substrate/plugins/engine-move.ts`): with Unreal closed it renames the
+project's folder into the game's `unreal/` and links the game to it there. It is refused, changing
+nothing, when the project is open or used by a run, another game is linked to it, the folder holds
+the game, is another game's own folder or is no project folder, `unreal/` is taken, it sits on
+another disk, or the host can't say which Loops run; the row then shows that reason (status
+`moveInWhy`) and no button. A failed link moves the folder back. Change project opens
 "Choose a project" (in a web game with no Unreal project, "Make this game in Unreal") with Back: a
 New Unreal project row leads (in a web game: what was made for the web stays, and Undo in the chat
 switches back), then the projects on this computer with their count and, past six, a name filter.
@@ -1156,10 +1163,9 @@ Mac is made without it (`create-project.ts`, after Epic's own values), and the b
 queue, the computer's play and the helper's stills, strips and checks lift the background throttle on a
 Mac only for an editor that says `r.RayTracing` is 0 (`editor-throttle.ts`, `genex_build/shots.py`). Xcode
 is recommended to every Mac user, since without it Genex works in Blueprints only: status's `xcode`
-(`xcode.ts`) gives This computer an Xcode row, only under a shown project, that says to get
+(`xcode.ts`) gives the panel's list an Xcode row, only under a shown project, that says to get
 Xcode, to open it once to finish its setup, to run one Terminal command (with Copy) when another
-developer folder is selected, or the range the engine builds with (once ready, a ticked row with its
-version under the engine's): one too new
+developer folder is selected, or the range the engine builds with (once ready, no row): one too new
 (`tooNew`) is kept and an older one added from Apple's downloads, and a second installed Xcode in
 range is judged instead of the selected one. It warns
 about an engine mismatch and under 16 GB of memory, and about free disk below
@@ -1258,13 +1264,13 @@ with no Unreal running asks for it and keeps `engine-setup/move-offers/<game>` (
 card again; once the game moved the card closes and tells the agent nothing. `move-engine`
 (confirmed: what changes, then what keeps the game as it was) runs `moveProject`: the descriptor
 names the newer Unreal, toolsets it lacks go (the user's own kept in the record's `dropped`, so
-Undo setup puts them back) and its own come, the port and the helper stay, and the project is set
+Remove Genex puts them back) and its own come, the port and the helper stay, and the project is set
 up for it. The open game's own project gets a game snapshot first (`game.snapshot`), and a snapshot
 that fails stops the move; any other project keeps only setup's copy of the descriptor. It is
 refused, changing nothing, while that Unreal isn't installed and while Unreal has the project
 open. A moved game's C++ targets (`Source/*.Target.cs`) that name 5.8's build settings and include
 order get 5.9's (`retargetProject` in `cpp-module.ts`; the record's `engine.targets` names them, and
-Undo setup gives them back): 5.9 compiles the editor target with 5.8's settings, but its launcher
+Remove Genex gives them back): 5.9 compiles the editor target with 5.8's settings, but its launcher
 build refuses the game target, which every package needs. A target naming anything else stays, and
 none is written through a link.
 
@@ -1369,7 +1375,7 @@ other than a folder or file where one belongs, an unreadable or oversize setting
 running Studio refuses the whole step before anything is written. On a Mac the panel notes before
 Set up that macOS may ask to let Genex use the Documents folder, where Roblox keeps its plugins. The record
 `setup/record.json` lists each write with its bytes' hash or the switch value it replaced, and keeps
-a copy of a helper file that was there before; Undo Set up takes back only what still holds Genex's
+a copy of a helper file that was there before; Remove Genex (`undo-setup`) takes back only what still holds Genex's
 bytes, and the Plugins folder only when Genex made it and it is empty. The helper carries
 `GENEX_HELPER_VERSION`: an older or unmarked one is replaced, a newer one is kept, and at the same
 version the bytes decide (an earlier Genex's recorded write that isn't the shipped helper is
@@ -1439,7 +1445,7 @@ Restart Studio while Studio is open; Do it for me, or Restart Studio, while the 
 only signing in left it runs nothing and says so. The card offers it only then, never while Studio
 is being got; `doneSays` tells the agent once every row is ticked, so the chat goes on by itself,
 and `stuckSays` when Get Roblox Studio stopped by itself. Get Roblox Studio, Set up and Restart
-Studio ask on no card; Undo Set up, Add Luau checks, Quit Studio (as a tool) and publishing still do.
+Studio ask on no card; Remove Genex, Add Luau checks, Quit Studio (as a tool) and publishing still do.
 
 Its connection `studio` (connector `roblox-studio`; the plugin page names it "Roblox Studio",
 "Your open Roblox Studio, where agents build Roblox games.") is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in
@@ -3186,9 +3192,9 @@ the online play) puts Genex multiplayer into the game's Unity project, WebGL and
 
 The toolbar button (`unity:editor`, labelled Unity with the `unity` icon, only on a game with a
 Unity project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
-[engine panel](../design/genex/README.md#engine-panels): the project's block (its folder, the state
-in the button's words, the step, Engine, the step's buttons in the foot) and This computer (the
-newest Unity installed). The button's status action `toolbar-status`
+[engine panel](../design/genex/README.md#engine-panels): one list whose head holds the project's name, the state
+in the button's words with the Unity version, the step's button and ⋯, then the Agents can use
+Unity while you play switch. The button's status action `toolbar-status`
 and the panel's `status` answer the same look (`panel-status.ts`), which only reads: the installed
 editors, the project the game's folder holds and whether its manifest asks for the Pipeline
 package, whether an editor has it open, and one `GET /api/editor_status`. It sends the editor no
@@ -3201,7 +3207,7 @@ command, so the toolbar may ask as often as it does.
 | `old-project` | The project was saved with a Unity older than 6 | Not set up | Open Unity Hub |
 | `not-set-up` | Its manifest does not ask for the Pipeline package | Not set up | Set up |
 | `no-editor` | The Unity it was saved with is not installed | Not open | Open Unity Hub |
-| `not-open` | No editor has it open | Not open | Open in Unity, Undo setup |
+| `not-open` | No editor has it open | Not open | Open in Unity, Remove Genex |
 | `opening` | An editor has it open and does not answer yet | Starting | Restart Unity |
 | `ready` | Its main thread answers (the panel says when it plays or compiles) | Ready | Restart Unity |
 | `stalled` | Its server is there and its main thread runs nothing | Stalled, `warn`, `attention` | Restart Unity |
@@ -3367,7 +3373,7 @@ image data URLs are supported. Use `src/plugin-sdk/panel.js` for request/respons
 same host (`PluginPanelHost`) serves a panel opened from the Plugins page and one opened from a
 toolbar button.
 
-`studioPlugin.call('context')` returns the selected project, host API version (`3`), the window's
+`studioPlugin.call('context')` returns the selected project and its title as Genex shows it, host API version (`3`), the window's
 language (`locale`, from `panelContext` in `renderer/panels/panel-bridge.ts`) and theme tokens:
 `background`, `foreground`, the raw `accent`, and the readable button colours Studio's own primary
 buttons use (`accentFill` under `accentForeground` text, at least 5:1, and `accentHover`);
@@ -4329,9 +4335,10 @@ project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a hea
 scripts left unsaved or an editor that didn't answer; at `restore.before` either one blocks, so a
 restore never replaces work the editor still holds. `reload-editor` at `restore.after` rescans and
 reloads the open scenes. With no editor beating, each answers nothing.
-Its panel is an engine panel (design README): This game's project (state, the step: Set up for
-Genex or Open in Godot, Change project, ⋯ Export for the web) and This computer (Godot, the Web
-template), and Choose a project behind Change project: New project on top, then the person's Godot
+Its panel is an engine panel (design README): one list for this game's project (state, the step:
+Add Genex or Open in Godot, ⋯ with Change project and Export for the web; the Web template has no
+row, since Export fetches it; a project outside the game gets **Move into game**, action
+`move-into-game`, the same rules as Unreal's into `godot/`), and Choose a project behind Change project: New project on top, then the person's Godot
 projects (`find-projects.ts`: Godot's own `projects.cfg` and Documents › Godot Projects or
 GodotProjects one level down, each once by real path, at most 12) tagged In use or Outside game,
 and Choose a project.godot…. `use-project {folder}` links the game to that project

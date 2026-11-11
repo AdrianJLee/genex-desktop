@@ -1429,8 +1429,6 @@ export default {
   "Export target must be an ordinary directory": "La cible de l’export doit être un dossier ordinaire",
   "Export validation does not yet support scoped import maps; build this project before export":
     "La validation de l’export ne prend pas encore en charge les scoped import maps ; crée un build de ce projet avant d’exporter",
-  "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.":
-    "Exporté pour le web dans web/ : l’onglet Jeu web de Live le lance, et la publication le met en ligne.",
   "Exported {count} public files. Included: {included}. Excluded from selected roots: {excluded}.":
     "{count} fichiers publics exportés. Inclus : {included}. Exclus des dossiers racines choisis : {excluded}.",
   "Exporting…": "Exportation…",
@@ -3426,7 +3424,6 @@ export default {
   "Set up the protected workspace": "Configurer l’espace de travail protégé",
   "Set up this game's Unity project": "Configure le projet Unity de ce jeu",
   "Set up {name} for Genex.": "Configurer {name} pour Genex.",
-  "Set up {name} for Genex?": "Configurer {name} pour Genex ?",
   "Set up {project} after it ends.": "Configure {project} une fois le Loop terminé.",
   "Set up {project} for Genex · {game} now builds in {engine}":
     "{project} configuré pour Genex · {game} se crée maintenant dans {engine}",
@@ -4382,7 +4379,6 @@ export default {
   "Undid {count, plural, one {# try} other {# tries}} before it":
     "{count, plural, one {# essai annulé} other {# essais annulés}} avant",
   Undo: "Annuler",
-  "Undo setup for {name}?": "Annuler la configuration de {name} ?",
   "Undo this change": "Annuler ce changement",
   Undone: "Annulé",
   "Undone because {reason}.": "Annulé, car {reason}.",
@@ -6631,4 +6627,28 @@ export default {
     "Installation… {percent} % · {speed} · moins d’une minute restante",
   "This plugin stopped several times in a row, so it starts again in {seconds, plural, one {# second} other {# seconds}}. Try again then.":
     "Ce plugin s’est arrêté plusieurs fois de suite, il redémarre dans {seconds, plural, one {# seconde} other {# secondes}}. Réessaie à ce moment-là.",
+  "Add Genex to {name}?": "Ajouter Genex à {name} ?",
+  "Another Genex game builds in this project too, so it stays where it is.":
+    "Un autre jeu Genex se crée aussi dans ce projet, donc il reste où il est.",
+  "Exported. Play it in Live's Web game tab, or publish it.":
+    "Exporté. Joue-y dans l'onglet Jeu web de Live, ou publie-le.",
+  "Genex moves its folder from {from} to {to}. Rewind and Loops reach it there.":
+    "Genex déplace son dossier de {from} vers {to}. Retour en arrière et Loop l'atteignent là.",
+  "Genex moves its folder from {from} to {to}. Rewind, Loops and Publish reach it there.":
+    "Genex déplace son dossier de {from} vers {to}. Retour en arrière, Loop et Publier l'atteignent là.",
+  "Move {name} into this game?": "Déplacer {name} dans ce jeu ?",
+  "Only the project this game builds in can move into it.":
+    "Seul le projet dans lequel ce jeu se crée peut y être déplacé.",
+  "Quit Godot first: a project can't move while it is open.":
+    "Quitte d'abord Godot : un projet ouvert ne peut pas être déplacé.",
+  "Quit Unreal first: a project can't move while it is open.":
+    "Quitte d'abord Unreal : un projet ouvert ne peut pas être déplacé.",
+  "Remove Genex from {name}?": "Retirer Genex de {name} ?",
+  "This game already has a godot folder.": "Ce jeu a déjà un dossier godot.",
+  "This game already has an unreal folder.": "Ce jeu a déjà un dossier unreal.",
+  "This project is already in this game's folder.": "Ce projet est déjà dans le dossier de ce jeu.",
+  "This project is on another disk, so Genex leaves it there.":
+    "Ce projet est sur un autre disque, donc Genex le laisse là.",
+  "This project's folder holds other things too, so Genex leaves it where it is.":
+    "Le dossier de ce projet contient d'autres choses, donc Genex le laisse où il est.",
 } satisfies LocaleCatalog;

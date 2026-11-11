@@ -1435,8 +1435,6 @@ export default {
   "Export target must be an ordinary directory": "Das Exportziel muss ein normaler Ordner sein",
   "Export validation does not yet support scoped import maps; build this project before export":
     "Die Exportprüfung unterstützt noch keine scoped import maps; baue dieses Projekt vor dem Export",
-  "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.":
-    "Für das Web nach web/ exportiert: Der Tab „Webspiel“ in „Live“ spielt es ab, und „Veröffentlichen“ stellt es online.",
   "Exported {count} public files. Included: {included}. Excluded from selected roots: {excluded}.":
     "{count} öffentliche Dateien exportiert. Enthalten: {included}. Aus den gewählten Stammordnern ausgeschlossen: {excluded}.",
   "Exporting…": "Wird exportiert…",
@@ -3445,7 +3443,6 @@ export default {
   "Set up the protected workspace": "Geschützten Arbeitsbereich einrichten",
   "Set up this game's Unity project": "Richte das Unity-Projekt dieses Spiels ein",
   "Set up {name} for Genex.": "{name} für Genex einrichten.",
-  "Set up {name} for Genex?": "{name} für Genex einrichten?",
   "Set up {project} after it ends.": "Richte {project} ein, wenn der Loop endet.",
   "Set up {project} for Genex · {game} now builds in {engine}":
     "{project} für Genex eingerichtet · {game} wird jetzt in {engine} gebaut",
@@ -4417,7 +4414,6 @@ export default {
   "Undid {count, plural, one {# try} other {# tries}} before it":
     "Davor {count, plural, one {# Versuch} other {# Versuche}} rückgängig gemacht",
   Undo: "Rückgängig",
-  "Undo setup for {name}?": "Einrichtung von {name} rückgängig machen?",
   "Undo this change": "Änderung rückgängig machen",
   Undone: "Rückgängig gemacht",
   "Undone because {reason}.": "Rückgängig gemacht: {reason}.",
@@ -6673,4 +6669,28 @@ export default {
     "Wird installiert… {percent} % · {speed} · noch unter einer Minute",
   "This plugin stopped several times in a row, so it starts again in {seconds, plural, one {# second} other {# seconds}}. Try again then.":
     "Dieses Plugin hat mehrmals hintereinander gestoppt, deshalb startet es in {seconds, plural, one {# Sekunde} other {# Sekunden}} neu. Versuch es dann noch mal.",
+  "Add Genex to {name}?": "Genex zu {name} hinzufügen?",
+  "Another Genex game builds in this project too, so it stays where it is.":
+    "In diesem Projekt wird noch ein Genex-Spiel gebaut, also bleibt es, wo es ist.",
+  "Exported. Play it in Live's Web game tab, or publish it.":
+    "Exportiert. Spiel es im Tab „Web-Spiel“ von Live oder veröffentliche es.",
+  "Genex moves its folder from {from} to {to}. Rewind and Loops reach it there.":
+    "Genex verschiebt den Ordner von {from} nach {to}. Dort erreichen ihn Zurückspulen und Loop.",
+  "Genex moves its folder from {from} to {to}. Rewind, Loops and Publish reach it there.":
+    "Genex verschiebt den Ordner von {from} nach {to}. Dort erreichen ihn Zurückspulen, Loop und Veröffentlichen.",
+  "Move {name} into this game?": "{name} in dieses Spiel verschieben?",
+  "Only the project this game builds in can move into it.":
+    "Nur das Projekt, in dem dieses Spiel gebaut wird, kann hinein verschoben werden.",
+  "Quit Godot first: a project can't move while it is open.":
+    "Beende zuerst Godot: Ein offenes Projekt lässt sich nicht verschieben.",
+  "Quit Unreal first: a project can't move while it is open.":
+    "Beende zuerst Unreal: Ein offenes Projekt lässt sich nicht verschieben.",
+  "Remove Genex from {name}?": "Genex aus {name} entfernen?",
+  "This game already has a godot folder.": "Dieses Spiel hat schon einen Ordner godot.",
+  "This game already has an unreal folder.": "Dieses Spiel hat schon einen Ordner unreal.",
+  "This project is already in this game's folder.": "Dieses Projekt liegt schon im Ordner dieses Spiels.",
+  "This project is on another disk, so Genex leaves it there.":
+    "Dieses Projekt liegt auf einer anderen Festplatte, also lässt Genex es dort.",
+  "This project's folder holds other things too, so Genex leaves it where it is.":
+    "Im Ordner dieses Projekts liegt noch anderes, also lässt Genex ihn, wo er ist.",
 } satisfies LocaleCatalog;

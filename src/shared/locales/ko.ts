@@ -1342,8 +1342,6 @@ export default {
   "Export target must be an ordinary directory": "내보낼 대상은 일반 폴더여야 해요",
   "Export validation does not yet support scoped import maps; build this project before export":
     "내보내기 검사는 아직 scoped import maps를 지원하지 않아요. 내보내기 전에 이 프로젝트를 빌드하세요",
-  "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.":
-    "web/에 웹용으로 내보냈어요. 라이브의 ‘웹 게임’ 탭에서 플레이할 수 있고, ‘게시하기’로 온라인에 올릴 수 있어요.",
   "Exported {count} public files. Included: {included}. Excluded from selected roots: {excluded}.":
     "공개 파일 {count}개를 내보냈어요. 포함: {included}. 선택한 루트에서 제외: {excluded}.",
   "Exporting…": "내보내는 중…",
@@ -3286,7 +3284,6 @@ export default {
   "Set up the protected workspace": "보호된 작업 공간 설정",
   "Set up this game's Unity project": "이 게임의 Unity 프로젝트를 설정하세요",
   "Set up {name} for Genex.": "{name} 프로젝트를 Genex용으로 설정하세요.",
-  "Set up {name} for Genex?": "{name} 프로젝트를 Genex용으로 설정할까요?",
   "Set up {project} after it ends.": "Loop가 끝나면 {project} 프로젝트를 설정하세요.",
   "Set up {project} for Genex · {game} now builds in {engine}":
     "{project} 프로젝트를 Genex용으로 설정했어요 · {game} 게임은 이제 {engine}에서 만들어져요",
@@ -4210,7 +4207,6 @@ export default {
   "Unclosed TOML string": "닫히지 않은 TOML 문자열",
   "Undid {count, plural, one {# try} other {# tries}} before it": "그 전에 {count, plural, other {#번}} 되돌렸어요",
   Undo: "실행 취소",
-  "Undo setup for {name}?": "{name} 프로젝트의 설정을 되돌릴까요?",
   "Undo this change": "이 변경 되돌리기",
   Undone: "되돌림",
   "Undone because {reason}.": "되돌린 이유: {reason}.",
@@ -6368,4 +6364,27 @@ export default {
   "Installing… {percent}% · {speed} · under a minute left": "설치 중… {percent}% · {speed} · 1분 미만 남음",
   "This plugin stopped several times in a row, so it starts again in {seconds, plural, one {# second} other {# seconds}}. Try again then.":
     "이 플러그인이 여러 번 연달아 멈춰서 {seconds, plural, other {#초}} 후에 다시 시작해요. 그때 다시 시도해 줘.",
+  "Add Genex to {name}?": "{name}에 Genex를 추가할까요?",
+  "Another Genex game builds in this project too, so it stays where it is.":
+    "이 프로젝트에서 다른 Genex 게임도 만들고 있어서 그대로 둡니다.",
+  "Exported. Play it in Live's Web game tab, or publish it.":
+    "내보냈습니다. 라이브의 '웹 게임' 탭에서 플레이하거나 게시하세요.",
+  "Genex moves its folder from {from} to {to}. Rewind and Loops reach it there.":
+    "Genex가 폴더를 {from}에서 {to}(으)로 옮깁니다. 거기서는 되감기와 Loop가 닿습니다.",
+  "Genex moves its folder from {from} to {to}. Rewind, Loops and Publish reach it there.":
+    "Genex가 폴더를 {from}에서 {to}(으)로 옮깁니다. 거기서는 되감기, Loop, 게시가 닿습니다.",
+  "Move {name} into this game?": "{name}을(를) 이 게임으로 옮길까요?",
+  "Only the project this game builds in can move into it.": "이 게임을 만드는 프로젝트만 옮길 수 있습니다.",
+  "Quit Godot first: a project can't move while it is open.":
+    "먼저 Godot를 종료하세요. 열려 있는 프로젝트는 옮길 수 없습니다.",
+  "Quit Unreal first: a project can't move while it is open.":
+    "먼저 Unreal을 종료하세요. 열려 있는 프로젝트는 옮길 수 없습니다.",
+  "Remove Genex from {name}?": "{name}에서 Genex를 제거할까요?",
+  "This game already has a godot folder.": "이 게임에는 이미 godot 폴더가 있습니다.",
+  "This game already has an unreal folder.": "이 게임에는 이미 unreal 폴더가 있습니다.",
+  "This project is already in this game's folder.": "이 프로젝트는 이미 이 게임의 폴더에 있습니다.",
+  "This project is on another disk, so Genex leaves it there.":
+    "이 프로젝트는 다른 디스크에 있어서 Genex가 그대로 둡니다.",
+  "This project's folder holds other things too, so Genex leaves it where it is.":
+    "이 프로젝트의 폴더에 다른 것도 있어서 Genex가 그대로 둡니다.",
 } satisfies LocaleCatalog;

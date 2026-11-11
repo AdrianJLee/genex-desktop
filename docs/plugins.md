@@ -3623,7 +3623,9 @@ Genex:
   `use-publish-card.ts`): one row per platform the person can act on (an Unreal game has a Web row only once its web build exists,
   and a Mac shows no Linux row for it unless that app is live), each with a dot and one line saying
   only what is true now ("Live · up to date", "Live · older than your game" against the folder's
-  `changedAt`, "Live · update ready" once a newer app is made, "Not built", "Built · older than your
+  `changedAt` and, for the web, against when the web build in a folder of the game was made
+  (`builtAt`, its newest file: a build put into `web/` is new with no source changed, since that
+  folder is no source), "Live · update ready" once a newer app is made, "Not built", "Built · older than your
   game", "Ready to publish", "In review", "Not approved", "Couldn't build · the older one is still
   live"; a Windows app Genex Cloud built counts as live once a publish gave it to players), its end
   saying when it went live, its size, or where it gets built ("builds on this Mac", "builds on Genex

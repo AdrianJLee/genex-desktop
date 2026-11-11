@@ -409,6 +409,16 @@ function nativeRow(row: PublishPlatform, input: CardInput, firstPublish: boolean
   return unpublished ? { ...base, ...unpublished } : null;
 }
 
+/**
+ * Whether the web version that went out at `publishedAt` is older than the game: the game changed
+ * after it, or the web build in the game's folder was made after it (a build put there is new by
+ * itself, with no source changed).
+ */
+function webOlder(row: PublishPlatform, publishedAt: string): boolean {
+  const published = ms(publishedAt);
+  return ms(row.changedAt) - published > SAME_BUILD_MS || ms(row.builtAt) - published > SAME_BUILD_MS;
+}
+
 /** The web row: live on Genex's page, ready to send, or one the agent can make; null when the game can't have one. */
 function webRow(row: PublishPlatform, input: CardInput): CardRow | null {
   const live = input.hostedWeb === true;
@@ -416,7 +426,7 @@ function webRow(row: PublishPlatform, input: CardInput): CardRow | null {
   const ready = row.state === PublishPlatformState.Ready;
   if (live) {
     const at = input.webPublishedAt;
-    const older = ready && (!at || ms(row.changedAt) - ms(at) > SAME_BUILD_MS);
+    const older = ready && (!at || webOlder(row, at));
     const side = at ? WORDS.ago(at, input.now) : null;
     return older
       ? { ...base, tone: CardTone.Old, status: WORDS.liveOlder, side: null, on: true, work: CardWork.Publish }

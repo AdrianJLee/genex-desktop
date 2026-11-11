@@ -669,6 +669,32 @@ describe("the Publish card's button", () => {
     assert.equal(pressPlan(older ? [older] : [], NO_SWITCHES)?.label, "Update web");
   });
 
+  it("takes a web build made after the last publish as newer than what players have, with no source changed", () => {
+    // An engine's web build in the game's web folder: the folder says when it was made (`builtAt`).
+    const web = (builtAgo: number) =>
+      cardRows({
+        platforms: [{ ...platform(PublishTarget.Web, READY), builtAt: at(builtAgo), changedAt: at(3 * 24 * HOUR_MS) }],
+        native: record(null),
+        now: NOW,
+        webOffer: WebOffer.Make,
+        madeHere: null,
+        hostedWeb: true,
+        webPublishedAt: at(2 * HOUR_MS),
+        mac: false,
+      })[0];
+    const rebuilt = web(20 * MINUTE_MS);
+    assert.deepEqual([rebuilt?.status, rebuilt?.work], ["Live · older than your game", CardWork.Publish]);
+    assert.equal(pressPlan(rebuilt ? [rebuilt] : [], NO_SWITCHES)?.label, "Update web");
+    const published = web(3 * HOUR_MS);
+    assert.deepEqual(
+      [published?.status, published?.side, published?.work],
+      ["Live · up to date", "2 hours ago", null],
+      "the build players have",
+    );
+    const sameBuild = web(2 * HOUR_MS - 30 * 1000);
+    assert.equal(sameBuild?.status, "Live · up to date", "a file written within a minute of the publish is that build");
+  });
+
   it("leaves a platform off when its switch is off and it isn't live", () => {
     const rows = unityRows();
     const plan = pressPlan(rows, new Map([[PublishTarget.Web, false]]));

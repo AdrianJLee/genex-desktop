@@ -1162,6 +1162,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "No se pudo instalar: este juego no funciona en este Mac.",
   "Couldn’t install: this game is larger than it says.": "No se pudo instalar: este juego ocupa más de lo que indica.",
   "Couldn’t install: this game isn’t signed.": "No se pudo instalar: este juego no está firmado.",
+  "Couldn’t install: this game needs a newer Genex. Update Genex and try again.":
+    "No se pudo instalar: este juego necesita una versión más nueva de Genex. Actualiza Genex e inténtalo de nuevo.",
   "Couldn’t install: this game needs Rosetta to run on this Mac.":
     "No se pudo instalar: este juego necesita Rosetta para funcionar en este Mac.",
   "Couldn’t install: this game’s files aren’t safe to open.":

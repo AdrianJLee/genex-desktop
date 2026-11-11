@@ -967,6 +967,7 @@ export const MESSAGES = [
   "Couldn’t install: this game is larger than it says.",
   "Couldn’t install: this game isn’t signed.",
   "Couldn’t install: this game needs Rosetta to run on this Mac.",
+  "Couldn’t install: this game needs a newer Genex. Update Genex and try again.",
   "Couldn’t install: this game’s files aren’t safe to open.",
   "Couldn’t load other versions.",
   "Couldn’t load the comments",

@@ -4,6 +4,12 @@ All notable changes to `com.genex.multiplayer`. Versions follow [semantic versio
 
 ## Unreleased
 
+- **Finding players across regions (PROTOCOL.md §17.1 *Finding players*).** Each authority region is its own matchmaking pool, and a
+  join used to enter the nearest one, so players in different regions never met. A pool join (not a join by code, a private
+  create, a rejoin or an explicit `Url`) now asks the regions within `GenexAuthorityOptions.MaxPingMs` (350) for a room that
+  already exists, nearest first, with Colyseus's plain `Join`, and opens a room in the nearest region only when none has one.
+  New options `RegionRule` (`Players`, default, or `Nearest`), `MaxPingMs` and `Region` (play in one named region only); held to
+  the new `search`, `searches` and `searchRefusals` vectors. No server change: a client behaves as before against today's servers.
 - **Your shots on UDP are confirmed, not counted refused (PROTOCOL.md §17.12 *Client*, §17.9; lane UP).** A fast seat settled a
   projectile prediction against the newest snapshot's ack, which runs ahead of the WebSocket that carries the launch; it now
   settles against the ack of the newest snapshot at or before the WebSocket's tick (`GenexSettleAckTrail`, the `settleAck` vectors).

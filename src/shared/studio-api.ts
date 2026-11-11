@@ -268,10 +268,22 @@ export interface StudioApi {
    * Publish a game that has only apps (no web build) from Studio's Publish dialog: its ready Mac and
    * Windows apps go to Genex and the game is listed under `title`. The press, under the rows it names,
    * is the consent; `remix` is its Allow remixing, whether the game's project goes once they are live.
+   * `release` names the platforms whose app Genex Cloud built and keeps, or still builds: players get
+   * each now, or as soon as it is built.
    */
-  genexPublishApps(project: string, title?: string, remix?: boolean, platforms?: string[]): Promise<void>;
-  /** Ask Genex to build the game's `platform` app on its own computers (an Unreal game's Windows app on a Mac). */
-  genexCloudBuild(project: string, platform: string): Promise<void>;
+  genexPublishApps(
+    project: string,
+    title?: string,
+    remix?: boolean,
+    platforms?: string[],
+    release?: string[],
+  ): Promise<void>;
+  /**
+   * Ask Genex to build the game's `platform` app on its own computers (an Unreal game's Windows app on
+   * a Mac). With `keep`, Genex keeps what it builds and players get nothing until a publish asks
+   * (`genexPublishApps`' `release`), so a game with no page on Genex yet can be built too.
+   */
+  genexCloudBuild(project: string, platform: string, keep?: boolean): Promise<void>;
   /**
    * Genex's review of a game's apps and its takedown, as the Genex plugin keeps it. With `refresh`
    * (the Publish dialog while something is open) Genex is asked again, at most once a 30 s.

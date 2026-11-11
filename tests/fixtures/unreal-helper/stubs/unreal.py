@@ -58,7 +58,7 @@ def reset(project_dir: str) -> None:
                   'time_dilation': 1.0, 'min_time_dilation': 0.0001,
                   'control_rotation': Rotator(), 'nav_path': None, 'nav_queries': [],
                   'keys': {'W', 'A', 'S', 'D', 'SpaceBar', 'Gamepad_LeftX'}, 'pictures': {},
-                  'viewport_size': (1280, 720)})
+                  'viewport_size': (1280, 720), 'performance_settings': _PerformanceSettings()})
 
 
 def _record(*call) -> None:
@@ -1030,7 +1030,24 @@ class EdGraph(Object):
         return self.path
 
 
+# The editor's performance settings, as their class default object: no Python class of their own in Unreal.
+PERFORMANCE_SETTINGS_PATH = '/Script/UnrealEd.Default__EditorPerformanceSettings'
+
+
+class _PerformanceSettings(Object):
+    """The editor's performance settings, which Unreal's Python names no class for; it throttles in
+    the background by default."""
+
+    def __init__(self) -> None:
+        self.props = {'bThrottleCPUWhenNotForeground': True}
+
+    def get_editor_property(self, name: str):
+        return self.props[name]
+
+
 def find_object(outer, path: str):
+    if path == PERFORMANCE_SETTINGS_PATH:
+        return state.get('performance_settings')
     _record('find_object', path)
     return state.get('graphs', {}).get(path)
 

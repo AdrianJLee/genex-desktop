@@ -40,6 +40,7 @@ import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { StatusOrb } from "../../../ui/StatusOrb.tsx";
 import { StepBar } from "../../../ui/StepBar.tsx";
+import { SendProgress } from "./SendProgress.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { useCopy } from "../../../use-copy.ts";
 import { richText } from "../../../rich-text.tsx";
@@ -1316,7 +1317,15 @@ function PressSection({
 >): JSX.Element | null {
   const { card } = parts;
   if (moment.press)
-    return <PublishCardPress plan={card.plan} busy={card.busy} pressing={card.acting} onPress={card.press} />;
+    return (
+      <PublishCardPress
+        plan={card.plan}
+        busy={card.busy}
+        note={card.note}
+        pressing={card.acting}
+        onPress={card.press}
+      />
+    );
   if (!moment.dialogPress || !shown) return null;
   const apps = parts.apps !== null;
   return (
@@ -1544,6 +1553,13 @@ function Hint({
             {again.label}
           </TextButton>
         )}
+      </p>
+    );
+  // A send that says how far it is reads better than the standing line: it shows the wait is moving.
+  if (publishing && view.progress)
+    return (
+      <p className="genex-publish-hint" data-publish-progress>
+        <SendProgress progress={view.progress} />
       </p>
     );
   if (publishing) return <p className="genex-publish-hint">{WORDS.keepsGoing}</p>;

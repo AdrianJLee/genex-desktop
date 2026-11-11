@@ -150,6 +150,7 @@ export default {
     "Un modèle est en cours de téléchargement. Supprime celui-ci une fois le téléchargement terminé.",
   "A mountain rescue game with a dog and a sled": "Un jeu de sauvetage en montagne avec un chien et un traîneau",
   "A museum guard game where the exhibits come alive": "Un jeu de gardien de musée où les œuvres prennent vie",
+  "Agents get Unreal {to}’s tools.": "Les agents ont les outils d’Unreal {to}.",
   "An arcade shooter where your bullets bounce off the walls":
     "Un shooter d'arcade où tes balles rebondissent sur les murs",
   "A new build is ready to play.": "Un nouveau build est prêt à jouer.",
@@ -579,6 +580,7 @@ export default {
   "Build the {players} app of {title} again so I can publish it.":
     "Recrée l’app {players} de {title} pour que je puisse la publier.",
   "Build updated": "Build mis à jour",
+  "Build with Genex": "Créer avec Genex",
   "Build with the Cursor plan you already have.": "Crée avec le forfait Cursor que tu as déjà.",
   "Build with the Grok account you already have.": "Crée avec le compte Grok que tu as déjà.",
   "Changes Harness made to its own instructions. Undo any of them.":
@@ -586,6 +588,13 @@ export default {
   "Checking that Microsoft signed the installer…": "On vérifie que Microsoft a signé l’installeur…",
   "Downloading the Visual Studio Build Tools installer from Microsoft…":
     "Téléchargement de l’installeur de Visual Studio Build Tools depuis Microsoft…",
+  "Genex keeps a copy of the project file first. What Unreal {to} saves won’t open in {from}.":
+    "Genex garde d’abord une copie du fichier du projet. Ce qu’Unreal {to} enregistre ne s’ouvrira pas dans {from}.",
+  "Genex makes a save point of this game first. What Unreal {to} saves won’t open in {from}.":
+    "Genex crée d’abord un point de sauvegarde de ce jeu. Ce qu’Unreal {to} enregistre ne s’ouvrira pas dans {from}.",
+  "Genex makes new games with Unreal {to}. Agents get its tools.":
+    "Genex crée les nouveaux jeux avec Unreal {to}. Les agents ont ses outils.",
+  "Get {version}": "Installer {version}",
   "Install Visual Studio Build Tools": "Installer Visual Studio Build Tools",
   "Install Visual Studio Build Tools 2022 from Microsoft with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "Installe Visual Studio Build Tools 2022 de Microsoft avec « Développement Desktop en C++ » et le SDK .NET Framework 4.8.",
@@ -603,15 +612,26 @@ export default {
     "L’installeur de Microsoft ne s’est pas téléchargé. Vérifie ta connexion internet et réessaie.",
   "Microsoft's installer finished, but Unreal still can't build C++ with what it installed. Install Visual Studio Build Tools 2022 with Desktop development with C++ and the .NET Framework 4.8 SDK yourself.":
     "L’installeur de Microsoft a terminé, mais Unreal ne peut toujours pas compiler de C++ avec ce qu’il a installé. Installe toi-même Visual Studio Build Tools 2022 avec « Développement Desktop en C++ » et le SDK .NET Framework 4.8.",
+  "Move to {version}": "Passer à {version}",
+  "Move {name} to Unreal {to}?": "Passer {name} à Unreal {to} ?",
+  "Move {project} to Unreal {to}": "Passer {project} à Unreal {to}",
+  "Play in browser": "Jouer dans le navigateur",
+  "Play {title} in the browser": "Jouer à {title} dans le navigateur",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. About 7 GB. Do it for me installs them: choose Yes when Windows asks.":
     "Recommandé. Les outils C++ gratuits de Microsoft : avec eux, l'agent écrit la logique de ton jeu en C++, et Unreal empaquette un jeu ou un plugin en C++. Environ 7 Go. « Fais-le pour moi » les installe : choisis Oui quand Windows le demande.",
   "Recommended. Microsoft's free C++ tools: with them the agent writes your game's logic in C++, and Unreal packages a game or plugin with C++. Install Visual Studio Build Tools with Desktop development with C++ and the .NET Framework 4.8 SDK.":
     "Recommandé. Les outils C++ gratuits de Microsoft : avec eux, l'agent écrit la logique de ton jeu en C++, et Unreal empaquette un jeu ou un plugin en C++. Installe Visual Studio Build Tools avec « Développement Desktop en C++ » et le SDK .NET Framework 4.8.",
   "Self-improvement is off. Harness keeps its own instructions as they are.":
     "L’auto-amélioration est désactivée. Harness garde ses instructions telles quelles.",
+  "This project isn't on an older Unreal that Genex moves to {version}.":
+    "Ce projet n’est pas sur un Unreal plus ancien que Genex passe à {version}.",
   "Unreal can build C++ on this PC.": "Unreal peut compiler du C++ sur ce PC.",
   "Unreal {engine} doesn't build with the C++ tools on this PC. Do it for me updates them: choose Yes when Windows asks.":
     "Unreal {engine} ne compile pas avec les outils C++ de ce PC. « Fais-le pour moi » les met à jour : choisis Oui quand Windows le demande.",
+  "Unreal {to} isn’t on this computer yet: about {gb} GB, beside Unreal {from}.":
+    "Unreal {to} n’est pas encore sur cet ordinateur : environ {gb} Go, à côté d’Unreal {from}.",
+  "Unreal {version} isn't on this computer yet. Install it first, then move the project.":
+    "Unreal {version} n’est pas encore sur cet ordinateur. Installe-le d’abord, puis passe le projet.",
   "Update Visual Studio Build Tools": "Mettre à jour Visual Studio Build Tools",
   "Visual Studio Build Tools are installed.": "Visual Studio Build Tools est installé.",
   "Visual Studio's C++ tools are ready": "Les outils C++ de Visual Studio sont prêts",
@@ -1276,8 +1296,8 @@ export default {
   "Dismiss remaining imports": "Ignorer les imports restants",
   Dividers: "Séparateurs",
   "Do it for me": "Fais-le pour moi",
-  "Do it for me opens the launcher, and this chat installs it there with computer control. About 45 GB. Only you sign in to Epic, when it asks.":
-    "« Fais-le pour moi » ouvre le launcher, et ce chat y installe Unreal en contrôlant l’ordinateur. Environ 45 Go. Toi seul te connectes à Epic, quand il le demande.",
+  "Do it for me opens the launcher, and this chat installs it there with computer control. About {gb} GB. Only you sign in to Epic, when it asks.":
+    "« Fais-le pour moi » ouvre le launcher, et ce chat y installe Unreal en contrôlant l’ordinateur. Environ {gb} Go. Toi seul te connectes à Epic, quand il le demande.",
   "Does it feel alive? {score} of {max}": "Ça a l’air vivant ? {score} sur {max}",
   "Don't allow": "Ne pas autoriser",
   "Don't ask again for this action in {source}.": "Ne plus demander pour cette action dans {source}.",
@@ -1666,6 +1686,8 @@ export default {
   "Genex leaves it open until the Loop ends.": "Genex le laisse ouvert jusqu’à la fin du Loop.",
   "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}), or make the project in Unreal's own New Project dialog and choose it from the Unreal button.":
     "Genex crée les nouveaux projets Unreal avec Unreal {versions}, et cet ordinateur a Unreal {version}. Installe aussi {wanted} dans Epic Games Launcher ({clickPath}), ou crée le projet dans la fenêtre New Project d’Unreal et choisis-le avec le bouton Unreal.",
+  "Genex makes new Unreal projects with Unreal {versions}, and this computer has Unreal {version}. Install {wanted} beside it in the Epic Games Launcher ({clickPath}).":
+    "Genex crée les nouveaux projets Unreal avec Unreal {versions}, et cet ordinateur a Unreal {version}. Installe aussi {wanted} dans Epic Games Launcher ({clickPath}).",
   "Genex needs your OK to set up": "Genex a besoin de ton accord pour se configurer",
   "Genex plugin": "Plugin Genex",
   "Genex plugin, Credits": "Plugin Genex, Crédits",
@@ -1879,8 +1901,8 @@ export default {
   "In the background: {title}": "En arrière-plan : {title}",
   "In the build · not in your game folder yet": "Dans le build · pas encore dans le dossier de ton jeu",
   "In the game's folder": "Dans le dossier du jeu",
-  "In the launcher, sign in, then {clickPath}. About 45 GB. Only you can sign in to Epic.":
-    "Dans le launcher, connecte-toi, puis {clickPath}. Environ 45 Go. Personne d’autre que toi ne peut se connecter à Epic.",
+  "In the launcher, sign in, then {clickPath}. About {gb} GB. Only you can sign in to Epic.":
+    "Dans le launcher, connecte-toi, puis {clickPath}. Environ {gb} Go. Personne d’autre que toi ne peut se connecter à Epic.",
   "In the reviewers' words: {words}": "Selon les vérificateurs : {words}",
   "In this game’s folder. Workers load them from there.":
     "Dans le dossier de ce jeu. Les assistants les chargent depuis là.",
@@ -2050,8 +2072,10 @@ export default {
   "Its packages aren’t installed yet.": "Ses paquets ne sont pas encore installés.",
   "Its project didn’t go, so no one can remix it yet.":
     "Son projet n’est pas parti, donc personne ne peut encore le remixer.",
-  "Its project is too big to remix: Genex keeps up to 5 GB and 5,000 files.":
-    "Son projet est trop gros pour être remixé : Genex garde jusqu’à 5 Go et 5 000 fichiers.",
+  "Its project is too big to remix: Genex keeps up to 100 GB and 50,000 files.":
+    "Son projet est trop gros pour être remixé : Genex garde jusqu’à 100 Go et 50 000 fichiers.",
+  "There isn’t enough free space on this computer to remix this game.":
+    "Il n’y a pas assez d’espace libre sur cet ordinateur pour remixer ce jeu.",
   "Its session failed before it delivered anything.": "Sa session a échoué avant de livrer quoi que ce soit.",
   "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.":
     "Son code source est dans ton propre dépôt : lance genex make-remixable dans le dossier du jeu pour autoriser les remix.",
@@ -2587,6 +2611,8 @@ export default {
   "On this Mac · {size}": "Sur ce Mac · {size}",
   "Once on, it runs at Genex's moments: {steps}; those steps don't ask you first.":
     "Une fois activé, il s’exécute à certains moments de Genex : {steps} ; ces étapes ne te demandent rien avant.",
+  "One account for frontier AI models and game dev tools. Pay with Genex credits.":
+    "Un compte pour les modèles d’IA de pointe et les outils de création de jeux. Tu paies avec des crédits Genex.",
   "One account for hundreds of models. You pay OpenRouter for what you use.":
     "Un compte pour des centaines de modèles. Tu paies OpenRouter selon ton usage.",
   "One key for hundreds of models. Pay as you go.": "Une clé pour des centaines de modèles. Tu paies à l’usage.",
@@ -4410,7 +4436,7 @@ export default {
   Unpublish: "Dépublier",
   "Unpublish {title}?": "Retirer {title} de la publication ?",
   "Unpublishing…": "Retrait de la publication…",
-  "Unreal Engine 5.8 isn’t on this computer yet.": "Unreal Engine 5.8 n’est pas encore sur cet ordinateur.",
+  "Unreal Engine isn’t on this computer yet.": "Unreal Engine n’est pas encore sur cet ordinateur.",
   "Unreal Engine {version} isn't on this computer yet. The Unreal button above the game shows how to get it free from Epic, and notices when it's installed.":
     "Unreal Engine {version} n’est pas encore sur cet ordinateur. Le bouton Unreal au-dessus du jeu montre comment l’obtenir gratuitement chez Epic, et détecte quand il est installé.",
   "Unreal couldn't use the port Genex gave {name}. Quit Unreal and open it again from the Unreal button.":
@@ -5711,6 +5737,7 @@ export default {
   "{name} isn’t on this computer any more.": "{name} n’est plus sur cet ordinateur.",
   "{name} needs Studio {version} or newer": "{name} nécessite Studio {version} ou plus récent",
   "{name} needs a sign-in": "{name} demande une connexion",
+  "{name} opens in Unreal {to} from now on.": "{name} s’ouvre désormais dans Unreal {to}.",
   "{name} settings": "Réglages de {name}",
   "{name} was never saved to a file, so Genex can't open it. Open it in Roblox Studio, or choose another place.":
     "{name} n’a jamais été enregistré dans un fichier, donc Genex ne peut pas l’ouvrir. Ouvre-le dans Roblox Studio ou choisis un autre lieu.",
@@ -6355,12 +6382,12 @@ export default {
   "Raising…": "En cours…",
   "The chat now uses {model}. Send your message again.": "Le chat utilise maintenant {model}. Renvoie ton message.",
   "Couldn’t send the project to Genex: {error}": "Impossible d’envoyer le projet à Genex : {error}",
-  "Genex builds Unreal 5.8 games for now, and this project names no version of it. Open it in Unreal 5.8, save it, then build again.":
-    "Pour l’instant, Genex crée les jeux Unreal 5.8, et ce projet n’indique aucune version. Ouvre-le dans Unreal 5.8, enregistre-le, puis relance.",
+  "Genex builds Unreal {builds} games for now, and this project names no version of it. Open it in Unreal, save it, then build again.":
+    "Pour l’instant, Genex crée les jeux Unreal {builds}, et ce projet n’indique aucune version. Ouvre-le dans Unreal, enregistre-le, puis relance.",
   "Sending the project to Genex stopped": "L’envoi du projet à Genex s’est arrêté",
   "Sending to Genex. Keep Genex open": "Envoi à Genex. Garde Genex ouvert",
-  "This game uses Unreal {version}. Genex builds Unreal 5.8 games for now: upgrade it to 5.8, then build again.":
-    "Ce jeu utilise Unreal {version}. Pour l’instant, Genex crée les jeux Unreal 5.8 : passe-le en 5.8, puis relance.",
+  "This game uses Unreal {version}. Genex builds Unreal {builds} games for now, so it can’t build this one yet.":
+    "Ce jeu utilise Unreal {version}. Pour l’instant, Genex crée les jeux Unreal {builds} et ne peut donc pas encore créer celui-ci.",
   "Run the game": "Lance le jeu",
   "The agent is packaging the game. It starts it once the package is ready.":
     "L’agent empaquette le jeu. Il le lance dès que le paquet est prêt.",
@@ -6563,6 +6590,32 @@ export default {
     "Genex n’a pas pu lire si l’app Mac {app} peut utiliser le réseau. Si les joueurs ne peuvent pas se connecter, réempaquette-la dans Genex et publie-la.",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "L’app Mac {app} ne peut pas accéder à internet : elle est dans un bac à sable sans accès réseau, donc aucun joueur ne pourrait se connecter. Réempaquette-la dans Genex, puis publie. Rien n’a été envoyé.",
+  "Live · update ready": "En ligne · mise à jour prête",
+  "Not built": "Non compilée",
+  "Built · older than your game": "Compilée · plus ancienne que ton jeu",
+  "Ready to publish": "Prête à publier",
+  "{platforms} can take up to an hour.": "{platforms} peut prendre jusqu’à une heure.",
+  "{platform} build didn’t start": "La compilation {platform} n’a pas démarré",
+  "Checking the archive": "Vérification de l’archive",
+  Packing: "Compression",
+  "Sending the project for Remix": "Envoi du projet pour Remix",
+  "{done} of {total} · {speed}/s": "{done} sur {total} · {speed}/s",
+  "{done} of {total} · {speed}/s · under a minute left": "{done} sur {total} · {speed}/s · moins d’une minute",
+  "{done} of {total} · {speed}/s · about {minutes} min left":
+    "{done} sur {total} · {speed}/s · encore {minutes} min environ",
+  "{done} of {total} · {speed}/s · about {hours} h left": "{done} sur {total} · {speed}/s · encore {hours} h environ",
+  "{done} of {total} · {speed}/s · about {hours} h {minutes} min left":
+    "{done} sur {total} · {speed}/s · encore {hours} h {minutes} min environ",
+  "{size} MB/s": "{size} Mo/s",
+  "{size} KB/s": "{size} Ko/s",
+  "Verifying…": "Vérification…",
+  "Unpacking…": "Décompression…",
+  "Installing… {percent}% · {speed} · about {minutes} min left":
+    "Installation… {percent} % · {speed} · environ {minutes} min restantes",
+  "Installing… {percent}% · {speed} · under a minute left":
+    "Installation… {percent} % · {speed} · moins d’une minute restante",
+  "This plugin stopped several times in a row, so it starts again in {seconds, plural, one {# second} other {# seconds}}. Try again then.":
+    "Ce plugin s’est arrêté plusieurs fois de suite, il redémarre dans {seconds, plural, one {# seconde} other {# secondes}}. Réessaie à ce moment-là.",
   "Can call tools": "Peut appeler des outils",
   Configure: "Configurer",
   "Context size": "Taille du contexte",

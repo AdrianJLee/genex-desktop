@@ -8,11 +8,13 @@
  * with no git-lfs needed (`lfs.ts`). Then its packages are installed the guarded way (no
  * package's scripts, nothing of the copy running while the registry is open), the folder becomes a
  * game, and it is built once so it opens playing. Each step is told as it starts, and the models
- * as they download; a remix that fails says why in the log.
+ * as they download; a remix that fails says why in the log. A copy that fails goes, but its Git LFS
+ * files that came whole stay in a hidden folder of the game's own, so the next attempt at the same
+ * game downloads only the rest; they go once the copy is made, or when another game is remixed.
  */
 import { type ChildProcess, execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, rmdir, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { MINUTE_MS } from "../../shared/duration.ts";
@@ -21,7 +23,7 @@ import { isPlaySlug, PlayRemixRefusal, type RemixProgress, RemixStep, remixTitle
 import { HOST_GIT_CONFIG, hostGitEnv } from "../../substrate/git-policy.ts";
 import { ENGINE_PROJECT_DEPTH, sourceHoldsGame } from "./game-source.ts";
 import type { PlayWorld } from "./gallery.ts";
-import { downloadLfsFiles, type LfsDownloadDeps } from "./lfs.ts";
+import { downloadLfsFiles, type LfsDownloadDeps, LfsNoSpaceError } from "./lfs.ts";
 
 const exec = promisify(execFile);
 
@@ -46,6 +48,12 @@ const GIT_HOST = "git.genex.games";
  */
 const STAGING_PREFIX = ".remix-";
 const STAGING_NAME = /^\.remix-[a-z0-9][a-z0-9-]*-[0-9a-f]{6}$/;
+/**
+ * Where a failed copy's whole Git LFS files stay for the next attempt at the same game: a hidden
+ * folder named by this prefix and the game's slug. The dot is in no slug, so it is never a copy's.
+ */
+const KEPT_PREFIX = ".remix-kept.";
+const KEPT_NAME = /^\.remix-kept\.[a-z0-9][a-z0-9-]*$/;
 /** Random bytes in a hidden folder's name: six hex digits. */
 const STAGING_RANDOM_BYTES = 3;
 /** The most entries the look for a game's marks reads. */
@@ -257,8 +265,11 @@ export type ModelsProgress = (done: number, total: number | null) => void;
 export interface RemixDeps {
   /** Where new games go. */
   gamesRoot(): string;
-  /** Clone `url` into `dest`, an empty folder this remix made; `models` hears its Git LFS download. */
-  clone(url: string, dest: string, models: ModelsProgress): Promise<void>;
+  /**
+   * Clone `url` into `dest`, an empty folder this remix made; `models` hears its Git LFS download.
+   * `kept` is where its Git LFS files that came whole may stay when the clone fails; it may not exist.
+   */
+  clone(url: string, dest: string, models: ModelsProgress, kept: string): Promise<void>;
   /** Install the copy's packages the guarded way. A failure leaves the stage's Install packages. */
   install(dir: string): Promise<void>;
   /** Adopt a folder as a game with this title; answers its library name. */
@@ -322,7 +333,8 @@ export async function remixGame(world: PlayWorld, deps: RemixDeps): Promise<stri
 async function makeRemix(world: PlayWorld, source: string, deps: RemixDeps): Promise<string> {
   const root = deps.gamesRoot();
   await mkdir(root, { recursive: true });
-  await clearStaging(root);
+  await clearStaging(root, world.slug);
+  const kept = path.join(root, `${KEPT_PREFIX}${world.slug}`);
   // Made as any game folder is (`mkdtemp` would make it private, and the game would stay so).
   const work = path.join(root, `${STAGING_PREFIX}${world.slug}-${randomBytes(STAGING_RANDOM_BYTES).toString("hex")}`);
   await mkdir(work);
@@ -332,7 +344,9 @@ async function makeRemix(world: PlayWorld, source: string, deps: RemixDeps): Pro
   let name: string;
   try {
     step(RemixStep.Copy);
-    await deps.clone(source, work, (done, total) => step(RemixStep.Models, done, total));
+    await deps.clone(source, work, (done, total) => step(RemixStep.Models, done, total), kept);
+    // Every file is in the copy now: nothing stays aside.
+    await rm(kept, { recursive: true, force: true });
     // The copy starts its own history; the author's stays theirs.
     await rm(path.join(work, ".git"), { recursive: true, force: true });
     if (!(await holdsGame(work))) throw new RemixRefusedError(PlayRemixRefusal.NoProject, MESSAGE.NoProject);
@@ -343,17 +357,27 @@ async function makeRemix(world: PlayWorld, source: string, deps: RemixDeps): Pro
     name = await deps.adopt(dest, remixTitle(world.title));
   } catch (error) {
     await rm(dest ?? work, { recursive: true, force: true });
-    throw error;
+    throw refusalOf(error);
   }
   step(RemixStep.Build, null, null, name);
   await deps.build(name).catch(() => {});
   return name;
 }
 
-/** Remove the hidden folders of remixes the app quit in the middle of; only a remix's own name is touched. */
-async function clearStaging(root: string): Promise<void> {
+/** A failure as the renderer is told it: a full disk by its code, anything else as it is. */
+const refusalOf = (error: unknown): unknown =>
+  error instanceof LfsNoSpaceError ? new RemixRefusedError(PlayRemixRefusal.NoSpace, error.message) : error;
+
+/**
+ * Remove the hidden folders of remixes the app quit in the middle of, and the files kept for a
+ * game other than `slug`: only a remix's own names are touched, and only folders.
+ */
+async function clearStaging(root: string, slug: string): Promise<void> {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  const left = entries.filter((entry) => entry.isDirectory() && STAGING_NAME.test(entry.name));
+  const anothersKept = (name: string) => KEPT_NAME.test(name) && name !== `${KEPT_PREFIX}${slug}`;
+  const left = entries.filter(
+    (entry) => entry.isDirectory() && (STAGING_NAME.test(entry.name) || anothersKept(entry.name)),
+  );
   await Promise.all(left.map((entry) => rm(path.join(root, entry.name), { recursive: true, force: true })));
 }
 
@@ -426,26 +450,44 @@ const onStderr = (moved: () => void, child: ChildProcess) => {
   return () => child.stderr?.off("data", moved);
 };
 
+/** What a clone reaches the world through; each is this computer's own unless a test hands in another. */
+export interface CloneIo {
+  clock?: StallClock;
+  fetch?: LfsDownloadDeps["fetch"];
+  now?: LfsDownloadDeps["now"];
+  freeBytes?: LfsDownloadDeps["freeBytes"];
+}
+
+/** The free bytes on the disk holding `dir`. */
+async function diskFreeBytes(dir: string): Promise<number> {
+  const disk = await statfs(dir);
+  return disk.bavail * disk.bsize;
+}
+
 /**
  * The host's git clone under the host's git policy, then its Git LFS files over https if it has
  * any, with no git-lfs needed. Each download may take as long as it keeps moving
- * ({@link DOWNLOAD_STALL_MS}).
+ * ({@link DOWNLOAD_STALL_MS}). Its Git LFS files that came whole stay in `kept` when it fails.
  */
 export async function gitClone(
   url: string,
   dest: string,
   models: ModelsProgress = () => {},
-  clock: StallClock = TIMERS,
-  fetch: LfsDownloadDeps["fetch"] = globalThis.fetch,
+  kept?: string,
+  io: CloneIo = {},
 ): Promise<void> {
   if (!isRemixSource(url)) throw new Error(MESSAGE.NotRemixable);
+  const clock = io.clock ?? TIMERS;
   await download(cloneArgs(url, dest), { env: hostGitEnv({ GIT_LFS_SKIP_SMUDGE: "1" }) }, clock, onStderr);
   if (!(await tracksLfs(dest))) return;
   await downloadLfsFiles(dest, url, {
-    fetch,
+    fetch: io.fetch ?? globalThis.fetch,
     models,
     guard: () => stallGuard(clock),
     routed: (files) => lfsRoutedFiles(dest, files),
+    now: io.now ?? Date.now,
+    freeBytes: io.freeBytes ?? diskFreeBytes,
+    kept,
   });
 }
 

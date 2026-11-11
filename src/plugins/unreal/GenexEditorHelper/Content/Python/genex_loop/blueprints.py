@@ -26,7 +26,7 @@ import re
 
 import unreal
 
-from genex_loop import graph_write
+from genex_loop import epic_blueprints, graph_write
 
 OBJECT_REF = re.compile(r'([A-Za-z][A-Za-z0-9_]{0,63}) object ref', re.IGNORECASE)
 BASIC_TYPES = {'bool': 'bool', 'int': 'int', 'float': 'real', 'real': 'real', 'byte': 'byte',
@@ -36,8 +36,7 @@ STRUCT_TYPES = ('Vector', 'Rotator', 'Transform', 'Vector2D', 'LinearColor')
 
 def _tools():
     # Imported on use so the helper's other tools load even if Epic's toolset changes.
-    from editor_toolset.toolsets.blueprint import BlueprintTools
-    return BlueprintTools
+    return epic_blueprints.tools()
 
 
 def _node_type_cache():

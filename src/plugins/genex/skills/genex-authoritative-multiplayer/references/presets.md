@@ -62,7 +62,9 @@ export default defineRoom({
 **Units.** The defaults are the Source engine's, in Source units of about an inch: a hull 32 wide
 and 72 tall (54 ducked), a run of 250 units/s, gravity 800. The easy way to a game in metres is to
 keep these on the server and scale the drawing (`0.0254` metres a unit). A game that sets its own
-units sets every distance, speed and acceleration below, `skin` and `groundSnap` included.
+units sets every distance, speed and acceleration below, `skin` and `groundSnap` included. A `radius`
+under half the default is what tells the preset the game is in other units; at or over half, the
+room is in the defaults' units with its own hull.
 
 | Parameter | Default | Range | What it does |
 |---|---|---|---|
@@ -81,6 +83,7 @@ units sets every distance, speed and acceleration below, `skin` and `groundSnap`
 | `standHeight` | 72 | above 0, to 10000 | Hull height standing |
 | `crouchHeight` | 54 | above 0, to 10000 | Hull height fully ducked |
 | `duckTime` | 0.4 | above 0, to 100 | Seconds to duck fully, and to stand back up |
+| `airDuck` | 1 | 0 or 1 | 1: a duck can deepen in the air, lifting the feet (a crouch-jump). 0: only on the ground, for a game whose character can't tuck |
 | `stepHeight` | 18 | 0 to 10000 | Highest ledge walked up without a jump |
 | `standable` | 0.7 | 0 to 1 | Least upward share of a ramp's normal that can be stood on (0.7 is about 45°) |
 | `groundTrace` | 2.5 | 0 to 10000 | How far below the feet ground is found |
@@ -89,6 +92,9 @@ units sets every distance, speed and acceleration below, `skin` and `groundSnap`
 | `pitchLimit` | 1.5533430576324463 | 0 to π/2 | Largest look up or down, radians (89°) |
 | `jumpBit`, `duckBit`, `walkBit` | 1, 2, 4 | integer below 2^24 | Which `buttons` bits jump, duck and walk; 0 turns one off |
 | `substeps` | 2 | integer 1 to 8 | Sub-steps per input ([the CPU budget](#sub-steps-and-the-cpu-budget)) |
+| `capZeroJump` | 1 | 0 or 1 | 1: a jump works at `cap` 0. 0: a press at `cap` 0 is no jump (a freeze time) |
+| `runBit` | 0 | a button mask | A run the room owns: while set and not held, speed is `jogSpeed`, so a client can't run by its stick alone. 0: every move runs |
+| `jogSpeed` | 1 | 0 to 1 | Speed multiplier without `runBit`; duck and walk win |
 | `world` | the empty world's hash | | Written by the sandbox from the module's `world`: leave it out |
 
 An unknown parameter, or one out of its range, is refused when the module loads.
@@ -121,9 +127,9 @@ The Source engine's is `64 - 18 * duck` over the feet. A respawn writes the new 
 
 **What it does not do.** Players pass through each other: the preset collides only with the world.
 The world is fixed for the room's life, so a door, a lift or a crate that moves is the module's own
-rule, not a solid. And `ctx.rewind.hitscan` does not know the world either: test the shot against
-the same boxes yourself (a ray against each box) and refuse a hit behind a wall. The shot leaves
-from the eye along `(cos(pitch) * cos(yaw), cos(pitch) * sin(yaw), sin(pitch))`.
+rule, not a solid. And `ctx.rewind.hitscan` does not know the world: stop the shot with
+[`ctx.world.ray`](#a-shot-and-the-world). The shot leaves from the eye along
+`(cos(pitch) * cos(yaw), cos(pitch) * sin(yaw), sin(pitch))`.
 
 **Tick rate.** Ask for `tickHz: 60`. Air-strafing turns the wish direction once per input, so the
 speed a strafe gains grows with the input rate: at 30 Hz a perfect strafer gains less than half of
@@ -180,6 +186,7 @@ units sets every distance, speed and acceleration, `skin` included.
 | `skin` | 0.03 | 0 to 100 | Clearance kept from a surface |
 | `jumpBit`, `boostBit`, `driftBit` | 1, 2, 4 | integer below 2^24 | Which `buttons` bits jump, boost and drift; 0 turns one off |
 | `substeps` | 2 | integer 1 to 8 | Sub-steps per input ([the CPU budget](#sub-steps-and-the-cpu-budget)) |
+| `capZeroJump` | 1 | 0 or 1 | 1: a jump works at `cap` 0. 0: a press at `cap` 0 is no jump (a freeze time) |
 | `world` | the empty world's hash | | Written by the sandbox from the module's `world`: leave it out |
 
 **Input.** The heading is the car's own state, not input: `yaw`, `pitch` and `moveZ` are unused.
@@ -246,10 +253,11 @@ export const WORLD = {
 - **A ramp** is a box whose top rises along x (`axis` 0) or y (`axis` 1): `lo` at that axis's min
   end, `hi` at its max end, `maxZ` equal to the higher of them and `minZ` at or below both.
 - **Nothing is implicit.** With no floor box a body falls forever: open ground is one box.
-- **Every box is axis-aligned** and every ramp rises along x or y, so a level is built on a grid; a
-  diagonal wall is a staircase of boxes.
+- **Every box is axis-aligned** and every ramp rises along x or y, so by hand a level is built on a
+  grid and a diagonal wall is a staircase of boxes. A level made in an editor does not need that:
+  the fit does it, from any engine ([levels.md](levels.md)).
 - **Every number must be a float32**: integers are always safe, and so are halves and quarters;
-  `0.1` is refused. Each min is below its max. At most 4096 boxes and 512 ramps.
+  `0.1` is refused. Each min is below its max. At most 32,768 boxes and 4,096 ramps (a physics room's world: 4,096 and 512). `validate` also holds a world to what it costs a step, `world_cost` in [testing.md](testing.md).
 - **The module exports it**: `defineRoom({ …, world: WORLD })`. The sandbox validates it when the
   module loads (a bad world is a bad config: the module does not load) and writes its hash into
   the preset's `params.world`. Leave `params.world` out.
@@ -260,13 +268,73 @@ export const WORLD = {
   the room's, so one number changed on one side turns prediction off: your body is then drawn from
   the server, a round trip late, and the console says why once. `session.prediction` reports it:
   `reason` is `world_mismatch`, with both hashes in `world` and `roomWorld`. Keep the world in one
-  file both sides import; never rebuild it on the client from a model or a level file.
-- **Size is cheap.** The server and the session both cull with a bounding-volume tree, so a step
-  costs the solids near the body, not the size of the map, and a tower of stacked boxes costs no
-  more than the same boxes spread out. The results are the same with or without it.
-- **Draw what collides.** Build the visible level from the same boxes and ramps (or art that sits
-  on them exactly): a wall drawn a little off is one players stop at in the air. The module's own
-  tests (a shot's line of sight, a ball's bounce) use the same `WORLD`.
+  file both sides import, written once at build time ([levels.md](levels.md)). A client that rebuilds
+  it while a player waits differs by one float and is not predicted.
+- **What a world costs is what is near a body.** The server and the session both cull with a
+  bounding-volume tree, so a step costs the solids near the body, not the size of the map, and the
+  results are the same with or without it. A big city at a steady density is cheap; thousands of
+  tiny solids where people stand are not, and neither is a fine staircase on every diagonal: that
+  density, the box and ramp limits above and the module's byte limit are what a level runs out of.
+- **Draw what collides.** Build the visible level from the same boxes and ramps, or from the model
+  the fit read ([levels.md](levels.md)): a wall drawn a little off is one players stop at in the air. A shot's line of
+  sight asks [`ctx.world.ray`](#a-shot-and-the-world), and a module's other tests (a ball's bounce)
+  use the same `WORLD`.
+
+### A shot and the world
+
+`ctx.world.ray(origin, dir, { range })` is the first solid along a ray through this world, ramps by
+their real slope: `{ dist, point, normal, inside, solid }`, or `null` when nothing is in range. It
+walks the tree the step already holds, so a shot costs what is near its line and never a loop over
+the map. Any room that exports a `world` has it, in `init` and every hook. A physics room builds its
+tree at the first ray, inside that call: with a large world, ask once in `init`. Never loop over the boxes
+yourself: at a few thousand boxes eight such shots take a whole tick.
+
+`ctx.rewind.hitscan` judges the players, where the shooter saw them, and knows no walls. The world
+never moves, so it needs no rewinding. Ask the world how far the shot flies, then judge the players
+inside that distance:
+
+```js
+const RANGE = 4096;
+const HIT_RADIUS = 32; // the hit sphere
+const HIT_CENTRE = 36; // its centre over the target's feet
+
+function fire(ctx, playerId, me) {
+  const eye = { x: me.x, y: me.y, z: me.z + 64 - 18 * me.duck };
+  const c = Math.cos(me.pitch);
+  const dir = { x: c * Math.cos(me.yaw), y: c * Math.sin(me.yaw), z: Math.sin(me.pitch) };
+  const wall = ctx.world.ray(eye, dir, { range: RANGE });
+  const target = ctx.rewind.hitscan(
+    { x: eye.x, y: eye.y, z: eye.z - HIT_CENTRE }, // hitscan's spheres sit at the feet: lower the line
+    dir,
+    { range: wall ? wall.dist : RANGE, radius: HIT_RADIUS, kinds: ["player"] },
+  );
+  ctx.emit("shot", { shooter: playerId, hit: target && target.id, impact: wall && wall.point });
+}
+```
+
+Call it from `onInput` for a button in `config.lagComp.buttons`. A target counts when the middle of
+its sphere is in front of the wall: `hitscan`'s `dist` is measured to the middle, so a target whose
+middle is past a corner is safe.
+
+- **What it answers.** `dist` is the distance along the ray, `point` where it entered, `normal` the
+  face it entered by, `solid` which one, counting `boxes` and then `ramps`. Touching is not hitting:
+  a shot along a face, or from a face heading away, passes. A shot from inside a solid stops at once:
+  `dist` 0, `inside: true`.
+- **A ray that is no ray** answers `null`: zero length, or any value that is not a finite number. So
+  check an aim you built yourself: a `null` also means nothing in the way.
+- **It sees the world only.** A door, a lift or a crate your module moves is your own rule: test it
+  yourself, with `ctx.rewind.at(id)` for where the shooter saw it. Physics bodies are for
+  `ctx.physics.ray`.
+- **It is wrong where collision differs from what is drawn.** It stops on what bodies collide with,
+  not what players see: an invisible wall that keeps players out stops bullets too, a fence or a
+  railing with no solid does not stop them, and a shot past where any body can reach may meet
+  nothing, because a world built for movement need not hold what nobody can touch. A diagonal wall
+  is a staircase of boxes, so its impacts are stepped. Where that matters, give the room a shot world
+  and take the shooter's own stop: [levels.md](levels.md#what-bullets-meet).
+- **Server only.** No client SDK has it. The client draws the tracer and the impact at once from
+  what its own renderer hits (a raycast against the scene) and never decides damage by it; the
+  server's `shot` event says who was hit. The two impacts differ exactly where collision differs
+  from what is drawn: keep the client's for the look, and show damage from the event.
 
 ## Axes and three.js
 

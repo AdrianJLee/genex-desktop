@@ -239,6 +239,10 @@ void UGenexAuthoritySubsystem::StartSession(const FGenexAuthorityOptions& Option
 	// PROTOCOL.md §17.1 *Regions*: the sign-in answer's urls come with its regions (the nearest is joined).
 	const bool bIdentityUrls = Target.Url.IsEmpty() && Options.Urls.Num() == 0;
 	if (bIdentityUrls && Identity && Identity->Core()) Core.regions = Identity->Core()->AuthorityRegions();
+	// §17.1 *Finding players*: where a pool join looks for players before it opens a room.
+	Core.regionRule = Options.RegionRule == EGenexRegionRule::Nearest ? genex::regions::RegionRule::Nearest : genex::regions::RegionRule::Players;
+	Core.maxPingMs = static_cast<double>(Options.MaxPingMs);
+	Core.region = Utf8(Options.Region);
 	Core.gameId = Utf8(Options.GameId.IsEmpty() ? Settings->Slug : Options.GameId);
 	Core.matchKey = Utf8(Options.MatchKey);
 	Core.name = Utf8(Options.Name);

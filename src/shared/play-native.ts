@@ -421,6 +421,8 @@ export interface InstallProgress {
   /** Bytes of the archive downloaded so far, and its whole size. */
   receivedBytes: number;
   totalBytes: number;
+  /** The download's smoothed speed, or null while it is not known or nothing is downloading. */
+  bytesPerSecond: number | null;
   /** About how long the download has left, or null while it is not known. */
   etaMs: number | null;
   /** Why it failed; null unless `phase` is failed. */

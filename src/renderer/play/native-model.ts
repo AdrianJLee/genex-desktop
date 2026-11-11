@@ -102,6 +102,49 @@ export function gameStanding(
 export const installPercent = (progress: InstallProgress): number =>
   progress.totalBytes > 0 ? Math.min(100, Math.floor((progress.receivedBytes / progress.totalBytes) * 100)) : 0;
 
+/** What the game page's install line says. */
+export const InstallLine = {
+  Waiting: "waiting",
+  Downloading: "downloading",
+  Verifying: "verifying",
+  Unpacking: "unpacking",
+} as const;
+export type InstallLine = (typeof InstallLine)[keyof typeof InstallLine];
+
+/** The install line and what it tells: a download's percent, with its speed and minutes left once both are known. */
+export type InstallLineView =
+  | { line: typeof InstallLine.Waiting }
+  | { line: typeof InstallLine.Verifying }
+  | { line: typeof InstallLine.Unpacking }
+  | {
+      line: typeof InstallLine.Downloading;
+      percent: number;
+      bytesPerSecond: number | null;
+      minutesLeft: number | null;
+    };
+
+/** The steps after the download, each its own line. */
+const STEP_LINE: Partial<Record<InstallPhase, InstallLineView>> = {
+  [InstallPhase.Queued]: { line: InstallLine.Waiting },
+  [InstallPhase.Verifying]: { line: InstallLine.Verifying },
+  [InstallPhase.Unpacking]: { line: InstallLine.Unpacking },
+};
+
+/** What the install line says for `progress`: waiting, the download with its speed and time left, verifying or unpacking. */
+export function installLine(progress: InstallProgress | null | undefined): InstallLineView {
+  const step = progress && STEP_LINE[progress.phase];
+  if (step) return step;
+  const speed = progress?.bytesPerSecond ?? null;
+  const etaMs = progress?.etaMs ?? null;
+  const known = speed !== null && speed > 0 && etaMs !== null;
+  return {
+    line: InstallLine.Downloading,
+    percent: progress ? installPercent(progress) : 0,
+    bytesPerSecond: known ? speed : null,
+    minutesLeft: known ? Math.ceil(etaMs / MINUTE_MS) : null,
+  };
+}
+
 /** What a card shows over its cover's corner for a native game. */
 export const CardBadge = {
   /** Not installed: which systems it was built for. */
@@ -137,8 +180,30 @@ export function cardBadge(game: Pick<PlayGame, "slug" | "native">, installs: Nat
   return { kind: CardBadge.Platforms, platforms: platformsOf(game) };
 }
 
-/** Whether pressing `game`'s card opens its page rather than the viewer: it has no web build. */
-export const opensPage = (game: Pick<PlayGame, "native">): boolean => !hasWebBuild(game);
+/**
+ * Whether pressing `game`'s card opens its page rather than the viewer: it has an app to install
+ * (its page offers the app, and the browser too when it has a web build), or no web build at all.
+ */
+export const opensPage = (game: Pick<PlayGame, "native">): boolean =>
+  !hasWebBuild(game) || (game.native?.builds.length ?? 0) > 0;
+
+/**
+ * How a game's page offers its web build: not at all; as the one way to play here; first, with the
+ * app to install beside it; or second, beside the installed app's Play.
+ */
+export const WebPlay = { None: "none", Only: "only", First: "first", Second: "second" } as const;
+export type WebPlay = (typeof WebPlay)[keyof typeof WebPlay];
+
+/** Where each resting phase puts the web build; in every other phase the block is the app's alone. */
+const WEB_PLAY_IN: Partial<Record<GamePhase, WebPlay>> = {
+  [GamePhase.Elsewhere]: WebPlay.Only,
+  [GamePhase.Install]: WebPlay.First,
+  [GamePhase.Ready]: WebPlay.Second,
+};
+
+/** How the page offers `game`'s web build while it stands as `standing` on this computer ({@link WebPlay}). */
+export const webPlayOn = (game: Pick<PlayGame, "native">, standing: GameStanding): WebPlay =>
+  hasWebBuild(game) ? (WEB_PLAY_IN[standing.phase] ?? WebPlay.None) : WebPlay.None;
 
 /** Whole minutes since `startedAt` at `now`. */
 export const minutesSince = (startedAt: string, now: number): number =>

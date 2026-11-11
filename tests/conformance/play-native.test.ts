@@ -370,6 +370,7 @@ describe("The viewer's native-app pill", () => {
       phase: InstallPhase.Downloading,
       receivedBytes: 456_000_000,
       totalBytes: 1_200_000_000,
+      bytesPerSecond: null,
       etaMs: null,
       failure: null,
     };

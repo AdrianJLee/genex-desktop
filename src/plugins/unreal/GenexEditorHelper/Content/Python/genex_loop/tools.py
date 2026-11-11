@@ -193,6 +193,31 @@ class GenexLoopTools(unreal.ToolsetDefinition):
 
     @toolset_registry.tool_call
     @staticmethod
+    def run_settings() -> str:
+        """Says whether this editor slows down behind other apps and whether it ray-traces.
+
+        Returns:
+            JSON {throttle, rayTracing}; throttle is null where the editor keeps no such setting.
+        """
+        return _answer(session.run_settings)
+
+    @toolset_registry.tool_call
+    @staticmethod
+    def set_background_throttle(on: bool) -> str:
+        """Turns Unreal's "Use Less CPU when in Background" on or off for this run of the editor.
+
+        Nothing is saved: the person's own preference is back the next time Unreal starts.
+
+        Args:
+            on: True to slow down behind other apps, false to keep playing at full speed there.
+
+        Returns:
+            JSON {throttle}, or {error} where the editor keeps no such setting.
+        """
+        return _answer(session.set_background_throttle, on)
+
+    @toolset_registry.tool_call
+    @staticmethod
     def game_state(part: str = '') -> str:
         """Reads the parts' actors and the player, from the play session while one runs.
 

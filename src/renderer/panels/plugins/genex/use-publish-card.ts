@@ -1,11 +1,12 @@
 /**
  * The Publish card's state and its one press, for a game made in an engine. The rows wait for both
  * the game folder and Genex's record; the switches are the person's until the press; a press does
- * what its plan says: the agent builds apps (and nothing else), or the card sends what is ready,
- * has Genex Cloud build, and takes switched-off platforms down. Genex Cloud needs the game's page on
- * Genex: a first publish asks for its builds once the page is there.
+ * what its plan says. Build: the agent builds apps here and Genex Cloud builds the ones this
+ * computer can't, both at once, and players get nothing (Genex Cloud keeps what it builds). Publish:
+ * the card sends what is ready, gives players what Genex Cloud built (or still builds, once built),
+ * and takes switched-off platforms down.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { GenexAction, type GenexNativeRecord } from "../../../../shared/genex.ts";
 import type { FactRef } from "../../../../shared/project-facts.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
@@ -21,6 +22,7 @@ import {
   cardRows,
   type PressPlan,
   busyPress,
+  pressNote,
   pressPlan,
 } from "./publish-card-view.ts";
 import {
@@ -59,13 +61,17 @@ export interface ErrorBlock extends CardError {
   sentAt: string | null;
   /** A failed build: hand its log to the agent. */
   onSend?: () => void;
-  /** A send that didn't reach Genex: send that app again. */
+  /** A send that didn't reach Genex, or a build that didn't start: do it again. */
   onRetry?: () => void;
 }
 
+/** What Try again does for a block: start the build again, or send the app again. */
+const RETRY_WORK = { [CardErrorKind.Start]: CardWork.Cloud, [CardErrorKind.Send]: CardWork.Publish } as const;
+
 /**
  * The card's error blocks, each with its press: Send to agent for a failed Genex Cloud build (the block
- * then says the agent is fixing it, until the error changes), Try again for an app that didn't reach Genex.
+ * then says the agent is fixing it, until the error changes), Try again for a build that didn't start
+ * or an app that didn't reach Genex.
  */
 function useErrorBlocks(
   project: string,
@@ -79,8 +85,12 @@ function useErrorBlocks(
   return errors.map((error) => {
     const key = `${error.target}\n${error.kind}\n${error.text}`;
     const block: ErrorBlock = { ...error, sentAt: sent.get(key) ?? null };
-    if (error.kind === CardErrorKind.Send) {
-      const retry: PressPlan = { label: "", steps: [{ target: error.target, work: CardWork.Publish }], warn: false };
+    if (error.kind !== CardErrorKind.Build) {
+      const retry: PressPlan = {
+        label: "",
+        steps: [{ target: error.target, work: RETRY_WORK[error.kind] }],
+        warn: false,
+      };
       return { ...block, onRetry: () => void press(retry) };
     }
     const onSend = (): void => {
@@ -118,10 +128,8 @@ export function usePublishCard({
   const title = useLibrary((s) => s.games.find((g) => g.name === project)?.title) || project;
   const [switches, setSwitches] = useState<ReadonlyMap<PublishTarget, boolean>>(() => new Map());
   const [asked, setAsked] = useState<ReadonlyMap<PublishTarget, string>>(() => ASKED.get(project) ?? new Map());
-  const [waitingCloud, setWaitingCloud] = useState<readonly PublishTarget[]>([]);
   const [acting, setActing] = useState(false);
   const state = record.state;
-  const onGenex = Boolean(state?.slug);
   const rows =
     platforms && state
       ? cardRows({
@@ -136,12 +144,6 @@ export function usePublishCard({
           mac: hostPlatform() === "darwin",
         })
       : null;
-  // A first publish made the game's page: the Genex Cloud builds its press chose start now.
-  useEffect(() => {
-    if (!onGenex || waitingCloud.length === 0) return;
-    setWaitingCloud([]);
-    for (const target of waitingCloud) void window.studio.genexCloudBuild(project, target).catch(() => {});
-  }, [onGenex, waitingCloud, project]);
   const remember = (targets: readonly PublishTarget[]): void => {
     const at = new Date().toISOString();
     const next = new Map(asked);
@@ -167,36 +169,53 @@ export function usePublishCard({
         ? record.act(GenexAction.PublishRemoveWeb)
         : record.act(GenexAction.PublishRemoveApp, { platform: target }));
   };
+  /**
+   * Genex Cloud builds each app and keeps it. A build Genex refuses before anything goes is the record's
+   * error line; one whose project didn't arrive is the record's too, shown in its block.
+   */
+  const buildOnCloud = async (targets: readonly PublishTarget[]): Promise<void> => {
+    for (const target of targets) await record.buildOnCloud(target);
+  };
   const send = async (plan: PressPlan): Promise<void> => {
     const published = targetsOf(plan, CardWork.Publish);
     const apps = published.filter((target) => target !== PublishTarget.Web);
-    if (published.includes(PublishTarget.Web)) await record.publish(name, remix, replacesApps, apps);
-    else if (apps.length > 0) await record.publishApps(name, remix, apps);
-    const cloud = targetsOf(plan, CardWork.Cloud);
-    if (onGenex) for (const target of cloud) await window.studio.genexCloudBuild(project, target).catch(() => {});
-    else setWaitingCloud(cloud);
+    const released = targetsOf(plan, CardWork.Release);
+    const web = published.includes(PublishTarget.Web);
+    if (web) await record.publish(name, remix, replacesApps, apps);
+    // What Genex Cloud made goes with the apps; after a web publish, on its own.
+    if (released.length > 0 || (!web && apps.length > 0))
+      await record.publishApps(name, remix, web ? [] : apps, released);
   };
   const press = async (plan: PressPlan): Promise<void> => {
     setActing(true);
     try {
-      ask(targetsOf(plan, CardWork.Build));
+      const built = targetsOf(plan, CardWork.Build);
+      const onCloud = targetsOf(plan, CardWork.Cloud);
+      ask(built);
+      await buildOnCloud(onCloud);
       await takeDown(targetsOf(plan, CardWork.TakeDown));
       await send(plan);
-      setSwitches(new Map());
+      // A Build changes nothing for players: the switches stay as the person set them for the Publish after it.
+      if (built.length + onCloud.length === 0) setSwitches(new Map());
     } finally {
       setActing(false);
       await record.refresh();
     }
   };
   const errors = useErrorBlocks(project, title, platforms, state?.native, press);
+  const plan = rows ? pressPlan(rows, switches) : null;
+  const busy = rows ? busyPress(rows) : null;
+  const named = plan?.steps.map((step) => step.target) ?? [];
   return {
     /** The error blocks under the rows, each with its press. */
     errors,
     rows,
     switches,
     onSwitch: (target: PublishTarget, on: boolean) => setSwitches((before) => new Map(before).set(target, on)),
-    plan: rows ? pressPlan(rows, switches, onGenex) : null,
-    busy: rows ? busyPress(rows) : null,
+    plan,
+    busy,
+    /** The line under the button while Genex Cloud works: the active button's, else the busy one's. */
+    note: rows && plan ? pressNote(rows, named) : (busy?.note ?? null),
     /** The agent is building an app here: the folder is read again until it lands. */
     building: rows?.some((row) => row.here) ?? false,
     press,

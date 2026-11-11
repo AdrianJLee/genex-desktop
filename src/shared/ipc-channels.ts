@@ -434,8 +434,14 @@ export interface StudioInvokePayloads {
     replaceNativePage?: boolean;
     platforms?: string[];
   };
-  "studio:plugins.genex-publish-apps": { project: string; title?: string; remix?: boolean; platforms?: string[] };
-  "studio:plugins.genex-cloud-build": { project: string; platform: string };
+  "studio:plugins.genex-publish-apps": {
+    project: string;
+    title?: string;
+    remix?: boolean;
+    platforms?: string[];
+    release?: string[];
+  };
+  "studio:plugins.genex-cloud-build": { project: string; platform: string; keep?: boolean };
   "studio:plugins.genex-review-status": { project: string; refresh?: boolean };
   "studio:plugins.genex-review-lines": undefined;
   "studio:plugins.genex-fix-review": { project: string; autoPublish: boolean; fixId?: string; rebuild?: boolean };

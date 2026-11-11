@@ -1,7 +1,9 @@
 /**
  * The Publish card of a game made in an engine: one row per platform the person can act on, each
  * saying only what is true now, a switch for whether players get it, and one button whose words say
- * what it does (canvas "Publish to every platform", round 4).
+ * what it does (canvas "Publish to every platform", round 4). Build makes every switched-on app at
+ * once and gives players nothing; Publish gives them every switched-on app, one that Genex Cloud
+ * still builds as soon as it is built (canvas "Publish: Mac and Windows together", flow A).
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -12,6 +14,7 @@ import {
   CloudSendState,
   GenexBuildReview,
   type GenexCloudBuild,
+  GenexSendStage,
   type GenexNativeRecord,
 } from "../../src/shared/genex.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
@@ -25,6 +28,7 @@ import {
   CardTone,
   CardWork,
   cardRows,
+  pressNote,
   pressPlan,
 } from "../../src/renderer/panels/plugins/genex/publish-card-view.ts";
 import { WebOffer } from "../../src/renderer/panels/plugins/genex/publish-platforms-view.ts";
@@ -59,6 +63,9 @@ const unrealFolder = (mac: PublishPlatformState, builtAgo = 2 * 24 * HOUR_MS): P
   platform(PublishTarget.Linux, MISSING),
 ];
 
+/** The states of a build that made its app. */
+const ENDED: ReadonlySet<CloudBuildState> = new Set([CloudBuildState.Done, CloudBuildState.Built]);
+
 const cloudBuild = (
   state: CloudBuildState,
   startedAgo: number,
@@ -68,9 +75,13 @@ const cloudBuild = (
   jobId: `job-${startedAgo}`,
   state,
   startedAt: at(startedAgo),
-  ...(state === CloudBuildState.Done ? { finishedAt: at(startedAgo - 20 * MINUTE_MS) } : {}),
+  ...(ENDED.has(state) ? { finishedAt: at(startedAgo - 20 * MINUTE_MS) } : {}),
   ...extra,
 });
+
+/** A Windows app Genex Cloud built and keeps until a publish asks for it. */
+const keptBuild = (startedAgo: number): GenexCloudBuild =>
+  cloudBuild(CloudBuildState.Built, startedAgo, { held: true, installedBytes: Math.round(2.9 * 1024 ** 3) });
 
 /** The record of a Mac app sent `sentAgo` ago and Genex Cloud's Windows builds. */
 function record(
@@ -113,6 +124,9 @@ const unreal = (platforms: PublishPlatform[], native: GenexNativeRecord, more: P
 
 const said = (rows: readonly CardRow[]) => rows.map((row) => [row.name, row.tone, row.status, row.side, row.work]);
 const NO_SWITCHES = new Map<PublishTarget, boolean>();
+const MAC_OFF = new Map([[PublishTarget.Mac, false]]);
+const WINDOWS_OFF = new Map([[PublishTarget.Windows, false]]);
+const targets = (plan: ReturnType<typeof pressPlan>) => plan?.steps.map((step) => step.target) ?? [];
 
 describe("the Publish card's rows", () => {
   it("says both apps are older than the game, and how each gets built", () => {
@@ -127,18 +141,28 @@ describe("the Publish card's rows", () => {
     const build = pressPlan(rows, NO_SWITCHES);
     assert.deepEqual(
       [build?.label, build?.steps],
-      ["Build Mac", [{ target: PublishTarget.Mac, work: CardWork.Build }]],
-      "the agent builds first: nothing goes to players before a second press",
+      [
+        "Build Mac and Windows",
+        [
+          { target: PublishTarget.Mac, work: CardWork.Build },
+          { target: PublishTarget.Windows, work: CardWork.Cloud },
+        ],
+      ],
+      "one Build makes both at once: nothing goes to players before a second press",
     );
     const built = unreal(
       unrealFolder(READY, 2 * MINUTE_MS),
-      record(2 * 24 * HOUR_MS, [cloudBuild(CloudBuildState.Done, 13 * HOUR_MS)]),
+      record(2 * 24 * HOUR_MS, [cloudBuild(CloudBuildState.Done, 13 * HOUR_MS), keptBuild(HOUR_MS)]),
     );
+    assert.deepEqual(said(built), [
+      ["Mac", CardTone.Old, "Live · update ready", "3.2 GB", CardWork.Publish],
+      ["Windows", CardTone.Old, "Live · update ready", "2.9 GB", CardWork.Release],
+    ]);
     const update = pressPlan(built, NO_SWITCHES);
     assert.equal(update?.label, "Update Mac and Windows");
     assert.deepEqual(update?.steps, [
       { target: PublishTarget.Mac, work: CardWork.Publish },
-      { target: PublishTarget.Windows, work: CardWork.Cloud },
+      { target: PublishTarget.Windows, work: CardWork.Release },
     ]);
   });
 
@@ -175,7 +199,11 @@ describe("the Publish card's rows", () => {
       [windows?.tone, windows?.status, windows?.since, windows?.cloud],
       [CardTone.Working, "Building on Genex Cloud", building.startedAt, true],
     );
-    assert.deepEqual(busyPress(rows), { label: "Updating Windows", since: building.startedAt, cloud: true });
+    assert.deepEqual(busyPress(rows), {
+      label: "Updating Windows",
+      since: building.startedAt,
+      note: "It can take up to an hour.",
+    });
   });
 
   it("says a project on its way to Genex Cloud is sending, with its clock", () => {
@@ -189,6 +217,53 @@ describe("the Publish card's rows", () => {
       [windows?.status, windows?.since, windows?.cloud],
       ["Sending to Genex Cloud", send.startedAt, true],
     );
+  });
+
+  it("carries how far a project on its way to Genex Cloud is, on its own row only", () => {
+    const progress = { stage: GenexSendStage.Upload, doneBytes: 4, totalBytes: 10, at: NOW, target: "windows" };
+    const send = { platform: PublishTarget.Windows, startedAt: at(MINUTE_MS), state: CloudSendState.Sending, progress };
+    const rows = unreal(
+      unrealFolder(READY, 30 * MINUTE_MS),
+      record(20 * MINUTE_MS, [], { cloud: { supported: true, builds: [], send } }),
+    );
+    assert.deepEqual(
+      rows.map((row) => [row.target, row.progress?.doneBytes]),
+      [
+        [PublishTarget.Mac, undefined],
+        [PublishTarget.Windows, 4],
+      ],
+    );
+  });
+
+  it("carries how far an app being sent is, on the row of the app the CLI names", () => {
+    const folder = [platform(PublishTarget.Mac, READY, MINUTE_MS), platform(PublishTarget.Windows, READY, MINUTE_MS)];
+    const sending = (target: string | undefined) =>
+      unreal(
+        folder,
+        record(null, [], {
+          sending: true,
+          progress: {
+            stage: GenexSendStage.Upload,
+            doneBytes: 7,
+            totalBytes: 10,
+            at: NOW,
+            ...(target ? { target } : {}),
+          },
+        }),
+      ).map((row) => [row.target, row.tone, row.progress?.doneBytes]);
+    assert.deepEqual(sending("windows-x64"), [
+      [PublishTarget.Mac, CardTone.Working, undefined],
+      [PublishTarget.Windows, CardTone.Working, 7],
+    ]);
+    assert.deepEqual(sending("mac-universal"), [
+      [PublishTarget.Mac, CardTone.Working, 7],
+      [PublishTarget.Windows, CardTone.Working, undefined],
+    ]);
+    // An app the CLI did not name is on no row: better no bar than one on the wrong app.
+    assert.deepEqual(sending(undefined), [
+      [PublishTarget.Mac, CardTone.Working, undefined],
+      [PublishTarget.Windows, CardTone.Working, undefined],
+    ]);
   });
 
   it("keeps the older app live when a cloud build fails, and builds again only once the game changed", () => {
@@ -233,9 +308,63 @@ describe("the Publish card's rows", () => {
     );
     const landed = unreal(unrealFolder(READY, 2 * MINUTE_MS), record(2 * 24 * HOUR_MS), { asked })[0];
     assert.deepEqual(
-      [landed?.tone, landed?.work],
-      [CardTone.Old, CardWork.Publish],
+      [landed?.tone, landed?.status, landed?.work],
+      [CardTone.Old, "Live · update ready", CardWork.Publish],
       "the new build waits for the press",
+    );
+  });
+
+  it("says an app is not built, built before the game's last change, or ready to publish", () => {
+    const windowsKept = record(null, [keptBuild(HOUR_MS)]);
+    assert.deepEqual(said(unreal(unrealFolder(MISSING), record(null))), [
+      ["Mac", CardTone.None, "Not built", "builds on this Mac", CardWork.Build],
+      ["Windows", CardTone.None, "Not built", "builds on Genex Cloud", CardWork.Cloud],
+    ]);
+    assert.deepEqual(said(unreal(unrealFolder(STALE), windowsKept)), [
+      ["Mac", CardTone.None, "Built · older than your game", "builds on this Mac", CardWork.Build],
+      ["Windows", CardTone.Ready, "Ready to publish", "2.9 GB", CardWork.Release],
+    ]);
+    assert.deepEqual(said(unreal(unrealFolder(READY, 10 * MINUTE_MS), windowsKept)), [
+      ["Mac", CardTone.Ready, "Ready to publish", "3.2 GB", CardWork.Publish],
+      ["Windows", CardTone.Ready, "Ready to publish", "2.9 GB", CardWork.Release],
+    ]);
+  });
+
+  it("leaves a build Genex no longer keeps out: the app is not built", () => {
+    const gone = cloudBuild(CloudBuildState.Failed, 20 * 24 * HOUR_MS, { failure: CloudBuildFailure.Expired });
+    const windows = unreal(unrealFolder(MISSING), record(null, [gone])).find(
+      (row) => row.target === PublishTarget.Windows,
+    );
+    assert.deepEqual([windows?.status, windows?.work], ["Not built", CardWork.Cloud]);
+  });
+
+  it("says nothing of an older failed build once a newer one was built and then dropped", () => {
+    const failed = cloudBuild(CloudBuildState.Failed, 30 * 24 * HOUR_MS, {
+      failure: CloudBuildFailure.Compile,
+      errors: ["error C2065: 'Health': undeclared identifier"],
+    });
+    const gone = cloudBuild(CloudBuildState.Failed, 20 * 24 * HOUR_MS, { failure: CloudBuildFailure.Expired });
+    const native = record(null, [failed, gone]);
+    const windows = unreal(unrealFolder(MISSING), native).find((row) => row.target === PublishTarget.Windows);
+    assert.deepEqual([windows?.tone, windows?.status, windows?.work], [CardTone.None, "Not built", CardWork.Cloud]);
+    assert.deepEqual(cardErrors(unrealFolder(MISSING), native), [], "the game has built since: its old error is gone");
+  });
+
+  it("says a Windows app Genex Cloud built before the game's last change is older than the game, and builds it again", () => {
+    // The game changed an hour ago; Genex Cloud built its Windows app three hours ago and keeps it.
+    const older = keptBuild(3 * HOUR_MS);
+    assert.deepEqual(said(unreal(unrealFolder(READY, 10 * MINUTE_MS), record(null, [older]))), [
+      ["Mac", CardTone.Ready, "Ready to publish", "3.2 GB", CardWork.Publish],
+      ["Windows", CardTone.None, "Built · older than your game", "builds on Genex Cloud", CardWork.Cloud],
+    ]);
+    const live = record(2 * 24 * HOUR_MS, [cloudBuild(CloudBuildState.Done, 13 * HOUR_MS), older]);
+    const windows = unreal(unrealFolder(READY, 3 * 24 * HOUR_MS), live).find(
+      (row) => row.target === PublishTarget.Windows,
+    );
+    assert.deepEqual(
+      [windows?.tone, windows?.status, windows?.work],
+      [CardTone.Old, "Live · older than your game", CardWork.Cloud],
+      "players keep the app they have until the new one is built",
     );
   });
 });
@@ -263,10 +392,10 @@ describe("the Publish card's button", () => {
     assert.deepEqual(
       rows.map((row) => [row.name, row.status, row.on, row.work]),
       [
-        ["Web", "Not published", true, CardWork.Publish],
-        ["Mac", "Not published", true, CardWork.Publish],
-        ["Windows", "Not published", false, CardWork.Build],
-        ["Linux", "Not published", false, CardWork.Build],
+        ["Web", "Ready to publish", true, CardWork.Publish],
+        ["Mac", "Ready to publish", true, CardWork.Publish],
+        ["Windows", "Not built", false, CardWork.Build],
+        ["Linux", "Not built", false, CardWork.Build],
       ],
     );
     assert.equal(pressPlan(rows, NO_SWITCHES)?.label, "Publish to web and Mac");
@@ -299,13 +428,194 @@ describe("the Publish card's button", () => {
     assert.equal(pressPlan(windowsBuilt, NO_SWITCHES)?.label, "Publish to 3 platforms");
   });
 
-  it("publishes an Unreal game's Mac app and has Genex Cloud build its Windows app the first time", () => {
+  it("opens an Unreal game on a Mac with both apps switched on and one Build for both", () => {
+    const rows = unreal(unrealFolder(MISSING), record(null));
+    assert.deepEqual(
+      rows.map((row) => [row.target, row.on]),
+      [
+        [PublishTarget.Mac, true],
+        [PublishTarget.Windows, true],
+      ],
+    );
+    const plan = pressPlan(rows, NO_SWITCHES);
+    assert.deepEqual(plan, {
+      label: "Build Mac and Windows",
+      steps: [
+        { target: PublishTarget.Mac, work: CardWork.Build },
+        { target: PublishTarget.Windows, work: CardWork.Cloud },
+      ],
+      warn: false,
+    });
+    assert.equal(pressPlan(rows, MAC_OFF)?.label, "Build Windows");
+    assert.equal(pressPlan(rows, WINDOWS_OFF)?.label, "Build Mac");
+    const neither = new Map([...MAC_OFF, ...WINDOWS_OFF]);
+    assert.equal(pressPlan(rows, neither), null, "no button only when nothing is switched on");
+  });
+
+  it("switches on the app this PC builds, and leaves the other off", () => {
+    const rows = cardRows({
+      platforms: unrealFolder(MISSING),
+      native: record(null),
+      now: NOW,
+      webOffer: WebOffer.Unavailable,
+      madeHere: new Set([PublishTarget.Windows, PublishTarget.Linux]),
+      mac: false,
+    });
+    assert.deepEqual(
+      rows.map((row) => [row.name, row.status, row.side, row.on]),
+      [
+        ["Windows", "Not built", "builds on this PC", true],
+        ["Linux", "Not built", "builds on this PC", false],
+      ],
+    );
+    assert.equal(pressPlan(rows, NO_SWITCHES)?.label, "Build Windows");
+  });
+
+  it("builds a Windows app that isn't made before it publishes the Mac app that is", () => {
     const rows = unreal(unrealFolder(READY, 10 * MINUTE_MS), record(null));
     assert.deepEqual(said(rows), [
-      ["Mac", CardTone.None, "Not published", "3.2 GB", CardWork.Publish],
-      ["Windows", CardTone.None, "Not published", "builds on Genex Cloud", CardWork.Cloud],
+      ["Mac", CardTone.Ready, "Ready to publish", "3.2 GB", CardWork.Publish],
+      ["Windows", CardTone.None, "Not built", "builds on Genex Cloud", CardWork.Cloud],
     ]);
+    const plan = pressPlan(rows, NO_SWITCHES);
+    assert.deepEqual(
+      [plan?.label, plan?.steps],
+      ["Build Windows", [{ target: PublishTarget.Windows, work: CardWork.Cloud }]],
+    );
+    assert.equal(pressPlan(rows, WINDOWS_OFF)?.label, "Publish to Mac", "Mac never waits for Windows");
+  });
+
+  it("says both are building while they build, and which one is slow", () => {
+    const asked = new Map([[PublishTarget.Mac, at(6 * MINUTE_MS)]]);
+    const send = {
+      platform: PublishTarget.Windows,
+      startedAt: at(5 * MINUTE_MS),
+      state: CloudSendState.Sending,
+      held: true,
+    };
+    const sending = unreal(unrealFolder(MISSING), record(null, [], { cloud: { supported: true, builds: [], send } }), {
+      asked,
+    });
+    assert.equal(pressPlan(sending, NO_SWITCHES), null, "while the agent builds here, the Windows app waits with it");
+    assert.deepEqual(busyPress(sending), {
+      label: "Building Mac and Windows",
+      since: at(6 * MINUTE_MS),
+      note: "Windows can take up to an hour.",
+    });
+    const held = cloudBuild(CloudBuildState.Building, 5 * MINUTE_MS, { held: true });
+    const building = unreal(unrealFolder(MISSING), record(null, [held]), { asked });
+    assert.equal(busyPress(building)?.label, "Building Mac and Windows");
+  });
+
+  it("publishes the Mac app that is built together with the Windows app Genex Cloud still builds", () => {
+    const held = cloudBuild(CloudBuildState.Building, 20 * MINUTE_MS, { held: true });
+    const rows = unreal(unrealFolder(READY, 2 * MINUTE_MS), record(null, [held]));
+    assert.deepEqual(said(rows), [
+      ["Mac", CardTone.Ready, "Ready to publish", "3.2 GB", CardWork.Publish],
+      ["Windows", CardTone.Working, "Building on Genex Cloud", null, CardWork.Release],
+    ]);
+    const plan = pressPlan(rows, NO_SWITCHES);
+    assert.deepEqual(plan, {
+      label: "Publish to Mac and Windows",
+      steps: [
+        { target: PublishTarget.Mac, work: CardWork.Publish },
+        { target: PublishTarget.Windows, work: CardWork.Release },
+      ],
+      warn: false,
+    });
+    assert.equal(pressNote(rows, targets(plan)), "Windows can take up to an hour.");
+  });
+
+  it("publishes a game's only app once it is built: a game with nothing to play is never published", () => {
+    const send = {
+      platform: PublishTarget.Windows,
+      startedAt: at(MINUTE_MS),
+      state: CloudSendState.Sending,
+      held: true,
+    };
+    const rows = unreal(unrealFolder(MISSING), record(null, [], { cloud: { supported: true, builds: [], send } }));
+    assert.equal(pressPlan(rows, NO_SWITCHES)?.label, "Build Mac", "an app switched on and not built is built first");
+    assert.equal(pressPlan(rows, MAC_OFF), null, "nothing to publish yet");
+    assert.deepEqual(busyPress(rows), {
+      label: "Building Windows",
+      since: send.startedAt,
+      note: "It can take up to an hour.",
+    });
+    const built = unreal(unrealFolder(MISSING), record(null, [keptBuild(HOUR_MS)]));
+    const plan = pressPlan(built, MAC_OFF);
+    assert.deepEqual(
+      [plan?.label, plan?.steps],
+      ["Publish to Windows", [{ target: PublishTarget.Windows, work: CardWork.Release }]],
+    );
+  });
+
+  it("updates a live game's Windows app while Genex Cloud still builds it, and never beside a take-down alone", () => {
+    const held = cloudBuild(CloudBuildState.Building, 5 * MINUTE_MS, { held: true });
+    const rows = unreal(unrealFolder(READY, 30 * MINUTE_MS), record(MINUTE_MS, [held]));
+    const plan = pressPlan(rows, NO_SWITCHES);
+    assert.deepEqual(
+      [plan?.label, plan?.steps],
+      ["Publish to Windows", [{ target: PublishTarget.Windows, work: CardWork.Release }]],
+      "Mac players have the game: Windows follows when built",
+    );
+    assert.equal(pressNote(rows, targets(plan)), "It can take up to an hour.");
+    const down = pressPlan(rows, MAC_OFF);
+    assert.deepEqual(
+      [down?.label, down?.steps],
+      ["Take Mac down", [{ target: PublishTarget.Mac, work: CardWork.TakeDown }]],
+      "with Mac taken down nothing is left to play until Windows is built",
+    );
+  });
+
+  it("says a Windows app that was published is on its way to players while Genex Cloud builds it", () => {
+    const released = cloudBuild(CloudBuildState.Building, 26 * MINUTE_MS);
+    const rows = unreal(unrealFolder(READY, 30 * MINUTE_MS), record(MINUTE_MS, [released]));
+    assert.deepEqual(said(rows), [
+      ["Mac", CardTone.Live, "Live · up to date", "1 min ago", null],
+      ["Windows", CardTone.Working, "Building on Genex Cloud", null, null],
+    ]);
+    assert.equal(pressPlan(rows, NO_SWITCHES), null, "nothing left to press: Windows goes live by itself");
+    assert.deepEqual(busyPress(rows), {
+      label: "Publishing to Windows",
+      since: released.startedAt,
+      note: "It can take up to an hour.",
+    });
+    const send = {
+      platform: PublishTarget.Windows,
+      startedAt: at(MINUTE_MS),
+      state: CloudSendState.Sending,
+      released: true,
+    };
+    const going = unreal(
+      unrealFolder(READY, 30 * MINUTE_MS),
+      record(MINUTE_MS, [], { cloud: { supported: true, builds: [], send } }),
+    );
+    assert.equal(busyPress(going)?.label, "Publishing to Windows");
+    assert.equal(pressPlan(going, NO_SWITCHES), null);
+  });
+
+  it("never offers to publish a project on its way up that Genex won't keep: its app goes to players by itself", () => {
+    // A build asked for without keeping (a game with a page, from the platforms list) is no kept app.
+    const send = { platform: PublishTarget.Windows, startedAt: at(MINUTE_MS), state: CloudSendState.Sending };
+    const rows = unreal(
+      unrealFolder(READY, 30 * MINUTE_MS),
+      record(20 * MINUTE_MS, [], { cloud: { supported: true, builds: [], send } }),
+    );
+    const windows = rows.find((row) => row.target === PublishTarget.Windows);
+    assert.deepEqual([windows?.making, windows?.work], [false, null]);
+    assert.equal(pressPlan(rows, NO_SWITCHES), null, "nothing to press: it is on its way to players already");
+    assert.equal(busyPress(rows)?.label, "Publishing to Windows");
+  });
+
+  it("publishes both once both are built, or only the one switched on", () => {
+    const rows = unreal(unrealFolder(READY, 40 * MINUTE_MS), record(null, [keptBuild(HOUR_MS)]));
     assert.equal(pressPlan(rows, NO_SWITCHES)?.label, "Publish to Mac and Windows");
+    const macOnly = pressPlan(rows, WINDOWS_OFF);
+    assert.deepEqual(
+      [macOnly?.label, macOnly?.steps],
+      ["Publish to Mac", [{ target: PublishTarget.Mac, work: CardWork.Publish }]],
+      "the Windows app stays built",
+    );
   });
 
   it("takes a live platform down when its switch goes off, and warns", () => {
@@ -331,23 +641,10 @@ describe("the Publish card's button", () => {
     assert.equal(plan?.warn, false);
   });
 
-  it("leaves Genex Cloud out until the game has a page on Genex or this press makes one", () => {
-    const rows = unreal(unrealFolder(MISSING), record(null));
-    assert.deepEqual(
-      rows.map((row) => [row.target, row.work]),
-      [
-        [PublishTarget.Mac, CardWork.Build],
-        [PublishTarget.Windows, CardWork.Cloud],
-      ],
-    );
-    assert.equal(pressPlan(rows, new Map([[PublishTarget.Mac, false]]), false), null, "no page to build on yet");
-    assert.equal(pressPlan(rows, new Map([[PublishTarget.Mac, false]]), true)?.label, "Publish to Windows");
-  });
-
   it("says the agent is building while it builds", () => {
     const asked = new Map([[PublishTarget.Mac, at(3 * MINUTE_MS)]]);
     const rows = unreal(unrealFolder(STALE), record(2 * 24 * HOUR_MS), { asked });
-    assert.deepEqual(busyPress(rows), { label: "Building Mac", since: at(3 * MINUTE_MS), cloud: false });
+    assert.deepEqual(busyPress(rows), { label: "Building Mac", since: at(3 * MINUTE_MS), note: null });
   });
 
   it("says whether the live web version is the game as it is now", () => {
@@ -406,6 +703,40 @@ describe("the Publish card's error blocks", () => {
       [mac?.status, mac?.work],
       ["Couldn’t send", null],
       "Try again is the block's, not the main button's",
+    );
+  });
+
+  it("names a Windows build that didn't start, and its row leaves the retry to the block", () => {
+    const send = {
+      platform: PublishTarget.Windows,
+      startedAt: at(2 * MINUTE_MS),
+      state: CloudSendState.Failed,
+      error: "This account has used its builds for this month.",
+    };
+    const native = record(null, [], { cloud: { supported: true, builds: [], send } });
+    const folder = unrealFolder(MISSING);
+    assert.deepEqual(cardErrors(folder, native), [
+      {
+        target: PublishTarget.Windows,
+        kind: CardErrorKind.Start,
+        title: "Windows build didn’t start",
+        text: "This account has used its builds for this month.",
+      },
+    ]);
+    const asked = new Map([[PublishTarget.Mac, at(2 * MINUTE_MS)]]);
+    const rows = unreal(folder, native, { asked });
+    const windows = rows.find((row) => row.target === PublishTarget.Windows);
+    assert.deepEqual(
+      [windows?.tone, windows?.status, windows?.work, windows?.on],
+      [CardTone.Bad, "Couldn’t send", null, true],
+    );
+    assert.equal(busyPress(rows)?.label, "Building Mac", "the Mac app builds on");
+    const closed = { platform: PublishTarget.Windows, startedAt: at(2 * MINUTE_MS), state: CloudSendState.Failed };
+    const stopped = record(null, [], { cloud: { supported: true, builds: [], send: closed } });
+    assert.deepEqual(
+      cardErrors(folder, stopped).map((error) => [error.kind, error.text]),
+      [[CardErrorKind.Start, ""]],
+      "stopped with Studio: no words to copy, the same Try again",
     );
   });
 

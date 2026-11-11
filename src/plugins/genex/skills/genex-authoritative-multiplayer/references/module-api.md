@@ -44,6 +44,7 @@ export default room;
 | `onLeave(ctx, player, reason)` | A seat ended. Remove what they owned. `reason` is a `LeaveReason`: `left`, `dropped` (the reconnect grace ran out), `superseded` (a newer session of the same player took the seat), `revoked` or `closing`. |
 | `onInput(ctx, playerId, input)` | One call per input, in each player's order, before `step`. |
 | `step(ctx)` | Once per tick, after the tick's inputs. |
+| `onDrain(ctx)` | Optional. The server closes this room for a deploy: return what the next room should start from, at most 256 KiB of JSON. It reads it as `ctx.handoff` in `init`. Seats come back with new ids, so key what you keep by `player.uid`. Without it the next room starts clean. |
 
 `player` is a `PlayerInfo`: `id` is the **seat** (an entity's `owner`, and what `emit(…, to)` takes);
 `uid` is the player's stable id for this game across visits — key saves and scores by it; `name`;
@@ -122,6 +123,12 @@ outside such an input, `null` for an unknown id, a projectile or a physics body 
 an entity that never ducks. Use it for hit zones that depend on stance: a head lower on a ducking
 target, a back that faces where the target faced.
 
+None of these knows the walls. `ctx.world.ray(origin, dir, { range })` does: the first solid along a
+ray through the module's `world`, or `null`, in `init` and every hook. How the two make a shot, and
+where it is wrong: [presets.md](presets.md#a-shot-and-the-world). With `world: "shot"` it asks the
+module's `shotWorld`, and `ctx.world.claim(origin, dir, claimed, { range })` holds a stop the shooter's
+client saw to it: [levels.md](levels.md#what-bullets-meet).
+
 ## Projectiles
 
 A projectile's launch is written once; every client computes its flight, so it costs nothing per
@@ -160,7 +167,7 @@ Its output is checked every tick, and each of these is a **fault**:
 - entity `data` at most 256 characters as JSON;
 - an id that is empty, longer than 64 characters, or `__proto__`, `constructor` or `prototype`.
 
-The third fault ends the room (close code 4501, and every player sees `disconnect`). So does a tick
+The third fault inside 1,200 ticks ends the room (close code 4501, and every player sees `disconnect`). So does a tick
 that runs past its deadline or a module whose CPU or memory use stays over budget. Keep per-tick
 work small, bounded and the same every run: `validate` holds it to a local CPU budget so a module
 that passes here fits Genex's servers.

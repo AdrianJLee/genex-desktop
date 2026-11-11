@@ -89,7 +89,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
  * server-authoritative card for an embed SDK with `getAuthorityUrls` (0.35.0).
  */
 export const GENEX_GAME_PACKAGES = {
-  "@genex-ai/multiplayer": "0.17.9",
+  "@genex-ai/multiplayer": "0.17.10",
   "@genex-ai/embed-sdk": "0.35.0",
 } as const;
 /** A Genex SDK package a game may add. */
@@ -102,7 +102,7 @@ export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
  * room check runs for a game that installed nothing.
  */
 export const GENEX_STUDIO_TOOLS = {
-  "@genex-ai/authority-dev": "0.1.6",
+  "@genex-ai/authority-dev": "0.1.7",
 } as const;
 /** A Genex tool Studio ships. */
 export type GenexStudioTool = keyof typeof GENEX_STUDIO_TOOLS;
@@ -442,6 +442,38 @@ export interface GenexRequest {
   options?: Record<string, string | number | boolean | Array<string | number>>;
 }
 
+/**
+ * What the Genex CLI is sending or preparing, as its progress lines name it (`GENEX_PROGRESS=json`).
+ * Wire values: never rename one.
+ */
+export const GenexSendStage = {
+  /** Packing an app or a project into its archive. */
+  Zip: "zip",
+  /** Reading an archive to name it. */
+  Hash: "hash",
+  /** Sending a web build's files, an app's archive or a project to a build on Genex. */
+  Upload: "upload",
+  /** Sending the project's large files to the source store, for Remix. */
+  SourceLfs: "source-lfs",
+  /** Sending the rest of the project's source. */
+  SourceGit: "source-git",
+} as const;
+export type GenexSendStage = (typeof GenexSendStage)[keyof typeof GenexSendStage];
+
+/** How far a send is, as of `at`. Kept in memory while the CLI runs: never written to a record. */
+export interface GenexSendProgress {
+  stage: GenexSendStage;
+  doneBytes: number;
+  /** 0 when the size is not known. */
+  totalBytes: number;
+  /** When this was read (epoch ms). */
+  at: number;
+  /** The speed over the last seconds; absent until bytes have moved. */
+  bytesPerSecond?: number;
+  /** Which app this is about (`mac-arm64`, `windows`); absent for a web build and a project's source. */
+  target?: string;
+}
+
 /** One publish attempt. Studio owns the record; the Genex CLI owns the hosted project it acts on. */
 export interface GenexPublishJob {
   id: string;
@@ -468,6 +500,8 @@ export interface GenexPublishJob {
   uploads?: number;
   /** A server-authoritative game's room module in this publish; absent for a game with no room block. */
   room?: GenexPublishRoom;
+  /** How far the build or its source is on the way up; only on a running job, never in its record. */
+  progress?: GenexSendProgress;
 }
 /**
  * What one publish made of a game's room module, from the CLI's own record of its gate (the report
@@ -870,6 +904,8 @@ export interface GenexNativeRecord {
   listing?: GenexNativeListing;
   /** The apps Genex builds on its own computers; absent from a Genex plugin older than them. */
   cloud?: GenexCloudRecord;
+  /** How far the app being sent now is; absent when none is, or from a CLI that says nothing of it. */
+  progress?: GenexSendProgress;
 }
 
 /** Where an app Genex builds on its own computers stands (`genex native build`). Wire values: never rename one. */
@@ -877,8 +913,10 @@ export const CloudBuildState = {
   /** Asked for, waiting for a computer. */
   Queued: "queued",
   Building: "building",
-  /** Built and checked: Genex is putting it on the game's page. */
+  /** Built: Genex is checking it, then puts it on the game's page or keeps it (`held`). */
   Publishing: "publishing",
+  /** Built, checked and kept by Genex: players get it once a publish asks (`genex native build-release`). */
+  Built: "built",
   /** On the game's page for its players. */
   Done: "done",
   Failed: "failed",
@@ -901,6 +939,8 @@ export const CloudBuildFailure = {
   SourceTooBig: "source-too-big",
   /** The game has no page on Genex for the app to go on. */
   NotOnGenex: "not-on-genex",
+  /** Built and kept, but no publish asked for it in time: Genex no longer has it. */
+  Expired: "expired",
   /** Anything else, or a code this Studio does not know. */
   Failed: "failed",
 } as const;
@@ -918,6 +958,14 @@ export interface GenexCloudBuild {
   failure?: CloudBuildFailure;
   /** What its log says went wrong, in the project's own paths; on a failed compile or cook only. */
   errors?: string[];
+  /**
+   * Genex keeps what it builds until a publish asks for it: players get nothing of it before. Absent
+   * once a publish asked (it then goes on the game's page as soon as it is built), and on a build
+   * that was asked to go there by itself.
+   */
+  held?: boolean;
+  /** How big the app it built is once installed, in bytes; absent until it is built. */
+  installedBytes?: number;
 }
 
 /** How sending a game's project to Genex for a build stands. Kept in the publish workspace: never rename one. */
@@ -937,6 +985,12 @@ export interface GenexCloudSend {
   state: CloudSendState;
   /** Why it stopped, in the CLI's words; absent when it was stopped here or Studio closed. */
   error?: string;
+  /** Genex keeps what it builds of this project until a publish asks for it; absent: the app goes to players once built. */
+  held?: boolean;
+  /** A publish asked for the app while its project was still on its way: its build goes to players once built. */
+  released?: boolean;
+  /** How far the project is on its way up; only while it is being sent. */
+  progress?: GenexSendProgress;
 }
 
 /**

@@ -2,7 +2,11 @@
  * Packaging an Unreal game as the app its players install: `package-game` runs Epic's
  * `BuildCookRun` (build, cook, stage and pak, Shipping) for a system this computer packages for, a
  * Mac app on a Mac, a Windows program on Windows, and on Windows a Linux program too, into
- * `unreal/Builds/<Mac|Windows|Linux>/`, where Publish finds it (`main/core/native-builds.ts`). Unreal
+ * `unreal/Builds/<Mac|Windows|Linux>/`, where Publish finds it (`main/core/native-builds.ts`). A web
+ * build (`system: "web"`, Unreal's Wasm platform) is the whole site, staged in `unreal/Builds/Wasm/`
+ * and then made the game's web version in `web/`, on either system by an engine that builds for the
+ * web (`web-build.ts`), from a game with a C++ module, with the emsdk the person installed, its
+ * content split into files a host that caps a file's size takes. Unreal
  * makes a Mac app only on a Mac and a Windows one only on Windows; Linux it cross-compiles from
  * Windows with Epic's Linux toolchain, which the person installs (Epic's installer sets
  * `LINUX_MULTIARCH_ROOT`, read from the registry so no restart is needed) and RunUAT is handed.
@@ -39,6 +43,24 @@ import { uatEnv } from "./program-env.ts";
 import { projectModule } from "./cpp-module.ts";
 import { letAppReachNetwork, type MacSigner, systemMacSigner } from "../../substrate/mac-entitlements.ts";
 import { LINUX_TOOLCHAIN_VARIABLE } from "./setup.ts";
+import {
+  EMSDK_VARIABLE,
+  emscriptenFor,
+  emsdkHolds,
+  engineBuildsWeb,
+  ensureWebSettings,
+  GAME_WEB_FOLDER,
+  HOST_LIMITS,
+  HostLimit,
+  holdsWebBuild,
+  PROJECT_CONFIG_FOLDER,
+  placeWebBuild,
+  siteExcess,
+  WEB_PAGE,
+  WEB_PLATFORM,
+  WebFolder,
+  webFolderOf,
+} from "./web-build.ts";
 import { canCompileCpp, cmdCarries, outputCollector, pathScrubber } from "./ubt.ts";
 import { type VisualStudioStatus, visualStudioLacking } from "./visual-studio.ts";
 import type { XcodeStatus } from "./xcode.ts";
@@ -79,12 +101,14 @@ const MAX_ERRORS = 12;
 const ERROR_CHARS = 400;
 /** How many of a failed package's last output lines it keeps when no line reads as an error. */
 const LAST_LINES = 8;
+/** The megabyte a size is said in: 1024 × 1024 bytes, as the host counts its limits. */
+const MEGABYTE_BYTES = 1024 * 1024;
 
 const MAC = "darwin";
 const WINDOWS = "win32";
 
 /** The systems a package is for. Wire values: `package-game`'s and `package-status`'s `system`. */
-export const PackageSystem = { Mac: "mac", Windows: "windows", Linux: "linux" } as const;
+export const PackageSystem = { Mac: "mac", Windows: "windows", Linux: "linux", Web: "web" } as const;
 export type PackageSystem = (typeof PackageSystem)[keyof typeof PackageSystem];
 
 /** Each system's package: UAT's platform, and the folder its stage makes under `Builds/`. */
@@ -92,11 +116,13 @@ const SYSTEMS: Readonly<Record<PackageSystem, { platform: string; folder: string
   [PackageSystem.Mac]: { platform: "Mac", folder: "Mac" },
   [PackageSystem.Windows]: { platform: "Win64", folder: "Windows" },
   [PackageSystem.Linux]: { platform: "Linux", folder: "Linux" },
+  // UAT stages the whole site into a folder it names for the platform.
+  [PackageSystem.Web]: { platform: WEB_PLATFORM, folder: WEB_PLATFORM },
 };
 /** What each computer packages for, its own system first: Windows cross-compiles Linux with Epic's toolchain. */
 const HOST_SYSTEMS: Partial<Record<NodeJS.Platform, readonly PackageSystem[]>> = {
-  [MAC]: [PackageSystem.Mac],
-  [WINDOWS]: [PackageSystem.Windows, PackageSystem.Linux],
+  [MAC]: [PackageSystem.Mac, PackageSystem.Web],
+  [WINDOWS]: [PackageSystem.Windows, PackageSystem.Linux, PackageSystem.Web],
 };
 
 /**
@@ -107,6 +133,7 @@ const HOST_SYSTEMS: Partial<Record<NodeJS.Platform, readonly PackageSystem[]>> =
 const LINUX_TOOLCHAINS: Readonly<Record<string, string>> = {
   "5.7": "v26_clang-20.1.8-rockylinux8",
   "5.8": "v26_clang-20.1.8-rockylinux8",
+  "5.9": "v26_clang-20.1.8-rockylinux8",
 };
 const LINUX_TOOLCHAIN_DOWNLOADS = "https://cdn.unrealengine.com/CrossToolchain_Linux/";
 /** A trailing slash or backslash, as the installer writes the folder. */
@@ -134,7 +161,7 @@ const MESSAGE = {
   NoEngine: "No supported Unreal is installed, so Genex can't package the game.",
   Unsupported: "Genex packages Unreal games on a Mac or on Windows.",
   CannotPackage: (asked: string) =>
-    `This computer can't package ${asked ? `"${asked.slice(0, 24)}"` : "that"}: Genex packages a Mac app on a Mac, and Windows and Linux apps on Windows (system: "windows" or "linux").`,
+    `This computer can't package ${asked ? `"${asked.slice(0, 24)}"` : "that"}: Genex packages a Mac app on a Mac, Windows and Linux apps on Windows (system: "windows" or "linux"), and a web build on either (system: "web").`,
   NoToolchainKnown: (version: string) =>
     `Genex doesn't know Epic's Linux toolchain for Unreal ${version} yet, so it can't package for Linux here.`,
   NeedsToolchain: (version: string, name: string, url: string) =>
@@ -150,7 +177,32 @@ const MESSAGE = {
   NotAFolder: (where: string) => `${where} isn't a plain folder in the project, so Genex packaged nothing.`,
   NotSaved: (why: string) =>
     `Unreal couldn't save its open work (${why}), so Genex packaged nothing: the app would miss it. Save in Unreal, or quit it, then package again.`,
+  NoWebPlatform: (version: string) =>
+    `Unreal ${version} on this computer can't build for the web: its install has no web (Wasm) platform, which Unreal has from 5.9 in installs that include it. Genex packaged nothing; say so to the user and offer this computer's own app instead.`,
+  WebNeedsCpp:
+    "A web build needs the game's C++ module: Unreal builds web games from C++ projects only. Call unreal__add-cpp-module (the user confirms it), then package again. Genex packaged nothing.",
+  NeedsEmsdk: (version: string) =>
+    `A web build needs emscripten ${version}, exactly, in an emsdk folder this computer names. Give the user these steps: clone https://github.com/emscripten-core/emsdk to a plain local folder, run "emsdk install ${version}" and "emsdk activate ${version}" in it, and set the ${EMSDK_VARIABLE} environment variable to that folder; then package again. Genex packaged nothing.`,
+  WebFolderTaken:
+    "The game's web/ folder holds other files, and a web build is the game's whole web/ folder. Move or remove what is in web/ (ask the user first), then package again. Genex packaged nothing.",
+  NoWebSettings: (config: string, code: string) =>
+    `Genex couldn't write the web build's settings into ${config}/ (${code}). The folders and config files there have to be the project's own plain ones, which Genex can read and write, never links. Genex packaged nothing.`,
   Packaged: (system: string, seconds: number) => `The ${system} app was packaged in ${seconds} s.`,
+  WebPackaged: (seconds: number) => `The web build was made in ${seconds} s.`,
+  /** What of a web build is past what Genex's hosting takes as a rule, in a sentence that stands alone. */
+  PastHostLimits: (what: string) => `The site is past Genex hosting's usual limits: ${what}.`,
+  /** The largest file past the file limit, and how many `others` are past it too: splitting one alone wouldn't do. */
+  FileTooLarge: (file: string, megabytes: number, most: number, others: number) => {
+    const largest = `${file} is ${megabytes} MB, and a file may be ${most} MB at most`;
+    if (others === 0) return largest;
+    return others === 1 ? `${largest} (1 more file is past that)` : `${largest} (${others} more files are past that)`;
+  },
+  SiteTooLarge: (megabytes: number, most: number) =>
+    `it is ${megabytes} MB in all, and a game may be ${most} MB at most`,
+  TooManyFiles: (files: number, most: number) => `it has ${files} files, and a game may have ${most} at most`,
+  /** The site was made, but `web/` came to hold other files meanwhile, so it stays where Unreal staged it. */
+  WebStaged: (seconds: number) =>
+    `The web build was made in ${seconds} s, but the game's web/ folder now holds other files, so the site stays in the build folder.`,
   NoApp: (system: string) => `BuildCookRun said it succeeded, but no ${system} app is in the build folder.`,
   Failed: (count: number) =>
     count === 0 ? "BuildCookRun failed." : `BuildCookRun failed: ${count} error line${count === 1 ? "" : "s"}.`,
@@ -176,13 +228,16 @@ export type UatLaunch = { file: string; args: string[]; verbatim: boolean; env?:
 /** What the tools need from the computer, the editor and the clock. */
 export type GamePackageDeps = {
   platform: NodeJS.Platform;
-  engine(): Promise<{ version: string; directory: string } | undefined>;
+  /** The installed engine `game` is packaged with: its project's own, else the newest supported one. */
+  engine(storage: string, game: string): Promise<{ version: string; directory: string } | undefined>;
   project(storage: string, game: string): Promise<string | undefined>;
   xcode(engineDir: string | undefined): Promise<Pick<XcodeStatus, "state">>;
   /** Where Microsoft's C++ tools stand on Windows, which a game with C++ is packaged with; none off Windows. */
   visualStudio?(engineDir: string | undefined): Promise<Pick<VisualStudioStatus, "state">>;
   /** Windows: `LINUX_MULTIARCH_ROOT` as Epic's installer set it, or undefined; none means no toolchain. */
   linuxToolchain?(): Promise<string | undefined>;
+  /** The emsdk folder this computer names for Unreal's web builds (`EMSDK_VARIABLES`), or undefined. */
+  emsdk?(): Promise<string | undefined>;
   /** Whether the game's own Unreal answers now. */
   editorAnswers(storage: string, game: string): Promise<boolean>;
   /** Saves the game's open Unreal (ending play first): whether all of it saved, and what didn't. */
@@ -235,8 +290,26 @@ export function linuxToolchainFor(version: string): { name: string; url: string 
 }
 
 /**
+ * What a web build asks of BuildCookRun beyond an app's: IoStore containers, as Epic's own command
+ * line for the platform has; the package step, the only one that writes the page's file list
+ * (`wasm-manifest.json`, without which the page never starts) and moves the files no host may serve
+ * (the symbol map, UAT's manifests) out of the site; no Brotli copy beside each file, which
+ * helps only on a host that serves it in the file's place, and Genex's serve each file as it is;
+ * and chunk lists from the cook, without which the game's whole content is one file however the
+ * project's config says to split it (`ensureWebSettings`), too large for a host that caps a file.
+ */
+const WEB_ONLY_ARGS = ["-iostore", "-package", "-WasmNoBrotli", "-manifests"] as const;
+
+/**
+ * What an app asks of BuildCookRun beyond a web build's: its paks compressed and no debug files
+ * staged beside the program. The staged app is what players download, so both make it smaller;
+ * a web build's files are compressed by the host that serves them.
+ */
+const APP_ONLY_ARGS = ["-compressed", "-nodebuginfo"] as const;
+
+/**
  * BuildCookRun's arguments: Shipping for `system` (this computer's own when none), built, cooked,
- * staged into paks and staged under `stagingDir`, the cook run by this computer's own command-line
+ * staged into paks (an app's compressed, with no debug files) and staged under `stagingDir`, the cook run by this computer's own command-line
  * editor (a project with no editor target of its own has none to build).
  */
 export function buildCookRunArgs(o: {
@@ -246,7 +319,8 @@ export function buildCookRunArgs(o: {
   platform: NodeJS.Platform;
   system?: PackageSystem;
 }): string[] {
-  const target = SYSTEMS[packageSystemOf(o.platform, o.system)];
+  const system = packageSystemOf(o.platform, o.system);
+  const target = SYSTEMS[system];
   return [
     "BuildCookRun",
     `-project=${o.projectFile}`,
@@ -256,6 +330,7 @@ export function buildCookRunArgs(o: {
     "-cook",
     "-stage",
     "-pak",
+    ...(system === PackageSystem.Web ? WEB_ONLY_ARGS : APP_ONLY_ARGS),
     `-stagingdirectory=${o.stagingDir}`,
     `-unrealexe=${editorCmdPath(o.engineDir, o.platform)}`,
     "-nocompileeditor",
@@ -342,7 +417,7 @@ async function targetOf(
   if (!linked) throw new Error(MESSAGE.NoProject);
   const [gameDir, projectFile] = await Promise.all([realpath(context.directory), realpath(linked)]);
   if (!isInside(gameDir, projectFile)) throw new Error(MESSAGE.OutsideGame);
-  const engine = await deps.engine();
+  const engine = await deps.engine(storage, game);
   if (!engine) throw new Error(MESSAGE.NoEngine);
   return {
     game,
@@ -360,14 +435,34 @@ async function targetOf(
  * a Linux package without Epic's toolchain for this Unreal. Answers what RunUAT's environment adds.
  */
 async function assertRunnable(deps: GamePackageDeps, target: Target): Promise<Record<string, string>> {
-  if (deps.platform === WINDOWS) {
-    if (!cmdCarries([target.engineDir, target.projectFile])) throw new Error(MESSAGE.Uncarried);
+  const windows = deps.platform === WINDOWS;
+  if (windows && !cmdCarries([target.engineDir, target.projectFile])) throw new Error(MESSAGE.Uncarried);
+  if (target.system.id === PackageSystem.Web) return assertWeb(deps, target);
+  if (windows) {
     if (target.system.id !== PackageSystem.Linux) return assertBuildTools(deps, target);
     return { [LINUX_TOOLCHAIN_VARIABLE]: await linuxToolchainRoot(deps, target.engineVersion) };
   }
   const xcode = await deps.xcode(target.engineDir);
   if (!canCompileCpp({ xcode }, deps.platform)) throw new Error(MESSAGE.NoXcode(xcode.state));
   return {};
+}
+
+/**
+ * Refuses a web build this computer can't make, each with what would let it: an engine whose install
+ * builds for the web, the game's C++ module (Unreal builds web games from C++ projects only), and an
+ * emsdk folder with exactly the emscripten that engine names, which RunUAT is handed in the first
+ * variable Unreal's build tool reads; and a `web/` folder in the game that holds other files. Emscripten compiles the game, so neither Xcode nor Microsoft's
+ * tools are asked for.
+ */
+async function assertWeb(deps: GamePackageDeps, target: Target): Promise<Record<string, string>> {
+  const wanted = (await engineBuildsWeb(target.engineDir)) ? await emscriptenFor(target.engineDir) : undefined;
+  if (!wanted) throw new Error(MESSAGE.NoWebPlatform(target.engineVersion));
+  if (!(await projectModule(target.projectFile).catch(() => undefined))) throw new Error(MESSAGE.WebNeedsCpp);
+  if ((await webFolderOf(target.gameDir)) === WebFolder.Taken) throw new Error(MESSAGE.WebFolderTaken);
+  const root = ((await deps.emsdk?.().catch(() => undefined)) ?? "").replace(TRAILING_SEPARATORS, "");
+  const carried = deps.platform !== WINDOWS || cmdCarries([root]);
+  if (!carried || !(await emsdkHolds(root, wanted))) throw new Error(MESSAGE.NeedsEmsdk(wanted));
+  return { [EMSDK_VARIABLE]: root };
 }
 
 /**
@@ -400,6 +495,21 @@ async function linuxToolchainRoot(deps: GamePackageDeps, version: string): Promi
   return set;
 }
 
+/**
+ * What Genex's hosts need of a web build, set in the project's own config before the cook reads it:
+ * they send no isolation headers, so the page adds them itself, and they take no file past a size,
+ * so the content comes in several. A config Genex can't write as a plain file of the project's own
+ * refuses the package, by its folder inside the game and the failure's code alone.
+ */
+async function webSettings(target: Target): Promise<void> {
+  try {
+    await ensureWebSettings(target.projectDir);
+  } catch (failure) {
+    const config = shownIn(target.gameDir, path.join(target.projectDir, PROJECT_CONFIG_FOLDER));
+    throw new Error(MESSAGE.NoWebSettings(config, errorCode(failure)));
+  }
+}
+
 /** Saves the person's open Unreal first; one that doesn't answer has nothing unsaved to lose. */
 async function saveFirst(deps: GamePackageDeps, storage: string, game: string): Promise<void> {
   if (!(await deps.editorAnswers(storage, game).catch(() => false))) return;
@@ -430,6 +540,7 @@ const APP_AT_ROOT: Readonly<Record<PackageSystem, { extension: string; folder: b
   [PackageSystem.Mac]: { extension: APP_EXTENSION, folder: true },
   [PackageSystem.Windows]: { extension: EXE_EXTENSION, folder: false },
   [PackageSystem.Linux]: { extension: SH_EXTENSION, folder: false },
+  [PackageSystem.Web]: { extension: WEB_PAGE, folder: false },
 };
 
 /** The app the stage holds for `system`: the one entry at its package's root that starts the game. */
@@ -473,6 +584,7 @@ async function runPackage(
   if (outcome.timedOut) throw new PackageFailed(MESSAGE.TimedOut, [], seconds);
   const app =
     outcome.code === 0 && SUCCEEDED.test(outcome.output) ? await appIn(dirs.dir, target.system.id) : undefined;
+  if (app && target.system.id === PackageSystem.Web) return webPackaged(target, dirs.dir, app, seconds);
   if (app) {
     if (target.system.id === PackageSystem.Mac) await networkedMacApp(deps, app, seconds);
     return { line: MESSAGE.Packaged(target.system.folder, seconds), app: shownIn(target.gameDir, app), seconds };
@@ -482,6 +594,37 @@ async function runPackage(
   const succeeded = outcome.code === 0 && SUCCEEDED.test(outcome.output);
   const line = succeeded ? MESSAGE.NoApp(target.system.folder) : MESSAGE.Failed(errors.length);
   throw new PackageFailed(line, errors, seconds);
+}
+
+/**
+ * A finished web build made the game's web version (`web/`), named by its page; left staged when
+ * `web/` is taken. Its line also says what of the site is past the host's usual limits, so that is
+ * known before an upload is tried.
+ */
+async function webPackaged(target: Target, staged: string, page: string, seconds: number) {
+  // A staged page without its file list never starts, and as web/ it would read as someone else's folder.
+  if (!(await holdsWebBuild(staged))) throw new PackageFailed(MESSAGE.NoApp(target.system.folder), [], seconds);
+  const placed = await placeWebBuild(target.gameDir, staged);
+  const made = placed ? MESSAGE.WebPackaged(seconds) : MESSAGE.WebStaged(seconds);
+  const past = await pastHostLimits(target, path.dirname(placed ?? page));
+  return { line: [made, ...past].join(" "), app: shownIn(target.gameDir, placed ?? page), seconds };
+}
+
+/** How many megabytes (of 1024 × 1024 bytes) `bytes` are, rounded up: a file a byte past a limit reads as past it. */
+const megabytes = (bytes: number) => Math.ceil(bytes / MEGABYTE_BYTES);
+
+/** What of the site in `site` is past the host's usual limits (`siteExcess`), in one sentence; none when it is inside them all. */
+async function pastHostLimits(target: Target, site: string): Promise<string[]> {
+  const excess = await siteExcess(site);
+  if (excess.length === 0) return [];
+  const said = excess.map((over) => {
+    if (over.limit === HostLimit.Files) return MESSAGE.TooManyFiles(over.amount, HOST_LIMITS.Files);
+    if (over.limit === HostLimit.Site)
+      return MESSAGE.SiteTooLarge(megabytes(over.amount), megabytes(HOST_LIMITS.SiteBytes));
+    const file = shownIn(target.gameDir, path.join(site, over.file ?? ""));
+    return MESSAGE.FileTooLarge(file, megabytes(over.amount), megabytes(HOST_LIMITS.FileBytes), over.others ?? 0);
+  });
+  return [MESSAGE.PastHostLimits(said.join("; "))];
 }
 
 /** Lets the packaged Mac app reach the network, or fails the package: an app that stays offline is not offered to Publish. */
@@ -571,6 +714,7 @@ export function createGamePackageTools(deps: GamePackageDeps) {
     try {
       if (context.signal?.aborted) throw new Error(MESSAGE.Stopped);
       await saveFirst(deps, storage, target.game);
+      if (target.system.id === PackageSystem.Web) await webSettings(target);
       return await freshStage(target);
     } catch (failure) {
       stops.delete(target.projectFile);
@@ -609,12 +753,20 @@ export function createGamePackageTools(deps: GamePackageDeps) {
     const target = await targetOf(deps, storage, context, args.system);
     const record = records.get(recordKey(target));
     if (record) return { ...record, jobRunning: record.state === GamePackageState.Running };
-    const dir = path.join(target.projectDir, BUILDS_FOLDER, target.system.folder);
+    const web = target.system.id === PackageSystem.Web;
+    const ours = web && (await webFolderOf(target.gameDir)) === WebFolder.Ours;
+    // A web build is the game's own web/ folder; an app stays in its system's build folder.
+    const dir = ours
+      ? path.join(target.gameDir, GAME_WEB_FOLDER)
+      : path.join(target.projectDir, BUILDS_FOLDER, target.system.folder);
     const app = (await isPlain(dir)) ? await appIn(dir, target.system.id) : undefined;
+    // After a restart the build's own line is gone: a web build still says what the host won't take.
+    const past = web && app ? await pastHostLimits(target, path.dirname(app)) : [];
     return {
       state: GamePackageState.Idle,
       system: target.system.folder,
       ...(app ? { app: shownIn(target.gameDir, app) } : {}),
+      ...(past.length > 0 ? { line: past.join(" ") } : {}),
       jobRunning: false,
     };
   }

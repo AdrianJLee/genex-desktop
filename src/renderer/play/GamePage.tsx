@@ -20,7 +20,6 @@ import { type PlayGameDetail, PlayNote, playPageUrl, PlayShelf } from "../../sha
 import {
   hasWebBuild,
   InstallFailure,
-  InstallPhase,
   NativeArch,
   NativeEngine,
   NativePlatform,
@@ -39,7 +38,16 @@ import { Button } from "../ui/Button.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { NATIVE_WORDS, nativeHereWords, notHereWords, PLAY_CARD_MENU_WORDS, PLAY_WORDS } from "../words.ts";
 import { formatCount, type LikeShown, likeFlipped } from "./play-model.ts";
-import { GamePhase, type GameStanding, gameStanding, installPercent, minutesSince } from "./native-model.ts";
+import {
+  GamePhase,
+  type GameStanding,
+  gameStanding,
+  installLine,
+  installPercent,
+  minutesSince,
+  WebPlay,
+  webPlayOn,
+} from "./native-model.ts";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
 import { PlayersValue } from "./PlayersFact.tsx";
 import { PlatformMarks, platformNames } from "./NativeBadge.tsx";
@@ -104,11 +112,7 @@ function usePlayedMinutes(startedAt: string | null): number {
 function Installing({ game, standing }: { game: PlayGameDetail; standing: GameStanding }): JSX.Element {
   const progress = standing.progress;
   const percent = progress ? installPercent(progress) : 0;
-  const label = (() => {
-    if (progress?.phase === InstallPhase.Queued) return WORDS.waiting;
-    if (progress?.phase === InstallPhase.Downloading) return WORDS.installing(percent);
-    return WORDS.checking;
-  })();
+  const label = WORDS.installLine(installLine(progress));
   return (
     <div
       className="game-installing"
@@ -208,25 +212,117 @@ function Elsewhere({ game, standing }: { game: PlayGameDetail; standing: GameSta
 }
 
 /**
- * Whether the page plays the game in the viewer: it has a web build, and nothing of it is installed,
- * installing, running or failed here, so Play does what its card does.
+ * Play for a game's web build: the viewer opens over the page, as a web game's card opens it. Alone
+ * it is the page's Play. Beside the game's app it says where it plays: leading while the app isn't
+ * installed, stepping back beside the installed app's Play.
  */
-const playsInViewer = (game: PlayGameDetail, standing: GameStanding): boolean =>
-  hasWebBuild(game) && (standing.phase === GamePhase.Install || standing.phase === GamePhase.Elsewhere);
-
-/** Play for a game with a web build: the viewer opens over the page, as the game's card opens it. */
-function PlayInViewer({ game }: { game: PlayGameDetail }): JSX.Element {
+function PlayInViewer({ game, place }: { game: PlayGameDetail; place: WebPlay }): JSX.Element {
+  const beside = place !== WebPlay.Only;
+  const leads = place !== WebPlay.Second;
   return (
     <Button
-      variant="play-fill"
-      className="game-primary"
-      aria-label={WORDS.playLabel(game.title)}
+      variant={leads ? "play-fill" : "secondary"}
+      className={beside && leads ? "game-primary game-primary-wide" : "game-primary"}
+      aria-label={beside ? WORDS.playInBrowserLabel(game.title) : WORDS.playLabel(game.title)}
       data-game-action="play-web"
-      onClick={() => void studio().play.open({ slug: game.slug, title: game.title, coverUrl: game.coverUrl })}
+      onClick={() => void studio().play.openViewer({ slug: game.slug, title: game.title, coverUrl: game.coverUrl })}
+    >
+      <Icon name={leads ? "play" : "globe"} size={14} />
+      {beside ? WORDS.playInBrowser : WORDS.play}
+    </Button>
+  );
+}
+
+/** Install with the app's size: the page's one button, or the second beside Play in browser. */
+function InstallButton({
+  game,
+  standing,
+  leads,
+  onInstall,
+}: {
+  game: PlayGameDetail;
+  standing: GameStanding;
+  leads: boolean;
+  onInstall: () => void;
+}): JSX.Element {
+  const size = sizeWords(standing.build?.installedBytes ?? 0);
+  return (
+    <Button
+      variant={leads ? "play-fill" : "secondary"}
+      className="game-primary"
+      aria-label={WORDS.installLabel(game.title, size)}
+      data-game-action="install"
+      onClick={onInstall}
+    >
+      <Icon name="download" />
+      {WORDS.install}
+      <span className="game-primary-size">{size}</span>
+    </Button>
+  );
+}
+
+/** The installed app's Play, with Play in browser beside it for a game that has a web build, and where the app is. */
+function Ready({ game, standing, web }: { game: PlayGameDetail; standing: GameStanding; web: WebPlay }): JSX.Element {
+  const beside = web === WebPlay.Second;
+  const play = (
+    <Button
+      variant="play-fill"
+      className={beside ? "game-primary game-primary-wide" : "game-primary"}
+      aria-label={WORDS.playLabel(game.title)}
+      data-game-action="play"
+      onClick={() => void studio().play.launch(game.slug)}
     >
       <Icon name="play" size={14} />
       {WORDS.play}
     </Button>
+  );
+  return (
+    <>
+      {beside ? (
+        <div className="game-primary-row">
+          {play}
+          <PlayInViewer game={game} place={web} />
+        </div>
+      ) : (
+        play
+      )}
+      <p className="game-primary-note" data-game-note="ready">
+        <Icon name="check" size={13} className="game-check" />
+        {nativeHereWords(standing.here).readyHere(sizeWords(standing.installed?.bytes ?? 0))}
+      </p>
+    </>
+  );
+}
+
+/** A newer version than the installed one: update and play, or play the one that is here. */
+function Update({
+  game,
+  standing,
+  onInstall,
+}: {
+  game: PlayGameDetail;
+  standing: GameStanding;
+  onInstall: () => void;
+}): JSX.Element {
+  const { build, installed } = standing;
+  return (
+    <>
+      <Button variant="play-fill" className="game-primary" data-game-action="update" onClick={onInstall}>
+        <Icon name="update" />
+        {WORDS.updateAndPlay}
+        <span className="game-primary-size">{sizeWords(build?.sizeBytes ?? 0)}</span>
+      </Button>
+      {installed && (
+        <button
+          type="button"
+          className="game-text-button"
+          data-game-action="play-installed"
+          onClick={() => void studio().play.launch(game.slug)}
+        >
+          {WORDS.playVersion(installed.version)}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -241,12 +337,12 @@ function PrimaryBlock({
   /** Install pressed: play once it is installed, while the page is still open. */
   onPlayWhenReady: () => void;
 }): JSX.Element {
-  const { build, installed } = standing;
+  const web = webPlayOn(game, standing);
   const install = () => {
     onPlayWhenReady();
     void studio().play.install(game.slug);
   };
-  if (playsInViewer(game, standing)) return <PlayInViewer game={game} />;
+  if (web === WebPlay.Only) return <PlayInViewer game={game} place={web} />;
   switch (standing.phase) {
     case GamePhase.Installing:
       return <Installing game={game} standing={standing} />;
@@ -257,58 +353,22 @@ function PrimaryBlock({
     case GamePhase.Elsewhere:
       return <Elsewhere game={game} standing={standing} />;
     case GamePhase.Ready:
-      return (
-        <>
-          <Button
-            variant="play-fill"
-            className="game-primary"
-            aria-label={WORDS.playLabel(game.title)}
-            data-game-action="play"
-            onClick={() => void studio().play.launch(game.slug)}
-          >
-            <Icon name="play" size={14} />
-            {WORDS.play}
-          </Button>
-          <p className="game-primary-note" data-game-note="ready">
-            <Icon name="check" size={13} className="game-check" />
-            {nativeHereWords(standing.here).readyHere(sizeWords(installed?.bytes ?? 0))}
-          </p>
-        </>
-      );
+      return <Ready game={game} standing={standing} web={web} />;
     case GamePhase.Update:
-      return (
-        <>
-          <Button variant="play-fill" className="game-primary" data-game-action="update" onClick={install}>
-            <Icon name="update" />
-            {WORDS.updateAndPlay}
-            <span className="game-primary-size">{sizeWords(build?.sizeBytes ?? 0)}</span>
-          </Button>
-          {installed && (
-            <button
-              type="button"
-              className="game-text-button"
-              data-game-action="play-installed"
-              onClick={() => void studio().play.launch(game.slug)}
-            >
-              {WORDS.playVersion(installed.version)}
-            </button>
-          )}
-        </>
+      return <Update game={game} standing={standing} onInstall={install} />;
+    default: {
+      const button = (
+        <InstallButton game={game} standing={standing} leads={web !== WebPlay.First} onInstall={install} />
       );
-    default:
+      if (web !== WebPlay.First) return button;
+      // The browser plays it now; the app is there for whoever would rather install it.
       return (
-        <Button
-          variant="play-fill"
-          className="game-primary"
-          aria-label={WORDS.installLabel(game.title, sizeWords(build?.installedBytes ?? 0))}
-          data-game-action="install"
-          onClick={install}
-        >
-          <Icon name="download" />
-          {WORDS.install}
-          <span className="game-primary-size">{sizeWords(build?.installedBytes ?? 0)}</span>
-        </Button>
+        <div className="game-primary-row">
+          <PlayInViewer game={game} place={web} />
+          {button}
+        </div>
       );
+    }
   }
 }
 
@@ -443,6 +503,8 @@ function Fact({
 function Facts({ game, standing }: { game: PlayGameDetail; standing: GameStanding }): JSX.Element {
   const facts = WORDS.facts;
   const platforms = platformsOf(game);
+  // A game with apps and a web build runs in a browser too; a web game's page has no such tile.
+  const web = hasWebBuild(game);
   const bytes = standing.installed?.bytes ?? standing.build?.installedBytes ?? 0;
   const engine = game.native?.engine ?? null;
   const appleSilicon = standing.build?.platform === NativePlatform.Mac && standing.build.arch === NativeArch.Arm64;
@@ -452,9 +514,9 @@ function Facts({ game, standing }: { game: PlayGameDetail; standing: GameStandin
       {platforms.length > 0 && (
         <Fact
           hook="platforms"
-          mark={<PlatformMarks platforms={platforms} size={24} />}
+          mark={<PlatformMarks platforms={platforms} web={web} size={24} />}
           label={facts.runsOn}
-          value={`${platformNames(platforms)}${armOnly}`}
+          value={`${platformNames(platforms, web)}${armOnly}`}
         />
       )}
       {bytes > 0 && (

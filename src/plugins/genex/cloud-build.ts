@@ -9,8 +9,14 @@
  * anew). The build takes a while too: its jobs are kept there and followed with
  * `genex native build-status <job>` until each one ends.
  *
- * The CLI and Genex's side are a draft contract: nothing is asked while Studio's pinned CLI has no
- * `genex native build` (`pinnedCliBuildsApps`), and the dialog says where the app is packaged as before.
+ * A build asked for with `--hold` (the Publish card's Build) is kept by Genex once built and checked:
+ * players get nothing of it, and the game needs no page on Genex yet. A publish gives it to them with
+ * `genex native build-release <job>` (`releaseCloudBuild`), at once when it is built, else as soon as
+ * it is. A publish that comes while the project is still on its way up is remembered by the plugin
+ * while Studio runs and asked for the moment Genex names the build.
+ *
+ * Nothing is asked while Studio's pinned CLI can't hold a build (`pinnedCliBuildsApps`): the dialog
+ * then says where the app is packaged, as before.
  */
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -26,11 +32,11 @@ import {
   type GenexCloudSend,
 } from "../../shared/genex.ts";
 import { NativePlatform } from "../../shared/play-native.ts";
-import { atomicWriteJson } from "../../substrate/fsx.ts";
+import { AsyncLock, atomicWriteJson } from "../../substrate/fsx.ts";
 import type { StagedSource } from "./remix-source.ts";
 
-/** The first Genex CLI with `genex native build` and `build-status`, as agreed for its release. */
-const CLOUD_BUILD_CLI = [1, 38, 0] as const;
+/** The first Genex CLI whose `genex native build` holds a build (`--hold`) and that has `build-release`. */
+const CLOUD_BUILD_CLI = [1, 41, 0] as const;
 /** Where a game's builds on Genex are kept in its publish workspace. */
 export const CLOUD_BUILD_FILE = "cloud-build.json";
 /** Where the project is staged for a build, apart from the remix copy a publish may stage at the same time. */
@@ -57,11 +63,15 @@ export const CLOUD_UNREAL_VERSIONS: ReadonlySet<string> = new Set(["5.8"]);
 const MESSAGE = {
   NotABuild: "Genex answered without the build it started",
   UnknownPlatform: "Genex builds no app for that system",
+  NotKept: "Genex no longer keeps this build. Build the app again, then publish it.",
 } as const;
 
+/** The CLI's error code for a release of a build with nothing to give: it failed, or Genex no longer keeps it. */
+const NOT_RELEASABLE = "cloud_build_not_releasable";
+
 /**
- * Whether CLI `version` has `genex native build`. A prerelease comes before its release, so only a
- * later release's prerelease counts.
+ * Whether CLI `version` has `genex native build --hold` and `build-release`. A prerelease comes before
+ * its release, so only a later release's prerelease counts.
  */
 export function hasCloudBuildCommand(version: string): boolean {
   const match = /^(\d+)\.(\d+)\.(\d+)(-.+)?$/.exec(version);
@@ -77,22 +87,41 @@ export function hasCloudBuildCommand(version: string): boolean {
 /** Whether the CLI Studio ships, the version this build pins, can ask Genex to build an app. */
 export const pinnedCliBuildsApps = (): boolean => hasCloudBuildCommand(cliPackage.version);
 
-/** The CLI's words for starting a build of the project staged in `sourceDir`. */
-export const cloudBuildArgs = (platform: string, sourceDir: string): string[] => [
+/** The CLI's words for starting a build of the project staged in `sourceDir`; with `keep`, one Genex keeps for a publish. */
+export const cloudBuildArgs = (platform: string, sourceDir: string, keep = false): string[] => [
   "native",
   "build",
   "--platform",
   platform,
   "--source",
   sourceDir,
+  ...(keep ? ["--hold"] : []),
 ];
 
 /** The CLI's words for reading how build `jobId` stands. */
 export const buildStatusArgs = (jobId: string): string[] => ["native", "build-status", jobId];
 
+/**
+ * The CLI's words for giving players what build `jobId` made, or makes. With `gallery`, the game is
+ * listed under that title with it (a game whose first app is this one).
+ */
+export const buildReleaseArgs = (jobId: string, gallery?: { title: string }): string[] => [
+  "native",
+  "build-release",
+  jobId,
+  ...(gallery ? ["--gallery", "--title", gallery.title] : []),
+];
+
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 const isTime = (value: unknown): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value));
 const STATES: ReadonlySet<unknown> = new Set(Object.values(CloudBuildState));
+/** The states a build Genex keeps for a publish can be in: on its way to being built, or built. */
+const HOLDING: ReadonlySet<CloudBuildState> = new Set([
+  CloudBuildState.Queued,
+  CloudBuildState.Building,
+  CloudBuildState.Publishing,
+  CloudBuildState.Built,
+]);
 const FAILURES: ReadonlySet<unknown> = new Set(Object.values(CloudBuildFailure));
 
 /** A failure as Studio knows it: a code it doesn't know reads as a failure with no reason. */
@@ -109,12 +138,15 @@ function errorsOf(value: unknown): string[] {
 /** One build as kept or answered, or null when anything in it is off. */
 function buildOf(value: unknown): GenexCloudBuild | null {
   if (!isRecord(value)) return null;
-  const { platform, jobId, state, startedAt, finishedAt, failure, errors } = value;
+  const { platform, jobId, state, startedAt, finishedAt, failure, errors, held, installedBytes } = value;
   const known = typeof platform === "string" && CLOUD_PLATFORMS.has(platform);
   const named = typeof jobId === "string" && JOB_ID.test(jobId);
   if (!known || !named || !STATES.has(state) || !isTime(startedAt)) return null;
   const failed = state === CloudBuildState.Failed;
   const lines = failed ? errorsOf(errors) : [];
+  // Only a build that can still reach players is held; one that is live or failed holds nothing.
+  const holds = held === true && HOLDING.has(state as CloudBuildState);
+  const sized = typeof installedBytes === "number" && Number.isSafeInteger(installedBytes) && installedBytes > 0;
   return {
     platform: String(platform),
     jobId: String(jobId),
@@ -123,6 +155,8 @@ function buildOf(value: unknown): GenexCloudBuild | null {
     ...(isTime(finishedAt) ? { finishedAt } : {}),
     ...(failed ? { failure: failureOf(failure) } : {}),
     ...(lines.length > 0 ? { errors: lines } : {}),
+    ...(holds ? { held: true } : {}),
+    ...(sized && !failed ? { installedBytes } : {}),
   };
 }
 
@@ -142,7 +176,7 @@ const SEND_STATES: ReadonlySet<unknown> = new Set(Object.values(CloudSendState))
 export function readCloudSend(value: unknown): GenexCloudSend | null {
   const send = isRecord(value) ? value.send : undefined;
   if (!isRecord(send)) return null;
-  const { platform, startedAt, state, error } = send;
+  const { platform, startedAt, state, error, held } = send;
   const known = typeof platform === "string" && CLOUD_PLATFORMS.has(platform);
   if (!known || !SEND_STATES.has(state) || !isTime(startedAt)) return null;
   return {
@@ -150,13 +184,43 @@ export function readCloudSend(value: unknown): GenexCloudSend | null {
     startedAt: String(startedAt),
     state: state as CloudSendState,
     ...(typeof error === "string" ? { error } : {}),
+    ...(held === true ? { held: true } : {}),
   };
 }
 
-/** `builds` with `build` in place of the one with its job id, or added last; only the newest few kept. */
+/** How far along a build is, by its state. */
+const PROGRESS = {
+  [CloudBuildState.Queued]: 0,
+  [CloudBuildState.Building]: 1,
+  [CloudBuildState.Publishing]: 2,
+  [CloudBuildState.Built]: 3,
+  [CloudBuildState.Done]: 4,
+  [CloudBuildState.Failed]: 4,
+} as const satisfies Record<CloudBuildState, number>;
+
+/**
+ * `answer`, unless it is older news than `kept` of the same build. Two answers can cross (a status
+ * read and a release): a build never goes back a step, and once a publish asked for it Genex never
+ * keeps it back again.
+ */
+export function latestOf(kept: GenexCloudBuild | undefined, answer: GenexCloudBuild): GenexCloudBuild {
+  if (!kept) return answer;
+  const back = PROGRESS[answer.state] < PROGRESS[kept.state];
+  const keptAgain = kept.held !== true && answer.held === true;
+  return back || keptAgain ? kept : answer;
+}
+
+/**
+ * `builds` with `build` in place of the one with its job id (unless it is older news, `latestOf`),
+ * or added last; only the newest few kept.
+ */
 export function withBuild(builds: readonly GenexCloudBuild[], build: GenexCloudBuild): GenexCloudBuild[] {
   const others = builds.filter((kept) => kept.jobId !== build.jobId);
-  return [...others, build].slice(-CLOUD_BUILDS_KEPT);
+  const latest = latestOf(
+    builds.find((kept) => kept.jobId === build.jobId),
+    build,
+  );
+  return [...others, latest].slice(-CLOUD_BUILDS_KEPT);
 }
 
 /** Refuse a system Genex builds no app for, before anything is kept or sent. */
@@ -164,9 +228,30 @@ export function assertCloudPlatform(platform: unknown): void {
   if (typeof platform !== "string" || !CLOUD_PLATFORMS.has(platform)) throw new Error(MESSAGE.UnknownPlatform);
 }
 
+/** The states a build rests in: nothing more happens to it until someone asks. */
+const AT_REST: ReadonlySet<CloudBuildState> = new Set([
+  CloudBuildState.Done,
+  CloudBuildState.Failed,
+  CloudBuildState.Built,
+]);
+
 /** Whether a build is still going on Genex's computers. */
-export const isRunning = (build: GenexCloudBuild): boolean =>
-  build.state !== CloudBuildState.Done && build.state !== CloudBuildState.Failed;
+export const isRunning = (build: GenexCloudBuild): boolean => !AT_REST.has(build.state);
+
+/** Whether Genex keeps (or will keep) what `build` makes until a publish asks for it. */
+export const isHeld = (build: GenexCloudBuild): boolean => build.held === true;
+
+/** Whether `build` is an app Genex built and keeps: at rest here, and Genex's to stop keeping after a while. */
+export const isKeptApp = (build: GenexCloudBuild): boolean => isHeld(build) && build.state === CloudBuildState.Built;
+
+/** The newest build of `platform` Genex keeps for a publish, built or still building; undefined when it keeps none. */
+export function newestHeld(builds: readonly GenexCloudBuild[], platform: string): GenexCloudBuild | undefined {
+  const held = builds.filter((build) => build.platform === platform && isHeld(build));
+  return held.reduce<GenexCloudBuild | undefined>(
+    (newest, build) => (newest && Date.parse(newest.startedAt) >= Date.parse(build.startedAt) ? newest : build),
+    undefined,
+  );
+}
 
 /** How long to wait before the `attempt`th status read (from 0). */
 export const pollDelayMs = (attempt: number): number =>
@@ -197,42 +282,86 @@ export async function loadCloudSend(
   return readCloudSend(await read(path.join(dir, CLOUD_BUILD_FILE)));
 }
 
+/** A workspace's record as kept: its builds, and its send when one is under way or stopped. */
+interface CloudRecord {
+  builds: GenexCloudBuild[];
+  send: GenexCloudSend | null;
+}
+
+/** Each publish workspace's lock: its record changes one change at a time (`changeRecord`). */
+const recordLocks = new Map<string, AsyncLock>();
+
+/**
+ * Change the record of workspace `dir`: read, changed by `change` (null leaves it as it is) and
+ * written back in a turn of its own. Answers about one game cross, each from a CLI run of its own
+ * (a status read, a release, a send that starts or arrives): without turns, the one that wrote last
+ * wrote from what it read first and dropped what the other had kept.
+ */
+function changeRecord(
+  dir: string,
+  read: (file: string) => Promise<unknown>,
+  change: (record: CloudRecord) => CloudRecord | null,
+): Promise<void> {
+  const file = path.join(dir, CLOUD_BUILD_FILE);
+  const lock = recordLocks.get(file) ?? new AsyncLock();
+  recordLocks.set(file, lock);
+  return lock.run(async () => {
+    const kept = await read(file);
+    const next = change({ builds: readCloudBuilds(kept), send: readCloudSend(kept) });
+    if (next) await atomicWriteJson(file, { builds: next.builds, ...(next.send ? { send: next.send } : {}) });
+  });
+}
+
 /** Keep `build` in the workspace's record; a send under way stays, unless this is the build it became. */
-async function keepBuild(
+function keepBuild(
   dir: string,
   build: GenexCloudBuild,
   read: (file: string) => Promise<unknown>,
   arrived = false,
-) {
-  const builds = withBuild(await loadCloudBuilds(dir, read), build);
-  const send = arrived ? null : await loadCloudSend(dir, read);
-  await atomicWriteJson(path.join(dir, CLOUD_BUILD_FILE), { builds, ...(send ? { send } : {}) });
+): Promise<void> {
+  return changeRecord(dir, read, ({ builds, send }) => ({
+    builds: withBuild(builds, build),
+    send: arrived ? null : send,
+  }));
 }
 
 /**
  * Forget every build of `platform` in the workspace's record: its app was taken off Genex, so none is
  * what players have. A send under way stays.
  */
-export async function forgetCloudBuilds(dir: string, platform: string, read: (file: string) => Promise<unknown>) {
-  const builds = (await loadCloudBuilds(dir, read)).filter((build) => build.platform !== platform);
-  const send = await loadCloudSend(dir, read);
-  await atomicWriteJson(path.join(dir, CLOUD_BUILD_FILE), { builds, ...(send ? { send } : {}) });
+export function forgetCloudBuilds(
+  dir: string,
+  platform: string,
+  read: (file: string) => Promise<unknown>,
+): Promise<void> {
+  return changeRecord(dir, read, ({ builds, send }) => ({
+    builds: builds.filter((build) => build.platform !== platform),
+    send,
+  }));
 }
 
 /** Keep `send` as the workspace's send, beside its builds. */
-async function keepSend(dir: string, send: GenexCloudSend, read: (file: string) => Promise<unknown>) {
-  const builds = await loadCloudBuilds(dir, read);
-  await atomicWriteJson(path.join(dir, CLOUD_BUILD_FILE), { builds, send });
+function keepSend(dir: string, send: GenexCloudSend, read: (file: string) => Promise<unknown>): Promise<void> {
+  return changeRecord(dir, read, ({ builds }) => ({ builds, send }));
 }
 
-/** Say in the record that `platform`'s project is on its way, before the press answers. */
+/**
+ * Say in the record that `platform`'s project is on its way, before the press answers; with `keep`,
+ * that Genex keeps what it builds of it.
+ */
 export async function beginCloudSend(
   dir: string,
   platform: string,
   read: (file: string) => Promise<unknown>,
+  keep = false,
   now = new Date(),
 ): Promise<GenexCloudSend> {
-  const send = { platform, startedAt: now.toISOString(), state: CloudSendState.Sending };
+  const send = {
+    platform,
+    startedAt: now.toISOString(),
+    state: CloudSendState.Sending,
+    ...(keep ? { held: true } : {}),
+  };
   await keepSend(dir, send, read);
   return send;
 }
@@ -245,8 +374,9 @@ function lastLine(text: string): string {
 
 /**
  * Ask Genex to build the `platform` app of the game in `gameDir`: its project is staged in the
- * workspace `dir`, sent by the CLI, and removed once sent, whatever the answer. Answers the build
- * Genex started, kept in the record; throws with the CLI's words when Genex refused it.
+ * workspace `dir`, sent by the CLI, and removed once sent, whatever the answer. With `keep`, Genex
+ * keeps what it builds for a publish. Answers the build Genex started, kept in the record; throws
+ * with the CLI's words when Genex refused it.
  */
 export async function startCloudBuild(
   dir: string,
@@ -254,12 +384,13 @@ export async function startCloudBuild(
   gameDir: string,
   deps: CloudBuildDeps & { read: (file: string) => Promise<unknown> },
   signal: AbortSignal,
+  keep = false,
 ): Promise<GenexCloudBuild> {
   assertCloudPlatform(platform);
   const sourceDir = path.join(dir, CLOUD_SOURCE_FOLDER);
   try {
     await deps.stage(gameDir, sourceDir);
-    const build = cloudBuildOf(await deps.cli(cloudBuildArgs(platform, sourceDir), signal));
+    const build = cloudBuildOf(await deps.cli(cloudBuildArgs(platform, sourceDir, keep), signal));
     if (!build || build.platform !== platform) throw new Error(MESSAGE.NotABuild);
     await keepBuild(dir, build, deps.read, true);
     return build;
@@ -278,14 +409,111 @@ export async function sendCloudBuild(
   gameDir: string,
   deps: CloudBuildDeps & { read: (file: string) => Promise<unknown> },
   signal: AbortSignal,
+  keep = false,
 ): Promise<GenexCloudBuild | null> {
   try {
-    return await startCloudBuild(dir, send.platform, gameDir, deps, signal);
+    return await startCloudBuild(dir, send.platform, gameDir, deps, signal, keep);
   } catch (error) {
     const reason = signal.aborted ? "" : lastLine(errorMessage(error));
     await keepSend(dir, { ...send, state: CloudSendState.Failed, ...(reason ? { error: reason } : {}) }, deps.read);
     return null;
   }
+}
+
+/** What Genex answered a release with: the build as it stands now, and how listing the game went when asked. */
+export interface CloudRelease {
+  build: GenexCloudBuild;
+  /** The CLI's `listing` answer as it gave it; absent when no listing was asked for. */
+  listing?: unknown;
+}
+
+/** What Genex said in an error it answered with, cut to a line's length; empty when it said nothing. */
+const saidIn = (answer: Record<string, unknown>): string =>
+  typeof answer.message === "string" ? answer.message.trim().slice(0, SEND_ERROR_CHARS) : "";
+
+/** How a build Genex refuses to release ended, and Genex's words for it; null when `answer` is no such refusal. */
+function refusedRelease(answer: unknown): { failure: CloudBuildFailure; words: string } | null {
+  if (!isRecord(answer) || answer.error !== NOT_RELEASABLE) return null;
+  const expired = answer.failure === CloudBuildFailure.Expired;
+  return {
+    failure: expired ? CloudBuildFailure.Expired : CloudBuildFailure.Failed,
+    words: saidIn(answer) || MESSAGE.NotKept,
+  };
+}
+
+/**
+ * Why a release that answered no build didn't happen: Genex's own words when it answered an error
+ * (it can't read the build right now, or the build is changing), so the person knows to try again.
+ */
+function unansweredRelease(answer: unknown): string {
+  const said = isRecord(answer) && typeof answer.error === "string" ? saidIn(answer) : "";
+  return said || MESSAGE.NotABuild;
+}
+
+/**
+ * Say in the record that Genex has nothing of kept build `jobId` to give. A build the record no
+ * longer calls kept stays as it is: it ended already, or is followed to its own end.
+ */
+function endKeptBuild(
+  dir: string,
+  jobId: string,
+  failure: CloudBuildFailure,
+  read: (file: string) => Promise<unknown>,
+  now: Date,
+): Promise<void> {
+  return changeRecord(dir, read, ({ builds, send }) => {
+    const kept = builds.find((build) => build.jobId === jobId);
+    if (!kept || !isHeld(kept)) return null;
+    const { platform, startedAt } = kept;
+    const finishedAt = now.toISOString();
+    const ended = { platform, jobId, startedAt, state: CloudBuildState.Failed, failure, finishedAt };
+    return { builds: withBuild(builds, ended), send };
+  });
+}
+
+/**
+ * Give players what build `jobId` made (`genex native build-release`): at once when it is built,
+ * else as soon as it is. The build as Genex answers it is kept in the record. Throws with the CLI's
+ * words when Genex refused, or answered without the build; a build Genex has nothing of to give (it
+ * failed, or Genex no longer keeps it) is first said so in the record, so the next press builds it.
+ * A release Genex can't do right now leaves the record as it is: the build is still kept.
+ */
+export async function releaseCloudBuild(
+  dir: string,
+  jobId: string,
+  deps: CloudBuildDeps & { read: (file: string) => Promise<unknown> },
+  signal: AbortSignal,
+  gallery?: { title: string },
+  now = new Date(),
+): Promise<CloudRelease> {
+  if (!JOB_ID.test(jobId)) throw new Error(MESSAGE.NotABuild);
+  const answer = await deps.cli(buildReleaseArgs(jobId, gallery), signal);
+  const refused = refusedRelease(answer);
+  if (refused) {
+    await endKeptBuild(dir, jobId, refused.failure, deps.read, now);
+    throw new Error(refused.words);
+  }
+  const build = cloudBuildOf(answer);
+  if (!build || build.jobId !== jobId) throw new Error(unansweredRelease(answer));
+  await keepBuild(dir, build, deps.read);
+  return { build, ...(isRecord(answer) && answer.listing !== undefined ? { listing: answer.listing } : {}) };
+}
+
+/**
+ * Read how build `jobId` stands once and keep it in the record: an app Genex keeps rests until a
+ * publish asks, and Genex stops keeping one after a while. False when Genex could not be read.
+ */
+export async function refreshCloudBuild(
+  dir: string,
+  jobId: string,
+  deps: CloudBuildDeps & { read: (file: string) => Promise<unknown> },
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (!JOB_ID.test(jobId)) return false;
+  const build = cloudBuildOf(await deps.cli(buildStatusArgs(jobId), signal).catch(() => null));
+  if (!build || build.jobId !== jobId || signal.aborted) return false;
+  await keepBuild(dir, build, deps.read);
+  return true;
 }
 
 /**

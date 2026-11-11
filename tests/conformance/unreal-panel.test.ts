@@ -19,6 +19,7 @@ import { inlinePanelSdk, panelWordsScripts } from "../../src/plugin-sdk/inline-p
 import { createUnrealBackend, PanelStep } from "../../src/plugins/unreal/backend.ts";
 import type { Launch } from "../../src/plugins/unreal/editor-launch.ts";
 import type { EditorLog } from "../../src/plugins/unreal/editor-log.ts";
+import { NEW_GAMES_ENGINE, OLDEST_ENGINE } from "../../src/plugins/unreal/engine-line.ts";
 import type { SetupEnv } from "../../src/plugins/unreal/setup.ts";
 import { ENGINE_LINKS_FOLDER } from "../../src/shared/plugins.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";
@@ -54,26 +55,34 @@ window.studioPlugin = {
 
 const uproject = (engine: string) => `${JSON.stringify({ FileVersion: 3, EngineAssociation: engine }, null, "\t")}\n`;
 
+/** The Unreal new games are made with, and the older one a game made with it stays on, each with its build. */
+const INSTALLED: ReadonlyArray<readonly [string, string]> = [
+  [NEW_GAMES_ENGINE, "5.9.0-60000001"],
+  [OLDEST_ENGINE, "5.8.3-58210709"],
+];
+
 /**
- * A fake computer with 5.8 installed, a project Drift (5.8) and Cave (5.7), and an editor the test
- * sets. With `game`, the backend's calls come from that open Genex game, whose link the host keeps.
+ * A fake computer with Unreal 5.9 and 5.8 installed, a project Drift (made with 5.8, which it stays
+ * on) and Cave (5.7), and an editor the test sets. With `game`, the backend's calls come from that
+ * open Genex game, whose link the host keeps.
  */
 async function computer(options: { game?: string } = {}) {
   const root = await realpath(await tmpDir("studio-unreal-panel-"));
   const home = path.join(root, "home");
   const storage = path.join(root, "storage");
-  const engine = path.join(root, "Engines", "UE_5.8");
-  await mkdir(path.join(engine, "Engine", "Binaries", "Mac", "UnrealEditor.app"), { recursive: true });
+  const list = [];
+  for (const [version, build] of INSTALLED) {
+    const engine = path.join(root, "Engines", `UE_${version}`);
+    await mkdir(path.join(engine, "Engine", "Binaries", "Mac", "UnrealEditor.app"), { recursive: true });
+    list.push({
+      InstallLocation: engine,
+      AppVersion: `${build}+++UE5+Release-${version}-Mac`,
+      AppName: `UE_${version}`,
+    });
+  }
   const epic = path.join(home, "Library", "Application Support", "Epic", "UnrealEngineLauncher");
   await mkdir(epic, { recursive: true });
-  await writeFile(
-    path.join(epic, "LauncherInstalled.dat"),
-    JSON.stringify({
-      InstallationList: [
-        { InstallLocation: engine, AppVersion: "5.8.3-58210709+++UE5+Release-5.8-Mac", AppName: "UE_5.8" },
-      ],
-    }),
-  );
+  await writeFile(path.join(epic, "LauncherInstalled.dat"), JSON.stringify({ InstallationList: list }));
   const project = async (name: string, version: string) => {
     const file = path.join(root, "Projects", name, `${name}.uproject`);
     await mkdir(path.dirname(file), { recursive: true });
@@ -169,7 +178,7 @@ async function computer(options: { game?: string } = {}) {
     game,
     runs,
     project,
-    drift: await project("Drift", "5.8"),
+    drift: await project("Drift", OLDEST_ENGINE),
     cave: await project("Cave", "5.7"),
   };
 }
@@ -384,6 +393,27 @@ describe("The Set up Unreal panel", { skip }, () => {
       assert.equal(c.sent[0]?.[0], "ray-tracing-off");
       await tab.waitForSelector("#ray-tracing[hidden]", { state: "attached" });
       assert.match(await readFile(config, "utf8"), /r\.RayTracing=False/);
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("a set-up project made with an older Unreal offers the move on its Engine row, and the press moves it", async () => {
+    const c = await computer();
+    const file = await STEPS[PanelStep.Open].arrange(c);
+    await c.act("status", { project: file });
+    const tab = await open(c);
+    const engineRow = () =>
+      tab.evaluate(() => ["project-engine", "move-engine"].map((id) => document.getElementById(id)?.textContent ?? ""));
+    try {
+      await tab.waitForSelector("#move-engine:not([hidden])");
+      assert.deepEqual(await engineRow(), [`Unreal ${OLDEST_ENGINE}`, `Move to ${NEW_GAMES_ENGINE}`]);
+      c.sent.length = 0;
+      await tab.click("#move-engine");
+      for (let i = 0; i < WAIT_TRIES && c.sent.length === 0; i++) await tab.waitForTimeout(WAIT_STEP_MS);
+      assert.deepEqual(c.sent[0], ["move-engine", { project: file }]);
+      await tab.waitForSelector("#move-engine[hidden]", { state: "attached" });
+      assert.equal((await engineRow())[0], `Unreal ${NEW_GAMES_ENGINE}`);
     } finally {
       await tab.close();
     }
@@ -861,12 +891,15 @@ window.addEventListener("message", async (event) => {
 });
 </script></body></html>`;
 
-/** Stands in for the backend's `create` on a fake engine: writes a 5.8 game and sets it up, as create does. */
+/**
+ * Stands in for the backend's `create` on a fake engine: writes a game of the Unreal new games are
+ * made with and sets it up, as create does.
+ */
 async function makeGame(c: Computer, args: Record<string, unknown>) {
   const name = String(args.name);
   const file = path.join(c.newGames, name, `${name}.uproject`);
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, uproject("5.8"));
+  await writeFile(file, uproject(NEW_GAMES_ENGINE));
   return { project: file, state: await c.act("setup", { project: file }) };
 }
 
@@ -972,7 +1005,7 @@ describe("The Set up Unreal panel in Studio's sandboxed frame", { skip }, () => 
     // A project of an engine that isn't installed sets up without opening, so its next step is Open.
     const later = path.join(path.dirname(path.dirname(c.drift)), "Later", "Later.uproject");
     await mkdir(path.dirname(later), { recursive: true });
-    await writeFile(later, uproject("5.9"));
+    await writeFile(later, uproject("5.10"));
     await c.act("status", { project: later });
     const p = await open(c);
     try {

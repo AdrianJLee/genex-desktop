@@ -48,11 +48,29 @@ config: { tickHz: 60, maxPlayers: 6, preset: { name: "vehicle", params: {} }, co
 
 ## Inputs
 
-`config.inputs: { preset?, repeat? }`. A starved seat (its input is late) is either stepped again
+`config.inputs: { preset?, repeat?, settleMs? }`. A starved seat (its input is late) is either stepped again
 under its last input (`repeat: "on"`, bounded to about 33 ms a starve and 100 ms in all) or held
 (`"off"`). The default is the genre's column above (`inputs.preset`, else `contacts.preset`, else on).
 Car arenas measured worse with repeats on, shooters and character games better. Override only with a
 measurement: `inputs: { repeat: "off" }`. The client follows the room's setting by itself.
+
+A seat that stops sending inputs holds where its last one left it, in the air too, and everyone else
+sees that. `settleMs` (100 to 60000, default none) has the room step its `firstperson` or `vehicle` body
+under a stick at rest once it has been quiet that long, until it lies still. Keep it above a hitch: 500
+is a fair start. A kick for idling stays the module's.
+
+## Holding bodies still: announce the release
+
+A body held with `cap` 0 (a freeze time, a kickoff) and let go: inputs already on their way are stepped
+at the new cap, so a stick held through the lift lurches ahead by about speed × round trip when the
+client hears. Announce the tick instead, the way a countdown is shown anyway:
+- The module writes the tick `go` into data the client reads, more than a round trip ahead, and sets
+  `cap` in its `step` of tick `go`.
+- The client gives `connectAuthority` a seat rule:
+  `seatRule: (seat, tick) => { if (seat.cap === 0 && go > 0 && tick > go) seat.cap = 1; }`, and clears `go`
+  when no release is coming.
+Every seat then starts on one tick at any ping, and nothing is corrected. Any announced `cap` change works
+the same way, up or down. A change the module could not announce arrives as a correction.
 
 ## Lifts
 
@@ -93,7 +111,8 @@ config: { tickHz: 120, maxPlayers: 4, preset: { name: "vehicle", params: {} }, p
 
 ## Regions
 
-Pass the stand's regions beside its urls and the client joins the nearest one by measured ping:
+Pass the stand's regions beside its urls. The client measures its ping to each and goes where the
+players are:
 
 ```ts
 const session = await connectAuthority({
@@ -101,9 +120,23 @@ const session = await connectAuthority({
 });
 ```
 
-Each region is its own matchmaking pool: players meet others who entered through the same region. A
-region that answers no probe is tried last. A full region (503) is retried, and moves on to the next-best
-after a second refusal. Nothing to configure in the module.
+Each region is its own matchmaking pool: players meet others who entered through the same region. So
+a join first asks every region within reach for a room that already has players, nearest first, and
+opens a new room in the nearest region only when none has one. A player in Asia therefore joins a
+friend's room in Europe instead of waiting alone. A region that answers no probe is never asked. A
+full region (503) is retried, and moves on to the next-best after a second refusal. Nothing to
+configure in the module.
+
+Three options on `connectAuthority` change this, and most games need none:
+
+| Option | Default | What it does |
+|---|---|---|
+| `maxPingMs` | `350` | The farthest region asked for players, as round-trip ping. A twitch-competitive game sets it lower. |
+| `regionRule` | `'players'` | `'nearest'` joins the nearest region only, whoever is elsewhere. |
+| `region` | none | A region the player picked by name (`'asia'`, `'eu'`, `'us'`): only it is joined. Offer it as a setting when players ask to choose. |
+
+`session.url` is the server the player landed on. Two players who start at the same moment in two empty
+regions each open their own room; the next player to join either finds one of them.
 
 ## The fast channel (`fast@1`)
 
@@ -114,9 +147,31 @@ WebSocket. It needs nothing in the room module.
 
 - The seat asks for it (`fast@1`), the room offers it only when the server has it configured, and a seat
   that is not offered it stays a WebSocket seat. If the datagrams stop, or the endpoint cannot be reached,
-  the seat falls back to the WebSocket by itself, mid-game, and prediction does not notice.
-- **Status:** a UDP seat in Unreal (`bFastChannel`), Unity (`GenexAuthorityOptions.Fast`, not WebGL),
-  Rust (`AuthorityOptions::fast(true)`) and TypeScript in Node (the client's `fast` option, given
-  `openUdpFastSocket` from `@genex-ai/multiplayer/authority/fast-udp`). It is off until the game turns it on. **A browser game
-  is a WebSocket seat**: browsers have no raw UDP, and WebTransport is not shipped. Godot is a WebSocket seat.
-  Do not promise a browser player UDP-like play.
+  the seat falls back to the WebSocket by itself, mid-game, and prediction does not notice; when the path
+  comes back the seat returns to it by itself. A network that blocks UDP loses no input: a seat moves only
+  once the path is proven. A seat with nothing to send, a NAT rebinding and a Wi-Fi to mobile move all keep it
+  on the channel, and a room too big for one snapshot sends what matters most first, the rest in turn.
+- **On by default:** Unreal (`bFastChannel`), Unity (`GenexAuthorityOptions.Fast`) and Rust
+  (`AuthorityOptions::fast`) seats and TypeScript in Node ask for UDP unless the game sets it to false, and
+  the WebSocket is the automatic fallback. Do not write code to turn it on. Do not turn it off unless you are
+  testing the fallback. `genex-authority-dev start` serves it locally too (`--no-fast` is its off switch).
+- **See which transport you are on:** one line per join says so, in every engine:
+  `genex transport: udp fast@1 udp://...`, or `genex transport: websocket, <reason>: ...` with the reason
+  (`off`, `no_udp`, `not_offered`, or a fallback's `unreachable`, `handshake`, `stall`, `server`). Read it in
+  the log, or as `session.fast.line`, `GetTransportLine()`, `GenexFastStatus.Line`, `transport_line()`. A log
+  that says `websocket` is the first thing to read when a game feels late.
+- **A browser game has it by default, over WebTransport, with nothing to write**: `connectAuthority` and the
+  web engine bridge (Godot and Rust web exports) use it wherever the room's server runs the relay and the
+  browser can open it; `fast: false` turns it off. Anything else lands the seat on the WebSocket by itself,
+  and `session.fast.fallback` says why (`no-webtransport`, `no-relay`, `not-offered`, `unreachable`,
+  `handshake`, `stall`, `server`). A game gets it once it is rebuilt on this SDK.
+- **Not on UDP:** a native Godot build (no fast channel yet) and Unity WebGL (no sockets; `FastWebTransport`
+  asks for WebTransport) are WebSocket seats.
+
+## Idle seats and room age
+
+`config.lifetime: { idleSeatS?, maxRoomAgeS? }`, whole seconds. A seat whose input has not changed for `idleSeatS` (default 1800, 30 to 86400) leaves with `onLeave` reason `idle`; your client sees close 4408 and may offer to rejoin. Raise it if your honest players stand still that long: a turn-based game, a spectator. A room `maxRoomAgeS` old (default 86400, 60 to 604800) gets `server:restart` and ends: raise it for a world that should live longer. Neither can be turned off.
+
+## Rooms past about 30 seats
+
+A seat on the fast channel gets a share of what its room may send: 68 KiB/s a seat at 30 seats, 32 at 64. Past its share its snapshots are cut: far entities update less often, its own seat never does. Rooms that large have not been measured on UDP, so `validate` warns (`downlink_share`). Test yours full, or lower `maxPlayers`.

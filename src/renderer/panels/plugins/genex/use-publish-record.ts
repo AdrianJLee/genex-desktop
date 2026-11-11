@@ -131,10 +131,14 @@ export function usePublishRecord(plugin: PluginInfo, project: string | null) {
       ),
     /**
      * Publish a game's apps on their own under `title`: the press is the consent to the apps its rows
-     * name, or only the `platforms` the Publish card's switches send.
+     * name, or only the `platforms` the Publish card's switches send, and to the apps Genex Cloud
+     * built or builds for the platforms `release` names.
      */
-    publishApps: (title: string, remix?: boolean, platforms?: string[]): Promise<void> =>
-      run(Pressing.Publish, () => window.studio.genexPublishApps(game, title, remix, platforms)),
+    publishApps: (title: string, remix?: boolean, platforms?: string[], release?: string[]): Promise<void> =>
+      run(Pressing.Publish, () => window.studio.genexPublishApps(game, title, remix, platforms, release)),
+    /** Ask Genex Cloud to build the game's `platform` app and keep it for a publish; a refusal is the record's error line. */
+    buildOnCloud: (platform: string): Promise<void> =>
+      run(Pressing.Action, () => window.studio.genexCloudBuild(game, platform, true)),
     /**
      * Publish again while Studio cannot tell whether the last upload reached Genex: settle that
      * upload (`again` names it), then publish under `title` as Publish does.

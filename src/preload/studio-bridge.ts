@@ -382,9 +382,10 @@ function pluginCalls(bridge: BridgeCalls) {
     genexPublishPlatforms: (project) => invoke("studio:plugins.genex-publish-platforms", { project }),
     genexPublish: (project, review, title, remix, replaceNativePage, platforms) =>
       invoke("studio:plugins.genex-publish", { project, review, title, remix, replaceNativePage, platforms }),
-    genexPublishApps: (project, title, remix, platforms) =>
-      invoke("studio:plugins.genex-publish-apps", { project, title, remix, platforms }),
-    genexCloudBuild: (project, platform) => invoke("studio:plugins.genex-cloud-build", { project, platform }),
+    genexPublishApps: (project, title, remix, platforms, release) =>
+      invoke("studio:plugins.genex-publish-apps", { project, title, remix, platforms, release }),
+    genexCloudBuild: (project, platform, keep) =>
+      invoke("studio:plugins.genex-cloud-build", { project, platform, ...(keep ? { keep: true } : {}) }),
     genexReviewStatus: (project, refresh) =>
       invoke("studio:plugins.genex-review-status", { project, ...(refresh ? { refresh: true } : {}) }),
     genexReviewLines: () => invoke("studio:plugins.genex-review-lines"),

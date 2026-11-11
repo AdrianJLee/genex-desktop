@@ -16,6 +16,7 @@ import type { GenexNativeRecord } from "../../../../shared/genex.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { type BusyPress, type CardRow, CardTone, type PressPlan, switchedOn } from "./publish-card-view.ts";
 import { failureLines } from "./publish-platforms-view.ts";
+import { SendProgress } from "./SendProgress.tsx";
 import type { ErrorBlock, usePublishCard } from "./use-publish-card.ts";
 import { useCopy } from "../../../use-copy.ts";
 
@@ -77,6 +78,7 @@ function Row({
             row.status
           )}
         </span>
+        {working && <SendProgress progress={row.progress} />}
       </span>
       {row.side && !working && <span className="genex-publish-card-side">{row.side}</span>}
       <RowEnd row={row} on={on} onSwitch={onSwitch} />
@@ -126,11 +128,14 @@ export function PublishCardRows({
 export function PublishCardPress({
   plan,
   busy,
+  note,
   pressing,
   onPress,
 }: {
   plan: PressPlan | null;
   busy: BusyPress | null;
+  /** The line under the button while Genex Cloud works. */
+  note: string | null;
   /** A press is being sent now. */
   pressing: boolean;
   onPress: (plan: PressPlan) => void;
@@ -148,7 +153,7 @@ export function PublishCardPress({
             </span>
           )}
         </Button>
-        {busy.cloud && <p className="genex-publish-card-note">{WORDS.cloudTakesLong}</p>}
+        {note && <p className="genex-publish-card-note">{note}</p>}
       </div>
     );
   if (!plan) return null;
@@ -166,7 +171,7 @@ export function PublishCardPress({
       >
         {plan.label}
       </Button>
-      {busy?.cloud && <p className="genex-publish-card-note">{WORDS.cloudTakesLong}</p>}
+      {note && <p className="genex-publish-card-note">{note}</p>}
     </div>
   );
 }
@@ -234,7 +239,7 @@ function ErrorBlockRow({ block }: { block: ErrorBlock }): JSX.Element {
           {WORDS.tryAgain}
         </button>
       )}
-      <CopyError text={block.text} />
+      {block.text !== "" && <CopyError text={block.text} />}
     </div>
   );
 }

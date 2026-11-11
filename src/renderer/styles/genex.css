@@ -1430,7 +1430,8 @@ button.genex-publish-banner-name:hover {
   line-height: 18px;
   white-space: nowrap;
 }
-/* The dot speaks the banner chip's language: green live, amber older than the game, hollow not on Genex. */
+/* The dot speaks the banner chip's language: green live, amber older than the game, hollow not on
+   Genex; filled in the text's own colour once its app is built and waits for Publish. */
 .genex-publish-card-dot {
   flex: none;
   width: 7px;
@@ -1440,6 +1441,10 @@ button.genex-publish-banner-name:hover {
 }
 [data-tone="live"] .genex-publish-card-dot {
   background: var(--green);
+  box-shadow: none;
+}
+[data-tone="ready"] .genex-publish-card-dot {
+  background: var(--ink);
   box-shadow: none;
 }
 [data-tone="old"] .genex-publish-card-dot {
@@ -1470,6 +1475,42 @@ button.genex-publish-banner-name:hover {
 .genex-publish-card-clock {
   min-width: 36px;
   text-align: end;
+}
+/* A send on its way: a hairline bar over one line of numbers, in the status line's own type. */
+.genex-send-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 2px;
+}
+.genex-send-progress-bar {
+  display: block;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  background: var(--line);
+}
+.genex-send-progress-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 1px;
+  background: color-mix(in oklab, var(--accent) 60%, var(--ink));
+  transition: width 400ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .genex-send-progress-bar > i {
+    transition: none;
+  }
+}
+/* Wraps rather than cuts: the time left is at the line's end, and longer in other languages. */
+.genex-send-progress-words {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 /* An error block under the rows: what failed in a few words, its press and Copy; never the log. */
 .genex-publish-card-error {

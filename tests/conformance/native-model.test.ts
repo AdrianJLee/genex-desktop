@@ -11,8 +11,12 @@ import {
   cardBadge,
   GamePhase,
   gameStanding,
+  InstallLine,
+  installLine,
   installPercent,
   opensPage,
+  WebPlay,
+  webPlayOn,
 } from "../../src/renderer/play/native-model.ts";
 import {
   type InstalledGame,
@@ -69,6 +73,7 @@ const progress = (phase: InstallProgress["phase"], overrides: Partial<InstallPro
   phase,
   receivedBytes: 456,
   totalBytes: 1_200,
+  bytesPerSecond: 38 * 1024 ** 2,
   etaMs: 120_000,
   failure: null,
   ...overrides,
@@ -170,10 +175,31 @@ describe("a native game's page", () => {
     });
   });
 
-  it("opens its page only for a game with no web build", () => {
+  it("opens its page for a game with an app to install, with a web build too or not; a web game plays at once", () => {
     assert.equal(opensPage(game()), true);
-    assert.equal(opensPage(game([build()], true)), false);
+    assert.equal(opensPage(game([build()], true)), true, "its page offers the browser and the app");
+    assert.equal(opensPage(game([], false)), true, "no web build: the page says where it stands");
+    assert.equal(opensPage(game([], true)), false);
     assert.equal(opensPage({}), false);
+  });
+
+  it("offers a game's web build beside its app: first while the app isn't installed, second once it is", () => {
+    const both = game([build()], true);
+    const on = (parts: Partial<NativeInstalls> = {}, sessions: NativeSession[] = []) =>
+      webPlayOn(both, gameStanding(both, installs(parts), sessions));
+    assert.equal(on(), WebPlay.First);
+    assert.equal(on({ installed: [installed()] }), WebPlay.Second);
+    // No app for this computer: the browser is the one way to play.
+    const windowsOnly = game([build({ platform: NativePlatform.Windows, arch: NativeArch.X64 })], true);
+    assert.equal(webPlayOn(windowsOnly, gameStanding(windowsOnly, installs(), [])), WebPlay.Only);
+    // While the app is on its way, running, out of date or failed, the block is the app's alone.
+    assert.equal(on({ progress: [progress(InstallPhase.Downloading)] }), WebPlay.None);
+    assert.equal(on({ installed: [installed("1.2")] }), WebPlay.None);
+    assert.equal(on({ installed: [installed()] }, [session(NativeSessionPhase.Running)]), WebPlay.None);
+    assert.equal(on({ progress: [progress(InstallPhase.Failed, { failure: InstallFailure.NoSpace })] }), WebPlay.None);
+    // A game with no web build has nothing to play in a browser.
+    const appOnly = game();
+    assert.equal(webPlayOn(appOnly, gameStanding(appOnly, installs(), [])), WebPlay.None);
   });
 });
 
@@ -221,6 +247,26 @@ describe("a native game's card", () => {
       assert.equal(here.readyToPlay, "Ready to play on this computer.");
       assert.equal(NATIVE_WORDS.installFailed[InstallFailure.NotOffered]("", here), here.notOffered);
     }
+  });
+
+  it("says how an install is going in one line: percent, speed and time left, then each step by name", () => {
+    const line = (phase: InstallProgress["phase"], overrides: Partial<InstallProgress> = {}) =>
+      NATIVE_WORDS.installLine(installLine(progress(phase, overrides)));
+    assert.deepEqual(installLine(progress(InstallPhase.Downloading)), {
+      line: InstallLine.Downloading,
+      percent: 38,
+      bytesPerSecond: 38 * 1024 ** 2,
+      minutesLeft: 2,
+    });
+    assert.equal(line(InstallPhase.Downloading), "Installing… 38% · 38 MB/s · about 2 min left");
+    assert.equal(line(InstallPhase.Downloading, { etaMs: 61_000 }), "Installing… 38% · 38 MB/s · about 2 min left");
+    assert.equal(line(InstallPhase.Downloading, { etaMs: 40_000 }), "Installing… 38% · 38 MB/s · under a minute left");
+    for (const unknown of [{ bytesPerSecond: null }, { etaMs: null }, { bytesPerSecond: 0 }])
+      assert.equal(line(InstallPhase.Downloading, unknown), "Installing… 38%", "no speed or time is said until known");
+    assert.equal(line(InstallPhase.Queued), "Waiting for another install…");
+    assert.equal(line(InstallPhase.Verifying), "Verifying…");
+    assert.equal(line(InstallPhase.Unpacking), "Unpacking…");
+    assert.equal(NATIVE_WORDS.installLine(installLine(undefined)), "Installing… 0%");
   });
 
   it("reads a download's percent whole and never past 100", () => {

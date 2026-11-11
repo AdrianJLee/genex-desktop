@@ -359,6 +359,13 @@ if (target.includes("Broken")) {
   process.stderr.write("› Zipping…\\n✗ Couldn't get an upload token (HTTP 413).\\n");
   process.exit(1);
 }
+if (target.includes("Slow")) {
+  // Says how far it is, when asked to, then waits to be let go: the test reads the record meanwhile.
+  const asked = process.env.GENEX_PROGRESS === "json";
+  if (asked) process.stderr.write('@genex-progress {"stage":"upload","doneBytes":4,"totalBytes":10,"target":"mac-universal"}\\n');
+  const { existsSync } = await import("node:fs");
+  while (!existsSync(${JSON.stringify(log + ".go")})) await new Promise((resolve) => setTimeout(resolve, 20));
+}
 const windows = !target.endsWith(".app");
 const listing = !args.includes("--gallery")
   ? undefined
@@ -387,13 +394,38 @@ process.exit(listing?.state === "refused" ? 1 : 0);
       .split("\n")
       .filter(Boolean)
       .map((line) => JSON.parse(line) as { args: string[]; cwd: string; home: string });
-  return { genex, runs };
+  /** Lets a "Slow" app's send go on to its end. */
+  const letGo = () => writeFile(`${log}.go`, "");
+  return { genex, runs, letGo };
 }
 
 describe("a publish's apps sent through the CLI", () => {
   const MAC_APP = { target: "/game/Builds/Mac/Dust Runners.app", platform: "mac" as const };
   const BROKEN = { target: "/game/Builds/Windows Broken", platform: "windows" as const };
   const LINUX = { target: "/game/Builds/Linux", platform: "linux" as const, entry: "Dust.x86_64" };
+
+  it("says how far the app on its way is, while it is on its way and no longer", async () => {
+    const { genex, letGo } = await toolsWithStandIn();
+    const slow = { target: "/game/Builds/Mac/Slow Runners.app", platform: "mac" as const };
+    const sending = genex.publishApps("dust", "job-1", [slow]);
+    let progress = (await genex.publishView("dust")).native?.progress;
+    for (let tries = 0; !progress && tries < 200; tries++) {
+      await sleep(20);
+      progress = (await genex.publishView("dust")).native?.progress;
+    }
+    assert.ok(progress, "the record carries the send's progress");
+    assert.deepEqual(
+      { ...progress, at: 0 },
+      { stage: "upload", doneBytes: 4, totalBytes: 10, target: "mac-universal", at: 0 },
+    );
+    await letGo();
+    await sending;
+    const { native } = await genex.publishView("dust");
+    assert.equal(native?.progress, undefined, "a finished send has none");
+    assert.equal(native?.sent.length, 1);
+    const saved = await readFile(path.join(genex.root, "publish", "dust", "native.json"), "utf8");
+    assert.ok(!saved.includes("doneBytes"), "progress is never written to the record");
+  });
 
   it("sends each app with `genex native publish` in the publish workspace and records how it went", async () => {
     const { genex, runs } = await toolsWithStandIn();
@@ -582,6 +614,46 @@ describe("a game with only apps, published", () => {
     const link = JSON.parse(await readFile(path.join(workspace, ".genex", "project.json"), "utf8"));
     assert.deepEqual([link.slug, link.id], ["new-link", "p1"], "the same game, at its new link");
     assert.deepEqual(await readdir(path.join(workspace, ".genex")), ["project.json"], "nothing set aside");
+  });
+
+  it("keeps what the record says of the game's other apps when one app is published on its own", async () => {
+    // The Publish card sends only the apps its switches name: the Windows app players already have
+    // stayed theirs on Genex, and the record forgot it, so its row read as never published.
+    const { genex } = await toolsWithStandIn(true, await fixtureApi());
+    await genex.publishAppsOnly("dust", [app("Dust Runners"), WINDOWS], "Dust Runners");
+    await genex.publishWait("dust");
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    assert.equal(state.job?.state, "done", JSON.stringify(state.job));
+    assert.deepEqual(
+      state.native?.sent.map((sent) => sent.platform),
+      ["windows", "mac"],
+    );
+    assert.deepEqual(state.native?.listing, { state: "published", detail: null }, "listed again with this publish");
+  });
+
+  it("starts the record anew when the game is made anew on Genex: the old game's apps are not this one's", async () => {
+    const server = await startGenexFixtureApi((req, reply) => {
+      if (req.url === "/api/auth/get-session") return reply.json({ user: { id: "u-me", email: "me@example.invalid" } });
+      if (req.url.startsWith("/api/projects/by-slug/deleted")) return reply.json({ error: "Not found" }, 404);
+    });
+    servers.push(server);
+    const { genex } = await toolsWithStandIn(true, server.url);
+    const workspace = await linkedTo(genex, { slug: "deleted", id: "p-old", status: "published" });
+    const old = {
+      platform: "windows",
+      arch: "x64",
+      version: "1",
+      sizeBytes: 1,
+      publishedAt: "2026-10-01T00:00:00.000Z",
+    };
+    await writeFile(path.join(workspace, "native.json"), JSON.stringify({ jobId: "old", sent: [old], failed: [] }));
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    assert.deepEqual(
+      state.native?.sent.map((sent) => sent.platform),
+      ["mac"],
+    );
   });
 
   /** Genex holding the listed game "dust-runners" (p1), keeping each title it is given. */

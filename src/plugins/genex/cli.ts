@@ -11,6 +11,7 @@ import { envPath } from "../../substrate/toolchain.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { PLUGIN_SEED_ENV } from "../../substrate/plugins/process.ts";
 import { AUTHORITY_DEV_PACKAGE } from "../../shared/genex.ts";
+import { PROGRESS_ENV, progressSplitter, type SendProgressEvent } from "./send-progress.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -59,7 +60,7 @@ export function parseGenexJson(output: string): any {
  */
 export function genexCliEnv(
   parent: NodeJS.ProcessEnv,
-  options: { api: string; home?: string; platform?: NodeJS.Platform; ca?: string },
+  options: { api: string; home?: string; platform?: NodeJS.Platform; ca?: string; progress?: boolean },
 ): NodeJS.ProcessEnv {
   return {
     ...windowsBaseEnv(parent, options.platform, options.home),
@@ -75,6 +76,8 @@ export function genexCliEnv(
     ...(options.home ? GIT_ENV : {}),
     // A development stand's own CA (`ca`), for Node's requests and git's pushes to the stand alone.
     ...(options.ca ? { NODE_EXTRA_CA_CERTS: options.ca, GIT_SSL_CAINFO: options.ca } : {}),
+    // Progress lines on the CLI's error output, only for a run that someone follows.
+    ...(options.progress ? PROGRESS_ENV : {}),
   };
 }
 
@@ -130,6 +133,12 @@ export interface GenexCliRun {
   answerExitCodes?: readonly number[];
   /** A development stand's own CA file the run trusts (`genexCliEnv`); absent on genex.games. */
   ca?: string;
+  /**
+   * Follows a long send: the CLI is asked for progress lines and each update lands here. With
+   * it, `timeoutMs` counts from the last byte that moved, not from the start: a send that is
+   * still going is never cut, and one that has stopped moving is.
+   */
+  onProgress?: (event: SendProgressEvent) => void;
 }
 
 /** A run stopped here, by its signal or its timeout, before the CLI answered. */
@@ -148,29 +157,49 @@ interface CliOutput {
   err: string;
 }
 
-function collectOutput(child: ChildProcess): CliOutput {
+/** Keeps the CLI's output as it arrives. Progress lines go to `onProgress` and stay out of `err`. */
+function collectOutput(child: ChildProcess, onProgress?: (event: SendProgressEvent) => void): CliOutput {
   const output: CliOutput = { out: "", err: "" };
+  const keepErr = (text: string) => {
+    output.err = (output.err + text).slice(-STDERR_TAIL_CHARS);
+  };
   child.stdout?.on("data", (b) => {
     output.out = (output.out + b).slice(-STDOUT_TAIL_CHARS);
   });
-  child.stderr?.on("data", (b) => {
-    output.err = (output.err + b).slice(-STDERR_TAIL_CHARS);
+  if (!onProgress) {
+    child.stderr?.on("data", (b) => keepErr(String(b)));
+    return output;
+  }
+  const split = progressSplitter();
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    const { text, events } = split.push(chunk);
+    keepErr(text);
+    for (const event of events) onProgress(event);
   });
+  child.stderr?.on("end", () => keepErr(split.end()));
   return output;
 }
 
 /** SIGTERM on abort or timeout, then SIGKILL after a grace period. `cleanup` disarms all of it. */
 function stopOnAbortOrTimeout(child: ChildProcess, signal: AbortSignal | undefined, timeoutMs: number) {
-  const state = { timedOut: false, cleanup: () => {} };
+  const state = { timedOut: false, cleanup: () => {}, restart: () => {} };
   let killTimer: ReturnType<typeof setTimeout> | undefined;
   const abort = () => {
     child.kill("SIGTERM");
     killTimer ??= setTimeout(() => child.kill("SIGKILL"), KILL_GRACE_MS);
   };
-  const timeout = setTimeout(() => {
+  const expire = () => {
     state.timedOut = true;
     abort();
-  }, timeoutMs);
+  };
+  let timeout = setTimeout(expire, timeoutMs);
+  /** Count the time limit from now: bytes moved (`GenexCliRun.onProgress`). */
+  state.restart = () => {
+    if (state.timedOut) return;
+    clearTimeout(timeout);
+    timeout = setTimeout(expire, timeoutMs);
+  };
   state.cleanup = () => {
     clearTimeout(timeout);
     clearTimeout(killTimer);
@@ -179,6 +208,22 @@ function stopOnAbortOrTimeout(child: ChildProcess, signal: AbortSignal | undefin
   signal?.addEventListener("abort", abort, { once: true });
   if (signal?.aborted) abort();
   return state;
+}
+
+/** Hands every update on, and calls `moved` for each one whose bytes or stage are further than the last. */
+function movedBytes(
+  onProgress: (event: SendProgressEvent) => void,
+  moved: () => void,
+): (event: SendProgressEvent) => void {
+  let last = "";
+  let done = -1;
+  return (event) => {
+    const key = `${event.stage}\n${event.target ?? ""}`;
+    if (key !== last || event.doneBytes > done) moved();
+    last = key;
+    done = event.doneBytes;
+    onProgress(event);
+  };
 }
 
 /** What a finished CLI run means: its answer, or the error that explains why there is none. */
@@ -219,15 +264,20 @@ export function runGenexCli(run: GenexCliRun): Promise<unknown> {
         // A publish spawn keeps the CLI's `~` inside Studio's workspace and commits as the studio:
         // `pushSource` runs git with no user identity of its own and must never read or write the user's config.
         cwd: run.cwd,
-        env: genexCliEnv(process.env, { api: run.api, home: run.home, ...(run.ca ? { ca: run.ca } : {}) }),
+        env: genexCliEnv(process.env, {
+          api: run.api,
+          home: run.home,
+          ...(run.ca ? { ca: run.ca } : {}),
+          ...(run.onProgress ? { progress: true } : {}),
+        }),
         stdio: ["ignore", "pipe", "pipe", "pipe"],
       },
     );
     const credentialPipe = child.stdio[3] as Writable;
     credentialPipe.on("error", () => {});
     credentialPipe.end(`GENEX_TOKEN=${run.token}\n`);
-    const output = collectOutput(child);
     const stop = stopOnAbortOrTimeout(child, run.signal, run.timeoutMs);
+    const output = collectOutput(child, run.onProgress && movedBytes(run.onProgress, stop.restart));
     child.on("error", (e) => {
       stop.cleanup();
       reject(e);

@@ -12,7 +12,7 @@ import { lstat, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { LiveBehindReason, type LiveBehindEvent } from "../../shared/live-behind.ts";
-import { CoreFact } from "../../shared/project-facts.ts";
+import { CoreFact, UNREAL_WEB_BUILD_FACT } from "../../shared/project-facts.ts";
 import { gitOrNull } from "../../substrate/snapshots.ts";
 
 /** The most uncommitted paths a folder's print reads the size and time of; past this it counts them. */
@@ -152,6 +152,9 @@ const godotBuildWhole = (files: ReadonlySet<string>): boolean => files.has("inde
 const WHOLE_BUILD: Readonly<Record<string, (files: ReadonlySet<string>) => boolean>> = {
   [CoreFact.UnityProject]: unityBuildWhole,
   [CoreFact.GodotProject]: godotBuildWhole,
+  // Unreal's web build is staged elsewhere and reaches the game's web folder whole, in one move
+  // (the plugin's package-game), so there it is whole whenever it holds anything.
+  [UNREAL_WEB_BUILD_FACT]: (files) => files.size > 0,
 };
 
 /** How long a web build's newest file must be left alone before Live takes the build as finished. */

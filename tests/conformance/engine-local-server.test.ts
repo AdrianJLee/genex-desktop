@@ -7,6 +7,7 @@
  * failure's mapping are exercised for real, with no network and no model.
  */
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { LocalServerEngine } from "../../src/substrate/engines/local-server.ts";
@@ -14,6 +15,7 @@ import { EngineRegistry } from "../../src/substrate/engines/registry.ts";
 import { EngineError } from "../../src/substrate/engines/types.ts";
 import {
   memoryModelOverridesStore,
+  modelOverridesStore,
   memoryServerSettings,
   type ModelOverridesStore,
   sanitizeModelOverride,
@@ -322,6 +324,38 @@ describe("reading each server's models", () => {
       contextWindow: 65536,
       supportsVision: true,
     });
+  });
+
+  it("reads hand-edited or broken models.json safely and replaces entries on write", async () => {
+    const file = path.join(await tmpDir("local-server-overrides-"), "models.json");
+    const store = modelOverridesStore(file);
+
+    // Broken JSON falls back to an empty map without throwing
+    await writeFile(file, "{not valid json", "utf8");
+    assert.deepEqual(await store.read(), {});
+
+    // Hand-edited JSON keeps only valid sanitized entries
+    await writeFile(
+      file,
+      JSON.stringify({
+        "bad-model": { contextWindow: 100, supportsVision: "yes" },
+        "good-model": { contextWindow: 65_536, supportsVision: true, unknownField: 123 },
+      }),
+      "utf8",
+    );
+    assert.deepEqual(await store.read(), {
+      "good-model": { contextWindow: 65_536, supportsVision: true },
+    });
+
+    // Write replaces the existing entry rather than merging old fields
+    await store.write("good-model", { contextWindow: 131_072 });
+    assert.deepEqual(await store.read(), {
+      "good-model": { contextWindow: 131_072 },
+    });
+
+    // Write null removes the entry
+    await store.write("good-model", null);
+    assert.deepEqual(await store.read(), {});
   });
 });
 

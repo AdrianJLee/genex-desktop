@@ -1,4 +1,3 @@
-import type { ModelOverride } from "./local-server.ts";
 /**
  * The IPC contract between the preload (`window.studio`) and main's `handle()` table.
  *
@@ -19,6 +18,7 @@ import type { StudioApi } from "./studio-api.ts";
 import type { StudioErrorCode } from "./error-codes.ts";
 import type { AddSource, ShareItem } from "./asset-library.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
+import type { ModelOverride } from "./local-server.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
 import type { SessionAction } from "./play-native.ts";
 import type { PlayBarHold } from "./play-bar.ts";
@@ -172,7 +172,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:local-server.forget": "localServerForget",
   "studio:local-server.find": "localServerFind",
   "studio:local-server.set-model-override": "localServerSetModelOverride",
-  "studio:local-server.open-config": "localServerOpenConfig",
   "studio:terminal.list": "terminalList",
   "studio:terminal.accessibility": "terminalAccessibility",
   "studio:terminal.open": "terminalOpen",
@@ -493,7 +492,6 @@ export interface StudioInvokePayloads {
   "studio:local-server.forget": undefined;
   "studio:local-server.find": undefined;
   "studio:local-server.set-model-override": { id: string; override: ModelOverride | null };
-  "studio:local-server.open-config": undefined;
   "studio:terminal.list": undefined;
   "studio:terminal.accessibility": undefined;
   "studio:terminal.open": { project: string };

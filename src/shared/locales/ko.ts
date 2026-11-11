@@ -6305,4 +6305,15 @@ export default {
     "Genex가 Mac 앱 {app}이(가) 네트워크를 쓸 수 있는지 읽지 못했어요. 플레이어가 연결하지 못하면 Genex에서 다시 패키징하고 게시하세요.",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "Mac 앱 {app}은(는) 인터넷에 연결할 수 없어요. 네트워크 접근이 없는 샌드박스에서 실행되어 어떤 플레이어도 연결할 수 없어요. Genex에서 다시 패키징한 뒤 게시하세요. 아무것도 보내지 않았어요.",
+  "Can call tools": "도구 호출 가능",
+  Configure: "구성",
+  "Context size": "컨텍스트 크기",
+  "Context size must be between 1,024 and 10,000,000 tokens.":
+    "컨텍스트 크기는 1,024에서 10,000,000 토큰 사이여야 합니다.",
+  "Custom context length and vision for this model on your local server. Saved to models.json.":
+    "로컬 서버의 이 모델에 대한 사용자 정의 컨텍스트 길이 및 비전. models.json에 저장됩니다.",
+  "Failed to save settings.": "설정을 저장하지 못했습니다.",
+  "Reported by server": "서버에서 보고됨",
+  "Reset to default": "기본값으로 재설정",
+  "Sees images": "이미지 인식",
 } satisfies LocaleCatalog;

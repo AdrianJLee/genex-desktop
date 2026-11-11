@@ -375,16 +375,12 @@ function merged(first: ModelFacts, later: ModelFacts | undefined): ModelFacts {
 
 /** A model as a picker row: unknown context planned for, tool calling taken as given unless refused. */
 function modelRow(id: string, facts: ModelFacts, override?: ModelOverride): EngineModel {
-  const isContextReported = facts.context !== undefined;
-  const isVisionReported = facts.vision !== undefined;
-  const isToolsReported = facts.tools !== undefined;
-
-  const contextTokens = isContextReported ? facts.context!.tokens : (override?.contextWindow ?? UNKNOWN_CONTEXT_TOKENS);
+  const contextTokens = facts.context?.tokens ?? override?.contextWindow ?? UNKNOWN_CONTEXT_TOKENS;
   const contextSource =
     facts.context?.source ?? (override?.contextWindow ? ModelContextSource.Configured : ModelContextSource.Unknown);
 
-  const supportsVision = isVisionReported ? facts.vision! : (override?.supportsVision ?? false);
-  const supportsTools = isToolsReported ? facts.tools! : (override?.supportsTools ?? true);
+  const supportsVision = facts.vision ?? override?.supportsVision ?? false;
+  const supportsTools = facts.tools ?? override?.supportsTools ?? true;
 
   return {
     id,

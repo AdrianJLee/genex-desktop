@@ -1,8 +1,3 @@
-import { t } from "../../shared/i18n.ts";
-import type { ModelOverride } from "../../shared/local-server.ts";
-import { DialogSurface } from "../ui/dialog.tsx";
-import { Checkbox } from "../ui/Checkbox.tsx";
-import { Icon } from "../ui/icons.tsx";
 /**
  * Settings → Model Providers, the local server row: a model server the person runs (LM Studio,
  * llama.cpp, TabbyAPI, vLLM, KoboldCpp). It keeps a provider row's shape (`provider-row.tsx`): one
@@ -13,7 +8,7 @@ import { Icon } from "../ui/icons.tsx";
  */
 import { type FormEvent, type JSX, useEffect, useRef, useState } from "react";
 import { EngineId } from "../../shared/providers.ts";
-import type { FoundLocalServer, LocalServerInfo } from "../../shared/local-server.ts";
+import type { FoundLocalServer, LocalServerInfo, ModelOverride } from "../../shared/local-server.ts";
 import {
   reportClock,
   reportLocalServerConnect,
@@ -24,7 +19,10 @@ import {
 import { LocalServerVia, ProviderAction, ProviderSurface } from "../analytics/welcome-vocabulary.ts";
 import type { EngineDescriptor } from "../types.ts";
 import { Button } from "../ui/Button.tsx";
+import { Checkbox } from "../ui/Checkbox.tsx";
+import { DialogSurface } from "../ui/dialog.tsx";
 import { DropdownMenuItem } from "../ui/dropdown-menu.tsx";
+import { Icon } from "../ui/icons.tsx";
 import { LOCAL_SERVER_WORDS, METERED_PROVIDER_WORDS } from "../words.ts";
 import {
   isKeyRefusal,
@@ -59,9 +57,6 @@ function ServerMenu({ act }: { act: RowActions }): JSX.Element {
       onCheck={() => act.recheck(ProviderAction.CheckConnection)}
     >
       <>
-        <DropdownMenuItem onSelect={() => void window.studio.localServerOpenConfig()}>
-          <ItemWords title={WORDS.openModelSettings} line={t("Edit context and vision configuration file")} />
-        </DropdownMenuItem>
         <DropdownMenuItem onSelect={act.change}>
           <ItemWords title={WORDS.change} line={WORDS.changeLine} />
         </DropdownMenuItem>
@@ -304,6 +299,68 @@ const PRESET_CONTEXTS = [
   { label: "1M", value: 1_048_576 },
 ];
 
+function buildOverride(
+  reported: { context: boolean; vision: boolean; tools: boolean },
+  values: { context: number; vision: boolean; tools: boolean },
+): ModelOverride | null {
+  const override: ModelOverride = {};
+  if (!reported.context && Number.isFinite(values.context)) override.contextWindow = values.context;
+  if (!reported.vision) override.supportsVision = values.vision;
+  if (!reported.tools) override.supportsTools = values.tools;
+  return Object.keys(override).length ? override : null;
+}
+
+function ModelCapabilities({
+  isVisionReported,
+  isToolsReported,
+  supportsVision,
+  supportsTools,
+  onVisionChange,
+  onToolsChange,
+}: {
+  isVisionReported: boolean;
+  isToolsReported: boolean;
+  supportsVision: boolean;
+  supportsTools: boolean;
+  onVisionChange: (val: boolean) => void;
+  onToolsChange: (val: boolean) => void;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-2.5 pt-2 border-t border-line">
+      <label
+        className={`flex items-center justify-between gap-2 text-xs text-foreground select-none ${isVisionReported ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span className="flex items-center gap-2">
+          <Checkbox
+            checked={supportsVision}
+            disabled={isVisionReported}
+            onChange={(e) => onVisionChange(e.target.checked)}
+          />
+          <span>{WORDS.seesImagesOption}</span>
+        </span>
+        {isVisionReported && (
+          <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">{WORDS.reportedByServer}</span>
+        )}
+      </label>
+      <label
+        className={`flex items-center justify-between gap-2 text-xs text-foreground select-none ${isToolsReported ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span className="flex items-center gap-2">
+          <Checkbox
+            checked={supportsTools}
+            disabled={isToolsReported}
+            onChange={(e) => onToolsChange(e.target.checked)}
+          />
+          <span>{WORDS.canCallToolsOption}</span>
+        </span>
+        {isToolsReported && (
+          <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">{WORDS.reportedByServer}</span>
+        )}
+      </label>
+    </div>
+  );
+}
+
 function ModelConfigDialog({
   model,
   onClose,
@@ -321,33 +378,39 @@ function ModelConfigDialog({
   const [supportsVision, setSupportsVision] = useState(Boolean(model.supportsVision));
   const [supportsTools, setSupportsTools] = useState(model.supportsTools !== false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const save = async (): Promise<void> => {
+    setError(null);
+    const raw = contextWindow.trim();
+    const parsed = Number(raw);
+    if (!isContextReported && (raw === "" || !Number.isInteger(parsed) || parsed < 1024 || parsed > 10_000_000)) {
+      setError(WORDS.invalidContext);
+      return;
+    }
     setSaving(true);
     try {
-      const parsed = Number.parseInt(contextWindow, 10);
-      const override: ModelOverride = {};
-      if (!isContextReported && Number.isFinite(parsed) && parsed > 0) {
-        override.contextWindow = parsed;
-      }
-      if (!isVisionReported) {
-        override.supportsVision = supportsVision;
-      }
-      if (!isToolsReported) {
-        override.supportsTools = supportsTools;
-      }
-      await onSave(Object.keys(override).length ? override : null);
+      const override = buildOverride(
+        { context: isContextReported, vision: isVisionReported, tools: isToolsReported },
+        { context: parsed, vision: supportsVision, tools: supportsTools },
+      );
+      await onSave(override);
       onClose();
+    } catch {
+      setError(WORDS.saveFailed);
     } finally {
       setSaving(false);
     }
   };
 
   const reset = async (): Promise<void> => {
+    setError(null);
     setSaving(true);
     try {
       await onSave(null);
       onClose();
+    } catch {
+      setError(WORDS.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -369,7 +432,9 @@ function ModelConfigDialog({
       <div className="flex flex-col gap-4 py-2">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-medium text-foreground">{WORDS.contextTokens}</label>
+            <label htmlFor="model-context-size" className="text-xs font-medium text-foreground">
+              {WORDS.contextSize}
+            </label>
             {isContextReported && (
               <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">
                 {WORDS.reportedByServer}
@@ -377,13 +442,17 @@ function ModelConfigDialog({
             )}
           </div>
           <input
+            id="model-context-size"
             type="number"
             min={1024}
             max={10000000}
             step={1024}
             disabled={isContextReported}
             value={contextWindow}
-            onChange={(e) => setContextWindow(e.target.value)}
+            onChange={(e) => {
+              setContextWindow(e.target.value);
+              if (error) setError(null);
+            }}
             className={`h-8 rounded border border-input bg-field px-2.5 font-mono text-xs text-foreground focus:outline-none focus:border-accent-ink ${
               isContextReported ? "opacity-60 cursor-not-allowed" : ""
             }`}
@@ -394,7 +463,10 @@ function ModelConfigDialog({
                 <button
                   type="button"
                   key={preset.value}
-                  onClick={() => setContextWindow(String(preset.value))}
+                  onClick={() => {
+                    setContextWindow(String(preset.value));
+                    if (error) setError(null);
+                  }}
                   className={`rounded border px-2 py-0.5 text-micro transition-colors ${
                     contextWindow === String(preset.value)
                       ? "border-accent bg-accent/10 font-medium text-accent"
@@ -408,42 +480,20 @@ function ModelConfigDialog({
           )}
         </div>
 
-        <div className="flex flex-col gap-2.5 pt-2 border-t border-line">
-          <label
-            className={`flex items-center justify-between gap-2 text-xs text-foreground select-none ${isVisionReported ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-          >
-            <span className="flex items-center gap-2">
-              <Checkbox
-                checked={supportsVision}
-                disabled={isVisionReported}
-                onChange={(e) => setSupportsVision(e.target.checked)}
-              />
-              <span>{WORDS.supportsVision}</span>
-            </span>
-            {isVisionReported && (
-              <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">
-                {WORDS.reportedByServer}
-              </span>
-            )}
-          </label>
-          <label
-            className={`flex items-center justify-between gap-2 text-xs text-foreground select-none ${isToolsReported ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-          >
-            <span className="flex items-center gap-2">
-              <Checkbox
-                checked={supportsTools}
-                disabled={isToolsReported}
-                onChange={(e) => setSupportsTools(e.target.checked)}
-              />
-              <span>{WORDS.supportsTools}</span>
-            </span>
-            {isToolsReported && (
-              <span className="text-micro font-medium text-ink-3 uppercase tracking-wide">
-                {WORDS.reportedByServer}
-              </span>
-            )}
-          </label>
-        </div>
+        <ModelCapabilities
+          isVisionReported={isVisionReported}
+          isToolsReported={isToolsReported}
+          supportsVision={supportsVision}
+          supportsTools={supportsTools}
+          onVisionChange={setSupportsVision}
+          onToolsChange={setSupportsTools}
+        />
+
+        {error && (
+          <p role="alert" className="text-xs text-red">
+            {error}
+          </p>
+        )}
 
         <div className="flex items-center justify-between gap-2 pt-4 border-t border-line">
           <Button variant="ghost" size="sm" onClick={reset} disabled={saving}>
@@ -454,7 +504,7 @@ function ModelConfigDialog({
               {WORDS.cancel}
             </Button>
             <Button variant="default" size="sm" onClick={save} disabled={saving}>
-              {saving ? t("Saving…") : t("Save")}
+              {saving ? WORDS.saving : WORDS.save}
             </Button>
           </div>
         </div>
@@ -463,6 +513,7 @@ function ModelConfigDialog({
   );
 }
 
+/** The saved server's models: each with its context, and whether it sees or cannot build. */
 function ServerModels({
   models,
   onConfigure,
@@ -472,6 +523,7 @@ function ServerModels({
 }): JSX.Element | null {
   if (models.length === 0) return null;
   return (
+    // The person's own server names its models: a replay shows them masked.
     <ul
       aria-label={WORDS.models}
       className="mt-1 -mx-2.5 flex flex-col border-t border-line pt-2"
@@ -483,7 +535,13 @@ function ServerModels({
           key={model.id}
           className="group flex min-h-8 flex-wrap items-center justify-between gap-x-2.5 px-2.5 py-1.5 rounded-md hover:bg-surface-raised cursor-pointer transition-colors"
           onClick={() => onConfigure(model)}
-          title={WORDS.clickToConfigure}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onConfigure(model);
+            }
+          }}
+          title={WORDS.configure}
         >
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2.5">
             <span className="min-w-0 break-all font-mono text-xs text-ink">{model.label}</span>
@@ -493,8 +551,8 @@ function ServerModels({
           </div>
           <button
             type="button"
-            className="opacity-0 group-hover:opacity-100 p-1 text-ink-3 hover:text-ink transition-opacity rounded"
-            aria-label={t("Configure")}
+            className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-ink p-1 text-ink-3 hover:text-ink focus-visible:text-ink transition-opacity rounded"
+            aria-label={WORDS.configure}
             onClick={(e) => {
               e.stopPropagation();
               onConfigure(model);
@@ -507,6 +565,7 @@ function ServerModels({
     </ul>
   );
 }
+
 /** Connect and disconnect: each refreshes the engines, and a refusal keeps why. */
 function useServerActions(onEnginesRefresh: () => Promise<void> | void) {
   const { run, error } = useRun();
@@ -606,7 +665,6 @@ export function LocalServerRow({
           onClose={() => setConfigModel(null)}
           onSave={async (override) => {
             await window.studio.localServerSetModelOverride(configModel.id, override);
-            setConfigModel(null);
             await onEnginesRefresh();
           }}
         />

@@ -453,7 +453,6 @@ function accountCalls(bridge: BridgeCalls) {
     openRouterSignInCancel: () => invoke("studio:openrouter.signin.cancel"),
     localServerConnect: (url, key) => invoke("studio:local-server.connect", key ? { url, key } : { url }),
     localServerSetModelOverride: (id, override) => invoke("studio:local-server.set-model-override", { id, override }),
-    localServerOpenConfig: () => invoke("studio:local-server.open-config"),
     localServerForget: () => invoke("studio:local-server.forget"),
     localServerFind: () => invoke("studio:local-server.find"),
     onClaudeLogin: (listener) => subscribe("studio:claude-login", listener),

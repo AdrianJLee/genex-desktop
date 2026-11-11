@@ -56,6 +56,7 @@ export function memoryServerSettings(initial: SavedServer | null = null): Server
   };
 }
 
+/** Persists per-model overrides (context window, vision, tools) for a local server. */
 export interface ModelOverridesStore {
   readonly file: string;
   read(): Promise<Record<string, ModelOverride>>;
@@ -95,6 +96,7 @@ function sanitizeOverridesRecord(data: unknown): Record<string, ModelOverride> {
   return clean;
 }
 
+/** File-backed JSON store for per-model overrides. */
 export function modelOverridesStore(file: string): ModelOverridesStore {
   return {
     file,
@@ -109,14 +111,16 @@ export function modelOverridesStore(file: string): ModelOverridesStore {
   };
 }
 
+/** In-memory store for per-model overrides, for tests. */
 export function memoryModelOverridesStore(): ModelOverridesStore {
-  let value: Record<string, ModelOverride> = {};
+  const value: Record<string, ModelOverride> = {};
   return {
     file: ":memory:",
     read: async () => ({ ...value }),
     write: async (id, override) => {
-      if (override === null) delete value[id];
-      else value[id] = { ...value[id], ...override };
+      const validated = override ? sanitizeModelOverride(override) : null;
+      if (validated) value[id] = validated;
+      else delete value[id];
     },
   };
 }

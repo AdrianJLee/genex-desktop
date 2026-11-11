@@ -1,7 +1,3 @@
-import { shell } from "electron";
-import fs from "node:fs/promises";
-import fsSync from "node:fs";
-import path from "node:path";
 /** Engines and local models: what is available, re-checking sign-ins, and downloading or deleting a model. */
 import { modelProgress } from "../model-progress.ts";
 import { SUBSCRIPTION_ENGINES, type StudioCore } from "../studio-core.ts";
@@ -273,14 +269,5 @@ function registerLocalServerIpc(
     const cleanOverride = sanitizeModelOverride(payload.override);
     await localServer().setModelOverride(payload.id.trim(), cleanOverride);
     changed();
-  });
-  handle("studio:local-server.open-config", async () => {
-    const filePath = localServer().overridesPath;
-    const dir = path.dirname(filePath);
-    await fs.mkdir(dir, { recursive: true });
-    if (!fsSync.existsSync(filePath)) {
-      await fs.writeFile(filePath, "{}\n", "utf8");
-    }
-    await shell.openPath(filePath);
   });
 }

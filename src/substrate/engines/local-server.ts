@@ -418,21 +418,13 @@ export class LocalServerEngine implements Engine {
     return { models: await serverModels(access, kind, list.entries, overrides), source: ModelCatalogSource.Provider };
   }
 
-  /** The first model the server lists: a local model costs nothing, so the app may pick it. */
-
-  get overridesPath(): string {
-    return this.#overrides.file;
-  }
-
-  async getModelOverrides(): Promise<Record<string, ModelOverride>> {
-    return this.#overrides.read();
-  }
-
+  /** Save or clear a user-configured override for one model, then refresh the catalog. */
   async setModelOverride(id: string, override: ModelOverride | null): Promise<void> {
     await this.#overrides.write(id, override);
     await this.refreshModels(true);
   }
 
+  /** The first model the server lists: a local model costs nothing, so the app may pick it. */
   async defaultModel(): Promise<string | null> {
     return this.#catalog.models().find((model) => model.supportsTools)?.id ?? this.#catalog.models()[0]?.id ?? null;
   }

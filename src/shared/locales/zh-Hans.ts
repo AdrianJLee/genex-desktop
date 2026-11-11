@@ -1997,17 +1997,10 @@ export default {
   "Local models": "本地模型",
   "Local server": "本地服务器",
   "Local server options": "本地服务器选项",
-  "Open model settings (models.json)…": "打开模型配置 (models.json)…",
-  "Edit context and vision configuration file": "编辑上下文与视觉支持配置文件",
-  Configure: "配置",
   "Reported by server": "服务端已报告",
   "Custom context length and vision for this model on your local server. Saved to models.json.":
     "为此本地服务器模型自定义上下文长度和视觉支持。已保存至 models.json。",
-  "Context window (tokens)": "上下文大小 (Tokens)",
-  "Supports vision (image understanding)": "支持视觉（图片理解）",
-  "Supports tool calling (file editing, terminal)": "支持工具调用（文件编辑、终端）",
   "Reset to default": "恢复默认",
-  "Click to configure context window and vision": "点击配置此模型的上下文大小与视觉支持",
   "Local servers are unavailable": "本地服务器不可用",
   "Long work the lead or a worker started, like a build. It runs on while the agents go on working.":
     "主智能体或助手启动的长时间工作，比如构建。智能体继续工作时，它也会一直运行。",
@@ -6105,4 +6098,10 @@ export default {
     "Genex 无法读取 Mac 应用 {app} 是否可以使用网络。如果玩家无法连接，请在 Genex 中重新打包并发布。",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "Mac 应用 {app} 无法连接互联网：它在没有网络权限的沙盒中运行，因此任何玩家都无法连接。请在 Genex 中重新打包，然后发布。没有发送任何内容。",
+  "Can call tools": "可调用工具",
+  Configure: "配置",
+  "Context size": "上下文大小",
+  "Context size must be between 1,024 and 10,000,000 tokens.": "上下文大小必须在 1,024 到 10,000,000 个 Token 之间。",
+  "Failed to save settings.": "保存设置失败。",
+  "Sees images": "可识图",
 } satisfies LocaleCatalog;

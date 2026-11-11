@@ -6606,4 +6606,15 @@ export default {
     "Genex konnte nicht lesen, ob die Mac-App {app} das Netzwerk nutzen darf. Wenn Spieler sich nicht verbinden können, pack sie in Genex noch einmal und veröffentliche sie.",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "Die Mac-App {app} erreicht das Internet nicht: Sie läuft in einer Sandbox ohne Netzwerkzugriff, daher könnte sich kein Spieler verbinden. Pack sie in Genex noch einmal und veröffentliche dann. Es wurde nichts gesendet.",
+  "Can call tools": "Kann Tools aufrufen",
+  Configure: "Konfigurieren",
+  "Context size": "Kontextgröße",
+  "Context size must be between 1,024 and 10,000,000 tokens.":
+    "Die Kontextgröße muss zwischen 1.024 und 10.000.000 Token liegen.",
+  "Custom context length and vision for this model on your local server. Saved to models.json.":
+    "Eigene Kontextlänge und Bildverarbeitung für dieses Modell auf deinem lokalen Server. In models.json gespeichert.",
+  "Failed to save settings.": "Einstellungen konnten nicht gespeichert werden.",
+  "Reported by server": "Vom Server gemeldet",
+  "Reset to default": "Auf Standard zurücksetzen",
+  "Sees images": "Versteht Bilder",
 } satisfies LocaleCatalog;

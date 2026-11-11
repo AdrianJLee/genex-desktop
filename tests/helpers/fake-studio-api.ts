@@ -145,7 +145,6 @@ const METHODS = [
   "localServerForget",
   "localServerFind",
   "localServerSetModelOverride",
-  "localServerOpenConfig",
   "terminalList",
   "terminalAccessibility",
   "terminalOpen",

@@ -6500,4 +6500,15 @@ export default {
     "Genex не смог прочитать, может ли приложение для Mac {app} пользоваться сетью. Если игроки не могут подключиться, упакуйте его в Genex заново и опубликуйте.",
   "The Mac app {app} can't reach the internet: it is sandboxed without network access, so no player could connect. Package it again in Genex, then publish. Nothing was sent.":
     "Приложение для Mac {app} не может выйти в интернет: оно работает в песочнице без доступа к сети, поэтому ни один игрок не сможет подключиться. Упакуйте его в Genex заново, затем опубликуйте. Ничего не отправлено.",
+  "Can call tools": "Может вызывать инструменты",
+  Configure: "Настроить",
+  "Context size": "Размер контекста",
+  "Context size must be between 1,024 and 10,000,000 tokens.":
+    "Размер контекста должен составлять от 1 024 до 10 000 000 токенов.",
+  "Custom context length and vision for this model on your local server. Saved to models.json.":
+    "Пользовательский размер контекста и распознавание изображений для этой модели на локальном сервере. Сохранено в models.json.",
+  "Failed to save settings.": "Не удалось сохранить настройки.",
+  "Reported by server": "Сообщено сервером",
+  "Reset to default": "Сбросить по умолчанию",
+  "Sees images": "Распознает изображения",
 } satisfies LocaleCatalog;

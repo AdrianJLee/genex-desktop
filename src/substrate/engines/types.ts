@@ -81,8 +81,11 @@ export interface EngineModel {
   contextWindow: number;
   supportsFast?: boolean;
   contextSource?: ModelContextSource;
+  /** Context window reported by the server, or undefined when not reported. */
   reportedContextWindow?: number;
+  /** Vision capability reported by the server, or undefined when not reported. */
   reportedVision?: boolean;
+  /** Tool calling capability reported by the server, or undefined when not reported. */
   reportedTools?: boolean;
   hardLimitTokens?: number;
   maxTokens: number;

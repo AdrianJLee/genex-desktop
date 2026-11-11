@@ -289,6 +289,16 @@ namespace Genex.Multiplayer.Authority
         public static GenexSearchRefusal SearchRefusalKind(int code) =>
             KindOfRefusal(code) == GenexRefusalKind.Final ? GenexSearchRefusal.Final : GenexSearchRefusal.Next;
 
+        /// <summary>What an ask refused with <paramref name="e"/> does next: <see cref="KindOfRefusal(GenexJoinException)"/>'s
+        /// reading of it.</summary>
+        public static GenexSearchRefusal SearchRefusalKind(GenexJoinException e) =>
+            KindOfRefusal(e) == GenexRefusalKind.Final ? GenexSearchRefusal.Final : GenexSearchRefusal.Next;
+
+        /// <summary>What a join refused with <paramref name="e"/> does next. Only a server's answer can be final or a full
+        /// region: a failure that is not one (<see cref="GenexJoinException.Answered"/>) is a path that is down, so the next
+        /// region is tried, whatever status it was reported with.</summary>
+        public static GenexRefusalKind KindOfRefusal(GenexJoinException e) => e.Answered ? KindOfRefusal(e.Code) : GenexRefusalKind.NextRegion;
+
         /// <summary>The attempt after a 503 in <paramref name="state"/> over <paramref name="regionCount"/> ranked regions and
         /// the capacity schedule <paramref name="delays"/>, or null when the join gives up.</summary>
         /// <summary>What a join refused with <paramref name="code"/> does next (§17.1 *Regions*); 0 or below is a network that failed.</summary>

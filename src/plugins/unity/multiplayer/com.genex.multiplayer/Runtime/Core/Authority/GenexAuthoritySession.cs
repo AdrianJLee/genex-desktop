@@ -616,7 +616,7 @@ namespace Genex.Multiplayer.Authority
                 {
                     // §17.1 *Regions*: a second refusal on a region moves to the next-best one at once; otherwise the
                     // schedule's next wait on the same region.
-                    var kind = GenexAuthorityRegions.KindOfRefusal(e.Code);
+                    var kind = GenexAuthorityRegions.KindOfRefusal(e);
                     if (kind == GenexRefusalKind.NextRegion && state.Region + 1 < targets.Length)
                     {
                         state = new GenexCapacityState(state.Region + 1, 0, state.Step);
@@ -673,9 +673,10 @@ namespace Genex.Multiplayer.Authority
                     var client = new Client(url);
                     room = await GenexMultiplayer.MapRefusals(() => client.Join<AuthorityRoomState>(A.RoomType, joinOptions));
                 }
-                catch (GenexJoinException e) when (GenexAuthorityRegions.SearchRefusalKind(e.Code) == GenexSearchRefusal.Next)
+                catch (GenexJoinException e) when (GenexAuthorityRegions.SearchRefusalKind(e) == GenexSearchRefusal.Next)
                 {
-                    // No room here, or a path that is down or full: the next region is asked.
+                    // No room here, or a path that is down or full: the next region is asked. So is an answer the player could
+                    // not read: the fleet's "no room" is HTTP 521, which Cloudflare replaces with a page a browser blocks.
                 }
                 catch (GenexJoinException e)
                 {

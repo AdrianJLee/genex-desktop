@@ -1378,7 +1378,8 @@ button.genex-publish-banner-name:hover {
   text-align: center;
 }
 /* The Publish card of a game made in an engine: one framed list, a hairline between rows, a dot and
-   one line saying what is true now, the row's end note, then its switch (a clock while it works). */
+   one line saying what is true now, the row's end note, then its own control: a button, the loader of
+   the work under way, "Queued", and the menu of a platform players have. */
 .genex-publish-card {
   display: grid;
   gap: 12px;
@@ -1430,6 +1431,12 @@ button.genex-publish-banner-name:hover {
   line-height: 18px;
   white-space: nowrap;
 }
+/* A line longer than its row (a long platform button in another language) ends in an ellipsis. */
+.genex-publish-card-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* The dot speaks the banner chip's language: green live, amber older than the game, hollow not on
    Genex; filled in the text's own colour once its app is built and waits for Publish. */
 .genex-publish-card-dot {
@@ -1475,6 +1482,70 @@ button.genex-publish-banner-name:hover {
 .genex-publish-card-clock {
   min-width: 36px;
   text-align: end;
+}
+/* A row's own button (Build on PC, Publish, Update, Try again): Play's soft blue, a step under the
+   card's one filled button. It keeps its look while its press is sent. */
+.genex-publish-card-build {
+  flex: none;
+  height: 28px;
+  padding-inline: 12px;
+  font-size: 12.5px;
+}
+.genex-publish-card-build[aria-busy]:disabled {
+  opacity: 1;
+}
+/* The row's loader in its button's place: Genex's own orb, the work's word, then its clock in
+   smaller, quieter figures. It is a status, never a press. */
+.genex-publish-card-working {
+  cursor: default;
+}
+.genex-publish-card-pill-clock {
+  color: var(--ink-3);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+/* An app that waits for another's build: a quiet outline where its button was. */
+.genex-publish-card-queued {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  height: 28px;
+  padding-inline: 12px;
+  border-radius: var(--radius-button);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--ink-3);
+  font: 12.5px / 1 var(--font-family-mono);
+}
+/* The menu of a platform players have, at the row's very end: its dots end where a button would,
+   and stand as near what is before them as the row's other parts do. */
+.genex-publish-card-more {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-inline: -8px -6px;
+  border-radius: 8px;
+  color: var(--ink-3);
+  transition: background var(--duration-quick);
+}
+.genex-publish-card-more:hover,
+.genex-publish-card-more[data-state="open"] {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+}
+.genex-publish-card-more:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.genex-publish-card-down {
+  color: color-mix(in oklab, var(--red) 80%, var(--ink));
+}
+/* How far a row's send is: a hairline under its status line. */
+.genex-publish-card-bar {
+  margin-top: 4px;
+  max-width: 220px;
 }
 /* A send on its way: a hairline bar over one line of numbers, in the status line's own type. */
 .genex-send-progress {
@@ -1588,12 +1659,6 @@ button.genex-publish-banner-name:hover {
 .genex-publish-card-press {
   display: grid;
   gap: 10px;
-}
-/* A press that only takes platforms down warns in amber. */
-.genex-publish-primary[data-warn] {
-  background: color-mix(in srgb, var(--orange) 22%, var(--background));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 45%, transparent);
-  color: color-mix(in oklab, var(--orange) 85%, var(--ink));
 }
 .genex-publish-card-note {
   color: var(--ink-3);

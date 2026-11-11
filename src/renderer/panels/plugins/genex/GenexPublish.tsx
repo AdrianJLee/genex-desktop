@@ -1056,22 +1056,27 @@ function useAppsReview(
   };
 }
 
-/** The apps' progress through Genex's check and the review card under the rows; nothing while it celebrates. */
+/**
+ * The apps' progress through Genex's check and the review card under the rows; nothing while it
+ * celebrates. A running publish's steps are left out when the Publish card's web row says them (`onRow`).
+ */
 function AppsReview({
   view,
   review,
   project,
   quiet,
+  onRow,
 }: {
   view: PublishView;
   review: ReturnType<typeof useAppsReview>;
   project: string;
   quiet: boolean;
+  onRow: boolean;
 }): JSX.Element | null {
   if (quiet) return null;
   return (
     <>
-      {(view.running || view.check) && <Progress view={view} />}
+      {((view.running && !onRow) || view.check) && <Progress view={view} />}
       {review.card && !view.running && (
         <ReviewCard
           project={project}
@@ -1240,19 +1245,34 @@ function usePlatformsAndCard(
 
 /**
  * Which press a game's dialog shows: the Publish card's own for a game made in an engine (while nothing
- * celebrates, runs, waits for Genex's terms or a review card's fix), else the dialog's Publish, which the
- * card keeps for a publish under way, Genex's terms, and a review card whose way forward is publishing
- * again (`republish`); and whether the card leaves the foot line out (all but a slow publish's way out).
+ * waits for Genex's terms or a review card's fix; a publish under way is on its row, and a
+ * celebration leaves the card as it is), else the dialog's Publish, which the card keeps for Genex's
+ * terms, a review card whose way forward is publishing again (`republish`) and what they leave
+ * running; and whether the card leaves the foot line out (all but a slow publish's way out).
  */
 function cardMoment(
   engineGame: boolean,
-  moment: { shown: boolean; publishing: boolean; view: PublishView; held: boolean; republish: boolean },
+  moment: { publishing: boolean; view: PublishView; held: boolean; republish: boolean },
 ): { press: boolean; dialogPress: boolean; quiet: boolean } {
   if (!engineGame) return { press: false, dialogPress: true, quiet: false };
-  const { shown, publishing, view, held, republish } = moment;
-  const press = shown && !publishing && !view.terms && !held && !republish;
+  const { publishing, view, held, republish } = moment;
+  const press = !view.terms && !held && !republish;
   const dialogPress = !press && (publishing || view.terms !== null || republish);
   return { press, dialogPress, quiet: !(publishing && view.slow) };
+}
+
+/**
+ * What stays on screen while the dialog celebrates: a game made in an engine keeps its rows and its
+ * button under the banner, since its other platforms go on (`pressShown`), and the celebration's foot
+ * line stands only when that button has nothing to say (`footShown`).
+ */
+function underCelebration(
+  engineGame: boolean,
+  celebrate: boolean,
+  card: Pick<ReturnType<typeof usePublishCard>, "plan" | "bar">,
+): { pressShown: boolean; footShown: boolean } {
+  const cardPresses = card.plan !== null || card.bar !== null;
+  return { pressShown: engineGame || !celebrate, footShown: celebrate && !cardPresses };
 }
 
 /** The game's platforms: the Publish card's rows for a game made in an engine, else the list a web game with apps keeps. */
@@ -1320,10 +1340,9 @@ function PressSection({
     return (
       <PublishCardPress
         plan={card.plan}
-        busy={card.busy}
-        note={card.note}
-        pressing={card.acting}
-        onPress={card.press}
+        bar={card.bar}
+        acting={card.acting}
+        onPress={(plan) => void card.press(plan)}
       />
     );
   if (!moment.dialogPress || !shown) return null;
@@ -1343,6 +1362,7 @@ function PressSection({
  * The read record: the banner with the game's name and where it is, then what the moment needs:
  * the platforms a game with an app is built for, the running attempt's progress, the celebration
  * and link once it just went live, the link of a live game, or a failed attempt's line, and the presses.
+ * The celebration of a game made in an engine is the banner's alone: its rows and button stay under it.
  */
 function PublishBody({
   view: plain,
@@ -1364,10 +1384,9 @@ function PublishBody({
   const publishing = record.pressing === Pressing.Publish || view.running;
   const { celebrate, went } = useCelebration(view, publishing, inReview, review.record);
   const failure = record.error ? { text: record.error, details: record.error } : view.failure;
-  const pressShown = !celebrate;
+  const { pressShown, footShown } = underCelebration(engineGame, celebrate, card);
   const pressNeeded = pressHasWork(pressShown, view, publishing, { upToDate, inReview }) && !review.holdsPress;
   const card$ = cardMoment(engineGame, {
-    shown: pressShown,
     publishing,
     view,
     held: review.holdsPress,
@@ -1401,7 +1420,7 @@ function PublishBody({
         ))}
         <PlatformsSection
           engineGame={engineGame}
-          shown={!celebrate}
+          shown={pressShown}
           project={project}
           card={card}
           platforms={platforms}
@@ -1409,7 +1428,7 @@ function PublishBody({
           replacesApps={replacesApps}
           reviewed={review.card !== null || view.check !== null}
         />
-        <AppsReview view={view} review={review} project={project} quiet={celebrate} />
+        <AppsReview view={view} review={review} project={project} quiet={celebrate} onRow={card$.press} />
         {celebrate && <LiveUpdateLine went={went} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
         <WhoPlays
@@ -1444,7 +1463,7 @@ function PublishBody({
           record={record}
           name={name}
           appsLine={appsHint(view, review, { publishing, celebrate, appsOnly: apps !== null, pressed: pressNeeded })}
-          quiet={card$.quiet && !celebrate}
+          quiet={card$.quiet && !footShown}
         />
       </div>
     </div>

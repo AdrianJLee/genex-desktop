@@ -3672,52 +3672,59 @@ Genex:
   the game went, the publish fails and keeps the link, never making a second game. A publish
   under way on Genex (`release_conflict`) is said in plain words.
 - A game made in an engine gets the Publish card (`PublishCard.tsx`, `publish-card-view.ts`,
-  `use-publish-card.ts`): one row per platform the person can act on (an Unreal game has a Web row only once its web build exists,
+  `use-publish-card.ts`, `publish-follow.ts`): one row per platform the person can act on (an Unreal game has a Web row only once its web build exists,
   and a Mac shows no Linux row for it unless that app is live), each with a dot and one line saying
   only what is true now ("Live · up to date", "Live · older than your game" against the folder's
   `changedAt` and, for the web, against when the web build in a folder of the game was made
   (`builtAt`, its newest file: a build put into `web/` is new with no source changed, since that
   folder is no source; the web version is live only while Genex lists the game, so the build Genex
-  still serves of a game taken back to a draft reads "Ready to publish"), "Live · update ready" once a newer app is made, "Not built", "Built · older than your
+  still serves of a game taken back to a draft reads "Ready to publish"), "Live · update ready" once a newer app or web build is made, "Not built", "Built · older than your
   game", "Ready to publish", "In review", "Not approved", "Couldn't build · the older one is still
   live"; a Windows app Genex Cloud built counts as live once a publish gave it to players), its end
-  saying when it went live, its size, or where it gets built ("builds on this Mac", "builds on Genex
-  Cloud"), and a switch: players get it. Before a game's first publish the apps a first Build makes
-  start switched on (`startsOn`: this computer's own and Genex Cloud's, for a game whose apps are
-  made per computer). Work under way shows in the row with a clock in the switch's place ("Building
-  on this Mac", "Sending to Genex Cloud", "Building on Genex Cloud"). Build and Publish are two
-  presses, and the one button says what pressing it does (`pressPlan`). Apps that aren't made go
-  first and alone, the agent's and Genex Cloud's in one press ("Build Mac and Windows"): the chat is
-  asked for the ones this computer makes and Genex Cloud for the ones it can't (`buildOnCloud` →
-  `genexCloudBuild` with `keep`), both at once. Nothing reaches players: Genex Cloud keeps what it
-  builds, so the game needs no page on Genex. The folder is read again until the agent's build lands,
-  an ask nothing came of is let go after two hours. A switch stays where the person left it: a
-  platform switched off is kept per game (`publish-left-out.ts`, `keptSwitches`) and is still off
-  after the press and when the card opens again, while one players have opens switched on whatever
-  was kept, so an old choice never offers to take it down. Then "Update Mac and Windows" / "Publish to Mac and Windows" ("… 3 platforms" from three)
-  sends the switched-on ready apps (`platforms` on `genex-publish-apps` and `genex-publish`,
-  `publishedApps`' `platforms` choice) and gives players the app Genex Cloud keeps (`CardWork.Release`,
-  `release` on `genex-publish-apps`). A kept app built before the game's last change is no such app:
-  like a build in the folder that is older than the game it stays where it is, its row says "Built ·
-  older than your game" and the button builds it again (`keptBuild`, `builtBeforeChange`). One Genex
-  Cloud still builds goes with them and reaches players
-  as soon as it is built (`sendingRows`: only beside an app that is made, or for a game players have
-  already, and not while the agent still builds here); its row then stays at work and the busy
-  button names only what is on its way to players (`busyWords`). A live platform switched off is
-  taken down ("Take Windows down", amber, confirmed: `publish-remove-app` →
+  note (when it went live, or its size) and its own control. No row has a switch. The control is a
+  button in Play's soft blue ("Build on Mac" or "Build on PC" for an app this computer makes, "Build
+  on Genex Cloud" for the one it can't, "Publish", "Update", "Try again"); the row's loader while
+  work is under way (Genex's orb, "Building", "Publishing" or "Updating", and a clock), with the
+  status line saying where ("On this Mac", "On Genex Cloud", "Sending to Genex Cloud") or, for a send,
+  how much went and how fast over a hairline bar, the loader then saying how long is left
+  (`sendStatus`, `leftWords`); "Queued" for an app the agent builds after another ("Builds after
+  Windows": a computer builds one app at a time, `hereQueue`); and on a row players have, a "…" menu
+  whose one item takes the platform down (`publish-remove-app` →
   `DELETE /api/games/<id>/native-builds/<platform>/<arch>` for each build Genex holds, the record
-  forgetting it; the Web row's is `publish-remove-web`). While Genex Cloud works a line stands under
-  the button (`pressNote`): "It can take up to an hour." when the button names only that app,
-  "Windows can take up to an hour." when it names more. What failed gets a block of its own under the
-  rows, above the link (`cardErrors`): its name in a few words ("Windows build error", "Windows build
-  didn't start", "Mac app didn't send"), never the log, with Send to agent (a failed Genex Cloud
-  build: the whole log goes to the game's chat, and the block then says the agent is fixing it, with
-  a clock) or Try again (a build that didn't start, because the game's project never reached Genex
-  Cloud or it refused it; a send that didn't reach Genex), and a Copy icon when there are words to
-  copy. Genex Cloud builds again only once the game changed since it failed. Until the folder and Genex's record
-  both answered the rows are skeletons and there is no button. The card has no Share assets line and no
-  explanation lines; the public link carries its mark inside the address, no word before it ("Test"
-  names the test link). A review card whose way forward is publishing again keeps the dialog's Publish.
+  forgetting it; the Web row's is `publish-remove-web`). A row's own button does one thing
+  (`RowAct`). Build asks the chat for the app this computer makes, or Genex Cloud for the one it
+  can't (`buildOnCloud` → `genexCloudBuild` with `keep`), and gives players nothing: Genex Cloud
+  keeps what it builds, so the game needs no page on Genex. The folder is read again until the
+  agent's build lands, an ask nothing came of is let go after two hours. Publish and Update send that
+  row's build (`platforms` on `genex-publish-apps` and `genex-publish`, `publishedApps`' `platforms`
+  choice) or give players the app Genex Cloud keeps (`CardWork.Release`, `release` on
+  `genex-publish-apps`). A kept app built before the game's last change is no such app: like a build
+  in the folder that is older than the game it stays where it is, its row says "Built · older than
+  your game" and its button builds it again (`keptBuild`, `builtBeforeChange`). Under the rows one
+  big button does all of it (`pressPlan`): "Publish to all platforms", or "Update all platforms"
+  when players have every platform it names, over one line saying what it does now and what by
+  itself later ("Publishes Web now, Windows and Linux once they are built.", "Builds Mac and Windows
+  first. Windows can take up to an hour."). Its press starts every build that isn't made (the chat
+  is asked once for all the apps this computer makes), sends what is ready, and is then followed for
+  as long as the app runs (`publish-follow.ts`, `followStep`): the game's folder and record are read
+  every few seconds, with the dialog open or closed, and each platform the press named goes to
+  players once, as soon as it is ready; an app Genex Cloud still builds is promised to them as soon
+  as a game is there to play (`playable`). A platform whose build failed or never landed, or whose
+  send was refused (the refusal shows under the rows), leaves the follow alone, and the follow ends
+  when none is left; quitting the app ends it too. Meanwhile the button is a grey status,
+  "Publishing to all platforms · 1 of 3 live" (`followBar`), over "Each one goes live as soon as
+  it's ready. You can close this window." A row whose last try failed is left to its own Try again,
+  and with nothing to build, send or follow there is no big button. A web publish that goes live
+  celebrates in the banner while the rows and the button stay under it. What failed gets a block of
+  its own under the rows, above the link (`cardErrors`): its name in a few words ("Windows build
+  error", "Windows build didn't start", "Mac app didn't send"), never the log, with Send to agent (a
+  failed Genex Cloud build: the whole log goes to the game's chat, and the block then says the agent
+  is fixing it, with a clock) and a Copy icon when there are words to copy; trying again is the
+  row's button, offered unless the account's Genex Cloud builds are used up. Until the folder and
+  Genex's record both answered the rows are skeletons and there is no button. The card has no Share
+  assets line and no explanation lines; the public link carries its mark inside the address, no word
+  before it ("Test" names the test link). A review card whose way forward is publishing again keeps
+  the dialog's Publish.
 - A web game whose folder also holds a player build lists its platforms above the presses
   (`PublishPlatforms.tsx`, `publish-platforms-view.ts`; read by
   `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app,
@@ -3873,7 +3880,7 @@ with the working dot, Checking fixes; none for a game Genex doesn't know) comes 
 - A row nothing can be done about from here is left out (`outOfReach`, `shownRows`): an Unreal
   game's web row, and its rows for a system this computer doesn't package, except the Windows row on
   a Mac once Genex can build it (`cloudWords`, `CLOUD_TARGETS`). The Publish card's Build asks for it
-  beside the Mac app with `keep`: Genex keeps what it builds for the Publish after it, and a game
+  with `keep`: Genex keeps what it builds for the Publish after it, and a game
   that was never published gets its hosted project here, a draft nobody sees (`#hostForBuild`). The
   platform list's row asks without it: while the game has no page on Genex it says to publish first,
   then it offers Build on Genex, whose app goes on the game's page once built. Both run

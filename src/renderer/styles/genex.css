@@ -1608,9 +1608,12 @@ button.genex-publish-banner-name:hover {
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
-/* While it publishes the main press is its status: readable, not greyed out. */
+/* While it works the main press is not greyed out: the blue press keeps its own label while it is
+ * sent, and the grey status in its place says the step at work in quieter ink. */
 .genex-publish-primary[aria-busy]:disabled {
   opacity: 1;
+}
+.genex-publish-primary[data-variant="secondary"][aria-busy]:disabled {
   color: var(--ink-2);
 }
 /* Send report beside Try again, at its height. */

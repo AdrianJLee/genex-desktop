@@ -3,7 +3,8 @@
  * `window.studio`: skeleton rows and no button until the game folder has answered. An Unreal game on a
  * Mac opens with both apps switched on and one button, "Build Mac and Windows": the agent builds the
  * Mac app here while Genex Cloud builds the Windows one and keeps it, the busy button says both and
- * "Windows can take up to an hour."; once the Mac app is built, "Publish to Mac and Windows" gives
+ * "Windows can take up to an hour."; while a press is being sent the blue button keeps its words, its
+ * fill and its label's colour; once the Mac app is built, "Publish to Mac and Windows" gives
  * players the Mac app now and the Windows one as soon as it is built; both built publishes both, or
  * only the one switched on. A live game whose apps are older builds both, then updates both. Genex
  * Cloud building an app that was published shows its clock, the busy button and "It can take up to an
@@ -99,6 +100,18 @@ app.whenReady().then(async()=>{
   const macOnly=await step('firstWindowsOff','window.cardRig.toggle("mac")');
   assert.equal(macOnly.primary,'Build Mac');
   report.firstWindowsOff=await capture('dark-m5b-windows-off');
+  // While a press is being sent the blue button keeps its words, its fill and its label's colour.
+  for (const theme of ['light','dark']) {
+   await step(theme+'SendingOpen','window.cardRig.open({scene:"first",theme:"'+theme+'"})');
+   const ready=await step(theme+'SendingReady','window.cardRig.toggle("mac")');
+   assert.equal(ready.primary,'Build Windows');
+   const sending=await step(theme+'Sending','window.cardRig.hold()');
+   assert.equal(sending.primary,'Build Windows','a pressed button keeps its words');
+   assert.equal(sending.primaryDisabled,true,'and takes no second press');
+   assert.deepEqual([sending.primaryInk,sending.primaryFill],[ready.primaryInk,ready.primaryFill],theme+': a pressed button keeps its label colour and its fill');
+   report[theme+'Sending']=await capture(theme+'-press-being-sent');
+   await step(theme+'Sent','window.cardRig.goThrough()');
+  }
   // Windows alone: Genex Cloud builds it, and the button stays busy until there is an app to publish.
   await step('darkFirstWindowsOnly','window.cardRig.open({scene:"first",theme:"dark"})');
   await step('windowsOnlyMacOff','window.cardRig.toggle("mac")');
@@ -302,7 +315,7 @@ app.whenReady().then(async()=>{
   const linux=await step('linuxOn','window.cardRig.toggle("linux")');
   assert.equal(linux.primary,'Build Linux','an app the agent makes is built first, alone');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish card: skeleton rows before the folder answers; one Build makes the Mac app here and the Windows app on Genex Cloud, kept; one Publish gives players what is built and what Genex Cloud still builds once built; both built publish together or one alone; older apps build, then update; Genex Cloud shows its clock and the hour line; done has no button; a switch off takes an app down in amber; a failed cloud build leaves the Mac app free and its block hands the log to the agent, never showing it; a build that did not start and a failed send have blocks that try again; a PC builds its Windows app there; a switch turned off stays off after the publish and when the card opens again; a Unity game lists four platforms; no "Public:", no Share assets');
+  console.log('PASS Publish card: skeleton rows before the folder answers; one Build makes the Mac app here and the Windows app on Genex Cloud, kept; one Publish gives players what is built and what Genex Cloud still builds once built; both built publish together or one alone; older apps build, then update; Genex Cloud shows its clock and the hour line; done has no button; a pressed button keeps its words, fill and label colour while the press is sent; a switch off takes an app down in amber; a failed cloud build leaves the Mac app free and its block hands the log to the agent, never showing it; a build that did not start and a failed send have blocks that try again; a PC builds its Windows app there; a switch turned off stays off after the publish and when the card opens again; a Unity game lists four platforms; no "Public:", no Share assets');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

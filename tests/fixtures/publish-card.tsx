@@ -256,8 +256,12 @@ fake.stub("genexPublishApps", async (_project, _title, _remix, platforms, releas
 fake.stub("genexPublish", async (_project, _review, _title, _remix, _replace, platforms) => {
   asked.push(`web:${(platforms ?? []).join("+")}`);
 });
+/** A held press: the ask it sends to Genex Cloud waits until `letThrough`. */
+let held = false;
+let letThrough: () => void = () => {};
 fake.stub("genexCloudBuild", async (_project, platform, keep) => {
   asked.push(`cloud:${platform}${keep ? ":keep" : ""}`);
+  if (held) await new Promise<void>((resolve) => (letThrough = resolve));
   const startedAt = new Date().toISOString();
   // The record says at once how the project's way up goes: on its way, or refused.
   cloudSend =
@@ -308,6 +312,9 @@ function sample() {
     rows,
     primary: primary?.textContent ?? null,
     primaryDisabled: primary?.disabled ?? null,
+    // The button's label colour and fill as drawn.
+    primaryInk: primary ? getComputedStyle(primary).color : null,
+    primaryFill: primary ? getComputedStyle(primary).backgroundColor : null,
     warn: primary?.dataset.warn === "true",
     note: content?.querySelector(".genex-publish-card-note")?.textContent ?? null,
     blocks: [...(content?.querySelectorAll<HTMLElement>("[data-publish-error]") ?? [])].map((block) => ({
@@ -388,6 +395,23 @@ async function press() {
   return sample();
 }
 
+/** Press the card's button and stop while its ask to Genex Cloud is being sent; `goThrough` lets it on. */
+async function hold() {
+  held = true;
+  document.querySelector<HTMLButtonElement>(".genex-publish-primary")?.click();
+  for (let i = 0; i < 60 && asked.length === 0; i++) await frame();
+  await settle();
+  return sample();
+}
+
+/** The held press goes through. */
+async function goThrough() {
+  held = false;
+  letThrough();
+  await settle();
+  return sample();
+}
+
 /**
  * The agent's Mac build lands in the folder while the card stays open, and the agent's turn ends: the
  * card is never reopened, and waits at most `wait` frames for the row to change.
@@ -410,4 +434,4 @@ async function block(which: "send" | "retry" | "copy") {
   return sample();
 }
 
-Object.assign(window, { cardRig: { open, answer, toggle, press, sample, land, block } });
+Object.assign(window, { cardRig: { open, answer, toggle, press, hold, goThrough, sample, land, block } });

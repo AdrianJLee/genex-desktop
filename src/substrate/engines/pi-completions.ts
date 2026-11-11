@@ -185,6 +185,7 @@ export function piContext(request: CompleteRequest, provider: string = EngineId.
   };
 }
 
+/** Drop acceptJsonString because strict proxies answer 400 to schema keys they do not know. */
 function cleanToolParameters(schema: unknown): unknown {
   if (!schema || typeof schema !== "object") return schema;
   if (Array.isArray(schema)) return schema.map(cleanToolParameters);

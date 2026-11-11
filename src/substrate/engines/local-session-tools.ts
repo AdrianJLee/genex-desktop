@@ -306,21 +306,22 @@ function matchTargetText(
   oldText: string,
   newText: string,
 ): { targetOld: string; targetNew: string; at: number } {
-  let at = source.indexOf(oldText);
-  if (at >= 0) return { targetOld: oldText, targetNew: newText, at };
   const isCrlf = source.includes("\r\n");
+  const targetNew = isCrlf ? newText.replace(/\r?\n/g, "\r\n") : newText;
+  const at = source.indexOf(oldText);
+  if (at >= 0) return { targetOld: oldText, targetNew, at };
   if (isCrlf && !oldText.includes("\r\n") && oldText.includes("\n")) {
     const crlfOld = oldText.replace(/\r?\n/g, "\r\n");
-    if (source.indexOf(crlfOld) >= 0) {
-      return { targetOld: crlfOld, targetNew: newText.replace(/\r?\n/g, "\r\n"), at: source.indexOf(crlfOld) };
-    }
+    const crlfAt = source.indexOf(crlfOld);
+    if (crlfAt >= 0) return { targetOld: crlfOld, targetNew, at: crlfAt };
   } else if (!isCrlf && oldText.includes("\r\n")) {
     const lfOld = oldText.replace(/\r\n/g, "\n");
-    if (source.indexOf(lfOld) >= 0) {
-      return { targetOld: lfOld, targetNew: newText.replace(/\r\n/g, "\n"), at: source.indexOf(lfOld) };
+    const lfAt = source.indexOf(lfOld);
+    if (lfAt >= 0) {
+      return { targetOld: lfOld, targetNew: newText.replace(/\r\n/g, "\n"), at: lfAt };
     }
   }
-  return { targetOld: oldText, targetNew: newText, at: -1 };
+  return { targetOld: oldText, targetNew, at: -1 };
 }
 
 async function editFileTool(args: ToolArgs, context: ToolContext): Promise<LiveToolResult> {

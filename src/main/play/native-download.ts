@@ -12,7 +12,7 @@
  */
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { type FileHandle, open, rm, stat } from "node:fs/promises";
+import { type FileHandle, open, rm, stat, truncate } from "node:fs/promises";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { InstallFailure, type NativeBuild, type ZipBuild } from "../../shared/play-native.ts";
 import {
@@ -286,12 +286,10 @@ async function savedRanges(job: Download, shape: RangeShape, etag: string): Prom
   }
   await writeRangeRecord(partial, newRangeRecord(shape, etag, done ?? []));
   // "a" makes the file when it is missing and keeps what it holds.
-  const file = await open(partial, "a", 0o600);
-  try {
-    if (!done) await file.truncate(0);
-  } finally {
-    await file.close();
-  }
+  await (await open(partial, "a", 0o600)).close();
+  // Emptied by its path, never through that handle: Windows refuses to truncate a file opened
+  // for appending (EPERM), and a download whose record is not believed would then fail there.
+  if (!done) await truncate(partial, 0);
   return done ?? [];
 }
 

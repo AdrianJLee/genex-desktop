@@ -230,7 +230,8 @@ namespace Genex.Multiplayer.Authority
                 }
                 catch (GenexJoinException e)
                 {
-                    refusal = e.Code > 0 ? e.Code : (int?)null;
+                    // Only a server's answer is a refusal: one the player could not read is a network that failed.
+                    refusal = e.Answered && e.Code > 0 ? e.Code : (int?)null;
                 }
                 catch (Exception)
                 {

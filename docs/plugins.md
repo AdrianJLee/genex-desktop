@@ -2823,8 +2823,11 @@ the headers: the Genex SDK's reproducible zig build of the same release, `COLYSE
 vendored from genex-demo's `win64-core` CI artifact by `scripts/vendor-unreal-colyseus-win64.ts`, whose
 `vendor.json` records the provenance and every file's sha256), checking each file against its pin before
 any is written, with its license and the notices of what the dll links statically; nothing is
-downloaded. A core that isn't the pinned one, or a link in its way, is a note in `core.why`, never a
-refusal; a link anywhere on the plugin's way refuses the call before anything is written. The `unreal-multiplayer` skill takes the builder from there: the room module
+downloaded. A Mac places that Win64 core too, before its own (the two share `include/` and the license,
+byte for byte the same release's), so a game made on a Mac can be built for Windows by Build on Genex,
+whose machine compiles the plugin as the project holds it; the answer's `windows` says whether it was
+placed. A core that isn't the pinned one, or a link in its way, is a note in `core.why` (or
+`windows.why`), never a refusal; a link anywhere on the plugin's way refuses the call before anything is written. The `unreal-multiplayer` skill takes the builder from there: the room module
 and `genex.json`'s `authority` block, the `Genex Authority Subsystem` client, `genex__room` with bots
 (Play joins it through `.studio/authority.json`) and publish, which stages the room as for any game.
 Any Unreal game also gets `unreal__package-game {stop?, system?}` and `unreal__package-status {system?}`

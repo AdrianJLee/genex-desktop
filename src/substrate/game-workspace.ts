@@ -76,7 +76,13 @@ import {
 } from "../shared/project-workspace.ts";
 import { readEngineBinding } from "./game-engine-binding.ts";
 import { usesGenexMultiplayer } from "./genex-game-manifest.ts";
-import { exportPublicGame, type ExportOptions, type ExportResult } from "./game-export.ts";
+import {
+  exportPublicGame,
+  listPublicGame,
+  type ExportListing,
+  type ExportOptions,
+  type ExportResult,
+} from "./game-export.ts";
 import { ownRules, REFERENCES_README } from "./game-workspace-prompts.ts";
 import { type GameValidation, validateGameDir } from "./game-validation.ts";
 import {
@@ -1614,16 +1620,36 @@ export class GameWorkspaces {
     builtOutput?: string,
     options: ExportOptions = {},
   ): Promise<ExportResult> {
+    const from = await this.#publicSource(name, builtOutput);
+    return exportPublicGame(from.dir, targetDir, from.roots, from.vendor, options);
+  }
+
+  /**
+   * The files {@link export} would put in the bundle and leave out, read where they are: nothing is
+   * copied. Undefined for a game that carries the vendored library, whose bundle has to be made to
+   * know which of the library's files it keeps.
+   */
+  async exportListing(
+    name: string,
+    builtOutput?: string,
+    options: ExportOptions = {},
+  ): Promise<ExportListing | undefined> {
+    const from = await this.#publicSource(name, builtOutput);
+    return from.vendor ? undefined : listPublicGame(from.dir, from.roots, options);
+  }
+
+  /** What a game's public copy is made from: the folder, its public paths, and the vendored library a template game adds. */
+  async #publicSource(name: string, builtOutput?: string): Promise<{ dir: string; roots: string[]; vendor?: string }> {
     const dir = this.dirFor(name);
     const shape = await detectProjectShape(dir);
     const config = await readJsonIfExists<{ exportFiles?: string[] }>(path.join(dir, "studio.json"));
-    if (builtOutput) return exportPublicGame(builtOutput, targetDir, await readdir(builtOutput), undefined, options);
+    if (builtOutput) return { dir: builtOutput, roots: await readdir(builtOutput) };
     if (shape?.build) throw new CodedError(ExportRefusal.NeedsBuild, MESSAGE.BuildBeforeExport());
     if (shape && !config?.exportFiles)
       throw new CodedError(ExportRefusal.FilesUndeclared, MESSAGE.DeclareExportFiles());
     const roots = config?.exportFiles ?? (await defaultExportRoots(dir));
     if (!isExportList(roots)) throw new CodedError(ExportRefusal.FilesInvalid, MESSAGE.BadExportFiles());
-    return exportPublicGame(dir, targetDir, roots, shape ? undefined : this.vendorDir, options);
+    return { dir, roots, vendor: shape ? undefined : this.vendorDir };
   }
 }
 

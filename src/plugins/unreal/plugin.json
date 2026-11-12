@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.56.4",
+  "version": "0.56.6",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
@@ -751,7 +751,8 @@
       "id": "setup",
       "title": "Unreal",
       "file": "panel.html",
-      "placement": "settings"
+      "placement": "settings",
+      "width": "narrow"
     }
   ],
   "settings": [],
@@ -762,8 +763,8 @@
     },
     {
       "name": "setup",
-      "label": "Set up project",
-      "confirmation": "Set up this Unreal project for Genex: turn on Epic's MCP plugins and toolsets in its .uproject, start the MCP server on the project's own port when it opens, and add the Genex editor helper to its Plugins folder. Genex keeps a copy of each file first."
+      "label": "Add Genex",
+      "confirmation": "Add Genex to this Unreal project: turn on Epic's MCP plugins and toolsets in its .uproject, start the MCP server on the project's own port when it opens, and add the Genex editor helper to its Plugins folder. Genex keeps a copy of each file first."
     },
     {
       "name": "templates",
@@ -809,7 +810,7 @@
     },
     {
       "name": "undo-setup",
-      "label": "Undo setup",
+      "label": "Remove Genex",
       "confirmation": "Take back what Genex added to this Unreal project: its plugin entries, the MCP server start-up lines and the Genex editor helper. Anything else you changed stays."
     },
     {
@@ -820,6 +821,12 @@
     {
       "name": "move-later",
       "label": "Not now"
+    },
+    {
+      "name": "move-into-game",
+      "label": "Move into game",
+      "confirmation": "Move this Unreal project's folder into this game's folder, as unreal/, where Rewind, Loops and Publish reach it. Nothing is copied or replaced.",
+      "native": true
     },
     {
       "name": "use-project",

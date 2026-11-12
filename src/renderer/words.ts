@@ -6254,6 +6254,7 @@ const INSTALL_FAILED: Readonly<Record<InstallFailure, (free: string, here: Nativ
   [InstallFailure.TooLarge]: () => t("Couldn’t install: this game is larger than it says."),
   [InstallFailure.UnsupportedOs]: (_free: string, here: NativeHereWords) => here.unsupported,
   [InstallFailure.NeedsRosetta]: () => t("Couldn’t install: this game needs Rosetta to run on this Mac."),
+  [InstallFailure.NeedsUpdate]: () => t("Couldn’t install: this game needs a newer Genex. Update Genex and try again."),
   [InstallFailure.EntryMissing]: () => t("Couldn’t install: the download doesn’t hold the game."),
   [InstallFailure.NotOffered]: (_free: string, here: NativeHereWords) => here.notOffered,
   [InstallFailure.Failed]: () => t("Couldn’t install. Try again."),

@@ -20,6 +20,7 @@ import { type PlayGameDetail, PlayNote, playPageUrl, PlayShelf } from "../../sha
 import {
   hasWebBuild,
   InstallFailure,
+  installSpaceBytes,
   NativeArch,
   NativeEngine,
   NativePlatform,
@@ -176,7 +177,7 @@ function Playing({ game, standing }: { game: PlayGameDetail; standing: GameStand
 /** A failure: Try again, and one orange line naming the cause. */
 function Failed({ game, standing }: { game: PlayGameDetail; standing: GameStanding }): JSX.Element {
   const failure = standing.failure;
-  const needed = (standing.build?.sizeBytes ?? 0) + (standing.build?.installedBytes ?? 0);
+  const needed = standing.build ? installSpaceBytes(standing.build) : 0;
   const here = nativeHereWords(standing.here);
   const line = (() => {
     if (!failure) return WORDS.installFailed[InstallFailure.Failed]("", here);

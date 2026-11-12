@@ -32,12 +32,13 @@ import {
   type NativeSession,
   NativeSessionPhase,
   WhyNotHere,
+  type ZipBuild,
 } from "../../src/shared/play-native.ts";
 import { NATIVE_WORDS, nativeHereWords, notHereWords } from "../../src/renderer/words.ts";
 
 const HOST: NativeHost = { platform: NativePlatform.Mac, arch: NativeArch.Arm64, osVersion: "15.0" };
 
-const build = (overrides: Partial<NativeBuild> = {}): NativeBuild => ({
+const build = (overrides: Partial<ZipBuild> = {}): ZipBuild => ({
   platform: NativePlatform.Mac,
   arch: NativeArch.Universal,
   version: "1.3",

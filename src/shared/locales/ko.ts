@@ -1087,6 +1087,8 @@ export default {
   "Couldn’t install: this game doesn’t run on this Mac.": "설치하지 못했어요. 이 게임은 이 Mac에서 실행되지 않아요.",
   "Couldn’t install: this game is larger than it says.": "설치하지 못했어요. 이 게임이 표시된 크기보다 커요.",
   "Couldn’t install: this game isn’t signed.": "설치하지 못했어요. 이 게임은 서명되지 않았어요.",
+  "Couldn’t install: this game needs a newer Genex. Update Genex and try again.":
+    "설치하지 못했어요. 이 게임에는 더 새로운 Genex가 필요해요. Genex를 업데이트하고 다시 시도하세요.",
   "Couldn’t install: this game needs Rosetta to run on this Mac.":
     "설치하지 못했어요. 이 Mac에서 이 게임을 실행하려면 Rosetta가 필요해요.",
   "Couldn’t install: this game’s files aren’t safe to open.":

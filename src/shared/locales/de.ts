@@ -1173,6 +1173,8 @@ export default {
   "Couldn’t install: this game is larger than it says.":
     "Installation fehlgeschlagen: Dieses Spiel ist größer als angegeben.",
   "Couldn’t install: this game isn’t signed.": "Installation fehlgeschlagen: Dieses Spiel ist nicht signiert.",
+  "Couldn’t install: this game needs a newer Genex. Update Genex and try again.":
+    "Installation fehlgeschlagen: Dieses Spiel braucht ein neueres Genex. Aktualisiere Genex und versuch es noch mal.",
   "Couldn’t install: this game needs Rosetta to run on this Mac.":
     "Installation fehlgeschlagen: Dieses Spiel braucht Rosetta auf diesem Mac.",
   "Couldn’t install: this game’s files aren’t safe to open.":

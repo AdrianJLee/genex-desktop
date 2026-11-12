@@ -3181,7 +3181,10 @@ the online play) puts Genex multiplayer into the game's Unity project, WebGL and
   the matchmaking), `GenexAuthority.Connect` on the client. `GenexGame.LocalRoomUrl` is
   `genex__room`'s local room: `GENEX_AUTHORITY_URL` in a native build, the preview's
   `genex_authority_url` in a WebGL one (only a `ws://` loopback room on a loopback page);
-  `GenexGame.PageAuthorityUrls` is the published page's `window.genexEmbed.getAuthorityUrls()`. The
+  `GenexGame.PageAuthorityUrls` is the published page's `window.genexEmbed.getAuthorityUrls()`,
+  `PageAuthorityRegions` its `getAuthorityRegions()` (one region a line, name and urls tab-separated
+  across the jslib) and `PageAuthorityHome` its `getAuthorityHome()`, only when it names one of those
+  regions. The
   room travels with the WebGL build through the same staging as any game's (`readGenexGameManifest`
   reads `genex.json` once the project embeds the package).
 - **Verified so far:** a Unity 6 Mono Mac build, named by `GENEX_GAME`, signed in as a guest and

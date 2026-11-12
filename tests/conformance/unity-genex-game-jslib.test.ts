@@ -97,7 +97,9 @@ describe("GenexGame in a WebGL build", () => {
       null,
       "asia",
     ];
-    const call = await linked(page("https://genex.games/play/arena", { genexEmbed: { getAuthorityRegions: () => regions } }));
+    const call = await linked(
+      page("https://genex.games/play/arena", { genexEmbed: { getAuthorityRegions: () => regions } }),
+    );
     assert.equal(
       call("GenexGame_PageAuthorityRegions"),
       "asia\twss://asia.genex.games:8443\twss://asia.genex.games\neu\twss://eu.genex.games:2053",
@@ -115,7 +117,13 @@ describe("GenexGame in a WebGL build", () => {
       ["empty", () => "", ""],
       ["not a string", () => 7, ""],
       ["absent", () => undefined, ""],
-      ["throws", () => { throw new Error("not initialised"); }, ""],
+      [
+        "throws",
+        () => {
+          throw new Error("not initialised");
+        },
+        "",
+      ],
       ["an SDK without the call", undefined, ""],
     ];
     for (const [name, getAuthorityHome, expected] of cases) {

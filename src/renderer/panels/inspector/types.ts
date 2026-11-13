@@ -49,16 +49,10 @@ export interface InspectorProps {
   resultPath: string | null;
   /** the result's picture is a part's, lent while the new build is being tried */
   resultBorrowed: boolean;
-  /** the result's picture was taken as the starting one was (the final capture): only then are they compared */
-  resultPairsWithBase: boolean;
-  /** a Loop's build history, when the graph draws one */
+  /** a Loop's build history, when the run has one */
   timeline: BuildTimeline | null;
   onClose: () => void;
   onSelect: (id: string) => void;
-  onPrev: () => void;
-  onNext: () => void;
-  /** The try whose judges' notes its card opens on, already showing — a gate on the graph asked for them. */
-  notesFor: string | null;
   onLight: (items: LightItem[], index: number) => void;
   onOpenJob: (job: AssetInfo) => void;
   /** Put a chip naming this node in the chat's composer; null when there is no chat to reply in. */

@@ -95,6 +95,7 @@ import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 import { MentionMiss } from "../shared/prompt-mention.ts";
 import { AssetScope, LibraryKind } from "../shared/asset-library.ts";
 import { KindChoice } from "./play/asset-tiles.ts";
+import { AssetOrder, AssetTab } from "./assets-filter.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -4435,6 +4436,21 @@ export const ASSET_LIBRARY_WORDS = {
   search: t("Search assets"),
   searchLabel: t("Search this game, your library and the community"),
   clearSearch: t("Clear the search"),
+  /** The canvas's tabs and the order its cards run in. */
+  tabsLabel: t("Kinds of asset"),
+  tabs: {
+    [AssetTab.All]: t("All"),
+    [AssetTab.Models]: t("Models"),
+    [AssetTab.Images]: t("Images"),
+    [AssetTab.Sounds]: t("Sounds"),
+    [AssetTab.Video]: t("Video"),
+  } satisfies Record<AssetTab, string>,
+  sortLabel: t("Sort assets"),
+  orders: {
+    [AssetOrder.Newest]: t("Newest"),
+    [AssetOrder.Name]: t("Name"),
+    [AssetOrder.Size]: t("Size"),
+  } satisfies Record<AssetOrder, string>,
   thisGame: t("This game"),
   myLibrary: t("My library"),
   community: t("Community"),

@@ -807,6 +807,10 @@ export interface StudioApi {
   presentProjectAssets(p: { project: string; files: string[] }): Promise<string[]>;
   /** What these GLB and glTF files hold, read from their headers: meshes, clips and bones; other files are skipped. */
   projectModelRigs(p: { project: string; files: string[] }): Promise<ModelRig[]>;
+  /** A card's thumbnail Studio kept in an earlier session under the key the card made it for; null when none. */
+  readAssetThumbnail(p: { project: string; key: string }): Promise<{ mimeType: string; data: string } | null>;
+  /** Keep a card's thumbnail (base64 of a small picture) in Studio's own data for the next session; false when refused. */
+  keepAssetThumbnail(p: { project: string; key: string; data: string }): Promise<boolean>;
   projectAssets(project: string): Promise<ProjectAssets>;
   /** The Genex account's asset library on genex.games, newest first; throws signed out. */
   assetLibrary(query: LibraryQuery): Promise<LibraryPage>;

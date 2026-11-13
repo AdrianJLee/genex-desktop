@@ -8,6 +8,7 @@ import { buildDeliveries, resolveBuildRef } from "../build-assets.ts";
 import { isBuildRef } from "../../shared/build-ref.ts";
 import { assertAssetPath, readAssetPreview } from "../asset-preview.ts";
 import { readModelRig } from "../model-rigs.ts";
+import { type KeptThumbnail, keepThumbnail, readThumbnail } from "../asset-thumbnails.ts";
 import type { ModelRig } from "../../shared/model-rig.ts";
 import { assertRelativePath, isBelow } from "../../substrate/paths.ts";
 import {
@@ -55,6 +56,7 @@ const MESSAGE = {
   assetRequired: "Project and asset are required.",
   recordedAssetUnavailable: () => t("Recorded asset is unavailable."),
   filesRequired: "Project and files are required.",
+  keyRequired: "Project and key are required.",
 } as const;
 
 /** The most mood-board frames one call saves, and the largest one, in bytes. */
@@ -64,6 +66,8 @@ const MAX_REFERENCE_BYTES = 8 * 1024 * 1024;
 const REFERENCE_SLUG_MAX_CHARS = 40;
 /** The most delivered files one presence check looks at. */
 const MAX_PRESENCE_FILES = 200;
+/** How many model headers one rig read opens at once. */
+const RIG_READS_AT_ONCE = 8;
 /** The longest label a run's feedback keeps. */
 const FEEDBACK_LABEL_CHARS = 120;
 /** How long a game's asset folders are reused by its previews and thumbnails: the Assets stage's poll. */
@@ -409,6 +413,25 @@ export class AssetService {
     return present;
   }
 
+  /** The game a thumbnail request names, checked: a malformed request or a game outside this studio is refused. */
+  async #thumbnailGame(p: { project: string; key: string }): Promise<void> {
+    const malformed = !p || typeof p.project !== "string" || typeof p.key !== "string";
+    if (malformed) throw new Error(MESSAGE.keyRequired);
+    await this.#core.assertProjectAllowed(this.#core.games.dirFor(p.project));
+  }
+
+  /** The thumbnail kept for a card of this game under `key` in an earlier session, or null. */
+  async readAssetThumbnail(p: { project: string; key: string }): Promise<KeptThumbnail | null> {
+    await this.#thumbnailGame(p);
+    return readThumbnail(this.#core.layout.assetThumbnails, p.project, p.key);
+  }
+
+  /** Keep a card's thumbnail (base64) for the next session; false when it is no small picture. */
+  async keepAssetThumbnail(p: { project: string; key: string; data: string }): Promise<boolean> {
+    await this.#thumbnailGame(p);
+    return keepThumbnail(this.#core.layout.assetThumbnails, p.project, p.key, p.data);
+  }
+
   /** The rigs of these GLB and glTF files in the game folder, read from their headers; other files are skipped. */
   async projectModelRigs(p: { project: string; files: string[] }): Promise<ModelRig[]> {
     const malformed = !p || typeof p.project !== "string" || !Array.isArray(p.files);
@@ -416,10 +439,13 @@ export class AssetService {
     const dir = this.#core.games.dirFor(p.project);
     await this.#core.assertProjectAllowed(dir);
     const root = await realpath(dir);
+    const asked = p.files.slice(0, MAX_PRESENCE_FILES);
     const rigs: ModelRig[] = [];
-    for (const file of p.files.slice(0, MAX_PRESENCE_FILES)) {
-      const rig = await readModelRig(root, file);
-      if (rig) rigs.push(rig);
+    // A few headers at a time, answered in the order asked: the Assets stage waits on this to fold clips.
+    for (let at = 0; at < asked.length; at += RIG_READS_AT_ONCE) {
+      const batch = asked.slice(at, at + RIG_READS_AT_ONCE);
+      const read = await Promise.all(batch.map((file) => readModelRig(root, file)));
+      rigs.push(...read.filter((rig) => rig !== null));
     }
     return rigs;
   }

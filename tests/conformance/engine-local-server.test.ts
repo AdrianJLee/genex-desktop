@@ -306,6 +306,26 @@ describe("reading each server's models", () => {
     assert.equal(row?.supportsVision, true);
   });
 
+  it("shows overrides saved through setModelOverride in models()", async () => {
+    const server = await fake();
+    const local = await connected(server, { overrides: memoryModelOverridesStore() });
+    const [before] = await local.models();
+    assert.equal(before?.contextWindow, 32_768);
+    assert.equal(before?.contextSource, "unknown");
+
+    await local.setModelOverride("my-model", { contextWindow: 262_144, supportsVision: true, supportsTools: false });
+    const [after] = await local.models();
+    assert.equal(after?.contextWindow, 262_144);
+    assert.equal(after?.contextSource, "configured");
+    assert.equal(after?.supportsVision, true);
+    assert.equal(after?.supportsTools, false);
+
+    await local.setModelOverride("my-model", null);
+    const [cleared] = await local.models();
+    assert.equal(cleared?.contextWindow, 32_768);
+    assert.equal(cleared?.contextSource, "unknown");
+  });
+
   it("server reported context and vision win over models.json overrides", async () => {
     const server = await fake({ flavor: "tabbyapi", props: { nCtx: 131_072, vision: false } });
     const overrides = memoryModelOverridesStore();

@@ -8,7 +8,13 @@
  */
 import { type FormEvent, type JSX, useEffect, useRef, useState } from "react";
 import { EngineId } from "../../shared/providers.ts";
-import type { FoundLocalServer, LocalServerInfo, ModelOverride } from "../../shared/local-server.ts";
+import {
+  MAX_OVERRIDE_CONTEXT,
+  MIN_OVERRIDE_CONTEXT,
+  type FoundLocalServer,
+  type LocalServerInfo,
+  type ModelOverride,
+} from "../../shared/local-server.ts";
 import {
   reportClock,
   reportLocalServerConnect,
@@ -25,7 +31,9 @@ import { DropdownMenuItem } from "../ui/dropdown-menu.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { LOCAL_SERVER_WORDS, METERED_PROVIDER_WORDS } from "../words.ts";
 import {
+  buildOverride,
   isKeyRefusal,
+  isValidOverrideContext,
   kindName,
   LocalServerRowState,
   localServerRowState,
@@ -299,17 +307,6 @@ const PRESET_CONTEXTS = [
   { label: "1M", value: 1_048_576 },
 ];
 
-function buildOverride(
-  reported: { context: boolean; vision: boolean; tools: boolean },
-  values: { context: number; vision: boolean; tools: boolean },
-): ModelOverride | null {
-  const override: ModelOverride = {};
-  if (!reported.context && Number.isFinite(values.context)) override.contextWindow = values.context;
-  if (!reported.vision) override.supportsVision = values.vision;
-  if (!reported.tools) override.supportsTools = values.tools;
-  return Object.keys(override).length ? override : null;
-}
-
 function ModelCapabilities({
   isVisionReported,
   isToolsReported,
@@ -382,9 +379,7 @@ function ModelConfigDialog({
 
   const save = async (): Promise<void> => {
     setError(null);
-    const raw = contextWindow.trim();
-    const parsed = Number(raw);
-    if (!isContextReported && (raw === "" || !Number.isInteger(parsed) || parsed < 1024 || parsed > 10_000_000)) {
+    if (!isContextReported && !isValidOverrideContext(contextWindow)) {
       setError(WORDS.invalidContext);
       return;
     }
@@ -392,7 +387,7 @@ function ModelConfigDialog({
     try {
       const override = buildOverride(
         { context: isContextReported, vision: isVisionReported, tools: isToolsReported },
-        { context: parsed, vision: supportsVision, tools: supportsTools },
+        { context: Number(contextWindow.trim()), vision: supportsVision, tools: supportsTools },
       );
       await onSave(override);
       onClose();
@@ -444,8 +439,8 @@ function ModelConfigDialog({
           <input
             id="model-context-size"
             type="number"
-            min={1024}
-            max={10000000}
+            min={MIN_OVERRIDE_CONTEXT}
+            max={MAX_OVERRIDE_CONTEXT}
             step={1024}
             disabled={isContextReported}
             value={contextWindow}

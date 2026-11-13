@@ -6,7 +6,12 @@
  */
 import { rm } from "node:fs/promises";
 import { atomicWriteJson, isJsonObject, readJsonIfExists } from "../fsx.ts";
-import { LocalServerKind, type ModelOverride } from "../../shared/local-server.ts";
+import {
+  LocalServerKind,
+  MAX_OVERRIDE_CONTEXT,
+  MIN_OVERRIDE_CONTEXT,
+  type ModelOverride,
+} from "../../shared/local-server.ts";
 import { readServerAddress } from "./address.ts";
 
 /** The saved server: the API's base URL and, when known, which software answers there. */
@@ -63,31 +68,27 @@ export interface ModelOverridesStore {
   write(id: string, override: ModelOverride | null): Promise<void>;
 }
 
-const MIN_OVERRIDE_CONTEXT = 1024;
-const MAX_OVERRIDE_CONTEXT = 10_000_000;
-
 /** Sanitize a model override: finite numbers in sane range, boolean capabilities. */
 export function sanitizeModelOverride(raw: unknown): ModelOverride | null {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const obj = raw as Record<string, unknown>;
+  if (!isJsonObject(raw)) return null;
   const clean: ModelOverride = {};
-  if (typeof obj.contextWindow === "number" && Number.isFinite(obj.contextWindow)) {
-    const tokens = Math.floor(obj.contextWindow);
+  if (typeof raw.contextWindow === "number" && Number.isFinite(raw.contextWindow)) {
+    const tokens = Math.floor(raw.contextWindow);
     if (tokens >= MIN_OVERRIDE_CONTEXT && tokens <= MAX_OVERRIDE_CONTEXT) {
       clean.contextWindow = tokens;
     }
   }
-  if (typeof obj.supportsVision === "boolean") {
-    clean.supportsVision = obj.supportsVision;
+  if (typeof raw.supportsVision === "boolean") {
+    clean.supportsVision = raw.supportsVision;
   }
-  if (typeof obj.supportsTools === "boolean") {
-    clean.supportsTools = obj.supportsTools;
+  if (typeof raw.supportsTools === "boolean") {
+    clean.supportsTools = raw.supportsTools;
   }
   return Object.keys(clean).length > 0 ? clean : null;
 }
 
 function sanitizeOverridesRecord(data: unknown): Record<string, ModelOverride> {
-  if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+  if (!isJsonObject(data)) return {};
   const clean: Record<string, ModelOverride> = {};
   for (const [id, value] of Object.entries(data)) {
     const validated = sanitizeModelOverride(value);

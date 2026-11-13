@@ -194,6 +194,7 @@ export interface LocalServerEngineOptions {
   toolPath?: () => Promise<string>;
   /** Where the server's address is saved. */
   settings: ServerSettings;
+  /** Where per-model capability overrides are kept; defaults to models.json in root. */
   overridesStore?: ModelOverridesStore;
   /** Where its API key is kept. */
   keys: ApiKeyStore;

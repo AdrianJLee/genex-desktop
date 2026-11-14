@@ -371,23 +371,12 @@
     opacity: 1;
   }
 }
-/* The builds graph draws what is live or selected in its own accent (themes.ts `graph`), the app's until set. */
+/* The Builds tab draws what is live or selected in its own accent (themes.ts `graph`), the app's until set. */
 [data-stage-graph] {
   --accent: var(--graph, var(--accent-primary));
   --accent-tint: color-mix(in srgb, var(--accent) 16%, transparent);
 }
-/* Ours: the run graph's "building right now" halo, and the still that is not there yet. */
-@keyframes graph-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0;
-    transform: scale(1.06);
-  }
-}
+/* A dot that breathes once: a gate on a card, the stage's Reload when Live is behind. */
 @keyframes gate-pulse {
   0%,
   100% {
@@ -398,16 +387,6 @@
     opacity: 0.45;
     transform: scale(1.2);
   }
-}
-/* The start node has no card, so its halo pulses on the ring around its words, not on them. */
-:is([data-graph-node], [data-graph-ring])[data-working="true"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  border: 2px solid var(--accent);
-  pointer-events: none;
-  animation: graph-pulse 1.6s ease-in-out infinite;
 }
 [inert] [data-stage-graph] *,
 [inert] [data-stage-graph] *::after {
@@ -430,7 +409,7 @@
   .loader-grid > span,
   [style*="infinite"]
 ),
-:root[data-motion="rest"] :is([data-graph-node], [data-graph-ring], .graph-shimmer)::after {
+:root[data-motion="rest"] .graph-shimmer::after {
   animation-play-state: paused !important;
 }
 /* A selected node opening into its card over the zoomed canvas. */
@@ -4380,22 +4359,6 @@ button.chat-header-title:hover {
   gap: 8px;
   min-width: 0;
 }
-/* Builds on its way (RunGraph.tsx): what you asked, two parts and the build, on the graph's dots. */
-.skeleton-graph {
-  display: flex;
-  align-items: center;
-  justify-content: safe center;
-  gap: 48px;
-  height: 100%;
-  padding: 32px;
-  background-image: radial-gradient(var(--line-strong) 1px, transparent 1.25px);
-  background-size: 22px 22px;
-}
-.skeleton-graph-column {
-  display: flex;
-  flex-direction: column;
-  gap: 40px;
-}
 /* The Assets tab on its way (AssetsCanvas.tsx): a first screen of tiles, each with its name. */
 .skeleton-tiles {
   display: grid;
@@ -5098,6 +5061,32 @@ button.chat-header-title:hover {
 .chat-question-body > :first-child {
   padding-inline-end: 28px;
 }
+/* Which question of a short run this is: its count, and a dash for each, filled up to this one. */
+.chat-question-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--ink-3);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+.chat-question-dashes {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+.chat-question-dashes > span {
+  width: 18px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+.chat-question-dashes > [data-filled] {
+  background: var(--accent);
+}
 .chat-question-recap {
   margin-bottom: 6px;
   color: var(--ink-2);
@@ -5178,10 +5167,20 @@ button.chat-header-title:hover {
   line-height: 20px;
   text-align: start;
   cursor: pointer;
+  transition: opacity var(--duration-quick) ease-out;
 }
+/* An answer that cannot be pressed dims only once the wait is long enough to read: a question shown
+   as the reply that asked it is still ending, or answered in the composer, would otherwise flash
+   half-lit for a moment. The starting style keeps a card that arrives disabled from opening dimmed. */
 .chat-answer:disabled {
   opacity: 0.5;
   cursor: default;
+  transition-delay: 600ms;
+}
+@starting-style {
+  .chat-answer:disabled {
+    opacity: 1;
+  }
 }
 /* An answer on its way looks as it did when pressed: only the pointer says it is working. */
 .chat-answer[aria-busy="true"] {
@@ -6344,36 +6343,9 @@ a:focus-visible {
   position: relative;
   z-index: 1;
 }
-/* Open in Builds, at the foot of the Building card's parts: a small filled button (`pill-quiet`)
- * above the card's own toggle. */
-.build-checklist-open {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-self: flex-start;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-  padding: 3px 8px 3px 10px;
-  border: 0;
-  border-radius: var(--radius-control);
-  font-family: var(--font-family-content);
-  font-size: 13px;
-  line-height: 18px;
-  letter-spacing: -0.2px;
-  cursor: pointer;
-  transition:
-    background-color var(--duration-quick),
-    color var(--duration-quick);
-}
-.build-checklist-open:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
 @media (prefers-reduced-motion: reduce) {
   .build-card,
-  .build-card-open svg,
-  .build-checklist-open {
+  .build-card-open svg {
     transition: none;
   }
 }
@@ -6920,6 +6892,15 @@ a:focus-visible {
   background: color-mix(in srgb, var(--background) 88%, transparent);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
+}
+/* The caller's actions and Close in the top corner. Windows and Linux draw the window's own controls
+ * over that corner (theme.css `--window-controls-end`), so there the row sits under the title bar. */
+.lightbox-actions {
+  top: 20px;
+}
+:root[data-platform="win32"] .lightbox-actions,
+:root[data-platform="linux"] .lightbox-actions {
+  top: 56px;
 }
 .lightbox-button {
   display: inline-flex;

@@ -104,6 +104,7 @@ import { createGenexLane, type GenexLaneDeps } from "../substrate/engines/genex.
 import { CodexEngine } from "../substrate/engines/codex.ts";
 import { OllamaEngine, OllamaSidecar } from "../substrate/engines/ollama.ts";
 import { OpenCodeEngine, openCodeSessionFolders } from "../substrate/engines/opencode.ts";
+import { AntigravityEngine } from "../substrate/engines/antigravity.ts";
 import { CursorEngine } from "../substrate/engines/cursor.ts";
 import { GrokEngine } from "../substrate/engines/grok.ts";
 import { cursorHomes, grokHome } from "../substrate/credential-homes.ts";
@@ -150,7 +151,7 @@ import type { PreviewConsoleEntry, PreviewPixelStats, PreviewPort } from "../sub
 import { SnapshotEngine, SnapshotIndex, HARNESS_WORKSPACE } from "../substrate/snapshots.ts";
 import { gitMissingProblem, SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { claudeFolderDenyWrites, ProcessSandbox } from "../substrate/spawn.ts";
-import { ensureHostGit } from "../substrate/windows-sandbox.ts";
+import { ensureHostGit, leftOutFolder } from "../substrate/windows-sandbox.ts";
 import { ensureMacGit } from "../substrate/git-policy.ts";
 import { type JobProbe, JobService, type JobSpawn } from "../substrate/jobs.ts";
 import { type AppLookPort, type ScreenAccess, unsupportedAppLook } from "../substrate/app-look.ts";
@@ -160,6 +161,7 @@ import { TurnFactory } from "../substrate/turns.ts";
 import type { EventData, EventEnvelope } from "../substrate/types.ts";
 import { AssetCheckpoints } from "./asset-checkpoints.ts";
 import { AssetService } from "./core/assets.ts";
+import { DesignBoardService } from "./core/design-board.ts";
 import { ChatPermissionService } from "./core/chat-permissions.ts";
 import { ConnectionService } from "./core/connections.ts";
 import { ConversationService } from "./core/conversation.ts";
@@ -574,6 +576,8 @@ export class StudioCore {
   readonly fastDecisions: FastDecisions;
   readonly contextPreferences: ContextPreferences;
   readonly games: GameWorkspaces;
+  /** The games' design boards: read for the Design tab, served to its frames, shown by a game's agent. */
+  readonly design: DesignBoardService = new DesignBoardService(this);
   readonly journal: UpdateJournal;
   readonly ollamaSidecar: OllamaSidecar;
   /** Token bookkeeping + improvement-class caps, enforced at the engine seam (A9). */
@@ -1188,9 +1192,32 @@ export class StudioCore {
       // Windows: the window opens on the games while the network check and folder grants finish.
       startInBackground: true,
       log: (line) => this.options.onLog?.(`[sandbox] ${line}`, "stderr"),
+      onWriteRefused: (dir) => void this.#folderLeftOut(dir),
       // A Finder-launched app has no npm on its PATH; every build the studio ever ran exited 127.
       toolPath: async () => (await toolchain()).path,
     });
+  }
+
+  /**
+   * Windows refused the sandbox's write grant on `dir` (feedback cmwdpn67: a game folder whose
+   * permissions the person may not change), and the agents start without it: analytics hears what
+   * the folder is to Genex and whether it is on another drive, never where it is.
+   */
+  async #folderLeftOut(dir: string): Promise<void> {
+    const games = await this.games.list().catch(() => []);
+    const places = {
+      profile: os.homedir(),
+      gamesRoot: this.layout.gamesRoot,
+      games: games.map((game) => game.dir),
+      data: [
+        this.layout.workspaces,
+        this.layout.runs,
+        this.layout.exports,
+        this.layout.nativeWork,
+        this.layout.scratch,
+      ],
+    };
+    this.emit(UiEvent.SandboxFolderLeftOut, leftOutFolder(dir, places));
   }
 
   /**
@@ -1588,9 +1615,29 @@ export class StudioCore {
       EngineId.OpenCode,
       EngineId.Grok,
       EngineId.Cursor,
+      EngineId.Antigravity,
       EngineId.Genex,
       EngineId.OpenRouter,
     ]);
+  }
+
+  /**
+   * Antigravity on the person's Google AI plan, on a Mac alone for now: its Google sign-in is in
+   * the operating system's own store, which a session in the studio's sandbox reaches on macOS
+   * (the Keychain) and has not been shown to reach on Windows (the sandbox runs as another user)
+   * or Linux.
+   */
+  #antigravityEngines(): Engine[] {
+    if (process.platform !== StudioPlatform.Mac) return [];
+    return [
+      new AntigravityEngine({
+        scratchRoot: path.join(this.layout.scratch, EngineId.Antigravity),
+        protectedPaths: this.#protectedPaths(),
+        toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
+        lockRecovery: path.join(this.layout.engineHomes, LOCK_RECOVERY_DIR),
+        onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.Antigravity }),
+      }),
+    ];
   }
 
   #defaultEngines(): Engine[] {
@@ -1644,6 +1691,7 @@ export class StudioCore {
         lockRecovery: path.join(this.layout.engineHomes, LOCK_RECOVERY_DIR),
         onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.Cursor }),
       }),
+      ...this.#antigravityEngines(),
       // Metered: OpenCode on whatever the person signed it in to, OpenRouter on the key pasted in
       // Settings. Registered like the subscriptions, so the picker can offer them.
       new OpenCodeEngine({
@@ -3036,6 +3084,18 @@ export class StudioCore {
     ...args: Parameters<AssetService["projectModelRigs"]>
   ): ReturnType<AssetService["projectModelRigs"]> {
     return this.#assets.projectModelRigs(...args);
+  }
+
+  readAssetThumbnail(
+    ...args: Parameters<AssetService["readAssetThumbnail"]>
+  ): ReturnType<AssetService["readAssetThumbnail"]> {
+    return this.#assets.readAssetThumbnail(...args);
+  }
+
+  keepAssetThumbnail(
+    ...args: Parameters<AssetService["keepAssetThumbnail"]>
+  ): ReturnType<AssetService["keepAssetThumbnail"]> {
+    return this.#assets.keepAssetThumbnail(...args);
   }
 
   saveReferenceFrames(

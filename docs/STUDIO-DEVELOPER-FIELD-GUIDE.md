@@ -309,7 +309,11 @@ controls, immediate thread cancellation, the blocker held past the request, the 
 mounting — lives in the build smoke, which is why `npm run test:build-ui` is now part of `npm
 run verify`. The Assets stage tab is covered by `assets-layout.test.ts`, `game-assets.test.ts` and
 `canvas-view.test.ts` (grouping, deterministic non-overlapping rects, the read-only walk and join,
-containment and size caps, the fit and zoom maths) and by five build-smoke checks that offer the
+containment and size caps, the fit and zoom maths), by `assets-filter.test.ts` (tabs, counts, sort
+order, cards before the model headers are read), by `thumbnail-lanes.test.ts`,
+`kept-thumbnails.test.ts` and `asset-thumbnails.test.ts` (pictures made a few at a time, and kept
+between sessions in `<userData>/asset-thumbnails/<game hash>/<key hash>`, only small pictures, the
+oldest forgotten past 2,000 a game) and by five build-smoke checks that offer the
 tab, hide the native game, render a real fixture delivery back through the contained reader, find
 the delivery in the project's log and give the stage back to the game. A sixth appends the host's
 own `plugin_tool_started` / `plugin_tool` pair and asserts the Builds graph draws the asset job
@@ -413,6 +417,8 @@ this machine; Set up, Open Studio and Get Roblox Studio are native, so a fixture
 and items-store (with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`: the fixture game is the account's Snowball on
 Genex, so Create › Items' Add to and Ask the agent reach its chat, which ends with Frost Axe's Listing draft
 card; [the item store](play.md#the-item-store))
+and design-board (the Design tab with three pages on its wall and the chat that asked for them;
+[design board](design-board.md))
 and native-review (with `STUDIO_FIXTURE_GENEX_ACCOUNT=1`: five games on Genex. The fixture game,
 Midnight Asphalt, is taken down for three things to fix; Skate Dog is with a person, Stick & Steel
 and Lost Cathedral are public, The Long Silence is being checked. Their news arrives 4 s after the
@@ -450,8 +456,7 @@ screen still blank and the clips playing), click (selector/scope, desktop or `pl
 surface, as a mouse would), select (selector/scope/value), scroll (surface/deltas/target),
 game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,
-trace.start/stop and stop. `graph.drag` takes bounded duration/distance/steps and returns
-commit counters through release; `window.resize` takes bounded width/height deltas, steps and
+trace.start/stop and stop. `window.resize` takes bounded width/height deltas, steps and
 duration, resizes the studio window step by step with a game in Live, and returns how far the
 game view trailed its slot right after each change and before the next ([performance](performance.md));
 `fixture.graph` takes `other-project-frames` or `append-round`

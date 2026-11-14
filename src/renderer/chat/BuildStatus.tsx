@@ -1,5 +1,6 @@
 import { type JSX, useId, useMemo, useState } from "react";
 import { t } from "../../shared/i18n.ts";
+import { openBuildStep } from "../open-build.ts";
 import { useNow } from "../panels/run-graph/use-builds-model.ts";
 import { Elapsed, useStartedAt } from "../ui/LoadingState.tsx";
 import { Presence } from "../ui/Presence.tsx";
@@ -13,8 +14,8 @@ import { BuildChecklist } from "./BuildChecklist.tsx";
  * A build running while the chat itself is free — the only thing the chat shows for it. Its one
  * line is where it stands: its steps counted once it has some, else what is happening now. Its
  * clock sits on the right: how long it has run. With steps, the card opens to their list (the
- * lead's save points, its workers' parts added, working or not added) and Open in Builds; without,
- * the whole card opens Builds.
+ * lead's save points, its workers' parts added, working or not added), each opening its row on
+ * Builds; without, the whole card opens Builds.
  */
 export function BuildStatus({
   since,
@@ -72,7 +73,20 @@ export function BuildStatus({
               ? [
                   {
                     key: "parts",
-                    node: <BuildChecklist id={listId} list={list} {...(onOpenBuilds ? { onOpenBuilds } : {})} />,
+                    node: (
+                      <BuildChecklist
+                        id={listId}
+                        list={list}
+                        {...(onOpenBuilds
+                          ? {
+                              onOpenStep: (stepId: string) => {
+                                openBuildStep(stepId);
+                                onOpenBuilds();
+                              },
+                            }
+                          : {})}
+                      />
+                    ),
                   },
                 ]
               : []}

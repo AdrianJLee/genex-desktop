@@ -7,15 +7,15 @@ setup. Blocked plans keep the request, offering settings or retry.
 
 Claude Code and Codex discover models without generating. The list names each family's newest
 model of the newest generation; older ones switch on in Settings; one in use stays listed.
-An unset pick runs the CLI's named default, else a default row. Aliases follow the CLI;
+Unset picks or effort run the CLI's named default, else a default row. Aliases follow the CLI;
 versions stay pinned.
 
-Settings shows CLI versions; Account rechecks or updates them; failed refreshes offer Try again.
+Settings shows CLI versions; Account rechecks or updates; failed refreshes offer Try again.
 Tabs switch [accounts](../connections-and-context.md#several-accounts-per-subscription).
 Unavailable picks block sends; without models, Connect AI model replaces the pill. A
 listing proves no access.
 
-Each chat keeps its model and effort; fresh games inherit the last picks. One effort, on the
+Chats keep their model and effort; fresh games inherit the last picks. One effort, on the
 main agent's levels, serves every role (Workers and Reviewers at most high).
 The Workers pick runs the chat's workers too; Reviewers
 run only in a Loop. Both survive a main-agent change; models unlisted twice fall back. Each Ollama job picks its model; Reviewers must see images and
@@ -23,8 +23,9 @@ check a Loop's finish.
 
 Local Models (Bonsai/Ollama) downloads and deletes. Metered
 [OpenRouter, OpenCode](../connections-and-context.md#openrouter-and-opencode),
-[Grok Build](../connections-and-context.md#grok-build), [Cursor](../connections-and-context.md#cursor) and
-[Genex](../connections-and-context.md#build-with-genex-credits) are never auto-chosen unless Free and alone; OpenRouter, OpenCode and Cursor show three. Local server connects your LM
+[Grok Build](../connections-and-context.md#grok-build), [Cursor](../connections-and-context.md#cursor),
+[Antigravity](../connections-and-context.md#antigravity) (Mac) and
+[Genex](../connections-and-context.md#build-with-genex-credits) are never auto-chosen unless Free and alone; OpenRouter, OpenCode and Cursor show three. Local server connects LM
 Studio, llama.cpp or TabbyAPI ([details](../connections-and-context.md#your-own-model-server)).
 
 ## What the model knows

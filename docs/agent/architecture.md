@@ -19,6 +19,7 @@ bundled plugin ([plugins](../plugins.md#the-bundled-unity-plugin)).
 | Harness child | [`src/harness-seed/`](../../src/harness-seed/), booted by [`src/harness-boot/bootstrap.mjs`](../../src/harness-boot/bootstrap.mjs) | Untrusted: the in-app agent rewrites it. Plain Node under `ProcessSandbox`. |
 | Contractors (coding CLIs) | [`src/substrate/engines/`](../../src/substrate/engines/) | Vendor harnesses briefed by the studio; see [Residual risks](#residual-risks). |
 | Game pages | [`src/main/preview.ts`](../../src/main/preview.ts), [`src/page/`](../../src/page/) | Untrusted web content in a closed partition. |
+| Design pages | [`src/main/design-pages.ts`](../../src/main/design-pages.ts), [`src/renderer/panels/design/`](../../src/renderer/panels/design/) | Untrusted agent-written HTML in closed frames of the main window: no script of its own, no network ([design board](../design-board.md#what-a-page-may-do)). |
 | Plugin backends, MCP servers | [`src/substrate/plugins/`](../../src/substrate/plugins/), [`src/substrate/mcp/`](../../src/substrate/mcp/) | Trusted native code the user approved; a process is crash isolation, not a sandbox. |
 | Terminal hosts | [`src/main/terminal-host.ts`](../../src/main/terminal-host.ts) | One Electron utility process per node-pty session, as the user. |
 | CLI installers | [`src/substrate/cli-installer.ts`](../../src/substrate/cli-installer.ts) | Vendor installers, unsandboxed. |
@@ -247,8 +248,8 @@ drives the stores with `tests/helpers/fake-studio-api.ts`. See the
 [store recipe](recipes.md#zustand-store).
 
 **Layout.** A large panel is a folder of its parts beside its entry component:
-`panels/inspector/` (`RunInspector.tsx`'s sheets), `panels/run-graph/` (`RunGraph.tsx`'s nodes,
-gates and camera), `panels/stage/` (`PreviewPanel.tsx`'s body and strip), `panels/plugins/` and
+`panels/inspector/` (`RunInspector.tsx`'s sheets), `panels/run-graph/` (`RunGraph.tsx`'s list,
+its rows and status bar), `panels/stage/` (`PreviewPanel.tsx`'s body and strip), `panels/plugins/` and
 `panels/connectors/`. `panels/ChatPanel.tsx` keeps its parts in `chat/`: its hooks are
 `chat/use-*.ts` (wired by `use-chat-panel.ts`), sending routes in `send-route.ts`, the
 conversation in `ChatConversation.tsx`. First launch is `onboarding/` (pure
@@ -911,7 +912,7 @@ managed local runtime; core has no Blender tool of its own.
 - **Ledger.** `PluginServices.onDelivered` fires after every `assets.deliver`; `StudioCore` records
   `asset_delivered` (project, plugin, job, files, worker attribution) and emits `asset.delivered`.
   [`src/main/plugin-activity.ts`](../../src/main/plugin-activity.ts) builds the
-  `plugin_tool_started`/`plugin_tool` pair for both agent paths. The Builds graph joins them on
+  `plugin_tool_started`/`plugin_tool` pair for both agent paths. The Builds list joins them on
   `callId` and `jobId`.
 - **Inventory.** [`src/main/game-assets.ts`](../../src/main/game-assets.ts) enumerates `assets/**` and
   `public/assets/**` read-only (lstat, symlinks skipped, capped), reads Genex `job.json`

@@ -1,7 +1,6 @@
 /**
  * The card of a part built in one session: its picture, who checked it, and what happened to it.
- * A worker's card says what the lead asked it, its own report and the lead's note, never how it
- * works in the game.
+ * A worker's card says what it did in its own words, never what the lead asked it or noted about it.
  */
 import { placedWord } from "../../run-graph-builds.ts";
 import type { JSX } from "react";
@@ -21,7 +20,7 @@ import {
   stoppedShort,
   workerStopWords,
 } from "../../run-steps.ts";
-import { stoppedWords, verdictSentence, WORKER_WORDS } from "../../words.ts";
+import { stoppedWords, verdictSentence } from "../../words.ts";
 import { useRoundStill, useWorkerStill } from "../run-stills.ts";
 import { AssetThumbnail } from "../AssetThumbnail.tsx";
 import { type DetailRow, Details, Panel, PanelRow, Para, Quote, Row, Rows } from "./chrome.tsx";
@@ -32,11 +31,11 @@ import { Status } from "./tone.tsx";
 import type { StepPanelProps } from "./types.ts";
 
 /** The recorded outcome's task for a part, when there is one. */
-export const taskOf = (outcome: RunSummary | null, facetId: string): RunTask | null =>
+const taskOf = (outcome: RunSummary | null, facetId: string): RunTask | null =>
   outcome?.tasks.find((item) => item.id === facetId) ?? null;
 
 /** The technical rows a part's task adds: how often it merged and who built it. */
-export const taskRows = (task: RunTask | null): DetailRow[] => [
+const taskRows = (task: RunTask | null): DetailRow[] => [
   [t("integrations"), task ? String(task.integrations) : null],
   [t("workers"), task && task.workers.length > 1 ? task.workers.join(" → ") : null],
 ];
@@ -86,18 +85,13 @@ function PartAbout({ props, step }: { props: StepPanelProps; step: Step }): JSX.
   );
 }
 
-/**
- * A worker's account: the reviewers' word when they compared its build, what the lead asked it,
- * its own report, the lead's note, why it stopped short.
- */
+/** A worker's account: the reviewers' word when they compared its build, its own report, why it stopped short. */
 function WorkerAbout({ step, worker }: { step: Step; worker: WorkerInfo }): JSX.Element {
   const failed = workerStopWords(worker);
   return (
     <>
       {step.verdict ? <WhoChecked step={step} /> : null}
-      {worker.task ? <Quote label={WORKER_WORDS.asked}>{worker.task}</Quote> : null}
       {worker.summary ? <Para>{worker.summary}</Para> : null}
-      {worker.note ? <Quote label={WORKER_WORDS.leadSaid}>{worker.note}</Quote> : null}
       {failed ? <Para quiet>{failed}.</Para> : null}
     </>
   );
@@ -115,7 +109,7 @@ function WorkerAssetPicture({ project, asset }: { project: string; asset: Projec
   );
 }
 
-/** The card's picture when no agent's screen is live: a still, else the worker's delivered model, else why there is none. */
+/** The card's picture when no agent's screen is live: a still, else the worker's delivered model. */
 function StillMedia({ props, src, asset }: { props: StepPanelProps; src: string | null; asset: ProjectAsset | null }) {
   const { step, project } = props;
   if (!src && project && asset) return <WorkerAssetPicture project={project} asset={asset} />;
@@ -141,29 +135,30 @@ export function SessionPanel(props: StepPanelProps): JSX.Element {
   const round = useRoundStill(graph, step.facetId, 1, null, working && graph.active);
   const worker = useWorkerStill(props.project, step.picture);
   const screen = usePartScreen(props.project, runIdOf(graph), step.facetId, working && graph.active);
+  const src = round ?? worker.src;
+  // A worker that kept no picture and delivered nothing to draw has a card of words alone.
+  const pictured = src !== null || (props.project !== null && worker.asset !== null);
+  const still = pictured ? <StillMedia props={props} src={src} asset={worker.asset} /> : null;
+  const media = screen.frame ? (
+    <LiveScreen
+      frame={screen.frame}
+      trail={screen.trail}
+      label={step.name}
+      onOpen={(shown, caption) => props.onLight([{ path: null, src: shown, title: step.name, caption }], 0)}
+    />
+  ) : (
+    still
+  );
   return (
     <Panel
       id={step.id}
       label={t("Selected part")}
       title={step.name}
       status={<Status tone={STATE_TONE[step.state]}>{sessionPill(props)}</Status>}
-      onPrev={props.onPrev}
-      onNext={props.onNext}
       onClose={props.onClose}
       reply={{ label: step.name, placeholder: t("Anything to change here?"), target: { facetId: step.facetId } }}
       onReply={props.onReply}
-      media={
-        screen.frame ? (
-          <LiveScreen
-            frame={screen.frame}
-            trail={screen.trail}
-            label={step.name}
-            onOpen={(shown, caption) => props.onLight([{ path: null, src: shown, title: step.name, caption }], 0)}
-          />
-        ) : (
-          <StillMedia props={props} src={round ?? worker.src} asset={worker.asset} />
-        )
-      }
+      media={media}
     >
       {step.worker ? <WorkerAbout step={step} worker={step.worker} /> : <PartAbout props={props} step={step} />}
     </Panel>

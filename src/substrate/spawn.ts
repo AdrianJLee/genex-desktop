@@ -134,6 +134,8 @@ export interface SandboxPolicy {
   allowRead: string[];
   denyRead: string[];
   denyWrite: string[];
+  /** macOS: the system services, beyond sandbox-runtime's own list, a process here may look up. */
+  machServices?: string[];
 }
 
 export interface RunRequest {
@@ -210,6 +212,11 @@ export interface SandboxOptions {
    * denies it and a secret path or another CLI's home named here stays denied.
    */
   ownHome?: readonly string[];
+  /**
+   * macOS: system services the one CLI that runs inside this sandbox needs beyond sandbox-runtime's
+   * own list. Only a name in `SandboxMachService` is opened; any other is dropped.
+   */
+  machServices?: readonly string[];
   /** Set false only in unit tests that assert the fallback path. */
   enabled?: boolean;
   /**
@@ -240,6 +247,12 @@ export interface SandboxOptions {
   startInBackground?: boolean;
   /** Where the sandbox says how long each step of its start took (Windows). */
   log?: (line: string) => void;
+  /**
+   * Windows: told of each write root the sandbox left out because Windows refused its grant (the
+   * person may not change the folder's permissions); commands there fail with
+   * `SandboxLaunchCode.WriteRefused` and the rest run.
+   */
+  onWriteRefused?: (dir: string) => void;
   /**
    * Linux: the bubblewrap to run (default: the app's own copy beside its executable when there is
    * one, else the system's on PATH; substrate/linux-bubblewrap.ts says why).
@@ -582,6 +595,26 @@ export function claudeFoldersIn(folders: readonly string[]): string[] {
 }
 
 /**
+ * The macOS system services a sandbox may be given on top of sandbox-runtime's own list. A value is
+ * the service's own name: never rename one.
+ */
+export const SandboxMachService = {
+  /**
+   * The certificate checker. A Go program (Antigravity's CLI) verifies every HTTPS certificate
+   * through it, so without it none of its connections opens. sandbox-runtime leaves it out by
+   * default because a process can pass data out through the lookups it asks trustd to make.
+   */
+  Trust: "com.apple.trustd.agent",
+} as const;
+export type SandboxMachService = (typeof SandboxMachService)[keyof typeof SandboxMachService];
+
+/** The named services a sandbox may open: the listed ones alone. */
+function ownMachServices(named: readonly string[] = []): string[] {
+  const known: readonly string[] = Object.values(SandboxMachService);
+  return [...new Set(named.filter((name) => known.includes(name)))];
+}
+
+/**
  * The named homes a sandbox may exempt: exactly the sign-in home of a CLI that runs inside the
  * studio's sandbox, never a secret path, another CLI's home, a parent folder or a relative path.
  */
@@ -606,6 +639,7 @@ export class ProcessSandbox {
   #starting: Promise<void> | null = null;
   #initError: Error | null = null;
   #log: ((line: string) => void) | null = null;
+  #onWriteRefused: ((dir: string) => void) | undefined;
   /** Linux: the bubblewrap sandbox-runtime runs, when not the system's on PATH. */
   #bubblewrap: string | null = null;
   #toolPath: (() => Promise<string>) | null = null;
@@ -640,6 +674,7 @@ export class ProcessSandbox {
         ...options.secretPaths,
         ...(options.denyWrite ?? []),
       ],
+      machServices: ownMachServices(options.machServices),
     };
     const sandbox = new ProcessSandbox(policy, options.enabled ?? true, scratchDir, platform);
     sandbox.#toolPath = options.toolPath ?? null;
@@ -647,6 +682,7 @@ export class ProcessSandbox {
     sandbox.#seams = options.windows ?? {};
     sandbox.#dataRoot = longDataRoot(options.dataRoot, platform);
     sandbox.#log = options.log ?? null;
+    sandbox.#onWriteRefused = options.onWriteRefused;
     sandbox.#bubblewrap = platform === StudioPlatform.Linux ? (options.bubblewrap ?? ownBubblewrap()) : null;
     if (!sandbox.enabled) return sandbox;
     if (options.startInBackground && platform === StudioPlatform.Windows) await sandbox.#startInBackground();
@@ -843,6 +879,7 @@ export class ProcessSandbox {
         installDir,
         ...(this.#dataRoot ? { dataRoot: this.#dataRoot } : {}),
         ...(this.#log ? { log: this.#log } : {}),
+        ...(this.#onWriteRefused ? { refused: this.#onWriteRefused } : {}),
       });
     const backend = { session, bash, read, profile, curlHome: await writeCurlHome(this.scratchDir) };
     await session
@@ -899,6 +936,9 @@ export class ProcessSandbox {
         // Windows: loopback is the install's, machine-wide, and Genex installs it closed (commands
         // reach the sandbox's proxies only); srt-win refuses a session or command that asks otherwise.
         allowLocalBinding: this.#platform !== StudioPlatform.Windows && policy.allowLocalBinding,
+        ...(this.#platform === StudioPlatform.Mac && policy.machServices?.length
+          ? { allowMachLookup: policy.machServices }
+          : {}),
       },
       filesystem: {
         allowWrite: policy.allowWrite,
@@ -1102,6 +1142,9 @@ export class ProcessSandbox {
     const files: string[] = [];
     const removeFiles = () => Promise.all(files.map((file) => rm(file, { force: true })));
     try {
+      // A folder Windows refused the write grant on: a command there would fail on its first write.
+      const refused = backend.session.refusedAt([...needed.write, longPath(request.cwd, this.#platform)]);
+      if (refused !== null) throw new SandboxLaunchError(SandboxLaunchCode.WriteRefused, refused);
       if (!backend.session.covers(needed))
         throw new SandboxLaunchError(SandboxLaunchCode.NotGranted, [...needed.write, ...needed.read].join(", "));
       if (request.longLived) await backend.session.refreshAncestors();

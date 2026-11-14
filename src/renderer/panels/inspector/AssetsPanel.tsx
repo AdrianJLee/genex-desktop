@@ -8,7 +8,6 @@ import { t, tc } from "../../../shared/i18n.ts";
 import type { AssetInfo, BlenderNode, RunGraph as RunGraphModel } from "../../run-graph.ts";
 import { runIdOf, truncate } from "../../run-graph.ts";
 import { AssetCardState, earlierVersion } from "../../run-graph-assets.ts";
-import type { AssetCard } from "../../run-steps.ts";
 import { useStill } from "../../stills.ts";
 import { BlenderLogo } from "../../ui/brand.tsx";
 import { Icon } from "../../ui/icons.tsx";
@@ -40,7 +39,7 @@ const BLENDER_ERROR_CHARS = 140;
  * when the same file was delivered again since), its Assets-stage thumbnail, the modeller's render,
  * a still of it in the game, or its kind in words (a sound has no picture).
  */
-function DeliveredPicture({ job, project }: { job: AssetInfo; project: string | null }): JSX.Element {
+export function DeliveredPicture({ job, project }: { job: AssetInfo; project: string | null }): JSX.Element {
   const kept = useStill(job.picture ? { run: job.picture, maxPx: ASSET_THUMB_PX } : null);
   const drawn = job.picture || job.preview?.kind === "audio" ? null : (job.preview ?? null);
   const picture = !job.preview && !job.picture ? firstImage(job) : null;
@@ -360,8 +359,6 @@ export function AssetsPanel(props: InspectorProps): JSX.Element {
       label={t("Assets")}
       title={t("Assets")}
       sub={assetsSub(jobs, modelled)}
-      onPrev={props.onPrev}
-      onNext={props.onNext}
       onClose={props.onClose}
     >
       {jobGroups(jobs)
@@ -384,56 +381,6 @@ export function AssetsPanel(props: InspectorProps): JSX.Element {
       <Rows>
         <AssetDetails graph={graph} jobs={jobs} modelled={modelled} />
       </Rows>
-    </Panel>
-  );
-}
-
-/**
- * The card of one asset a worker delivered: what it is and who made it, then every version of it,
- * newest first, each with the compare to the version before it, as the run's Assets card has them.
- */
-export function AssetCardPanel(props: InspectorProps & { card: AssetCard }): JSX.Element {
-  const { card, graph, blender, assets, project } = props;
-  const partNumber = partNumberOf(graph);
-  const jobs = assets?.jobs ?? [];
-  const modelled = blender?.assets ?? [];
-  const openBlender = blenderOpener(props, partNumber);
-  // A modelled version opens the modeller's renders, found by its record (the card may hold a copy);
-  // any other opens its job on the Assets stage.
-  const open = (job: AssetInfo): void => {
-    const sameModelled = (asset: AssetInfo): boolean =>
-      asset.callId === null && asset.name === job.name && asset.at === job.at;
-    const asModelled = job.callId === null ? modelled.find(sameModelled) : undefined;
-    if (asModelled) openBlender(asModelled);
-    else props.onOpenJob(job);
-  };
-  const newest = card.versions.at(-1);
-  const count = card.versions.length;
-  const sub = joinDots([
-    newest ? kindWord(newest) : null,
-    newest ? (newest.pluginName ?? newest.source) : null,
-    count > 1 ? ASSET_VERSION_WORDS.count(count) : null,
-  ]);
-  return (
-    <Panel
-      id={card.id}
-      label={card.name}
-      title={card.name}
-      sub={sub}
-      onPrev={props.onPrev}
-      onNext={props.onNext}
-      onClose={props.onClose}
-    >
-      {[...card.versions].reverse().map((job) => (
-        <JobRow
-          key={`${job.callId ?? job.jobId ?? ""}@${job.at}`}
-          job={job}
-          earlier={earlierVersion(jobs, job)}
-          project={project}
-          partNumber={partNumber}
-          onOpen={open}
-        />
-      ))}
     </Panel>
   );
 }

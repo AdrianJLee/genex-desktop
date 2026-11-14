@@ -1821,7 +1821,13 @@ harness, a delegated builder, the lead's own session and the `plugins.invoke` RP
   thread, and the worker attribution (`runId`, `facetId`, `iteration`) at the payload's top level.
 - `plugin_tool`, after the call returns or throws: the same fields plus `ok`, `error`, a capped
   digest of the result, how many images came back and — when the result is shaped like a job
-  record — `jobId`, `generationId` and `files`.
+  record — `jobId`, `generationId` and `files`. A failed call also says why as a code
+  (`failure`, `PluginCallFailure` in `shared/plugins.ts`): the plugin's own error (`plugin`, with
+  the error's `code` as `errorCode` when the backend threw one shaped like a code), or the host's
+  refusal or stop (`unknown-tool`, `invalid-arguments`, `unavailable`, `declined`, `blocked`,
+  `lock-refused`, `credit-cap`, `cut-off`, `out-of-time`, `not-run-in-time`, `restart-paused`,
+  `not-sent`), else `other`. Usage analytics sends both on `plugin_tool_finished`, the code only
+  for a catalog plugin (`pluginCallFailure` in `core/plugin-tools.ts`).
 
 Neither payload can carry image bytes, data URLs or credential-shaped keys: the digests drop them
 before the event is written. The chat folds the pair by `callId` into one row of its work group,
@@ -2605,7 +2611,7 @@ session gets is its seat's (`ProjectToolSeat`): a run's lead (a web run's direct
 gets both, and its card shows in the one chat its run was started in, as the host's records say,
 never a thread the harness names; a worker the host seated gets `plugins_find` only and reports
 what it found to its lead; any other session (a reviewer, a judge) gets
-neither. Only the chat's own session gets `start_web_game`, and on an Unreal game `play_build`, the
+neither. The chat's own session also gets `show_design` ([design board](design-board.md)); a lead does not, as the board does not read its build's folder. Only the chat's own session gets `start_web_game`, and on an Unreal game `play_build`, the
 person's Play: Genex starts the game folder's newest app for this computer in place, in the game
 sandbox (`main/play/local-plays.ts`), or answers that there is none, that it is older than the
 game's last change (package again first) or that a package the chat started is still running. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists

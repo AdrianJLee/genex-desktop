@@ -22,6 +22,7 @@
 
 import { InteractionObjective, InteractionSource } from "../shared/run-summary.ts";
 import type { GameEngine } from "../shared/game-engine.ts";
+import type { AssetKind } from "../shared/game-assets.ts";
 import { WorkerStopCode } from "../shared/workers.ts";
 import { type PackageManager, type SandboxProblemCode, type StartStep, StudioPlatform } from "../shared/boot.ts";
 import { ChatFileOpen } from "../shared/chat-files.ts";
@@ -95,6 +96,7 @@ import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 import { MentionMiss } from "../shared/prompt-mention.ts";
 import { AssetScope, LibraryKind } from "../shared/asset-library.ts";
 import { KindChoice } from "./play/asset-tiles.ts";
+import { AssetOrder, AssetTab } from "./assets-filter.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -1879,11 +1881,31 @@ export const STAGE_WORDS = {
   tabs: {
     live: t("Live"),
     builds: t("Builds"),
+    design: t("Design"),
     shop: t("Shop"),
     assets: t("Assets"),
     webGame: t("Web game"),
     unreal: "Unreal",
   },
+} as const;
+
+/** The stage's Design tab (`panels/design/DesignStage.tsx`): what an empty board says and offers. */
+export const DESIGN_WORDS = {
+  emptyTitle: t("No design pages yet"),
+  emptySubtitle: t("Concepts, maps and choices land here."),
+  /** Leaves the request in the game's chat for the person to finish and send. */
+  ask: t("Ask for a design"),
+  /** The board's block in the chat (`chat/DesignPageCard.tsx`): its tag above the title, and what a press does. */
+  cardKind: t("Game design"),
+  /** How many artboards the board holds, under a block's title when the agent left no note. */
+  artboards: (count: number) => t("{count, plural, one {# artboard} other {# artboards}}", { count }),
+  /** A 3D model's tile: what a press on it does. */
+  turnModel: t("Turn the model"),
+  openInDesign: t("Open in Design"),
+  /** The card of a page that left the board. */
+  gone: (title: string) => t("{title} was removed from Design", { title }),
+  /** A page's name in the chat: what a press on it does. */
+  opensInDesign: t("Opens in Design"),
 } as const;
 
 /** Live for a folder with no view of its own (Godot, Blender, files of its own): the latest pictures its runs kept. */
@@ -2302,9 +2324,6 @@ export const WORKER_WORDS = {
   nothingMade: t("Nothing made"),
   stopped: t("Stopped"),
   notUsed: t("Not used"),
-  /** the quotes on a worker's card */
-  asked: t("The lead asked"),
-  leadSaid: t("The lead"),
 } as const;
 
 /**
@@ -2366,7 +2385,8 @@ export const BUILD_CHECKLIST_WORDS = {
   caption: (done: number, working: number) =>
     working ? t("{done} done · {working} working", { done, working }) : t("{done} done", { done }),
   finishing: (working: number) => (working ? t("Finishing up · {working} working", { working }) : t("Finishing up")),
-  open: t("Open in Builds"),
+  /** The row of a long list that stands for its earlier steps: pressing it shows them. */
+  earlier: (count: number) => t("{count, plural, one {# earlier step} other {# earlier steps}}", { count }),
   /** The card's toggle, as a screen reader names it. */
   toggle: t("Building: show or hide its parts"),
   /** The list's own name, for a screen reader. */
@@ -2464,18 +2484,6 @@ export const BUILD_LINE_WORDS = {
   leadsOwn: t("The main agent's own changes"),
   /** A merged worker's status on the build line: in that build, not yet the game. */
   addedToBuild: t("Added to your build"),
-  /** A worker's first line on the graph: the build it hangs off, and why. */
-  mergedInto: (n: number) => t("Merged into Build {number}", { number: n }),
-  startedFrom: (n: number) => t("Started from Build {number}", { number: n }),
-  startedFirst: t("Started before the first build"),
-  /** The card that folds a build's finished workers, and what pressing it does. */
-  folded: (count: number) => t("{count, plural, one {+# worker} other {+# workers}}", { count }),
-  showAll: t("Show all"),
-  showFewer: t("Show fewer"),
-  foldLabel: (count: number) => t("{count, plural, one {Show # more worker} other {Show # more workers}}", { count }),
-  /** The compare, when the picture is the one before it, measured. */
-  unchanged: (n: number) => t("The picture did not visibly change from Build {number}.", { number: n }),
-  before: (n: number) => t("Build {number}", { number: n }),
   problems: t("What the check found"),
   finding: {
     not_loaded: t("The page did not load."),
@@ -2487,6 +2495,36 @@ export const BUILD_LINE_WORDS = {
   found: t("found"),
 } as const;
 
+/** The order a step's row counts what it made in. */
+const MADE_ORDER: readonly AssetKind[] = ["model", "image", "audio", "video", "other"];
+
+/** What a step made, on its row of the Builds list: one thing by its kind and versions, more by their kinds' counts. */
+export const MADE_WORDS = {
+  kind: {
+    image: t("Image"),
+    model: t("Model"),
+    audio: t("Sound"),
+    video: t("Video"),
+    other: t("File"),
+  } satisfies Record<AssetKind, string>,
+  count: {
+    image: (count: number) => t("{count, plural, one {# image} other {# images}}", { count }),
+    model: (count: number) => t("{count, plural, one {# model} other {# models}}", { count }),
+    audio: (count: number) => t("{count, plural, one {# sound} other {# sounds}}", { count }),
+    video: (count: number) => t("{count, plural, one {# video} other {# videos}}", { count }),
+    other: (count: number) => t("{count, plural, one {# file} other {# files}}", { count }),
+  } satisfies Record<AssetKind, (count: number) => string>,
+  /** One thing: its kind, then how many versions of it, when more than one. */
+  one: (kind: AssetKind, versions: number): string =>
+    versions > 1 ? `${MADE_WORDS.kind[kind]} · ${ASSET_VERSION_WORDS.count(versions)}` : MADE_WORDS.kind[kind],
+  /** More: each kind's count, models first, then images, sounds, videos and files. */
+  many: (counts: Partial<Record<AssetKind, number>>): string =>
+    MADE_ORDER.flatMap((kind) => {
+      const n = counts[kind];
+      return n ? [MADE_WORDS.count[kind](n)] : [];
+    }).join(" · "),
+};
+
 /** An asset delivered again: its card's count of versions, and its compare with the version before it. */
 export const ASSET_VERSION_WORDS = {
   /** How many times a worker made one asset, on its card under the worker. */
@@ -2496,12 +2534,6 @@ export const ASSET_VERSION_WORDS = {
   now: t("Now"),
   unchanged: t("The picture did not visibly change from the earlier version."),
 } as const;
-
-/** A worker's first line on a Loop's build line: the build its work went into, or the one it started from. */
-export function workerPlaceWords(place: { build: number; merged: boolean }): string {
-  if (place.merged) return BUILD_LINE_WORDS.mergedInto(place.build);
-  return place.build ? BUILD_LINE_WORDS.startedFrom(place.build) : BUILD_LINE_WORDS.startedFirst;
-}
 
 /** A build in the stage's history, by what it was and the day it started; never a number or a count. */
 /** The Builds bar's tabs, one for each of the chat's builds. */
@@ -3233,6 +3265,7 @@ const STUDIO_TOOLS: Record<string, ToolWords> = {
   land_build: { icon: "write", label: t("put the build in your game") },
   ask_user: { icon: "think", label: t("asked you a question") },
   set_game_cover: { icon: "write", label: t("painted the game's cover") },
+  show_design: { icon: "see", label: t("showed you a design page") },
   checkpoint: { icon: "see", label: t("marked a moment worth seeing") },
   capture: { icon: "see", label: t("captured the game"), active: t("Capturing the game") },
   // The lead's run tools. `wait` stays neutral.
@@ -4435,6 +4468,21 @@ export const ASSET_LIBRARY_WORDS = {
   search: t("Search assets"),
   searchLabel: t("Search this game, your library and the community"),
   clearSearch: t("Clear the search"),
+  /** The canvas's tabs and the order its cards run in. */
+  tabsLabel: t("Kinds of asset"),
+  tabs: {
+    [AssetTab.All]: t("All"),
+    [AssetTab.Models]: t("Models"),
+    [AssetTab.Images]: t("Images"),
+    [AssetTab.Sounds]: t("Sounds"),
+    [AssetTab.Video]: t("Video"),
+  } satisfies Record<AssetTab, string>,
+  sortLabel: t("Sort assets"),
+  orders: {
+    [AssetOrder.Newest]: t("Newest"),
+    [AssetOrder.Name]: t("Name"),
+    [AssetOrder.Size]: t("Size"),
+  } satisfies Record<AssetOrder, string>,
   thisGame: t("This game"),
   myLibrary: t("My library"),
   community: t("Community"),

@@ -77,6 +77,8 @@ export function registerGamesIpc(handle: IpcHandle, { core, runSummaryReader, pu
   handle("studio:game.asset.preview", async (payload) => core.previewProjectAsset(payload));
   handle("studio:game.asset.present", async (payload) => core.presentProjectAssets(payload));
   handle("studio:game.asset.rigs", async (payload) => core.projectModelRigs(payload));
+  handle("studio:game.asset.thumbnail", async (payload) => core.readAssetThumbnail(payload));
+  handle("studio:game.asset.thumbnail.keep", async (payload) => core.keepAssetThumbnail(payload));
   handle("studio:game.assets", async (payload) => {
     if (!payload || typeof payload.project !== "string") throw new Error(MESSAGE.projectRequired);
     const events = await runSummaryReader.forProject(payload.project, core.mainThread).catch((error: unknown) => {
@@ -85,4 +87,23 @@ export function registerGamesIpc(handle: IpcHandle, { core, runSummaryReader, pu
     return core.projectAssets(payload.project, events);
   });
   handle("studio:game.asset.still", async (payload) => core.readProjectAsset(payload));
+  // The Design stage: the pages of the game's board, read from its folder.
+  handle("studio:design.board", async (payload) => {
+    if (!payload || typeof payload.project !== "string") throw new Error(MESSAGE.projectRequired);
+    return core.design.board(payload.project);
+  });
+  // A picture the person dropped on the Design canvas: kept in the game's board, or refused.
+  handle("studio:design.drop", async (payload) => {
+    if (!payload || typeof payload.project !== "string") throw new Error(MESSAGE.projectRequired);
+    return core.design.drop(payload.project, payload.name, payload.data);
+  });
+  // What the person did on the Design canvas (places, notes, picks): read from, and kept in, the game's board.
+  handle("studio:design.marks", async (payload) => {
+    if (!payload || typeof payload.project !== "string") throw new Error(MESSAGE.projectRequired);
+    return core.design.marks(payload.project);
+  });
+  handle("studio:design.marks.save", async (payload) => {
+    if (!payload || typeof payload.project !== "string") throw new Error(MESSAGE.projectRequired);
+    return core.design.saveMarks(payload.project, payload.marks);
+  });
 }

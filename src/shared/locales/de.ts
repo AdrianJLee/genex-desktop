@@ -6590,6 +6590,17 @@ export default {
   "{title} was removed from Design": "{title} wurde aus Design entfernt",
   "Opens in Design": "Öffnet sich in Design",
   "Question {step} of {of}": "Frage {step} von {of}",
+  "Can call tools": "Kann Tools aufrufen",
+  Configure: "Konfigurieren",
+  "Context size": "Kontextgröße",
+  "Context size must be between 1,024 and 10,000,000 tokens.":
+    "Die Kontextgröße muss zwischen 1.024 und 10.000.000 Token liegen.",
+  "Custom context length and vision for this model on your local server. Saved to models.json.":
+    "Eigene Kontextlänge und Bildverarbeitung für dieses Modell auf deinem lokalen Server. In models.json gespeichert.",
+  "Failed to save settings.": "Einstellungen konnten nicht gespeichert werden.",
+  "Reported by server": "Vom Server gemeldet",
+  "Reset to default": "Auf Standard zurücksetzen",
+  "Sees images": "Versteht Bilder",
   "Step {n} of {total} · {name}": "Schritt {n} von {total} · {name}",
   "Version {version} is in your game": "Version {version} ist in deinem Spiel",
 } satisfies LocaleCatalog;

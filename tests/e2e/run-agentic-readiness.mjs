@@ -387,7 +387,15 @@ try {
           (c) => c.node === "step:river:1",
         );
       if (!(await listed())) await reach(a, "click", { selector: '[data-builds-left-out][aria-expanded="false"]' });
-      await until(async () => (await snapshot(a)).text.includes("River and bridge"), "the earlier run's step");
+      // The list's own text: a whole-window snapshot keeps only its first 24,000 characters, which
+      // the conversation above fills by now.
+      await until(
+        async () =>
+          (await op(a, "snapshot", { surface: "desktop", scope: "[data-builds-list]" })).text.includes(
+            "River and bridge",
+          ),
+        "the earlier run's step",
+      );
       await reach(a, "click", { selector: step });
       await until(
         async () =>

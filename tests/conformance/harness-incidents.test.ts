@@ -6071,3 +6071,15 @@ describe("the person's words reach the chat's own session as they wrote them (ch
     assert.equal(lead.system, chat, "the lead's system text is the chat's own");
   });
 });
+
+describe("a build's plan as the chat names it", () => {
+  it("PS-1. Claude Code sent start_autopilot's steps as the list's JSON text (its intake tools take only strings): the Building card showed one step reading [\"Three places\", …", async () => {
+    const { startAutopilot } = await import("../../src/harness-seed/loop/start-autopilot.ts");
+    type Launch = { details?: { run?: Record<string, unknown> } };
+    const steps = '["Three places", "People and sounds", "Game code"]';
+    const launch = (await startAutopilot.execute({ goal: "g", title: "T", steps }, {
+      engine: "claude",
+    } as never)) as Launch;
+    assert.deepEqual(launch.details?.run?.steps, ["Three places", "People and sounds", "Game code"]);
+  });
+});

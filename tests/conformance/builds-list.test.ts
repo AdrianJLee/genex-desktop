@@ -222,6 +222,31 @@ describe("the Builds list", () => {
     assert.ok(!titles(paused.leftOut).includes("A timber house"));
   });
 
+  it("never counts work handed back that the lead has not used as a change: it waits while the run goes on, then is left out", () => {
+    const { events } = loop();
+    events.push(start("w4", "A stone well"), end("w4", "A stone well"));
+    const input = inputOf(events);
+    const well = input.rows.flatMap((row) => row.steps).find((step) => step.name === "A stone well");
+    assert.equal(well?.state, StepState.Delivered, "the well is handed back, not used yet");
+    const live = buildsList({ ...input, graph: { ...input.graph, active: true } });
+    assert.equal(named(live.working, "A stone well").mark, RowMark.Waiting);
+    assert.ok(!titles(live.changes).includes("A stone well"));
+    const over = buildsList({ ...input, graph: { ...input.graph, active: false } });
+    assert.ok(!titles(over.changes).includes("A stone well"));
+    assert.ok(titles(over.leftOut).includes("A stone well"));
+  });
+
+  it("never counts a try reviewers kept as a change until it stands in the build: an ended run leaves it out", () => {
+    const input = withStep(inputOf(loop().events), "A timber house", StepState.Kept);
+    const rows = input.rows.map((row) => ({
+      ...row,
+      steps: row.steps.map((step) => (step.name === "A timber house" ? { ...step, onLine: false } : step)),
+    }));
+    const over = buildsList({ ...input, rows, graph: { ...input.graph, active: false } });
+    assert.ok(!titles(over.changes).includes("A timber house"));
+    assert.ok(titles(over.leftOut).includes("A timber house"));
+  });
+
   it("marks a stopped finish check as left out, not as a problem", () => {
     const input = inputOf(loop().events);
     const stopped: FinishCheckNode = {

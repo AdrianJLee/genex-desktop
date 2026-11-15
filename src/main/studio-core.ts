@@ -161,6 +161,7 @@ import { TurnFactory } from "../substrate/turns.ts";
 import type { EventData, EventEnvelope } from "../substrate/types.ts";
 import { AssetCheckpoints } from "./asset-checkpoints.ts";
 import { AssetService } from "./core/assets.ts";
+import { DesignBoardService } from "./core/design-board.ts";
 import { ChatPermissionService } from "./core/chat-permissions.ts";
 import { ConnectionService } from "./core/connections.ts";
 import { ConversationService } from "./core/conversation.ts";
@@ -575,6 +576,8 @@ export class StudioCore {
   readonly fastDecisions: FastDecisions;
   readonly contextPreferences: ContextPreferences;
   readonly games: GameWorkspaces;
+  /** The games' design boards: read for the Design tab, served to its frames, shown by a game's agent. */
+  readonly design: DesignBoardService = new DesignBoardService(this);
   readonly journal: UpdateJournal;
   readonly ollamaSidecar: OllamaSidecar;
   /** Token bookkeeping + improvement-class caps, enforced at the engine seam (A9). */
@@ -647,6 +650,7 @@ export class StudioCore {
   /** The same port the registry reads, kept so a plugin server's `secret:<name>` can be resolved. */
   #mcpSecrets: SecretPort | null = null;
   #started = false;
+  #agentsStarting: Promise<void> | null = null;
   #settings: StudioSettings = {
     learning: false,
     buildersMax: DEFAULT_BUILDERS,
@@ -847,6 +851,9 @@ export class StudioCore {
       },
       get started() {
         return core.#started;
+      },
+      get agentsStarting() {
+        return core.#agentsStarting;
       },
       get toolRegistryRevision() {
         return core.#connections.revision;
@@ -1779,6 +1786,22 @@ export class StudioCore {
    * recover — the shipped seed is copied over the harness before it boots.
    */
   async start(bootReason: BootReason = BootReason.ColdStart, options: { resetHarness?: boolean } = {}): Promise<void> {
+    // A message sent while this runs waits for it (`ConversationService`): on Windows the sandbox
+    // starts behind the open window and can take minutes.
+    const run = this.#start(bootReason, options);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#agentsStarting = settled;
+    try {
+      await run;
+    } finally {
+      if (this.#agentsStarting === settled) this.#agentsStarting = null;
+    }
+  }
+
+  async #start(bootReason: BootReason, options: { resetHarness?: boolean }): Promise<void> {
     const mark = (step: string): void => this.options.markBoot?.(`core:start-${step}`);
     await this.snapshots.init();
     mark("snapshots");
@@ -3081,6 +3104,18 @@ export class StudioCore {
     ...args: Parameters<AssetService["projectModelRigs"]>
   ): ReturnType<AssetService["projectModelRigs"]> {
     return this.#assets.projectModelRigs(...args);
+  }
+
+  readAssetThumbnail(
+    ...args: Parameters<AssetService["readAssetThumbnail"]>
+  ): ReturnType<AssetService["readAssetThumbnail"]> {
+    return this.#assets.readAssetThumbnail(...args);
+  }
+
+  keepAssetThumbnail(
+    ...args: Parameters<AssetService["keepAssetThumbnail"]>
+  ): ReturnType<AssetService["keepAssetThumbnail"]> {
+    return this.#assets.keepAssetThumbnail(...args);
   }
 
   saveReferenceFrames(

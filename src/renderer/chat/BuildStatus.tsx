@@ -1,11 +1,12 @@
 import { type JSX, useId, useMemo, useState } from "react";
 import { t } from "../../shared/i18n.ts";
+import { openBuildStep } from "../open-build.ts";
 import { useNow } from "../panels/run-graph/use-builds-model.ts";
 import { Elapsed, useStartedAt } from "../ui/LoadingState.tsx";
 import { Presence } from "../ui/Presence.tsx";
 import { BUILD_CHECKLIST_WORDS } from "../words.ts";
 import type { RunSummary } from "../../shared/run-summary.ts";
-import { buildChecklist } from "./build-checklist.ts";
+import { buildChecklist, summaryTitle } from "./build-checklist.ts";
 import { BuildCard } from "./BuildCard.tsx";
 import { BuildChecklist } from "./BuildChecklist.tsx";
 
@@ -13,8 +14,8 @@ import { BuildChecklist } from "./BuildChecklist.tsx";
  * A build running while the chat itself is free — the only thing the chat shows for it. Its one
  * line is where it stands: its steps counted once it has some, else what is happening now. Its
  * clock sits on the right: how long it has run. With steps, the card opens to their list (the
- * lead's save points, its workers' parts added, working or not added) and Open in Builds; without,
- * the whole card opens Builds.
+ * lead's save points, its workers' parts added, working or not added), each opening its row on
+ * Builds; without, the whole card opens Builds.
  */
 export function BuildStatus({
   since,
@@ -36,10 +37,11 @@ export function BuildStatus({
   // The rows' time left moves on only while they are on show.
   const now = useNow(expanded);
   const list = useMemo(() => (summary ? buildChecklist(summary, now) : null), [summary, now]);
+  const title = useMemo(() => summaryTitle(summary), [summary]);
   return (
     <section data-build-status aria-label={t("Build running")} className="min-w-0">
       <BuildCard
-        title={t("Building")}
+        title={title || t("Building")}
         {...(list
           ? {
               toggle: {
@@ -53,7 +55,12 @@ export function BuildStatus({
         {...(!list && onOpenBuilds ? { open: { onClick: onOpenBuilds } } : {})}
         line={
           // The lead's own words about what it does on its screen.
-          <p role="status" title={caption} data-analytics-mask className="m-0 truncate text-status text-ink-3">
+          <p
+            role="status"
+            title={caption}
+            data-analytics-mask
+            className="chat-status-shimmer m-0 truncate text-status text-ink-3"
+          >
             {caption}
           </p>
         }
@@ -72,7 +79,20 @@ export function BuildStatus({
               ? [
                   {
                     key: "parts",
-                    node: <BuildChecklist id={listId} list={list} {...(onOpenBuilds ? { onOpenBuilds } : {})} />,
+                    node: (
+                      <BuildChecklist
+                        id={listId}
+                        list={list}
+                        {...(onOpenBuilds
+                          ? {
+                              onOpenStep: (stepId: string) => {
+                                openBuildStep(stepId);
+                                onOpenBuilds();
+                              },
+                            }
+                          : {})}
+                      />
+                    ),
                   },
                 ]
               : []}

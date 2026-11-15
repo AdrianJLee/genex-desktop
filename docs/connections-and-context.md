@@ -88,8 +88,11 @@ except in first launch: discovery starts the CLI, so a signed-in subscription wh
 loaded is not shown connected there but offers a check again, which retries discovery too.
 
 Aliases retain their request IDs and show reported canonical targets. Explicit model IDs and saved
-cross-provider roles are never silently replaced. New unset roles and effort defer to CLI defaults
-under Genex's launch policy. Settings can update the selected CLI; provider operations and updates
+cross-provider roles are never silently replaced. New unset roles defer to CLI defaults under
+Genex's launch policy. An unset effort is the default the provider reports for the model, sent with
+the turn; where none is reported, no effort is sent and the CLI's own applies. Claude Code reports
+one for the model its default resolves to: discovery's idle session asks `get_settings` what it
+applies, and a running session, which applies its send's effort, is never asked. Settings can update the selected CLI; provider operations and updates
 are mutually exclusive. The app never silently installs a different executable or auto-updates.
 A sign-in event names its own provider; its adjacent harness reply replaces duplicate narration.
 
@@ -411,8 +414,10 @@ are the session's whole account); it takes the key off, puts the person's Genex 
 model and the chat (`x-genex-model`, `x-genex-chat`) and passes only the two Messages routes
 (`GenexBuildRoute`). The token never enters an agent's environment, and nothing a session holds can
 spend once it ends. genex.games owns the price, the plan and the models; the app shows the ones it
-ships with (`GENEX_MODELS`, Gemini 4 Hydrogen first) until genex.games lists its own. Claude Code's
-own helpers run on the first model listed; the Loop's workers and reviewers run on Sonnet.
+ships with (`GENEX_MODELS`, Gemini 4 Hydrogen first) until genex.games lists its own. That list is
+the engine's whole answer (no CLI catalog), so a chat whose saved model it leaves out opens on a model
+that runs: one the person runs without credits if there is one, else Genex's own default
+(`resolveComposerModel`). Claude Code's own helpers run on the first model listed; the Loop's workers and reviewers run on Sonnet.
 
 The lane ([genex.ts](../src/substrate/engines/genex.ts)) reads `GET /api/desktop/llm/status` (reused
 for 5 seconds, joined while in flight) and maps its access word to the engine's status: ready, or a

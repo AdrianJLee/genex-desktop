@@ -9,7 +9,7 @@ Dropped pictures stay pictures; other files become links. @ tags (max 5): local 
 Genex ones in `.studio/refs/`, assets `src/assets/`.
 
 Chat work shows its status and clock; waiting is static. A running build is one card that holds
-still: steps counted, their list, Open in Builds. Run workers get no lines.
+still: steps counted and their list, each step opening its row on Builds. Run workers get no lines.
 
 Neighboring tools group under **Worked on N steps** (or **Worked in Unreal**);
 failures stay visible. Play views and assets sit under their work. Build updates use a short
@@ -24,9 +24,9 @@ asking about plugins never resumes a build. A reply may start workers in the cha
 with it; each is one line opening its work on Builds. Background work is one line with Stop until Genex
 quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any mode.
 
-- An `ask_user` question shows above the composer with up to three answers; ⌘↩ presses the
-  first, and typed words answer too.
-  Progress is never a question; an unsaid game, look or engine before a build is.
+- `ask_user` questions show above the composer with up to three answers; ⌘↩ presses the
+  first, typed words answer.
+  Progress is never one; an unsaid game, look or engine before a build is: **Question 2 of 4**.
 - Permission requests wait above the composer; a worker's plugin
   questions appear in its run, cancelled with it. Plugins ask Allow once or Don't allow; Claude asks **Allow once**, the grant it offers
   (**Always allow …**) or **Deny**, or takes words instead; a plan leaving Plan is approved

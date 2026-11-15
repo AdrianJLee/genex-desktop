@@ -228,7 +228,15 @@ const FIXTURE_SAFE = [
   "studio:game.asset.preview",
   "studio:game.asset.present",
   "studio:game.asset.rigs",
+  // A card's kept thumbnail: read from and written to the profile's own data, never the game.
+  "studio:game.asset.thumbnail",
+  "studio:game.asset.thumbnail.keep",
   "studio:game.assets",
+  // The Design tab reads the pages a game's docs/design/ holds; fixtures read their own game's.
+  "studio:design.board",
+  "studio:design.drop",
+  "studio:design.marks",
+  "studio:design.marks.save",
   "studio:game.asset.still",
   "studio:engines",
   "studio:engines.recheck",

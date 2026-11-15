@@ -223,8 +223,8 @@ async function prepareTheStart(loopRun: LoopRun): Promise<StartOfRun> {
  * The time the person asked for goes beside the first as each is sent (wake.ts, `withWorkLine`).
  */
 function startLines(loopRun: LoopRun, start: StartOfRun): string[] {
-  const { goal } = loopRun.run;
-  const line = resumedFromJournal(loopRun) ? LOOP_WORDS.resumed(goal) : LOOP_WORDS.started(goal);
+  const { goal, steps = [] } = loopRun.run;
+  const line = resumedFromJournal(loopRun) ? LOOP_WORDS.resumed(goal, steps) : LOOP_WORDS.started(goal, steps);
   return [line, ...start.notes];
 }
 
@@ -240,7 +240,7 @@ function sessionEndWords(loopRun: LoopRun, result: Partial<DelegateResult>): str
  * The run the lead left open — its turn ended with nothing at work, its wrap-up ended, or a lost
  * provider paused it: the harness closes it in place, as `finish` does. A run a lost provider or a
  * Stop paused keeps what it did for a Resume, and so does one whose lead's turn ended with nothing
- * at work: a build is the whole making of the game, so the person's next word goes on with it.
+ * at work: the person's next word that asks for more of its goal goes on with it.
  */
 export async function closeLeftOpen(
   loopRun: LoopRun,

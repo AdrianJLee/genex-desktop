@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import type { LiveView } from "../../src/renderer/live-views.ts";
 import {
   activeStageTab,
+  keptViews,
   liveViewForBuild,
   stageTabs,
   tabChoice,
@@ -28,11 +29,13 @@ describe("the stage strip's tabs", () => {
         stageTabs({ views: [view], plugins, hasBuilds, buildsLive, beside: null });
       assert.deepEqual(tabs(false, false), [
         { key: "live", label: "Live" },
+        { key: "design", label: "Design" },
         { key: "assets", label: "Assets" },
       ]);
       assert.deepEqual(tabs(true, false), [
         { key: "live", label: "Live" },
         { key: "builds", label: "Builds" },
+        { key: "design", label: "Design" },
         { key: "assets", label: "Assets" },
       ]);
       assert.deepEqual(tabs(true, true)[1], { key: "builds", label: "Builds ●" });
@@ -62,6 +65,7 @@ describe("the stage strip's tabs", () => {
       { key: "live", label: "Web game" },
       { key: "live-unreal-card", label: "Unreal" },
       { key: "builds", label: "Builds" },
+      { key: "design", label: "Design" },
       { key: "assets", label: "Assets" },
     ]);
     const unrealFirst = stageTabs({
@@ -76,6 +80,7 @@ describe("the stage strip's tabs", () => {
       [
         ["live", "Unreal"],
         ["live-preview", "Web game"],
+        ["design", "Design"],
         ["assets", "Assets"],
       ],
     );
@@ -115,5 +120,25 @@ describe("the stage strip's tabs", () => {
     assert.equal(webBuildView("other", null, []), PREVIEW_OBSERVER, "with no game on the stage");
     for (const garbage of [undefined, null, "", 7, {}])
       assert.equal(webBuildView(garbage, "garden", [card, preview]), null, String(garbage));
+  });
+});
+
+describe("the stage views kept once opened", () => {
+  it("keeps Builds, Design, Shop and Assets once each has been on show, so going back draws at once", () => {
+    let kept = keptViews([], StageView.Live);
+    assert.deepEqual(kept, [], "Live is the game's own view, never kept as a panel");
+    kept = keptViews(kept, StageView.Builds);
+    kept = keptViews(kept, StageView.Assets);
+    kept = keptViews(kept, StageView.Live);
+    kept = keptViews(kept, StageView.Design);
+    kept = keptViews(kept, StageView.Shop);
+    assert.deepEqual(kept, [StageView.Builds, StageView.Assets, StageView.Design, StageView.Shop]);
+  });
+
+  it("answers the same list when nothing new opens, so nothing draws again", () => {
+    const kept = keptViews([], StageView.Assets);
+    assert.equal(keptViews(kept, StageView.Assets), kept);
+    assert.equal(keptViews(kept, StageView.Live), kept);
+    assert.equal(keptViews(kept, StageView.File), kept, "a file beside closes with its tab");
   });
 });

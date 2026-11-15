@@ -43,6 +43,11 @@ class GENEX_CORE_API Pump {
   /** The `nowMs` of the frame being pumped (its instant: taken before the poll decoded anything), NaN outside one. A
    *  session draws at it, not at the clock after the poll's work (decodes, keyframe replays). */
   static double FrameNowMs();
+  /** When the frame before the one being pumped polled the C core (Clock::NowMs, taken before that poll read anything):
+   *  whatever this frame's poll reads arrived after it. NaN outside a frame, and in the first one. A socket is read
+   *  once a frame, so this and the clock at the read are all a session knows of when a state arrived
+   *  (GenexClockSamples.h PolledArrival). */
+  static double PolledSinceMs();
   /** colyseus_set_polled(true), once per process. The C core latches the mode when each socket,
    *  request and room STARTS, so call this before creating any colyseus client (sessions do). On Windows
    *  it also gives the core's room clocks a clock finer than a frame (GenexRoomClock.h). */

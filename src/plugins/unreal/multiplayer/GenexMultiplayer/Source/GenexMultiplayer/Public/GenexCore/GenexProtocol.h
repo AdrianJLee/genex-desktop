@@ -87,6 +87,12 @@ inline constexpr const char* kInputRepeat = "repeat@1";
 inline constexpr const char* kFast = "fast@1";
 /** The seat can come back to the fast channel after a fallback (§17.12 *Return to the channel*). */
 inline constexpr const char* kFastReturn = "fast-return@1";
+/** Draws correctly at any update rate (§17.6 *Which rooms take the rate*; protocol.ts UPDATE_RATE): this client
+ *  eases a correction of its own entity over its own constant, never the interval its room tells, paces its
+ *  clock's round-trip samples (GenexClockSamples.h) and replays its in-flight inputs when it first sees the
+ *  entity it owns. A room takes its update rate only when the seat whose join created it sent this; no room
+ *  refuses a join for lacking it. Held by genex_rtt_samples_check and sdks/unreal/test/update-rate.ts. */
+inline constexpr const char* kUpdateRate = "rate@1";
 inline constexpr int kMaxCaps = 16;
 inline constexpr int kMaxCapChars = 32;
 }  // namespace caps
@@ -322,9 +328,14 @@ inline constexpr double kRevocationSweepMs = 30000;
 namespace authority_timing {
 inline constexpr int kTickHz = 30;
 inline constexpr double kRenderDelayMs = 100;
+/** The most a room may let its clients draw behind (§17.3 *The render delay*): the highest ceiling a
+ *  room publishes. */
+inline constexpr double kRenderDelayMaxMs = 250;
 inline constexpr double kMaxRewindMs = 500;
 inline constexpr int kInputBuffer = 32;
-inline constexpr double kPatchIntervalMs = 50;
+/** How many times a second a room sends its state when its module asks no rate and names no genre
+ *  (§17.6 *The update rate*): after every K-th fixed step, never on a timer. */
+inline constexpr int kPatchHz = 60;
 }  // namespace authority_timing
 
 // ---- §8 reconnection: the settings every client applies (`ClientReconnection`) ----

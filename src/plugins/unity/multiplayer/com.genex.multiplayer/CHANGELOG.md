@@ -2,6 +2,150 @@
 
 All notable changes to `com.genex.multiplayer`. Versions follow [semantic versioning](https://semver.org); before 1.0 a minor bump may add API.
 
+## 0.10.1
+
+- **A session is ready at the room clock's first round trip again, also on a link with next to no latency.** 0.10.0 waited
+  for the round trip a render time is placed by to be above 0, and that one is the server's time less the stamp arriving
+  now, twice: on a local room or a LAN it reads 0 or under it for good, so `Me` and `Entities` stayed empty for the whole
+  2 s warm-up (`authority-edge.ts yaw-fold`, a room on loopback: "own entity never drawn", every run; and 251 ms after
+  the join on a 150 ms link it read -24.9). The session waits on the clock's own measured round trip.
+- **`session.Rtt` is the measured round trip again**, what a game shows as its ping (0.10.0 gave the render one there). The
+  round trip a render time is placed by is `session.RenderRtt`.
+
+## 0.10.0
+
+- **The render delay counts a sample's lateness from the last frame drawn before it landed, not from its landing (PROTOCOL.md
+  §17.3 *The render delay*).** The delay is for the frames that had to draw without a sample. The socket's states wait for the
+  frame, so a frame of your own that stalls is handed the states that waited for it together, and each was noted as late as the
+  stall, though no frame drew without them: the delay rose, and other entities were drawn further behind for the ten seconds the
+  window keeps a sample (a frame of 150 ms, three times, on a steady link of 30 ms each way at 30 updates a second, under a
+  ceiling of 250: up to 194 and 202 ms by WebSocket and 187 and 191 on the fast channel, two runs each, 219 of a run's 339
+  frames above the floor).
+  `GenexRenderDelayBuffer.Note` now takes `drawnMs`, and the session hands it the last frame that had to draw without the state:
+  the frame before, for a state `Frame()`'s own drain decodes (it is in hand for this frame), and the latest frame for any
+  other. Behaviour change in a room that publishes a ceiling above your `RenderDelayMs`: a hitch of your own no longer draws
+  others further behind, and on a link whose samples do land late the delay settles lower than it did by the time from that
+  frame to the state's arrival (half a frame for a drained state). A room that publishes no ceiling draws as before. Held bit
+  for bit by `render-delay.json` (`GenexSmoke render-delay`: its rows carry `drawn`) and, in a real room, by
+  `render-delay-run.ts stall` on the WebSocket and on the fast channel (`RenderDelayStall.cs`, the client framed as Unity frames
+  it): once the delay has stood at the floor for two seconds the client's own frame stops for 150 ms three times, each stall
+  hands the next frame 4 or 5 ticks of states at once, and the delay is 100 in every frame from those two seconds on, to the
+  bit.
+- **The render time of other entities no longer moves with where your frames fall between the room's updates (PROTOCOL.md
+  §17.3 *A state's arrival*).** The socket's states wait for the frame: `Frame()` drains them, and what lands after that is
+  posted to the main thread, which runs it once a frame. The room clock took the drain's own instant for the arrival of every
+  state: the wait for the frame, up to a frame, went half into the clock's offset and whole into the round trip, so other
+  entities were drawn that much further behind the server, by a wait that at a frame rate near the room's update rate is the
+  same for seconds and creeps (the Unreal client, which reads its socket the same way, drew other cars 148 to 157 ms behind
+  within one car-ball run at 60 frames a second against 60 updates). `room.Clock` (`GenexPacedClock`) now times every state
+  by its stamp: a state stamped S arrives at S plus the link's time, one number for the link (`GenexPolledArrival`), the
+  shortest time from stamp to read of the first second and a half and held from then on. It moves when the link does: a
+  state read more than a frame before it says, a second in which every state was still missing at a drain after it says, an
+  answer to an input before that input left. A stalled frame moves nothing. And the round trip everything places a render
+  time by (`room.Clock.SmoothedRtt()`: the session, the SDK's input handle and its Predict) is the one that puts the
+  server's time less half of it on the stamp of a state arriving now, so other entities are drawn at that stamp less the
+  render delay. The clock's own smoothed round trip (`GenexPacedClock.LinkRtt`) and its offset are not read off the same
+  thing: the round trip counts the wait for the room's next update after an input lands, which moves with where a frame
+  falls too, and the offset leaves most of it out, so the two moved apart by up to half an update's interval on a link
+  shorter than five intervals. The server's present, which projectiles and predicted bodies are drawn at, is the SDK
+  clock's as before. A WebGL player's WebSocket has no queue: its states are timed as the browser delivers them.
+  Behaviour changes for every game: other entities are drawn at one lag for the whole of a link's life, between none and a
+  frame further behind the server than the link alone would have them (the wait for the frame of the session's first
+  second and a half stays in; a frame rate off the room's update rate leaves none), and nearer it than before by the mean
+  of the link's jitter and of the wait for the room's update; a link's jitter and its stalls no longer move the render
+  time (the render delay covers them, and is fed the reads themselves); `Rtt` is the round trip the render time is placed
+  by, which moves by up to a frame with where the frames fall (the clock's own is `LinkRtt`). Held by `update-rate-run.ts
+  phase` (the client framed as Unity frames it, at exactly the room's update interval, its frames crept across the interval
+  and then moved across it in eighths, over 100 ms and over 10 ms: the render time stays where it was, 0.00 ms in 13 runs
+  of the two and 2.08 ms in one against a bound of 3; with the drain's instant taken for the arrival it moved 10 ms on both) and by
+  `clock-samples` (the Unreal
+  core's rows: a simulated room and link through `GenexPolledArrival` and the paced clock, frames at the room's rate,
+  creeping past it and off it, late states, stalls, a stalled frame, a link that changes). In the built car-ball player
+  the release-1 gate passes at every link, one run each: other cars read 4.2 to 10.0 from the server's own, 39.3
+  through WebSocket stalls (`carball-engine-feel.test.ts`; their bounds are not measured again and stay).
+- **Other entities are drawn on the render timeline itself: the output spring is off by default (`RemoteSmoothMs` 0, was 25).**
+  The session eased every other entity toward its interpolated pose with a 25 ms time constant, which the TypeScript session never
+  did. While a room sent 20 updates a second that rounded the corners of 50 ms chords. A room this client creates now sends 60
+  (§17.6 *The update rate*), its updates carry the server's motion tick by tick, and the spring smoothed that away and drew it late.
+  Car-ball's release-1 room, 7 runs of 30 s a link with the built player, the 25 ms spring against none, other cars as the median
+  of the runs: how far their drawn motion is from the server's own (`remote.jitterExcessP99`) 26.7 against 8.5 on a LAN, 50.7
+  against 11.7 at 100 ms, 61.8 against 13.6 at 200 ms, 59.1 against 18.0 on a jittery link (the TypeScript client: 7.3, 9.6, 19.0,
+  21.3); their hitches a run 3 to 134, 57 to 312, 105 to 598 and 97 to 496 against 0 to 5, 0 to 2, 0 to 4 and 0 to 26; and they
+  were drawn 16 to 20 ms later. Through WebSocket stalls (loss-2) the two draw alike (39.2 and 39.2). Behaviour change for every
+  game that did not set the option: another entity is drawn exactly where a shot is judged (§17.5), about 17 ms nearer the
+  server's present at 60 frames a second, with whatever unevenness the room's updates carry. `RemoteSmoothMs = 25` is the old
+  drawing. Held by `update-rate-run.ts` (a client on the default options draws another entity within 4 ms of its render time at
+  20 and at 60 updates a second: it was 17 ms behind) and by the defaults row of `authority-edge.ts offline`; `authority-smoke.ts`
+  passes at 150 and 300 ms without it (the target is never seen to teleport). The car-ball gates' `unity r1` rows bound that
+  drawing (`carball-gates.ts`). Not run inside a Unity player beyond car-ball's. The Godot session still defaults to 25.
+- **The session draws the same at any update rate, and says so with `rate@1` (PROTOCOL.md §17.6 *The update rate*).** Rooms now send
+  on tick boundaries, 60 times a second by default, and tell a client their update interval. Three things the session did were tied
+  to the old 50 ms timer, and each changes behaviour:
+  - *A correction of your own entity eases over 50 ms in every room* (§17.3 *Easing a correction*). The reconciler's time constant
+    was the interval the room told, so at 60 updates a second the same correction was drawn in a third of the time (17 ms measured,
+    50 now). The snap that draws a fresh prediction after a respawn lasts 400 ms in every room for the same reason.
+  - *The room clock takes one round trip per 50 ms* (§17.3 *The clock's samples*; `GenexClockSamples`, `ClockSamples.cs`). Every
+    state used to move the smoothed round trip a tenth of the way, so the states a held WebSocket releases together stepped the
+    render time of other players back: 29 ms of round trip in one frame at 60 updates a second, 11 now. `room.Clock` is a
+    `GenexPacedClock` in front of the SDK's, for the state frames and the fast channel's snapshots alike; `session.Rtt` follows a
+    change of the link as fast as it did at 20 updates a second.
+  - *Your own entity is predicted through the inputs in flight when it is first seen* (§17.3), as after a respawn: a room that
+    spawns it after the join no longer corrects it by a round trip of movement at the first acknowledgement (0.4 units at 6 units a
+    second on a 60 ms link). A fresh prediction (the first sight, `SetWorld`, the re-prediction after a contact the seat
+    prediction found late) is drawn from its own state only until its first fixed step, then through the reconciler like any
+    other frame, as in the TypeScript session. It was drawn from that state for 400 ms, the window a respawn's snap needs, and
+    a correction inside it was drawn at once: a 4 unit correction 0.1 s after the first sight was all there in one frame, and
+    is now eased over 50 ms (§17.3 *Easing a correction*). The 400 ms stay after an own respawn, whose reconciler carries the
+    jump as an offset.
+  With all three in, every join's `caps` carries `rate@1` (`GenexProtocol.Authority.Caps.UpdateRate`), with the fast channel off
+  too; a `CapsOverride` sends only what it lists. Held by `GenexSmoke clock-samples` (the TypeScript tests' rows, the Colyseus
+  clock behind the pacer included), by `update-rate-run.ts` (a real room at 20 and at 60 updates a second behind a link that holds
+  its downlink; the walk from the first sight drawn without a step back, and a shove 0.1 s after it eased) and by the join
+  options table of `authority-edge.ts offline`. None of it has run inside a Unity player.
+- **A WebGL seat far from its room keeps the fast channel (PROTOCOL.md §17.12 *WebTransport*).** The client counted one second from
+  the first datagram it queued, so on a long route the WebTransport session's own setup used the deadline up: a player in Bangkok in
+  an EU room (234 ms round trip) always read `WebSocket (handshake)`, and every retry failed the same way. A socket that opens
+  asynchronously now says it is opening (`IGenexFastSocketState.Opening`, `GenexFastWeb_Opening` in the jslib), and the handshake
+  runs twice, as in the TypeScript client: to the socket opening, the longer of 1 s and `GenexFastClient.OpenRoundTrips` (4) of the
+  seat's round trip, measured by one WebSocket ping at each binding; then 1 s from the opening to the first snapshot. The first
+  binding and every retry get the same rule; a raw UDP socket, which never opens asynchronously, keeps its one deadline, and a
+  blocked network still ends with `handshake`. Behaviour change: an implementation of `IGenexFastSocketState` outside this package
+  needs the new `Opening` member. Held by `GenexSmoke fast-client` (the TypeScript tests' cases) and by `fast-session.ts opening`
+  (a real room, a socket that takes 1.4 s to open).
+- **A WebGL player rides WebTransport by default.** `GenexAuthorityOptions.FastWebTransport` is now true: in a browser with
+  WebTransport a seat's fast channel opens through the room's relay with no word from the game, as UDP does on every other
+  platform (false keeps it on the WebSocket). It was off because the path had never run in a player; it now has, on
+  production in Chromium, where the same room measured 122 ms by datagram and 317 ms by WebSocket. A browser without
+  WebTransport never asks, as before.
+- **The render delay follows the link (PROTOCOL.md §17.3 *The render delay*).** A fixed delay fits one link: on a jittery one a state
+  that lands later than it covers leaves other players held, then jumping. In a room that publishes a ceiling
+  (`"interpolation":{"maxDelayMs":N}` in its preset text) the session now sizes its delay between `GenexAuthorityOptions.RenderDelayMs`
+  and that ceiling: each state that moves other entities (a patch, a fast snapshot) is noted, and each `Frame()` moves the delay
+  towards what the worst sample of the last ten seconds needed, up by a fifth of the frame time and down by a fiftieth. One value a
+  frame serves the interpolation, a respawn's step on the render timeline and the render time on your inputs, on the WebSocket and on
+  the fast channel. New: `session.RenderDelayMs` (the delay in use), `GenexRenderDelayBuffer` and
+  `GenexRenderDelay.PresetRenderDelayMax` (`RenderDelay.cs`), `GenexProtocol.Authority.Timing.RenderDelayMaxMs` (250). Held bit for bit
+  to `render-delay.json` (`GenexSmoke render-delay`) and, in a real room on a late link, by `render-delay-run.ts`. Behaviour change
+  only in a room that publishes a ceiling above your `RenderDelayMs`: there other entities are drawn from the session's own record
+  of their states instead of the Colyseus lerp (whose delay is fixed when an entity is attached). A room that publishes none draws as
+  before, value for value. A ceiling published alone, with no preset name, is read as no preset.
+
+- **Predicted hits (PROTOCOL.md §17.9 *Predicted hits*).** The hit of your own shot is shown when the shot reaches a target on your
+  screen and settled by the states that follow; nothing reaches the wire. New: `session.PredictHitscan(origin, dir, range, radius,
+  kinds, settle)` while staging the firing input (id `<seat>.<seq>.h<n>`), `GenexProjectilePrediction.Hits` (`GenexProjectileHits
+  {Kinds, Radius, Settle}`: the projectile is tested each frame along its drawn path), the events `PredictedHit` and `HitSettled`,
+  `ConfirmHit(id)` and `CancelHit(id)` for a hit the game settles (`GenexHitSettle.Manual`), the telemetry counters `HitsPredicted`,
+  `HitsConfirmed` and `HitsCancelled`, and the pure rules `GenexPredictedHits.SweepHits`, `HitscanHit` and `SettleHit`
+  (`PredictedHits.cs`), held bit for bit to `predicted-hits.json` (`GenexSmoke predicted-hits`). A drop, a room that ends and
+  `Leave()` cancel every hit still waiting. On the fast channel a hitscan's hit is decided only once a WebSocket patch is known to
+  cover its input or known not to (`HitSession.cs`). Held in real rooms by `hits-run.ts`, on the WebSocket and on the fast channel.
+  No behaviour change for a game that calls none of it.
+
+- **On the fast channel, the record a pending respawn is drawn from takes its poses from snapshots only.** A WebSocket patch stamped
+  later than a late snapshot used to add a pose under its own stamp with the snapshot before's values, and the late snapshot's own
+  pose was then refused as older. Behaviour change only on the fast channel, in the render delay before another player's respawn is
+  drawn.
+
 ## 0.9.0
 
 - **A player's home region is tried first (PROTOCOL.md §17.1 *Regions*).** A probe through a proxy measured the path to the Asia

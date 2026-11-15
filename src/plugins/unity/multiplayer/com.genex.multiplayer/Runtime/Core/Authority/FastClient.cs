@@ -2,8 +2,10 @@
 // still holds for the redundant uplink, its snapshot reassembly and the deadlines after which the seat goes back to
 // the WebSocket. No I/O of its own: the socket is an IGenexFastSocket (GenexUdpFastSocket in FastUdp.cs, a fake in
 // the tests) the client polls on the caller's thread, and every call that needs the time takes it, so every
-// decision here is replayable. The session (FastSeat.cs) owns the reliable side: the `__fast` binding,
-// `__fast:off`, and writing each applied snapshot into the state. A port of the TypeScript reference
+// decision here is replayable. A socket that opens asynchronously (a browser's WebTransport, FastWeb.cs) says so
+// through IGenexFastSocketState, and the handshake then runs twice: to the socket opening, then to the first
+// snapshot. The session (FastSeat.cs) owns the reliable side: the `__fast` binding, `__fast:off`, and writing each
+// applied snapshot into the state. A port of the TypeScript reference
 // (packages/multiplayer/src/authority/fast-client.ts), with the Rust port's polled shape. No UnityEngine.
 using System;
 using System.Collections.Generic;
@@ -25,13 +27,19 @@ namespace Genex.Multiplayer.Authority
     public delegate IGenexFastSocket GenexFastSocketOpener(string url);
 
     /// <summary>What a socket that opens asynchronously knows of itself (WebTransport): the seat falls back at once, with no
-    /// deadline to wait out, from one that can never carry the channel.</summary>
+    /// deadline to wait out, from one that can never carry the channel, and gives one that is still opening its own bound
+    /// (<see cref="GenexFastClient.Due"/>). A socket without it (raw UDP) never says it is opening.</summary>
     public interface IGenexFastSocketState
     {
         /// <summary>True once the socket can never carry the channel (a refused or failed session).</summary>
         bool Failed { get; }
         /// <summary>The longest datagram it can send now; 0 while unknown.</summary>
         int MaxDatagramBytes { get; }
+        /// <summary>True while the socket is still opening (WebTransport: round trips before a first datagram can leave). The
+        /// handshake then runs twice: to the socket opening, <see cref="GenexFast.HandshakeMs"/> or
+        /// <see cref="GenexFastClient.OpenRoundTrips"/> of the seat's round trips, whichever is longer; and from then to the
+        /// first snapshot, <see cref="GenexFast.HandshakeMs"/>.</summary>
+        bool Opening { get; }
     }
 
     /// <summary>Why a fast seat went back to the WebSocket (the wire spelling of TypeScript's <c>FastFallbackReason</c>).</summary>
@@ -39,7 +47,8 @@ namespace Genex.Multiplayer.Authority
     {
         /// <summary>The <c>__fast</c> binding was malformed, or this client cannot open its url.</summary>
         public const string Unreachable = "unreachable";
-        /// <summary>No snapshot within <see cref="GenexFast.HandshakeMs"/> of the first datagram.</summary>
+        /// <summary>No snapshot within <see cref="GenexFast.HandshakeMs"/> of the first datagram (of the socket opening, for
+        /// one that opens asynchronously, or that socket still not open at its bound).</summary>
         public const string Handshake = "handshake";
         /// <summary>No snapshot for <see cref="GenexFast.StallFallbackMs"/> after the last one.</summary>
         public const string Stall = "stall";
@@ -151,6 +160,11 @@ namespace Genex.Multiplayer.Authority
     {
         /// <summary>The most datagrams one <see cref="Poll"/> reads (a hostile flood never holds a frame).</summary>
         public const int MaxDatagramsPerPoll = 256;
+        /// <summary>Round trips a socket that opens asynchronously may take to open, where that is longer than
+        /// <see cref="GenexFast.HandshakeMs"/> (fast-client.ts FAST_OPEN_ROUND_TRIPS): WebTransport over QUIC and HTTP/3
+        /// took three in Safari 26 (Chromium's two are within it), so a long route's seat is not sent back for its session's
+        /// own handshake.</summary>
+        public const int OpenRoundTrips = 4;
 
         private sealed class Decoded
         {
@@ -160,6 +174,10 @@ namespace Genex.Multiplayer.Authority
 
         private readonly IGenexFastSocket socket;
         private readonly double tickHz;
+        /// <summary>The seat's round trip as measured so far (ms; null, or answering 0: not yet known).</summary>
+        private readonly Func<double> roundTripMs;
+        /// <summary>When the socket's <see cref="IGenexFastSocketState.Opening"/> first read false.</summary>
+        private double? openedAt;
         private GenexFastClientRx rx = GenexFastClientRx.Empty();
         private List<GenexFastInput> sent = new List<GenexFastInput>();
         private readonly Dictionary<uint, double> sentTimes = new Dictionary<uint, double>();
@@ -173,23 +191,27 @@ namespace Genex.Multiplayer.Authority
         private Dictionary<ushort, Decoded> decodedByKey = new Dictionary<ushort, Decoded>();
         private Dictionary<string, GenexMotionRecord> latest = new Dictionary<string, GenexMotionRecord>();
 
-        /// <summary>A client on <paramref name="socket"/> (already open) for <paramref name="bind"/>.</summary>
-        public GenexFastClient(GenexFastBind bind, double tickHz, IGenexFastSocket socket)
+        /// <summary>A client on <paramref name="socket"/> for <paramref name="bind"/>. <paramref name="roundTripMs"/> answers
+        /// the seat's round trip as measured so far (ms; null, or 0: not yet known), read while the socket is opening.</summary>
+        public GenexFastClient(GenexFastBind bind, double tickHz, IGenexFastSocket socket, Func<double> roundTripMs = null)
         {
             Bind = bind;
             this.tickHz = tickHz;
             this.socket = socket;
+            this.roundTripMs = roundTripMs;
         }
 
         /// <summary>Opens a seat's fast channel on <paramref name="bind"/>; null when <paramref name="open"/> cannot reach its url.</summary>
-        public static GenexFastClient Open(GenexFastBind bind, double tickHz, GenexFastSocketOpener open)
+        public static GenexFastClient Open(GenexFastBind bind, double tickHz, GenexFastSocketOpener open, Func<double> roundTripMs = null)
         {
             var target = bind?.OpenTarget(GenexFastSeat.InBrowser);
             var socket = target == null || open == null ? null : open(target);
-            return socket == null ? null : new GenexFastClient(bind, tickHz, socket);
+            return socket == null ? null : new GenexFastClient(bind, tickHz, socket, roundTripMs);
         }
 
         public GenexFastBind Bind { get; }
+        /// <summary>True while the socket is still opening.</summary>
+        public bool Opening => socket is IGenexFastSocketState state && state.Opening;
         /// <summary>The snapshot receive state (reassembly, held bases, newest applied).</summary>
         public GenexFastClientRx Rx => rx;
         /// <summary>The newest input seq queued (0: none).</summary>
@@ -299,15 +321,25 @@ namespace Genex.Multiplayer.Authority
         public string Due(double now)
         {
             if (closed) return null;
-            if (socket is IGenexFastSocketState state)
+            var state = socket as IGenexFastSocketState;
+            if (state != null)
             {
                 if (state.Failed) return GenexFastFallbackReason.Unreachable;
                 var room = state.MaxDatagramBytes;
                 if (room > 0 && room < GenexFastTransport.UplinkMaxBytes(tickHz)) return GenexFastFallbackReason.Unreachable;
             }
             if (lastAppliedAt.HasValue) return now - lastAppliedAt.Value > GenexFast.StallFallbackMs ? GenexFastFallbackReason.Stall : null;
-            return firstSentAt.HasValue && now - firstSentAt.Value > GenexFast.HandshakeMs ? GenexFastFallbackReason.Handshake : null;
+            if (!firstSentAt.HasValue) return null;
+            // A socket that never says it is opening (raw UDP): the one deadline, from its first datagram.
+            if (state == null) return Late(now, firstSentAt.Value, GenexFast.HandshakeMs);
+            // Still opening: the datagrams wait in the socket, so the bound is the session's own handshake.
+            if (state.Opening) return Late(now, firstSentAt.Value, Math.Max(GenexFast.HandshakeMs, OpenRoundTrips * (roundTripMs?.Invoke() ?? 0)));
+            if (!openedAt.HasValue) openedAt = now;
+            return Late(now, Math.Max(firstSentAt.Value, openedAt.Value), GenexFast.HandshakeMs);
         }
+
+        /// <summary>The handshake's fallback once <paramref name="now"/> is more than <paramref name="boundMs"/> past <paramref name="from"/>.</summary>
+        private static string Late(double now, double from, double boundMs) => now - from > boundMs ? GenexFastFallbackReason.Handshake : null;
 
         /// <summary>Every datagram the socket holds (at most <see cref="MaxDatagramsPerPoll"/>): the snapshots they applied.</summary>
         public List<GenexFastSnapshot> Poll(double now)

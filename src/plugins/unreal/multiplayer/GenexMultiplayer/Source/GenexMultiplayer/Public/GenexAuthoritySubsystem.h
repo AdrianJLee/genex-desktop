@@ -1,7 +1,8 @@
 // Genex server-authoritative rooms (protocol 4, PROTOCOL.md §17) for one game instance, over
 // GenexCore's AuthoritySession: the server runs the game's room module; this client sends one
 // input per fixed step (SetInput stages it) and draws what the server decided — your own entity
-// predicted with the room's movement preset, every other one 100 ms behind on the timeline the
+// predicted with the room's movement preset, every other one its render delay behind (100 ms, or what
+// this client's link needs up to the ceiling a room publishes: Get Render Delay Ms) on the timeline the
 // server's lag compensation rewinds to. Separate from the relay subsystem, so relay games are
 // untouched.
 //
@@ -74,10 +75,13 @@ struct GENEXMULTIPLAYER_API FGenexAuthorityOptions
 	 *  UDP is blocked or stalls. A room that does not offer it seats you on the WebSocket. One LogGenex line per
 	 *  join names the transport and any fallback (GetTransportLine). False keeps the seat on the WebSocket. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") bool bFastChannel = true;
-	/** How far behind the server others are drawn (ms); the server rewinds shots to the same instant. */
+	/** How far behind the server others are drawn (ms); the server rewinds shots to the same instant. In a room
+	 *  that publishes a ceiling (PROTOCOL.md §17.3 *The render delay*) this is the floor: the delay then follows
+	 *  what this client's link needs, between it and the ceiling (Get Render Delay Ms). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex", meta = (ClampMin = "0")) float RenderDelayMs = 100.f;
-	/** The output spring on other entities (ms; 0 = off). Never across a respawn. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex", meta = (ClampMin = "0")) float RemoteSmoothMs = 25.f;
+	/** An output spring on other entities (ms; 0 = off, the default: they are drawn exactly on the render timeline,
+	 *  where a shot is judged). A value eases the drawing toward that pose, never across a respawn. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex", meta = (ClampMin = "0")) float RemoteSmoothMs = 0.f;
 	/** How other entities' samples are timed in a predicting physics room (§17.11 *Drawing other seats*): by their
 	 *  keyframe's tick (default) or by the patch's server stamp (for comparison). Other rooms always use the stamp. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Physics") EGenexRemoteSamples RemoteSamples = EGenexRemoteSamples::Tick;
@@ -130,6 +134,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FGenexAuthorityDrainingSignature, fl
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FGenexAuthorityRejoinedSignature, const FString&, SessionId);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FGenexAuthorityCodeSignature, int32, Code);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FGenexAuthorityEventSignature, const FString&, Type, const FString&, DataJson);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FGenexPredictedHitSignature, const FGenexPredictedHit&, Hit);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FGenexHitSettledSignature, const FGenexPredictedHit&, Hit, bool, bConfirmed);
 
 UCLASS()
 class GENEXMULTIPLAYER_API UGenexAuthoritySubsystem : public UGameInstanceSubsystem
@@ -176,11 +182,31 @@ public:
 	 * the one this prediction is keyed on; 0 leaves the staged input alone (stage the button yourself and
 	 * clear it after the frame). The projectile is drawn at once (GetEntity(Id) and GetEntities() list it
 	 * this frame), keeps its id when the server's arrives, and is dropped if the server never launches it.
+	 * With Hit Kinds in the launch its hit is predicted too (PROTOCOL.md §17.9 *Predicted hits*): the frame it
+	 * is drawn reaching a target, On Predicted Hit fires under the projectile's id, and On Hit Settled once the
+	 * server's states confirm it or not.
 	 * Returns its id, `<seat>.<seq>.<n>`, or "" before the room is ready or while reconnecting (no input
 	 * staged then is sent).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Genex|Authority")
 	FString PredictProjectile(const FGenexProjectileLaunch& Launch, int32 FireButtons = 0);
+	/**
+	 * Predict a hitscan you fire (PROTOCOL.md §17.9 *Predicted hits*). Call it in the frame you fire, with the
+	 * ray and the options the room module hands `ctx.rewind.hitscan`. It is tested against the other entities
+	 * where this frame draws them (the positions the server judges the shot at): true, with the hit, when the
+	 * ray finds a target; On Predicted Hit fires for it too, and On Hit Settled once the state that judged the
+	 * shot shows the target hurt (confirmed) or not. `FireButtons` is added to the next input sent, as in
+	 * Predict Projectile, hit or miss. False for a miss, before the room is ready or while reconnecting.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Genex|Authority")
+	bool PredictHitscan(const FGenexHitscan& Shot, FGenexPredictedHit& OutHit, int32 FireButtons = 0);
+	/** Settle a pending predicted hit yourself, as landed (a hit the room module tells by an event: Hit Settle
+	 *  Manual): On Hit Settled follows, confirmed. False when no hit of that id is pending. */
+	UFUNCTION(BlueprintCallable, Category = "Genex|Authority")
+	bool ConfirmHit(const FString& Id);
+	/** As Confirm Hit, as missed: On Hit Settled follows, not confirmed. */
+	UFUNCTION(BlueprintCallable, Category = "Genex|Authority")
+	bool CancelHit(const FString& Id);
 	/** Draw every projectile again at this instant (their flight is closed-form): call it right before
 	 *  rendering for the exact present. Entities are otherwise drawn once per frame, before the world ticks. */
 	UFUNCTION(BlueprintCallable, Category = "Genex|Authority")
@@ -192,6 +218,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Genex|Authority") FGenexAuthorityTelemetry GetTelemetry() const;
 	/** Smoothed round trip (ms), or -1 before the first. */
 	UFUNCTION(BlueprintPure, Category = "Genex|Authority") double GetRtt() const;
+	/** The render delay in use (ms, PROTOCOL.md §17.3 *The render delay*): how far behind the server this frame
+	 *  drew other entities, and what its inputs' render-time stamps carried. Options.RenderDelayMs in a room that
+	 *  publishes no ceiling; between it and the room's ceiling otherwise. -1 without a session. */
+	UFUNCTION(BlueprintPure, Category = "Genex|Authority") double GetRenderDelayMs() const;
 	/** Read it inside an On Rejoined handler: true while On Rejoined is raised for a move (PROTOCOL.md §17.1
 	 *  *Regrouping*: no room was lost; the player was alone and now sits in a room that has players), false for a lost
 	 *  room's rejoin and at any other time. */
@@ -271,6 +301,11 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Genex|Authority") FGenexAuthorityRejoinedSignature OnRejoined;
 	/** An event the room module emitted (server:restart included). */
 	UPROPERTY(BlueprintAssignable, Category = "Genex|Authority") FGenexAuthorityEventSignature OnEvent;
+	/** A shot of yours reached a target as this client draws it (PROTOCOL.md §17.9 *Predicted hits*): show the
+	 *  hit now; the server's word follows as On Hit Settled. Once per hit. */
+	UPROPERTY(BlueprintAssignable, Category = "Genex|Authority") FGenexPredictedHitSignature OnPredictedHit;
+	/** That hit is settled, once: confirmed, or not (take back what you showed). */
+	UPROPERTY(BlueprintAssignable, Category = "Genex|Authority") FGenexHitSettledSignature OnHitSettled;
 
 	/**
 	 * C++: what a region picker shows (PROTOCOL.md §17.1 *Regrouping*), with no join: the regions a Join would use
@@ -299,8 +334,8 @@ public:
 
 	/** Called by the pump hook right after the session's update. */
 	void DispatchEvents();
-	/** Called by the pump hook right after the session's Frame: a PredictProjectile's FireButtons go out
-	 *  on the first input sent after it, and only on that one. */
+	/** Called by the pump hook right after the session's Frame: a PredictProjectile's or PredictHitscan's
+	 *  FireButtons go out on the first input sent after it, and only on that one. */
 	void AfterFrame(int32 Sent);
 
 	/** EGenexJoinRefusal for a JoinError code. */
@@ -320,7 +355,7 @@ private:
 	/** The module's rules SetPredictionRules gave, kept across joins. */
 	FGenexPredictionRules PredictionRules;
 	FGenexAuthorityInput Staged;
-	/** A PredictProjectile's FireButtons wait for the next input sent. */
+	/** A PredictProjectile's or PredictHitscan's FireButtons wait for the next input sent. */
 	bool bFirePending = false;
 	/** On Rejoined is being raised for a move (WasMoved). */
 	bool bRaisingMove = false;

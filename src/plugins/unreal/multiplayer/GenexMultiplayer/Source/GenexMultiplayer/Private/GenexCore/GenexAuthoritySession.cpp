@@ -7,16 +7,19 @@
 #include "GenexCore/AuthoritySchema.h"
 #include "GenexCore/GenexAuthorityRejoin.h"
 #include "GenexCore/GenexClock.h"
+#include "GenexCore/GenexClockSamples.h"
 #include "GenexCore/GenexColyseus.h"
 #include "GenexCore/GenexContactSession.h"
 #include "GenexCore/GenexFastLine.h"
 #include "GenexCore/GenexFastSeat.h"
+#include "GenexCore/GenexHitSession.h"
 #include "GenexCore/GenexInputRepeat.h"
 #include "GenexCore/GenexLog.h"
 #include "GenexCore/GenexMsgpack.h"
 #include "GenexCore/GenexNoDelay.h"
 #include "GenexCore/GenexOwnPredict.h"
 #include "GenexCore/GenexProtocol.h"
+#include "GenexCore/GenexRenderDelay.h"
 #include "GenexCore/GenexTickDrawing.h"
 #include "GenexCore/GenexUrl.h"
 
@@ -61,10 +64,15 @@ constexpr double kShotStoreNeverMs = 1.0e12;
 constexpr double kHandshakeStallMs = 1000.0;
 /** The longest the views wait for the room clock's first round trip (see BecameReady). */
 constexpr double kClockWarmupTimeoutMs = 2000.0;
-/** After an own respawn the predicted state is drawn for this many patch intervals (the reconciler's
- *  correction offset for the jump has then decayed to e^-8 of it); the fallback tau without a patch rate. */
+/** A correction of your own entity is eased with this time constant, ms (§17.3 *Easing a correction*): 63% drawn
+ *  after it, 95% after three. The session says so to the reconciler, whose own default is the patch interval the
+ *  room's handshake told: at 60 updates a second that drew the same correction three times as fast as on the 50 ms
+ *  timer (update-rate.ts: 16.8 ms told 17, 34.5 told 33, 100.3 told 100), and your car with two to three times the
+ *  frame-to-frame jitter (session.ts OWN_CORRECTION_EASE_MS). */
+constexpr double kOwnCorrectionEaseMs = 50.0;
+/** After an own respawn the predicted state is drawn for this many ease time constants (the reconciler's
+ *  correction offset for the jump has then decayed to e^-8 of it). */
 constexpr double kRespawnSnapTaus = 8.0;
-constexpr double kRespawnSnapFallbackTauMs = 50.0;
 /** How much of an entity's patch record is kept: render delay plus half the worst round trip, with room. */
 constexpr double kRemoteHistoryMs = 1000.0;
 /** A patch stamped this far before the newest noted one restarts the record (a clock axis change). */
@@ -158,6 +166,11 @@ struct Shot {
   int spawnId = 0;
   /** When it was made, on the room clock's `now` (its age against ProjectileTtl). */
   double madeAt = 0.0;
+  /** What it can hit (§17.9 *Predicted hits*), where the last frame drew it (its launch until one has), and
+   *  whether its one hit is predicted, or it is the server's now (a bounce) and predicts none. */
+  std::optional<ProjectileHits> hits;
+  hits::HitPoint drawn;
+  bool hitDone = false;
 };
 
 /** One physics body as this client draws it (§17.10): its descriptor, the entity instance and fields it
@@ -252,7 +265,6 @@ struct Own {
   double yawPrev = 0.0;
   double yawErr = 0.0;
   double yawAcc = 0.0;
-  double yawSmoothMs = 50.0;
   double yawLastTick = NaN();
   int yawHandleEpoch = 0;
 };
@@ -357,7 +369,10 @@ struct Impl {
     };
     h.sample = [this](double sent, double rtt) {
       if (room == nullptr) return;
-      colyseus_room_clock_sample(colyseus_room_get_clock(room), sent, rtt);
+      // §17.3 *The clock's samples*: a snapshot is timed and paced like a WebSocket state, and the C core's clock
+      // is handed what the session's took (session.ts paceClockSamples).
+      const double read = Clock::NowMs();
+      colyseus_room_clock_sample(colyseus_room_get_clock(room), sent, NoteClockSample(sent, rtt >= 0.0 ? read - rtt : NaN(), read));
     };
     h.statePass = [this] { FastStatePass(); };
     return h;
@@ -366,12 +381,17 @@ struct Impl {
   /** What a decoded patch runs (CbState, then the queued State), for a snapshot written into the state. */
   void FastStatePass() {
     if (room == nullptr || State() == nullptr) return;
+    fastPass = true;
     NotePatches();
     NoteBodies();
     NotePhysicsKeyframe();
     SampleTicks();
-    projectileTtl.NoteState(colyseus_room_clock_now(colyseus_room_get_clock(room)));
+    const double now = colyseus_room_clock_now(colyseus_room_get_clock(room));
+    projectileTtl.NoteState(now);
     SettleShots();
+    NoteHitAcks();
+    SettleHits(now);
+    fastPass = false;
     RefreshPlayers();
   }
 
@@ -393,7 +413,15 @@ struct Impl {
   }
 
   AuthorityOptions options;
+  /** §17.3 *The render delay*: `renderDelay` is the delay in use, the buffer's value as the last Frame left it
+   *  (FrameRenderDelay). Its floor is the game's (AuthorityOptions::renderDelayMs) and its ceiling the room's,
+   *  read from the state's preset text whenever that text changes; a room that publishes none keeps the floor. */
   double renderDelay = protocol::authority_timing::kRenderDelayMs;
+  double renderDelayFloor = protocol::authority_timing::kRenderDelayMs;
+  render_delay::RenderDelayBuffer delayBuffer;
+  std::string delayCeilingText = std::string(1, '\0');
+  /** Inside the state pass of a fast snapshot (FastStatePass): the sample it notes is the channel's. */
+  bool fastPass = false;
   std::shared_ptr<int> alive = std::make_shared<int>(0);
 
   colyseus_settings_t* settings = nullptr;
@@ -487,6 +515,19 @@ struct Impl {
    *  moves back on one socket, so no replay needs an input this has let go of. */
   std::deque<std::pair<int, aw::AuthorityInput>> sentSinceAck;
   int sentSinceAckEpoch = -1;
+  /** §17.3 *The clock's samples*, *A state's arrival*: the smoothed round trip this session draws by and the stamp
+   *  of a state arriving now (GenexClockSamples.h), each state timed by `arrival`, never by the poll that read it.
+   *  The render time and the inputs' render-time stamps (RenderBase, StampDelay) read the arriving stamp; §17.9's
+   *  time limit, Ready and Rtt() the round trip, never the C core clock's own, which takes every WebSocket state's
+   *  round trip inside its decode. */
+  clock_samples::PacedRoundTrip roundTrip;
+  clock_samples::PolledArrival arrival;
+  /** When each input not yet acknowledged over the WebSocket went out (Clock::NowMs), in sequence order, the epoch
+   *  of `handle` they were sent on and the last input a WebSocket state acknowledged on it: a state's round trip
+   *  as the C core's handle measures it for its own clock (InputHandle.ts ackInput), which it does not give out. */
+  std::deque<std::pair<int, double>> sentAt;
+  int sentAtEpoch = -1;
+  int sentAtAck = 0;
   /** The upstream throttle (§17.11 *Input pacing*) and the frame instant it last paid at. */
   input_repeat::InputThrottle throttle;
   /** The room's input repeat setting (§17.11 *Input pacing*), cached per preset text (RoomRepeat). */
@@ -625,15 +666,32 @@ struct Impl {
   int stagedEpoch = -1;
   int stagedSeq = 0;
   int stagedN = 0;
+  /** That input's PredictHitscan calls so far, a miss counted (§17.9 *Predicted hits*: the `n` of
+   *  `<seat>.<seq>.h<n>`). */
+  int stagedHitscans = 0;
+  /** §17.9 *Settling* on the fast channel (§17.12): the most a WebSocket state can have acknowledged, and
+   *  whether the seat was on the channel when it was last kept (it starts afresh when that changes). */
+  hits::AckCeiling hitAckCeiling;
+  bool hitAcksLive = false;
+  /** A predicted hit waiting for the server's word: what the game heard, and what settles it. */
+  struct WaitingHit {
+    AuthorityHit hit;
+    hits::PendingHit pending;
+  };
+  /** The predicted hits not settled yet, in the order predicted. */
+  std::vector<WaitingHit> waitingHits;
 
   // ---------------- connection ----------------
 
   void Start() {
     if (!(options.renderDelayMs >= 0.0) || !std::isfinite(options.renderDelayMs)) {
-      renderDelay = protocol::authority_timing::kRenderDelayMs;
+      renderDelayFloor = protocol::authority_timing::kRenderDelayMs;
     } else {
-      renderDelay = options.renderDelayMs;
+      renderDelayFloor = options.renderDelayMs;
     }
+    // A fixed delay until a room publishes a ceiling (FrameRenderDelay).
+    delayBuffer.Bounds(renderDelayFloor, renderDelayFloor);
+    renderDelay = delayBuffer.Delay();
     if (!options.extra.IsObject()) options.extra = Json::MakeObject();
     if (options.gameId.empty()) {
       Refuse(0, "genex: AuthorityOptions.gameId is required");
@@ -844,6 +902,9 @@ struct Impl {
     if (PredictsPhysics()) caps.push_back(protocol::caps::kPhysicsPredict);
     // §17.11 *Input pacing*: this client reconciles a predicting room's repeated inputs (SteppedAck).
     caps.push_back(protocol::caps::kInputRepeat);
+    // §17.6 *Which rooms take the rate*: this client draws the same at any update rate (kOwnCorrectionEaseMs,
+    // roundTrip, PredictOwn's ReplayInFlight), so a room it creates may send at its own.
+    caps.push_back(protocol::caps::kUpdateRate);
     // §17.12: a client that can open the fast channel's socket asks for it.
     if (options.fast) {
       caps.push_back(protocol::caps::kFast);
@@ -965,6 +1026,7 @@ struct Impl {
     connected = false;
     awaitingResync = false;
     retryAt = -1.0;
+    DropHits();
     DisposePrediction();
     DisposeShots();
     // physics-predict-session.ts dispose: the client world is freed and the session says `off`.
@@ -990,6 +1052,8 @@ struct Impl {
     ackHold = input_repeat::ReconcilerAckHold{};
     sentSinceAck.clear();
     sentSinceAckEpoch = -1;
+    ForgetRoundTrips();
+    sentAtEpoch = -1;
     handle = nullptr;
     remotes.clear();
     ticked.Clear();
@@ -1131,6 +1195,7 @@ struct Impl {
         connected = false;
         status = AuthorityStatus::Reconnecting;
         awaitingResync = false;  // a drop during the post-reconnect sequence abandons it (§8)
+        DropHits();              // §17.9 *Predicted hits*: a drop cancels every pending hit
         if (fastSeat != nullptr) fastSnapshotsBefore = fastSeat->Status().snapshots;
         if (fastSeat != nullptr) fastSeat->Dropped();
         fastLine.Reset();
@@ -1277,8 +1342,7 @@ struct Impl {
    *  steps back once when it lands (Godot 0.3-0.55 units at 150 ms; Unity 0.59). Inputs already flow. */
   void BecameReady(double now) {
     if (ready || !joined || closed) return;
-    colyseus_room_clock_t* clock = colyseus_room_get_clock(room);
-    if (colyseus_room_clock_smoothed_rtt(clock) <= 0.0 && now < readyDeadline) return;
+    if (roundTrip.SmoothedMs() <= 0.0 && now < readyDeadline) return;
     ready = true;
     if (rejoinedSeat) return;
     AuthorityEvent e;
@@ -1393,8 +1457,9 @@ struct Impl {
     colyseus_input_options_t io{};
     io.unreliable = false;
     // Lag compensation rewinds to what this player was rendering: the handle carries the delay, as the
-    // TS session does (an explicit value here wins over the predict layer's binding).
-    io.render_delay = renderDelay;
+    // TS session does. It is not given here: a delay passed at creation is final (the C core's
+    // colyseus_input_handle_set_render_delay does nothing on such a handle), and the render delay follows
+    // the link (§17.3 *The render delay*), so every send sets it (SendSteps).
     // One input handle per room, kept (and reset, options intact) across an in-place reconnect: a
     // rebuild takes it back without options, as Godot's `_room.input()` does. Options on a second
     // call are ignored, and the C core warns on stderr about it.
@@ -1538,7 +1603,7 @@ struct Impl {
    *  nothing settled within it is dropped and counted rejected. Run each frame at the room clock's `now`. */
   void ExpireShots(double now) {
     if (unsettled.empty() || shots == nullptr || room == nullptr) return;
-    const double ttl = projectileTtl.Ms(colyseus_room_clock_smoothed_rtt(colyseus_room_get_clock(room)), connected, now);
+    const double ttl = projectileTtl.Ms(roundTrip.SmoothedMs(), connected, now);
     std::vector<int> dropped;
     for (auto it = unsettled.begin(); it != unsettled.end();) {
       if (now - (*it)->madeAt <= ttl) {
@@ -1609,11 +1674,28 @@ struct Impl {
     return p != nullptr ? p->seqBase : 0.0;
   }
 
-  /** Whether a projectile staged now could be keyed: seated, with an input handle and the store. */
-  bool CanPredictProjectile() const {
+  /** Whether a shot staged now could be keyed on the input being staged: seated, with an input handle. */
+  bool CanStageShot() const {
     // Not while the socket is down: no input staged then is ever sent (SendSteps drops it), and the
     // handle's count and the seat's seqBase are not this socket's yet (they are at its first state).
-    return !closed && joined && connected && handle != nullptr && shots != nullptr && room != nullptr && !sid.empty();
+    return !closed && joined && connected && handle != nullptr && room != nullptr && !sid.empty();
+  }
+
+  /** Whether a projectile staged now could be keyed: that, and the store. */
+  bool CanPredictProjectile() const { return CanStageShot() && shots != nullptr; }
+
+  /** The input being staged, which goes out as the next send: its sequence is one past what was sent. A new
+   *  one starts its counts of predictions afresh (session.ts `staged`). */
+  int StagedSeq() {
+    const int seq = colyseus_input_handle_sent_count(handle) + 1;
+    const int epoch = colyseus_input_handle_epoch(handle);
+    if (stagedEpoch != epoch || stagedSeq != seq) {
+      stagedEpoch = epoch;
+      stagedSeq = seq;
+      stagedN = 0;
+      stagedHitscans = 0;
+    }
+    return seq;
   }
 
   /** The id PredictProjectile would give a projectile staged now ("" when it would refuse). */
@@ -1627,15 +1709,9 @@ struct Impl {
 
   std::string PredictProjectile(const ProjectilePrediction& projectile) {
     if (!CanPredictProjectile()) return std::string();
-    // The input being staged goes out as the next send: its sequence is one past what was sent, counted
-    // on from the seqBase the server gave this socket.
-    const int seq = colyseus_input_handle_sent_count(handle) + 1;
-    const int epoch = colyseus_input_handle_epoch(handle);
-    if (stagedEpoch != epoch || stagedSeq != seq) {
-      stagedEpoch = epoch;
-      stagedSeq = seq;
-      stagedN = 0;
-    }
+    // Keyed on the input being staged, counted on from the seqBase the server gave this socket.
+    const int seq = StagedSeq();
+    const int epoch = stagedEpoch;
     std::unique_ptr<Shot> shot(new Shot());
     shot->id = AuthorityProjectileId(sid, SeqBase(), seq, stagedN++);
     shot->kind = projectile.kind;
@@ -1651,6 +1727,10 @@ struct Impl {
     shot->seq = seq;
     shot->epoch = epoch;
     shot->madeAt = colyseus_room_clock_now(colyseus_room_get_clock(room));
+    // §17.9 *Predicted hits*: swept from its launch, where it is drawn at once (a radius that is no number
+    // at least 0 declares nothing, as session.ts).
+    if (projectile.hits && std::isfinite(projectile.hits->radius) && projectile.hits->radius >= 0.0) shot->hits = projectile.hits;
+    shot->drawn = hits::HitPoint{shot->launch.x, shot->launch.y, shot->launch.z};
     Shot* raw_ = shot.release();
     raw_->spawnId = colyseus_spawns_spawn(shots, raw_);  // the store owns it from here (FreeShot)
     unsettled.push_back(raw_);
@@ -1661,12 +1741,227 @@ struct Impl {
     return id;
   }
 
+  // ---------------- predicted hits (§17.9 *Predicted hits*, GenexPredictedHits.h) ----------------
+
+  /** §17.9 *The targets*: the entities of `kinds` (null: every kind) where the last frame drew them, in the
+   *  state's `entities` order, without projectiles, physics body entities and every entity this seat owns. */
+  std::vector<hits::HitTarget> HitTargets(const std::vector<std::string>* kinds) const {
+    std::vector<hits::HitTarget> out;
+    aw::AuthorityRoomState* st = State();
+    if (st == nullptr || st->entities == nullptr) return out;
+    ForEach(st->entities, [&](const std::string& id, void* value) {
+      if (value == nullptr) return;
+      const aw::AuthorityEntity& e = *static_cast<const aw::AuthorityEntity*>(value);
+      const bool ownedByYou = !sid.empty() && Str(e.owner) == sid;
+      if (IsProjectile(e) || IsBody(id) || ownedByYou) return;
+      if (kinds != nullptr && std::find(kinds->begin(), kinds->end(), Str(e.kind)) == kinds->end()) return;
+      const auto view = views.find(id);
+      if (view == views.end()) return;
+      out.push_back(hits::HitTarget{id, view->second.x, view->second.y, view->second.z});
+    });
+    return out;
+  }
+
+  /** A target's `hp` and `epoch` as the state holds them now; none when it has no such entity. */
+  std::optional<hits::HitTargetState> TargetState(const std::string& id) const {
+    const aw::AuthorityEntity* e = EntityById(id);
+    if (e == nullptr) return std::nullopt;
+    return hits::HitTargetState{e->hp, e->epoch};
+  }
+
+  /** A hit predicted now, at the room clock's `now`, by the input `seq`: remembered with its target's `hp` and
+   *  `epoch` as the state holds them, and told once. False when the state has no such target. */
+  bool RaiseHit(const AuthorityHit& hit, hits::HitSettle settle, int seq, double now) {
+    const std::optional<hits::HitTargetState> target = TargetState(hit.target);
+    if (!target) return false;
+    // An id is one shot's: a hit predicted again under it replaces nothing.
+    if (std::any_of(waitingHits.begin(), waitingHits.end(), [&](const WaitingHit& w) { return w.hit.id == hit.id; })) return true;
+    WaitingHit waiting;
+    waiting.hit = hit;
+    waiting.pending.kind = hit.kind;
+    waiting.pending.settle = settle;
+    waiting.pending.seq = static_cast<double>(seq);
+    waiting.pending.hp = target->hp;
+    waiting.pending.epoch = target->epoch;
+    waiting.pending.at = now;
+    waitingHits.push_back(std::move(waiting));
+    telemetry.hitsPredicted += 1;
+    AuthorityEvent e;
+    e.type = AuthorityEventType::PredictedHit;
+    e.hit = hit;
+    events.push_back(std::move(e));
+    return true;
+  }
+
+  /** A hit is settled: counted, and told once. */
+  void EndHit(const WaitingHit& waiting, bool confirmed) {
+    if (confirmed) {
+      telemetry.hitsConfirmed += 1;
+    } else {
+      telemetry.hitsCancelled += 1;
+    }
+    AuthorityEvent e;
+    e.type = AuthorityEventType::HitSettled;
+    e.hit = waiting.hit;
+    e.hit.confirmed = confirmed;
+    events.push_back(std::move(e));
+  }
+
+  /** A drop, or the end: every pending hit is cancelled, and a projectile fired before it predicts none after. */
+  void DropHits() {
+    if (shots != nullptr) {
+      for (const colyseus_spawn_entry_t* entry = colyseus_spawns_first(shots); entry != nullptr; entry = colyseus_spawns_next(shots, entry)) {
+        if (entry->local != nullptr) static_cast<Shot*>(entry->local)->hitDone = true;
+      }
+    }
+    std::vector<WaitingHit> gone;
+    gone.swap(waitingHits);
+    for (const WaitingHit& waiting : gone) EndHit(waiting, false);
+  }
+
+  /** Once per state, right after its decode and before the look (§17.9 *Settling*, session.ts `hitAckCeiling`):
+   *  on the fast channel a snapshot brings the acknowledgement and a WebSocket patch the `hp`, each under the
+   *  server's stamp, so the ceiling keeps which snapshots are not older than the last patch. It starts afresh
+   *  whenever the seat moves on or off the channel; off it a patch carries its own acknowledgement. */
+  void NoteHitAcks() {
+    const bool live = fastSeat != nullptr && fastSeat->Status().live;
+    if (live != hitAcksLive) {
+      hitAcksLive = live;
+      hitAckCeiling.Reset();
+    }
+    if (!live || room == nullptr) return;
+    const double stamp = colyseus_room_clock_last_server_time(colyseus_room_get_clock(room));
+    if (fastPass) {
+      hitAckCeiling.Snapshot(stamp, static_cast<double>(OwnAck()));
+    } else {
+      hitAckCeiling.Patch(stamp);
+    }
+  }
+
+  /** One look at a pending hit (hits::SettleHit's input), now (session.ts `hitLook`). */
+  hits::HitLook HitLookOf(const WaitingHit& waiting, double now, double ttl) {
+    hits::HitLook seen;
+    seen.target = TargetState(waiting.hit.target);
+    seen.now = now;
+    seen.ttl = ttl;
+    // The acknowledgement SettleShots reads: on the fast channel the newest snapshot's not after the patch.
+    const double lower = static_cast<double>(fastSeat != nullptr ? fastSeat->SettleAck() : OwnAck());
+    seen.ack = lower;
+    // A projectile's hit asks no acknowledgement: the first state that shows its target hurt confirms it.
+    if (waiting.pending.kind == hits::HitKind::Projectile) return seen;
+    // Another life the newest snapshot wrote is as of that snapshot's ack exactly.
+    const bool motionKnown = fastSeat == nullptr || fastSeat->MotionKnown(waiting.hit.target);
+    if (seen.target && seen.target->epoch != waiting.pending.epoch && motionKnown) {
+      seen.ack = static_cast<double>(OwnAck());
+      return seen;
+    }
+    const bool live = fastSeat != nullptr && fastSeat->Status().live;
+    const std::optional<double> ack = hits::LookAck(waiting.pending.seq, lower, live ? hitAckCeiling.Upper() : lower);
+    if (!ack) return hits::WaitingLook(waiting.pending, now, ttl);
+    seen.ack = *ack;
+    return seen;
+  }
+
+  /** The game's own word on a pending hit (ConfirmHit, CancelHit); false when none of that id is pending. */
+  bool SettleHitByGame(const std::string& id, bool confirmed) {
+    const auto it = std::find_if(waitingHits.begin(), waitingHits.end(), [&](const WaitingHit& w) { return w.hit.id == id; });
+    if (it == waitingHits.end()) return false;
+    const WaitingHit waiting = std::move(*it);
+    waitingHits.erase(it);
+    EndHit(waiting, confirmed);
+    return true;
+  }
+
+  /** §17.9 *Settling*: one look at every pending hit, against the state as it stands with what it has
+   *  acknowledged (HitLookOf), and the time limit ExpireShots keeps (max(2·RTT, 600 ms), a stall waited out).
+   *  Run on every state, right after its decode, and every frame; `now` is the room clock's. */
+  void SettleHits(double now) {
+    if (waitingHits.empty() || room == nullptr) return;
+    const double ttl = projectileTtl.Ms(roundTrip.SmoothedMs(), connected, now);
+    std::vector<WaitingHit> still;
+    std::vector<std::pair<WaitingHit, bool>> settled;
+    for (WaitingHit& waiting : waitingHits) {
+      const hits::HitState state = hits::SettleHit(waiting.pending, HitLookOf(waiting, now, ttl));
+      if (state == hits::HitState::Pending) {
+        still.push_back(std::move(waiting));
+      } else {
+        settled.emplace_back(std::move(waiting), state == hits::HitState::Confirmed);
+      }
+    }
+    waitingHits.swap(still);
+    for (const auto& [waiting, confirmed] : settled) EndHit(waiting, confirmed);
+  }
+
+  /** §17.9 *A hitscan*: the nearest target the ray finds among the entities as drawn, predicted as a hit of
+   *  the input being staged. */
+  std::optional<AuthorityHit> PredictHitscan(const HitscanPrediction& shot) {
+    if (!CanStageShot() || !ready) return std::nullopt;
+    // Every call of the input being staged takes a number, a miss too.
+    const int seq = StagedSeq();
+    const int n = stagedHitscans++;
+    for (double v : {shot.origin.x, shot.origin.y, shot.origin.z, shot.dir.x, shot.dir.y, shot.dir.z}) {
+      if (!std::isfinite(v)) return std::nullopt;
+    }
+    const std::vector<hits::HitTarget> drawn = HitTargets(shot.kinds ? &*shot.kinds : nullptr);
+    const std::optional<hits::HitFound> found = hits::HitscanHit(shot.origin, shot.dir, drawn, shot.range, shot.radius);
+    if (!found) return std::nullopt;
+    const auto target = std::find_if(drawn.begin(), drawn.end(), [&](const hits::HitTarget& t) { return t.id == found->id; });
+    if (target == drawn.end()) return std::nullopt;
+    const hits::HitPoint at = hits::RayEntry(shot.origin, shot.dir, *target, *found, shot.radius);
+    AuthorityHit hit;
+    hit.id = AuthorityHitscanId(sid, SeqBase(), seq, n);
+    hit.kind = hits::HitKind::Hitscan;
+    hit.target = found->id;
+    hit.x = at.x;
+    hit.y = at.y;
+    hit.z = at.z;
+    hit.dist = found->dist;
+    if (!RaiseHit(hit, shot.settle, seq, colyseus_room_clock_now(colyseus_room_get_clock(room)))) return std::nullopt;
+    return hit;
+  }
+
+  /** §17.9 *A projectile*: each of your projectiles that declared what it can hit (and has predicted no hit
+   *  yet) is tested along the straight path from where the last frame drew it to where this one does; the
+   *  nearest target is its predicted hit, under the projectile's id. Yours while it is predicted, or confirmed
+   *  with `src` your seat: one the server re-launched (a bounce, src '') is the server's from then on. Run each
+   *  frame, after the views are drawn; `now` is the room clock's. */
+  void SweepShots(double now) {
+    if (shots == nullptr || !ready) return;
+    for (const colyseus_spawn_entry_t* entry = colyseus_spawns_first(shots); entry != nullptr;
+         entry = colyseus_spawns_next(shots, entry)) {
+      if (entry->local == nullptr) continue;
+      Shot& shot = *static_cast<Shot*>(entry->local);
+      if (!shot.hits || shot.hitDone) continue;
+      const auto view = views.find(shot.id);
+      if (view == views.end()) continue;
+      if (entry->confirmed && view->second.src != sid) {
+        shot.hitDone = true;
+        continue;
+      }
+      const hits::HitPoint from = shot.drawn;
+      shot.drawn = hits::HitPoint{view->second.x, view->second.y, view->second.z};
+      const std::vector<hits::HitFound> found = hits::SweepHits(from, shot.drawn, HitTargets(&shot.hits->kinds), shot.hits->radius);
+      if (found.empty()) continue;
+      const hits::HitPoint at = hits::PathPoint(from, shot.drawn, found.front().dist);
+      AuthorityHit hit;
+      hit.id = shot.id;
+      hit.kind = hits::HitKind::Projectile;
+      hit.target = found.front().id;
+      hit.x = at.x;
+      hit.y = at.y;
+      hit.z = at.z;
+      hit.dist = found.front().dist;
+      shot.hitDone = RaiseHit(hit, shot.hits->settle, shot.seq, now);
+    }
+  }
+
   /** The clock projectiles are drawn by, read once: the room clock's serverNow and the tick at it. */
   AuthorityServerClock ReadClock() const {
     AuthorityServerClock c;
     c.serverNow = ServerNowDrawn();
     c.tickHz = TickHz();
     c.serverTick = presets::ServerTick(c.serverNow, TickOrigin(), c.tickHz);
+    c.renderNow = RenderTime();
     return c;
   }
 
@@ -1777,7 +2072,8 @@ struct Impl {
     if (st == nullptr) return;
     colyseus_predict_field_options_t position{};
     position.mode = COLYSEUS_PREDICT_LERP;
-    position.delay = renderDelay;
+    // The core's lerp takes one fixed delay: the floor, which is the delay wherever the room publishes no ceiling.
+    position.delay = renderDelayFloor;
     position.smooth_ms = -1.0;  // explicit 0: the exact interpolation, no output spring
     colyseus_predict_field_options_t angle = position;
     angle.angle = true;
@@ -1793,22 +2089,135 @@ struct Impl {
   }
 
   /** The render time an input sent now carries on the fast channel: the stamp the handle's WebSocket frame
-   *  carries (§17.12 *Render-time stamp*), on the room clock and the handle's render delay. */
+   *  carries (§17.12 *Render-time stamp*), the render time this session draws at now. */
   double FastRenderStamp() const {
     colyseus_room_clock_t* clock = colyseus_room_get_clock(room);
     const bool synced = colyseus_room_clock_last_server_time(clock) > 0.0;
+    if (synced && roundTrip.Arrives()) return fast::RenderStamp(std::optional<double>(Clock::NowMs() + roundTrip.ArrivingMs()), renderDelay + StampHold(), 0.0);
     const std::optional<double> now = synced ? std::optional<double>(ServerNow()) : std::nullopt;
-    const double delay = handle != nullptr ? colyseus_input_handle_render_delay(handle) : renderDelay;
-    return fast::RenderStamp(now, delay, colyseus_room_clock_smoothed_rtt(clock));
+    return fast::RenderStamp(now, renderDelay, roundTrip.SmoothedMs());
   }
 
-  /** Where the other entities are drawn on that timeline (the TS session's and the server rewind's). */
+  /** Where the other entities are drawn on that timeline (the server rewind's): the stamp of a state arriving at
+   *  the instant being drawn, less the render delay (§17.3 *A state's arrival*). That is the room's time less half
+   *  the round trip, read off the arrivals themselves; before the first round trip, the room's time alone. Never
+   *  nearer the server than the stamp the room reads can say (StampHold). */
   double RenderTime() const {
     colyseus_room_clock_t* clock = colyseus_room_get_clock(room);
-    if (colyseus_room_clock_last_server_time(clock) > 0.0) {
-      return ServerNowDrawn() - renderDelay - colyseus_room_clock_smoothed_rtt(clock) / 2.0;
+    if (!(colyseus_room_clock_last_server_time(clock) > 0.0)) return colyseus_room_clock_now(clock) - renderDelay;
+    if (!roundTrip.Arrives()) return ServerNowDrawn() - renderDelay - StampHold();
+    return Clock::NowMs() - FrameLag() + roundTrip.ArrivingMs() - renderDelay - StampHold();
+  }
+
+  // ---- the clock's round-trip samples (§17.3 *The clock's samples*, GenexClockSamples.h) ----
+
+  /** The estimates and the send times start afresh (a new socket, a new room). */
+  void ForgetRoundTrips() {
+    roundTrip.Reset();
+    arrival.Reset();
+    sentAt.clear();
+    sentAtAck = 0;
+  }
+
+  /** A new socket's inputs count from 1 again and the C core starts its clock afresh: so does the estimate. */
+  void FollowHandleEpoch() {
+    const int epoch = colyseus_input_handle_epoch(handle);
+    if (epoch == sentAtEpoch) return;
+    sentAtEpoch = epoch;
+    ForgetRoundTrips();
+  }
+
+  /** Input `seq` went out on `handle` now; at most the handle's ring of them is kept, as the handle keeps its own. */
+  void NoteSentAt(int seq) {
+    FollowHandleEpoch();
+    sentAt.emplace_back(seq, Clock::NowMs());
+    const auto ring = static_cast<std::size_t>((std::max)(1, colyseus_input_handle_replay_buffer_size(handle)));
+    while (sentAt.size() > ring) sentAt.pop_front();
+  }
+
+  /** A state stamped `stamp` on the room's clock was read at `readAt` (Clock::NowMs), acknowledging an input that
+   *  went out at `inputAt` (no number: none new): into what this session draws by. The socket is read once a
+   *  frame, since the pump's poll before this one; PolledArrival says when the state is taken to have arrived.
+   *  Returns the round trip the pacer handed over (kNoRoundTrip: none). */
+  double NoteClockSample(double stamp, double inputAt, double readAt) {
+    const double arrived = arrival.Note(stamp, Pump::PolledSinceMs(), readAt, inputAt);
+    return roundTrip.Note(arrived, stamp, std::isfinite(inputAt) ? arrived - inputAt : clock_samples::kNoRoundTrip);
+  }
+
+  /** The WebSocket state just decoded (CbState), for what this session draws by: its stamp, and when the input
+   *  it newly acknowledges went out (none when it acknowledges nothing new or that input's send time is gone). A
+   *  state before the room's first stamp times nothing. */
+  void NoteStateRoundTrip() {
+    if (handle == nullptr) return;
+    FollowHandleEpoch();
+    const double stamp = colyseus_room_clock_last_server_time(colyseus_room_get_clock(room));
+    if (!(stamp > 0.0)) return;
+    double sent = NaN();
+    const int ack = colyseus_input_handle_last_processed(handle);
+    if (ack > sentAtAck) {
+      sentAtAck = ack;
+      while (!sentAt.empty() && sentAt.front().first < ack) sentAt.pop_front();
+      if (!sentAt.empty() && sentAt.front().first == ack) sent = sentAt.front().second;
     }
-    return colyseus_room_clock_now(clock) - renderDelay;
+    NoteClockSample(stamp, sent, Clock::NowMs());
+  }
+
+  /** The delay `handle` is told, so the render time it stamps on an input is the one this session draws at
+   *  (clock_samples::StampDelayMs): its stamp counts from the C core clock's server time, less half that clock's
+   *  own smoothed round trip. Before the first round trip the session draws at that clock's server time. */
+  double StampDelay() const {
+    return clock_samples::StampDelayMs(renderDelay + StampHold(), colyseus_room_clock_smoothed_rtt(colyseus_room_get_clock(room)), ClockPastArriving());
+  }
+
+  /** How far the C core clock's server time reads past the stamp of a state arriving now, ms (0 before the first
+   *  paced round trip: the session then draws by that clock's server time). Both move with the local clock, so it
+   *  changes only when a state is read. */
+  double ClockPastArriving() const {
+    if (!roundTrip.Arrives()) return 0.0;
+    return colyseus_room_clock_server_now(colyseus_room_get_clock(room)) - (Clock::NowMs() + roundTrip.ArrivingMs());
+  }
+
+  /** How far behind the arriving stamp less the render delay other entities are drawn, ms, so that an input's stamp
+   *  is the instant drawn (§17.3; clock_samples::StampHoldMs). On the WebSocket the room reads the stamp the C core's
+   *  handle writes, and the handle takes no delay below 0: the session draws no nearer the server than that. While
+   *  the fast channel is live the room reads the render time each datagram carries, which this session writes itself
+   *  (FastRenderStamp), so nothing is held. */
+  double StampHold() const {
+    if (fastSeat != nullptr && fastSeat->Status().live) return 0.0;
+    return clock_samples::StampHoldMs(renderDelay, colyseus_room_clock_smoothed_rtt(colyseus_room_get_clock(room)), ClockPastArriving());
+  }
+
+  // ---- the render delay (§17.3 *The render delay*, GenexRenderDelay.h) ----
+
+  /** A sample that moves other entities landed now and is placed at the server time `stamp` on the render
+   *  timeline. Not before the room clock is timed: until then a patch is placed at its local arrival, which
+   *  is no server time (and would hide every later stamp behind it). */
+  void NoteRenderSample(double stamp) {
+    if (room == nullptr || !(colyseus_room_clock_last_server_time(colyseus_room_get_clock(room)) > 0.0)) return;
+    // While the fast channel is live its snapshots are what moves other entities: a WebSocket patch's motion
+    // fields are held back then (GenexFastSeat.h MotionGuard), so it is no sample.
+    if (!fastPass && fastSeat != nullptr && fastSeat->Status().live) return;
+    // Whatever this frame reads landed after the frame before drew: that frame is the last one without it.
+    delayBuffer.Note(Clock::NowMs(), stamp, Pump::PolledSinceMs());
+  }
+
+  /** Once a frame, before anything is timed by it: the room's ceiling re-read when its preset text changed
+   *  (none: the floor, a fixed delay) and the delay moved towards what this link needs. The frame's sends
+   *  carry that value: the WebSocket's frames through the input handle (SendSteps), the fast channel's
+   *  datagrams through FastRenderStamp. */
+  void FrameRenderDelay(double now) {
+    const aw::AuthorityRoomState* st = State();
+    const std::string_view text = st != nullptr && st->preset != nullptr ? std::string_view(st->preset) : std::string_view();
+    if (text != delayCeilingText) {
+      delayCeilingText = std::string(text);
+      delayBuffer.Bounds(renderDelayFloor, render_delay::PresetRenderDelayMax(text).value_or(renderDelayFloor));
+    }
+    renderDelay = delayBuffer.Frame(now);
+    const double held = StampHold();
+    if (held > 0.0) {
+      telemetry.renderHeldFrames += 1;
+      telemetry.peakRenderHoldMs = (std::max)(telemetry.peakRenderHoldMs, held);
+    }
   }
 
   /** Once per patch, right after it decoded (the C state callback): note every entity's pose and time,
@@ -1817,6 +2226,8 @@ struct Impl {
     aw::AuthorityRoomState* st = State();
     if (st == nullptr || st->entities == nullptr) return;
     const double at = PatchTime();
+    // On the tick timeline the keyframe's sample is the one placed (SampleTicks).
+    if (!DrawsOnTicks()) NoteRenderSample(at);
     std::unordered_set<std::string> present;
     ForEach(st->entities, [&](const std::string& id, void* value) {
       if (value == nullptr) return;
@@ -1904,6 +2315,7 @@ struct Impl {
     const double at = presets::TickInstant(st->tick, TickOrigin(), hz);
     const double period = 1000.0 / hz * static_cast<double>(KeyframeTicksOf(Str(st->physDesc)));
     telemetry.tickKeyframes += 1;
+    NoteRenderSample(at);
     ForEach(st->entities, [&](const std::string& id, void* value) {
       if (value == nullptr) return;
       const aw::AuthorityEntity& e = *static_cast<const aw::AuthorityEntity*>(value);
@@ -2581,7 +2993,9 @@ struct Impl {
     Prediction prediction = PredictionInUse();
     if (!prediction.Known()) return;
     colyseus_reconciler_options_t ro{};
-    ro.smooth_ms = -1.0;  // the default: one patch interval
+    // §17.3 *Easing a correction*: the session's own constant, never the reconciler's default (the patch interval
+    // the room's handshake told).
+    ro.smooth_ms = kOwnCorrectionEaseMs;
     ro.snap = 0.0;
     ro.fields = prediction.Fields();
     ro.field_count = prediction.FieldCount();
@@ -2597,7 +3011,6 @@ struct Impl {
       blocked = "no_preset";
       return;  // drawn on the render timeline like any other
     }
-    colyseus_input_handle_set_render_delay(handle, renderDelay);
     own->reconciler = r;
     own->prediction = prediction;
     own->fields.clear();
@@ -2605,8 +3018,6 @@ struct Impl {
     own->before.assign(own->fields.size(), 0.0);
     own->after.assign(own->fields.size(), 0.0);
     own->yawMirrored = std::find(own->fields.begin(), own->fields.end(), "yaw") != own->fields.end();
-    const int patchMs = colyseus_input_handle_patch_rate(handle);
-    own->yawSmoothMs = patchMs > 0 ? static_cast<double>(patchMs) : 50.0;  // reconciler.c's default smooth_ms
     own->yawLastTick = NaN();
     own->yawHandleEpoch = colyseus_input_handle_epoch(handle);
     ReplayInFlight();
@@ -2651,8 +3062,8 @@ struct Impl {
   void SettleYawRender(double beforeYaw, double afterYaw, double dt) {
     own->yawErr = AuthorityWrapAngle(own->yawErr + (beforeYaw - afterYaw));
     if (dt > 0) {
-      const double k = own->yawSmoothMs <= 0 ? 1.0 : 1.0 - std::exp(-dt / own->yawSmoothMs);
-      own->yawErr -= own->yawErr * k;
+      // The heading is eased as the reconciler eases every other field (PredictOwn's smooth_ms).
+      own->yawErr -= own->yawErr * (1.0 - std::exp(-dt / kOwnCorrectionEaseMs));
     }
   }
 
@@ -2696,9 +3107,11 @@ struct Impl {
     colyseus_reconciler_free(own->reconciler);
     own->reconciler = nullptr;
     own->shoveEasing = false;
+    // A fresh prediction with the inputs in flight replayed on top, once (PredictOwn's ReplayInFlight steps the
+    // mirror it is given: a second call here stepped it through them again, a round trip of movement ahead of
+    // where the next reconcile then put it back).
     PredictOwn();
     if (own->reconciler == nullptr) return;
-    ReplayInFlight();
     const std::array<double, 3> after = OwnDrawnPlace(now);
     own->shoveDx = before[0] - after[0];
     own->shoveDy = before[1] - after[1];
@@ -3097,6 +3510,8 @@ struct Impl {
 
   /** See AuthoritySession::ReseedMissing. */
   int reseedMissing = 0;
+  /** AuthoritySession::TestMissedContact was called: the next Frame re-predicts as after a missed contact. */
+  bool testMissedContact = false;
 
   /** Inputs in flight OwnPathNow could not step (see AuthoritySession::OwnPathMissing). */
   int OwnPathMissing() const {
@@ -3202,9 +3617,7 @@ struct Impl {
       // The reconcile that adopted the new life: a snap, not a correction (kRespawnSnapTaus).
       own->respawning = false;
       own->drawnEpoch = own->entity->epoch;
-      const int patchMs = colyseus_input_handle_patch_rate(handle);
-      const double tau = patchMs > 0 ? static_cast<double>(patchMs) : kRespawnSnapFallbackTauMs;
-      own->snapUntil = now + kRespawnSnapTaus * tau;
+      own->snapUntil = now + kRespawnSnapTaus * kOwnCorrectionEaseMs;
       own->snapPrev.clear();
       own->snapCur.clear();
       return;
@@ -3248,6 +3661,8 @@ struct Impl {
       return 0;
     }
     aw::AuthorityInput* data = reinterpret_cast<aw::AuthorityInput*>(colyseus_input_handle_data(handle));
+    // §17.3 *The render delay*: the stamp these inputs carry is taken at the delay this frame draws with.
+    colyseus_input_handle_set_render_delay(handle, StampDelay());
     int sent = 0;
     for (int i = 0; i < due; ++i) {
       staged.WriteSanitized(*data);
@@ -3257,6 +3672,7 @@ struct Impl {
         // §17.12: while the fast channel is live the input also goes by datagram (the same wire input).
         if (fastSeat != nullptr) fastSeat->Sent(seq, InputTickField(data->tick), Input::FromWire(*data), FastRenderStamp());
         KeepSent(seq, *data);
+        NoteSentAt(seq);
       } else {
         telemetry.inputsDropped += 1;
       }
@@ -3281,6 +3697,10 @@ struct Impl {
       bool& framing;
       ~Unframe() { framing = false; }
     } unframe{framing};
+    // §17.3 *The render delay*: the one value this frame's interpolation, respawn step and input stamps use.
+    FrameRenderDelay(now);
+    // A socket that dropped: the round trip is unknown again from this frame on, as the C core's clock has it.
+    if (handle != nullptr) FollowHandleEpoch();
     TrackOwn();
     colyseus_reconciler_t* r = own ? own->reconciler : nullptr;
     const int seqBefore = r != nullptr ? colyseus_reconciler_reconcile_seq(r) : 0;
@@ -3292,6 +3712,7 @@ struct Impl {
     const int extra = ThrottleExtra(now);
     const int due = colyseus_predict_tick(predict, tickNow) + extra;
     ExpireShots(tickNow);
+    SettleHits(tickNow);
     int sent = 0;
     if (r == nullptr) {
       sent = SendSteps(OwnPace(now) + extra, staged);
@@ -3310,10 +3731,14 @@ struct Impl {
       // §17.11 *Seat contacts* (session.ts): a state that put your inputs in flight on later ticks had the
       // seat prediction find a contact in an input your entity was already stepped through without it: your
       // inputs are predicted again from the state, your drawing eased from where it was.
-      if (seatWorld != nullptr && !seatWorld->TakeMissed().empty() && own && own->reconciler != nullptr) ShoveRepredict(now);
+      const bool missed = seatWorld != nullptr && !seatWorld->TakeMissed().empty();
+      // AuthoritySession::TestMissedContact asks for the same re-prediction, on this frame.
+      const bool asked = std::exchange(testMissedContact, false);
+      if ((missed || asked) && own && own->reconciler != nullptr) ShoveRepredict(now);
     }
     BecameReady(now);
     RefreshViews(now);
+    SweepShots(tickNow);
     return sent;
   }
 
@@ -3706,12 +4131,17 @@ void CbState(void* ud) {
   // predictions this patch's acknowledgement settles, against the state it carries.
   // The reconnect's first state first: its decode confirmed what the earlier socket's inputs launched.
   if (impl->resyncFirstState) impl->DropEarlierSockets();
+  // §17.3 *The clock's samples*: this state's round trip, paced, before anything is placed by the render time.
+  impl->NoteStateRoundTrip();
   impl->NotePatches();
   impl->NoteBodies();
   impl->NotePhysicsKeyframe();
   impl->SampleTicks();
-  impl->projectileTtl.NoteState(colyseus_room_clock_now(colyseus_room_get_clock(impl->room)));
+  const double now = colyseus_room_clock_now(colyseus_room_get_clock(impl->room));
+  impl->projectileTtl.NoteState(now);
   impl->SettleShots();
+  impl->NoteHitAcks();
+  impl->SettleHits(now);
   Push(ctx, RawKind::State);
   // A later patch in this same poll decodes against the WebSocket's values again.
   impl->BeforePoll();
@@ -3796,6 +4226,10 @@ void CbRoom(colyseus_room_t* room, void* ud) {
     return;
   }
   impl->room = room;
+  // §17.9's time limit counts the link's silence from the seat, as session.ts starts `lastStateAt` at the room
+  // clock's present: counted from 0, the first state read as the end of a stall as long as the clock's reading,
+  // and nothing waiting on the limit (a prediction, a predicted hit) was ever let go.
+  impl->projectileTtl = ProjectileTtl(colyseus_room_clock_now(colyseus_room_get_clock(room)));
 }
 
 void CbJoinError(int code, const char* message, void* ud) {
@@ -3874,6 +4308,10 @@ const char* AuthorityEventTypeName(AuthorityEventType type) {
       return "message";
     case AuthorityEventType::Warning:
       return "warning";
+    case AuthorityEventType::PredictedHit:
+      return "predictedHit";
+    case AuthorityEventType::HitSettled:
+      return "hitSettled";
   }
   return "warning";
 }
@@ -4223,6 +4661,8 @@ void AuthoritySession::AdoptRegroup(double nowMs) {
   next->targets = impl_->targets;
   std::unique_ptr<asd::Impl> empty = std::move(impl_);
   impl_ = std::move(next);
+  // The room moved out of takes its pending hits with it: told before its events are carried.
+  empty->DropHits();
   std::vector<AuthorityEvent> carried;
   carried.swap(empty->events);
   for (AuthorityEvent& event : impl_->events) carried.push_back(std::move(event));
@@ -4310,8 +4750,10 @@ const std::string& AuthoritySession::Preset() const {
 
 double AuthoritySession::Rtt() const {
   if (impl_->room == nullptr) return 0.0;
-  return colyseus_room_clock_smoothed_rtt(colyseus_room_get_clock(impl_->room));
+  return impl_->roundTrip.SmoothedMs();
 }
+
+double AuthoritySession::RenderDelayMs() const { return impl_->renderDelay; }
 
 AuthorityTelemetry AuthoritySession::Telemetry() const { return impl_->telemetry; }
 
@@ -4372,6 +4814,12 @@ std::string AuthoritySession::PredictProjectile(const ProjectilePrediction& proj
 
 std::string AuthoritySession::NextProjectileId() const { return impl_->NextProjectileId(); }
 
+std::optional<AuthorityHit> AuthoritySession::PredictHitscan(const HitscanPrediction& shot) { return impl_->PredictHitscan(shot); }
+
+bool AuthoritySession::ConfirmHit(const std::string& id) { return impl_->SettleHitByGame(id, true); }
+
+bool AuthoritySession::CancelHit(const std::string& id) { return impl_->SettleHitByGame(id, false); }
+
 std::optional<AuthorityServerClock> AuthoritySession::DrawProjectiles() {
   if (!impl_->ready || impl_->closed || impl_->room == nullptr) return std::nullopt;
   // Read once: the views are drawn at exactly the instant returned.
@@ -4386,6 +4834,8 @@ std::optional<AuthorityServerClock> AuthoritySession::ServerClock() const { retu
 void AuthoritySession::TestDrop() {
   if (impl_->joined && impl_->connected) impl_->Drop();
 }
+
+void AuthoritySession::TestMissedContact() { impl_->testMissedContact = true; }
 
 std::optional<AuthorityRemoteProbe> AuthoritySession::ProbeRemote(const std::string& id) const {
   auto it = impl_->probes.find(id);
@@ -4434,6 +4884,15 @@ std::string AuthorityProjectileId(const std::string& sid, double seqBase, int se
   id += '.';
   AppendJsonNumber(id, seqBase + static_cast<double>(seq));
   id += '.';
+  id += std::to_string(n);
+  return id;
+}
+
+std::string AuthorityHitscanId(const std::string& sid, double seqBase, int seq, int n) {
+  std::string id = sid;
+  id += '.';
+  AppendJsonNumber(id, seqBase + static_cast<double>(seq));
+  id += ".h";
   id += std::to_string(n);
   return id;
 }

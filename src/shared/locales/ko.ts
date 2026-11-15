@@ -566,7 +566,7 @@ export default {
   "Visual Studio's C++ tools are ready": "Visual Studio C++ 도구가 준비됐어요",
   "When off, Harness doesn’t change its own instructions. Changes it already made stay until you undo them.":
     "끄면 Harness가 자기 지침을 바꾸지 않아요. 이미 한 변경은 되돌리기 전까지 남아요.",
-  "Workers pitch in": "작업자가 거들어요",
+  "Get your game": "게임을 받아요",
   Building: "만드는 중",
   "Building the game": "게임 빌드 중",
   "Building the starting point": "시작점을 만드는 중",
@@ -2708,7 +2708,7 @@ export default {
   "Plan ready": "계획 준비됨",
   "Plan ready for review": "검토할 계획이 준비됐어요",
   "Plan usage isn’t available right now.": "지금은 요금제 사용량을 확인할 수 없어요.",
-  "Your agent leads": "에이전트가 이끌어요",
+  "Share your idea": "아이디어를 말해요",
   Planning: "계획 중",
   "Planning the build": "빌드 계획 중",
   "Planning the next step": "다음 단계를 계획하는 중",
@@ -3036,7 +3036,7 @@ export default {
   "Reviewers compare instructions; they don’t rebuild your games. An applied change isn’t proof of better results.":
     "리뷰어는 지침을 비교할 뿐 게임을 다시 만들지 않아요. 변경을 적용했다고 결과가 더 좋아졌다는 증거는 아니에요.",
   "Reviewers model": "리뷰어 모델",
-  "A second opinion": "다른 시선",
+  "Approve the game design": "게임 디자인을 승인해요",
   "Reviewers · try {number}": "리뷰어 · 시도 {number}",
   "Reviewers: {model}": "리뷰어: {model}",
   Reviewing: "리뷰 중",
@@ -4607,7 +4607,7 @@ export default {
   "an earlier build is ready to play · resume from chat": "이전 빌드를 플레이할 수 있어요 · 채팅에서 이어 가기",
   "an empty folder": "빈 폴더",
   "an input": "입력",
-  "when the lead asks for one": "메인 에이전트가 요청할 때",
+  "change anything you want": "원하는 건 뭐든 바꿔요",
   "app update left every harness file as it was": "앱 업데이트에서 Harness 파일은 그대로 유지됐어요",
   "app update refreshed {count, plural, one {# harness file} other {# harness files}}":
     "앱 업데이트로 {count, plural, other {Harness 파일 #개}}를 갱신했어요",
@@ -4697,7 +4697,7 @@ export default {
   "effort\u0004xHigh": "매우 높음",
   eighth: "여덟 번째",
   ended: "종료됨",
-  "on parts at the same time": "여러 부분을 동시에",
+  "the AI builds it for you": "AI가 대신 만들어요",
   "every step landed": "모든 단계가 반영됐어요",
   "exit {code}": "종료 코드 {code}",
   "export games": "게임 내보내기",
@@ -4957,7 +4957,7 @@ export default {
   "the game had not finished loading when it was looked at": "확인할 때 게임이 아직 다 로드되지 않았어요",
   "the game inside it stays exactly where it is": "안에 있는 게임은 지금 위치 그대로 있어요",
   "the game's app": "게임 앱",
-  "and plans when it helps": "필요하면 계획도 세워요",
+  "the AI plans the game": "AI가 게임을 계획해요",
   "the kept {file} still has its own {names}, but {callers} now use {target}":
     "유지된 {file} 파일에는 자체 {names} 코드가 남아 있지만, 이제 {callers}에서는 {target} 파일을 써요",
   "the lead ended it before it was finished, so nobody reviewed it and the work it had done is kept":

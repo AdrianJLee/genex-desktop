@@ -23,7 +23,7 @@ import { GraphSelection } from "../inspector/selection.ts";
 
 const MESSAGE = { assets: t("Assets") } as const;
 
-/** A row's mark: its work is in the build, under way, left out of it, a check that did not pass, or not started. */
+/** A row's mark: its work is in the build, under way, left out of it, a check that did not pass, or not in the build yet. */
 export const RowMark = {
   Added: "added",
   Working: "working",
@@ -219,7 +219,7 @@ export function buildsList(input: BuildsListInput): BuildsList {
   const failed = (input.timeline?.builds ?? []).filter((build) => build.outcome !== BuildOutcome.Passed).map(buildRow);
   const fixedOnes = fixedRows(input);
   const atWork = (row: ListRow): boolean => row.mark === RowMark.Working;
-  // A step not ended yet waits with the work while the run goes on or is paused; once it is over, it was left out.
+  // A step not in the build yet waits with the work while the run goes on or is paused; once it is over, it was left out.
   const waits = (row: ListRow): boolean => row.mark === RowMark.Waiting;
   const live = runMayStillAdd(input.graph);
   const current = (row: ListRow): boolean => atWork(row) || (live && waits(row));

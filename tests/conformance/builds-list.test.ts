@@ -236,6 +236,21 @@ describe("the Builds list", () => {
     assert.ok(titles(over.leftOut).includes("A stone well"));
   });
 
+  it("counts work handed back as a change once the lead used it, though nothing of it was merged", () => {
+    const { events } = loop();
+    events.push(
+      start("w4", "A stone well"),
+      end("w4", "A stone well"),
+      inRun(CustomEvent.WorkerFinished, {
+        workerId: poolWorkerId("w4"),
+        title: "A stone well",
+        verdict: WorkerVerdict.Used,
+      }),
+    );
+    const over = buildsList({ ...inputOf(events), graph: { ...inputOf(events).graph, active: false } });
+    assert.equal(named(over.changes, "A stone well").mark, RowMark.Added);
+  });
+
   it("never counts a try reviewers kept as a change until it stands in the build: an ended run leaves it out", () => {
     const input = withStep(inputOf(loop().events), "A timber house", StepState.Kept);
     const rows = input.rows.map((row) => ({

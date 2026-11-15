@@ -23,7 +23,7 @@ import { GraphSelection } from "../inspector/selection.ts";
 
 const MESSAGE = { assets: t("Assets") } as const;
 
-/** A row's mark: its work is in the build, under way, left out of it, a check that did not pass, or not started. */
+/** A row's mark: its work is in the build, under way, left out of it, a check that did not pass, or not in the build yet. */
 export const RowMark = {
   Added: "added",
   Working: "working",
@@ -92,15 +92,20 @@ const fixed = (id: string, title: string, mark: RowMark, detail: string | null =
   build: null,
 });
 
-/** The steps whose work is in the build, or on its way there. */
-const IN_BUILD: ReadonlySet<StepState> = new Set([StepState.InBuild, StepState.Kept, StepState.Delivered]);
+/** The steps whose work was kept or handed back: in the build only while they stand on its line (`onLine`). */
+const HANDED_BACK: ReadonlySet<StepState> = new Set([StepState.Kept, StepState.Delivered]);
 /** The steps that have not ended either way: not started, or stopped by a pause with their work kept. */
 const NOT_ENDED: ReadonlySet<StepState> = new Set([StepState.Waiting, StepState.Paused]);
 
-/** A step's mark, by where its work stands. */
+/**
+ * A step's mark, by where its work stands. Work kept by reviewers or handed back to the lead counts as
+ * added only once it stands on the build's line (a worker that finished well, or the lead used it);
+ * until then it waits with the work while the run can still add it, and is left out once it is over.
+ */
 function stepMark(step: Step): RowMark {
   if (isLiveStep(step)) return RowMark.Working;
-  if (IN_BUILD.has(step.state)) return RowMark.Added;
+  if (step.state === StepState.InBuild) return RowMark.Added;
+  if (HANDED_BACK.has(step.state)) return step.onLine ? RowMark.Added : RowMark.Waiting;
   return NOT_ENDED.has(step.state) ? RowMark.Waiting : RowMark.Out;
 }
 
@@ -214,7 +219,7 @@ export function buildsList(input: BuildsListInput): BuildsList {
   const failed = (input.timeline?.builds ?? []).filter((build) => build.outcome !== BuildOutcome.Passed).map(buildRow);
   const fixedOnes = fixedRows(input);
   const atWork = (row: ListRow): boolean => row.mark === RowMark.Working;
-  // A step not ended yet waits with the work while the run goes on or is paused; once it is over, it was left out.
+  // A step not in the build yet waits with the work while the run goes on or is paused; once it is over, it was left out.
   const waits = (row: ListRow): boolean => row.mark === RowMark.Waiting;
   const live = runMayStillAdd(input.graph);
   const current = (row: ListRow): boolean => atWork(row) || (live && waits(row));

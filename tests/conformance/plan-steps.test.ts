@@ -20,6 +20,16 @@ test("a plan keeps its named steps on one line each, cut to its longest, at most
     ["Three places", "Game code"],
     "a text names one step a line",
   );
+  assert.deepEqual(
+    planSteps('["Three places", "Game code"]'),
+    ["Three places", "Game code"],
+    "a list's JSON text names each",
+  );
+  assert.deepEqual(
+    planSteps("[WIP] Three places\nGame code"),
+    ["[WIP] Three places", "Game code"],
+    "no list: a step a line",
+  );
   assert.equal(planSteps(42), null);
   assert.equal(planSteps([]), null);
   assert.equal(planSteps(["", "  "]), null);

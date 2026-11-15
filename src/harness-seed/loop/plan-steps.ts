@@ -26,11 +26,28 @@ function stepName(raw: unknown): string {
 }
 
 /**
- * A plan's steps as a tool call names them: a list, or a text of one step per line (a live tool's
- * flat parameters hold no list); its non-empty names, at most `MAX_PLAN_STEPS`; null when it names none.
+ * A text's steps: the list it spells as JSON (an engine that sends every field as a string, such as
+ * Claude Code's flat intake tools, sends `["Three places", …]` as text), else one step per line.
+ */
+function textSteps(text: string): unknown[] {
+  if (text.trim().startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // Not JSON: a text of one step per line that happens to start with a bracket.
+    }
+  }
+  return text.split("\n");
+}
+
+/**
+ * A plan's steps as a tool call names them: a list, the list as JSON text, or a text of one step per
+ * line (a live tool's flat parameters hold no list); its non-empty names, at most `MAX_PLAN_STEPS`;
+ * null when it names none.
  */
 export function planSteps(raw: unknown): string[] | null {
-  const list = typeof raw === "string" ? raw.split("\n") : raw;
+  const list = typeof raw === "string" ? textSteps(raw) : raw;
   if (!Array.isArray(list)) return null;
   const steps = list.map(stepName).filter(Boolean).slice(0, MAX_PLAN_STEPS);
   return steps.length ? steps : null;

@@ -17,7 +17,9 @@
 import type { StudioApi } from "./studio-api.ts";
 import type { StudioErrorCode } from "./error-codes.ts";
 import type { AddSource, ShareItem } from "./asset-library.ts";
+import type { DesignMarks } from "./design-marks.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
+import type { ModelOverride } from "./local-server.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
 import type { SessionAction } from "./play-native.ts";
 import type { PlayBarHold } from "./play-bar.ts";
@@ -159,6 +161,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:grok.signin": "grokSignIn",
   "studio:cursor.signin": "cursorSignIn",
   "studio:cursor.signout": "cursorSignOut",
+  "studio:antigravity.signin": "antigravitySignIn",
   "studio:openrouter.key.save": "openRouterKeySave",
   "studio:openrouter.key.clear": "openRouterKeyClear",
   "studio:typesafe.key.status": "typeSafeKeyStatus",
@@ -170,6 +173,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:local-server.connect": "localServerConnect",
   "studio:local-server.forget": "localServerForget",
   "studio:local-server.find": "localServerFind",
+  "studio:local-server.set-model-override": "localServerSetModelOverride",
   "studio:terminal.list": "terminalList",
   "studio:terminal.accessibility": "terminalAccessibility",
   "studio:terminal.open": "terminalOpen",
@@ -278,7 +282,13 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:game.asset.preview": "previewProjectAsset",
   "studio:game.asset.present": "presentProjectAssets",
   "studio:game.asset.rigs": "projectModelRigs",
+  "studio:game.asset.thumbnail": "readAssetThumbnail",
+  "studio:game.asset.thumbnail.keep": "keepAssetThumbnail",
   "studio:game.assets": "projectAssets",
+  "studio:design.board": "designBoard",
+  "studio:design.drop": "dropOnDesign",
+  "studio:design.marks": "designMarks",
+  "studio:design.marks.save": "saveDesignMarks",
   "studio:game.asset.still": "readProjectAsset",
   "studio:run.feedback": "runFeedback",
   "studio:review.play": "playSnapshot",
@@ -484,6 +494,7 @@ export interface StudioInvokePayloads {
   "studio:grok.signin": undefined;
   "studio:cursor.signin": undefined;
   "studio:cursor.signout": undefined;
+  "studio:antigravity.signin": undefined;
   "studio:openrouter.key.save": { key: string };
   "studio:openrouter.key.clear": undefined;
   "studio:typesafe.key.status": undefined;
@@ -495,6 +506,7 @@ export interface StudioInvokePayloads {
   "studio:local-server.connect": { url: string; key?: string };
   "studio:local-server.forget": undefined;
   "studio:local-server.find": undefined;
+  "studio:local-server.set-model-override": { id: string; override: ModelOverride | null };
   "studio:terminal.list": undefined;
   "studio:terminal.accessibility": undefined;
   "studio:terminal.open": { project: string };
@@ -596,7 +608,13 @@ export interface StudioInvokePayloads {
   "studio:game.asset.preview": Arg<"previewProjectAsset", 0>;
   "studio:game.asset.present": Arg<"presentProjectAssets", 0>;
   "studio:game.asset.rigs": Arg<"projectModelRigs", 0>;
+  "studio:game.asset.thumbnail": Arg<"readAssetThumbnail", 0>;
+  "studio:game.asset.thumbnail.keep": Arg<"keepAssetThumbnail", 0>;
   "studio:game.assets": { project: string };
+  "studio:design.board": { project: string };
+  "studio:design.drop": { project: string; name: string; data: Uint8Array };
+  "studio:design.marks": { project: string };
+  "studio:design.marks.save": { project: string; marks: DesignMarks };
   "studio:assets.library": Arg<"assetLibrary", 0>;
   "studio:assets.states": { project: string };
   "studio:assets.save": { project: string; files: string[]; saved: boolean };

@@ -12,10 +12,13 @@
 // AuthorityInput per step (the staged `input`, sanitized as the server will), the reconciler predicts
 // the entity this seat owns with the room's movement preset (GenexPresets.h: the server's own step,
 // bit for bit) and rewinds-and-replays when the server's truth arrives, and every other entity is
-// drawn renderDelayMs in the past on the render time the server's lag compensation rewinds to,
+// drawn its render delay in the past on the render time the server's lag compensation rewinds to,
 // serverNow - renderDelay - rtt/2, interpolated from this session's own record of the server-stamped
 // patches (the measurement behind that choice: sdks/unreal/SPIKE.md "The C core's lerp"), with its
-// respawn (an epoch bump) snapped on that same timeline (§17.3).
+// respawn (an epoch bump) snapped on that same timeline (§17.3). The render delay is renderDelayMs in a
+// room that publishes no ceiling, and in one that does it follows this client's own link between
+// renderDelayMs and that ceiling (§17.3 *The render delay*, GenexRenderDelay.h): one value a frame, read
+// by RenderDelayMs(), which the interpolation, the respawn step and the inputs' render-time stamps share.
 //
 // A `firstperson` or `vehicle` room (§17.7) is predicted only while the client's collision world
 // (SetWorld, or AuthorityOptions::world) hashes to the room's `params.world`; otherwise the own entity is
@@ -36,6 +39,12 @@
 // of the present while it is still yours (so the flight never snaps back by lead × velocity), and
 // dropped unconfirmed once a state patch acknowledging its firing input lacks it (TTL
 // max(2·RTT, 600 ms) only as the fallback).
+//
+// Predicted hits (§17.9 *Predicted hits*, GenexPredictedHits.h): a shot of yours is tested against the
+// other entities where this client draws them, the hit is told at once (AuthorityEventType::PredictedHit)
+// and the states that follow settle it (HitSettled, confirmed or not). A projectile declares what it can
+// hit (ProjectilePrediction::hits) and is swept frame to frame; a hitscan is PredictHitscan, called while
+// staging the input that fires. Nothing of it reaches the wire: the server decides every hit as before.
 //
 // Physics bodies (§17.10: an entity with a descriptor in the room state's `bodies`) are drawn, outside
 // physics prediction (below): at the server's present, extrapolated on the room clock from the latest state
@@ -86,6 +95,7 @@
 #include "GenexCore/GenexInput.h"
 #include "GenexCore/GenexJson.h"
 #include "GenexCore/GenexPhysicsPredictor.h"
+#include "GenexCore/GenexPredictedHits.h"
 #include "GenexCore/GenexPresets.h"
 #include "GenexCore/GenexPump.h"
 #include "GenexCore/GenexSeatContacts.h"
@@ -245,11 +255,16 @@ struct AuthorityOptions {
   /** How other seats are drawn with seat contacts (§17.11 *Drawing other seats*): Predicted, Separate or Timeline;
    *  none (the default): a declared contact policy's `drawing` (*Contact policy*), else Predicted. */
   std::optional<SeatDrawing> seatDrawing;
-  /** How far in the past other entities render, ms (AuthorityTiming.RENDER_DELAY_MS). */
+  /** How far in the past other entities render, ms (AuthorityTiming.RENDER_DELAY_MS): the delay itself in a
+   *  room that publishes no ceiling, and the floor of the one this client sizes to its link in a room that
+   *  does (§17.3 *The render delay*; AuthoritySession::RenderDelayMs is the delay in use). */
   double renderDelayMs = 100.0;
-  /** The output spring on other entities, ms (display only; 0 = off; never across a respawn). Seats drawn
-   *  Predicted take the shared seat offset instead (kSeatTauMs). */
-  double remoteSmoothMs = 25.0;
+  /** An output spring on other entities, ms (display only; 0 = off, the default, as the TypeScript session
+   *  draws; never across a respawn). Off, another entity is drawn exactly on the render timeline, which is what
+   *  a shot is judged against (§17.5); a value eases each frame's drawing toward that pose, trailing it by
+   *  speed × this and smoothing away motion the room's updates carry (25 until rooms sent 60 updates a second:
+   *  CHANGELOG.md). Seats drawn Predicted take the shared seat offset instead (kSeatTauMs). */
+  double remoteSmoothMs = 0.0;
   /** Waits before each retry of a join refused for capacity (503). Empty never retries. */
   std::vector<double> capacityRetryMs = {1000.0, 2000.0, 4000.0};
   /** The fast channel (PROTOCOL.md §17.12, GenexFastSeat.h): how this client opens a datagram socket to the
@@ -278,6 +293,18 @@ struct AuthorityOptions {
   bool probeCoreLerp = false;
 };
 
+/** What a projectile can hit (§17.9 *Predicted hits*): the room module's own
+ *  `ctx.projectiles.sweep(id, { kinds, radius })`. */
+struct ProjectileHits {
+  /** The entity kinds it can hit; none listed hits nothing, as the module's sweep visits none. */
+  std::vector<std::string> kinds;
+  /** A target's hit sphere, world units around its entity's x, y, z. */
+  double radius = 0.0;
+  /** What settles its predicted hit: the target's health in the states that follow, or the game alone
+   *  (AuthoritySession::ConfirmHit, CancelHit) when the module tells a hit some other way. */
+  hits::HitSettle settle = hits::HitSettle::Health;
+};
+
 /** A projectile your game fires, as it predicts it (AuthoritySession::PredictProjectile): where it
  *  starts, its velocity and its gravity, in world units — the values the room module launches it with. */
 struct ProjectilePrediction {
@@ -290,14 +317,56 @@ struct ProjectilePrediction {
   double vz = 0.0;
   /** Downward acceleration along −z, units/s², [0, 1000]. */
   double g = 0.0;
+  /** What it can hit, for a predicted hit (§17.9 *Predicted hits*); none, or a radius that is no number at
+   *  least 0: its hits are the server's word alone. */
+  std::optional<ProjectileHits> hits;
+};
+
+/** A hitscan your game fires, as it predicts it (AuthoritySession::PredictHitscan): the ray and the options
+ *  the room module hands `ctx.rewind.hitscan(origin, dir, { range, radius, kinds })`, in world units. */
+struct HitscanPrediction {
+  hits::HitPoint origin;
+  /** Along the ray, of any length; one with no length is no shot. */
+  hits::HitPoint dir;
+  /** How far the ray reaches; none (or below 0): no limit. */
+  std::optional<double> range;
+  /** A target's hit sphere; none (or below 0): hits::kHitscanRadius, the server's default. */
+  std::optional<double> radius;
+  /** The entity kinds it can hit; none: every kind, as the module's hitscan without `kinds`. */
+  std::optional<std::vector<std::string>> kinds;
+  /** What settles its predicted hit (ProjectileHits::settle). */
+  hits::HitSettle settle = hits::HitSettle::Health;
+};
+
+/** A predicted hit as the game hears it (§17.9 *Predicted hits*). */
+struct AuthorityHit {
+  /** A hitscan's `<seat>.<seq>.h<n>` (the input being staged, that input's PredictHitscan calls from 0, a
+   *  miss counted); a projectile's own id (a projectile predicts one hit). What ConfirmHit and CancelHit take. */
+  std::string id;
+  hits::HitKind kind = hits::HitKind::Hitscan;
+  /** The entity hit. */
+  std::string target;
+  /** Where the path or the ray enters the target's sphere; the start of one that starts inside it. */
+  double x = 0.0;
+  double y = 0.0;
+  double z = 0.0;
+  /** How far along the test found the target, as the room's own test says it: for a projectile along the
+   *  path of the frame that reached it (`ctx.projectiles.sweep`), for a hitscan along the ray to the point
+   *  nearest the target's centre (`ctx.rewind.hitscan`). World units. */
+  double dist = 0.0;
+  /** HitSettled: the states that followed (or ConfirmHit) confirmed it; false: cancelled. */
+  bool confirmed = false;
 };
 
 /** The client's own estimate of the room clock (§16.1's sNow scale, ms) and the room's tick at that
- *  instant, `(serverNow − tickOrigin) · tickHz / 1000` (fractional): the clock projectiles are drawn by. */
+ *  instant, `(serverNow − tickOrigin) · tickHz / 1000` (fractional): the clock projectiles are drawn by. And the
+ *  room's time every entity this client does not predict is drawn at (§17.3: the stamp of a state arriving now,
+ *  less the render delay in use), which is the render time its inputs carry. */
 struct AuthorityServerClock {
   double serverNow = 0.0;
   double serverTick = 0.0;
   double tickHz = 0.0;
+  double renderNow = 0.0;
 };
 
 /** An entity as this client draws it. */
@@ -490,9 +559,21 @@ struct AuthorityTelemetry {
   int projectilesRejected = 0;
   /** The latest confirmation's input lead, ms: the server's launch instant minus the prediction's. */
   double lastProjectileLeadMs = 0.0;
+  /** Hits predicted (§17.9 *Predicted hits*): told once each as PredictedHit. */
+  int hitsPredicted = 0;
+  /** Of those, the ones the states that followed (or ConfirmHit) confirmed. */
+  int hitsConfirmed = 0;
+  /** And the ones cancelled: the server judged otherwise, nothing settled it in time, a drop, CancelHit. */
+  int hitsCancelled = 0;
   /** Keyframes whose other entities were sampled on the tick timeline (§17.11 *Drawing other seats*): 0
    *  in a room that does not predict physics, or with RemoteSamples::Patch. */
   int tickKeyframes = 0;
+  /** Frames in which other entities were drawn further behind than the render delay asks, so that the
+   *  WebSocket input's stamp could say the instant drawn (clock_samples::StampHoldMs), and the most they were
+   *  held back by, ms. None while the fast channel is live; at the default delay, on a playable link, only
+   *  while the clock's estimates settle after a join. */
+  int renderHeldFrames = 0;
+  double peakRenderHoldMs = 0.0;
 };
 
 enum class AuthorityStatus {
@@ -537,6 +618,11 @@ enum class AuthorityEventType {
   Message,
   /** Something a developer should see (a room error after the join, a missing workaround). */
   Warning,
+  /** A shot of yours reached a target as this client draws it (§17.9 *Predicted hits*): `hit`. Once per hit;
+   *  show it now, the server's word follows. */
+  PredictedHit,
+  /** That hit is settled, once: `hit`, with `hit.confirmed` (false: take the hit you showed back). */
+  HitSettled,
 };
 
 GENEX_CORE_API const char* AuthorityEventTypeName(AuthorityEventType type);
@@ -554,6 +640,8 @@ struct AuthorityEvent {
   std::string message;
   /** Rejoined: the seat moved out of a room it was alone in (§17.1 *Regrouping*), no room was lost. */
   bool moved = false;
+  /** PredictedHit, HitSettled: the hit. */
+  AuthorityHit hit;
 };
 
 /** A remote entity drawn both ways (AuthorityOptions::probeCoreLerp): the measurement seam behind
@@ -631,8 +719,18 @@ class GENEX_CORE_API AuthoritySession final : public IPumped {
   double Tick() const;
   /** The room's movement preset as JSON text ("" = none). */
   const std::string& Preset() const;
-  /** Smoothed round trip in ms; 0 until the first input is acknowledged. */
+  /** Smoothed round trip in ms; 0 until the first input is acknowledged: one sample per 50 ms reaches it,
+   *  whatever the room's update rate, each timed by its state's stamp and the link's time (§17.3 *The clock's
+   *  samples*, *A state's arrival*; GenexClockSamples.h), so a stall's burst of states does not move it. It
+   *  counts the wait for the room's next update after an input lands. */
   double Rtt() const;
+  /** The render delay in use, ms (§17.3 *The render delay*): how far behind the server the last Frame() drew
+   *  other entities, and the delay its inputs' render-time stamps carried. AuthorityOptions::renderDelayMs in a
+   *  room that publishes no ceiling; between it and the room's ceiling otherwise, following this client's link.
+   *  By WebSocket a frame draws them further behind than this where the input handle could not otherwise stamp
+   *  the instant drawn (a delay near none on a jittery link; Telemetry().renderHeldFrames counts those frames),
+   *  and ServerClock()'s renderNow is where it drew them. */
+  double RenderDelayMs() const;
   AuthorityTelemetry Telemetry() const;
   /** The fast channel (§17.12): whether it is live, snapshots applied, and why it fell back. */
   const fast::FastSeatStatus& Fast() const;
@@ -671,11 +769,35 @@ class GENEX_CORE_API AuthoritySession final : public IPumped {
    * the id, or "" before the first state (there is no input sequence to key it on yet), while
    * reconnecting (no input staged then is sent) or after the end. A prediction fired on the socket a
    * drop cut that the reconnect's first state does not confirm is dropped then, counted rejected.
+   * With `hits` (§17.9 *Predicted hits*) each Frame() tests the path from where the last frame drew it to
+   * where this one does against the other entities as drawn, while it is yours (predicted, or confirmed with
+   * `src` your seat): the nearest is told once as PredictedHit under the projectile's id (one hit a
+   * projectile) and settled once as HitSettled, confirmed by the first state that shows the target hurt.
+   * A projectile fired before a drop predicts no hit after it.
    */
   std::string PredictProjectile(const ProjectilePrediction& projectile);
   /** The id PredictProjectile would give a projectile staged now, without predicting one ("" when it
    *  would refuse). */
   std::string NextProjectileId() const;
+  /**
+   * Predict a hitscan you fire (§17.9 *Predicted hits*): call it while staging the input that fires it, before
+   * the Frame() that sends it, with the ray and the options the room module hands `ctx.rewind.hitscan`. Answers
+   * the nearest target the ray passes within `radius` of, no further along it than `range` (of two at the same
+   * distance, the earlier in the state's `entities` order), tested against the other entities where the last
+   * Frame() drew them: every entity of `kinds` but a projectile, a physics body entity and one your seat owns.
+   * A hit is told once as PredictedHit under the id `<seat>.<seq>.h<n>` (the input being staged, its
+   * PredictHitscan calls from 0, a miss counted) and settled once as HitSettled: by the first state whose
+   * acknowledgement covers that input (the target hurt confirms, unhurt cancels; on the fast channel, where
+   * `hp` comes by WebSocket and the acknowledgement by snapshot, only once the two are known to agree:
+   * GenexHitSession.h), by ConfirmHit or CancelHit, by a drop, or after max(2·RTT, 600 ms). None for a miss,
+   * a ray that is no number, before IsReady(), while reconnecting or after the end.
+   */
+  std::optional<AuthorityHit> PredictHitscan(const HitscanPrediction& shot);
+  /** Settle a pending predicted hit yourself (§17.9: a hit the module tells by an event, HitSettle::Manual;
+   *  any pending hit takes it): HitSettled follows, confirmed. False when no hit of that id is pending. */
+  bool ConfirmHit(const std::string& id);
+  /** As ConfirmHit, cancelled. */
+  bool CancelHit(const std::string& id);
   /** Draw every projectile again at this instant (their flight is closed-form: no Frame needed), and
    *  return the clock they were drawn by; nullopt before the first timed state patch or the room's tick
    *  rate (projectiles are then drawn on the local clock). Invalidates pointers to projectile views. */
@@ -716,6 +838,9 @@ class GENEX_CORE_API AuthoritySession final : public IPumped {
 
   /** TEST ONLY: kill the socket (close 4010, Godot's test_drop), as a network cut would; the core reconnects. */
   void TestDrop();
+  /** TEST ONLY: on the next Frame your inputs are predicted again from the state, as after a contact the seat
+   *  prediction found late (§17.11 *Seat contacts*), with no contact: the fresh prediction lands where the old stood. */
+  void TestMissedContact();
   /** TEST ONLY (probeCoreLerp): both drawings of a remote entity this frame. */
   std::optional<AuthorityRemoteProbe> ProbeRemote(const std::string& id) const;
 
@@ -824,6 +949,11 @@ GENEX_CORE_API bool AuthorityVisibleCorrection(double place, double unitsPerMetr
  *  handle's count on this socket, from 1), counted on from the seat's `seqBase`: `<sid>.<seqBase+seq>.<n>`,
  *  `n` the launches during that input from 0 (§17.9). Numbers print as JavaScript prints them. */
 GENEX_CORE_API std::string AuthorityProjectileId(const std::string& sid, double seqBase, int seq, int n);
+
+/** The id of a hitscan's hit seat `sid` predicts while staging its input `seq` (as AuthorityProjectileId
+ *  counts it): `<sid>.<seqBase+seq>.h<n>`, `n` that input's PredictHitscan calls from 0, a miss counted
+ *  (§17.9 *Predicted hits*). */
+GENEX_CORE_API std::string AuthorityHitscanId(const std::string& sid, double seqBase, int seq, int n);
 
 /** A predicted projectile no server entity confirmed within max(2·RTT, this) is dropped, when no acknowledgement
  *  of its firing input settled it first (§17.9). */

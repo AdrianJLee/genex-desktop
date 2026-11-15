@@ -19,6 +19,7 @@ bundled plugin ([plugins](../plugins.md#the-bundled-unity-plugin)).
 | Harness child | [`src/harness-seed/`](../../src/harness-seed/), booted by [`src/harness-boot/bootstrap.mjs`](../../src/harness-boot/bootstrap.mjs) | Untrusted: the in-app agent rewrites it. Plain Node under `ProcessSandbox`. |
 | Contractors (coding CLIs) | [`src/substrate/engines/`](../../src/substrate/engines/) | Vendor harnesses briefed by the studio; see [Residual risks](#residual-risks). |
 | Game pages | [`src/main/preview.ts`](../../src/main/preview.ts), [`src/page/`](../../src/page/) | Untrusted web content in a closed partition. |
+| Design pages | [`src/main/design-pages.ts`](../../src/main/design-pages.ts), [`src/renderer/panels/design/`](../../src/renderer/panels/design/) | Untrusted agent-written HTML in closed frames of the main window: no script of its own, no network ([design board](../design-board.md#what-a-page-may-do)). |
 | Plugin backends, MCP servers | [`src/substrate/plugins/`](../../src/substrate/plugins/), [`src/substrate/mcp/`](../../src/substrate/mcp/) | Trusted native code the user approved; a process is crash isolation, not a sandbox. |
 | Terminal hosts | [`src/main/terminal-host.ts`](../../src/main/terminal-host.ts) | One Electron utility process per node-pty session, as the user. |
 | CLI installers | [`src/substrate/cli-installer.ts`](../../src/substrate/cli-installer.ts) | Vendor installers, unsandboxed. |
@@ -247,8 +248,8 @@ drives the stores with `tests/helpers/fake-studio-api.ts`. See the
 [store recipe](recipes.md#zustand-store).
 
 **Layout.** A large panel is a folder of its parts beside its entry component:
-`panels/inspector/` (`RunInspector.tsx`'s sheets), `panels/run-graph/` (`RunGraph.tsx`'s nodes,
-gates and camera), `panels/stage/` (`PreviewPanel.tsx`'s body and strip), `panels/plugins/` and
+`panels/inspector/` (`RunInspector.tsx`'s sheets), `panels/run-graph/` (`RunGraph.tsx`'s list,
+its rows and status bar), `panels/stage/` (`PreviewPanel.tsx`'s body and strip), `panels/plugins/` and
 `panels/connectors/`. `panels/ChatPanel.tsx` keeps its parts in `chat/`: its hooks are
 `chat/use-*.ts` (wired by `use-chat-panel.ts`), sending routes in `send-route.ts`, the
 conversation in `ChatConversation.tsx`. First launch is `onboarding/` (pure
@@ -350,7 +351,9 @@ the [feature map](feature-map.md).
 
 **Covers.** `GameAvatar` paints every cover with one WebGL context (`ui/cover-animation.ts`,
 `ui/cover-stills.ts`; [feature map](feature-map.md)). Asset cards render thumbnails through a serialized decoder queue
-and dispose their WebGL contexts.
+and dispose their WebGL contexts. A thumbnail fills its frame (`thumbnail-fit.ts`) unless it is a
+model's or texture's render or see-through: main shrinks a picture to a JPEG, or a PNG when a pixel
+is see-through (`resizeStill`), and every reader names the type by the bytes.
 
 **Appearance.** [`src/renderer/appearance/`](../../src/renderer/appearance/) owns the versioned
 palette model, bounded JSON/JSONC interchange and the `studio.appearance.v1` preference; one
@@ -733,7 +736,9 @@ their rectangle intersects the Live slot; identical bounds do not repeat IPC. A 
 hidden (the loader, a dialog) stays in the rectangle it was last shown in, sized before it is hidden
 (`placedBounds`, `previewVisibility`): Chromium lays a zero-size view, or one wholly outside its
 window, out at 0x0, and a game that sizes its world from its canvas at start-up can then never
-finish loading. A load, Play, Reload or Stop waits at most a minute for its page (`waitForLoad`); a
+finish loading. A hidden view runs no animation frames, so Live uncovers a loaded page once its
+requests are quiet and, when it has a canvas, its game has drawn or asked for a frame
+(`liveStatus`, `live-load.ts`), 3 s after the page at most. A load, Play, Reload or Stop waits at most a minute for its page (`waitForLoad`); a
 page still loading then (a script that never yields) is noted as stalled
 (`LiveLoadFailure.Stalled`), and Live's load queue moves on to the next load.
 
@@ -911,7 +916,7 @@ managed local runtime; core has no Blender tool of its own.
 - **Ledger.** `PluginServices.onDelivered` fires after every `assets.deliver`; `StudioCore` records
   `asset_delivered` (project, plugin, job, files, worker attribution) and emits `asset.delivered`.
   [`src/main/plugin-activity.ts`](../../src/main/plugin-activity.ts) builds the
-  `plugin_tool_started`/`plugin_tool` pair for both agent paths. The Builds graph joins them on
+  `plugin_tool_started`/`plugin_tool` pair for both agent paths. The Builds list joins them on
   `callId` and `jobId`.
 - **Inventory.** [`src/main/game-assets.ts`](../../src/main/game-assets.ts) enumerates `assets/**` and
   `public/assets/**` read-only (lstat, symlinks skipped, capped), reads Genex `job.json`

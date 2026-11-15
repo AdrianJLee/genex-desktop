@@ -131,6 +131,13 @@ namespace Genex.Multiplayer.Authority
         public event Action<int, int, double> Rejoining;
         /// <summary>Back in play: a new seat (<see cref="Id"/>) in a new room (<see cref="Code"/>). <see cref="Moved"/> tells why.</summary>
         public event Action Rejoined;
+        /// <summary>A hit was predicted for your own shot (§17.9 <i>Predicted hits</i>): show it now. Raised once per hit,
+        /// inside <see cref="PredictHitscan"/> for a hitscan and inside <see cref="Frame()"/> for a projectile.</summary>
+        public event Action<GenexPredictedHit> PredictedHit;
+        /// <summary>A predicted hit was settled, once per hit: true when the server's states (or <see cref="ConfirmHit"/>)
+        /// confirmed it, false when it was cancelled (take the effect back). A drop, a room that ends and
+        /// <see cref="Leave"/> cancel every hit still waiting.</summary>
+        public event Action<GenexPredictedHit, bool> HitSettled;
 
         /// <summary>Set while <see cref="Rejoined"/> is raised, and until the next replacement: no room was lost, the player was alone
         /// and now sits in a room that has players (§17.1 *Regrouping*). False for a seat that came back from a lost room.</summary>
@@ -168,6 +175,14 @@ namespace Genex.Multiplayer.Authority
             next.Disconnected += code =>
             {
                 if (next == seat && !left) Lost(code);
+            };
+            next.PredictedHit += hit =>
+            {
+                if (next == seat) PredictedHit?.Invoke(hit);
+            };
+            next.HitSettled += (hit, confirmed) =>
+            {
+                if (next == seat) HitSettled?.Invoke(hit, confirmed);
             };
             next.On(P.ServerMessage.ServerRestart, data =>
             {
@@ -368,6 +383,15 @@ namespace Genex.Multiplayer.Authority
         public double Tick => seat.Tick;
         public string Preset => seat.Preset;
         public double Rtt => seat.Rtt;
+        /// <summary>The round trip a render time is placed by, ms (§17.3 <i>A state's arrival</i>): other entities are drawn at
+        /// the server's time less <see cref="RenderDelayMs"/> and half of this. No measure of the link: with next to no
+        /// latency it reads 0 or under it. A game's ping is <see cref="Rtt"/>.</summary>
+        public double RenderRtt => seat.RenderRtt;
+        /// <summary>How far behind the server other entities are drawn now, ms (§17.3 <i>The render delay</i>):
+        /// <see cref="GenexAuthorityOptions.RenderDelayMs"/> in a room that publishes no ceiling, and between it and the
+        /// room's ceiling where it publishes one, sized each <see cref="Frame()"/> to this link's jitter. Your inputs carry
+        /// the same value.</summary>
+        public double RenderDelayMs => seat.RenderDelayMs;
         public GenexFastStatus Fast => seat.Fast;
         public GenexAuthorityTelemetry Telemetry => seat.Telemetry;
         public bool IsReady => seat.IsReady;
@@ -382,6 +406,16 @@ namespace Genex.Multiplayer.Authority
         public GenexFirstpersonWorld World => seat.World;
         public GenexPredictionStatus Prediction => seat.Prediction;
         public string PredictProjectile(GenexProjectilePrediction projectile) => seat.PredictProjectile(projectile);
+        /// <summary>Predict the hit of a hitscan you fire (§17.9 <i>Predicted hits</i>), while staging the input that fires:
+        /// the nearest entity, as the last frame drew it, the ray passes within <paramref name="radius"/> (default 0.5) of,
+        /// no further than <paramref name="range"/> (default: no limit), of <paramref name="kinds"/> (default: every kind);
+        /// null for none, and while the socket is down. See <see cref="GenexAuthoritySeat.PredictHitscan"/>.</summary>
+        public GenexPredictedHit PredictHitscan(GenexHitPoint origin, GenexHitPoint dir, double? range = null, double? radius = null, string[] kinds = null,
+            GenexHitSettle settle = GenexHitSettle.Health) => seat.PredictHitscan(origin, dir, range, radius, kinds, settle);
+        /// <summary>Settle a pending predicted hit as landed (<see cref="HitSettled"/> with true); false when none of that id is pending.</summary>
+        public bool ConfirmHit(string id) => seat.ConfirmHit(id);
+        /// <summary>Settle a pending predicted hit as not landed (<see cref="HitSettled"/> with false); false when none of that id is pending.</summary>
+        public bool CancelHit(string id) => seat.CancelHit(id);
         public double RedrawProjectiles() => seat.RedrawProjectiles();
         public bool RedrawBodies() => seat.RedrawBodies();
         public int Frame() => seat.Frame();

@@ -8,6 +8,7 @@ import { UiEvent } from "../shared/ui-events.ts";
 import { findClaudeBinary } from "../substrate/engines/claude-cli.ts";
 import { requireCodingCli } from "../substrate/engines/external-cli.ts";
 import { openCodeSignInArgs } from "../substrate/engines/opencode-cli.ts";
+import { antigravitySignInLaunch, stringEnv } from "../substrate/engines/antigravity.ts";
 import { CURSOR_FILE_STORE, CursorCommand } from "../substrate/engines/cursor-cli.ts";
 import { childEnv } from "../substrate/child-env.ts";
 import { grokHome } from "../substrate/credential-homes.ts";
@@ -59,7 +60,7 @@ export async function settleSignIn(engine: SubscriptionEngine, home: string | nu
 }
 
 export interface LoginControllerDeps {
-  terminals: Pick<TerminalService, "open" | "stop">;
+  terminals: Pick<TerminalService, "open" | "stop" | "list">;
   openExternal(url: string): Promise<unknown>;
   subscription(id: string): SubscriptionEngine | null;
   pushUiEvent(event: UiEvent): void;
@@ -72,9 +73,13 @@ export interface LoginControllerDeps {
   onGrokSignedIn?(): Promise<unknown>;
   /** Cursor's sign-in ended: check the sign-in and read the models it can run now. */
   onCursorSignedIn?(): Promise<unknown>;
+  /** Antigravity's sign-in ended: ask the CLI whose plan it runs on, and its models, now. */
+  onAntigravitySignedIn?(): Promise<unknown>;
   /** The installed CLI each sign-in runs; the studio's own resolver unless a test gives another. */
   requireCli?: typeof requireCodingCli;
   findBinary?: typeof findClaudeBinary;
+  /** How Antigravity's sign-in starts in the sessions' box; the real box unless a test gives another. */
+  boxAntigravitySignIn?: typeof antigravitySignInLaunch;
   /** Write one line to the app's log (`studio.log`). */
   log?: (line: string) => void;
 }
@@ -91,6 +96,8 @@ export function createLoginControllers({
   onOpenCodeSignedIn,
   onGrokSignedIn,
   onCursorSignedIn,
+  onAntigravitySignedIn,
+  boxAntigravitySignIn = antigravitySignInLaunch,
   log,
 }: LoginControllerDeps): {
   codexLogin: CodexLoginController;
@@ -98,6 +105,7 @@ export function createLoginControllers({
   openCodeLogin: OpenCodeLogin;
   grokLogin: CliLogin;
   cursorLogin: CliLogin;
+  antigravityLogin: CliLogin;
 } {
   let lastCodexLoginPhase = "idle";
   const codexLogin = new CodexLoginController({
@@ -195,7 +203,56 @@ export function createLoginControllers({
     },
   };
   const cursorLogin = cursorSignIn({ terminals, requireCli, onCursorSignedIn });
-  return { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin };
+  const antigravityLogin = antigravitySignIn({ terminals, requireCli, onAntigravitySignedIn, boxAntigravitySignIn });
+  return { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin, antigravityLogin };
+}
+
+/**
+ * Antigravity's sign-in: `agy acp --login` in a terminal in its Settings row. It prints Google's
+ * page and takes the code that page gives. It runs in the box every Antigravity session runs in,
+ * where the Keychain is out of reach, so the CLI keeps the sign-in in its own file, the one each
+ * session reads; when the terminal closes, the box goes and the studio asks the CLI again. A
+ * sign-in already open is shown again, and the box made for this one is given back.
+ */
+function antigravitySignIn({
+  terminals,
+  requireCli,
+  onAntigravitySignedIn,
+  boxAntigravitySignIn,
+}: Pick<LoginControllerDeps, "terminals" | "onAntigravitySignedIn"> & {
+  requireCli: typeof requireCodingCli;
+  boxAntigravitySignIn: typeof antigravitySignInLaunch;
+}): CliLogin {
+  return {
+    async start() {
+      const cli = await requireCli(EngineId.Antigravity).catch(() => null);
+      if (!cli) return { started: false, missingCli: true };
+      // No other vendor's variables and no Gemini key, which would stand in for the account.
+      const env = childEnv(cli.env, { base: "contractor", vendor: "antigravity" });
+      const boxed = await boxAntigravitySignIn({ binary: cli.path, env: stringEnv(env) });
+      const before = new Set(terminals.list().map((session) => session.id));
+      const launch = {
+        file: boxed.file,
+        args: boxed.args,
+        cwd: boxed.cwd,
+        env: boxed.env,
+        title: t("Antigravity sign-in"),
+        kind: TerminalKind.AntigravityLogin,
+        onExit: () => {
+          void boxed.release();
+          void onAntigravitySignedIn?.()?.catch(() => {});
+        },
+      };
+      try {
+        const session = terminals.open(launch);
+        if (before.has(session.id)) void boxed.release();
+      } catch (err) {
+        void boxed.release();
+        throw err;
+      }
+      return { started: true };
+    },
+  };
 }
 
 /**

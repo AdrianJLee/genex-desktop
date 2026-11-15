@@ -798,7 +798,7 @@ export interface ModelCatalogStatus {
 }
 // ↑ src/shared/model-catalog.ts
 
-export type CodingProvider = "codex" | "claude-code" | "opencode" | "grok" | "cursor";
+export type CodingProvider = "codex" | "claude-code" | "opencode" | "grok" | "cursor" | "antigravity";
 // ↑ src/shared/coding-cli.ts
 
 export interface CodingCliStatus {
@@ -827,8 +827,8 @@ export interface EngineAccount {
 /**
  * How a provider signs in: Claude through a piped or embedded terminal plus status polling, Codex
  * through its native login reported from the in-app console, OpenCode through its own `auth login`
- * in the embedded terminal (which keeps every provider it signs in to), Grok Build and Cursor through
- * their own sign-in command there (the person's account, in the browser), `none` for an engine with
+ * in the embedded terminal (which keeps every provider it signs in to), Grok Build, Cursor and Antigravity
+ * through their own sign-in command there (the person's account, in the browser), `none` for an engine with
  * no sign-in of its own (a local model, a local server, or OpenRouter, whose key is pasted in Settings).
  */
 export type LoginKind = "terminal" | "console" | "cli" | "none";
@@ -920,6 +920,12 @@ export interface EngineDescriptor {
     contextWindow: number;
     /** The window is the engine's guess, not a figure the provider reported (an Ollama model not loaded yet). */
     contextEstimated?: boolean;
+    /** Context window reported by the server, or undefined when not reported. */
+    reportedContextWindow?: number;
+    /** Vision capability reported by the server, or undefined when not reported. */
+    reportedVision?: boolean;
+    /** Tool calling capability reported by the server, or undefined when not reported. */
+    reportedTools?: boolean;
     supportsFast?: boolean;
     supportsTools: boolean;
     supportsVision: boolean;
@@ -2157,6 +2163,10 @@ export interface RunReference {
 export interface RunSpec {
   runId: string;
   goal: string;
+  /** A short name the chat gave the build as it started it (start_autopilot `title`); older runs have none. */
+  title?: string;
+  /** The plan as a few short steps (start_autopilot `steps`); each save point ticks the next. Older runs have none. */
+  steps?: string[];
   project: string;
   /** "autopilot": the wire name of a Loop's run, kept for the records it is in. */
   mode?: "autopilot";

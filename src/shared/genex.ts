@@ -89,7 +89,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
  * server-authoritative card for an embed SDK with `getAuthorityRegions` and `getAuthorityHome` (0.36.0).
  */
 export const GENEX_GAME_PACKAGES = {
-  "@genex-ai/multiplayer": "0.17.12",
+  "@genex-ai/multiplayer": "0.17.15",
   "@genex-ai/embed-sdk": "0.36.0",
 } as const;
 /** A Genex SDK package a game may add. */
@@ -102,7 +102,7 @@ export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
  * room check runs for a game that installed nothing.
  */
 export const GENEX_STUDIO_TOOLS = {
-  "@genex-ai/authority-dev": "0.1.7",
+  "@genex-ai/authority-dev": "0.1.8",
 } as const;
 /** A Genex tool Studio ships. */
 export type GenexStudioTool = keyof typeof GENEX_STUDIO_TOOLS;

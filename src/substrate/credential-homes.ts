@@ -76,6 +76,7 @@ export function credentialHomes(
     openCodeDataHome({}, home),
     grokHome({}, home),
     ...cursorHomes({}, home, platform),
+    antigravityHome(home),
     env.CODEX_HOME,
     env.CLAUDE_CONFIG_DIR,
     env.XDG_DATA_HOME && path.isAbsolute(env.XDG_DATA_HOME) ? openCodeDataHome(env, home) : undefined,
@@ -168,5 +169,30 @@ export function sandboxedCliHomes(
   home: string = os.homedir(),
   platform: NodeJS.Platform = process.platform,
 ): string[] {
-  return [openCodeDataHome(env, home), grokHome(env, home), ...cursorHomes(env, home, platform)];
+  return [
+    openCodeDataHome(env, home),
+    grokHome(env, home),
+    ...cursorHomes(env, home, platform),
+    ...antigravityHomes(home),
+  ];
+}
+
+/**
+ * Where Antigravity CLI keeps its settings, conversations, its MCP servers' sign-ins and, when the
+ * operating system's store is out of its reach, its own Google sign-in
+ * (`antigravity-cli/antigravity-oauth-token`): `~/.gemini`, the folder it took over from Gemini CLI.
+ */
+export function antigravityHome(home: string = os.homedir()): string {
+  return path.join(home, ".gemini");
+}
+
+/**
+ * What an Antigravity session's own sandbox is given of the sign-in stores: its folder alone. The
+ * CLI keeps its sign-in in the Keychain when it can reach it and in a file in this folder when it
+ * cannot (1.5.7: a failed Keychain read or save falls back to the file). Genex's sign-in runs in
+ * the same box as the sessions (`antigravitySignInLaunch`), so the sign-in lands in the file every
+ * session reads, and no sandbox reaches the Keychain.
+ */
+export function antigravityHomes(home: string = os.homedir()): string[] {
+  return [antigravityHome(home)];
 }

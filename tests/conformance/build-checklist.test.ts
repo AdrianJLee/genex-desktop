@@ -7,7 +7,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { savePointRound } from "../../src/harness-seed/loop/director/open/graph.ts";
-import { buildChecklist, checklistCaption, PartMark } from "../../src/renderer/chat/build-checklist.ts";
+import {
+  buildChecklist,
+  CHECKLIST_FOLD_PAST,
+  CHECKLIST_ROWS_SHOWN,
+  type ChecklistRow,
+  checklistCaption,
+  foldChecklist,
+  PartMark,
+} from "../../src/renderer/chat/build-checklist.ts";
 import { EntryAction, EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
 import { buildHistory } from "../../src/renderer/build-progress.ts";
 import { BuildBarShape, buildBarShape } from "../../src/renderer/panels/run-graph/bar-shape.ts";
@@ -245,9 +253,13 @@ describe("the building-card dev fixture", () => {
     const list = buildChecklist(summarizeRun(log, "fixture-game", runId), Date.now());
     assert.deepEqual(
       list?.rows.map((row) => [row.title, row.mark]),
+      // Flipped (plan steps): the lead's save points were listed by their labels; the fixture's run now
+      // names its plan, so its steps are the rows, two ticked by the save points and the third at work.
       [
-        ["A car to drive on a test loop", PartMark.Added],
-        ["A full lap of the night city, with speed and lap time", PartMark.Added],
+        ["A car to drive", PartMark.Added],
+        ["A full lap of the night city", PartMark.Added],
+        ["Clear-coat cars", PartMark.Working],
+        ["Building facades", PartMark.Next],
         ["Speed and lap HUD", PartMark.Added],
         ["Track and night city", PartMark.Added],
         ["Cars: clear-coat finish", PartMark.Working],
@@ -256,9 +268,10 @@ describe("the building-card dev fixture", () => {
     );
     // Flipped (no clock): the part at work showed its round's time left ("Working · ~25 min"); a Loop's
     // round has no deadline, so it shows its round.
-    assert.equal(list?.rows[4]?.status, BUILD_CHECKLIST_WORDS.workingRound(2));
-    assert.equal(list?.rows[5]?.status, BUILD_CHECKLIST_WORDS.workingRound(1), "the restart's own first round");
-    assert.equal(checklistCaption(list!, false), "4 done · 2 working");
+    assert.equal(list?.rows[6]?.status, BUILD_CHECKLIST_WORDS.workingRound(2));
+    assert.equal(list?.rows[7]?.status, BUILD_CHECKLIST_WORDS.workingRound(1), "the restart's own first round");
+    // Flipped (plan steps): the card's line counted its rows ("4 done · 2 working"); it names the plan's step.
+    assert.equal(list && checklistCaption(list, false), BUILD_CHECKLIST_WORDS.step(3, 4, "Clear-coat cars"));
     assert.equal(
       log.filter((e) => e.data.type === "messages").length,
       6,
@@ -288,5 +301,84 @@ describe("the building-card dev fixture", () => {
       "each build is named by what was asked",
     );
     assert.equal(buildBarShape(history.length, Number.POSITIVE_INFINITY), BuildBarShape.Picker);
+  });
+});
+
+describe("the Building card's fold", () => {
+  const rows = (count: number): ChecklistRow[] =>
+    Array.from({ length: count }, (_, index) => ({
+      id: `step-${index + 1}`,
+      title: `Step ${index + 1}`,
+      mark: PartMark.Added,
+      status: BUILD_CHECKLIST_WORDS.added,
+    }));
+  const ids = (list: ChecklistRow[]): string[] => list.map((row) => row.id);
+
+  it("shows every row of a short list", () => {
+    const all = rows(CHECKLIST_FOLD_PAST);
+    assert.deepEqual(foldChecklist(all, false), { rows: all, hidden: 0 });
+  });
+
+  it("past that, shows the latest rows and counts the earlier ones", () => {
+    const all = rows(CHECKLIST_FOLD_PAST + 5);
+    const folded = foldChecklist(all, false);
+    assert.equal(folded.rows.length, CHECKLIST_ROWS_SHOWN);
+    assert.deepEqual(ids(folded.rows), ids(all.slice(-CHECKLIST_ROWS_SHOWN)));
+    assert.equal(folded.hidden, all.length - CHECKLIST_ROWS_SHOWN);
+  });
+
+  it("shows them all once the person opened the earlier ones", () => {
+    const all = rows(CHECKLIST_FOLD_PAST + 5);
+    assert.deepEqual(foldChecklist(all, true), { rows: all, hidden: 0 });
+  });
+
+  it("folds away only steps already done: the step at work and the ones after it stay in sight", () => {
+    const markOf = (at: number): PartMark => {
+      if (at < 2) return PartMark.Added;
+      return at === 2 ? PartMark.Working : PartMark.Next;
+    };
+    const plan: ChecklistRow[] = rows(5).map((row, at) => ({ ...row, mark: markOf(at) }));
+    const all = [...plan, ...rows(4).map((row) => ({ ...row, id: `part-${row.id}` }))];
+    const folded = foldChecklist(all, false);
+    assert.equal(folded.hidden, 2, "the two done steps fold, nothing after them");
+    assert.deepEqual(ids(folded.rows), ids(all.slice(2)));
+  });
+});
+
+describe("the Building card with the lead's plan", () => {
+  const PLAN = ["Три места", "Люди и звуки", "Код игры", "Свет и чудеса"];
+  const started = () => [custom(1, CustomEvent.RunStarted, { mode: "director", steps: PLAN })];
+
+  it("lists the plan's steps from the start: each save point ticks the next, the one after is at work", async () => {
+    const log = started();
+    assert.deepEqual(
+      rowsOf(checklistOf(log))?.map(([title, mark]) => [title, mark]),
+      [
+        ["Три места", PartMark.Working],
+        ["Люди и звуки", PartMark.Next],
+        ["Код игры", PartMark.Next],
+        ["Свет и чудеса", PartMark.Next],
+      ],
+    );
+    await leadSaves(log, 1, "Три места проходятся");
+    await leadSaves(log, 2, "Люди готовы");
+    await leadSaves(log, 3, "Autosave", true);
+    const list = checklistOf(log);
+    assert.deepEqual(
+      list?.rows.map((row) => row.mark),
+      [PartMark.Added, PartMark.Added, PartMark.Working, PartMark.Next],
+    );
+    assert.equal(list && checklistCaption(list, false), BUILD_CHECKLIST_WORDS.step(3, 4, "Код игры"));
+  });
+
+  it("keeps the last step at work when the lead saves more than it planned, and names the extra save points", async () => {
+    const log = started();
+    for (const [at, label] of ["a", "b", "c", "d", "e"].entries()) await leadSaves(log, at + 1, label);
+    const list = checklistOf(log);
+    assert.deepEqual(
+      list?.rows.map((row) => row.title),
+      [...PLAN, "e"],
+    );
+    assert.equal(list && checklistCaption(list, false), BUILD_CHECKLIST_WORDS.step(4, 4, "Свет и чудеса"));
   });
 });

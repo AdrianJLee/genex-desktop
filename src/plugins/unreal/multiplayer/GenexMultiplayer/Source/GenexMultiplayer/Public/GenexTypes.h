@@ -49,6 +49,24 @@ enum class EGenexRemoteSamples : uint8
 	Patch
 };
 
+/** What settles a predicted hit (PROTOCOL.md §17.9 *Predicted hits*). */
+UENUM(BlueprintType)
+enum class EGenexHitSettle : uint8
+{
+	/** The target's health in the states that follow: the default. */
+	Health,
+	/** The game alone (Confirm Hit, Cancel Hit): for a hit the room module tells by an event, with no hp. */
+	Manual
+};
+
+/** What a predicted hit came from (PROTOCOL.md §17.9 *Predicted hits*). */
+UENUM(BlueprintType)
+enum class EGenexHitKind : uint8
+{
+	Hitscan,
+	Projectile
+};
+
 /** How other seats are drawn with seat contacts (PROTOCOL.md §17.11 *Drawing other seats*). */
 UENUM(BlueprintType)
 enum class EGenexSeatDrawing : uint8
@@ -320,6 +338,53 @@ struct GENEXMULTIPLAYER_API FGenexProjectileLaunch
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") FVector Velocity = FVector::ZeroVector;
 	/** Downward acceleration along -Z, Unreal units per second squared (at most 1000 Genex units/s²). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex", meta = (ClampMin = "0")) float Gravity = 0.f;
+	/** The entity kinds it can hit, for a predicted hit (PROTOCOL.md §17.9 *Predicted hits*): the kinds the room
+	 *  module hands `ctx.projectiles.sweep(id, { kinds, radius })`. None: no hit is predicted, the server's word alone. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits") TArray<FString> HitKinds;
+	/** A target's hit sphere around its entity's location, Unreal units (the module's sweep `radius`). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits", meta = (ClampMin = "0")) float HitRadius = 0.f;
+	/** What settles its predicted hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits") EGenexHitSettle HitSettle = EGenexHitSettle::Health;
+};
+
+/** A hitscan your game fires, as it predicts it (UGenexAuthoritySubsystem::PredictHitscan): the ray and the options
+ *  the room module hands `ctx.rewind.hitscan(origin, dir, { range, radius, kinds })`, in Unreal units. */
+USTRUCT(BlueprintType)
+struct GENEXMULTIPLAYER_API FGenexHitscan
+{
+	GENERATED_BODY()
+
+	/** Where the ray starts, Unreal units. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") FVector Origin = FVector::ZeroVector;
+	/** Along the ray, of any length; one with no length is no shot. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") FVector Direction = FVector::ForwardVector;
+	/** How far the ray reaches, Unreal units; below 0: no limit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") float Range = -1.f;
+	/** A target's hit sphere, Unreal units; below 0: the server's default (0.5 Genex units). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") float Radius = -1.f;
+	/** The entity kinds it can hit; none: every kind, as the module's hitscan without `kinds`. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") TArray<FString> Kinds;
+	/** What settles its predicted hit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") EGenexHitSettle Settle = EGenexHitSettle::Health;
+};
+
+/** A hit this client predicted for its own shot (PROTOCOL.md §17.9 *Predicted hits*): shown at once, settled by
+ *  the states that follow. */
+USTRUCT(BlueprintType)
+struct GENEXMULTIPLAYER_API FGenexPredictedHit
+{
+	GENERATED_BODY()
+
+	/** A hitscan's `<seat>.<seq>.h<n>`; a projectile's own id. What Confirm Hit and Cancel Hit take. */
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") FString Id;
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") EGenexHitKind Kind = EGenexHitKind::Hitscan;
+	/** The id of the entity hit. */
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") FString Target;
+	/** Where the path or the ray enters the target's hit sphere (the start of one that starts inside), Unreal units. */
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") FVector Location = FVector::ZeroVector;
+	/** How far along the test found the target, Unreal units: a projectile's along the path of the frame that
+	 *  reached it, a hitscan's along the ray to the point nearest the target's centre. */
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") float Distance = 0.f;
 };
 
 /** One seat of an authority room. */
@@ -356,6 +421,11 @@ struct GENEXMULTIPLAYER_API FGenexAuthorityTelemetry
 	UPROPERTY(BlueprintReadOnly, Category = "Genex") int32 ProjectilesRejected = 0;
 	/** The latest confirmation's input lead, ms: the server's launch instant minus the prediction's. */
 	UPROPERTY(BlueprintReadOnly, Category = "Genex") float LastProjectileLeadMs = 0.f;
+	/** Hits you predicted (PROTOCOL.md §17.9 *Predicted hits*), the ones the server's states or Confirm Hit
+	 *  confirmed, and the ones cancelled. */
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") int32 HitsPredicted = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") int32 HitsConfirmed = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Genex") int32 HitsCancelled = 0;
 };
 
 /** A device sign-in in progress: show the code and the address (or a QR of the full one). */

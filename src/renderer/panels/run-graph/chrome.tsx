@@ -1,6 +1,7 @@
 /** The Builds tab's bar of the chat's builds, its Play button, and the zoom pill in the canvas corner. */
 import type { JSX, KeyboardEvent, ReactNode, RefObject } from "react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { buildTitle } from "../../../shared/build-title.ts";
 import { t } from "../../../shared/i18n.ts";
 import { RunState } from "../../../shared/run-state.ts";
 import { buildWhen, type HistoryEntry, historyLabel, isNewestBuild } from "../../build-progress.ts";
@@ -30,9 +31,14 @@ export interface BuildTabs {
   onOpen: (runId: string) => void;
 }
 
-/** A tab's name: what the person asked for it, else what the history calls it ("This Loop"). */
-function tabName(builds: readonly HistoryEntry[], build: HistoryEntry): string {
-  return build.ask || historyLabel(build, { newest: isNewestBuild(builds, build) });
+/**
+ * A tab's name: a Loop's own name (`buildTitle`, shared/build-title.ts), a chat turn's message, else
+ * what the history calls it ("This Loop"). The chat's title is left out: every tab of the bar is a
+ * build of the same chat, so it would name them all alike.
+ */
+function tabName(tabs: BuildTabs, build: HistoryEntry): string {
+  const named = build.chat ? build.ask : buildTitle({ title: build.title, goal: build.ask });
+  return named || historyLabel(build, { newest: isNewestBuild(tabs.builds, build) });
 }
 
 /** How a build stands, before its name: the status line's loader while it works, a bare ✓ once done, a dot while paused. */
@@ -108,7 +114,7 @@ function BuildTabTrack({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.E
   return (
     <div ref={track} role="tablist" aria-label={WORDS.tabs} className="build-tabs surface-glass">
       {builds.map((build, index) => {
-        const name = tabName(builds, build);
+        const name = tabName(tabs, build);
         const isOpen = build.runId === open;
         return (
           <BuildTab
@@ -208,7 +214,7 @@ function useOpenRowShown() {
 function BuildPicker({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.Element {
   const { builds, open, onOpen } = tabs;
   const shown = builds.find((build) => build.runId === open) ?? builds.at(-1);
-  const name = shown ? tabName(builds, shown) : "";
+  const name = shown ? tabName(tabs, shown) : "";
   const { attach, onOpenChange, trigger } = useOpenRowShown();
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
@@ -233,7 +239,7 @@ function BuildPicker({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.Ele
       <DropdownMenuContent ref={attach} align="start" className="build-picker-menu">
         <DropdownMenuRadioGroup value={open ?? ""} onValueChange={onOpen}>
           {newestFirst(builds).map((build) => (
-            <BuildRow key={build.runId} build={build} name={tabName(builds, build)} />
+            <BuildRow key={build.runId} build={build} name={tabName(tabs, build)} />
           ))}
         </DropdownMenuRadioGroup>
         <span aria-hidden="true" data-list-fade className="build-picker-fade" />
@@ -349,55 +355,5 @@ export function PlayButton({
       <Icon name="play" size={13} />
       {opening ? t("Opening…") : label}
     </Button>
-  );
-}
-
-const ICON_BUTTON =
-  "inline-flex size-[26px] cursor-pointer items-center justify-center rounded-[7px] text-ink-3 hover:bg-control-hover hover:text-control-text-hover focus-visible:outline-2 focus-visible:outline-accent";
-const TEXT_BUTTON =
-  "h-[26px] cursor-pointer rounded-[7px] px-2.5 font-mono text-xs text-ink-2 hover:bg-control-hover hover:text-control-text-hover focus-visible:outline-2 focus-visible:outline-accent";
-
-/** Zoom out, the zoom level, zoom in, fit everything, and — while a run is live — jump back to its work. */
-export function ZoomPill({
-  pct,
-  onOut,
-  onIn,
-  onFit,
-  onNow,
-}: {
-  pct: number;
-  onOut: () => void;
-  onIn: () => void;
-  onFit: () => void;
-  onNow: (() => void) | null;
-}): JSX.Element {
-  return (
-    <div
-      className="absolute bottom-3 left-3 z-[3] flex h-8 items-center gap-0.5 rounded-[11px] bg-surface px-[3px] shadow-card"
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <button type="button" aria-label={t("Zoom out")} title={t("Zoom out")} className={ICON_BUTTON} onClick={onOut}>
-        <Icon name="minus" size={13} />
-      </button>
-      <span
-        className="w-10 text-center font-mono text-xs text-ink-3 tabular-nums"
-        aria-label={t("Zoom {percent}%", { percent: pct })}
-      >
-        {pct}%
-      </span>
-      <button type="button" aria-label={t("Zoom in")} title={t("Zoom in")} className={ICON_BUTTON} onClick={onIn}>
-        <Icon name="plus" size={13} />
-      </button>
-      <span aria-hidden="true" className="mx-0.5 h-3.5 w-px bg-line-strong" />
-      <button type="button" title={t("Fit everything (0)")} className={TEXT_BUTTON} onClick={onFit}>
-        {t("Fit")}
-      </button>
-      {onNow ? (
-        <button type="button" className={`${TEXT_BUTTON} text-accent-ink`} onClick={onNow}>
-          {t("Jump to now")}
-        </button>
-      ) : null}
-    </div>
   );
 }

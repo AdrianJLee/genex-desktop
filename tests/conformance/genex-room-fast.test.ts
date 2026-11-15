@@ -40,6 +40,10 @@ import { tmpDir } from "../helpers/tmp.ts";
 
 /** The room's tick rate. */
 const TICK_HZ = 60;
+/** The floor of the delay a session draws other players behind (PROTOCOL.md §17.3). */
+const RENDER_DELAY_MS = 100;
+/** The most any room's ceiling lets that delay grow to (PROTOCOL.md §17.3). */
+const RENDER_DELAY_MAX_MS = 250;
 /**
  * A topdown room whose players the preset moves from their inputs alone. A room patches its state,
  * and sends each fast seat a snapshot, every 50 ms by default (PROTOCOL.md §17.6); a predicting
@@ -57,6 +61,24 @@ const ROOM_JS = [
   "  step() {},",
   "};",
 ].join("\n");
+/**
+ * The same room without a rate of its own: no physics, no `patchHz`. Such a room sends its state
+ * {@link DEFAULT_UPDATE_HZ} times a second to a client that claims `rate@1` (PROTOCOL.md §17.6 *The
+ * update rate*); before `@genex-ai/authority-dev` 0.1.8 a local room sent 20, on a 50 ms timer.
+ */
+const PLAIN_ROOM_JS = [
+  "export default {",
+  "  contract: 1,",
+  `  config: { tickHz: ${TICK_HZ}, maxPlayers: 8, preset: { name: "topdown" } },`,
+  "  init: () => ({}),",
+  '  onJoin(ctx, player) { ctx.entities.spawn({ kind: "player", owner: player.id, hp: 3 }); },',
+  "  onLeave(ctx, player) { const me = ctx.entities.ownedBy(player.id); if (me) ctx.entities.remove(me.id); },",
+  "  onInput() {},",
+  "  step() {},",
+  "};",
+].join("\n");
+/** The updates a second of a room that asks for none. */
+const DEFAULT_UPDATE_HZ = 60;
 /** The room key the toolchain serves (`authority-dev`'s LOCAL_ROOM_KEY). */
 const ROOM_KEY = "local";
 /** How long the seats play once both are bound. */
@@ -108,12 +130,12 @@ after(async () => {
   await sandbox.dispose();
 });
 
-/** A game folder declaring the room. */
-async function game(name: string): Promise<string> {
+/** A game folder declaring the room (`source`: its module). */
+async function game(name: string, source = ROOM_JS): Promise<string> {
   const dir = path.join(root, "games", name);
   await mkdir(path.join(dir, "server"), { recursive: true });
   await writeFile(path.join(dir, "index.html"), "<!doctype html>");
-  await writeFile(path.join(dir, "server", "room.js"), ROOM_JS);
+  await writeFile(path.join(dir, "server", "room.js"), source);
   await writeFile(path.join(dir, "genex.json"), JSON.stringify({ authority: { module: "server/room.js" } }));
   return dir;
 }
@@ -275,6 +297,17 @@ function assertPlayed(player: Player, fastUrl: string | undefined): void {
   assert.deepEqual(off, [], "live on UDP with no fallback on every sample after binding");
   assert.equal(player.session.fast.fallbacks, 0, "never fell back to the WebSocket");
   assert.deepEqual(player.wire.opened, [fastUrl], "one socket, to the room's fast port");
+  // What a game shows a player about the link (a template game's ping line reads both).
+  assert.equal(player.session.region, "", "a room joined by its url alone is in no listed region");
+  const { rttMs } = player.session;
+  assert.ok(Number.isFinite(rttMs) && rttMs >= 0, `the room clock measured a round trip, got ${rttMs}`);
+  // How far behind the server it draws other players. A local room publishes a ceiling (authority-dev 0.1.8),
+  // so the delay is sized to how late this link's states land: from the floor up to that ceiling.
+  const { renderDelayMs } = player.session;
+  assert.ok(
+    renderDelayMs >= RENDER_DELAY_MS && renderDelayMs <= RENDER_DELAY_MAX_MS,
+    `the delay other players are drawn behind, ${renderDelayMs} ms, is between the floor and the most a ceiling allows`,
+  );
   for (const field of ["snapshots", "heard", "sent"] as const) {
     const rate = ratePerSecond(player.samples, field);
     assert.ok(
@@ -394,6 +427,25 @@ describe("a local room's fast@1 channel carries real clients from this computer"
     }
     assert.equal(pids.length, 1, "one room process");
     for (const pid of pids) assert.equal(running(pid), false, `the room process ${pid} ended`);
+  });
+
+  it("sends a room that names no rate 60 updates a second", async (t) => {
+    const dir = await game("fast-default-rate", PLAIN_ROOM_JS);
+    const { rooms, binding } = service(dir);
+    const players: Player[] = [];
+    try {
+      await playRoom(t, rooms, binding, players);
+      for (const player of players) {
+        const rate = ratePerSecond(player.samples, "snapshots");
+        assert.ok(
+          Math.abs(rate - DEFAULT_UPDATE_HZ) <= DEFAULT_UPDATE_HZ * RATE_SHARE,
+          `${player.axis} heard ${rate.toFixed(1)} snapshots a second, the default is ${DEFAULT_UPDATE_HZ}`,
+        );
+      }
+    } finally {
+      for (const player of players) await player.session.leave().catch(() => undefined);
+      await rooms.stopAll();
+    }
   });
 
   it("keeps both seats on the channel while more strangers than the bridge keeps send to its port", async (t) => {

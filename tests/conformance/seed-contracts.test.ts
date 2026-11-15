@@ -18,6 +18,7 @@ import {
   OPEN_LEAD_PART as seedOpenLeadPart,
   SAVE_POINT_VERDICT_SOURCE as seedSavePointSource,
 } from "../../src/harness-seed/loop/director/open/graph.ts";
+import { interviewQuestion as seedInterviewQuestion } from "../../src/harness-seed/loop/interview-question.ts";
 import * as seedInbox from "../../src/harness-seed/loop/run-inbox.ts";
 import * as seedQueue from "../../src/harness-seed/loop/message-queue.ts";
 import * as seedRoles from "../../src/harness-seed/loop/model-roles.ts";
@@ -42,8 +43,12 @@ import { DelegationRefusal as seedDelegationRefusal } from "../../src/harness-se
 import * as seedWorkers from "../../src/harness-seed/loop/workers/contract.ts";
 import * as seedJobs from "../../src/harness-seed/loop/jobs/contract.ts";
 import { RESUME_RUN as seedResumeRun } from "../../src/harness-seed/loop/after-loop-run.ts";
-import { startAutopilot as seedStartAutopilot } from "../../src/harness-seed/loop/start-autopilot.ts";
+import {
+  buildTitleOf as seedBuildTitleOf,
+  startAutopilot as seedStartAutopilot,
+} from "../../src/harness-seed/loop/start-autopilot.ts";
 import * as seedVerdict from "../../src/harness-seed/loop/verdict.ts";
+import { cleanBuildTitle } from "../../src/shared/build-title.ts";
 import { endsChatSessions } from "../../src/shared/chat-rewind.ts";
 import * as chatRun from "../../src/shared/chat-run.ts";
 import { throughClaudeFolder as seedThroughClaudeFolder } from "../../src/harness-seed/loop/workers/claude-folder.ts";
@@ -57,6 +62,7 @@ import {
   RunStartRefusal,
   StopCode,
   customPayload,
+  questionStepOf,
 } from "../../src/shared/custom-events.ts";
 import * as duration from "../../src/shared/duration.ts";
 import { TargetRuntime } from "../../src/shared/computer-target.ts";
@@ -190,6 +196,15 @@ const LOGS: Record<string, EventEnvelope[]> = {
     custom(5, "run_steering_delivered", { runId: "r1", sourceMessageId: "red", how: "lead" }),
   ],
 };
+
+describe("a build's title (shared/build-title.ts ↔ loop/start-autopilot.ts)", () => {
+  it("reads the title a launch names the same way: one line, unquoted, cut at a word", () => {
+    const long = "Пицца-кот на крышах ночного города ".repeat(4);
+    for (const raw of ["Pizza cat", '  "Neon   drift\nracer" ', "«Кот»", long, "x".repeat(90), "", "  ", 7, null]) {
+      assert.equal(cleanBuildTitle(raw), seedBuildTitleOf(raw), JSON.stringify(raw));
+    }
+  });
+});
 
 describe("the chat's run (shared/chat-run.ts ↔ loop/run-inbox.ts)", () => {
   it("the chat's own session after a run keeps the host's own tools: live run controls, and the resume it records", () => {
@@ -578,6 +593,19 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
       { second: seedTime.SECOND_MS, minute: seedTime.MINUTE_MS, hour: seedTime.HOUR_MS },
       { second: duration.SECOND_MS, minute: duration.MINUTE_MS, hour: duration.HOUR_MS },
     );
+  });
+});
+
+describe("a question's place in a short run of them (shared/custom-events.ts ↔ loop/interview-question.ts)", () => {
+  it("the app reads the count the seed's ask_user writes, and both drop the same senseless ones", () => {
+    const numbers = [0, 1, 2, 3, 4, 5, 1.5];
+    for (const step of numbers)
+      for (const of of numbers) {
+        const written = seedInterviewQuestion({ question: "Which camera?", step, of });
+        const kept = "step" in written ? { step: written.step, of: written.of } : null;
+        assert.deepEqual(questionStepOf(written), kept, `${step} of ${of}, as the seed wrote it`);
+        assert.deepEqual(questionStepOf({ step, of }), kept, `${step} of ${of}, as a record names it`);
+      }
   });
 });
 

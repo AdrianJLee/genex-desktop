@@ -85,6 +85,24 @@ FGenexEntity ToEntity(const genex::AuthorityEntityView& E)
 	return Out;
 }
 
+/** A predicted hit in Unreal units. */
+FGenexPredictedHit ToHit(const genex::AuthorityHit& H)
+{
+	const double Scale = GetDefault<UGenexSettings>()->UnitsPerMeter;
+	FGenexPredictedHit Out;
+	Out.Id = Str(H.id);
+	Out.Kind = H.kind == genex::hits::HitKind::Projectile ? EGenexHitKind::Projectile : EGenexHitKind::Hitscan;
+	Out.Target = Str(H.target);
+	Out.Location = FVector(H.x * Scale, H.y * Scale, H.z * Scale);
+	Out.Distance = static_cast<float>(H.dist * Scale);
+	return Out;
+}
+
+genex::hits::HitSettle ToSettle(EGenexHitSettle Settle)
+{
+	return Settle == EGenexHitSettle::Manual ? genex::hits::HitSettle::Manual : genex::hits::HitSettle::Health;
+}
+
 /** An Unreal-unit value as the Genex float32 it stands for: divided by UnitsPerMeter and rounded to
  *  float32, which gives back exactly the float32 a Genex value times the scale came from. */
 double ToGenex(double V, double Scale)
@@ -342,6 +360,15 @@ FString UGenexAuthoritySubsystem::PredictProjectile(const FGenexProjectileLaunch
 	P.vy = Launch.Velocity.Y * ToMetres;
 	P.vz = Launch.Velocity.Z * ToMetres;
 	P.g = Launch.Gravity * ToMetres;
+	// §17.9 *Predicted hits*: what it can hit, when the launch names any kind.
+	if (Launch.HitKinds.Num() > 0)
+	{
+		genex::ProjectileHits Can;
+		for (const FString& Kind : Launch.HitKinds) Can.kinds.push_back(GenexUnrealJson::Utf8(Kind));
+		Can.radius = Launch.HitRadius * ToMetres;
+		Can.settle = GenexAuthorityDetail::ToSettle(Launch.HitSettle);
+		P.hits = Can;
+	}
 	// Staged first: the prediction is keyed on the input being staged, the next one sent.
 	if (FireButtons != 0)
 	{
@@ -355,6 +382,47 @@ FString UGenexAuthoritySubsystem::PredictProjectile(const FGenexProjectileLaunch
 		bFirePending = false;
 	}
 	return GenexAuthorityDetail::Str(Id);
+}
+
+bool UGenexAuthoritySubsystem::PredictHitscan(const FGenexHitscan& Shot, FGenexPredictedHit& OutHit, int32 FireButtons)
+{
+	OutHit = FGenexPredictedHit();
+	if (!Session || !Session->IsReady() || !Session->IsConnected()) return false;
+	const double Scale = GetDefault<UGenexSettings>()->UnitsPerMeter;
+	const double ToMetres = Scale > 0 ? 1.0 / Scale : 0.0;
+	genex::HitscanPrediction P;
+	P.origin = genex::hits::HitPoint{Shot.Origin.X * ToMetres, Shot.Origin.Y * ToMetres, Shot.Origin.Z * ToMetres};
+	// A direction: its length does not matter, so it is not scaled.
+	P.dir = genex::hits::HitPoint{Shot.Direction.X, Shot.Direction.Y, Shot.Direction.Z};
+	if (Shot.Range >= 0.f) P.range = Shot.Range * ToMetres;
+	if (Shot.Radius >= 0.f) P.radius = Shot.Radius * ToMetres;
+	if (Shot.Kinds.Num() > 0)
+	{
+		std::vector<std::string> Kinds;
+		for (const FString& Kind : Shot.Kinds) Kinds.push_back(GenexUnrealJson::Utf8(Kind));
+		P.kinds = std::move(Kinds);
+	}
+	P.settle = GenexAuthorityDetail::ToSettle(Shot.Settle);
+	// Staged first: the hit is keyed on the input being staged, the next one sent. The shot is fired, hit or miss.
+	if (FireButtons != 0)
+	{
+		Session->input.buttons = static_cast<double>(Staged.Buttons | FireButtons);
+		bFirePending = true;
+	}
+	const std::optional<genex::AuthorityHit> Hit = Session->PredictHitscan(P);
+	if (!Hit) return false;
+	OutHit = GenexAuthorityDetail::ToHit(*Hit);
+	return true;
+}
+
+bool UGenexAuthoritySubsystem::ConfirmHit(const FString& Id)
+{
+	return Session && Session->ConfirmHit(GenexUnrealJson::Utf8(Id));
+}
+
+bool UGenexAuthoritySubsystem::CancelHit(const FString& Id)
+{
+	return Session && Session->CancelHit(GenexUnrealJson::Utf8(Id));
 }
 
 void UGenexAuthoritySubsystem::AfterFrame(int32 Sent)
@@ -403,6 +471,8 @@ void UGenexAuthoritySubsystem::DispatchEvents()
 		}
 		case T::Message: OnEvent.Broadcast(GenexAuthorityDetail::Str(E.name), GenexUnrealJson::ToText(E.data)); break;
 		case T::Warning: OnError.Broadcast(E.code, GenexAuthorityDetail::Str(E.message)); break;
+		case T::PredictedHit: OnPredictedHit.Broadcast(GenexAuthorityDetail::ToHit(E.hit)); break;
+		case T::HitSettled: OnHitSettled.Broadcast(GenexAuthorityDetail::ToHit(E.hit), E.hit.confirmed); break;
 		default: break;
 		}
 		if (JoinGeneration != Generation) return;
@@ -413,6 +483,7 @@ bool UGenexAuthoritySubsystem::IsConnected() const { return Session && Session->
 FString UGenexAuthoritySubsystem::GetSessionId() const { return Session ? GenexAuthorityDetail::Str(Session->SessionId()) : FString(); }
 int32 UGenexAuthoritySubsystem::GetTick() const { return Session ? static_cast<int32>(Session->Tick()) : 0; }
 double UGenexAuthoritySubsystem::GetRtt() const { return Session && Session->Rtt() > 0 ? Session->Rtt() : -1.0; }
+double UGenexAuthoritySubsystem::GetRenderDelayMs() const { return Session ? Session->RenderDelayMs() : -1.0; }
 
 FString UGenexAuthoritySubsystem::GetRegion() const { return Session ? GenexAuthorityDetail::Str(Session->Region()) : FString(); }
 
@@ -502,6 +573,9 @@ FGenexAuthorityTelemetry UGenexAuthoritySubsystem::GetTelemetry() const
 	Out.ProjectilesConfirmed = T.projectilesConfirmed;
 	Out.ProjectilesRejected = T.projectilesRejected;
 	Out.LastProjectileLeadMs = static_cast<float>(T.lastProjectileLeadMs);
+	Out.HitsPredicted = T.hitsPredicted;
+	Out.HitsConfirmed = T.hitsConfirmed;
+	Out.HitsCancelled = T.hitsCancelled;
 	return Out;
 }
 

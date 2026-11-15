@@ -1,3 +1,5 @@
+import { cleanBuildTitle } from "../shared/build-title.ts";
+import { withoutMentionContext } from "../shared/prompt-mention.ts";
 import { graphKeyOf, type RunGraphEvent, turnOfGraphKey, workerKeyOf } from "../shared/run-graph-events.ts";
 /**
  * Run graph — the pure data model behind the Build room's node-graph view of an Autopilot run.
@@ -305,6 +307,8 @@ export interface RunNode {
   project: string | null;
   /** What the build was asked: its goal, or the words the chat last went on with it for. */
   goal: string;
+  /** The title the chat gave the build as it started it (shared/build-title.ts); null on an older run. */
+  title: string | null;
   reference: { name: string; kind: string | null } | null;
   startedAt: string | null;
   finishedAt: string | null;
@@ -610,6 +614,8 @@ export interface HealthLook {
   findings: HealthFinding[] | null;
   /** its record's place in the log */
   seq: number;
+  /** when its record was written; null on a draft that read no time */
+  at: string | null;
 }
 
 export interface RunGraph {
@@ -944,6 +950,7 @@ function newRunNode(runId: string): RunNode {
     runId,
     project: null,
     goal: "",
+    title: null,
     reference: null,
     startedAt: null,
     finishedAt: null,
@@ -1279,6 +1286,8 @@ function onRunStarted(graph: GraphDraft, entry: RunEntry): void {
   if (run.startedAt === null) run.asked = graph.answering;
   else goOn(graph);
   run.goal = graph.wentOnWith ?? str(payload.goal, "");
+  // A resume registers the run again, maybe without its title: the first one named stays.
+  run.title ??= cleanBuildTitle(payload.title);
   run.startedAt = entry.event.created_at;
   const reference = record(payload.reference);
   run.reference = reference ? { name: str(reference.name, "reference"), kind: strOrNull(reference.kind) } : null;
@@ -1399,7 +1408,7 @@ function onDirectorWorker(graph: GraphDraft, payload: Payload): void {
 function onWorkerRecord(graph: GraphDraft, entry: RunEntry, started: boolean): void {
   const row = (workerId: string, title: string | undefined) => facet(graph, restartOf(graph, workerId).id, title).node;
   const fold = started ? onWorkerStarted : onWorkerFinished;
-  if (!fold(graph.workers, row, entry.payload, graph.seq) || !graph.turn) return;
+  if (!fold(graph.workers, row, entry.payload, { seq: graph.seq, at: graph.eventAt }) || !graph.turn) return;
   graph.run.startedAt ??= entry.event.created_at;
   if (started && !graph.run.goal) graph.run.goal = str(entry.payload.ask, "").trim();
 }
@@ -1431,7 +1440,8 @@ export function queuedAsk(events: EventEnvelope[], queue: QueueView, turn: strin
   const queued = queue.messages.get(turn);
   const said = queued?.eventId ? events.find((event) => event.id === queued.eventId) : undefined;
   const asked = said?.data.type === EventKind.Messages ? said.data.messages.find((m) => m.role === "user") : undefined;
-  return (asked?.content ?? queued?.action?.text ?? "").trim();
+  // The person's own words: never the context a send added under them (@ tags, the Design board's notes).
+  return withoutMentionContext(asked?.content ?? queued?.action?.text ?? "").trim();
 }
 
 /**
@@ -1621,6 +1631,7 @@ function onHealth(graph: GraphDraft, payload: Payload): void {
     problems: strings(payload.problems),
     findings: Array.isArray(payload.findings) ? payload.findings.filter(isHealthFinding) : null,
     seq: graph.seq,
+    at: graph.eventAt,
   });
 }
 

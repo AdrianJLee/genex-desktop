@@ -47,6 +47,7 @@ namespace Genex.Multiplayer.Authority
         [DllImport("__Internal")] private static extern void GenexFastWeb_Send(int id, byte[] bytes, int length);
         [DllImport("__Internal")] private static extern int GenexFastWeb_Receive(int id, byte[] bytes, int capacity);
         [DllImport("__Internal")] private static extern int GenexFastWeb_Failed(int id);
+        [DllImport("__Internal")] private static extern int GenexFastWeb_Opening(int id);
         [DllImport("__Internal")] private static extern int GenexFastWeb_MaxDatagram(int id);
         [DllImport("__Internal")] private static extern void GenexFastWeb_Close(int id);
 #else
@@ -55,6 +56,7 @@ namespace Genex.Multiplayer.Authority
         private static void GenexFastWeb_Send(int id, byte[] bytes, int length) { }
         private static int GenexFastWeb_Receive(int id, byte[] bytes, int capacity) => -1;
         private static int GenexFastWeb_Failed(int id) => 0;
+        private static int GenexFastWeb_Opening(int id) => 0;
         private static int GenexFastWeb_MaxDatagram(int id) => 0;
         private static void GenexFastWeb_Close(int id) { }
 #endif
@@ -97,6 +99,8 @@ namespace Genex.Multiplayer.Authority
         public bool Failed => id != 0 && GenexFastWeb_Failed(id) != 0;
 
         public int MaxDatagramBytes => id == 0 ? 0 : GenexFastWeb_MaxDatagram(id);
+
+        public bool Opening => id != 0 && GenexFastWeb_Opening(id) != 0;
 
         public void Close()
         {

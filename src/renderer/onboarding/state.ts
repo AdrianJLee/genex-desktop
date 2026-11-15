@@ -18,7 +18,7 @@ import { STORAGE_KEYS } from "../storage.ts";
 
 /** Set once the welcome is finished or skipped on this profile. */
 export const WELCOMED_KEY = STORAGE_KEYS.welcomed;
-/** The demo prompt names the game the second opinion's screen plays. */
+/** The idea the welcome types itself, as a person would. */
 export const DEMO_IDEA = t("A tiny space shooter in a field of asteroids");
 
 /** Welcome only a first launch: the session allows it, the library is empty and this profile was never welcomed. */
@@ -36,6 +36,7 @@ export const WelcomeScreen = {
   OpenCode: "opencode",
   Grok: "grok",
   Cursor: "cursor",
+  Antigravity: "antigravity",
 } as const;
 export type WelcomeScreen = (typeof WelcomeScreen)[keyof typeof WelcomeScreen];
 

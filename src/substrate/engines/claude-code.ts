@@ -6,7 +6,12 @@ import { t } from "../../shared/i18n.ts";
 import { validateClaudeModels } from "./claude-telemetry.ts";
 import { supportedPreferences, type ModelPreferences } from "../../shared/model-preferences.ts";
 import type { ProviderUsage } from "../../shared/provider-usage.ts";
-import { readClaudeTelemetry, readClaudeUsage, withClaudeModelCapabilities } from "./claude-telemetry.ts";
+import {
+  readClaudeAppliedEffort,
+  readClaudeTelemetry,
+  readClaudeUsage,
+  withClaudeModelCapabilities,
+} from "./claude-telemetry.ts";
 import { cliVersion, requireCodingCli, resolveCodingCli, invalidateCodingCli } from "./external-cli.ts";
 /**
  * Delegated engine — Claude Code via the Agent SDK.
@@ -531,7 +536,8 @@ export class ClaudeCodeEngine implements Engine {
         try {
           this.#catalog.publish(
             {
-              models: withClaudeModelCapabilities([], validateClaudeModels(data.models)),
+              // The rows keep the default efforts the catalog read: a running session reports none.
+              models: withClaudeModelCapabilities(this.#catalog.models(), validateClaudeModels(data.models)),
               source: ModelCatalogSource.Provider,
             },
             catalogEpoch,
@@ -986,7 +992,9 @@ export class ClaudeCodeEngine implements Engine {
     }
   }
 
-  catalogSnapshot = () => this.#catalog.snapshot();
+  // On Genex the gateway's own list is the answer (`models()`); the CLI's catalog never reads, so
+  // it would stay loading and a pick the gateway no longer lists would never be replaced.
+  catalogSnapshot = () => (this.#gateway ? undefined : this.#catalog.snapshot());
 
   async models(): Promise<EngineModel[]> {
     if (this.#gateway) return this.#gateway.models();
@@ -1067,8 +1075,11 @@ export class ClaudeCodeEngine implements Engine {
               );
             }),
           ]);
+          const listed = validateClaudeModels(models);
+          // No effort was asked of this session, so the one it applies is its model's default.
+          const applied = await readClaudeAppliedEffort(stream);
           return {
-            models: withClaudeModelCapabilities([], validateClaudeModels(models)),
+            models: withClaudeModelCapabilities([], listed, applied),
             source: ModelCatalogSource.Provider,
           };
         } finally {

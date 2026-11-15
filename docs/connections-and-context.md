@@ -88,8 +88,11 @@ except in first launch: discovery starts the CLI, so a signed-in subscription wh
 loaded is not shown connected there but offers a check again, which retries discovery too.
 
 Aliases retain their request IDs and show reported canonical targets. Explicit model IDs and saved
-cross-provider roles are never silently replaced. New unset roles and effort defer to CLI defaults
-under Genex's launch policy. Settings can update the selected CLI; provider operations and updates
+cross-provider roles are never silently replaced. New unset roles defer to CLI defaults under
+Genex's launch policy. An unset effort is the default the provider reports for the model, sent with
+the turn; where none is reported, no effort is sent and the CLI's own applies. Claude Code reports
+one for the model its default resolves to: discovery's idle session asks `get_settings` what it
+applies, and a running session, which applies its send's effort, is never asked. Settings can update the selected CLI; provider operations and updates
 are mutually exclusive. The app never silently installs a different executable or auto-updates.
 A sign-in event names its own provider; its adjacent harness reply replaces duplicate narration.
 
@@ -124,7 +127,9 @@ fails as `unsupported`, never as a download; Grok Build from `x.ai/cli/install.s
 `~/.grok/bin`, updated with `grok update`; and Cursor from `cursor.com/install` (`?win32=true` on
 Windows) into `~/.local/bin` (`%LOCALAPPDATA%\cursor-agent` on Windows), updated with
 `cursor-agent update`. Cursor's installer also links `~/.local/bin/agent`, a name Grok Build's
-installer uses too, so discovery looks only for `cursor-agent`. Main fetches the script over HTTPS
+installer uses too, so discovery looks only for `cursor-agent`. Antigravity's CLI (`agy`) comes from
+`antigravity.google/cli/install.sh` (`install.ps1` on Windows) into `~/.local/bin`, updated with
+`agy update`. Main fetches the script over HTTPS
 itself, with a program's user agent (cursor.com answers a browser's with its web page), runs it as the person with the
 contractor environment (no keys, none of the other vendor's variables; Codex with
 `CODEX_NON_INTERACTIVE=1` so it asks nothing), keeps only its last output for `studio.log` and
@@ -312,7 +317,7 @@ Beta tag beside its name in Settings and its group in the picker). Settings show
 OpenCode and Grok Build: Install, Sign in (`cursor-agent login` in a terminal inside the row, which
 opens the browser and prints the page for Open sign-in page; `studio:cursor.signin`, native), and
 once connected Check connection, Sign in again, Sign out (`cursor-agent logout`,
-`studio:cursor.signout`, native) and Update. First launch's "or use" row offers it with its Beta
+`studio:cursor.signout`, native) and Update. First launch's "or use" lines offer it with its Beta
 tag, as Grok Build: Install and Sign in on its own screen. The engine is Ready once `cursor-agent status --format json` says `isAuthenticated` and
 `cursor-agent models` lists a model; the picker shows the CLI's default (`auto`) and the first three
 it lists, the rest under Older models.
@@ -346,6 +351,62 @@ else ends the build with the CLI's words, its session kept. A turn that prints n
 stopped and kept; either way its process group goes with it. Compact now is refused: Cursor compacts
 its own sessions. Tests: `engine-cursor.test.ts` on `tests/fixtures/transcripts/cursor-*`.
 
+## Antigravity
+
+**Antigravity** ([antigravity.ts](../src/substrate/engines/antigravity.ts)) is a delegated engine
+that runs Google's Antigravity CLI on the person's Google AI plan (Beta, on a Mac only for now:
+`StudioCore` registers it there alone). The only mode Genex starts is `agy acp`, the CLI's Agent
+Client Protocol server on stdio ([acp.ts](../src/substrate/engines/acp.ts)): Google's own words are
+that wrapping its print mode (`agy -p`) is not for consumer plans, while any ACP client may launch
+`agy acp`. One turn is one process: `initialize`, `session/new` (or `session/load` to continue a
+session, whose replayed history is not mirrored), `session/set_model`, `session/prompt`, and every
+`session/update` ([antigravity-events.ts](../src/substrate/engines/antigravity-events.ts)) until
+the prompt is answered with the turn's ending and tokens. Its tokens are the plan's quota, never a
+bill, but the provider is `metered` in the table so the app never picks a Beta on its own.
+
+Settings › Model Providers has its row (`CliSignInRow`): Install, Sign in (`agy acp --login` in a
+terminal inside the row, started in the box a session runs in (`antigravitySignInLaunch`,
+`ProcessSandbox.terminalLaunch`): it prints Google's page for Open sign-in page and takes the code
+that page gives; `studio:antigravity.signin`, native), and once
+connected Check connection, Sign in again and Update. The CLI has no command that says whether it
+is signed in, so the engine asks by opening a session in an empty folder, at most once a minute:
+the answer lists the models the account can run and its plan, or refuses with ACP's sign-in code
+(`-32000`). The row's status names the CLI's version and the plan. First launch's "or use" lines offer it on a Mac, beside Grok Build and Cursor on the first line (plans a person may already pay for; local models, OpenRouter and OpenCode on the second), with its Beta tag and the same Install and Sign in on its own screen. The model list is the account's (`session/new`'s `availableModels`, so a paid plan's newer Gemini shows by itself); the picker starts with the newest Gemini generation it lists, each family at its newest version with every thinking level (`googleLatest` in `renderer/model-lineup.ts`), and the other vendors' models Google's plan runs (Claude, GPT-OSS) and older Gemini wait under More models.
+
+Antigravity keeps its Google sign-in in the operating system's own store (the Keychain on a Mac)
+when it can reach it, and in `~/.gemini/antigravity-cli/antigravity-oauth-token` when it cannot (a
+failed Keychain read or save falls back to the file). Genex never reads either. Its sign-in runs in
+the session's box, where the Keychain is out of reach, so the sign-in lands in the file every
+session reads; a sign-in made in the person's own terminal lives in the Keychain alone, and the row
+then asks for Sign in. Its own controls are no box (its
+terminal sandbox leaves its file tools out, and its permission rules do not reach an ACP session),
+so each turn runs in `ProcessSandbox` with `antigravitySandbox` (a build for a chat the person set to
+Bypass runs as them outside it, `runsAsPerson`, as Codex's and Grok Build's do): the workspace (a read-only
+session, Plan or a reviewer runs from a scratch folder) is all it writes, the network is Google's
+hosts (`ANTIGRAVITY_HOSTS`), a game's `.agents` folder is not the session's to write, and inside
+the box every tool call the agent asks about is allowed, except a command the never-touch screen
+stops (`antigravityPermission`, `neverTouchVerdict`): macOS's keychain tool, a command the screen
+cannot read and a command with no command line are refused, as a worker's hook refuses them. Its sandbox alone is given `~/.gemini`
+(its settings, conversations and sign-in file; `antigravityHomes`, `ownHome`) and the system's
+certificate checker (`SandboxMachService.Trust`, `com.apple.trustd.agent`, which a Go program
+verifies every HTTPS certificate through and sandbox-runtime leaves closed by default), because
+without either a signed-in CLI answers "sign in"; `~/Library/Keychains` stays denied, as in every
+sandbox, and every other sandbox still denies `~/.gemini` and opens no extra service. Studio tools reach it through the bridge command, as Codex's do.
+
+A failed turn is named by ACP's code (`-32000` a sign-in failure) or by Google's status name in
+the error (`RESOURCE_EXHAUSTED` a usage limit; `UNAVAILABLE`, `INTERNAL`, `DEADLINE_EXCEEDED`
+unavailable); anything else ends the build with the CLI's words. Stop sends `session/cancel` and
+gives the CLI five seconds to answer before it is stopped; a turn that says nothing for 10 minutes
+(30 while a tool call is open) is stopped with its process group. Compact now is refused.
+A live run on a signed-in Mac (CLI 1.5.7, free plan) reads the sign-in, builds in the game and
+cannot write beside it, continues a session from another folder, builds in Bypass, and shows
+what the sign-in needs: with the Keychain closed it works from the file; with the file or the
+certificate service closed, the CLI answers "sign in". Not yet shown: a plan that has run out, and
+Windows and Linux (where the sandbox runs as another user or has no Secret Service). Tests: `engine-antigravity.test.ts` and `event-antigravity.test.ts` on
+`tests/fixtures/transcripts/antigravity-*`, recorded from Antigravity CLI 1.5.7.
+`STUDIO_ANTIGRAVITY_CLI_TESTS=1` runs the real, signed-in CLI in the real sandbox
+(`antigravity-cli-live.test.ts`).
+
 ## Build with Genex credits
 
 **Genex** (`genex` in the provider table, `billing: "metered"`, `runsClaudeCode`) lets someone with
@@ -358,8 +419,10 @@ are the session's whole account); it takes the key off, puts the person's Genex 
 model and the chat (`x-genex-model`, `x-genex-chat`) and passes only the two Messages routes
 (`GenexBuildRoute`). The token never enters an agent's environment, and nothing a session holds can
 spend once it ends. genex.games owns the price, the plan and the models; the app shows the ones it
-ships with (`GENEX_MODELS`, Gemini 4 Hydrogen first) until genex.games lists its own. Claude Code's
-own helpers run on the first model listed; the Loop's workers and reviewers run on Sonnet.
+ships with (`GENEX_MODELS`, Gemini 4 Hydrogen first) until genex.games lists its own. That list is
+the engine's whole answer (no CLI catalog), so a chat whose saved model it leaves out opens on a model
+that runs: one the person runs without credits if there is one, else Genex's own default
+(`resolveComposerModel`). Claude Code's own helpers run on the first model listed; the Loop's workers and reviewers run on Sonnet.
 
 The lane ([genex.ts](../src/substrate/engines/genex.ts)) reads `GET /api/desktop/llm/status` (reused
 for 5 seconds, joined while in flight) and maps its access word to the engine's status: ready, or a
@@ -407,7 +470,7 @@ server the person runs: TabbyAPI (ExLlamaV3 on an NVIDIA card), LM Studio, llama
 or an Ollama elsewhere on the network, through its OpenAI-compatible API. Like OpenRouter it is a
 direct engine on the pi-ai path whose game chats and builds run as Genex sessions (`LocalSessions`
 under its own id), so Loop's workers and reviewers can use it; unlike OpenRouter it is
-`billing: "local"`, so it may be picked by itself and may take over a throttled run.
+`billing: "local"`, so it may be picked by itself and may take over a throttled run. When a server or proxy does not report a model's context length or vision capabilities, configure them through the model row's configuration dialog or in `models.json`.
 
 Its row is the last in Settings → Model Providers (`LocalServerRow.tsx`); Local Models and the
 welcome's local screen link to it. Until a server is saved the row lists the servers answering on
@@ -441,8 +504,8 @@ nothing is `unavailable`, so another engine may take over. Tests: `engine-local-
 against `helpers/fake-local-server.ts`, which speaks each server's dialect.
 
 Residual risk: the CLI must read its sign-ins and its shell tool shares its sandbox, so an OpenCode
-session can read OpenCode's own `auth.json` (and a Cursor session Cursor's), and its commands can reach the provider host the session
-calls. OpenCode's permission rules keep its own tools inside the workspace, but that is not an OS
+session can read OpenCode's own `auth.json` (and a Cursor session Cursor's, and an Antigravity session its sign-in file), and its commands
+can reach the provider host the session calls. OpenCode's permission rules keep its own tools inside the workspace, but that is not an OS
 boundary. Every other sandbox still denies the folder. Every sandbox allows localhost, where
 OpenCode 2.x's background server listens outside any sandbox; its password
 (`~/.config/opencode/service.json`) is in every sandbox's deny-read list (`baseDenyRead`), but a

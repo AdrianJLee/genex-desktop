@@ -40,8 +40,10 @@ import { tmpDir } from "../helpers/tmp.ts";
 
 /** The room's tick rate. */
 const TICK_HZ = 60;
-/** The delay a session draws other players behind where the room publishes no ceiling for it (PROTOCOL.md §17.3). */
+/** The floor of the delay a session draws other players behind (PROTOCOL.md §17.3). */
 const RENDER_DELAY_MS = 100;
+/** The most any room's ceiling lets that delay grow to (PROTOCOL.md §17.3). */
+const RENDER_DELAY_MAX_MS = 250;
 /**
  * A topdown room whose players the preset moves from their inputs alone. A room patches its state,
  * and sends each fast seat a snapshot, every 50 ms by default (PROTOCOL.md §17.6); a predicting
@@ -299,8 +301,13 @@ function assertPlayed(player: Player, fastUrl: string | undefined): void {
   assert.equal(player.session.region, "", "a room joined by its url alone is in no listed region");
   const { rttMs } = player.session;
   assert.ok(Number.isFinite(rttMs) && rttMs >= 0, `the room clock measured a round trip, got ${rttMs}`);
-  // How far behind the server it draws other players: the SDK's fixed 100 ms in a room that publishes no ceiling.
-  assert.equal(player.session.renderDelayMs, RENDER_DELAY_MS, "the delay other players are drawn behind");
+  // How far behind the server it draws other players. A local room publishes a ceiling (authority-dev 0.1.8),
+  // so the delay is sized to how late this link's states land: from the floor up to that ceiling.
+  const { renderDelayMs } = player.session;
+  assert.ok(
+    renderDelayMs >= RENDER_DELAY_MS && renderDelayMs <= RENDER_DELAY_MAX_MS,
+    `the delay other players are drawn behind, ${renderDelayMs} ms, is between the floor and the most a ceiling allows`,
+  );
   for (const field of ["snapshots", "heard", "sent"] as const) {
     const rate = ratePerSecond(player.samples, field);
     assert.ok(

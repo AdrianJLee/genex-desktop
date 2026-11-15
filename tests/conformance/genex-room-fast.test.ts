@@ -59,6 +59,24 @@ const ROOM_JS = [
   "  step() {},",
   "};",
 ].join("\n");
+/**
+ * The same room without a rate of its own: no physics, no `patchHz`. Such a room sends its state
+ * {@link DEFAULT_UPDATE_HZ} times a second to a client that claims `rate@1` (PROTOCOL.md §17.6 *The
+ * update rate*); before `@genex-ai/authority-dev` 0.1.8 a local room sent 20, on a 50 ms timer.
+ */
+const PLAIN_ROOM_JS = [
+  "export default {",
+  "  contract: 1,",
+  `  config: { tickHz: ${TICK_HZ}, maxPlayers: 8, preset: { name: "topdown" } },`,
+  "  init: () => ({}),",
+  '  onJoin(ctx, player) { ctx.entities.spawn({ kind: "player", owner: player.id, hp: 3 }); },',
+  "  onLeave(ctx, player) { const me = ctx.entities.ownedBy(player.id); if (me) ctx.entities.remove(me.id); },",
+  "  onInput() {},",
+  "  step() {},",
+  "};",
+].join("\n");
+/** The updates a second of a room that asks for none. */
+const DEFAULT_UPDATE_HZ = 60;
 /** The room key the toolchain serves (`authority-dev`'s LOCAL_ROOM_KEY). */
 const ROOM_KEY = "local";
 /** How long the seats play once both are bound. */
@@ -110,12 +128,12 @@ after(async () => {
   await sandbox.dispose();
 });
 
-/** A game folder declaring the room. */
-async function game(name: string): Promise<string> {
+/** A game folder declaring the room (`source`: its module). */
+async function game(name: string, source = ROOM_JS): Promise<string> {
   const dir = path.join(root, "games", name);
   await mkdir(path.join(dir, "server"), { recursive: true });
   await writeFile(path.join(dir, "index.html"), "<!doctype html>");
-  await writeFile(path.join(dir, "server", "room.js"), ROOM_JS);
+  await writeFile(path.join(dir, "server", "room.js"), source);
   await writeFile(path.join(dir, "genex.json"), JSON.stringify({ authority: { module: "server/room.js" } }));
   return dir;
 }
@@ -402,6 +420,25 @@ describe("a local room's fast@1 channel carries real clients from this computer"
     }
     assert.equal(pids.length, 1, "one room process");
     for (const pid of pids) assert.equal(running(pid), false, `the room process ${pid} ended`);
+  });
+
+  it("sends a room that names no rate 60 updates a second", async (t) => {
+    const dir = await game("fast-default-rate", PLAIN_ROOM_JS);
+    const { rooms, binding } = service(dir);
+    const players: Player[] = [];
+    try {
+      await playRoom(t, rooms, binding, players);
+      for (const player of players) {
+        const rate = ratePerSecond(player.samples, "snapshots");
+        assert.ok(
+          Math.abs(rate - DEFAULT_UPDATE_HZ) <= DEFAULT_UPDATE_HZ * RATE_SHARE,
+          `${player.axis} heard ${rate.toFixed(1)} snapshots a second, the default is ${DEFAULT_UPDATE_HZ}`,
+        );
+      }
+    } finally {
+      for (const player of players) await player.session.leave().catch(() => undefined);
+      await rooms.stopAll();
+    }
   });
 
   it("keeps both seats on the channel while more strangers than the bridge keeps send to its port", async (t) => {

@@ -377,19 +377,17 @@ try {
     "earlier run and a step's actual saved capture visible",
     async () => {
       await openBuildFromChat(a, "fixture-build-1");
-      await until(async () => {
-        const s = await snapshot(a);
-        return s.stage.selectedRun === "fixture-build-1" && s.text.includes("River and bridge");
-      }, "earlier history graph");
-      // The run stopped with its only step's work outside the build: that row waits under the
-      // left-out row, which a press opens. The selected run changes before its complete host
-      // summary has arrived, so wait for each pointer target to become visible.
+      await until(async () => (await snapshot(a)).stage.selectedRun === "fixture-build-1", "earlier history graph");
+      // The run stopped with its only step's work outside the build: that row, and so its title,
+      // waits under the left-out row, which a press opens. The selected run changes before its
+      // complete host summary has arrived, so wait for each pointer target to become visible.
       const step = '[data-graph-node="step:river:1"]';
       const listed = async () =>
         (await op(a, "snapshot", { surface: "desktop", scope: "[data-builds-list]" })).controls.some(
           (c) => c.node === "step:river:1",
         );
       if (!(await listed())) await reach(a, "click", { selector: '[data-builds-left-out][aria-expanded="false"]' });
+      await until(async () => (await snapshot(a)).text.includes("River and bridge"), "the earlier run's step");
       await reach(a, "click", { selector: step });
       await until(
         async () =>

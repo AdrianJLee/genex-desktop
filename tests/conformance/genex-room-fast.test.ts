@@ -40,6 +40,8 @@ import { tmpDir } from "../helpers/tmp.ts";
 
 /** The room's tick rate. */
 const TICK_HZ = 60;
+/** The delay a session draws other players behind where the room publishes no ceiling for it (PROTOCOL.md §17.3). */
+const RENDER_DELAY_MS = 100;
 /**
  * A topdown room whose players the preset moves from their inputs alone. A room patches its state,
  * and sends each fast seat a snapshot, every 50 ms by default (PROTOCOL.md §17.6); a predicting
@@ -279,6 +281,8 @@ function assertPlayed(player: Player, fastUrl: string | undefined): void {
   assert.equal(player.session.region, "", "a room joined by its url alone is in no listed region");
   const { rttMs } = player.session;
   assert.ok(Number.isFinite(rttMs) && rttMs >= 0, `the room clock measured a round trip, got ${rttMs}`);
+  // How far behind the server it draws other players: the SDK's fixed 100 ms in a room that publishes no ceiling.
+  assert.equal(player.session.renderDelayMs, RENDER_DELAY_MS, "the delay other players are drawn behind");
   for (const field of ["snapshots", "heard", "sent"] as const) {
     const rate = ratePerSecond(player.samples, field);
     assert.ok(

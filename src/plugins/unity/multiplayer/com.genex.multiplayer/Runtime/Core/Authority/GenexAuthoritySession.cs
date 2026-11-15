@@ -6,11 +6,16 @@
 // sends one AuthorityInput per step (the staged Input, sanitized as the server will), the reconciler
 // predicts the entity this seat owns with the room's movement preset (Presets.cs, the same step the
 // server runs, so prediction matches by construction) and rewinds-and-replays when the server's truth
-// arrives, and every other entity is drawn RenderDelayMs in the past on the render time the server's
+// arrives, and every other entity is drawn its render delay in the past on the render time the server's
 // lag compensation rewinds to (serverNow - renderDelay - rtt/2: the SDK's lerp target), with a respawn
-// (an epoch bump) snapped on that same timeline. A projectile (an entity with a launch tick, §17.9) is
+// (an epoch bump) snapped on that same timeline. The render delay is RenderDelayMs in a room that publishes no
+// ceiling, and where it publishes one it follows this link's jitter between the two (§17.3 *The render delay*,
+// RenderDelay.cs): one value a frame for the interpolation, the respawn step and the render time the inputs carry.
+// A projectile (an entity with a launch tick, §17.9) is
 // never interpolated: it is drawn from its closed-form flight (Projectile.cs) at the server's present,
-// and the shooter's own from the moment it fires (PredictProjectile), on the SDK's PredictedSpawns. A
+// and the shooter's own from the moment it fires (PredictProjectile), on the SDK's PredictedSpawns. A shot's hit is
+// shown at once too (§17.9 *Predicted hits*, PredictedHits.cs: PredictHitscan, a projectile's Hits), tested against
+// the entities as drawn and settled by the states that follow. A
 // `firstperson` or `vehicle` room (§17.7) is predicted only while the collision world the game handed SetWorld is the
 // room's: its hash must equal the preset's `params.world`; otherwise the own entity is drawn from the server's state,
 // unpredicted, and Prediction says why. A predicted heading that wraps across ±π (a car's) is drawn as an angle: the
@@ -65,6 +70,17 @@ namespace Genex.Multiplayer.Authority
         public const string Separate = "separate";
         /// <summary>On the render timeline only.</summary>
         public const string Timeline = "timeline";
+    }
+
+    /// <summary>The socket a seat's fast channel opens (PROTOCOL.md §17.12).</summary>
+    internal enum GenexFastSocketKind
+    {
+        /// <summary>None: the seat never claims fast@1 and plays on the WebSocket.</summary>
+        None,
+        /// <summary>Raw UDP datagrams.</summary>
+        Udp,
+        /// <summary>The room's relay, by the browser's WebTransport.</summary>
+        WebTransport,
     }
 
     public sealed class GenexAuthorityOptions
@@ -137,16 +153,21 @@ namespace Genex.Multiplayer.Authority
         public bool CreatePrivate;
         /// <summary>Join the room with this invite code, walking the regions until one holds it.</summary>
         public string JoinCode;
-        /// <summary>How far in the past other entities render, ms (default 100, AuthorityTiming).</summary>
+        /// <summary>How far in the past other entities render, ms (default 100, AuthorityTiming). In a room that
+        /// publishes a render delay ceiling (§17.3 <i>The render delay</i>) this is the floor: the delay follows the
+        /// link's jitter between it and the ceiling (<see cref="GenexAuthoritySession.RenderDelayMs"/> says where it
+        /// stands); a value at or above the ceiling keeps it fixed.</summary>
         public double RenderDelayMs = A.Timing.RenderDelayMs;
         /// <summary>
-        /// The output spring on other entities, ms (display only; default 25, 0 = off). The SDK's lerp draws at
-        /// serverNow - renderDelay - rtt/2, and the smoothed RTT and clock offset still move after the first acks:
-        /// measured at 300 ms RTT, one frame stepped 0.35 world units (over the teleport bar) a few frames after
-        /// the views appeared. The spring trails what a shot is judged against by speed × this (0.15 units at
-        /// 6 units/s); hits measured the same. Never applied across a respawn. Godot's session has the same knob.
+        /// An output spring on other entities, ms (display only; default 0 = off, as the TypeScript session draws).
+        /// Off, another entity is drawn exactly on the render timeline: the room's updates interpolated at
+        /// serverNow - renderDelay - rtt/2, which is what a shot is judged against (§17.5). A value eases every frame's
+        /// drawing toward that pose with this time constant, never across a respawn: it trails the render time by
+        /// speed × this and smooths away motion the updates carry. It was 25 by default while a room sent 20 updates a
+        /// second, whose 50 ms chords it only rounded; at 60 a second it drew other cars off the server's own motion
+        /// (car-ball, CHANGELOG.md). Godot's and Rust's sessions have the same knob.
         /// </summary>
-        public double RemoteSmoothMs = 25;
+        public double RemoteSmoothMs = 0;
         /// <summary>Waits before each retry of a join refused for capacity (503). Default 1, 2, 4 s; empty never retries.</summary>
         public double[] CapacityRetryMs = { 1000, 2000, 4000 };
         /// <summary>Whether a seat whose room ended for a deploy, or whose socket no reconnect restored, goes back into
@@ -280,16 +301,17 @@ namespace Genex.Multiplayer.Authority
         /// The fast channel (PROTOCOL.md §17.12, <c>fast@1</c>, with <c>tick@1</c>), on by default: where the room offers it, your
         /// inputs and your motion state move off the WebSocket onto raw UDP datagrams, back to the WebSocket when no snapshot comes,
         /// and on to the datagrams again when they do (<see cref="GenexAuthoritySession.Fast"/>, and one log line per join names the
-        /// transport and any fallback). False keeps the seat on the WebSocket. A WebGL player has no sockets: its seat stays a
-        /// WebSocket seat unless <see cref="FastWebTransport"/> asks for WebTransport.
+        /// transport and any fallback). False keeps the seat on the WebSocket. A WebGL player has no sockets: its channel is the
+        /// browser's WebTransport (<see cref="FastWebTransport"/>).
         /// </summary>
         public bool Fast = true;
 
         /// <summary>
-        /// A WebGL player has no sockets, so <see cref="Fast"/> alone leaves it on the WebSocket; true asks for WebTransport through
-        /// the room's relay where the browser has it (PROTOCOL.md §17.12 *WebTransport*, never yet run in a player). Off by default.
+        /// A WebGL player has no sockets: its fast channel goes by WebTransport through the room's relay where the browser has it
+        /// (PROTOCOL.md §17.12 *WebTransport*), on by default as UDP is everywhere else. False keeps a WebGL seat on the WebSocket;
+        /// a browser without WebTransport never asks, and its transport line says so.
         /// </summary>
-        public bool FastWebTransport;
+        public bool FastWebTransport = true;
 
         /// <summary>The replay budget in use: <see cref="PhysicsBudgetMs"/> when finite and over 0, else the device's.</summary>
         internal double EffectiveBudgetMs()
@@ -307,6 +329,8 @@ namespace Genex.Multiplayer.Authority
         internal GenexFastSocketOpener FastOpener { get; set; }
         /// <summary>The fast channel's clock (ms) instead of the SDK's (tests).</summary>
         internal Func<double> FastClock { get; set; }
+        /// <summary>The fast channel's WebSocket ping instead of the room's: the callback gets the round trip, ms (tests).</summary>
+        internal Action<Action<int>> FastPing { get; set; }
 
         /// <summary>The opener the session's fast seat uses: null when the channel is not asked for, or this build of the
         /// SDK lacks a member the seat reaches by reflection (GenexFastSeat.Missing).</summary>
@@ -317,8 +341,21 @@ namespace Genex.Multiplayer.Authority
         /// has WebTransport the relay's session (none: the seat never claims fast@1, and its transport line says why).</summary>
         private GenexFastSocketOpener PlatformOpener()
         {
-            if (!GenexFastSeat.InBrowser) return GenexFastUdp.Open;
-            return FastWebTransport && GenexFastWebSocket.Available ? GenexFastWebSocket.Open : (GenexFastSocketOpener)null;
+            var inBrowser = GenexFastSeat.InBrowser;
+            switch (PlatformSocket(inBrowser, FastWebTransport, inBrowser && GenexFastWebSocket.Available))
+            {
+                case GenexFastSocketKind.Udp: return GenexFastUdp.Open;
+                case GenexFastSocketKind.WebTransport: return GenexFastWebSocket.Open;
+                default: return null;
+            }
+        }
+
+        /// <summary>Which socket a seat's fast channel opens: raw UDP off a browser; in one, the relay's WebTransport
+        /// session when the game left it on and the browser has it, else none.</summary>
+        internal static GenexFastSocketKind PlatformSocket(bool inBrowser, bool webTransportAsked, bool webTransportAvailable)
+        {
+            if (!inBrowser) return GenexFastSocketKind.Udp;
+            return webTransportAsked && webTransportAvailable ? GenexFastSocketKind.WebTransport : GenexFastSocketKind.None;
         }
 
         /// <summary>Where the transport line goes instead of the log (tests).</summary>
@@ -478,6 +515,48 @@ namespace Genex.Multiplayer.Authority
         public double X, Y, Z, VX, VY, VZ;
         /// <summary>Downward acceleration along -z, units/s², [0, 1000]. Default 0.</summary>
         public double G;
+        /// <summary>What the shot can hit (§17.9 <i>Predicted hits</i>): its hit is then predicted the frame its drawn
+        /// path reaches a target (<see cref="GenexAuthoritySession.PredictedHit"/>). Null: no hit is predicted.</summary>
+        public GenexProjectileHits Hits;
+    }
+
+    /// <summary>
+    /// What a predicted projectile can hit (§17.9 <i>Predicted hits</i>): the arguments of the room module's own
+    /// <c>ctx.projectiles.sweep(id, { kinds, radius })</c>.
+    /// </summary>
+    public sealed class GenexProjectileHits
+    {
+        /// <summary>The entity kinds the shot can hit. Required.</summary>
+        public string[] Kinds;
+        /// <summary>A target's hit sphere, room units around its drawn position: a finite number at least 0.</summary>
+        public double Radius;
+        /// <summary>What settles the hit: the target's health in the states that follow (the default), or the game alone
+        /// (<see cref="GenexAuthoritySession.ConfirmHit"/>, <see cref="GenexAuthoritySession.CancelHit"/>) for a module that
+        /// tells a hit some other way (an event, no <c>hp</c>).</summary>
+        public GenexHitSettle Settle = GenexHitSettle.Health;
+    }
+
+    /// <summary>
+    /// A hit this client predicted for its own shot (§17.9 <i>Predicted hits</i>): shown at once, then confirmed or
+    /// cancelled by the states that follow (<see cref="GenexAuthoritySession.HitSettled"/>). The server decides every hit.
+    /// </summary>
+    public sealed class GenexPredictedHit
+    {
+        /// <summary>A hitscan's <c>&lt;seat&gt;.&lt;seq&gt;.h&lt;n&gt;</c> (the input that fired it and that input's
+        /// <see cref="GenexAuthoritySession.PredictHitscan"/> calls from 0, a miss counted); a projectile's own id.</summary>
+        public string Id { get; internal set; }
+        public GenexHitKind Kind { get; internal set; }
+        public GenexHitSettle Settle { get; internal set; }
+        /// <summary>The entity hit, by id.</summary>
+        public string Target { get; internal set; }
+        /// <summary>How far along the test found the target, as the room's own test says it, room units: for a projectile
+        /// along the path of the frame that reached it (<c>ctx.projectiles.sweep</c>), for a hitscan along the ray to the
+        /// point nearest the target's centre (<c>ctx.rewind.hitscan</c>).</summary>
+        public double Dist { get; internal set; }
+        /// <summary>Where the path or the ray enters the target's sphere; the start of one that starts inside it.</summary>
+        public double X { get; internal set; }
+        public double Y { get; internal set; }
+        public double Z { get; internal set; }
     }
 
     /// <summary>A seated player.</summary>
@@ -526,6 +605,13 @@ namespace Genex.Multiplayer.Authority
         public int ProjectilesRejected;
         /// <summary>The latest confirmation's input lead, ms: the server's launch instant minus the prediction's.</summary>
         public double LastProjectileLeadMs;
+        /// <summary>Hits predicted for your own shots (§17.9 <i>Predicted hits</i>: a hitscan's, a projectile's).</summary>
+        public int HitsPredicted;
+        /// <summary>Predicted hits the states that followed (or the game, for one it settles) confirmed.</summary>
+        public int HitsConfirmed;
+        /// <summary>Predicted hits cancelled: the state that judged the shot showed the target unhurt, the target was gone
+        /// before it, the game said so, a drop, or nothing settled it within max(2·RTT, 600 ms).</summary>
+        public int HitsCancelled;
         /// <summary>Prediction steps run (every replayed input counts), and the time they took, ms.</summary>
         public int PredictionSteps;
         public double PredictionStepMs;
@@ -849,8 +935,11 @@ namespace Genex.Multiplayer.Authority
             // This package decodes and draws §17.10's bodies: a physics room admits it (and refuses a client without it, 426);
             // with a core it predicts them too (§17.11 *Joining*), and it reconciles a predicting room's repeated inputs
             // (§17.11 *Input pacing*: SteppedAck).
+            // §17.6 *The update rate*: it draws at whatever rate the room sends (rate@1: the clock's paced samples, the fixed
+            // ease of a correction, the replay at first sight), so a room it creates takes its rate.
             // §17.12: a client that asks for the fast channel claims fast@1 beside tick@1 (every slot carries the input's tick).
             var caps = PredictsPhysics(options) ? new List<string> { A.Caps.Physics, A.Caps.PhysicsPredict, A.Caps.InputRepeat } : new List<string> { A.Caps.Physics, A.Caps.InputRepeat };
+            caps.Add(A.Caps.UpdateRate);
             if (options.FastSocketOpener() != null) caps.AddRange(new[] { A.Caps.InputTick, A.Caps.Fast, A.Caps.FastReturn });
             o[A.JoinOption.Caps] = options.CapsOverride ?? caps.ToArray();
             o[A.JoinOption.Sdk] = A.SdkLabel; // §17.1: counted, so a protocol bump can see whom it would strand
@@ -884,13 +973,19 @@ namespace Genex.Multiplayer.Authority
         /// <summary>The longest the views wait for the room clock's first round trip (see Warm).</summary>
         private const double ClockWarmupTimeoutMs = 2000;
         /// <summary>
+        /// A correction of your own entity is eased with this time constant, ms (§17.3 <i>Easing a correction</i>): 63%
+        /// drawn after it, 95% after three. The session says so to the reconciler, whose own default is the patch
+        /// interval the room's handshake told: at 60 updates a second that drew the same correction three times as fast
+        /// as on the 50 ms timer, and your entity with two to three times the frame-to-frame jitter.
+        /// </summary>
+        private const double OwnCorrectionEaseMs = 50;
+        /// <summary>
         /// A respawn of your own entity is the reconcile that adopts the server's new pose; the SDK eases that jump
-        /// out as a correction offset (tau = one patch interval), so for this many intervals after it (the offset has
-        /// then decayed to e^-8 of the jump) the own entity is drawn from its predicted state, interpolated here
-        /// between its fixed steps (see SnapPose). The fallback tau is the SDK's own default without a patch rate.
+        /// out as a correction offset (tau = <see cref="OwnCorrectionEaseMs"/>), so for this many time constants after
+        /// it (the offset has then decayed to e^-8 of the jump) the own entity is drawn from its predicted state,
+        /// interpolated here between its fixed steps (see SnapPose).
         /// </summary>
         private const double RespawnSnapTaus = 8;
-        private const double RespawnSnapFallbackTauMs = 50;
         private const double TwoPi = 2 * Math.PI;
         /// <summary>§17.9's TTL for predictions no acknowledgement settled: max(2·RTT, 600 ms), a stalled link's silence not
         /// counted (on GenexTime's clock).</summary>
@@ -913,7 +1008,23 @@ namespace Genex.Multiplayer.Authority
 
         private readonly Room<AuthorityRoomState> room;
         private readonly GenexAuthorityOptions options;
+        /// <summary>The game's render delay (<see cref="GenexAuthorityOptions.RenderDelayMs"/>): the floor of
+        /// <see cref="delays"/>.</summary>
         private readonly double renderDelay;
+        /// <summary>§17.3 <i>The render delay</i>: this link's samples and the delay they ask for, between the game's floor
+        /// and the ceiling the room publishes (none: the floor, a fixed delay).</summary>
+        private readonly GenexRenderDelayBuffer delays = new GenexRenderDelayBuffer();
+        /// <summary>The delay as it stands in this frame, ms: what the interpolation of other entities, the respawn step and
+        /// the render time on your inputs all read (PaceRenderDelay moves it, once a frame).</summary>
+        private double delayNow;
+        /// <summary>Whether the room publishes a ceiling above the floor, so the delay can move: other entities are then
+        /// drawn from this session's own record of their patches (OtherPose).</summary>
+        private bool delayFollows;
+        /// <summary>The preset text the ceiling was last read from.</summary>
+        private string ceilingText = "\u0000";
+        /// <summary>The fast channel's snapshots applied when a state was last noted: a state that raised the count came by
+        /// the channel (StateChanged).</summary>
+        private int snapshotsNoted;
         private readonly InputHandle handle;
         /// <summary>§17.11 *Input pacing*: the input handle your reconciler reads, acknowledged up to <see cref="SteppedAck"/>
         /// (<see cref="GenexShadowInput"/>), and the upstream throttle with the frame instant it last paid at.</summary>
@@ -983,8 +1094,19 @@ namespace Genex.Multiplayer.Authority
         private readonly PredictedSpawns<AuthorityEntity, Shot> shots;
         /// <summary>Predictions not yet confirmed (see SettleShots).</summary>
         private readonly List<Shot> unsettled = new List<Shot>();
-        /// <summary>The input being staged: its handle epoch and sequence, and the launches predicted against it.</summary>
-        private int stagedEpoch = -1, stagedSeq, stagedLaunches;
+        /// <summary>The input being staged: its handle epoch and sequence, and the launches and the hitscans predicted
+        /// against it.</summary>
+        private int stagedEpoch = -1, stagedSeq, stagedLaunches, stagedHitscans;
+        /// <summary>§17.9 <i>Predicted hits</i>: your projectiles still looking for their hit, each tested along its drawn
+        /// path every frame; the hits waiting for the server's word; and the targets of one test (reused).</summary>
+        private readonly List<Shot> sweeping = new List<Shot>();
+        private readonly List<PendingHit> pendingHits = new List<PendingHit>();
+        private readonly List<GenexHitTarget> hitTargets = new List<GenexHitTarget>();
+        private readonly List<GenexHitFound> hitsFound = new List<GenexHitFound>();
+        /// <summary>On the fast channel: the most a WebSocket state can have acknowledged (NoteHitAcks), kept while the seat
+        /// stays on the channel.</summary>
+        private readonly GenexAckCeiling hitAckCeiling = new GenexAckCeiling();
+        private bool hitAcksLive;
         /// <summary>The firstperson or vehicle collision world, and why the own entity is not predicted (see Prediction).</summary>
         private GenexFirstpersonWorld world;
         private string blocked = "no_entity";
@@ -1029,6 +1151,12 @@ namespace Genex.Multiplayer.Authority
         public event Action<int> Disconnected;
         /// <summary>The server is draining (<c>server:restart</c>): the room ends soon.</summary>
         public event Action ServerRestart;
+        /// <summary>A hit was predicted for your own shot (§17.9 <i>Predicted hits</i>): show it now. Raised once per hit,
+        /// inside <see cref="PredictHitscan"/> for a hitscan and inside <see cref="Frame()"/> for a projectile.</summary>
+        public event Action<GenexPredictedHit> PredictedHit;
+        /// <summary>A predicted hit was settled, once per hit: true when the server's states (or <see cref="ConfirmHit"/>)
+        /// confirmed it, false when it was cancelled (take the effect back).</summary>
+        public event Action<GenexPredictedHit, bool> HitSettled;
 
         internal GenexAuthoritySeat(Room<AuthorityRoomState> room, GenexAuthorityOptions options, GenexInput input)
         {
@@ -1036,6 +1164,9 @@ namespace Genex.Multiplayer.Authority
             this.options = options;
             Input = input;
             renderDelay = options.RenderDelayMs >= 0 && !double.IsNaN(options.RenderDelayMs) ? options.RenderDelayMs : A.Timing.RenderDelayMs;
+            // A fixed delay until the room's state publishes a ceiling above it (BoundRenderDelay).
+            delays.Bounds(renderDelay, renderDelay);
+            delayNow = delays.Delay;
 
             var r = room.Reconnection;
             r.Enabled = P.Reconnection.Enabled;
@@ -1047,17 +1178,27 @@ namespace Genex.Multiplayer.Authority
             r.MaxEnqueuedMessages = P.Reconnection.MaxEnqueuedMessages;
             watchdog = new GenexReconnectWatchdog<AuthorityRoomState>(room, GiveUp);
 
+            // §17.3 *The clock's samples*: one round trip per 50 ms reaches the clock, whatever the room's update rate, so
+            // the render time (the clock less the delay and half the smoothed round trip) neither follows the link three
+            // times as fast at 60 updates a second nor steps back by a stall's burst. Before the input handle, Predict and
+            // the fast seat take the room's clock: every caller of it goes through the pacer from here on.
+            // §17.3 *A state's arrival*: and every state is timed by its stamp and the link's time, not by the frame
+            // that drained it from the socket (PolledSince).
+            room.Clock = GenexClockSamples.Pace(room.Clock, () => RoomClock.GetNow());
+            if (room.Clock is GenexPacedClock paced) paced.PolledSince = PolledSince;
+
             // The delay goes to the input handle too, not only to Predict: lag compensation rewinds to
             // serverNow - renderDelay - rtt/2, and Predict binds its delay to the handle only once a
-            // reconciler exists. Without one the server would rewind to ~100 ms after what was drawn.
-            handle = room.Input(new AuthorityInput(), new InputOptions { Mode = "reliable", RenderDelay = renderDelay });
+            // reconciler exists. Without one the server would rewind to ~100 ms after what was drawn. Set here, it
+            // is the handle's own from then on, which PaceRenderDelay writes each frame the delay moves.
+            handle = room.Input(new AuthorityInput(), new InputOptions { Mode = "reliable", RenderDelay = delayNow });
             shadow = new GenexShadowInput(handle, () => room.Clock);
             // §17.12: with the fast channel your inputs also go by datagram (numbered by the handle) and your motion arrives
             // by snapshot, written into this same state; its ack stands in for the handle's.
             var fastOpener = options.FastSocketOpener();
             inputTicks = fastOpener != null && options.CapsOverride == null;
-            fast = new GenexFastSeat(room, handle, fastOpener, options.FastClock ?? (() => RoomClock.GetNow()), TickHz, FastStateCurrent, options.Fast, options.FastLog ?? (line => ColyseusContext.Logger.Log(line)));
-            predict = Predict.Get(room, new PredictGetOptions { Mode = PredictMode.Lerp, Delay = renderDelay });
+            fast = new GenexFastSeat(room, handle, fastOpener, options.FastClock ?? (() => RoomClock.GetNow()), TickHz, FastStateCurrent, options.Fast, options.FastLog ?? (line => ColyseusContext.Logger.Log(line)), options.FastPing);
+            predict = Predict.Get(room, new PredictGetOptions { Mode = PredictMode.Lerp, Delay = delayNow });
             predict.AttachAll("entities", new AttachOptions { Mode = PredictMode.Lerp, Fields = PositionFields });
             predict.AttachAll("entities", new AttachOptions { Mode = PredictMode.Lerp, Fields = AngleFields, Angle = true });
             predict.AttachAll("entities", new AttachOptions { Mode = PredictMode.Lerp, Fields = PitchFields });
@@ -1158,8 +1299,19 @@ namespace Genex.Multiplayer.Authority
         public double Tick => room.State != null ? room.State.tick : 0;
         /// <summary>The room's movement preset as JSON text ("" = none).</summary>
         public string Preset => room.State?.preset ?? "";
-        /// <summary>Smoothed round trip in ms; 0 until the first input is acknowledged.</summary>
-        public double Rtt => room.Clock.SmoothedRtt();
+        /// <summary>Smoothed round trip to the server in ms, as the room clock measures it; 0 until the first input is
+        /// acknowledged. What a game shows as its ping.</summary>
+        public double Rtt => MeasuredRtt();
+        /// <summary>The round trip a render time is placed by, ms (§17.3 <i>A state's arrival</i>,
+        /// <see cref="GenexPacedClock.SmoothedRtt"/>): the server's time less half of it is the stamp of a state arriving
+        /// now, so other entities are drawn at the server's time less <see cref="RenderDelayMs"/> and half of this. It is
+        /// no measure of the link: where the link has next to no latency it reads 0 or under it.</summary>
+        public double RenderRtt => room.Clock.SmoothedRtt();
+        /// <summary>How far behind the server other entities are drawn now, ms (§17.3 <i>The render delay</i>):
+        /// <see cref="GenexAuthorityOptions.RenderDelayMs"/> in a room that publishes no ceiling; between it and the room's
+        /// ceiling where it publishes one, sized each <see cref="Frame()"/> to how late this link's states land. Your inputs
+        /// carry the same value, so a shot is judged where it was aimed.</summary>
+        public double RenderDelayMs => delayNow;
 
         /// <summary>The fast channel (§17.12, <see cref="GenexAuthorityOptions.Fast"/>): live, snapshots applied, the fallback's reason.</summary>
         public GenexFastStatus Fast => fast.Status;
@@ -1255,26 +1407,24 @@ namespace Genex.Multiplayer.Authority
         /// is dropped as soon as the server acknowledges the input that fired it, one whose input a drop lost at the
         /// reconnect's first state, and any at the latest after max(2·RTT, 600 ms). Returns the id, or <c>""</c>
         /// (and predicts nothing) while the socket is down: from a drop until the reconnect's first state.
+        /// With <see cref="GenexProjectilePrediction.Hits"/> its hit is predicted too (§17.9 <i>Predicted hits</i>): while the
+        /// projectile is yours, each <see cref="Frame()"/> tests the straight path from where the last frame drew it to where
+        /// this one does against the entities of those kinds as drawn (never a projectile, a physics body or anything your
+        /// seat owns), and the nearest one it enters is the hit (<see cref="PredictedHit"/>, once a projectile).
         /// </summary>
         public string PredictProjectile(GenexProjectilePrediction projectile)
         {
             if (projectile == null) throw new ArgumentNullException(nameof(projectile));
+            var hits = projectile.Hits;
+            // As the module's own sweep refuses them (`projectiles.sweep needs { kinds: string[], radius: a finite number >= 0 }`).
+            var badHits = hits != null && (hits.Kinds == null || double.IsNaN(hits.Radius) || double.IsInfinity(hits.Radius) || hits.Radius < 0);
+            if (badHits) throw new ArgumentException("GenexProjectilePrediction.Hits needs Kinds and a Radius that is a finite number at least 0", nameof(projectile));
             if (ended) throw new InvalidOperationException("the session has ended");
             // No prediction while the socket is down (§17.9): no input goes out until the reconnect, and the seat's
             // sequence is not known until the reconnect's first state writes its seqBase.
             if (!connected) return "";
-            // The input being staged goes out as the next send: its sequence is one past what was sent, counted on
-            // from the seqBase the server gave this socket.
-            var seq = handle.SentCount + 1;
-            if (stagedEpoch != handle.Epoch || stagedSeq != seq)
-            {
-                stagedEpoch = handle.Epoch;
-                stagedSeq = seq;
-                stagedLaunches = 0;
-            }
-            var players = room.State?.players;
-            var seqBase = players != null && players.TryGetValue(room.SessionId, out var me) && me != null ? me.seqBase : 0;
-            var id = room.SessionId + "." + ((long)(seqBase + seq)).ToString(CultureInfo.InvariantCulture) + "." + stagedLaunches++.ToString(CultureInfo.InvariantCulture);
+            var seq = StageInput();
+            var id = StagedId(seq) + "." + stagedLaunches++.ToString(CultureInfo.InvariantCulture);
             var at = room.Clock.ServerNow();
             var g = GenexProjectile.LaunchNumber(projectile.G);
             var shot = new Shot
@@ -1302,8 +1452,86 @@ namespace Genex.Multiplayer.Authority
             // Drawn at once, in this frame, at the tick the frame's other projectiles are drawn at (before its launch
             // tick, so at its origin until the next frame): the views otherwise change only in Frame().
             if (warm && !(EntityMap()?.ContainsKey(id) ?? false)) ShotView(shot, double.IsNaN(DrawnTick) ? NowTick() : DrawnTick);
+            if (hits != null)
+            {
+                // Its own copy: what the game changes later is another shot's.
+                shot.Hits = new GenexProjectileHits { Kinds = (string[])hits.Kinds.Clone(), Radius = hits.Radius, Settle = hits.Settle };
+                // The path's first stretch starts where the shot is drawn now: its origin.
+                shot.Drawn = new GenexHitPoint(shot.Launch.X, shot.Launch.Y, shot.Launch.Z);
+                sweeping.Add(shot);
+            }
             return id;
         }
+
+        /// <summary>The input being staged goes out as the next send: its sequence on the handle is one past what was sent.
+        /// A new one starts its launches and its hitscans at 0.</summary>
+        private int StageInput()
+        {
+            var seq = handle.SentCount + 1;
+            if (stagedEpoch != handle.Epoch || stagedSeq != seq)
+            {
+                stagedEpoch = handle.Epoch;
+                stagedSeq = seq;
+                stagedLaunches = 0;
+                stagedHitscans = 0;
+            }
+            return seq;
+        }
+
+        /// <summary><c>&lt;seat&gt;.&lt;seq&gt;</c> of the staged input: its sequence counted on from the seqBase the server
+        /// gave this socket (§17.9).</summary>
+        private string StagedId(int seq)
+        {
+            var players = room.State?.players;
+            var seqBase = players != null && players.TryGetValue(room.SessionId, out var me) && me != null ? me.seqBase : 0;
+            return room.SessionId + "." + ((long)(seqBase + seq)).ToString(CultureInfo.InvariantCulture);
+        }
+
+        /// <summary>
+        /// Predict the hit of a hitscan you fire (§17.9 <i>Predicted hits</i>): call it while staging the input that fires,
+        /// before the <see cref="Frame()"/> that sends it. It answers the nearest entity, as the last frame drew it, that the
+        /// ray from <paramref name="origin"/> along <paramref name="dir"/> passes within <paramref name="radius"/> (default
+        /// 0.5) of, no further along it than <paramref name="range"/> (default: no limit), by the rule of the room module's
+        /// <c>ctx.rewind.hitscan</c>: of <paramref name="kinds"/> (default: every kind), never a projectile, a physics body
+        /// or anything your seat owns; of two at the same distance, the earlier in the state's order. The server judges that
+        /// shot against these same drawn positions (§17.5), so the two agree but for the link's noise.
+        /// <see cref="PredictedHit"/> is raised before this returns, and <see cref="HitSettled"/> once the first state whose
+        /// acknowledgement covers the firing input shows the target hurt (confirmed) or not (cancelled), or the game
+        /// settles it (<paramref name="settle"/> <see cref="GenexHitSettle.Manual"/>: <see cref="ConfirmHit"/>,
+        /// <see cref="CancelHit"/>), at the latest after max(2·RTT, 600 ms). The hit's id is
+        /// <c>&lt;seat&gt;.&lt;seq&gt;.h&lt;n&gt;</c>: the input's sequence and your calls of this during it, from 0, a miss
+        /// counted. Its point is where the ray enters the target's sphere (the origin for a ray that starts inside it), and
+        /// its <c>Dist</c> the rule's own, to the point of the ray nearest the target's centre. Returns null when the ray hits
+        /// nothing (or is no finite numbers), and while the socket is down (no input goes out then).
+        /// </summary>
+        public GenexPredictedHit PredictHitscan(GenexHitPoint origin, GenexHitPoint dir, double? range = null, double? radius = null, string[] kinds = null,
+            GenexHitSettle settle = GenexHitSettle.Health)
+        {
+            if (ended) throw new InvalidOperationException("the session has ended");
+            if (!connected) return null;
+            var seq = StageInput();
+            // Every call of the input counts, a miss too.
+            var id = StagedId(seq) + ".h" + stagedHitscans++.ToString(CultureInfo.InvariantCulture);
+            if (!IsFinitePoint(origin) || !IsFinitePoint(dir)) return null;
+            var targets = HitTargets(kinds);
+            var found = GenexPredictedHits.HitscanHit(origin, dir, targets, range, radius);
+            if (!found.HasValue) return null;
+            var target = targets.Find(t => t.Id == found.Value.Id);
+            // Shown where the ray enters the target's sphere; the distance is the test's own (to the point nearest its centre).
+            return Predicted(id, GenexHitKind.Hitscan, settle, found.Value, GenexHitSession.RayEntry(origin, dir, target, found.Value, radius), seq);
+        }
+
+        private static bool IsFinitePoint(GenexHitPoint p) =>
+            !(double.IsNaN(p.X) || double.IsInfinity(p.X) || double.IsNaN(p.Y) || double.IsInfinity(p.Y) || double.IsNaN(p.Z) || double.IsInfinity(p.Z));
+
+        /// <summary>Settle a pending predicted hit as landed (§17.9 <i>Predicted hits</i>: a hit the game settles,
+        /// <see cref="GenexHitSettle.Manual"/>, when the module's own word arrives; any pending hit may be settled so).
+        /// <see cref="HitSettled"/> is raised with true. False when no hit of that id is pending.</summary>
+        public bool ConfirmHit(string id) => SettleById(id, true);
+
+        /// <summary>Settle a pending predicted hit as not landed: <see cref="HitSettled"/> is raised with false. False when
+        /// no hit of that id is pending.</summary>
+        public bool CancelHit(string id) => SettleById(id, false);
 
         /// <summary>
         /// Redraw every projectile at this instant and return the tick it was drawn at (<see cref="ServerTick"/>). A
@@ -1420,6 +1648,8 @@ namespace Genex.Multiplayer.Authority
             if (ended) return 0;
             PollFast();
             if (ended) return 0;
+            // §17.3 *The render delay*: this frame's value, after what arrived was noted and before anything is sent or drawn.
+            PaceRenderDelay(now);
             // The newest keyframe of what arrived, adopted once before this frame's inputs go (§17.11 *A burst of keyframes*).
             physicsPrediction.Settle();
             frameStepTicks = 0;
@@ -1445,6 +1675,8 @@ namespace Genex.Multiplayer.Authority
                 FoldYawCorrection(own, seqBefore, headingBefore);
                 sent = SendSteps(budget);
                 sentMap = InputMap();
+                // A stepped reconciler renders from the re-seeded pose on: draw through it again (session.ts).
+                if (sent > 0 && own != null) own.Reseeded = false;
                 // §17.11 *Seat contacts* (session.ts): a state that put your inputs in flight on later ticks had the seat
                 // prediction find a contact in an input your entity was already stepped through without it (a re-run keeps
                 // none of its changes to yours): your inputs are predicted again from the state, not held still until the
@@ -1455,6 +1687,9 @@ namespace Genex.Multiplayer.Authority
             var frameMs = frameStepTicks * 1000.0 / Stopwatch.Frequency;
             if (frameMs > telemetry.PeakFramePredictionMs) telemetry.PeakFramePredictionMs = frameMs;
             RefreshViews();
+            // §17.9 *Predicted hits*: your projectiles along what this frame drew, then the time limit of the hits still waiting.
+            SweepShots();
+            SettleHits();
             return sent;
         }
 
@@ -1484,8 +1719,33 @@ namespace Genex.Multiplayer.Authority
             return Math.Min(Math.Max((frameAt - previousFrameAt) / 2, 0), MaxArrivalLagMs);
         }
 
+        /// <summary>
+        /// The last frame drawn before the state being decoded landed, on the SDK clock (no number before the first
+        /// frame): the last one that had to draw without it, which a render sample's lateness counts from (§17.3 *The
+        /// render delay*). A state the frame's own drain decodes is in hand for this frame, so it is the frame before;
+        /// any other lands after the latest frame drew.
+        /// </summary>
+        private double DrawnBefore() => decodingArrived ? previousFrameAt : frameAt;
+
         /// <summary>The room clock when the state being decoded arrived (see ArrivalLag).</summary>
         private double ServerNowArrived() => ServerNowDrawn() - ArrivalLag();
+
+        /// <summary>
+        /// Since when the socket's states now reaching the clock can have arrived (the SDK clock's time), no number when
+        /// they reach it as they arrive (§17.3 *A state's arrival*, GenexPacedClock). Frame() drains both channels once
+        /// (DecodeArrived, PollFast): what it reads arrived since the frame before. A WebSocket state that lands after
+        /// that is posted to the main thread, which runs it later in the same frame: it arrived since this frame. A
+        /// WebGL socket has no queue: its states come as the browser delivers them.
+        /// </summary>
+        private double PolledSince()
+        {
+            if (decodingArrived) return previousFrameAt;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return double.NaN;
+#else
+            return SynchronizationContext.Current == null ? double.NaN : frameAt;
+#endif
+        }
 
         /// <summary>
         /// Decodes, here and now, the patches that have arrived since the last frame, so a keyframe already here is adopted
@@ -1667,6 +1927,10 @@ namespace Genex.Multiplayer.Authority
             public double DrawnEpoch;
             /// <summary>An epoch bump arrived and the reconcile that adopts the new life has not yet.</summary>
             public bool Respawning;
+            /// <summary>A fresh prediction, its in-flight inputs replayed onto its state, and not stepped live since: drawn from
+            /// that state as is (SnapPose), since the reconciler's render still eases from the server's pose until its first
+            /// live step (session.ts <c>reseeded</c>).</summary>
+            public bool Reseeded;
             /// <summary>Until then (SDK clock, ms) the entity is drawn by SnapPose; SnapPrev/SnapCur are its last two steps.</summary>
             public double SnapUntil = double.NegativeInfinity;
             public double[] SnapPrev;
@@ -1719,8 +1983,12 @@ namespace Genex.Multiplayer.Authority
             foreach (var kv in map)
             {
                 if (!Ownable(kv.Key, kv.Value)) continue;
+                // A first sight is a new life too (§17.3): the server applies the inputs already in flight to it (a room may
+                // spawn it after the join, when a seat is sending an input a step), so they are replayed on its pose, as
+                // after a respawn. Seeded from the pose alone it stood a round trip of movement behind, and the next
+                // acknowledgement's reconcile moved it there in one step.
                 own = new Own { Id = kv.Key, Entity = kv.Value, Epoch = kv.Value.epoch, DrawnEpoch = kv.Value.epoch };
-                PredictOwn(own);
+                Repredict(own);
                 return;
             }
         }
@@ -1801,6 +2069,7 @@ namespace Genex.Multiplayer.Authority
                 // §17.11 *Input pacing*: it compares your prediction with the state at what the shadow's hold tells from StateAck.
                 Input = shadow.Handle,
                 Fields = fields,
+                SmoothMs = OwnCorrectionEaseMs,
                 // The input exactly as sent, sanitized as the server sanitizes it before its own step, and the
                 // fixed dt the SDK derives from the room's advertised tick rate.
                 Step = (ctx, body, command) => RunStep(step, body, command, ctx.Dt, fields, ctx.Tick),
@@ -1820,16 +2089,20 @@ namespace Genex.Multiplayer.Authority
 
         /// <summary>
         /// A fresh prediction from the server's pose, with the inputs still in flight replayed on top (or none, when this
-        /// client cannot predict now): a new world (SetWorld). The reconciler's next acknowledgement adopts the server's
-        /// state and replays the same inputs, landing where this did, so the switch is not counted as a correction. Until
-        /// the next fixed step the own entity is drawn from that predicted state (SnapPose), not from the server's pose the
-        /// reconciler's render would ease from.
+        /// client cannot predict now): a new world (SetWorld), or the first sight of the entity (TrackOwn). The
+        /// reconciler's next acknowledgement adopts the server's state and replays the same inputs, landing where this did,
+        /// so the switch is not counted as a correction. Until its first live step the own entity is drawn from that
+        /// predicted state as is (<see cref="Own.Reseeded"/>), not from the server's pose the reconciler's render would
+        /// ease from; from that step on it is drawn through the reconciler, so a correction is eased from the first one
+        /// on (§17.3 <i>Easing a correction</i>). A fresh reconciler has no offset to decay: the respawn's snap window
+        /// (<see cref="RespawnSnapTaus"/>) is not for it.
         /// </summary>
         private void Repredict(Own tracked)
         {
             tracked.Reconciler?.Dispose();
             tracked.Reconciler = null;
             tracked.Respawning = false;
+            tracked.Reseeded = false;
             tracked.DrawnEpoch = tracked.Entity.epoch;
             PredictOwn(tracked);
             var reconciler = tracked.Reconciler;
@@ -1839,13 +2112,17 @@ namespace Genex.Multiplayer.Authority
             {
                 if (ReplayInput(seq) is AuthorityInput command) RunStep(tracked.Step, reconciler.State, command, dt, tracked.Fields, seq);
             }
-            var tau = handle.PatchRate is int patchMs && patchMs > 0 ? patchMs : RespawnSnapFallbackTauMs;
-            tracked.SnapUntil = RoomClock.GetNow() + RespawnSnapTaus * tau;
+            tracked.Reseeded = true;
+            tracked.SnapUntil = double.NegativeInfinity;
             tracked.SnapCur = null;
         }
 
+        /// <summary>Whether your entity is drawn from its predicted state (SnapPose) now: a fresh prediction before its first
+        /// live step, or the time constants after a respawn's reconcile.</summary>
+        private static bool DrawnFromState(Own tracked) => tracked.Reseeded || RoomClock.GetNow() < tracked.SnapUntil;
+
         /// <summary>Your entity's drawn place now, as RefreshView draws it before the shove's ease (the snapped pose, else the SDK's).</summary>
-        private Pose OwnPlace(Own tracked) => (RoomClock.GetNow() < tracked.SnapUntil ? SnapPose(tracked) : null) ?? Interpolated(tracked.Entity);
+        private Pose OwnPlace(Own tracked) => (DrawnFromState(tracked) ? SnapPose(tracked) : null) ?? Interpolated(tracked.Entity);
 
         /// <summary><paramref name="pose"/> with what is left of the shove's ease; a finished ease is dropped (session.ts <c>timelinePose</c>).</summary>
         private static void ShoveEased(Own tracked, ref Pose pose)
@@ -2113,8 +2390,7 @@ namespace Genex.Multiplayer.Authority
                 // The reconcile that adopted the new life: a snap, not a correction (see RespawnSnapTaus).
                 tracked.Respawning = false;
                 tracked.DrawnEpoch = tracked.Entity.epoch;
-                var tau = handle.PatchRate is int patchMs && patchMs > 0 ? patchMs : RespawnSnapFallbackTauMs;
-                tracked.SnapUntil = RoomClock.GetNow() + RespawnSnapTaus * tau;
+                tracked.SnapUntil = RoomClock.GetNow() + RespawnSnapTaus * OwnCorrectionEaseMs;
                 tracked.SnapCur = null;
                 return;
             }
@@ -2271,19 +2547,84 @@ namespace Genex.Multiplayer.Authority
         {
             var clock = room.Clock;
             var now = clock.LastServerTime() > 0 ? clock.ServerNow() : (double?)null;
-            return GenexFastTransport.RenderStamp(now, renderDelay, clock.SmoothedRtt());
+            return GenexFastTransport.RenderStamp(now, delayNow, clock.SmoothedRtt());
         }
 
         private double RenderTime()
         {
             var clock = room.Clock;
-            return clock.LastServerTime() > 0 ? ServerNowDrawn() - renderDelay - clock.SmoothedRtt() / 2 : RoomClock.GetNow() - FrameLag() - renderDelay;
+            return clock.LastServerTime() > 0 ? ServerNowDrawn() - delayNow - clock.SmoothedRtt() / 2 : RoomClock.GetNow() - FrameLag() - delayNow;
+        }
+
+        // ---------------- the render delay (§17.3 *The render delay*): one value, as it stands in a frame ----------------
+        // The floor is the game's (RenderDelayMs) and the ceiling the room's, read from its preset text: a room that
+        // publishes none keeps the delay at the floor, value for value what it was before the delay could move, and every
+        // other entity on the SDK's lerp as before. Each sample that moves other entities is noted as it lands
+        // (NoteRenderSample), each frame moves the delay towards what the link needed (PaceRenderDelay), and the
+        // interpolation (OtherPose, the tick timeline), the respawn step (RenderTime) and the render time your inputs carry
+        // (the handle's on the WebSocket, FastRenderStamp on the fast channel) all read that frame's value.
+
+        /// <summary>The room's ceiling, read again when its preset text changes: none, or one at or under the game's floor,
+        /// is a fixed delay.</summary>
+        private void BoundRenderDelay()
+        {
+            var text = room.State?.preset ?? "";
+            if (string.Equals(text, ceilingText, StringComparison.Ordinal)) return;
+            ceilingText = text;
+            delays.Bounds(renderDelay, GenexRenderDelay.PresetRenderDelayMax(text) ?? renderDelay);
+            delayFollows = delays.Ceiling > delays.Floor;
+        }
+
+        /// <summary>Once a frame, before its sends and draws: the delay moves towards what the link needed, and the input
+        /// handle stamps this frame's inputs with it.</summary>
+        private void PaceRenderDelay(double now)
+        {
+            BoundRenderDelay();
+            var next = delays.Frame(now);
+            if (next == delayNow) return;
+            delayNow = next;
+            handle.RenderDelay = next;
+        }
+
+        /// <summary>
+        /// A state landed. When it moves other entities it is one sample of the link: its arrival on the SDK clock (the
+        /// frame's instant less ArrivalLag for a state the frame's own drain decoded, as every arrival in this session)
+        /// against the server time its poses are placed at on the render timeline, which is the keyframe's instant in a room
+        /// drawn on ticks (SampleTicks) and the patch's stamp or the snapshot's send time anywhere else. While the fast
+        /// channel is live the motion is the snapshots' (§17.12), so a WebSocket patch is no sample of it.
+        /// </summary>
+        private void NoteRenderSample(bool moves)
+        {
+            var state = room.State;
+            var patch = room.Clock.LastServerTime();
+            if (state == null || !moves || !(patch > 0)) return;
+            var onTicks = DrawsOnTicks();
+            // In a room drawn on ticks only a keyframe places a sample.
+            if (onTicks && state.tick != state.keyframe) return;
+            var stamp = onTicks ? GenexProjectile.TickInstant(state.tick, TickOrigin(), TickHz()) : patch;
+            delays.Note(RoomClock.GetNow() - FrameLag() - ArrivalLag(), stamp, DrawnBefore());
+        }
+
+        /// <summary>
+        /// Another entity on the render timeline. With a fixed delay it is the SDK's lerp, as ever. Where the room publishes
+        /// a ceiling the delay moves, and the SDK's lerp keeps the delay each entity was attached with (and sixteen samples
+        /// a field, less than a quarter second of a fast stream): the entity is then drawn from this session's own record
+        /// of its patches, every pose at every patch for the last second, at this frame's render time (the record a pending
+        /// respawn's old life is already drawn from).
+        /// </summary>
+        private Pose OtherPose(string id, AuthorityEntity e, double renderTime)
+        {
+            var recorded = delayFollows && remotes.TryGetValue(id, out var remote) && remote.Entity == e && remote.History.Count > 0 ? remote.History : null;
+            return recorded != null ? Sample(recorded, renderTime) : Interpolated(e);
         }
 
         private static Pose PoseOf(AuthorityEntity e, double t) => new Pose { T = t, X = e.x, Y = e.y, Z = e.z, Yaw = e.yaw, Pitch = e.pitch, Duck = e.duck };
 
-        /// <summary>Once per decoded patch: note every entity's pose and time, and every epoch bump.</summary>
-        private void NotePatches()
+        /// <summary>Once per decoded state: note every entity's pose and time, and every epoch bump. A state that does not
+        /// <paramref name="moves"/> other entities (a WebSocket patch while the fast channel holds the motion, §17.12: its
+        /// stamp runs ahead of a late snapshot's, and the poses in the state are still the snapshot before's) adds no pose
+        /// to a record that has one: noted under that stamp, it would have the late snapshot's own pose refused as older.</summary>
+        private void NotePatches(bool moves)
         {
             var map = EntityMap();
             if (map == null) return;
@@ -2307,7 +2648,7 @@ namespace Genex.Multiplayer.Authority
                     known.Epoch = e.epoch;
                 }
                 var history = known.History;
-                if (history.Count == 0 || at > history[history.Count - 1].T) history.Add(PoseOf(e, at));
+                if (history.Count == 0 || (moves && at > history[history.Count - 1].T)) history.Add(PoseOf(e, at));
                 while (history.Count > 2 && history[1].T < at - RemoteHistoryMs) history.RemoveAt(0);
             }
             gone.Clear();
@@ -2441,10 +2782,16 @@ namespace Genex.Multiplayer.Authority
         /// 150 ms: 0.59 world units in one frame, over the teleport bar). Inputs already flow meanwhile: they
         /// are what the clock measures. Godot's session waits the same way.
         /// </summary>
+        /// <summary>The room clock's own smoothed round trip, ms: every round trip handed to it, as the drains read them.</summary>
+        private double MeasuredRtt() => room.Clock is GenexPacedClock paced ? paced.LinkRtt : room.Clock.SmoothedRtt();
+
         private bool Warm()
         {
             if (warm) return true;
-            if (room.Clock.SmoothedRtt() <= 0 && GenexTime.Now() < warmDeadline) return false;
+            // The clock's own round trip, not the one a render time is placed by (RenderRtt): that one is the server's
+            // time less the stamp arriving now, twice, which on a link of next to no latency (a local room, a LAN) reads
+            // 0 or under it for good, so the views waited out the whole deadline.
+            if (MeasuredRtt() <= 0 && GenexTime.Now() < warmDeadline) return false;
             warm = true;
             return true;
         }
@@ -2570,7 +2917,8 @@ namespace Genex.Multiplayer.Authority
                 SeatDrawTick = SeatDrawLead = double.NaN;
                 return null;
             }
-            var alpha = AngleRenderAvailable && RenderAlphaMethod.Invoke(own.Reconciler, null) is double a ? a : 1;
+            // A re-seeded prediction is drawn at its newest input as is (session.ts drawnInput).
+            var alpha = !own.Reseeded && AngleRenderAvailable && RenderAlphaMethod.Invoke(own.Reconciler, null) is double a ? a : 1;
             var ack = SteppedAck();
             // Other seats are drawn on a smooth clock of their own (seat-predict.ts seatClock), on the throttled clock's share
             // of its lead (§17.11 *Input pacing*), so the drawing never jumps when an extra input goes out.
@@ -2779,7 +3127,7 @@ namespace Genex.Multiplayer.Authority
             // Predict.Value is the reconciler's predicted pose for your own entity, the lerp for the others.
             if (own != null && own.Entity == e && own.Reconciler != null)
             {
-                var snapped = RoomClock.GetNow() < own.SnapUntil ? SnapPose(own) : null;
+                var snapped = DrawnFromState(own) ? SnapPose(own) : null;
                 var pose = snapped ?? Interpolated(e);
                 // Your own heading as an angle (the SDK's value read first above, as a render read).
                 if (snapped == null)
@@ -2815,7 +3163,7 @@ namespace Genex.Multiplayer.Authority
             }
             else
             {
-                drawn = respawn != null && respawn.History.Count > 0 ? Sample(respawn.History, renderTime) : Interpolated(e);
+                drawn = respawn != null && respawn.History.Count > 0 ? Sample(respawn.History, renderTime) : OtherPose(id, e, renderTime);
                 epoch = respawn != null ? respawn.Epoch : e.epoch;
             }
             var shown = Smoothed(id, drawn, epoch);
@@ -2927,6 +3275,10 @@ namespace Genex.Multiplayer.Authority
             public double At;
             public int Seq, Epoch;
             public SpawnEntry<AuthorityEntity, Shot> Entry;
+            /// <summary>§17.9 <i>Predicted hits</i>: what it can hit (null: no hit is predicted), and where the last frame
+            /// drew it: the start of the path the next frame tests.</summary>
+            public GenexProjectileHits Hits;
+            public GenexHitPoint Drawn;
         }
 
         private double TickHz()
@@ -3087,6 +3439,190 @@ namespace Genex.Multiplayer.Authority
             v.Cap = 1;
             v.Spin = 0;
             v.Fuel = 0;
+        }
+
+        // ---------------- predicted hits (§17.9 *Predicted hits*) ----------------
+        // The hit of your own shot is shown when the shot reaches a target on your screen, and the states that follow
+        // settle it: each state as it is decoded (with what it has acknowledged: HitLook) and every frame (the time limit,
+        // the projectile predictions' own). Nothing here reaches the wire: the server decides every hit as before.
+
+        /// <summary>A predicted hit waiting for the server's word: what the game heard, what its settling holds it against,
+        /// and the socket (the handle's epoch) its firing input was counted on.</summary>
+        private sealed class PendingHit
+        {
+            public GenexPredictedHit Told;
+            public GenexPendingHit Held;
+            public int Epoch;
+        }
+
+        /// <summary>
+        /// The targets of a test (§17.9 <i>The targets</i>): the entities of <paramref name="kinds"/> (null: every kind) where
+        /// the last frame drew them, in the state's <c>entities</c> order, without projectiles, physics body entities and
+        /// every entity this seat owns. Reused: read it before the next call.
+        /// </summary>
+        private List<GenexHitTarget> HitTargets(string[] kinds)
+        {
+            hitTargets.Clear();
+            var map = EntityMap();
+            if (map == null) return hitTargets;
+            foreach (var kv in map)
+            {
+                var e = kv.Value;
+                var taken = e == null || e.t0 > 0 || e.owner == room.SessionId || IsBodyEntity(kv.Key);
+                if (taken || (kinds != null && Array.IndexOf(kinds, e.kind ?? "") < 0)) continue;
+                if (!views.TryGetValue(kv.Key, out var v)) continue;
+                hitTargets.Add(new GenexHitTarget { Id = kv.Key, X = v.X, Y = v.Y, Z = v.Z });
+            }
+            return hitTargets;
+        }
+
+        /// <summary>A hit is predicted: it remembers its target's <c>hp</c> and <c>epoch</c> as the latest state has them
+        /// (the states that follow are compared with that one), the input that fired it and when; the game hears it once.</summary>
+        private GenexPredictedHit Predicted(string id, GenexHitKind kind, GenexHitSettle settle, GenexHitFound found, GenexHitPoint at, int seq)
+        {
+            var told = new GenexPredictedHit { Id = id, Kind = kind, Settle = settle, Target = found.Id, Dist = found.Dist, X = at.X, Y = at.Y, Z = at.Z };
+            // An id is one shot's: a hit predicted again under one that still waits replaces nothing.
+            foreach (var waiting in pendingHits) if (waiting.Told.Id == id) return told;
+            AuthorityEntity target = null;
+            EntityMap()?.TryGetValue(found.Id, out target);
+            var held = new GenexPendingHit { Kind = kind, Settle = settle, Seq = seq, Hp = target?.hp ?? 0, Epoch = target?.epoch ?? 0, At = GenexTime.Now() };
+            pendingHits.Add(new PendingHit { Told = told, Held = held, Epoch = handle.Epoch });
+            telemetry.HitsPredicted++;
+            PredictedHit?.Invoke(told);
+            return told;
+        }
+
+        /// <summary>
+        /// Once a frame, after it drew: each of your projectiles that declared what it hits (and has not hit yet) is tested
+        /// along the straight path from where the last frame drew it to where this one does, by the module's own sweep
+        /// rule; the nearest target it enters is its predicted hit, and a projectile predicts one. It is yours while it is
+        /// predicted, or confirmed with your seat as its <c>src</c>: a bounce (the server's own from then on) or its end
+        /// stops the test.
+        /// </summary>
+        private void SweepShots()
+        {
+            if (!warm) return; // nothing is drawn yet
+            for (var i = 0; i < sweeping.Count; i++)
+            {
+                var shot = sweeping[i];
+                var yours = views.TryGetValue(shot.Id, out var v) && v.IsProjectile && v.Src == room.SessionId;
+                if (!yours)
+                {
+                    sweeping.RemoveAt(i--);
+                    continue;
+                }
+                var from = shot.Drawn;
+                var to = new GenexHitPoint(v.X, v.Y, v.Z);
+                shot.Drawn = to;
+                var found = GenexPredictedHits.SweepHits(from, to, HitTargets(shot.Hits.Kinds), shot.Hits.Radius, hitsFound);
+                if (found.Count == 0) continue;
+                var nearest = found[0];
+                sweeping.RemoveAt(i--);
+                // Shown where the path enters the target's sphere (its start when it starts inside).
+                Predicted(shot.Id, GenexHitKind.Projectile, shot.Hits.Settle, nearest, GenexHitSession.PathPoint(from, to, nearest.Dist), shot.Seq);
+            }
+        }
+
+        /// <summary>
+        /// What a state has acknowledged (§17.9 <i>Settling</i>), noted at each one. Off the fast channel a patch carries its
+        /// own ack. On it (§17.12) the ack comes by snapshot, as do an entity's place and <c>epoch</c>, while its <c>hp</c>
+        /// and whether it is in the list come by WebSocket: what a patch shows is as of an ack between the one a
+        /// projectile's settling reads (the newest snapshot sent no later than the patch) and the ceiling kept here (the
+        /// oldest snapshot sent no earlier than it). The seat moving on or off the channel starts the ceiling over.
+        /// </summary>
+        private void NoteHitAcks(bool bySnapshot)
+        {
+            var live = fast.Status.Live;
+            if (live != hitAcksLive)
+            {
+                hitAcksLive = live;
+                hitAckCeiling.Reset();
+            }
+            if (!live) return;
+            var stamp = room.Clock.LastServerTime();
+            if (bySnapshot) hitAckCeiling.Snapshot(stamp, fast.Ack());
+            else hitAckCeiling.Patch(stamp);
+        }
+
+        /// <summary>One look at a pending hit, now (GenexPredictedHits.SettleHit's input; session.ts <c>hitLook</c>).</summary>
+        private GenexHitLook HitLook(PendingHit hit, double now, double ttl)
+        {
+            var held = hit.Held;
+            AuthorityEntity target = null;
+            var has = (EntityMap()?.TryGetValue(hit.Told.Target, out target) ?? false) && target != null;
+            var look = new GenexHitLook { HasTarget = has, TargetHp = has ? target.hp : 0, TargetEpoch = has ? target.epoch : 0, Now = now, Ttl = ttl };
+            var lower = fast.SettleAck();
+            // A projectile's hit asks no acknowledgement: the first state that shows its target hurt confirms it.
+            if (held.Kind == GenexHitKind.Projectile)
+            {
+                look.Ack = lower;
+                return look;
+            }
+            // An input counted on an earlier socket is never acknowledged on this one: only its time is left.
+            if (hit.Epoch != handle.Epoch) return GenexHitSession.WaitingLook(held, now, ttl);
+            // Another life the newest snapshot wrote is as of that snapshot's ack exactly.
+            if (has && target.epoch != held.Epoch && fast.MotionKnown(hit.Told.Target))
+            {
+                look.Ack = fast.Ack();
+                return look;
+            }
+            var ack = GenexHitSession.LookAck(held.Seq, lower, fast.Status.Live ? hitAckCeiling.Upper() : lower);
+            if (!ack.HasValue) return GenexHitSession.WaitingLook(held, now, ttl);
+            look.Ack = ack.Value;
+            return look;
+        }
+
+        /// <summary>
+        /// One look at every pending hit (GenexPredictedHits.SettleHit): the target as the state has it, what that state
+        /// has acknowledged (HitLook), and the time limit of the projectile predictions' own store, max(2·RTT, 600 ms) with
+        /// a stall waited out. Run by every state and every frame.
+        /// </summary>
+        private void SettleHits()
+        {
+            if (pendingHits.Count == 0) return;
+            var now = GenexTime.Now();
+            var ttl = projectileTtl.Ms(room.Clock.SmoothedRtt(), connected, now);
+            for (var i = 0; i < pendingHits.Count; i++)
+            {
+                var hit = pendingHits[i];
+                var state = GenexPredictedHits.SettleHit(hit.Held, HitLook(hit, now, ttl));
+                if (state == GenexHitState.Pending) continue;
+                pendingHits.RemoveAt(i--);
+                Settled(hit, state == GenexHitState.Confirmed);
+            }
+        }
+
+        /// <summary>A hit left the pending ones: counted, and the game hears it once.</summary>
+        private void Settled(PendingHit hit, bool confirmed)
+        {
+            if (confirmed) telemetry.HitsConfirmed++;
+            else telemetry.HitsCancelled++;
+            HitSettled?.Invoke(hit.Told, confirmed);
+        }
+
+        /// <summary>The game settles the pending hit <paramref name="id"/> (ConfirmHit, CancelHit); false when none is pending.</summary>
+        private bool SettleById(string id, bool confirmed)
+        {
+            for (var i = 0; i < pendingHits.Count; i++)
+            {
+                var hit = pendingHits[i];
+                if (hit.Told.Id != id) continue;
+                pendingHits.RemoveAt(i);
+                Settled(hit, confirmed);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>A drop, or the session's end, cancels every pending hit (§17.9): the input that fired it may never have
+        /// arrived, and the reconnect's state does not say. A projectile fired before it predicts no hit after.</summary>
+        private void CancelHits()
+        {
+            sweeping.Clear();
+            if (pendingHits.Count == 0) return;
+            var waiting = pendingHits.ToArray();
+            pendingHits.Clear();
+            foreach (var hit in waiting) Settled(hit, false);
         }
 
         // ---------------- physics bodies (§17.10): drawn at the server's present, corrections eased ----------------
@@ -3384,10 +3920,19 @@ namespace Genex.Multiplayer.Authority
             projectileTtl.NoteState(GenexTime.Now());
             NoteBodies();
             physicsPrediction.OnState(ServerNowArrived());
-            NotePatches();
+            // A fast snapshot is counted just before it is written (§17.12): a state that raised the count came by the
+            // channel, and while the channel is live only such a state moves other entities.
+            var bySnapshot = fast.Status.Snapshots != snapshotsNoted;
+            snapshotsNoted = fast.Status.Snapshots;
+            var moves = bySnapshot || !fast.Status.Live;
+            NotePatches(moves);
             SampleTicks();
+            NoteRenderSample(moves);
+            NoteHitAcks(bySnapshot);
             if (resyncFirstState) DropEarlierSockets();
             SettleShots();
+            SettleHits();
+            if (ended) return; // a game's handler left
             fast.StateArrived();
             if (firstState.TrySetResult(true))
             {
@@ -3405,6 +3950,8 @@ namespace Genex.Multiplayer.Authority
             awaitingResync = false; // a drop during the post-reconnect sequence abandons it (§8)
             resyncFirstState = true;
             watchdog.Reset();
+            CancelHits();
+            if (ended) return; // a game's handler left
             var r = room.Reconnection;
             if (r.IsReconnecting && r.RetryCount >= r.MaxRetries) return; // the SDK gives up next (4003)
             Reconnecting?.Invoke(++reconnectAttempt, code);
@@ -3459,6 +4006,9 @@ namespace Genex.Multiplayer.Authority
             ended = true;
             connected = false;
             awaitingResync = false;
+            // No state will settle a hit still waiting: each is cancelled, and the game hears it (the session has ended
+            // by now, so a handler that leaves finds nothing to do).
+            CancelHits();
             DisposeOwn();
             unsettled.Clear();
             predict.Dispose();

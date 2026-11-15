@@ -198,7 +198,7 @@ namespace Genex.Multiplayer
             {
                 /// <summary>The capabilities this client implements: at most <see cref="Caps.MaxCaps"/> strings of at most <see cref="Caps.MaxCapChars"/> characters.</summary>
                 public const string Caps = "caps";
-                /// <summary>The SDK and version, <c>unity/0.9.0</c>: telemetry, never refused.</summary>
+                /// <summary>The SDK and version, <c>unity/0.10.1</c>: telemetry, never refused.</summary>
                 public const string Sdk = "sdk";
                 /// <summary>The pool this join asks for (§17.2 *Choosing a room*); absent = the game's one pool.</summary>
                 public const string MatchKey = "matchKey";
@@ -211,7 +211,7 @@ namespace Genex.Multiplayer
             }
 
             /// <summary>What this package sends as <see cref="JoinOption.Sdk"/>.</summary>
-            public const string SdkLabel = "unity/0.9.0";
+            public const string SdkLabel = "unity/0.10.1";
 
             /// <summary>AuthorityCaps (§17.10): what a client declares in its <c>caps</c> join option.</summary>
             public static class Caps
@@ -223,6 +223,11 @@ namespace Genex.Multiplayer
                 /// <summary>Reconciles a predicting room's repeated inputs (§17.11 *Input pacing*, InputRepeat.cs): the room repeats a
                 /// starved seat's held input and writes <c>inRep</c>, <c>inStarve</c> and <c>inBuf</c> for it.</summary>
                 public const string InputRepeat = "repeat@1";
+                /// <summary>Draws at a room's update rate (§17.6 <i>The update rate</i>): one round trip per 50 ms reaches its
+                /// clock (§17.3 <i>The clock's samples</i>), a correction of its own entity eases over 50 ms whatever interval
+                /// the room tells (<i>Easing a correction</i>), and its own entity is predicted through the inputs in flight at
+                /// first sight. A room created by a client without it keeps the old 20 updates a second.</summary>
+                public const string UpdateRate = "rate@1";
                 /// <summary>Writes into each input the server tick its prediction steps it at (§17.11 *The input's tick*); sent with
                 /// <see cref="Fast"/>, whose every slot carries it.</summary>
                 public const string InputTick = "tick@1";
@@ -263,11 +268,16 @@ namespace Genex.Multiplayer
             public static class Timing
             {
                 public const int TickHz = 30;
-                /// <summary>How far behind the server clock other entities are drawn.</summary>
+                /// <summary>How far behind the server clock other entities are drawn: the floor of a client's render delay
+                /// (§17.3 <i>The render delay</i>), and the whole of it in a room that publishes no ceiling.</summary>
                 public const double RenderDelayMs = 100;
+                /// <summary>The most a room may let its clients draw behind, ms: a room's published ceiling is a whole
+                /// number above <see cref="RenderDelayMs"/> and at most this.</summary>
+                public const double RenderDelayMaxMs = 250;
                 public const double MaxRewindMs = 500;
                 public const int InputBuffer = 32;
-                public const double PatchIntervalMs = 50;
+                /// <summary>Updates a second a room sends when nothing asks otherwise (§17.6 <i>The update rate</i>).</summary>
+                public const int PatchHz = 60;
             }
 
             /// <summary>Join options the authority server owns (§17.2); sending one is refused with 400, so the layer drops them.</summary>

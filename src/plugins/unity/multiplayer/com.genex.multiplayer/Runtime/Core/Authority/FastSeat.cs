@@ -22,7 +22,8 @@
 // fields; this one does not). A fallback is not the end (§17.12 *Return to the channel*): from a host that offers it the
 // seat asks for a fresh binding with backoff and jitter, proves the path while the WebSocket carries everything, and at
 // the third snapshot swaps at one instant (`__fast:on { last }`). The session polls, so the keepalive and the retries run
-// on its frames.
+// on its frames. A socket that has to open (a browser's WebTransport) gets its round trips to do it, on the first binding
+// and on every retry alike: the seat asks the room for one WebSocket ping at the binding and hands the answer to the client.
 //
 // The Colyseus C# SDK has no seam for any of this: the connection's Transmit and Dispatch delegates, the decoder's
 // TriggerChanges, the room's Serializer and OnStateChange and the input handle's encoder and stamp baseline are
@@ -118,6 +119,10 @@ namespace Genex.Multiplayer.Authority
         private readonly Func<double> now;
         private readonly Func<double> tickHz;
         private readonly Func<bool> stateCurrent;
+        /// <summary>One WebSocket ping: the callback gets its round trip, ms (the room's own, a test's script).</summary>
+        private readonly Action<Action<int>> ping;
+        /// <summary>The WebSocket's round trip, asked for when a socket has to open (ms; 0: no answer yet).</summary>
+        private double roundTripMs;
         private readonly GenexMotionGuard guard;
         private Link link;
         private Fallen fallback;
@@ -160,9 +165,11 @@ namespace Genex.Multiplayer.Authority
         /// <param name="stateCurrent">False from a drop until the reconnect's first state is decoded (its seqBase is then known).</param>
         /// <param name="asked">The game left the channel on (a seat with no opener and this true has no UDP here).</param>
         /// <param name="log">Where the transport line goes.</param>
+        /// <param name="ping">One WebSocket ping instead of the room's (tests).</param>
         public GenexFastSeat(Room<AuthorityRoomState> room, InputHandle handle, GenexFastSocketOpener open, Func<double> now, Func<double> tickHz,
-            Func<bool> stateCurrent, bool asked, Action<string> log)
+            Func<bool> stateCurrent, bool asked, Action<string> log, Action<Action<int>> ping = null)
         {
+            this.ping = ping ?? room.Ping;
             this.asked = asked;
             this.log = log;
             this.room = room;
@@ -348,6 +355,14 @@ namespace Genex.Multiplayer.Authority
             Applied(link, s);
         }
 
+        /// <summary>A socket that has to open gets its round trips to do it (<see cref="GenexFastClient.OpenRoundTrips"/>),
+        /// measured now: the first binding and every retry alike.</summary>
+        private void AskRoundTrip(GenexFastClient client)
+        {
+            if (!client.Opening) return;
+            ping(ms => roundTripMs = ms);
+        }
+
         /// <summary>A fresh binding to prove: the WebSocket carries everything until it is proven.</summary>
         private void StartProbe(GenexFastBind bind)
         {
@@ -360,13 +375,14 @@ namespace Genex.Multiplayer.Authority
             // A seat new to the channel was on the WebSocket all along: no input of its was dropped.
             if (fallback == null) fallback = new Fallen { At = 0, WsBefore = 0, Ack = 0 };
             early.Clear();
-            var client = bind == null ? null : GenexFastClient.Open(bind, tickHz(), open);
+            var client = bind == null ? null : GenexFastClient.Open(bind, tickHz(), open, () => roundTripMs);
             if (client == null)
             {
                 OffChannel(GenexFastFallbackReason.Unreachable);
                 ScheduleRetry();
                 return;
             }
+            AskRoundTrip(client);
             probe = client;
             retryAt = null;
             client.Keepalive(now());
@@ -438,12 +454,13 @@ namespace Genex.Multiplayer.Authority
                 return;
             }
             hostReturns = bind != null && bind.Rev >= GenexFast.BindRev;
-            var client = bind == null ? null : GenexFastClient.Open(bind, tickHz(), open);
+            var client = bind == null ? null : GenexFastClient.Open(bind, tickHz(), open, () => roundTripMs);
             if (client == null)
             {
                 FallBack(GenexFastFallbackReason.Unreachable);
                 return;
             }
+            AskRoundTrip(client);
             link = new Link { Client = client, SeqBase = SeqBase(), WsBefore = handle.SentCount, Stamp = (double)StampField.GetValue(handle) };
             // The server dropped every WebSocket input this socket sent before the binding, unstepped: the first datagram
             // carries them all again.

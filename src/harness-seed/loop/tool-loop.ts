@@ -37,6 +37,8 @@ const REPLY_RESERVE_TOKENS = 4096;
 const IMAGE_TOKENS = 2048;
 /** The context lengths a person is told to set when the model's is too small, smallest first. */
 const ADVISED_CONTEXTS = [16_384, 32_768, 65_536, 131_072] as const;
+/** The tool that makes a game: its result names the folder the rest of the turn works in. */
+const NEW_GAME_TOOL = "new_game";
 
 /** Whose compaction threshold a context policy carries (`mode`): the studio's default, or the user's. */
 const ContextPolicyMode = {
@@ -461,7 +463,7 @@ async function runToolCalls(
 
     const result = await tools.execute(call, ctx);
     collectImages(result, state.images);
-    if (call.name === "new_game" && result.ok && result.details?.project) {
+    if (call.name === NEW_GAME_TOOL && result.ok && result.details?.project) {
       options.project = String(result.details.project);
       state.standing = undefined;
     }

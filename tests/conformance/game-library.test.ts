@@ -58,6 +58,31 @@ describe("game-first library", () => {
     assert.equal((await rig.core.games.presentation(game.name)).primaryThreadId, thread);
     assert.ok((await rig.core.store.listEvents(thread)).some((e) => e.data.type === "messages"));
   });
+  it("a removed game keeps its name, so a new game of that title starts with a fresh chat", async () => {
+    const old = await rig.core.createGame("Copper Lantern");
+    const chat = await rig.core.threadForGame(old.name);
+    await rig.core.append([{ type: "messages", messages: [{ role: "user", content: "the old lantern" }] }], chat);
+    await rig.core.removeGame(old.name);
+    assert.notEqual(
+      ((await rig.core.store.getRecord(chat)).metadata as { archived?: boolean }).archived,
+      true,
+      "removal keeps the game's chat",
+    );
+    // The person deleted the folder after removing it: the name is still the removed game's.
+    await rm(old.dir, { recursive: true, force: true });
+    const fresh = await rig.core.createGame("Copper Lantern");
+    assert.notEqual(fresh.name, old.name, "a new game does not take a removed game's name");
+    assert.ok(
+      (await rig.core.games.list()).some((game) => game.name === fresh.name),
+      "the new game is listed",
+    );
+    const freshChat = await rig.core.threadForGame(fresh.name);
+    assert.doesNotMatch(
+      JSON.stringify(await rig.core.store.listEvents(freshChat)),
+      /the old lantern/,
+      "the new game's chat starts fresh",
+    );
+  });
   it("a game made Untitled by a greeting takes its first idea's name in place, never over the person's own", async () => {
     const replies: Record<string, GameName> = {
       "Hi there": { title: "Untitled game", provisional: true },

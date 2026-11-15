@@ -23,7 +23,7 @@ const THREAD_TITLE_MAX = 80;
 /** The tool that scaffolds a game: its `name` argument is the game it built. */
 const NEW_GAME_TOOL = "new_game";
 
-type GameThreadMeta = { kind?: string; project?: string | null; archived?: boolean };
+export type GameThreadMeta = { kind?: string; project?: string | null; archived?: boolean };
 
 const metaOf = (thread: ConversationRecord): GameThreadMeta => (thread.metadata ?? {}) as GameThreadMeta;
 
@@ -35,6 +35,16 @@ function isBoundGameThread(meta: GameThreadMeta): meta is GameThreadMeta & { pro
 /** A live game chat bound to nothing yet: a draft. */
 function isUnboundGameThread(meta: GameThreadMeta): boolean {
   return meta.kind === ThreadKind.Game && !meta.project && !meta.archived;
+}
+
+/**
+ * A live game chat the library has no game for: it was never bound, or the game it was bound to
+ * was removed from the sidebar. Only such a chat may be named after a game made in it; a chat of a
+ * game still in the library belongs to that game.
+ */
+export function isGameThreadWithoutGame(meta: GameThreadMeta, games: ReadonlySet<string>): boolean {
+  if (meta.kind !== ThreadKind.Game || meta.archived) return false;
+  return !meta.project || !games.has(meta.project);
 }
 
 export class GameThreadService {
@@ -117,8 +127,7 @@ export class GameThreadService {
     // Keep the first-ask title (or "New chat"). Naming the chat after the folder made every
     // row in that folder identical — the rail then had nothing to tell chats apart.
     // updateThread merges: only the keys this changes, so a stale copy never overwrites others.
-    await this.#core.store.updateThread(threadId, { metadata: { kind: ThreadKind.Game, project, archived: false } });
-    await this.#core.games.rememberThread(project, threadId);
+    await this.#core.store.updateThread(threadId, { metadata: { kind: ThreadKind.Game, project } });
     this.#core.emit(UiEvent.ThreadBound, { threadId, project });
   }
 
@@ -137,15 +146,11 @@ export class GameThreadService {
     const bound = new Map<string, ConversationRecord>();
     for (const t of threads) {
       const m = metaOf(t);
-      if (isBoundGameThread(m) && games.has(m.project)) bound.set(m.project, t);
+      if (isBoundGameThread(m)) bound.set(m.project, t);
     }
 
     for (const thread of threads) {
-      const m = metaOf(thread);
-      const isEligible =
-        isUnboundGameThread(m) ||
-        (m.kind === ThreadKind.Game && !m.archived && Boolean(m.project) && !games.has(m.project as string));
-      if (!isEligible) continue;
+      if (!isUnboundGameThread(metaOf(thread))) continue;
       const events = await this.#core.store.listEvents(thread.id).catch(() => []);
       const project = this.projectBuiltIn(events, games);
       if (!project) continue;

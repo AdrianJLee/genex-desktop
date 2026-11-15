@@ -288,22 +288,18 @@ describe("per-game threads", () => {
     assert.equal(await rig.core.threadForGame("puzzle"), threadId);
   });
 
-  it("removeGame archives existing threads so a new game with the same name starts fresh", async () => {
+  it("scaffolding another game in a live game's chat leaves that chat with its game", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
 
-    await rig.core.games.scaffold("pong", { title: "pong" });
-    const threadId1 = await rig.core.threadForGame("pong");
-    await rig.core.store.appendEvents(threadId1, [
-      { type: "messages", messages: [{ role: "user", content: "hello pong" }] },
-    ]);
-    await rig.core.removeGame("pong");
-    const record1 = await rig.core.store.getRecord(threadId1);
-    assert.equal((record1.metadata as { archived?: boolean }).archived, true);
-
-    await rig.core.games.scaffold("pong", { title: "pong" });
-    const threadId2 = await rig.core.threadForGame("pong");
-    assert.notEqual(threadId2, threadId1, "new game does not resurrect removed chat");
+    await rig.core.games.scaffold("arena", { title: "arena" });
+    const chat = await rig.core.threadForGame("arena");
+    const api = rig.core.api() as unknown as Record<string, (payload: unknown) => Promise<unknown>>;
+    const made = (await api["game.scaffold"]!({ name: "maze", threadId: chat })) as { name: string };
+    assert.equal(made.name, "maze");
+    const meta = (await rig.core.store.getRecord(chat)).metadata as { project?: string };
+    assert.equal(meta.project, "arena", "a live game's chat is never moved to another game");
+    assert.notEqual(await rig.core.threadForGame("maze"), chat);
   });
 
   it("a local model's new_game with non-ASCII name creates a valid slug and binds the chat", async () => {

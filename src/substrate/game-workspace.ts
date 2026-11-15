@@ -340,9 +340,14 @@ async function madeFolder(dir: string): Promise<boolean> {
 }
 
 /** A new folder `base`, or `base 2`, `base 3`… in `parent`: never one that was already there. */
-async function reserveNamedFolder(parent: string, base: string): Promise<string> {
+async function reserveNamedFolder(
+  parent: string,
+  base: string,
+  reserved?: (dir: string) => Promise<boolean>,
+): Promise<string> {
   for (let n = 1; ; n++) {
     const dir = path.join(parent, n === 1 ? base : `${base} ${n}`);
+    if (reserved && (await reserved(dir))) continue;
     if (await madeFolder(dir)) return dir;
   }
 }
@@ -748,10 +753,15 @@ export class GameWorkspaces {
       if (parent !== (await realpath(this.root))) return this.#createIn(parent, title, options.provisional);
     }
     const base = slugFromName(title);
+    const removed = this.#removedGameNames();
     for (let suffix = 1; ; suffix++) {
       const tail = suffix === 1 ? "" : `-${suffix}`;
       const name = base.slice(0, MAX_SLUG_LENGTH - tail.length) + tail;
       if (this.#aliases.has(name)) continue;
+      if (removed.has(name)) continue;
+      // A removed game still holds its name: its folder may come back, and with it its chats.
+      // A new game takes the next name instead of inheriting another game's history.
+      if (await this.#removedGameAt(path.join(this.root, name))) continue;
       if (!(await madeFolder(path.join(this.root, name)))) continue;
       await this.makeEmpty(name, { title });
       await this.#rollCover(name, provisional(options.provisional));
@@ -791,7 +801,9 @@ export class GameWorkspaces {
    * two games made at once never share one.
    */
   async #createIn(parent: string, title: string, waiting?: boolean): Promise<GameProject> {
-    const dir = await reserveNamedFolder(parent, folderNameFromTitle(title));
+    const dir = await reserveNamedFolder(parent, folderNameFromTitle(title), (candidate) =>
+      this.#removedGameAt(candidate),
+    );
     // The new folder must be where the checked location is: a link swapped in since the check
     // would have put it somewhere else. It is empty, so it goes again, and nothing is recorded.
     if ((await realpath(dir)) !== dir) {
@@ -799,12 +811,33 @@ export class GameWorkspaces {
       throw new CodedError(WorkspaceRefusal.LocationRefused, MESSAGE.LocationRefused());
     }
     const inRoot = new Set(await readdir(this.root));
-    const name = uniqueName(slugFromName(title), { has: (taken) => this.#aliases.has(taken) || inRoot.has(taken) });
+    const removed = this.#removedGameNames();
+    const name = uniqueName(slugFromName(title), {
+      has: (taken) => this.#aliases.has(taken) || inRoot.has(taken) || removed.has(taken),
+    });
     this.#aliases.set(name, dir);
     await this.#saveIndex();
     await this.makeEmpty(name, { title });
     await this.#rollCover(name, provisional(waiting));
     return this.#describe(name, dir);
+  }
+
+  /** Whether a removed game used `dir`: its identity, and the chats bound to its name, stay its own. */
+  async #removedGameAt(dir: string): Promise<boolean> {
+    const saved = this.#presentation.get(await savedPresentationPath(dir));
+    return saved?.removed === true;
+  }
+
+  /** The names of games removed from the library: a new game takes the next name, never their chats. */
+  #removedGameNames(): ReadonlySet<string> {
+    const names = new Set<string>();
+    for (const [dir, entry] of this.#presentation) {
+      if (!entry.removed) continue;
+      // An entry saved before `name` was kept still names a library game by its folder.
+      const name = entry.name ?? path.basename(dir);
+      if (PROJECT_NAME_RE.test(name)) names.add(name);
+    }
+    return names;
   }
 
   /**
@@ -1038,7 +1071,7 @@ export class GameWorkspaces {
     await this.loadIndex();
     const dir = this.dirFor(name);
     const key = await realpath(dir);
-    this.#presentation.set(key, { ...this.#presentation.get(key), removed: true });
+    this.#presentation.set(key, { ...this.#presentation.get(key), name, removed: true });
     this.#recents = this.#recents.filter((row) => row.name !== name);
     await this.#saveIndex();
     return { dir, trash: false };

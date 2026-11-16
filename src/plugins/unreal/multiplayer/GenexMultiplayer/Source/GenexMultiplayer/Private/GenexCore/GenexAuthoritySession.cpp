@@ -1740,8 +1740,10 @@ struct Impl {
     shot->epoch = epoch;
     shot->madeAt = colyseus_room_clock_now(colyseus_room_get_clock(room));
     // §17.9 *Predicted hits*: swept from its launch, where it is drawn at once (a radius that is no number
-    // at least 0 declares nothing, as session.ts).
-    if (projectile.hits && std::isfinite(projectile.hits->radius) && projectile.hits->radius >= 0.0) shot->hits = projectile.hits;
+    // at least 0 declares nothing, as session.ts; nor does a shape the module's own sweep would refuse,
+    // *Target shapes*: the shot still flies).
+    const bool shapeTaken = projectile.hits && hits::HitShapeKindOf(projectile.hits->height, projectile.hits->duckHeight) != hits::HitShapeKind::Refused;
+    if (shapeTaken && std::isfinite(projectile.hits->radius) && projectile.hits->radius >= 0.0) shot->hits = projectile.hits;
     shot->drawn = hits::HitPoint{shot->launch.x, shot->launch.y, shot->launch.z};
     Shot* raw_ = shot.release();
     raw_->spawnId = colyseus_spawns_spawn(shots, raw_);  // the store owns it from here (FreeShot)
@@ -1756,7 +1758,8 @@ struct Impl {
   // ---------------- predicted hits (§17.9 *Predicted hits*, GenexPredictedHits.h) ----------------
 
   /** §17.9 *The targets*: the entities of `kinds` (null: every kind) where the last frame drew them, in the
-   *  state's `entities` order, without projectiles, physics body entities and every entity this seat owns. */
+   *  state's `entities` order, without projectiles, physics body entities and every entity this seat owns;
+   *  each with its duck amount as drawn (*Target shapes*). */
   std::vector<hits::HitTarget> HitTargets(const std::vector<std::string>* kinds) const {
     std::vector<hits::HitTarget> out;
     aw::AuthorityRoomState* st = State();
@@ -1769,7 +1772,7 @@ struct Impl {
       if (kinds != nullptr && std::find(kinds->begin(), kinds->end(), Str(e.kind)) == kinds->end()) return;
       const auto view = views.find(id);
       if (view == views.end()) return;
-      out.push_back(hits::HitTarget{id, view->second.x, view->second.y, view->second.z});
+      out.push_back(hits::HitTarget{id, view->second.x, view->second.y, view->second.z, view->second.duck});
     });
     return out;
   }
@@ -1914,12 +1917,16 @@ struct Impl {
     for (double v : {shot.origin.x, shot.origin.y, shot.origin.z, shot.dir.x, shot.dir.y, shot.dir.z}) {
       if (!std::isfinite(v)) return std::nullopt;
     }
+    // A shape the module's own hitscan would refuse predicts nothing; the call has taken its number.
+    if (hits::HitShapeKindOf(shot.height, shot.duckHeight) == hits::HitShapeKind::Refused) return std::nullopt;
+    const std::optional<hits::HitShape> shape = hits::HitShapeOf(shot.height, shot.duckHeight);
     const std::vector<hits::HitTarget> drawn = HitTargets(shot.kinds ? &*shot.kinds : nullptr);
-    const std::optional<hits::HitFound> found = hits::HitscanHit(shot.origin, shot.dir, drawn, shot.range, shot.radius);
+    const std::optional<hits::HitFound> found = hits::HitscanHit(shot.origin, shot.dir, drawn, shot.range, shot.radius, shape);
     if (!found) return std::nullopt;
     const auto target = std::find_if(drawn.begin(), drawn.end(), [&](const hits::HitTarget& t) { return t.id == found->id; });
     if (target == drawn.end()) return std::nullopt;
-    const hits::HitPoint at = hits::RayEntry(shot.origin, shot.dir, *target, *found, shot.radius);
+    // A capsule's distance is where the ray enters it; a sphere's is the ray's point nearest its centre.
+    const hits::HitPoint at = shape ? hits::RayPoint(shot.origin, shot.dir, found->dist) : hits::RayEntry(shot.origin, shot.dir, *target, *found, shot.radius);
     AuthorityHit hit;
     hit.id = AuthorityHitscanId(sid, SeqBase(), seq, n);
     hit.kind = hits::HitKind::Hitscan;
@@ -1952,7 +1959,8 @@ struct Impl {
       }
       const hits::HitPoint from = shot.drawn;
       shot.drawn = hits::HitPoint{view->second.x, view->second.y, view->second.z};
-      const std::vector<hits::HitFound> found = hits::SweepHits(from, shot.drawn, HitTargets(&shot.hits->kinds), shot.hits->radius);
+      const std::vector<hits::HitFound> found =
+          hits::SweepHits(from, shot.drawn, HitTargets(&shot.hits->kinds), shot.hits->radius, hits::HitShapeOf(shot.hits->height, shot.hits->duckHeight));
       if (found.empty()) continue;
       const hits::HitPoint at = hits::PathPoint(from, shot.drawn, found.front().dist);
       AuthorityHit hit;
@@ -2208,9 +2216,11 @@ struct Impl {
     if (room == nullptr || !(colyseus_room_clock_last_server_time(colyseus_room_get_clock(room)) > 0.0)) return;
     // Only an update that landed is a sample: not a fallback's rewrite of the state.
     if (!passLanded) return;
-    // While the fast channel is live its snapshots are what moves other entities: a WebSocket patch's motion
-    // fields are held back then (GenexFastSeat.h MotionGuard), so it is no sample.
-    if (!fastPass && fastSeat != nullptr && fastSeat->Status().live) return;
+    // Once the fast channel carries the motion its snapshots are what moves other entities: a WebSocket
+    // patch's motion fields are held back then (GenexFastSeat.h MotionGuard), so it is no sample. It carries
+    // it from the first snapshot of the seat's own stream: a path challenge is written nowhere, and until
+    // that snapshot a patch still moves them, though the seat's inputs already go by datagram.
+    if (!fastPass && fastSeat != nullptr && fastSeat->CarriesMotion()) return;
     // A sample belongs to the channel that carried it, and the two paths take different times: the first
     // sample from the other channel starts the window over.
     if (sampleByFast.has_value() && *sampleByFast != fastPass) delayBuffer.Restart();
@@ -2598,8 +2608,9 @@ struct Impl {
         const auto seen = predictLastSeen.find(key);
         const std::optional<bodies::Vec3> lastSeen =
             seen != predictLastSeen.end() ? std::optional<bodies::Vec3>(seen->second) : std::nullopt;
-        // §17.12: on the fast channel a body is in a keyframe only while the newest snapshot carries it.
-        const bool motionKnown = fastSeat == nullptr || fastSeat->MotionKnown(key);
+        // §17.12: once the fast channel carries the motion a body is in a keyframe only while the newest
+        // snapshot carries it; until its first snapshot is written a keyframe is the WebSocket's, whole.
+        const bool motionKnown = fastSeat == nullptr || !fastSeat->CarriesMotion() || fastSeat->MotionKnown(key);
         if (const std::optional<bodies::Vec3> out = physics::OutOfViewAt(listed, motionKnown, lastSeen)) {
           physics::KeyframeOutside o;
           o.key = key;

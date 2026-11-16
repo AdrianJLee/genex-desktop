@@ -145,6 +145,10 @@ namespace Genex.Multiplayer.Authority
         public uint InputAck;
         /// <summary>The room clock the server wrote it at (the header's <c>sent</c>, a WebSocket patch's TIMED <c>sNow</c>).</summary>
         public uint Sent;
+        /// <summary>A path challenge's (§17.12 *Return path*; <see cref="GenexFastClient.IsPathChallenge"/>): it proves an
+        /// address and brings no update of the room, so the session writes none of it and counts no sample of the link.</summary>
+        public bool Challenge;
+        /// <summary>Nothing for a challenge: the records it repeats are not measured against.</summary>
         public List<GenexMotionRecord> Changed = new List<GenexMotionRecord>();
     }
 
@@ -188,8 +192,12 @@ namespace Genex.Multiplayer.Authority
         private double? lastUplinkAt;
         private double? lastFrameAt;
         private uint lastAppliedSnap;
+        /// <summary>The decoded records by key, with the bytes they came from, of the newest snapshot that brought an update
+        /// (a challenge is not decoded: <c>Changed</c> stays measured against what the session wrote), and that snapshot's
+        /// tick (-1: none yet).</summary>
         private Dictionary<ushort, Decoded> decodedByKey = new Dictionary<ushort, Decoded>();
         private Dictionary<string, GenexMotionRecord> latest = new Dictionary<string, GenexMotionRecord>();
+        private long updateTick = -1;
 
         /// <summary>A client on <paramref name="socket"/> for <paramref name="bind"/>. <paramref name="roundTripMs"/> answers
         /// the seat's round trip as measured so far (ms; null, or 0: not yet known), read while the socket is opening.</summary>
@@ -301,7 +309,7 @@ namespace Genex.Multiplayer.Authority
             if (firstSentAt.HasValue) firstSentAt = Math.Min(now, firstSentAt.Value + gap);
         }
 
-        /// <summary>Every record of the newest applied snapshot.</summary>
+        /// <summary>Every record of the newest applied snapshot that brought an update (a path challenge is none).</summary>
         public List<GenexMotionRecord> Records() => latest.Values.ToList();
 
         /// <summary>The input of seq <paramref name="seq"/> while it is still held, else null.</summary>
@@ -313,7 +321,7 @@ namespace Genex.Multiplayer.Authority
         public double? SentAt(uint seq) => sentTimes.TryGetValue(seq, out var at) ? at : (double?)null;
 
         /// <summary>The latest decoded record of <paramref name="id"/> of <paramref name="kind"/> (from the newest applied
-        /// snapshot), else null.</summary>
+        /// snapshot that brought an update: a path challenge is none), else null.</summary>
         public GenexMotionRecord MotionOf(int kind, string id) => latest.TryGetValue(RecordName(kind, id), out var r) ? r : null;
 
         /// <summary>Whether a deadline has passed at <paramref name="now"/> (§17.12 *Fallback*): a
@@ -368,13 +376,45 @@ namespace Genex.Multiplayer.Authority
             lastAppliedSnap = held.Snap;
             lastAppliedAt = now;
             sent = HeldInputs(sent, held.InputAck, tickHz);
-            var changed = DecodeChanged(held.Records);
+            var challenge = IsPathChallenge(held.Tick, held.Records.Count, updateTick, SameAsDecoded(held.Records));
+            if (!challenge) updateTick = held.Tick;
+            var changed = challenge ? new List<GenexMotionRecord>() : DecodeChanged(held.Records);
             var eager = changed.Count >= GenexFast.AckEagerRecords && (!lastUplinkAt.HasValue || now - lastUplinkAt.Value >= GenexFast.AckEagerGapMs);
             if (held.Snap - before >= GenexFast.ChallengeJump || eager) SendEmpty(now);
             return new GenexFastReceipt
             {
-                Applied = new GenexFastSnapshot { Snap = held.Snap, Tick = held.Tick, InputAck = held.InputAck, Sent = held.Sent, Changed = changed },
+                Applied = new GenexFastSnapshot { Snap = held.Snap, Tick = held.Tick, InputAck = held.InputAck, Sent = held.Sent, Challenge = challenge, Changed = changed },
             };
+        }
+
+        /// <summary>
+        /// Whether an applied snapshot of <paramref name="tick"/> holding <paramref name="records"/> records is a path
+        /// challenge's (§17.12 *Return path*) and not one of the seat's own stream (fast-client.ts <c>isPathChallenge</c>).
+        /// A challenge moves nothing: it is an empty keyframe (a first bind's, with no base to repeat), or it repeats its
+        /// base's tick and records. The seat's own snapshots are told from it by what the protocol already says of them:
+        /// each holds the seat's own echo, so it is never empty, and each is of a later tick than the one before, so it
+        /// never brings an earlier tick, and it brings the same tick again only with other records (a room whose patches are
+        /// a timer's can write twice in a tick). A snapshot of a room where nothing moved is of a new tick: it is the
+        /// stream's. <paramref name="updateTick"/> is the tick of the newest snapshot that brought an update (-1: none yet)
+        /// and <paramref name="sameRecords"/> whether this one's records are that one's, key for key and byte for byte.
+        /// Held to fast-transport.json's <c>pathChallenge</c> vectors.
+        /// </summary>
+        public static bool IsPathChallenge(long tick, int records, long updateTick, bool sameRecords)
+        {
+            if (records == 0 || tick < updateTick) return true;
+            return tick == updateTick && sameRecords;
+        }
+
+        /// <summary>Whether <paramref name="records"/> are the ones last decoded, key for key and byte for byte.</summary>
+        private bool SameAsDecoded(IReadOnlyList<GenexFastRecord> records)
+        {
+            if (records.Count != decodedByKey.Count) return false;
+            foreach (var r in records)
+            {
+                if (!decodedByKey.TryGetValue(r.Key, out var before)) return false;
+                if (!ReferenceEquals(before.Bytes, r.Bytes) && !before.Bytes.SequenceEqual(r.Bytes)) return false;
+            }
+            return true;
         }
 
         /// <summary>Drops the send times of seqs below <paramref name="from"/>.</summary>

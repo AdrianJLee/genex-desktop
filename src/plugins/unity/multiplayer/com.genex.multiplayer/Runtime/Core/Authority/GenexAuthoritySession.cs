@@ -522,14 +522,25 @@ namespace Genex.Multiplayer.Authority
 
     /// <summary>
     /// What a predicted projectile can hit (§17.9 <i>Predicted hits</i>): the arguments of the room module's own
-    /// <c>ctx.projectiles.sweep(id, { kinds, radius })</c>.
+    /// <c>ctx.projectiles.sweep(id, { kinds, radius, height?, duckHeight? })</c>. The module's <c>rewind</c> is the
+    /// server's alone: your prediction already tests what you draw.
     /// </summary>
     public sealed class GenexProjectileHits
     {
         /// <summary>The entity kinds the shot can hit. Required.</summary>
         public string[] Kinds;
-        /// <summary>A target's hit sphere, room units around its drawn position: a finite number at least 0.</summary>
+        /// <summary>A target's hit sphere, room units around its drawn position: a finite number at least 0. With a
+        /// <see cref="Height"/>, the radius of its capsule.</summary>
         public double Radius;
+        /// <summary>With a height each target is a body (§17.9 <i>Target shapes</i>): an upright capsule of
+        /// <see cref="Radius"/> standing on the entity's position, this tall, as the module gives it to <c>sweep</c>
+        /// (a <c>firstperson</c> body: the preset's <c>standHeight</c>). Null (the default): the sphere. A value the
+        /// module's call would refuse (not a finite number at least 0) predicts no hit.</summary>
+        public double? Height;
+        /// <summary>A body's height fully ducked (the preset's <c>crouchHeight</c>): a target drawn ducking is that much
+        /// lower, by its drawn <c>Duck</c>. Only with a <see cref="Height"/>; null: a duck amount changes nothing. A value
+        /// the module's call would refuse (not a finite number at least 0, or one without a height) predicts no hit.</summary>
+        public double? DuckHeight;
         /// <summary>What settles the hit: the target's health in the states that follow (the default), or the game alone
         /// (<see cref="GenexAuthoritySession.ConfirmHit"/>, <see cref="GenexAuthoritySession.CancelHit"/>) for a module that
         /// tells a hit some other way (an event, no <c>hp</c>).</summary>
@@ -551,9 +562,11 @@ namespace Genex.Multiplayer.Authority
         public string Target { get; internal set; }
         /// <summary>How far along the test found the target, as the room's own test says it, room units: for a projectile
         /// along the path of the frame that reached it (<c>ctx.projectiles.sweep</c>), for a hitscan along the ray to the
-        /// point nearest the target's centre (<c>ctx.rewind.hitscan</c>).</summary>
+        /// point nearest the target's centre (<c>ctx.rewind.hitscan</c>), or, declared with a height, to where the ray
+        /// enters the target's capsule.</summary>
         public double Dist { get; internal set; }
-        /// <summary>Where the path or the ray enters the target's sphere; the start of one that starts inside it.</summary>
+        /// <summary>Where the path or the ray enters the target's sphere, or its capsule when the shot was declared with a
+        /// height (§17.9 <i>Target shapes</i>); the start of one that starts inside it.</summary>
         public double X { get; internal set; }
         public double Y { get; internal set; }
         public double Z { get; internal set; }
@@ -1230,8 +1243,9 @@ namespace Genex.Multiplayer.Authority
                 options.KinematicRule,
                 // §17.11 *Contact policy*: a declared policy's pass runs in the replay on ticks no seat prediction posed.
                 DeclaredPass,
-                // §17.12: on the fast channel a body is in a keyframe only while the newest snapshot carries it.
-                id => fast.MotionKnown(id));
+                // §17.12: once the fast channel carries the motion a body is in a keyframe only while the newest snapshot
+                // carries it; until its first snapshot is written a keyframe is the WebSocket's, whole.
+                id => !fast.CarriesMotion || fast.MotionKnown(id));
             // §17.11 *Seat contacts*: the room's rule (the module's, or a declared policy's) against every other seat, used
             // while the room has seat contacts (HasContacts).
             contacts = new GenexSeatContacts(ContactRuleNow, OtherSeats);
@@ -1458,10 +1472,12 @@ namespace Genex.Multiplayer.Authority
             // Drawn at once, in this frame, at the tick the frame's other projectiles are drawn at (before its launch
             // tick, so at its origin until the next frame): the views otherwise change only in Frame().
             if (warm && !(EntityMap()?.ContainsKey(id) ?? false)) ShotView(shot, double.IsNaN(DrawnTick) ? NowTick() : DrawnTick);
-            if (hits != null)
+            // A shape the module's own sweep would refuse predicts nothing (§17.9 *Target shapes*): the shot is drawn all the same.
+            if (hits != null && GenexPredictedHits.HitShapeOf(hits.Height, hits.DuckHeight, out var shape))
             {
                 // Its own copy: what the game changes later is another shot's.
-                shot.Hits = new GenexProjectileHits { Kinds = (string[])hits.Kinds.Clone(), Radius = hits.Radius, Settle = hits.Settle };
+                shot.Hits = new GenexProjectileHits { Kinds = (string[])hits.Kinds.Clone(), Radius = hits.Radius, Height = hits.Height, DuckHeight = hits.DuckHeight, Settle = hits.Settle };
+                shot.Shape = shape;
                 // The path's first stretch starts where the shot is drawn now: its origin.
                 shot.Drawn = new GenexHitPoint(shot.Launch.X, shot.Launch.Y, shot.Launch.Z);
                 sweeping.Add(shot);
@@ -1507,11 +1523,17 @@ namespace Genex.Multiplayer.Authority
         /// <see cref="CancelHit"/>), at the latest after max(2·RTT, 600 ms). The hit's id is
         /// <c>&lt;seat&gt;.&lt;seq&gt;.h&lt;n&gt;</c>: the input's sequence and your calls of this during it, from 0, a miss
         /// counted. Its point is where the ray enters the target's sphere (the origin for a ray that starts inside it), and
-        /// its <c>Dist</c> the rule's own, to the point of the ray nearest the target's centre. Returns null when the ray hits
-        /// nothing (or is no finite numbers), and while the socket is down (no input goes out then).
+        /// its <c>Dist</c> the rule's own, to the point of the ray nearest the target's centre. With a
+        /// <paramref name="height"/> (and a <paramref name="duckHeight"/>), as the module gives them to its hitscan, each
+        /// target is a body (§17.9 <i>Target shapes</i>): an upright capsule of <paramref name="radius"/> standing on the
+        /// entity's position, that tall and <paramref name="duckHeight"/> tall fully ducked (by its drawn <c>Duck</c>); the
+        /// answer is the nearest target whose capsule the ray enters within <paramref name="range"/>, and its point and its
+        /// <c>Dist</c> are where the ray enters it. Returns null when the ray hits nothing (or is no finite numbers), for a
+        /// height or a ducked height the module's call would refuse (not a finite number at least 0, a ducked height alone:
+        /// the call still counts in the id), and while the socket is down (no input goes out then).
         /// </summary>
         public GenexPredictedHit PredictHitscan(GenexHitPoint origin, GenexHitPoint dir, double? range = null, double? radius = null, string[] kinds = null,
-            GenexHitSettle settle = GenexHitSettle.Health)
+            GenexHitSettle settle = GenexHitSettle.Health, double? height = null, double? duckHeight = null)
         {
             if (ended) throw new InvalidOperationException("the session has ended");
             if (!connected) return null;
@@ -1519,12 +1541,16 @@ namespace Genex.Multiplayer.Authority
             // Every call of the input counts, a miss too.
             var id = StagedId(seq) + ".h" + stagedHitscans++.ToString(CultureInfo.InvariantCulture);
             if (!IsFinitePoint(origin) || !IsFinitePoint(dir)) return null;
+            // A shape the module's own hitscan would refuse predicts nothing; the call has taken its number.
+            if (!GenexPredictedHits.HitShapeOf(height, duckHeight, out var shape)) return null;
             var targets = HitTargets(kinds);
-            var found = GenexPredictedHits.HitscanHit(origin, dir, targets, range, radius);
+            var found = GenexPredictedHits.HitscanHit(origin, dir, targets, range, radius, shape);
             if (!found.HasValue) return null;
             var target = targets.Find(t => t.Id == found.Value.Id);
-            // Shown where the ray enters the target's sphere; the distance is the test's own (to the point nearest its centre).
-            return Predicted(id, GenexHitKind.Hitscan, settle, found.Value, GenexHitSession.RayEntry(origin, dir, target, found.Value, radius), seq);
+            // Shown where the ray enters the target's sphere; the distance is the test's own (to the point nearest its
+            // centre). A capsule's distance is where the ray enters it.
+            var at = shape.HasValue ? GenexHitSession.RayPoint(origin, dir, found.Value.Dist) : GenexHitSession.RayEntry(origin, dir, target, found.Value, radius);
+            return Predicted(id, GenexHitKind.Hitscan, settle, found.Value, at, seq);
         }
 
         private static bool IsFinitePoint(GenexHitPoint p) =>
@@ -2597,7 +2623,7 @@ namespace Genex.Multiplayer.Authority
         /// frame's instant less ArrivalLag for a state the frame's own drain decoded, as every arrival in this session)
         /// against the server time its poses are placed at on the render timeline, which is the keyframe's instant in a room
         /// drawn on ticks (SampleTicks) and the patch's stamp or the snapshot's send time anywhere else. While the fast
-        /// channel is live the motion is the snapshots' (§17.12), so a WebSocket patch is no sample of it. A sample
+        /// channel carries the motion it is the snapshots' (§17.12), so a WebSocket patch is no sample of it. A sample
         /// belongs to the channel that carried it (<paramref name="bySnapshot"/>: the fast channel's), and the two paths
         /// take different times: the first sample from the other channel starts the window over. A state change that
         /// is no snapshot's and brings no new stamp is no update that landed (a fallback rewrites the fields the channel
@@ -3291,9 +3317,10 @@ namespace Genex.Multiplayer.Authority
             public double At;
             public int Seq, Epoch;
             public SpawnEntry<AuthorityEntity, Shot> Entry;
-            /// <summary>§17.9 <i>Predicted hits</i>: what it can hit (null: no hit is predicted), and where the last frame
-            /// drew it: the start of the path the next frame tests.</summary>
+            /// <summary>§17.9 <i>Predicted hits</i>: what it can hit (null: no hit is predicted), the body its targets are
+            /// (null: a sphere), and where the last frame drew it: the start of the path the next frame tests.</summary>
             public GenexProjectileHits Hits;
+            public GenexHitShape? Shape;
             public GenexHitPoint Drawn;
         }
 
@@ -3473,8 +3500,9 @@ namespace Genex.Multiplayer.Authority
 
         /// <summary>
         /// The targets of a test (§17.9 <i>The targets</i>): the entities of <paramref name="kinds"/> (null: every kind) where
-        /// the last frame drew them, in the state's <c>entities</c> order, without projectiles, physics body entities and
-        /// every entity this seat owns. Reused: read it before the next call.
+        /// the last frame drew them (each with its duck amount as drawn, <i>Target shapes</i>), in the state's
+        /// <c>entities</c> order, without projectiles, physics body entities and every entity this seat owns. Reused: read
+        /// it before the next call.
         /// </summary>
         private List<GenexHitTarget> HitTargets(string[] kinds)
         {
@@ -3487,7 +3515,7 @@ namespace Genex.Multiplayer.Authority
                 var taken = e == null || e.t0 > 0 || e.owner == room.SessionId || IsBodyEntity(kv.Key);
                 if (taken || (kinds != null && Array.IndexOf(kinds, e.kind ?? "") < 0)) continue;
                 if (!views.TryGetValue(kv.Key, out var v)) continue;
-                hitTargets.Add(new GenexHitTarget { Id = kv.Key, X = v.X, Y = v.Y, Z = v.Z });
+                hitTargets.Add(new GenexHitTarget { Id = kv.Key, X = v.X, Y = v.Y, Z = v.Z, Duck = v.Duck });
             }
             return hitTargets;
         }
@@ -3530,11 +3558,11 @@ namespace Genex.Multiplayer.Authority
                 var from = shot.Drawn;
                 var to = new GenexHitPoint(v.X, v.Y, v.Z);
                 shot.Drawn = to;
-                var found = GenexPredictedHits.SweepHits(from, to, HitTargets(shot.Hits.Kinds), shot.Hits.Radius, hitsFound);
+                var found = GenexPredictedHits.SweepHits(from, to, HitTargets(shot.Hits.Kinds), shot.Hits.Radius, hitsFound, shot.Shape);
                 if (found.Count == 0) continue;
                 var nearest = found[0];
                 sweeping.RemoveAt(i--);
-                // Shown where the path enters the target's sphere (its start when it starts inside).
+                // Shown where the path enters the target's sphere, or its capsule (its start when it starts inside).
                 Predicted(shot.Id, GenexHitKind.Projectile, shot.Hits.Settle, nearest, GenexHitSession.PathPoint(from, to, nearest.Dist), shot.Seq);
             }
         }
@@ -3937,10 +3965,12 @@ namespace Genex.Multiplayer.Authority
             NoteBodies();
             physicsPrediction.OnState(ServerNowArrived());
             // A fast snapshot is counted just before it is written (§17.12): a state that raised the count came by the
-            // channel, and while the channel is live only such a state moves other entities.
+            // channel, and once the channel carries the motion only such a state moves other entities. It carries it from
+            // the first snapshot of the seat's own stream: a path challenge is written nowhere, and until that snapshot a
+            // WebSocket patch still moves them, though the seat's inputs already go by datagram.
             var bySnapshot = fast.Status.Snapshots != snapshotsNoted;
             snapshotsNoted = fast.Status.Snapshots;
-            var moves = bySnapshot || !fast.Status.Live;
+            var moves = bySnapshot || !fast.CarriesMotion;
             NotePatches(moves);
             SampleTicks();
             NoteRenderSample(moves, bySnapshot);

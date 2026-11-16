@@ -46,7 +46,7 @@ namespace Genex.Multiplayer.Authority
     {
         /// <summary>Snapshots are flowing and inputs go by datagram.</summary>
         public bool Live { get; internal set; }
-        /// <summary>Snapshots applied on this session.</summary>
+        /// <summary>Snapshots of the seat's own stream written on this session (a path challenge is none).</summary>
         public int Snapshots { get; internal set; }
         /// <summary>Why this socket fell back to the WebSocket (a <see cref="GenexFastFallbackReason"/>), else null.</summary>
         public string Fallback { get; internal set; }
@@ -101,6 +101,8 @@ namespace Genex.Multiplayer.Authority
             public int WsBefore;
             /// <summary>The handle's stamp baseline when its frames went quiet (the last one the server decoded).</summary>
             public double Stamp;
+            /// <summary>A snapshot of the seat's own stream has been written on this binding (<see cref="CarriesMotion"/>).</summary>
+            public bool Carries;
         }
 
         private sealed class Fallen
@@ -351,7 +353,6 @@ namespace Genex.Multiplayer.Authority
             _ = Send(GenexFastMessage.On, new Dictionary<string, object> { ["last"] = (double)(base_ + (uint)handle.SentCount) });
             Mute();
             guard.Install();
-            s.Changed = client.Records();
             Applied(link, s);
         }
 
@@ -414,8 +415,16 @@ namespace Genex.Multiplayer.Authority
         /// live, only when that snapshot carries the entity's record (§17.12 <i>Client</i>).</summary>
         internal bool MotionKnown(string id) => link == null || link.Client.MotionOf(GenexMotionRecordKind.Entity, id) != null;
 
+        /// <summary>Whether the channel's snapshots carry the motion: live, and one of the seat's own stream has been written
+        /// on this binding. A path challenge (§17.12 <i>Return path</i>) proves an address and brings no update of the room,
+        /// so it is written nowhere; until that first snapshot a WebSocket patch still moves other entities, and is the
+        /// sample of the link (§17.3 <i>The render delay</i>).</summary>
+        internal bool CarriesMotion => link != null && link.Carries;
+
         private void Applied(Link l, GenexFastSnapshot s)
         {
+            // A path challenge brings no update of the room: nothing to count, to time or to write.
+            if (s.Challenge) return;
             Status.Snapshots++;
             var mine = l.Client.MotionOf(GenexMotionRecordKind.Seat, room.SessionId);
             var own = mine == null ? 0 : mine.Get(GenexFastRecords.SeatAckField);
@@ -431,6 +440,10 @@ namespace Genex.Multiplayer.Authority
             // The room clock the server sent it at, as a WebSocket patch's TIMED prefix gives it: the tick's nominal
             // instant would read up to a step early, by however late the server ran that step.
             room.Clock.Sample(s.Sent, rtt);
+            // The first snapshot written on this binding, so all of it: Changed is measured against the one before it,
+            // which a proof wrote nowhere.
+            if (!l.Carries) s.Changed = l.Client.Records();
+            l.Carries = true;
             guard.Write(s);
         }
 

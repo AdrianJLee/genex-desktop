@@ -2,6 +2,51 @@
 
 All notable changes to `com.genex.multiplayer`. Versions follow [semantic versioning](https://semver.org); before 1.0 a minor bump may add API.
 
+## 0.10.3
+
+- **Predicted hits on bodies: a height and a ducked height (PROTOCOL.md §17.9 *Target shapes*).** A predicted hit tested
+  each target as a sphere of `radius` round the entity's position. A preset body's position is its feet, so a shot at the
+  head of a body 72 units tall predicted nothing. `GenexProjectileHits` gains `Height` and `DuckHeight`, and
+  `PredictHitscan` gains `height` and `duckHeight` (all `double?`, null by default: the sphere, bit for bit as before).
+  With a height each target is an upright capsule of `radius` standing on the entity's position, that tall, and down to
+  `DuckHeight` tall by the `Duck` the frame draws the target with. Give the numbers the room module gives its own
+  `ctx.projectiles.sweep` and `ctx.rewind.hitscan` (a `firstperson` body: 72, 54 and a radius of 16 by default). A value
+  the module's call would refuse (not a finite number at least 0, a ducked height without a height) predicts no hit: the
+  projectile is still predicted and drawn, and `PredictHitscan` answers null with its call still counted in the id. A
+  capsule hitscan's `Dist` is where the ray enters the capsule and its point is the origin plus the unit direction times
+  that distance; the sphere's `Dist` and point are unchanged. New in `GenexPredictedHits`: `HitShapeKind`, `HitShapeOf`,
+  `CapsuleAxis`, `CapsuleEntry`, `NoEntry`, and an optional `shape` (`GenexHitShape`) on `SweepHits` and `HitscanHit`;
+  `GenexHitTarget` gains `Duck`. Whether the room judges your projectile where you drew a moving body is the module's
+  choice (`config.lagComp.projectiles` and `sweep`'s `rewind`, §17.5 *A seat's projectile*): nothing changes on the client
+  for it. Held bit for bit by predicted-hits.json's `shapes`, `capsuleSweeps` and `capsuleHitscans` (`GenexSmoke
+  predicted-hits`), and in a real room by `hits-run.ts shapes` and `hits-run.ts rewind` (new, in its default list: the
+  shape range behind a 150 and a 300 ms round trip on the WebSocket; a bolt and a ray hit a standing and a ducked body at
+  head height and miss just above it for the client and the room alike, and a bolt led at a strafing body is predicted and
+  confirmed where the module sweeps with `rewind` and cancelled where it does not). Run on .NET 8 only, not inside Unity.
+- **The render delay no longer rises as the fast channel goes live over a long path, and other entities keep every update
+  through it (PROTOCOL.md §17.3 *The render delay*, §17.12 *Return path*).** A seat proves its path before it moves to the
+  channel: it swaps at the third snapshot it applied. Until its address has answered a challenge those are path
+  challenges, snapshots that hold no record and move nothing, one per 50 ms, so behind a round trip over 100 ms the third
+  is one too, and the seat's own stream starts a round trip after the first. The session wrote that challenge as the
+  channel's first snapshot. It became the first sample of the new window; the WebSocket patches that landed after it added
+  no pose, because the channel was live; and the stream's first snapshot was stamped two or three updates after the
+  challenge. So other entities were drawn from poses 67 ms apart where the room sent an update every 33 and the WebSocket
+  had carried each, and where the step read was three updates the delay rose for the ten seconds the window keeps a sample
+  (two equal steady paths of 75 ms each way at 30 updates a second, under a ceiling of 250: in 6 of 11 joins 607 to 609 of
+  a run's 855 frames above the floor, from 0.35 s after the join to 10.5 s, the highest 102.3 ms; where the join falls
+  among the room's ticks decides whether the step is two updates or three, and only three is over the floor). A challenge
+  is now told from the seat's own snapshots by what it holds (`GenexFastClient.IsPathChallenge`,
+  `GenexFastSnapshot.Challenge`, new: no record, a tick before the newest one a snapshot brought, or that tick again with
+  the same records; a snapshot of a room at rest is of a new tick and is the stream's), is written nowhere and counted
+  nowhere, and the channel carries the motion from the first snapshot of the stream, written whole: until then a WebSocket
+  patch still adds its pose and is the link's sample, and a predicting session takes a keyframe from it whole. Behaviour
+  changes: `Fast.Snapshots` counts the stream's snapshots only, and `Fast.Transport` and the transport line say UDP at the
+  first of them (up to a round trip later than before on such a path); in a room that publishes a ceiling above your
+  `RenderDelayMs` the delay stays at the floor through a join and a return to the channel on a steady path. Held by
+  fast-transport.json's `pathChallenge` vectors (`GenexSmoke fast-client`) and, in a real room, by `render-delay-run.ts
+  fast golive` (new: two equal steady paths of 75 ms each way at 30 updates a second under a ceiling of 250): the delay is
+  100 in every frame from the join in 6 runs of 6, 0 of 855 to 857 frames above it.
+
 ## 0.10.2
 
 - **The render delay no longer rises when the fast channel goes live, or when the seat falls back (PROTOCOL.md §17.3 *The

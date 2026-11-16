@@ -79,6 +79,12 @@ HitPoint RayEntry(const HitPoint& origin, const HitPoint& dir, const HitTarget& 
   return HitPoint{origin.x + ux * entry, origin.y + uy * entry, origin.z + uz * entry};
 }
 
+HitPoint RayPoint(const HitPoint& origin, const HitPoint& dir, double dist) {
+  const double len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+  if (!(len > 0)) return origin;
+  return HitPoint{origin.x + (dir.x / len) * dist, origin.y + (dir.y / len) * dist, origin.z + (dir.z / len) * dist};
+}
+
 }  // namespace genex::hits
 
 GENEX_FP_STRICT_END

@@ -327,6 +327,7 @@ void FastSeat::FallBack(FallbackReason reason) {
   fallback_ = Fallback{sent, sent, Ack()};
   if (client_ != nullptr) client_->Close();
   client_.reset();
+  carries_ = false;
   early_.clear();
   status_.live = false;
   status_.fallback = reason;
@@ -400,6 +401,7 @@ void FastSeat::ProbeApplied(const FastSnapshot& s) {
   // Off the channel the ack and the WebSocket's list agree.
   settle_.Reset(fastAck_);
   client_ = std::move(probe_);
+  carries_ = false;
   linkSeqBase_ = base;
   fallback_.reset();
   retryAt_.reset();
@@ -410,14 +412,12 @@ void FastSeat::ProbeApplied(const FastSnapshot& s) {
   Json on = Json::MakeObject();
   on.Set("last", Json(base + static_cast<double>(sent)));
   host_.send(kOnMessage, on);
-  // The first snapshot written on this binding, so all of it.
-  FastSnapshot whole = s;
-  whole.changed = client_->AllRecords();
-  Applied(whole);
+  Applied(s);
 }
 
 void FastSeat::Applied(const FastSnapshot& s) {
-  if (client_ == nullptr) return;
+  // A path challenge brings no update of the room: nothing to count, to time or to write.
+  if (client_ == nullptr || s.challenge) return;
   status_.snapshots += 1;
   const MotionRecord* mine = client_->MotionOf(RecordKind::Seat, host_.sessionId());
   const double own = mine != nullptr ? mine->seat.inAck : 0;
@@ -433,7 +433,11 @@ void FastSeat::Applied(const FastSnapshot& s) {
   // The room clock the server sent it at, as a WebSocket patch's TIMED prefix gives it: the tick's nominal
   // instant would read up to a step early, by however late the server ran that step.
   host_.sample(s.sent, rtt);
-  guard_.Write(host_.state(), s.changed, s.tick);
+  // The first snapshot written on this binding, so all of it: `changed` is measured against the one before
+  // it, which a proof wrote nowhere.
+  const bool whole = !carries_;
+  carries_ = true;
+  guard_.Write(host_.state(), whole ? client_->AllRecords() : s.changed, s.tick);
   host_.statePass();
 }
 
@@ -459,6 +463,7 @@ void FastSeat::Bind(const Json& message) {
   o.onSnapshot = [this](const FastSnapshot& s) { Applied(s); };
   client_ = FastClient::Open(std::move(o));
   if (client_ == nullptr) return FallBack(FallbackReason::Unreachable);
+  carries_ = false;
   linkSeqBase_ = host_.seqBase();
   // The server dropped every WebSocket input this socket sent before the binding, unstepped: the first
   // datagram carries them all again.
@@ -534,6 +539,7 @@ void FastSeat::Dropped() {
   boundUrl_.clear();
   if (client_ != nullptr) client_->Close();
   client_.reset();
+  carries_ = false;
   if (probe_ != nullptr) probe_->Close();
   probe_.reset();
   probeApplied_ = 0;

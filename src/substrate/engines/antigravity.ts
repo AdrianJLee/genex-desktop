@@ -78,7 +78,8 @@ import {
 import { abortControllerFor, CompletionStop, interruption, partialDelegateResult, STOPPED_BY_USER } from "./common.ts";
 import type { PartialDelegateState } from "./common.ts";
 import { ProcessSandbox, type SandboxOptions, SandboxMachService, shellQuote } from "../spawn.ts";
-import { childEnv } from "../child-env.ts";
+import { childEnv, vendorEnv } from "../child-env.ts";
+import { StudioPlatform } from "../../shared/boot.ts";
 import { antigravityHomes, credentialHomes } from "../credential-homes.ts";
 import { killProcessTree } from "../process-tree.ts";
 import { spawnCommand } from "../command-launch.ts";
@@ -638,7 +639,7 @@ export class AntigravityEngine implements Engine {
     return {
       argv: [...ANTIGRAVITY_SESSION_ARGV],
       cwd: ctx.runDir,
-      env: {},
+      env: antigravityBoxEnv(),
       sandbox: antigravitySandbox({
         runDir: ctx.runDir,
         gameDir: ctx.cwd,
@@ -895,6 +896,36 @@ export function antigravitySandbox(input: {
   };
 }
 
+/**
+ * What makes Antigravity CLI keep its sign-in in its own file (`~/.gemini/antigravity-cli`) rather
+ * than in the operating system's credential store: it uses the file whenever it believes it runs
+ * over SSH (1.5.9 logs "Using file-based token storage because SSH session detected"). Nothing
+ * connects over SSH; the values only satisfy that check.
+ */
+const ANTIGRAVITY_FILE_STORE = {
+  SSH_CONNECTION: "127.0.0.1 0 127.0.0.1 0",
+  SSH_CLIENT: "127.0.0.1 0 0",
+} as const;
+
+/**
+ * What a boxed Antigravity process is told on top of its own variables.
+ *
+ * On a Mac the box denies the Keychain, so the CLI falls back to its file by itself. On Windows the
+ * sandbox runs it as its own user, whose Credential Manager the CLI would use: every Windows
+ * sandbox runs as that user and could read the sign-in there (seen on a real PC). On Linux the
+ * Secret Service may be within reach. So off a Mac it is told to use its file, and on Windows its
+ * home is the person's, so that file is the person's `~/.gemini`, which this sandbox alone may
+ * reach (`antigravityHomes`), never the sandbox user's profile, which every Windows sandbox shares.
+ */
+export function antigravityBoxEnv(
+  platform: NodeJS.Platform = process.platform,
+  home: string = os.homedir(),
+): Record<string, string> {
+  if (platform === StudioPlatform.Mac) return {};
+  if (platform === StudioPlatform.Windows) return { ...ANTIGRAVITY_FILE_STORE, USERPROFILE: home };
+  return { ...ANTIGRAVITY_FILE_STORE };
+}
+
 /** A sign-in started in the sessions' box: how its terminal starts it, and what gives the box back. */
 export interface AntigravitySignInLaunch {
   file: string;
@@ -909,14 +940,17 @@ export interface AntigravitySignInLaunch {
  * Antigravity's sign-in (`agy acp --login`) as the person's terminal starts it: in the box every
  * session runs in, its folder an empty one of its own. The Keychain is out of reach there, so the
  * CLI keeps the sign-in in its file in `~/.gemini`, which is where each session reads it; the
- * sign-in needs only Google's hosts and the certificate checker. macOS and Linux.
+ * sign-in needs only Google's hosts and, on a Mac, the certificate checker. On Windows the terminal
+ * reaches the boxed CLI through the sandbox's input relay (`ProcessSandbox.terminalLaunch`).
  */
 export async function antigravitySignInLaunch(input: {
   binary: string;
   env: Record<string, string>;
   scratchRoot?: string;
 }): Promise<AntigravitySignInLaunch> {
-  const root = await mkdtemp(path.join(input.scratchRoot ?? os.tmpdir(), "antigravity-signin-"));
+  const base = input.scratchRoot ?? os.tmpdir();
+  await mkdir(base, { recursive: true });
+  const root = await mkdtemp(path.join(base, "antigravity-signin-"));
   const runDir = path.join(root, "run");
   await mkdir(runDir, { recursive: true });
   const gone = () => rm(root, { recursive: true, force: true }).catch(() => {});
@@ -931,7 +965,7 @@ export async function antigravitySignInLaunch(input: {
     const launch = await sandbox.terminalLaunch({
       command,
       cwd: runDir,
-      env: input.env,
+      env: { ...input.env, ...antigravityBoxEnv() },
       label: "antigravity:sign-in",
       policy: { allowedDomains: [...ANTIGRAVITY_HOSTS] },
     });
@@ -1149,21 +1183,13 @@ async function startAntigravity(invocation: AntigravityInvocation): Promise<Anti
   if (!invocation.sandbox) return antigravityOutside(binary, invocation, installation.env);
   const sandbox = await ProcessSandbox.create(invocation.sandbox);
   try {
-    const env = childEnv(installation.env, { base: "contractor", vendor: "antigravity", set: invocation.env });
-    return await antigravityProcess(sandbox, binary, { ...invocation, env: stringEnv(env) }, () =>
-      sandbox.dispose().catch(() => {}),
-    );
+    // Its own variables alone: the sandbox builds the rest from its allow-list, as for Grok Build and Cursor.
+    const env = { ...vendorEnv(installation.env, "antigravity"), ...invocation.env };
+    return await antigravityProcess(sandbox, binary, { ...invocation, env }, () => sandbox.dispose().catch(() => {}));
   } catch (err) {
     await sandbox.dispose().catch(() => {});
     throw err;
   }
-}
-
-/** An environment's set variables alone. */
-export function stringEnv(env: NodeJS.ProcessEnv): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) if (value !== undefined) out[key] = value;
-  return out;
 }
 
 /**

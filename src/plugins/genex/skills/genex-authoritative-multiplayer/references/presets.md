@@ -295,26 +295,30 @@ inside that distance:
 
 ```js
 const RANGE = 4096;
-const HIT_RADIUS = 32; // the hit sphere
-const HIT_CENTRE = 36; // its centre over the target's feet
+/** A body as a target: the preset's radius, standHeight and crouchHeight. */
+const BODY = { kinds: ["player"], radius: 16, height: 72, duckHeight: 54 };
 
 function fire(ctx, playerId, me) {
   const eye = { x: me.x, y: me.y, z: me.z + 64 - 18 * me.duck };
   const c = Math.cos(me.pitch);
   const dir = { x: c * Math.cos(me.yaw), y: c * Math.sin(me.yaw), z: Math.sin(me.pitch) };
   const wall = ctx.world.ray(eye, dir, { range: RANGE });
-  const target = ctx.rewind.hitscan(
-    { x: eye.x, y: eye.y, z: eye.z - HIT_CENTRE }, // hitscan's spheres sit at the feet: lower the line
-    dir,
-    { range: wall ? wall.dist : RANGE, radius: HIT_RADIUS, kinds: ["player"] },
-  );
+  const target = ctx.rewind.hitscan(eye, dir, { ...BODY, range: wall ? wall.dist : RANGE });
   ctx.emit("shot", { shooter: playerId, hit: target && target.id, impact: wall && wall.point });
 }
 ```
 
-Call it from `onInput` for a button in `config.lagComp.buttons`. A target counts when the middle of
-its sphere is in front of the wall: `hitscan`'s `dist` is measured to the middle, so a target whose
-middle is past a corner is safe.
+Call it from `onInput` for a button in `config.lagComp.buttons`. A body's position is its feet, so
+the test needs the body's `height`: each target is then an upright capsule of `radius`, `height`
+tall and `duckHeight` tall fully ducked, and a shot at the head hits. Without `height` the target is
+a ball of `radius` round the feet. `dist` is where the ray enters the body, so a target counts when
+the shot reaches it in front of the wall. `height` needs `@genex-ai/multiplayer` 0.17.17 or newer.
+
+To show the hit marker the frame the player fires, the client gives `session.predictHitscan` the
+same `eye`, `dir` and `BODY`, with `range` cut to its own wall distance along
+the aim: [projectiles.md](projectiles.md#show-the-hit-at-once-predicted-hits). This `fire` lowers
+no `hp`: add the damage there (a lower `hp` is what confirms the marker), or pass
+`settle: "manual"` and settle the hit from the `shot` event.
 
 - **What it answers.** `dist` is the distance along the ray, `point` where it entered, `normal` the
   face it entered by, `solid` which one, counting `boxes` and then `ramps`. Touching is not hitting:
@@ -390,10 +394,10 @@ and re-launches it from where it is when one of these changes it:
 
 Each re-launch is one entity update, far inside a tick's caps. **The limit to say out loud:** every
 client draws the ball where the server has it now, its own car ahead of the server by its input
-lead, and other cars 100 ms behind. So your own touch shows your car reaching the ball a moment
-before the ball reacts, and another car's touch shows the ball leaving before that car visibly gets
-there: both are off by about the one-way latency. Draw the ball from `session.entities()` and leave
-it there; do not try to hide this by moving the ball on the client.
+lead, and other cars a render delay behind (100 ms or more). So your own touch shows your car
+reaching the ball a moment before the ball reacts, and another car's touch shows the ball leaving
+before that car visibly gets there: both are off by about the one-way latency. Draw the ball from
+`session.entities()` and leave it there; do not try to hide this by moving the ball on the client.
 
 ## Sub-steps and the CPU budget
 

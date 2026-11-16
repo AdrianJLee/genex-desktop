@@ -113,7 +113,7 @@ const claimOf = (axis) => (axis >= 1 ? null : ((axis + 1) * RANGE) / 2);
 function fire(ctx, playerId, me, input, weapon) {
   const stop = ctx.world.claim(eye, dir, claimOf(input.moveZ), { range: RANGE, ...WEAPONS[weapon] });
   if (stop === null) return; // a ray that is none
-  const target = ctx.rewind.hitscan(lowered, dir, { range: stop.dist, radius: HIT_RADIUS, kinds: ["player"] });
+  const target = ctx.rewind.hitscan(eye, dir, { ...BODY, range: stop.dist }); // BODY: presets.md, a shot and the world
   ctx.emit("shot", { shooter: playerId, hit: target && target.id, impact: stop.point });
 }
 ```

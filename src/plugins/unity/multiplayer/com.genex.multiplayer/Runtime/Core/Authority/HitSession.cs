@@ -108,5 +108,15 @@ namespace Genex.Multiplayer.Authority
             var entry = Math.Max(0, found.Dist - Math.Sqrt(Math.Max(0, inside)));
             return new GenexHitPoint(origin.X + ux * entry, origin.Y + uy * entry, origin.Z + uz * entry);
         }
+
+        /// <summary>The point <paramref name="dist"/> along a ray from <paramref name="origin"/> along
+        /// <paramref name="dir"/> (any length); <paramref name="origin"/> for a direction with none. Where a ray enters a
+        /// capsule the hitscan test found <paramref name="dist"/> along it (§17.9 <i>Target shapes</i>).</summary>
+        public static GenexHitPoint RayPoint(GenexHitPoint origin, GenexHitPoint dir, double dist)
+        {
+            var len = Math.Sqrt(dir.X * dir.X + dir.Y * dir.Y + dir.Z * dir.Z);
+            if (!(len > 0)) return origin;
+            return new GenexHitPoint(origin.X + dir.X / len * dist, origin.Y + dir.Y / len * dist, origin.Z + dir.Z / len * dist);
+        }
     }
 }

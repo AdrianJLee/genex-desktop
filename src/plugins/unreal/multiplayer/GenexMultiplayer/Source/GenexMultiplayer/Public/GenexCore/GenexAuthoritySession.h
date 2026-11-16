@@ -294,12 +294,20 @@ struct AuthorityOptions {
 };
 
 /** What a projectile can hit (§17.9 *Predicted hits*): the room module's own
- *  `ctx.projectiles.sweep(id, { kinds, radius })`. */
+ *  `ctx.projectiles.sweep(id, { kinds, radius, height, duckHeight })`. The module's `rewind` is the server's
+ *  alone: the prediction already tests what this client draws. */
 struct ProjectileHits {
   /** The entity kinds it can hit; none listed hits nothing, as the module's sweep visits none. */
   std::vector<std::string> kinds;
-  /** A target's hit sphere, world units around its entity's x, y, z. */
+  /** A target's hit sphere, world units around its entity's x, y, z; with `height`, its capsule's radius. */
   double radius = 0.0;
+  /** With a height, as the module gives it to `sweep`, each target is a body (§17.9 *Target shapes*): an
+   *  upright capsule of `radius` standing on the entity's position, `height` tall. None: the sphere. A value
+   *  the module's call would refuse (no finite number at least 0) predicts nothing. */
+  std::optional<double> height;
+  /** A body's height fully ducked, as the module gives it to `sweep`; none: a duck changes nothing. Only
+   *  with `height`: alone, or no finite number at least 0, it predicts nothing. */
+  std::optional<double> duckHeight;
   /** What settles its predicted hit: the target's health in the states that follow, or the game alone
    *  (AuthoritySession::ConfirmHit, CancelHit) when the module tells a hit some other way. */
   hits::HitSettle settle = hits::HitSettle::Health;
@@ -323,7 +331,8 @@ struct ProjectilePrediction {
 };
 
 /** A hitscan your game fires, as it predicts it (AuthoritySession::PredictHitscan): the ray and the options
- *  the room module hands `ctx.rewind.hitscan(origin, dir, { range, radius, kinds })`, in world units. */
+ *  the room module hands `ctx.rewind.hitscan(origin, dir, { range, radius, kinds, height, duckHeight })`, in
+ *  world units. */
 struct HitscanPrediction {
   hits::HitPoint origin;
   /** Along the ray, of any length; one with no length is no shot. */
@@ -334,6 +343,11 @@ struct HitscanPrediction {
   std::optional<double> radius;
   /** The entity kinds it can hit; none: every kind, as the module's hitscan without `kinds`. */
   std::optional<std::vector<std::string>> kinds;
+  /** A body's height, and its height fully ducked, as ProjectileHits has them (§17.9 *Target shapes*): with
+   *  a `height` each target is its upright capsule of `radius`. A pair the module's call would refuse
+   *  predicts nothing, and the call still takes its number. */
+  std::optional<double> height;
+  std::optional<double> duckHeight;
   /** What settles its predicted hit (ProjectileHits::settle). */
   hits::HitSettle settle = hits::HitSettle::Health;
 };
@@ -346,13 +360,15 @@ struct AuthorityHit {
   hits::HitKind kind = hits::HitKind::Hitscan;
   /** The entity hit. */
   std::string target;
-  /** Where the path or the ray enters the target's sphere; the start of one that starts inside it. */
+  /** Where the path or the ray enters the target's sphere, or its capsule when the shot was declared with a
+   *  `height` (§17.9 *Target shapes*); the start of one that starts inside it. */
   double x = 0.0;
   double y = 0.0;
   double z = 0.0;
   /** How far along the test found the target, as the room's own test says it: for a projectile along the
    *  path of the frame that reached it (`ctx.projectiles.sweep`), for a hitscan along the ray to the point
-   *  nearest the target's centre (`ctx.rewind.hitscan`). World units. */
+   *  nearest the target's centre (`ctx.rewind.hitscan`), or, declared with a `height`, to where the ray
+   *  enters the target's capsule. World units. */
   double dist = 0.0;
   /** HitSettled: the states that followed (or ConfirmHit) confirmed it; false: cancelled. */
   bool confirmed = false;

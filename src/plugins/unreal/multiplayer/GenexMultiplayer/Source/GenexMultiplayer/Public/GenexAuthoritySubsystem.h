@@ -184,7 +184,8 @@ public:
 	 * this frame), keeps its id when the server's arrives, and is dropped if the server never launches it.
 	 * With Hit Kinds in the launch its hit is predicted too (PROTOCOL.md §17.9 *Predicted hits*): the frame it
 	 * is drawn reaching a target, On Predicted Hit fires under the projectile's id, and On Hit Settled once the
-	 * server's states confirm it or not.
+	 * server's states confirm it or not. Targets that are bodies (their location is their feet) need Hit Height,
+	 * and Hit Duck Height when they duck: the numbers the module gives its own sweep (*Target shapes*).
 	 * Returns its id, `<seat>.<seq>.<n>`, or "" before the room is ready or while reconnecting (no input
 	 * staged then is sent).
 	 */
@@ -192,7 +193,8 @@ public:
 	FString PredictProjectile(const FGenexProjectileLaunch& Launch, int32 FireButtons = 0);
 	/**
 	 * Predict a hitscan you fire (PROTOCOL.md §17.9 *Predicted hits*). Call it in the frame you fire, with the
-	 * ray and the options the room module hands `ctx.rewind.hitscan`. It is tested against the other entities
+	 * ray and the options the room module hands `ctx.rewind.hitscan` (Height and Duck Height for targets that are
+	 * bodies, *Target shapes*). It is tested against the other entities
 	 * where this frame draws them (the positions the server judges the shot at): true, with the hit, when the
 	 * ray finds a target; On Predicted Hit fires for it too, and On Hit Settled once the state that judged the
 	 * shot shows the target hurt (confirmed) or not. `FireButtons` is added to the next input sent, as in

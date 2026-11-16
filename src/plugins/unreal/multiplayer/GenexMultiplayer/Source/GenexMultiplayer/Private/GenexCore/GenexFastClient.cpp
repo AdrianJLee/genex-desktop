@@ -240,6 +240,20 @@ std::optional<FallbackReason> FastClient::Due() const {
   return std::nullopt;
 }
 
+bool IsPathChallenge(double tick, std::size_t records, double updateTick, bool sameRecords) {
+  if (records == 0 || tick < updateTick) return true;
+  return tick == updateTick && sameRecords;
+}
+
+bool FastClient::SameAsDecoded(const Records& records) const {
+  if (records.size() != decodedByKey_.size()) return false;
+  for (const KeyedRecord& r : records) {
+    const auto before = decodedByKey_.find(r.key);
+    if (before == decodedByKey_.end() || before->second.bytes != r.bytes) return false;
+  }
+  return true;
+}
+
 std::vector<MotionRecord> FastClient::DecodeChanged(const Records& records) {
   std::map<double, Decoded> nextByKey;
   std::map<std::string, MotionRecord> nextLatest;
@@ -279,7 +293,9 @@ Receipt FastClient::Receive(const std::uint8_t* data, std::size_t length) {
   lastAppliedSnap_ = held.snap;
   lastAppliedAt_ = now;
   sent_ = HeldInputs(sent_, held.inputAck, options_.tickHz);
-  FastSnapshot applied{held.snap, held.tick, held.inputAck, held.sent, DecodeChanged(held.records)};
+  const bool challenge = IsPathChallenge(held.tick, held.records.size(), updateTick_, SameAsDecoded(held.records));
+  if (!challenge) updateTick_ = held.tick;
+  FastSnapshot applied{held.snap, held.tick, held.inputAck, held.sent, challenge, challenge ? std::vector<MotionRecord>() : DecodeChanged(held.records)};
   if (options_.onSnapshot) options_.onSnapshot(applied);
   const bool eager = applied.changed.size() >= kAckEagerRecords && (!lastUplinkAt_ || now - *lastUplinkAt_ >= kAckEagerGapMs);
   if (applied.snap - before >= kChallengeJump || eager) SendEmpty();

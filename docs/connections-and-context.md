@@ -570,7 +570,12 @@ unlock saved credentials. After a restart, a connector with saved environment or
 secrets is not started at all until the user presses Connect: its card reads "Saved credentials
 are locked. Press Connect…", and its tools, test and tool list are refused rather than run
 without the secret. Disconnect/lock revokes new calls; errors redact credentials even
-when a late response came from a transport created before revocation. Custom OAuth-server
+when a late response came from a transport created before revocation. An account stays with the
+authorization server it signed in at: refresh and revocation go only there, so a connected server
+that later names another one gets no token or client secret sent to it. An account saved before
+that pin (Genex 0.1.44 or older) asks for one new sign-in at its next refresh, and its disconnect
+revokes nothing at the server. A connector's key, session id and tool arguments never follow a
+redirect to another origin. Custom OAuth-server
 interoperability still needs real service acceptance; protocol regression coverage alone is
 not proof that every provider's sign-in flow works.
 
@@ -1017,7 +1022,11 @@ environment, a stdio connector with no or a mismatched `trustedLaunch` never lau
 hiding a connector from another project, one shared connection unless the launch is per project,
 the injectable idle close, suffix de-duplication within the 48-character limit, result and error
 redaction, erasing a dropped secret, and `resolveExecutable`. `mcp-oauth.test.ts` covers RFC 7009
-revocation on disconnect and remove. `tool-schema.test.ts` pins `zodShapeFromJsonSchema`,
+revocation on disconnect and remove after a full local sign-in, and the pin: a server that names
+another authorization server afterwards gets no secret at disconnect or refresh, a redirected
+revocation is not followed, and an account saved before the pin signs in once again. A table in
+`mcp-client.test.ts` redirects initialize, the stream and `tools/call` over HTTP and SSE to a
+second local origin with every redirect status and asserts that nothing reaches it. `tool-schema.test.ts` pins `zodShapeFromJsonSchema`,
 `flatParameters` and `exposedToolName`; `mcp-import.test.ts` pins the pure snippet parser (Claude
 JSON, the Codex TOML subset, `bearer_token_env_var` as a warning, `${VAR}` placeholders kept as names
 that need a value, malformed input warning rather than throwing, and no node imports —

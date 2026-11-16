@@ -1,8 +1,8 @@
 {
   "repository": "me-ai-org/genex-demo",
-  "commit": "233cf610de1b0ae74f90f7fdcd4bda52c24283af",
+  "commit": "ed1ceab3c36f535d166a940226d900a8f6e01e17",
   "path": "sdks/unity",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "excluded": [
     ".gitignore",
     "Tests~",
@@ -10,7 +10,7 @@
     "Runtime/Plugins.meta"
   ],
   "files": {
-    "CHANGELOG.md": "76a4bc09412ae617193060ef8d56f954bc4dce194431d5f5154b4f0bc4d0aa97",
+    "CHANGELOG.md": "b1e0361375a825aff039055108a936f8b5f18278cac8d13667f3867e87ecb83f",
     "CHANGELOG.md.meta": "cb9c4265f6cd873b5d869d73fd6fa4f76fdd3a929ac1595f9d79c34cf8c74de9",
     "Editor.meta": "933c7c3a21f873912a28017b48fde9ad288cd59889c2ae90b5f879230a2c713e",
     "Editor/Core.meta": "531dbb6093410174bb889135d71101338ad824b85877024578cc758bc522c73e",
@@ -22,7 +22,7 @@
     "Editor/GenexWorldExporter.cs.meta": "4ef767c316a30295dd703b80a507b1c9aef04e98d2cca6ccd82834db8598b040",
     "Editor/GenexWorldSceneWalk.cs": "7fe5e4cb5bd38d1d7cb64b8b8719448de2014f134e40135c1112388ba6ac1367",
     "Editor/GenexWorldSceneWalk.cs.meta": "5fd980f4b15504d7df4799c5d4d9c8190930bb9ff28df28803f122c001c16622",
-    "README.md": "7876c3357276251a32a5d20195d83577d58449b1628f48d28ac75a6b4670cd6d",
+    "README.md": "3244dae45b43422a6e90c8933cac92684b18e43785bf14e7ef356e2d5cfffae1",
     "README.md.meta": "36429f0996feffbe012355597ab80970d4e6d0b12c228c993fcc0f501c86a0b4",
     "Runtime.meta": "fcecbb29f6459619879a44eefecddc55049f0ab0c21294018336645418bd7674",
     "Runtime/Core.meta": "504177ae6a9f8f26adc0f06ea25e16e094bff9e113d5d83ba3976c4c1399f6d7",
@@ -61,7 +61,7 @@
     "Runtime/Core/Authority/Firstperson.cs.meta": "58dc6154aea62202ecb5e80939f4144cd749e50e8948011411fa9cabea79834a",
     "Runtime/Core/Authority/GenexAuthorityRejoin.cs": "091c03ab38eac063c58fa372c3a98d77627d39d838dd1546e447a68837593a67",
     "Runtime/Core/Authority/GenexAuthorityRejoin.cs.meta": "ad57bb0ed52629e53658c3b6a030752b1b2e2756cda28ff42fb73a94ce1c8a25",
-    "Runtime/Core/Authority/GenexAuthoritySession.cs": "75f6504de220fb746ec92aa4e5c4e53d09ad3b1ae8a67df4565e79442b25df9b",
+    "Runtime/Core/Authority/GenexAuthoritySession.cs": "a9d2b76e31b09fb32f8fe15e29196f6c91252d5fac26829022712629323c0024",
     "Runtime/Core/Authority/GenexAuthoritySession.cs.meta": "d1042644f136ccfa38cc3700de3f0df7aeedf1905ebb632eef61720bb8943fa2",
     "Runtime/Core/Authority/GenexInput.cs": "0a2ffd4a218514c6026aa2277dd95d9c5bade27919f458c5aca9bd0738be8073",
     "Runtime/Core/Authority/GenexInput.cs.meta": "5bff0631ffb187297a168b101cce9f8a6bae1d051e7ff3d6bd3010572e86c83d",
@@ -91,7 +91,7 @@
     "Runtime/Core/Authority/Presets.cs.meta": "67fcb9b72f8db2fd1a54a76e609d4b5858519382c68cf497334c499860a93006",
     "Runtime/Core/Authority/Projectile.cs": "09b51dac3904d38cc31f66f858c4d68a54e6f0d275f8eae8e64dfb4df4cc39fc",
     "Runtime/Core/Authority/Projectile.cs.meta": "345e51f947c3f7d5df3678292839437daf7ffbde967dcd83e649f3feb71b7d68",
-    "Runtime/Core/Authority/RenderDelay.cs": "0d256fc9d4cb70ffed027e00ab26afbc876082fa877a85940a6d44011f05f593",
+    "Runtime/Core/Authority/RenderDelay.cs": "b2f474f67721109e3b6d3efcaf7fb66c1098a2529f36826e27c22cefd92f4616",
     "Runtime/Core/Authority/RenderDelay.cs.meta": "ed776a9445787c48a49882f183023985a0b581c06662aed6ef201c3a3cdbc9c6",
     "Runtime/Core/Authority/RoomKey.cs": "643d3e05553633be36340b64604479b4440ff21a9c7448eff2bc8a0d4c45b736",
     "Runtime/Core/Authority/RoomKey.cs.meta": "cf271903a404127c12b36ec0a8bd5ab198026e99376643e64bc67768b54ff284",
@@ -117,7 +117,7 @@
     "Runtime/Core/Interpolator.cs.meta": "f950108236ed5e046035a28837472ccbc3e643e80033017ffb430475a032ae9b",
     "Runtime/Core/Json.cs": "1d826fe7198656afc8059bc419757d2c5ad0d28134735a446e8a8bbdfe3c4cea",
     "Runtime/Core/Json.cs.meta": "7e557f9f16b7b0cd7cf8ac69885cdfed3b71d0d2251990f76567cdc46508e9f0",
-    "Runtime/Core/Protocol.cs": "52733e03cd13384b167813b2b1ccf1a1f0026087c8efcb50d0278b2b0dfae44a",
+    "Runtime/Core/Protocol.cs": "68e6a46ece7f7c52c20d1218dafe6eefc42ddb32bb7b21c42ec79db6bd338ed5",
     "Runtime/Core/Protocol.cs.meta": "3ca7765d0682c263e853c1d48e5e9020b3d8a54a221fcd26aec70806a3110e56",
     "Runtime/Core/Schema.cs": "32a7c03a11f947bd5d431ad1890affef3a7850ba896bcacb9fca2bf776d44d2c",
     "Runtime/Core/Schema.cs.meta": "713584b67d3e37475a049f04922533d771602b78787ee1ad653e28a8c2420426",
@@ -144,7 +144,7 @@
     "Runtime/link.xml": "de9cc7a93538c4d9fdb10cc431debd496ee4fbf610420e0328615476b4ab0135",
     "Runtime/link.xml.meta": "ea97be817f5eadafd9247d5479f96240153ab4b156109827cf30c078e50b0ef1",
     "Samples~/Quickstart/GenexQuickstart.cs": "01e711577fa1a3783fa00ef44a1b264a92dbf6f57f1b7e763917b9a01fe4e4df",
-    "package.json": "2928844a26ea92da22b1f3aca370a5d95954b1ccf04ee7a1d688464d7674111c",
+    "package.json": "3d5159891e617a92043230a0f5ba3bfee1b6716369eadc4c856d5336bdc07b43",
     "package.json.meta": "1a0c6a788eeae23f34d17639f9442bd161fb9c62e10eebd4125a9fcd3e2c06f2"
   }
 }

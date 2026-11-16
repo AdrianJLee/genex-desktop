@@ -3,12 +3,15 @@
 // latency nothing needs, and on a jittery one a sample that lands later than the delay covers leaves the
 // interpolation holding its newest pose, then jumping when the next arrives (a rubber band). So a client
 // measures its own link: each sample's lateness against the best transit of the last ten seconds, plus
-// the step to the sample before it, is the delay that sample needed. The delay follows the worst of them
-// between the floor (the game's own delay, protocol::authority_timing::kRenderDelayMs by default) and the
-// ceiling the room publishes, rising fast (playback slows by a fifth) and falling slowly (a fiftieth), so
-// nothing drawn ever steps. The client stamps its inputs with the delay it draws at, and the room rewinds
-// no further than its ceiling explains (§17.5), which is why the ceiling is the room's: a room that
-// publishes none (an older host, a stand with the setting off) keeps every client at the floor.
+// the step to the sample before it, is the delay that sample needed. A sample belongs to the channel that
+// carried it: the WebSocket's path and the fast channel's take different times, so when the motion moves
+// from one to the other the window starts over (Restart), and no sample is measured against the other
+// path's best transit. The delay follows the worst of them between the floor (the game's own delay,
+// protocol::authority_timing::kRenderDelayMs by default) and the ceiling the room publishes, rising fast
+// (playback slows by a fifth) and falling slowly (a fiftieth), so nothing drawn ever steps. The client
+// stamps its inputs with the delay it draws at, and the room rewinds no further than its ceiling explains
+// (§17.5), which is why the ceiling is the room's: a room that publishes none (an older host, a stand with
+// the setting off) keeps every client at the floor.
 //
 // Port of packages/multiplayer/src/authority/render-delay.ts (`createRenderDelay`,
 // `presetRenderDelayMax`): doubles, only + − × and comparisons, in the reference's order, unfused
@@ -61,6 +64,10 @@ class GENEX_CORE_API RenderDelayBuffer {
    *  it together, and none of them was late for a frame. A stamp that is not after the last one, or an arrival
    *  or a stamp that is no number, is ignored. */
   void Note(double arrivalMs, double stampMs, double drawnMs = std::numeric_limits<double>::quiet_NaN());
+  /** The motion moved to the other channel (the fast channel went live, or the seat fell back to the
+   *  WebSocket): the window starts over with the next sample, whatever its stamp, its step read as 0. The
+   *  delay is kept, and moves on at its usual pace. */
+  void Restart();
   /** What the window's worst sample needed, within the bounds: where the delay is heading. */
   double Target() const;
   /** Moves the delay towards the target for the frame time since the last call; returns it. */

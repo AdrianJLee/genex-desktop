@@ -382,10 +382,14 @@ struct Impl {
   void FastStatePass() {
     if (room == nullptr || State() == nullptr) return;
     fastPass = true;
+    const int applied = fastSeat != nullptr ? fastSeat->Status().snapshots : snapshotsPassed;
+    passLanded = applied != snapshotsPassed;
+    snapshotsPassed = applied;
     NotePatches();
     NoteBodies();
     NotePhysicsKeyframe();
     SampleTicks();
+    passLanded = false;
     const double now = colyseus_room_clock_now(colyseus_room_get_clock(room));
     projectileTtl.NoteState(now);
     SettleShots();
@@ -422,6 +426,14 @@ struct Impl {
   std::string delayCeilingText = std::string(1, '\0');
   /** Inside the state pass of a fast snapshot (FastStatePass): the sample it notes is the channel's. */
   bool fastPass = false;
+  /** Inside the state pass of an update that landed: a decoded WebSocket patch (CbState), or a snapshot the
+   *  channel just applied (FastStatePass, by its count of them). False in any other reading of the state: a
+   *  fallback writing back the fields the channel held, BuildPrediction reading it as it stands. */
+  bool passLanded = false;
+  /** The fast channel's snapshots applied when a fast pass last ran: a pass that raised the count is a snapshot's. */
+  int snapshotsPassed = 0;
+  /** Whether the last sample noted came by the fast channel (no value: none yet). */
+  std::optional<bool> sampleByFast;
   std::shared_ptr<int> alive = std::make_shared<int>(0);
 
   colyseus_settings_t* settings = nullptr;
@@ -2194,9 +2206,15 @@ struct Impl {
    *  is no server time (and would hide every later stamp behind it). */
   void NoteRenderSample(double stamp) {
     if (room == nullptr || !(colyseus_room_clock_last_server_time(colyseus_room_get_clock(room)) > 0.0)) return;
+    // Only an update that landed is a sample: not a fallback's rewrite of the state.
+    if (!passLanded) return;
     // While the fast channel is live its snapshots are what moves other entities: a WebSocket patch's motion
     // fields are held back then (GenexFastSeat.h MotionGuard), so it is no sample.
     if (!fastPass && fastSeat != nullptr && fastSeat->Status().live) return;
+    // A sample belongs to the channel that carried it, and the two paths take different times: the first
+    // sample from the other channel starts the window over.
+    if (sampleByFast.has_value() && *sampleByFast != fastPass) delayBuffer.Restart();
+    sampleByFast = fastPass;
     // Whatever this frame reads landed after the frame before drew: that frame is the last one without it.
     delayBuffer.Note(Clock::NowMs(), stamp, Pump::PolledSinceMs());
   }
@@ -4133,10 +4151,12 @@ void CbState(void* ud) {
   if (impl->resyncFirstState) impl->DropEarlierSockets();
   // §17.3 *The clock's samples*: this state's round trip, paced, before anything is placed by the render time.
   impl->NoteStateRoundTrip();
+  impl->passLanded = true;
   impl->NotePatches();
   impl->NoteBodies();
   impl->NotePhysicsKeyframe();
   impl->SampleTicks();
+  impl->passLanded = false;
   const double now = colyseus_room_clock_now(colyseus_room_get_clock(impl->room));
   impl->projectileTtl.NoteState(now);
   impl->SettleShots();

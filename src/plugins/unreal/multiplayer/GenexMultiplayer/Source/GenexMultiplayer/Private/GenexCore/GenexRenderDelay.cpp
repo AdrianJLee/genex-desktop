@@ -54,6 +54,11 @@ void RenderDelayBuffer::Note(double arrivalMs, double stampMs, double drawnMs) {
   while (!samples_.empty() && (samples_.front().arrival < arrivalMs - kWindowMs || samples_.size() > kMaxSamples)) samples_.pop_front();
 }
 
+void RenderDelayBuffer::Restart() {
+  samples_.clear();
+  hasLast_ = false;
+}
+
 double RenderDelayBuffer::Target() const {
   if (samples_.empty()) return floor_;
   double base = std::numeric_limits<double>::infinity();

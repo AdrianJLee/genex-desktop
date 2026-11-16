@@ -18,6 +18,11 @@ import { tmpDir } from "../helpers/tmp.ts";
 /** A pause long enough for a refused connection's bytes to have arrived, had they been heard. */
 const SETTLE_MS = 200;
 
+/** A Windows terminal's line reads through Git's own `/usr/bin/cat`; Linux has one at that path, macOS only `/bin/cat`. */
+const GIT_CAT = {
+  skip: process.platform === "darwin" && "macOS has no /usr/bin/cat, the Git for Windows path the terminal line names",
+};
+
 async function shell(): Promise<string> {
   if (process.platform !== "win32") return "/bin/bash";
   const bash = await findGitBash();
@@ -150,7 +155,7 @@ describe("a terminal's feeder", () => {
     await live.close();
   });
 
-  it("is how a Windows sandbox's own terminal starts a command that reads what the person types", async () => {
+  it("is how a Windows sandbox's own terminal starts a command that reads what the person types", GIT_CAT, async () => {
     const scratchDir = await tmpDir("terminal-launch-");
     const windows = await ProcessSandbox.create({
       writableRoots: [scratchDir],

@@ -2385,12 +2385,19 @@ export const BUILD_CHECKLIST_WORDS = {
   caption: (done: number, working: number) =>
     working ? t("{done} done · {working} working", { done, working }) : t("{done} done", { done }),
   finishing: (working: number) => (working ? t("Finishing up · {working} working", { working }) : t("Finishing up")),
+  /** Where the lead is in its plan: "Step 3 of 4 · Game code". */
+  step: (n: number, total: number, name: string) => t("Step {n} of {total} · {name}", { n, total, name }),
   /** The row of a long list that stands for its earlier steps: pressing it shows them. */
   earlier: (count: number) => t("{count, plural, one {# earlier step} other {# earlier steps}}", { count }),
   /** The card's toggle, as a screen reader names it. */
   toggle: t("Building: show or hide its parts"),
   /** The list's own name, for a screen reader. */
   list: t("Parts of the build"),
+} as const;
+
+/** A finished build's one line in the chat and on Builds: which version of the game it is now. */
+export const OUTCOME_WORDS = {
+  inGame: (version: number) => t("Version {version} is in your game", { version }),
 } as const;
 
 /** The status line's rest while a Loop's workers work: "3 workers on it". */
@@ -2886,6 +2893,17 @@ export const LOCAL_SERVER_WORDS = {
   context: (size: string) => t("{size} context", { size }),
   seesImages: t("sees images"),
   cannotCallTools: t("can't call tools, so it can't build"),
+  configure: t("Configure"),
+  configureLine: t("Custom context length and vision for this model on your local server. Saved to models.json."),
+  contextSize: t("Context size"),
+  reportedByServer: t("Reported by server"),
+  seesImagesOption: t("Sees images"),
+  canCallToolsOption: t("Can call tools"),
+  resetDefault: t("Reset to default"),
+  save: t("Save"),
+  saving: t("Saving…"),
+  invalidContext: t("Context size must be between 1,024 and 10,000,000 tokens."),
+  saveFailed: t("Failed to save settings."),
   /** Where TabbyAPI keeps the key it asks for: it writes one on its first start. */
   tabbyKeyHint: t("TabbyAPI writes its key to api_tokens.yml in its folder on first start."),
   otherServer: t("Running another server?"),
@@ -2925,6 +2943,8 @@ export const PICKER_MODELS_WORDS = {
   group: (provider: string) => t("{provider} models in the model picker", { provider }),
   reset: t("Reset"),
   older: t("Older models"),
+  /** The heading over the models a provider offers beside its own (Antigravity's Claude, GPT-OSS). */
+  more: t("More models"),
   olderShown: (shown: number, total: number) =>
     shown ? t("{shown} of {total} shown", { shown, total }) : String(total),
   defaultModel: t("Default"),
@@ -6474,14 +6494,8 @@ export const CHECK_WORDS = {
     unknown: t("Not measured"),
     incomplete: t("Incomplete"),
   } satisfies Record<RunEvidence["status"], string>,
-  thisBuild: t("This build"),
-  earlierBuilds: t("Earlier builds"),
   reviewer: t("Reviewer"),
   recorded: t("Recorded check"),
-  routeTitle: t("Replayed the judge's route"),
-  routeHeld: t("The judge's moves were replayed on this build, and the goal held."),
-  showAll: t("Show all"),
-  showLess: t("Show less"),
 } as const;
 
 /**

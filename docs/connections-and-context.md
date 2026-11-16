@@ -317,7 +317,7 @@ Beta tag beside its name in Settings and its group in the picker). Settings show
 OpenCode and Grok Build: Install, Sign in (`cursor-agent login` in a terminal inside the row, which
 opens the browser and prints the page for Open sign-in page; `studio:cursor.signin`, native), and
 once connected Check connection, Sign in again, Sign out (`cursor-agent logout`,
-`studio:cursor.signout`, native) and Update. First launch's "or use" row offers it with its Beta
+`studio:cursor.signout`, native) and Update. First launch's "or use" lines offer it with its Beta
 tag, as Grok Build: Install and Sign in on its own screen. The engine is Ready once `cursor-agent status --format json` says `isAuthenticated` and
 `cursor-agent models` lists a model; the picker shows the CLI's default (`auto`) and the first three
 it lists, the rest under Older models.
@@ -365,15 +365,20 @@ the prompt is answered with the turn's ending and tokens. Its tokens are the pla
 bill, but the provider is `metered` in the table so the app never picks a Beta on its own.
 
 Settings › Model Providers has its row (`CliSignInRow`): Install, Sign in (`agy acp --login` in a
-terminal inside the row, as the person and outside any sandbox: it prints Google's page for Open
-sign-in page and takes the code that page gives; `studio:antigravity.signin`, native), and once
+terminal inside the row, started in the box a session runs in (`antigravitySignInLaunch`,
+`ProcessSandbox.terminalLaunch`): it prints Google's page for Open sign-in page and takes the code
+that page gives; `studio:antigravity.signin`, native), and once
 connected Check connection, Sign in again and Update. The CLI has no command that says whether it
 is signed in, so the engine asks by opening a session in an empty folder, at most once a minute:
 the answer lists the models the account can run and its plan, or refuses with ACP's sign-in code
-(`-32000`). The row's status names the CLI's version and the plan.
+(`-32000`). The row's status names the CLI's version and the plan. First launch's "or use" lines offer it on a Mac, beside Grok Build and Cursor on the first line (plans a person may already pay for; local models, OpenRouter and OpenCode on the second), with its Beta tag and the same Install and Sign in on its own screen. The model list is the account's (`session/new`'s `availableModels`, so a paid plan's newer Gemini shows by itself); the picker starts with the newest Gemini generation it lists, each family at its newest version with every thinking level (`googleLatest` in `renderer/model-lineup.ts`), and the other vendors' models Google's plan runs (Claude, GPT-OSS) and older Gemini wait under More models.
 
 Antigravity keeps its Google sign-in in the operating system's own store (the Keychain on a Mac)
-and has no file to keep it in instead, and Genex never reads it. Its own controls are no box (its
+when it can reach it, and in `~/.gemini/antigravity-cli/antigravity-oauth-token` when it cannot (a
+failed Keychain read or save falls back to the file). Genex never reads either. Its sign-in runs in
+the session's box, where the Keychain is out of reach, so the sign-in lands in the file every
+session reads; a sign-in made in the person's own terminal lives in the Keychain alone, and the row
+then asks for Sign in. Its own controls are no box (its
 terminal sandbox leaves its file tools out, and its permission rules do not reach an ACP session),
 so each turn runs in `ProcessSandbox` with `antigravitySandbox` (a build for a chat the person set to
 Bypass runs as them outside it, `runsAsPerson`, as Codex's and Grok Build's do): the workspace (a read-only
@@ -382,11 +387,11 @@ hosts (`ANTIGRAVITY_HOSTS`), a game's `.agents` folder is not the session's to w
 the box every tool call the agent asks about is allowed, except a command the never-touch screen
 stops (`antigravityPermission`, `neverTouchVerdict`): macOS's keychain tool, a command the screen
 cannot read and a command with no command line are refused, as a worker's hook refuses them. Its sandbox alone is given `~/.gemini`
-(its settings and conversations) and, on a Mac, `~/Library/Keychains` to read and never to write
-(`antigravityHomes`, `ownHome`, `antigravityKeychain`) and the system's certificate checker (`SandboxMachService.Trust`,
-`com.apple.trustd.agent`, which a Go program verifies every HTTPS certificate through and
-sandbox-runtime leaves closed by default), because without either a signed-in CLI answers "sign
-in"; every other sandbox still denies the folders and opens no extra service. Studio tools reach it through the bridge command, as Codex's do.
+(its settings, conversations and sign-in file; `antigravityHomes`, `ownHome`) and the system's
+certificate checker (`SandboxMachService.Trust`, `com.apple.trustd.agent`, which a Go program
+verifies every HTTPS certificate through and sandbox-runtime leaves closed by default), because
+without either a signed-in CLI answers "sign in"; `~/Library/Keychains` stays denied, as in every
+sandbox, and every other sandbox still denies `~/.gemini` and opens no extra service. Studio tools reach it through the bridge command, as Codex's do.
 
 A failed turn is named by ACP's code (`-32000` a sign-in failure) or by Google's status name in
 the error (`RESOURCE_EXHAUSTED` a usage limit; `UNAVAILABLE`, `INTERNAL`, `DEADLINE_EXCEEDED`
@@ -394,9 +399,9 @@ unavailable); anything else ends the build with the CLI's words. Stop sends `ses
 gives the CLI five seconds to answer before it is stopped; a turn that says nothing for 10 minutes
 (30 while a tool call is open) is stopped with its process group. Compact now is refused.
 A live run on a signed-in Mac (CLI 1.5.7, free plan) reads the sign-in, builds in the game and
-cannot write beside it, continues a session from another folder, and shows the sign-in needs both
-openings: with the Keychain's files or the certificate service closed, the CLI answers "sign in",
-and with the files read-only it works. Not yet shown: a plan that has run out, and
+cannot write beside it, continues a session from another folder, builds in Bypass, and shows
+what the sign-in needs: with the Keychain closed it works from the file; with the file or the
+certificate service closed, the CLI answers "sign in". Not yet shown: a plan that has run out, and
 Windows and Linux (where the sandbox runs as another user or has no Secret Service). Tests: `engine-antigravity.test.ts` and `event-antigravity.test.ts` on
 `tests/fixtures/transcripts/antigravity-*`, recorded from Antigravity CLI 1.5.7.
 `STUDIO_ANTIGRAVITY_CLI_TESTS=1` runs the real, signed-in CLI in the real sandbox
@@ -414,8 +419,10 @@ are the session's whole account); it takes the key off, puts the person's Genex 
 model and the chat (`x-genex-model`, `x-genex-chat`) and passes only the two Messages routes
 (`GenexBuildRoute`). The token never enters an agent's environment, and nothing a session holds can
 spend once it ends. genex.games owns the price, the plan and the models; the app shows the ones it
-ships with (`GENEX_MODELS`, Gemini 4 Hydrogen first) until genex.games lists its own. Claude Code's
-own helpers run on the first model listed; the Loop's workers and reviewers run on Sonnet.
+ships with (`GENEX_MODELS`, Gemini 4 Hydrogen first) until genex.games lists its own. That list is
+the engine's whole answer (no CLI catalog), so a chat whose saved model it leaves out opens on a model
+that runs: one the person runs without credits if there is one, else Genex's own default
+(`resolveComposerModel`). Claude Code's own helpers run on the first model listed; the Loop's workers and reviewers run on Sonnet.
 
 The lane ([genex.ts](../src/substrate/engines/genex.ts)) reads `GET /api/desktop/llm/status` (reused
 for 5 seconds, joined while in flight) and maps its access word to the engine's status: ready, or a
@@ -463,7 +470,7 @@ server the person runs: TabbyAPI (ExLlamaV3 on an NVIDIA card), LM Studio, llama
 or an Ollama elsewhere on the network, through its OpenAI-compatible API. Like OpenRouter it is a
 direct engine on the pi-ai path whose game chats and builds run as Genex sessions (`LocalSessions`
 under its own id), so Loop's workers and reviewers can use it; unlike OpenRouter it is
-`billing: "local"`, so it may be picked by itself and may take over a throttled run.
+`billing: "local"`, so it may be picked by itself and may take over a throttled run. When a server or proxy does not report a model's context length or vision capabilities, configure them through the model row's configuration dialog or in `models.json`.
 
 Its row is the last in Settings → Model Providers (`LocalServerRow.tsx`); Local Models and the
 welcome's local screen link to it. Until a server is saved the row lists the servers answering on
@@ -497,8 +504,8 @@ nothing is `unavailable`, so another engine may take over. Tests: `engine-local-
 against `helpers/fake-local-server.ts`, which speaks each server's dialect.
 
 Residual risk: the CLI must read its sign-ins and its shell tool shares its sandbox, so an OpenCode
-session can read OpenCode's own `auth.json` (and a Cursor session Cursor's, and on a Mac an Antigravity session the Keychain's files: macOS guards each item by its own access list, but an item another command-line tool saved through `/usr/bin/security` trusts that program, which the sandbox cannot keep from starting (a program it may not read starts all the same), so the never-touch screen refuses every command that calls it, as it does for a Claude Code session; what is left within a misled session's reach is what that screen cannot see, a program the session writes that calls the tool, and the encrypted Keychain file itself, and its commands can reach the provider host the session
-calls. OpenCode's permission rules keep its own tools inside the workspace, but that is not an OS
+session can read OpenCode's own `auth.json` (and a Cursor session Cursor's, and an Antigravity session its sign-in file), and its commands
+can reach the provider host the session calls. OpenCode's permission rules keep its own tools inside the workspace, but that is not an OS
 boundary. Every other sandbox still denies the folder. Every sandbox allows localhost, where
 OpenCode 2.x's background server listens outside any sandbox; its password
 (`~/.config/opencode/service.json`) is in every sandbox's deny-read list (`baseDenyRead`), but a

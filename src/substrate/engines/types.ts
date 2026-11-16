@@ -81,6 +81,12 @@ export interface EngineModel {
   contextWindow: number;
   supportsFast?: boolean;
   contextSource?: ModelContextSource;
+  /** Context window reported by the server, or undefined when not reported. */
+  reportedContextWindow?: number;
+  /** Vision capability reported by the server, or undefined when not reported. */
+  reportedVision?: boolean;
+  /** Tool calling capability reported by the server, or undefined when not reported. */
+  reportedTools?: boolean;
   hardLimitTokens?: number;
   maxTokens: number;
   /** Agentic use requires tool calling; models without it are offered for chat/judging only. */
@@ -522,7 +528,7 @@ export interface Engine {
   /** Cheap liveness/auth probe used by the UI and by engine fallback. */
   status(): Promise<EngineStatus>;
   models(): Promise<EngineModel[]>;
-  catalogSnapshot?(): ModelCatalogStatus;
+  catalogSnapshot?(): ModelCatalogStatus | undefined;
   refreshModels?(force?: boolean): Promise<void>;
   /** Local engines: delete an installed model from this Mac. */
   removeModel?(id: string): Promise<void>;

@@ -31,7 +31,7 @@ import {
   localWay,
   openCodeWay,
   openRouterWay,
-  OTHER_WAYS,
+  OTHER_WAY_LINES,
   routerMark,
   routerStep,
 } from "../../src/renderer/onboarding/ways.ts";
@@ -43,6 +43,8 @@ import {
   drawWelcome,
   PLANNER_VIEW,
   PROMPT_ORIGIN,
+  ROLE_AT,
+  STAGE,
   type Palette,
 } from "../../src/renderer/onboarding/art.ts";
 
@@ -284,8 +286,17 @@ describe("first launch's other ways", () => {
       assert.equal(openCodeWay(row).state, "idle", row);
   });
 
-  it("offers Grok Build and Cursor after OpenCode, ready once installed and signed in, Cursor in beta", () => {
-    assert.deepEqual(OTHER_WAYS, ["local", "openrouter", "opencode", "grok", "cursor"]);
+  it("offers Grok Build, Cursor and Antigravity on the first line, ready once installed and signed in, Cursor and Antigravity in beta", () => {
+    assert.deepEqual(OTHER_WAY_LINES, [
+      ["grok", "cursor", "antigravity"],
+      ["local", "openrouter", "opencode"],
+    ]);
+    assert.deepEqual(cliWay("antigravity", "connected"), {
+      state: "on",
+      label: "Antigravity ready",
+      hint: "Uses your Google AI plan",
+      beta: true,
+    });
     assert.deepEqual(cliWay("grok", "not_installed"), {
       state: "idle",
       label: "Grok Build",
@@ -531,6 +542,31 @@ describe("first-launch art", () => {
       ],
       "each letter leaves from its own place",
     );
+  });
+
+  it("keeps the design page inside its own third of the stage at every moment", () => {
+    const style = { font: "15px sans-serif", spacing: "0px" };
+    const pathXs = (t: number, still = false) => {
+      const { ctx, calls } = recorder();
+      drawWelcome(ctx, t, "", style, palette, still);
+      return calls
+        .filter((call) => call.name === "moveTo" || call.name === "lineTo")
+        .map((call) => call.args[0] as number);
+    };
+    // Between the design's arrival and the build's, only the plan and the design are drawn.
+    for (let t = ROLE_AT.design; t < ROLE_AT.build - 0.35; t += 0.05) {
+      const xs = pathXs(t);
+      assert.ok(Math.max(...xs) < 513, `the design crosses into the build's place at ${t.toFixed(2)} s`);
+      assert.ok(Math.max(...xs) > 300, `the design is drawn at ${t.toFixed(2)} s`);
+    }
+    for (let t = 0; t < 20; t += 0.25) {
+      const { ctx, calls } = recorder();
+      drawWelcome(ctx, t, "", style, palette);
+      for (const call of calls.filter((one) => one.name === "moveTo" || one.name === "lineTo")) {
+        const [x, y] = call.args as [number, number];
+        assert.ok(x >= 0 && x <= STAGE.width && y >= 0 && y <= STAGE.height, `(${x}, ${y}) at ${t} s`);
+      }
+    }
   });
 
   it("draws every part of the welcome, the marks and the chip with finite coordinates", () => {

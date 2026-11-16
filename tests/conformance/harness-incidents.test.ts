@@ -1509,6 +1509,16 @@ describe("a scoped ask on a project in pre-production (DeathWish)", () => {
     assert.match(words, /something narrower or different[^.]*do that instead, and the build stays paused/);
   });
 
+  it("the Loop's lead was never told the plan the person watched on the Building card, so its save points ticked steps it did not know", async () => {
+    const { LOOP_WORDS } = await import("../../src/harness-seed/loop/director/wake-prompts.ts");
+    const plan = ["Three places", "Game code", "Light and miracles"];
+    for (const line of [LOOP_WORDS.started("A walk", plan), LOOP_WORDS.resumed("A walk", plan)]) {
+      assert.match(line, /1\. Three places\n2\. Game code\n3\. Light and miracles/);
+      assert.match(line, /one save point as each step is done/);
+    }
+    assert.doesNotMatch(LOOP_WORDS.started("A walk"), /plan/, "a Loop with no plan reads no plan");
+  });
+
   it("SC-4. the Loop's lead read its goal with nothing about its bounds: the goal is all of the Loop's work", async () => {
     const { LOOP_WORDS } = await import("../../src/harness-seed/loop/director/wake-prompts.ts");
     for (const line of [LOOP_WORDS.started("Block out the lobby"), LOOP_WORDS.resumed("Block out the lobby")]) {
@@ -6059,5 +6069,17 @@ describe("the person's words reach the chat's own session as they wrote them (ch
     assert.ok(lead, "the lead took a turn");
     const chat = chatContext({ folderLabel: folderLabelOf(dir, host.game.name), appLanguage: null });
     assert.equal(lead.system, chat, "the lead's system text is the chat's own");
+  });
+});
+
+describe("a build's plan as the chat names it", () => {
+  it("PS-1. Claude Code sent start_autopilot's steps as the list's JSON text (its intake tools take only strings): the Building card showed one step reading [\"Three places\", …", async () => {
+    const { startAutopilot } = await import("../../src/harness-seed/loop/start-autopilot.ts");
+    type Launch = { details?: { run?: Record<string, unknown> } };
+    const steps = '["Three places", "People and sounds", "Game code"]';
+    const launch = (await startAutopilot.execute({ goal: "g", title: "T", steps }, {
+      engine: "claude",
+    } as never)) as Launch;
+    assert.deepEqual(launch.details?.run?.steps, ["Three places", "People and sounds", "Game code"]);
   });
 });

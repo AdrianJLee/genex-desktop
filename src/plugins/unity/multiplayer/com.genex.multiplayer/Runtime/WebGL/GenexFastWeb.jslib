@@ -1,7 +1,8 @@
 // The fast channel on a Unity WebGL player (PROTOCOL.md §17.12 *WebTransport*): a browser has no raw UDP, so the
 // seat's fast@1 datagrams go by WebTransport to the room's relay. The rules are the TypeScript opener's
 // (packages/multiplayer/src/authority/fast-webtransport.ts): unreliable or nothing, the relay's certificate matched by
-// the hashes the binding carries, and a refused or failed session reported at once so the seat stays on the WebSocket.
+// the hashes the binding carries, a refused or failed session reported at once so the seat stays on the WebSocket, and
+// a session that is still connecting reported as opening, so the seat's handshake waits for it (PROTOCOL.md §17.12).
 // C# polls it (GenexFastWebSocket): nothing here calls back, so a datagram waits in the inbox for the next frame.
 var GenexFastWebLibrary = {
   $GenexFastWeb: {
@@ -110,6 +111,12 @@ var GenexFastWebLibrary = {
   GenexFastWeb_Failed: function (id) {
     var s = GenexFastWeb.sessions[id];
     return s && s.state === 'failed' ? 1 : 0;
+  },
+  /** 1 while the session is still connecting (QUIC and HTTP/3: round trips before a first datagram can leave), else 0. */
+  GenexFastWeb_Opening__deps: ['$GenexFastWeb'],
+  GenexFastWeb_Opening: function (id) {
+    var s = GenexFastWeb.sessions[id];
+    return s && s.state === 'connecting' ? 1 : 0;
   },
   /** The longest datagram the session can send now, else 0 (not known yet). */
   GenexFastWeb_MaxDatagram__deps: ['$GenexFastWeb'],

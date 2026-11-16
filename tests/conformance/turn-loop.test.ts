@@ -1024,7 +1024,10 @@ describe("a chat whose session cannot be resumed", () => {
     assert.equal(prompts.length, 3, "first turn, the failed resume, the fresh retry");
     assert.equal(prompts[1]!.resume, "loop-1");
     assert.equal(prompts[2]!.resume, undefined);
-    assert.deepEqual(prompts[2]!.tools, ["start_autopilot"]);
+    // The retry is handed what the first turn was: the Loop's start, and the question card while
+    // the folder has no kind (#747).
+    assert.deepEqual(prompts[2]?.tools, prompts[0]?.tools);
+    assert.ok(prompts[2]?.tools.includes("start_autopilot"));
   });
 });
 

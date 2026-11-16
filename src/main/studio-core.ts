@@ -650,6 +650,7 @@ export class StudioCore {
   /** The same port the registry reads, kept so a plugin server's `secret:<name>` can be resolved. */
   #mcpSecrets: SecretPort | null = null;
   #started = false;
+  #agentsStarting: Promise<void> | null = null;
   #settings: StudioSettings = {
     learning: false,
     buildersMax: DEFAULT_BUILDERS,
@@ -850,6 +851,9 @@ export class StudioCore {
       },
       get started() {
         return core.#started;
+      },
+      get agentsStarting() {
+        return core.#agentsStarting;
       },
       get toolRegistryRevision() {
         return core.#connections.revision;
@@ -1622,10 +1626,9 @@ export class StudioCore {
   }
 
   /**
-   * Antigravity on the person's Google AI plan, on a Mac alone for now: its Google sign-in is in
-   * the operating system's own store, which a session in the studio's sandbox reaches on macOS
-   * (the Keychain) and has not been shown to reach on Windows (the sandbox runs as another user)
-   * or Linux.
+   * Antigravity on the person's Google AI plan, on a Mac alone for now: its sign-in runs in the
+   * session's sandbox and lands in the CLI's own file there (macOS shown live), while on Windows the
+   * sandbox runs as another user and cannot start a sign-in terminal, and Linux is untested.
    */
   #antigravityEngines(): Engine[] {
     if (process.platform !== StudioPlatform.Mac) return [];
@@ -1782,6 +1785,22 @@ export class StudioCore {
    * recover — the shipped seed is copied over the harness before it boots.
    */
   async start(bootReason: BootReason = BootReason.ColdStart, options: { resetHarness?: boolean } = {}): Promise<void> {
+    // A message sent while this runs waits for it (`ConversationService`): on Windows the sandbox
+    // starts behind the open window and can take minutes.
+    const run = this.#start(bootReason, options);
+    const settled = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#agentsStarting = settled;
+    try {
+      await run;
+    } finally {
+      if (this.#agentsStarting === settled) this.#agentsStarting = null;
+    }
+  }
+
+  async #start(bootReason: BootReason, options: { resetHarness?: boolean }): Promise<void> {
     const mark = (step: string): void => this.options.markBoot?.(`core:start-${step}`);
     await this.snapshots.init();
     mark("snapshots");

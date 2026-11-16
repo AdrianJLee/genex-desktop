@@ -920,6 +920,12 @@ export interface EngineDescriptor {
     contextWindow: number;
     /** The window is the engine's guess, not a figure the provider reported (an Ollama model not loaded yet). */
     contextEstimated?: boolean;
+    /** Context window reported by the server, or undefined when not reported. */
+    reportedContextWindow?: number;
+    /** Vision capability reported by the server, or undefined when not reported. */
+    reportedVision?: boolean;
+    /** Tool calling capability reported by the server, or undefined when not reported. */
+    reportedTools?: boolean;
     supportsFast?: boolean;
     supportsTools: boolean;
     supportsVision: boolean;
@@ -2159,6 +2165,10 @@ export interface RunReference {
 export interface RunSpec {
   runId: string;
   goal: string;
+  /** A short name the chat gave the build as it started it (start_autopilot `title`); older runs have none. */
+  title?: string;
+  /** The plan as a few short steps (start_autopilot `steps`); each save point ticks the next. Older runs have none. */
+  steps?: string[];
   project: string;
   /** "autopilot": the wire name of a Loop's run, kept for the records it is in. */
   mode?: "autopilot";

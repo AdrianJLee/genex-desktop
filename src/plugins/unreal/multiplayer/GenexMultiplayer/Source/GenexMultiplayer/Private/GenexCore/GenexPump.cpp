@@ -1,5 +1,6 @@
 #include "GenexCore/GenexPump.h"
 
+#include "GenexCore/GenexClock.h"
 #include "GenexCore/GenexColyseus.h"
 #if defined(_WIN32)
 #include "GenexCore/GenexLog.h"
@@ -20,6 +21,9 @@ struct PumpState {
   std::uint64_t lastFrame = 0;
   bool inFrame = false;
   double frameNow = 0.0;
+  /** Clock::NowMs before this frame's poll and before the last frame's (NaN: no such poll yet). */
+  double polledAt = std::numeric_limits<double>::quiet_NaN();
+  double polledBefore = std::numeric_limits<double>::quiet_NaN();
 };
 
 PumpState& State() {
@@ -79,6 +83,8 @@ void Pump::Frame(double nowMs, std::uint64_t frameId) {
     IPumped* object = state.objects[i];
     if (object != nullptr) object->BeforePoll();
   }
+  state.polledBefore = state.polledAt;
+  state.polledAt = Clock::NowMs();
   colyseus_poll();
   // Objects registered during this loop sit past `count` and wait for the next frame.
   const std::size_t count = state.objects.size();
@@ -93,6 +99,11 @@ void Pump::Frame(double nowMs, std::uint64_t frameId) {
 double Pump::FrameNowMs() {
   const pump_detail::PumpState& state = pump_detail::State();
   return state.inFrame ? state.frameNow : std::numeric_limits<double>::quiet_NaN();
+}
+
+double Pump::PolledSinceMs() {
+  const pump_detail::PumpState& state = pump_detail::State();
+  return state.inFrame ? state.polledBefore : std::numeric_limits<double>::quiet_NaN();
 }
 
 std::uint64_t Pump::Count() {

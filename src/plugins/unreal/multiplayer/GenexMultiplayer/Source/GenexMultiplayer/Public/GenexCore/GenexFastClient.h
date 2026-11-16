@@ -86,7 +86,7 @@ GENEX_CORE_API const char* FallbackReasonName(FallbackReason reason);
 struct FastSeatStatus {
   /** Snapshots are flowing and inputs go by datagram. */
   bool live = false;
-  /** Snapshots applied on this session. */
+  /** Snapshots of the seat's own stream written on this session (a path challenge is none). */
   int snapshots = 0;
   /** Why this seat is on the WebSocket now. */
   std::optional<FallbackReason> fallback;
@@ -105,8 +105,24 @@ struct FastSnapshot {
   double inputAck = 0;
   /** The room clock the server wrote it at (the header's `sent`, a WebSocket patch's TIMED `sNow`). */
   double sent = 0;
+  /** A path challenge's (§17.12 *Return path*; IsPathChallenge): it proves an address and brings no update
+   *  of the room, so the session writes none of it and counts no sample of the link. */
+  bool challenge = false;
+  /** Nothing for a challenge: the records it repeats are not measured against. */
   std::vector<MotionRecord> changed;
 };
+
+/** Whether an applied snapshot of `tick` holding `records` records is a path challenge's (§17.12 *Return
+ *  path*) and not one of the seat's own stream (fast-client.ts `isPathChallenge`). A challenge moves
+ *  nothing: it is an empty keyframe (a first bind's, with no base to repeat), or it repeats its base's
+ *  tick and records. The seat's own snapshots are told from it by what the protocol already says of them:
+ *  each holds the seat's own echo, so it is never empty, and each is of a later tick than the one before,
+ *  so it never brings an earlier tick, and it brings the same tick again only with other records (a room
+ *  whose patches are a timer's can write twice in a tick). A snapshot of a room where nothing moved is of
+ *  a new tick: it is the stream's. `updateTick` is the tick of the newest snapshot that brought an update
+ *  (-1: none yet) and `sameRecords` whether this one's records are that one's, key for key and byte for
+ *  byte. Held to fast-transport.json's `pathChallenge` vectors. */
+GENEX_CORE_API bool IsPathChallenge(double tick, std::size_t records, double updateTick, bool sameRecords);
 
 /** What one received datagram did. */
 struct Receipt {
@@ -155,7 +171,7 @@ class GENEX_CORE_API FastClient {
   /** A frame begins: time since the last frame past kFrameGapMs is taken off both deadlines' clocks, so a seat
    *  whose frames stopped does not read its own stop as a dead path. */
   void Framed();
-  /** Every record of the newest applied snapshot. */
+  /** Every record of the newest applied snapshot that brought an update (a path challenge is none). */
   std::vector<MotionRecord> AllRecords() const;
   /** The input of seq `seq` while it is still held. */
   const FastInput* InputAt(double seq) const;
@@ -163,7 +179,8 @@ class GENEX_CORE_API FastClient {
    *  server consumes an input well after it received it (its buffer, the next keyframe), and the round trip
    *  is timed from the send of the input a snapshot acks as consumed. */
   std::optional<double> SentAt(double seq) const;
-  /** The latest decoded record of `id` of `kind` (from the newest applied snapshot). */
+  /** The latest decoded record of `id` of `kind` (from the newest applied snapshot that brought an update:
+   *  a path challenge is none). */
   const MotionRecord* MotionOf(RecordKind kind, const std::string& id) const;
   /** Whether a deadline has passed (§17.12 *Fallback*), by the injected clock. */
   std::optional<FallbackReason> Due() const;
@@ -181,6 +198,8 @@ class GENEX_CORE_API FastClient {
   };
   explicit FastClient(FastClientOptions o);
   std::vector<MotionRecord> DecodeChanged(const Records& records);
+  /** Whether `records` are the ones last decoded, key for key and byte for byte. */
+  bool SameAsDecoded(const Records& records) const;
   double InputAck() const { return rx_.history.empty() ? 0 : rx_.history.back().inputAck; }
   void SendEmpty();
 
@@ -196,8 +215,12 @@ class GENEX_CORE_API FastClient {
   std::optional<double> lastUplinkAt_;
   std::optional<double> lastFrameAt_;
   double lastAppliedSnap_ = 0;
+  /** The decoded records by key, with the bytes they came from, of the newest snapshot that brought an
+   *  update (a challenge is not decoded: `changed` stays measured against what the session wrote), and
+   *  that snapshot's tick (-1: none yet). */
   std::map<double, Decoded> decodedByKey_;
   std::map<std::string, MotionRecord> latest_;
+  double updateTick_ = -1;
 };
 
 }  // namespace genex::fast

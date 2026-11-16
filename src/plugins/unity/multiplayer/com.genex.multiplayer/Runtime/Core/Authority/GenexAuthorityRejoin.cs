@@ -409,9 +409,13 @@ namespace Genex.Multiplayer.Authority
         /// <summary>Predict the hit of a hitscan you fire (§17.9 <i>Predicted hits</i>), while staging the input that fires:
         /// the nearest entity, as the last frame drew it, the ray passes within <paramref name="radius"/> (default 0.5) of,
         /// no further than <paramref name="range"/> (default: no limit), of <paramref name="kinds"/> (default: every kind);
-        /// null for none, and while the socket is down. See <see cref="GenexAuthoritySeat.PredictHitscan"/>.</summary>
+        /// with a <paramref name="height"/> (and a <paramref name="duckHeight"/>, its height fully ducked) each target is a
+        /// body, an upright capsule of <paramref name="radius"/> standing on its position (§17.9 <i>Target shapes</i>), and
+        /// the answer is the nearest one the ray enters; null for none, for a height the module's own hitscan would refuse,
+        /// and while the socket is down. See <see cref="GenexAuthoritySeat.PredictHitscan"/>.</summary>
         public GenexPredictedHit PredictHitscan(GenexHitPoint origin, GenexHitPoint dir, double? range = null, double? radius = null, string[] kinds = null,
-            GenexHitSettle settle = GenexHitSettle.Health) => seat.PredictHitscan(origin, dir, range, radius, kinds, settle);
+            GenexHitSettle settle = GenexHitSettle.Health, double? height = null, double? duckHeight = null) =>
+            seat.PredictHitscan(origin, dir, range, radius, kinds, settle, height, duckHeight);
         /// <summary>Settle a pending predicted hit as landed (<see cref="HitSettled"/> with true); false when none of that id is pending.</summary>
         public bool ConfirmHit(string id) => seat.ConfirmHit(id);
         /// <summary>Settle a pending predicted hit as not landed (<see cref="HitSettled"/> with false); false when none of that id is pending.</summary>

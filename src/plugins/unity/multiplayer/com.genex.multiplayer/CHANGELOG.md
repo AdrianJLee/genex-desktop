@@ -2,6 +2,24 @@
 
 All notable changes to `com.genex.multiplayer`. Versions follow [semantic versioning](https://semver.org); before 1.0 a minor bump may add API.
 
+## 0.10.2
+
+- **The render delay no longer rises when the fast channel goes live, or when the seat falls back (PROTOCOL.md §17.3 *The
+  render delay*).** The WebSocket's patches and the fast channel's snapshots travel two paths that take different times (in
+  production the WebSocket crosses a tunnel and the datagrams go straight), and the window kept the samples of both: every
+  sample of the slower path read late by the difference between the two, for the ten seconds the window keeps a sample, so
+  after a join other entities were drawn that much further behind though neither path asked for it (a WebSocket path of
+  150 ms each way and datagrams at 20, both steady, at 30 updates a second under a ceiling of 250: 855 of a run's 864
+  frames above the floor, from the frame the channel went live to the end of the 14 s run, the highest 202 ms). A sample
+  now belongs to the channel that carried it: the first sample from the other channel starts the window over
+  (`GenexRenderDelayBuffer.Restart`, new: the window and the last stamp are forgotten, the delay is kept and moves on at
+  its usual pace), and a state change that is no snapshot's and brings no new stamp (a fallback writing back the fields the
+  channel held) is no sample. Behaviour change in a room that publishes a ceiling above your `RenderDelayMs`: the delay stays where the link
+  in use asks for it across a change of channel. A room that publishes no ceiling draws as before. Held bit for bit by
+  `render-delay.json` (`GenexSmoke render-delay`: its `restart` steps) and, in a real room, by `render-delay-run.ts fast
+  join` (the stall client with `--stalls 0`, which now also reports the frames before the played ones as `early`): the
+  delay is 100 in every frame from the join, 0 of 863 above it.
+
 ## 0.10.1
 
 - **A session is ready at the room clock's first round trip again, also on a link with next to no latency.** 0.10.0 waited

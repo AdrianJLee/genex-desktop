@@ -1025,6 +1025,12 @@ namespace Genex.Multiplayer.Authority
         /// <summary>The fast channel's snapshots applied when a state was last noted: a state that raised the count came by
         /// the channel (StateChanged).</summary>
         private int snapshotsNoted;
+        /// <summary>The room clock's stamp at the last state change (NoteRenderSample): one that is no snapshot's and
+        /// brings no new stamp is no update that landed.</summary>
+        private double stampSeen;
+        /// <summary>Whether a sample has been noted, and whether the last one came by fast snapshot (false: by WebSocket
+        /// patch): the first sample from the other channel starts the window over.</summary>
+        private bool sampleNoted, sampleBySnapshot;
         private readonly InputHandle handle;
         /// <summary>§17.11 *Input pacing*: the input handle your reconciler reads, acknowledged up to <see cref="SteppedAck"/>
         /// (<see cref="GenexShadowInput"/>), and the upstream throttle with the frame instant it last paid at.</summary>
@@ -2591,17 +2597,27 @@ namespace Genex.Multiplayer.Authority
         /// frame's instant less ArrivalLag for a state the frame's own drain decoded, as every arrival in this session)
         /// against the server time its poses are placed at on the render timeline, which is the keyframe's instant in a room
         /// drawn on ticks (SampleTicks) and the patch's stamp or the snapshot's send time anywhere else. While the fast
-        /// channel is live the motion is the snapshots' (§17.12), so a WebSocket patch is no sample of it.
+        /// channel is live the motion is the snapshots' (§17.12), so a WebSocket patch is no sample of it. A sample
+        /// belongs to the channel that carried it (<paramref name="bySnapshot"/>: the fast channel's), and the two paths
+        /// take different times: the first sample from the other channel starts the window over. A state change that
+        /// is no snapshot's and brings no new stamp is no update that landed (a fallback rewrites the fields the channel
+        /// held under the stamp of the update before it; a snapshot is always one, though it may carry the stamp of the
+        /// WebSocket patch of its tick, which on equal paths lands just before it).
         /// </summary>
-        private void NoteRenderSample(bool moves)
+        private void NoteRenderSample(bool moves, bool bySnapshot)
         {
             var state = room.State;
             var patch = room.Clock.LastServerTime();
-            if (state == null || !moves || !(patch > 0)) return;
+            var landed = bySnapshot || patch != stampSeen;
+            stampSeen = patch;
+            if (state == null || !moves || !landed || !(patch > 0)) return;
             var onTicks = DrawsOnTicks();
             // In a room drawn on ticks only a keyframe places a sample.
             if (onTicks && state.tick != state.keyframe) return;
             var stamp = onTicks ? GenexProjectile.TickInstant(state.tick, TickOrigin(), TickHz()) : patch;
+            if (sampleNoted && sampleBySnapshot != bySnapshot) delays.Restart();
+            sampleNoted = true;
+            sampleBySnapshot = bySnapshot;
             delays.Note(RoomClock.GetNow() - FrameLag() - ArrivalLag(), stamp, DrawnBefore());
         }
 
@@ -3927,7 +3943,7 @@ namespace Genex.Multiplayer.Authority
             var moves = bySnapshot || !fast.Status.Live;
             NotePatches(moves);
             SampleTicks();
-            NoteRenderSample(moves);
+            NoteRenderSample(moves, bySnapshot);
             NoteHitAcks(bySnapshot);
             if (resyncFirstState) DropEarlierSockets();
             SettleShots();

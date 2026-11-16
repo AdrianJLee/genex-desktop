@@ -62,6 +62,12 @@ const MAX_TOOL_PAGES = 20;
  * no such route, method not allowed, or a request it cannot read. A URL saved as HTTP then tries SSE.
  */
 const SSE_ONLY_STATUSES: ReadonlySet<number> = new Set([400, 404, 405]);
+/**
+ * A remote connector's requests carry its header key, its session id and a tool's arguments. The
+ * server may move its endpoint within its own origin; a redirect to any other origin is refused,
+ * so none of that is replayed to a host the person never connected.
+ */
+const REDIRECTS = { redirectPolicy: "same-origin" } as const;
 
 /** What a connector's failures say. */
 const MESSAGE = {
@@ -640,6 +646,7 @@ export class McpConnection {
       StreamableHTTPClientTransport: new (url: URL, options?: Record<string, unknown>) => SdkTransport;
     };
     return new StreamableHTTPClientTransport(this.#remoteUrl(), {
+      ...REDIRECTS,
       authProvider: this.#authProvider,
       requestInit: { headers: await this.#headers() },
       ...(this.#fetch ? { fetch: this.#fetch } : {}),
@@ -652,6 +659,7 @@ export class McpConnection {
       SSEClientTransport: new (url: URL, options?: Record<string, unknown>) => SdkTransport;
     };
     return new SSEClientTransport(this.#remoteUrl(), {
+      ...REDIRECTS,
       authProvider: this.#authProvider,
       requestInit: { headers },
       eventSourceInit: { headers },

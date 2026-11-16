@@ -11,7 +11,8 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { findGitBash } from "../../src/substrate/windows-sandbox.ts";
-import { LiveInputEnv, openLiveInput } from "../../src/substrate/windows-live-input.ts";
+import { LiveInputEnv, openLiveInput, writeTerminalFeeder } from "../../src/substrate/windows-live-input.ts";
+import { ProcessSandbox } from "../../src/substrate/spawn.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 /** A pause long enough for a refused connection's bytes to have arrived, had they been heard. */
@@ -111,5 +112,66 @@ describe("the live input relay", () => {
     const empty = [...Object.values(LiveInputEnv), "ELECTRON_RUN_AS_NODE"].map((n) => `${n}=;`).join("");
     assert.equal(r.output(), empty);
     assert.equal(path.isAbsolute(r.live.file), true);
+  });
+});
+
+/** Run a terminal's launch with `typed` as what the person types; resolves with its exit code and output. */
+async function typeInto(launch: { file: string; args: string[]; env: NodeJS.ProcessEnv; cwd: string }, typed: string) {
+  const child = spawn(launch.file, launch.args, { cwd: launch.cwd, env: launch.env, stdio: ["pipe", "pipe", "pipe"] });
+  let stdout = "";
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+  });
+  child.stdin.end(typed);
+  const code = await new Promise<number | null>((resolve) => child.once("close", resolve));
+  return { code, stdout };
+}
+
+describe("a terminal's feeder", () => {
+  it("starts the relay, hands it what the person types, shows what the command prints and exits with it", async () => {
+    const scratchDir = await tmpDir("terminal-feeder-");
+    const live = await openLiveInput({
+      command: 'read line; echo "got:$line"; exit 3',
+      shell: await shell(),
+      scratchDir,
+    });
+    const feeder = await writeTerminalFeeder({
+      launch: { file: process.execPath, args: [live.file], cwd: scratchDir },
+      relay: live,
+      dir: await tmpDir("feeder-"),
+    });
+    const env = { ...process.env, ...live.env, ELECTRON_RUN_AS_NODE: "1" };
+    const run = await typeInto({ file: process.execPath, args: [feeder], env, cwd: scratchDir }, "4/0AbCd-code\n");
+    assert.equal(run.code, 3, "the terminal ends with the command's code");
+    assert.equal(run.stdout, "got:4/0AbCd-code\n");
+    assert.equal(existsSync(feeder), false, "the feeder deleted its own file");
+    assert.ok(!feeder.startsWith(scratchDir), "the feeder is not in the box's scratch folder");
+    await live.close();
+  });
+
+  it("is how a Windows sandbox's own terminal starts a command that reads what the person types", async () => {
+    const scratchDir = await tmpDir("terminal-launch-");
+    const windows = await ProcessSandbox.create({
+      writableRoots: [scratchDir],
+      scratchDir: path.join(scratchDir, "scratch"),
+      secretPaths: [],
+      platform: "win32",
+      enabled: false,
+      windows: { bash: await shell() },
+    });
+    const launch = await windows.terminalLaunch({ command: 'read line; echo "got:$line"', cwd: scratchDir });
+    // Flipped: Git Bash starts the feeder (Electron, a windowed program, reads and prints nothing
+    // started straight in a Windows terminal), its input through Git's own `cat`.
+    assert.equal(launch.file, await shell(), "the terminal runs Git Bash");
+    assert.match(launch.args.at(-1) ?? "", /< <\(\/usr\/bin\/cat\)$/);
+    // The feeder runs as the person, outside every box: it is never written where a box can write.
+    for (const root of [windows.scratchDir, scratchDir]) {
+      assert.ok(!(launch.args.at(-1) ?? "").includes(root), `the feeder is outside ${root}`);
+    }
+    const run = await typeInto(launch, "typed\n");
+    launch.release();
+    assert.equal(run.code, 0);
+    assert.equal(run.stdout, "got:typed\n");
   });
 });

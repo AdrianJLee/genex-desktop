@@ -8,9 +8,9 @@ import { UiEvent } from "../shared/ui-events.ts";
 import { findClaudeBinary } from "../substrate/engines/claude-cli.ts";
 import { requireCodingCli } from "../substrate/engines/external-cli.ts";
 import { openCodeSignInArgs } from "../substrate/engines/opencode-cli.ts";
-import { antigravitySignInLaunch, stringEnv } from "../substrate/engines/antigravity.ts";
+import { antigravitySignInLaunch } from "../substrate/engines/antigravity.ts";
 import { CURSOR_FILE_STORE, CursorCommand } from "../substrate/engines/cursor-cli.ts";
-import { childEnv } from "../substrate/child-env.ts";
+import { childEnv, vendorEnv } from "../substrate/child-env.ts";
 import { grokHome } from "../substrate/credential-homes.ts";
 import type { ClaudeLoginState } from "../shared/claude-login.ts";
 import type { CodexLoginState } from "../shared/codex-login.ts";
@@ -80,6 +80,12 @@ export interface LoginControllerDeps {
   findBinary?: typeof findClaudeBinary;
   /** How Antigravity's sign-in starts in the sessions' box; the real box unless a test gives another. */
   boxAntigravitySignIn?: typeof antigravitySignInLaunch;
+  /**
+   * The folder Antigravity's sessions run under, where its sign-in's box is made too (none before
+   * the core starts: the temporary folder then). On Windows srt-win refused to start a sign-in in
+   * the temporary folder (`mapped_drive_cwd`) while it started every session in this one.
+   */
+  antigravityScratch?: () => string | undefined;
   /** Write one line to the app's log (`studio.log`). */
   log?: (line: string) => void;
 }
@@ -98,6 +104,7 @@ export function createLoginControllers({
   onCursorSignedIn,
   onAntigravitySignedIn,
   boxAntigravitySignIn = antigravitySignInLaunch,
+  antigravityScratch = () => undefined,
   log,
 }: LoginControllerDeps): {
   codexLogin: CodexLoginController;
@@ -203,7 +210,13 @@ export function createLoginControllers({
     },
   };
   const cursorLogin = cursorSignIn({ terminals, requireCli, onCursorSignedIn });
-  const antigravityLogin = antigravitySignIn({ terminals, requireCli, onAntigravitySignedIn, boxAntigravitySignIn });
+  const antigravityLogin = antigravitySignIn({
+    terminals,
+    requireCli,
+    onAntigravitySignedIn,
+    boxAntigravitySignIn,
+    antigravityScratch,
+  });
   return { codexLogin, claudeLogin, openCodeLogin, grokLogin, cursorLogin, antigravityLogin };
 }
 
@@ -219,17 +232,24 @@ function antigravitySignIn({
   requireCli,
   onAntigravitySignedIn,
   boxAntigravitySignIn,
+  antigravityScratch,
 }: Pick<LoginControllerDeps, "terminals" | "onAntigravitySignedIn"> & {
   requireCli: typeof requireCodingCli;
   boxAntigravitySignIn: typeof antigravitySignInLaunch;
+  antigravityScratch: () => string | undefined;
 }): CliLogin {
   return {
     async start() {
       const cli = await requireCli(EngineId.Antigravity).catch(() => null);
       if (!cli) return { started: false, missingCli: true };
-      // No other vendor's variables and no Gemini key, which would stand in for the account.
-      const env = childEnv(cli.env, { base: "contractor", vendor: "antigravity" });
-      const boxed = await boxAntigravitySignIn({ binary: cli.path, env: stringEnv(env) });
+      // Its own variables alone, never a Gemini key, which would stand in for the account; the box
+      // builds the rest from its allow-list.
+      const scratchRoot = antigravityScratch();
+      const boxed = await boxAntigravitySignIn({
+        binary: cli.path,
+        env: vendorEnv(cli.env, "antigravity"),
+        ...(scratchRoot ? { scratchRoot } : {}),
+      });
       const before = new Set(terminals.list().map((session) => session.id));
       const launch = {
         file: boxed.file,

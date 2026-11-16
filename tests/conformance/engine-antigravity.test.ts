@@ -23,6 +23,7 @@ import {
   type AntigravityInvocation,
   type AntigravityProcess,
   type AntigravitySchedule,
+  antigravityBoxEnv,
   antigravityPermission,
   antigravityProcess,
   antigravitySandbox,
@@ -629,6 +630,23 @@ describe("Antigravity's box", () => {
       ),
       { outcome: { outcome: "cancelled" } },
       "with no way to refuse offered, the question is left unanswered, never allowed",
+    );
+  });
+
+  it("off a Mac its box keeps the sign-in in its own file, and on Windows that file is in the person's home", () => {
+    const home = "C:\\Users\\Ada";
+    // The CLI uses its file, not the credential store, when it believes it runs over SSH (1.5.9).
+    const fileStore = { SSH_CONNECTION: "127.0.0.1 0 127.0.0.1 0", SSH_CLIENT: "127.0.0.1 0 0" };
+    assert.deepEqual(
+      antigravityBoxEnv("win32", home),
+      { ...fileStore, USERPROFILE: home },
+      "not the shared sandbox user's store",
+    );
+    assert.deepEqual(antigravityBoxEnv("linux", home), fileStore, "not the Secret Service");
+    assert.deepEqual(
+      antigravityBoxEnv("darwin", home),
+      {},
+      "a Mac's box denies the Keychain, and the CLI uses its file",
     );
   });
 

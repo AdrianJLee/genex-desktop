@@ -366,6 +366,9 @@ FString UGenexAuthoritySubsystem::PredictProjectile(const FGenexProjectileLaunch
 		genex::ProjectileHits Can;
 		for (const FString& Kind : Launch.HitKinds) Can.kinds.push_back(GenexUnrealJson::Utf8(Kind));
 		Can.radius = Launch.HitRadius * ToMetres;
+		// §17.9 *Target shapes*: a body's height and ducked height, when given.
+		if (Launch.HitHeight >= 0.f) Can.height = Launch.HitHeight * ToMetres;
+		if (Launch.HitDuckHeight >= 0.f) Can.duckHeight = Launch.HitDuckHeight * ToMetres;
 		Can.settle = GenexAuthorityDetail::ToSettle(Launch.HitSettle);
 		P.hits = Can;
 	}
@@ -396,6 +399,9 @@ bool UGenexAuthoritySubsystem::PredictHitscan(const FGenexHitscan& Shot, FGenexP
 	P.dir = genex::hits::HitPoint{Shot.Direction.X, Shot.Direction.Y, Shot.Direction.Z};
 	if (Shot.Range >= 0.f) P.range = Shot.Range * ToMetres;
 	if (Shot.Radius >= 0.f) P.radius = Shot.Radius * ToMetres;
+	// §17.9 *Target shapes*: a body's height and ducked height, when given.
+	if (Shot.Height >= 0.f) P.height = Shot.Height * ToMetres;
+	if (Shot.DuckHeight >= 0.f) P.duckHeight = Shot.DuckHeight * ToMetres;
 	if (Shot.Kinds.Num() > 0)
 	{
 		std::vector<std::string> Kinds;

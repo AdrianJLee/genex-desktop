@@ -2,12 +2,14 @@
 // how far behind the server a client draws every entity it does not predict. A fixed delay is right for one link only:
 // on a jittery one a sample that lands later than the delay covers leaves the interpolation holding its newest pose,
 // then jumping when the next arrives (a rubber band). So a client measures its own link: each sample's lateness against
-// the best transit of the last ten seconds, plus the step to the sample before it, is the delay that sample needed. The
-// delay follows the worst of them between the room's floor (AuthorityTiming.RENDER_DELAY_MS, or the game's own choice)
-// and the ceiling the room publishes, rising fast (playback slows by a fifth) and falling slowly (a fiftieth), so
-// nothing drawn ever steps. The client stamps its inputs with the delay it draws at, and the room rewinds no further
-// than its ceiling explains (§17.5), which is why the ceiling is the room's: a room that publishes none keeps every
-// client at the floor.
+// the best transit of the last ten seconds, plus the step to the sample before it, is the delay that sample needed. A
+// sample belongs to the channel that carried it: the WebSocket's path and the fast channel's take different times, so
+// when the motion moves from one to the other the window starts over (Restart), and no sample is measured against the
+// other path's best transit. The delay follows the worst of them between the room's floor
+// (AuthorityTiming.RENDER_DELAY_MS, or the game's own choice) and the ceiling the room publishes, rising fast (playback
+// slows by a fifth) and falling slowly (a fiftieth), so nothing drawn ever steps. The client stamps its inputs with the
+// delay it draws at, and the room rewinds no further than its ceiling explains (§17.5), which is why the ceiling is the
+// room's: a room that publishes none keeps every client at the floor.
 //
 // Pure: float64, only + − × and comparisons, each its own statement in the order the reference writes them. Held bit
 // for bit to packages/netcode-bench/conformance/authority/render-delay.json by Tests~/GenexSmoke `render-delay`.
@@ -128,6 +130,16 @@ namespace Genex.Multiplayer.Authority
                 head = (head + 1) % Capacity;
                 count--;
             }
+        }
+
+        /// <summary>The motion moved to the other channel (the fast channel went live, or the seat fell back to the
+        /// WebSocket): the window starts over with the next sample, whatever its stamp, its step read as 0. The delay
+        /// is kept, and moves on at its usual pace.</summary>
+        public void Restart()
+        {
+            head = 0;
+            count = 0;
+            hasLast = false;
         }
 
         /// <summary>What the window's worst sample needed, within the bounds: where the delay is heading.</summary>

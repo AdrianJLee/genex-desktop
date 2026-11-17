@@ -96,6 +96,13 @@ const VENDOR = {
   // Antigravity CLI and the Gemini CLI it replaced, whose folder and variables it still reads.
   antigravity: /^(?:AGY|ANTIGRAVITY|GEMINI|GOOGLE_GEMINI)_/i,
 } as const;
+/**
+ * Variables a vendor's CLI reads that other tools share, so they are not that vendor's to strip
+ * from the others: Google Cloud's project and region for a Workspace or Code Assist plan.
+ */
+const VENDOR_SHARED: Partial<Record<keyof typeof VENDOR, RegExp>> = {
+  antigravity: /^(?:GOOGLE_CLOUD_PROJECT|GOOGLE_CLOUD_LOCATION|GOOGLE_GENAI_USE_VERTEXAI)$/i,
+};
 
 export function isCredentialVariable(name: string, value?: string): boolean {
   return (
@@ -104,6 +111,25 @@ export function isCredentialVariable(name: string, value?: string): boolean {
     CREDENTIAL_NAMES.has(name.toUpperCase()) ||
     (value !== undefined && PASSWORD_URL.test(value))
   );
+}
+
+/**
+ * A coding CLI's own variables in `parent` (with the shared ones it reads, `VENDOR_SHARED`) and
+ * nothing else, never a credential: what a CLI that runs in the sandbox is given on top of the
+ * sandbox's own allow-list (which builds the rest). The
+ * person's whole environment would not do there: on Windows the sandbox writes each variable into
+ * a shell file, which refuses a name like `ProgramFiles(x86)`.
+ */
+export function vendorEnv(
+  parent: Record<string, string | undefined>,
+  vendor: Exclude<ContractorRequest["vendor"], "none">,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  const shared = VENDOR_SHARED[vendor];
+  const isOwn = (key: string) => VENDOR[vendor].test(key) || (shared?.test(key) ?? false);
+  for (const [key, value] of Object.entries(parent))
+    if (value !== undefined && isOwn(key) && !isCredentialVariable(key, value)) env[key] = value;
+  return env;
 }
 
 /** The other vendor's variables a coding CLI's child never sees; a tool of neither vendor sees neither's. */

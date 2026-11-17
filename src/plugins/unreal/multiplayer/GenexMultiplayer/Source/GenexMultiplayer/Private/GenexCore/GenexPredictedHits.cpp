@@ -50,6 +50,21 @@ bool IdAtMost(const std::string& a, const std::string& b) {
   return i >= a.size();
 }
 
+/** `found` with a hit `dist` along on `id`, in order: nearest first, then by id (no sort implementation is
+ *  relied on). */
+void InsertHit(std::vector<HitFound>& found, const std::string& id, double dist) {
+  std::size_t at = found.size();
+  while (at > 0) {
+    const HitFound& before = found[at - 1];
+    if (before.dist < dist || (before.dist == dist && IdAtMost(before.id, id))) break;
+    at -= 1;
+  }
+  found.insert(found.begin() + static_cast<std::ptrdiff_t>(at), HitFound{id, dist});
+}
+
+/** A height a shape takes: a finite number at least 0. */
+bool IsSize(double v) { return std::isfinite(v) && v >= 0; }
+
 }  // namespace predicted_hits_detail
 
 const char* HitKindName(HitKind kind) {
@@ -84,7 +99,78 @@ const char* HitStateName(HitState state) {
   return "";
 }
 
-std::vector<HitFound> SweepHits(const HitPoint& a, const HitPoint& b, const std::vector<HitTarget>& targets, double radius) {
+const char* HitShapeKindName(HitShapeKind kind) {
+  switch (kind) {
+    case HitShapeKind::Sphere:
+      return "sphere";
+    case HitShapeKind::Capsule:
+      return "capsule";
+    case HitShapeKind::Refused:
+      return "refused";
+  }
+  return "";
+}
+
+HitShapeKind HitShapeKindOf(std::optional<double> height, std::optional<double> duckHeight) {
+  if (!height) return duckHeight ? HitShapeKind::Refused : HitShapeKind::Sphere;
+  if (!predicted_hits_detail::IsSize(*height)) return HitShapeKind::Refused;
+  return !duckHeight || predicted_hits_detail::IsSize(*duckHeight) ? HitShapeKind::Capsule : HitShapeKind::Refused;
+}
+
+std::optional<HitShape> HitShapeOf(std::optional<double> height, std::optional<double> duckHeight) {
+  if (HitShapeKindOf(height, duckHeight) != HitShapeKind::Capsule) return std::nullopt;
+  return HitShape{*height, duckHeight};
+}
+
+CapsuleAxis CapsuleAxisOf(const HitTarget& target, double radius, const HitShape& shape) {
+  const double duck = std::isfinite(target.duck) ? target.duck : 0;
+  const double level = duck < 0 ? 0 : duck > 1 ? 1 : duck;
+  const double height = !shape.duckHeight ? shape.height : shape.height + (*shape.duckHeight - shape.height) * level;
+  const double z0 = target.z + radius;
+  const double z1 = target.z + height - radius;
+  if (!(z1 > z0)) {
+    const double mid = target.z + height / 2;
+    return CapsuleAxis{mid, mid};
+  }
+  return CapsuleAxis{z0, z1};
+}
+
+double CapsuleEntry(const HitPoint& a, const HitPoint& d, double x, double y, const CapsuleAxis& axis, double radius) {
+  const double z0 = axis.z0;
+  const double z1 = axis.z1;
+  const double r2 = radius * radius;
+  const double fx = a.x - x;
+  const double fy = a.y - y;
+  const double zc = a.z < z0 ? z0 : a.z > z1 ? z1 : a.z;
+  const double fz = a.z - zc;
+  if (fx * fx + fy * fy + fz * fz <= r2) return 0;
+  const double dd = d.x * d.x + d.y * d.y + d.z * d.z;
+  if (!(dd > 0)) return kNoEntry;
+  double u = kNoEntry;
+  const double flat = d.x * d.x + d.y * d.y;
+  if (flat > 0) {
+    const double fd = fx * d.x + fy * d.y;
+    const double disc = fd * fd - flat * (fx * fx + fy * fy - r2);
+    if (disc >= 0) {
+      const double side = (-fd - std::sqrt(disc)) / flat;
+      const double zh = a.z + d.z * side;
+      if (side >= 0 && zh >= z0 && zh <= z1) u = side;
+    }
+  }
+  const int ends = z0 == z1 ? 1 : 2;
+  for (int end = 0; end < ends; ++end) {
+    const double gz = a.z - (end == 0 ? z0 : z1);
+    const double gg = fx * fx + fy * fy + gz * gz;
+    const double gd = fx * d.x + fy * d.y + gz * d.z;
+    const double disc = gd * gd - dd * (gg - r2);
+    if (disc < 0) continue;
+    const double ue = (-gd - std::sqrt(disc)) / dd;
+    if (ue >= 0 && (u < 0 || ue < u)) u = ue;
+  }
+  return u;
+}
+
+std::vector<HitFound> SweepHits(const HitPoint& a, const HitPoint& b, const std::vector<HitTarget>& targets, double radius, const std::optional<HitShape>& shape) {
   const double r2 = radius * radius;
   const double dx = b.x - a.x;
   const double dy = b.y - a.y;
@@ -92,6 +178,15 @@ std::vector<HitFound> SweepHits(const HitPoint& a, const HitPoint& b, const std:
   const double dd = dx * dx + dy * dy + dz * dz;
   const double len = std::sqrt(dd);
   std::vector<HitFound> found;
+  if (shape) {
+    const HitPoint d{dx, dy, dz};
+    for (const HitTarget& target : targets) {
+      const double u = CapsuleEntry(a, d, target.x, target.y, CapsuleAxisOf(target, radius, *shape), radius);
+      if (u < 0 || u > 1) continue;
+      predicted_hits_detail::InsertHit(found, target.id, u * len);
+    }
+    return found;
+  }
   for (const HitTarget& target : targets) {
     const double fx = a.x - target.x;
     const double fy = a.y - target.y;
@@ -107,20 +202,13 @@ std::vector<HitFound> SweepHits(const HitPoint& a, const HitPoint& b, const std:
       if (u < 0 || u > 1) continue;
       along = u * len;
     }
-    // Insertion in order: nearest first, then by id (no sort implementation is relied on).
-    std::size_t at = found.size();
-    while (at > 0) {
-      const HitFound& before = found[at - 1];
-      if (before.dist < along || (before.dist == along && predicted_hits_detail::IdAtMost(before.id, target.id))) break;
-      at -= 1;
-    }
-    found.insert(found.begin() + static_cast<std::ptrdiff_t>(at), HitFound{target.id, along});
+    predicted_hits_detail::InsertHit(found, target.id, along);
   }
   return found;
 }
 
 std::optional<HitFound> HitscanHit(const HitPoint& origin, const HitPoint& dir, const std::vector<HitTarget>& targets, std::optional<double> range,
-                                   std::optional<double> radius) {
+                                   std::optional<double> radius, const std::optional<HitShape>& shape) {
   const double len = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
   if (!(len > 0)) return std::nullopt;
   const double ux = dir.x / len;
@@ -129,6 +217,15 @@ std::optional<HitFound> HitscanHit(const HitPoint& origin, const HitPoint& dir, 
   const double reach = range && *range >= 0 ? *range : std::numeric_limits<double>::infinity();
   const double r = radius && *radius >= 0 ? *radius : kHitscanRadius;
   std::optional<HitFound> best;
+  if (shape) {
+    const HitPoint unit{ux, uy, uz};
+    for (const HitTarget& target : targets) {
+      const double u = CapsuleEntry(origin, unit, target.x, target.y, CapsuleAxisOf(target, r, *shape), r);
+      if (u < 0 || u > reach) continue;
+      if (!best || u < best->dist) best = HitFound{target.id, u};
+    }
+    return best;
+  }
   for (const HitTarget& target : targets) {
     const double along = (target.x - origin.x) * ux + (target.y - origin.y) * uy + (target.z - origin.z) * uz;
     if (along < 0 || along > reach) continue;

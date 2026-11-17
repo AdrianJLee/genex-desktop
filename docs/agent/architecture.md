@@ -816,8 +816,13 @@ dialog names the program that will run, resolved on the login `PATH` by `resolve
 same lookup Connect uses. HTTP/SSE connectors are https-only (loopback http allowed) with static
 header secrets or explicit browser OAuth (`mcp/oauth.ts`). Secrets are unlocked explicitly and
 leased in host memory (`mcp/session-secrets.ts`); a locked connector throws `McpSecretsLocked` and
-is not started. Disconnect and remove revoke OAuth tokens at the server where it offers RFC 7009
-revocation (refresh token first, 10 s limit, after the local record is deleted); remove erases every
+is not started. An OAuth account is pinned to the authorization server it signed in at: the record
+keeps that server's discovery (`saveDiscoveryState`), refresh and revocation go only there, and a
+different server named later costs the tokens and client (one new sign-in), never sends them on.
+Disconnect and remove revoke OAuth tokens at that server where it offers RFC 7009 revocation
+(refresh token first, 10 s limit, no redirect followed, after the local record is deleted); a record
+saved before the pin is only forgotten here. HTTP/SSE transports follow a redirect only within the
+connector's origin (`redirectPolicy: "same-origin"`). Remove erases every
 `mcp.<id>.*` secret, and an edit that drops an env or header name erases its value. Config import
 keeps a `${VAR}` placeholder as a name that still needs its value (`needsValue`). Project roots are
 opt-in and are not a sandbox.

@@ -10,7 +10,7 @@
  * exits with the command; a connection with any other first line is dropped and never heard.
  */
 import { randomUUID } from "node:crypto";
-import { rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Writable } from "node:stream";
 import { HarnessInbox } from "./harness-inbox.ts";
@@ -124,4 +124,76 @@ export async function openLiveInput(options: {
       await rm(file, { force: true });
     },
   };
+}
+
+/** The pause between two tries of a terminal's feeder to reach its relay while the relay starts. */
+const FEEDER_RETRY_MS = 100;
+
+/**
+ * A terminal's half of a relay, run as CommonJS by the studio's own Node as the person, in the
+ * terminal the caller opens (a sign-in that waits for what the person types). It deletes its own
+ * file first, starts the sandboxed relay's launch (srt-win) with its output on the terminal, and
+ * hands the relay everything the person types after the one-time token, retrying until the relay
+ * listens. It exits with the launch. `__PLAN__` is the launch and the relay's port and token.
+ */
+const FEEDER_SOURCE = `"use strict";
+const fs = require("node:fs");
+const net = require("node:net");
+const { spawn } = require("node:child_process");
+try { fs.rmSync(__filename, { force: true }); } catch {}
+const plan = __PLAN__;
+const env = { ...process.env };
+delete env.ELECTRON_RUN_AS_NODE;
+const child = spawn(plan.file, plan.args, { cwd: plan.cwd, env, stdio: ["ignore", "inherit", "inherit"] });
+child.on("error", (error) => { process.stderr.write(String(error) + "\\n"); process.exit(127); });
+child.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
+const connect = () => {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const socket = net.connect(plan.port, "127.0.0.1");
+  socket.once("connect", () => {
+    socket.on("error", () => {});
+    socket.write(plan.token + "\\n");
+    process.stdin.pipe(socket);
+  });
+  socket.once("error", () => { socket.destroy(); setTimeout(connect, ${FEEDER_RETRY_MS}); });
+};
+connect();
+`;
+
+/** A launch the feeder starts: the sandbox's own command line for the relay. */
+export interface FedLaunch {
+  file: string;
+  args: string[];
+  cwd: string;
+}
+
+/**
+ * Write the feeder for `launch` (a relay prepared by `openLiveInput`, wrapped by the sandbox) into
+ * a new folder of its own under `dir`; returns its file, for the studio's own Node to run with
+ * `ELECTRON_RUN_AS_NODE` set and the launch's environment. The feeder runs as the person, outside
+ * every box, so `dir` must be a folder no box can write (never the sandbox's scratch folder: on
+ * Windows every box runs as one user, so a box could rewrite the feeder before it starts). The
+ * caller removes the folder. Windows only: elsewhere a terminal's input reaches a sandboxed command
+ * directly.
+ */
+export async function writeTerminalFeeder(options: {
+  launch: FedLaunch;
+  relay: Pick<LiveInput, "env">;
+  dir: string;
+}): Promise<string> {
+  const plan = {
+    file: options.launch.file,
+    args: options.launch.args,
+    cwd: options.launch.cwd,
+    port: Number(options.relay.env[LiveInputEnv.Port]),
+    token: options.relay.env[LiveInputEnv.Token],
+  };
+  const folder = await mkdtemp(path.join(options.dir, "genex-terminal-feeder-"));
+  const file = path.join(folder, "feeder.cjs");
+  await writeFile(
+    file,
+    FEEDER_SOURCE.replace("__PLAN__", () => JSON.stringify(plan)),
+    { mode: 0o600 },
+  );
+  return file;
 }

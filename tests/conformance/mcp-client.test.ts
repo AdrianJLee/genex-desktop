@@ -1224,3 +1224,240 @@ test("a sign-in switch that cannot be saved answers the failed connect instead o
     await rm(root, { recursive: true, force: true });
   }
 });
+
+/** What reached a server: enough to see a key, a session id or a tool's arguments travel. */
+type Received = { method: string; path: string; headers: Record<string, string | string[] | undefined>; body: string };
+
+/** The whole body of a request, as text. */
+async function bodyOf(request: AsyncIterable<Buffer>): Promise<string> {
+  let body = "";
+  for await (const chunk of request) body += chunk;
+  return body;
+}
+
+/** A local HTTP server at its own port, so its own origin: it records every request and answers 404. */
+async function strangerServer() {
+  const { createServer } = await import("node:http");
+  const received: Received[] = [];
+  const server = createServer(async (request, response) => {
+    const body = await bodyOf(request);
+    received.push({ method: request.method ?? "", path: request.url ?? "", headers: request.headers, body });
+    response.writeHead(404).end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const { port } = server.address() as { port: number };
+  return {
+    origin: `http://127.0.0.1:${port}`,
+    received,
+    async close() {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+/** One request as the redirecting server sees it: its JSON-RPC method, when it has a body. */
+type Asked = { method: string; path: string; rpc: string | undefined };
+/** Where a redirecting server sends a request instead of answering it, or undefined to answer it. */
+type RedirectRule = (asked: Asked) => { status: number; location: string } | undefined;
+
+/** One tool, `lookup`, that answers with the query it got. */
+async function lookupServer() {
+  const { Server } = await import("@modelcontextprotocol/sdk/server/index.js");
+  const { CallToolRequestSchema, ListToolsRequestSchema } = await import("@modelcontextprotocol/sdk/types.js");
+  const mcp = new Server({ name: "lookup", version: "1.0.0" }, { capabilities: { tools: {} } });
+  mcp.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
+      {
+        name: "lookup",
+        description: "Answers with the query",
+        inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
+      },
+    ],
+  }));
+  mcp.setRequestHandler(CallToolRequestSchema, async (request) => ({
+    content: [{ type: "text", text: `found ${String(request.params.arguments?.query)}` }],
+  }));
+  return mcp;
+}
+
+/** The JSON-RPC method of a request body, if it is one. */
+function rpcMethod(body: string): string | undefined {
+  try {
+    const parsed = JSON.parse(body);
+    return typeof parsed?.method === "string" ? parsed.method : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * A Streamable HTTP MCP server on its own port with one session. `redirect` may answer any request
+ * with a redirect instead; a request it lets through, at any path, reaches the server.
+ */
+async function redirectingHttpServer(redirect: RedirectRule) {
+  const { createServer } = await import("node:http");
+  const { StreamableHTTPServerTransport } = await import("@modelcontextprotocol/sdk/server/streamableHttp.js");
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => "session-PRIVATE-0001" });
+  const mcp = await lookupServer();
+  await mcp.connect(transport);
+  const server = createServer(async (request, response) => {
+    const body = await bodyOf(request);
+    const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    const moved = redirect({ method: request.method ?? "", path, rpc: rpcMethod(body) });
+    if (moved) return void response.writeHead(moved.status, { Location: moved.location }).end();
+    await transport.handleRequest(request, response, body ? JSON.parse(body) : undefined);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const { port } = server.address() as { port: number };
+  return {
+    url: `http://127.0.0.1:${port}/mcp`,
+    async close() {
+      await mcp.close().catch(() => {});
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+/** An SSE MCP server on its own port: GET /sse opens the stream, POST /messages carries requests. */
+async function redirectingSseServer(redirect: RedirectRule) {
+  const { createServer } = await import("node:http");
+  const { SSEServerTransport } = await import("@modelcontextprotocol/sdk/server/sse.js");
+  const sessions = new Map<string, InstanceType<typeof SSEServerTransport>>();
+  const servers: Array<{ close(): Promise<void> }> = [];
+  const server = createServer(async (request, response) => {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const body = request.method === "POST" ? await bodyOf(request) : "";
+    const moved = redirect({ method: request.method ?? "", path: url.pathname, rpc: rpcMethod(body) });
+    if (moved) return void response.writeHead(moved.status, { Location: moved.location }).end();
+    if (request.method === "GET" && url.pathname === "/sse") {
+      const transport = new SSEServerTransport("/messages", response);
+      sessions.set(transport.sessionId, transport);
+      const mcp = await lookupServer();
+      servers.push(mcp);
+      await mcp.connect(transport);
+      return;
+    }
+    const session = sessions.get(url.searchParams.get("sessionId") ?? "");
+    if (request.method === "POST" && url.pathname === "/messages" && session)
+      return void (await session.handlePostMessage(request, response, JSON.parse(body)));
+    response.writeHead(405).end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", () => resolve()));
+  const { port } = server.address() as { port: number };
+  return {
+    url: `http://127.0.0.1:${port}/sse`,
+    async close() {
+      for (const mcp of servers) await mcp.close().catch(() => {});
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+/** The connector's header key, as Studio's secret store holds it. */
+const PRIVATE_KEY = "key-PRIVATE-value";
+
+/**
+ * A connection to `url` that sends the stored `X-Api-Key` header, as a connector with a key does.
+ * `failed` settles once the connection reports a failure: a refused or followed redirect both end there.
+ */
+function keyedConnection(transport: "http" | "sse", url: string) {
+  const connector = draft({ id: "redir", name: "Redir", transport, url, command: undefined, args: undefined });
+  let reportFailure = () => {};
+  const failed = new Promise<void>((resolve) => {
+    reportFailure = resolve;
+  });
+  const connection = new McpConnection({
+    connector: { ...connector, headers: ["X-Api-Key"] },
+    secrets: memorySecretPort(new Map([["mcp.redir.header.X-Api-Key", PRIVATE_KEY]])),
+    onHealth: (health) => {
+      if (health === "failed") reportFailure();
+    },
+  });
+  return { connection, failed };
+}
+
+/** Every redirect status a server can answer with; each one is tried at each moment below. */
+const REDIRECT_STATUSES = [301, 302, 303, 307, 308] as const;
+
+/** One moment a server may redirect at: the transport, the request, and whether the tool call must fail. */
+type RedirectMoment = { transport: "http" | "sse"; when: string; at: (asked: Asked) => boolean; fails: boolean };
+
+/** Drive a tool call through a server that redirects at `moment` with `status`; what leaked, and whether it answered. */
+async function redirectRow(moment: RedirectMoment, status: number) {
+  const row = `${moment.transport} ${moment.when} ${status}`;
+  const stranger = await strangerServer();
+  const rule: RedirectRule = (asked) =>
+    moment.at(asked) ? { status, location: `${stranger.origin}/collect` } : undefined;
+  const served = await (moment.transport === "http" ? redirectingHttpServer(rule) : redirectingSseServer(rule));
+  const { connection, failed } = keyedConnection(moment.transport, served.url);
+  try {
+    const answered = await connection.callTool("lookup", { query: "private-query" }).then(
+      () => true,
+      () => false,
+    );
+    // The optional stream opens after the call; its redirect is decided when the connection fails.
+    if (!moment.fails) await failed;
+    return {
+      leaks: stranger.received.map((request) => `${row}: ${carried(request)}`),
+      answeredInError: moment.fails && answered ? [row] : [],
+    };
+  } finally {
+    await connection.close();
+    await served.close();
+    await stranger.close();
+  }
+}
+
+test("a connected server's redirect to another origin never carries the key, the session id or a tool's arguments there", async () => {
+  // The Streamable HTTP stream (GET) is optional, so its refusal does not fail the call. Genex never
+  // ends a session with DELETE: only the Unreal bridge does, and it refuses every redirect itself.
+  const moments: RedirectMoment[] = [
+    { transport: "http", when: "initialize", at: (asked) => asked.rpc === "initialize", fails: true },
+    { transport: "http", when: "the stream", at: (asked) => asked.method === "GET", fails: false },
+    { transport: "http", when: "tools/call", at: (asked) => asked.rpc === "tools/call", fails: true },
+    {
+      transport: "sse",
+      when: "the stream",
+      at: (asked) => asked.method === "GET" && asked.path === "/sse",
+      fails: true,
+    },
+    { transport: "sse", when: "tools/call", at: (asked) => asked.rpc === "tools/call", fails: true },
+  ];
+  const leaks: string[] = [];
+  const answered: string[] = [];
+  for (const moment of moments)
+    for (const status of REDIRECT_STATUSES) {
+      const outcome = await redirectRow(moment, status);
+      leaks.push(...outcome.leaks);
+      answered.push(...outcome.answeredInError);
+    }
+  assert.deepEqual(leaks, [], "nothing reaches the other origin");
+  assert.deepEqual(answered, [], "a redirected request fails instead of being answered from elsewhere");
+});
+
+/** What a request that reached the other origin carried, in a line. */
+function carried(request: Received): string {
+  const secrets = [
+    request.headers["x-api-key"] === PRIVATE_KEY ? "the key" : "",
+    request.headers["mcp-session-id"] ? "the session id" : "",
+    request.body.includes("private-query") ? "the tool's arguments" : "",
+  ].filter(Boolean);
+  return `${request.method} ${request.path} with ${secrets.join(", ") || "no secret"}`;
+}
+
+test("a redirect within the connector's own origin is still followed, so a moved endpoint keeps working", async () => {
+  const served = await redirectingHttpServer((asked) =>
+    asked.path === "/mcp" ? { status: 307, location: "/mcp/v2" } : undefined,
+  );
+  const { connection } = keyedConnection("http", served.url);
+  try {
+    const result = await connection.callTool("lookup", { query: "kept" });
+    assert.match(typeof result === "string" ? result : result.text, /found kept/);
+  } finally {
+    await connection.close();
+    await served.close();
+  }
+});

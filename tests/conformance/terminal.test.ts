@@ -15,6 +15,7 @@ import {
   type TerminalSession,
 } from "../../src/shared/terminal.ts";
 import { commandShell, terminalShell } from "../../src/main/terminal-shell.ts";
+import { isPasteChord } from "../../src/renderer/panels/terminal-events.ts";
 
 describe("the shell a game's terminal opens", () => {
   const windowsEnv = {
@@ -388,5 +389,31 @@ describe("a sign-in page a terminal prints", () => {
     } finally {
       await manager.dispose();
     }
+  });
+});
+
+describe("a paste in the terminal", () => {
+  it("is Ctrl+V or Ctrl+Shift+V off a Mac, left to the browser so the clipboard's text arrives, not ^V", () => {
+    const key = (
+      code: string,
+      mods: Partial<Record<"metaKey" | "ctrlKey" | "altKey", boolean>> = {},
+      typed = code.replace(/^Key/, "").toLowerCase(),
+    ) => ({ metaKey: false, ctrlKey: false, altKey: false, code, key: typed, ...mods });
+    for (const platform of ["win32", "linux"]) {
+      assert.equal(isPasteChord(key("KeyV", { ctrlKey: true }), platform), true, `${platform}: Ctrl+V`);
+      assert.equal(isPasteChord(key("KeyV"), platform), false, `${platform}: a plain v is typed`);
+      assert.equal(
+        isPasteChord(key("KeyC", { ctrlKey: true }), platform),
+        false,
+        `${platform}: Ctrl+C still interrupts`,
+      );
+      assert.equal(isPasteChord(key("KeyV", { ctrlKey: true, altKey: true }), platform), false);
+      // The letter decides on a Latin layout, the key's place on any other.
+      assert.equal(isPasteChord(key("Period", { ctrlKey: true }, "v"), platform), true, `${platform}: Dvorak's V`);
+      assert.equal(isPasteChord(key("KeyV", { ctrlKey: true }, "k"), platform), false, `${platform}: Dvorak's K`);
+      assert.equal(isPasteChord(key("KeyV", { ctrlKey: true }, "м"), platform), true, `${platform}: Russian layout`);
+    }
+    assert.equal(isPasteChord(key("KeyV", { ctrlKey: true }), "darwin"), false, "on a Mac Ctrl+V stays the terminal's");
+    assert.equal(isPasteChord(key("KeyV", { metaKey: true }), "darwin"), false, "Cmd+V is the menu's paste");
   });
 });

@@ -339,16 +339,25 @@ struct GENEXMULTIPLAYER_API FGenexProjectileLaunch
 	/** Downward acceleration along -Z, Unreal units per second squared (at most 1000 Genex units/s²). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex", meta = (ClampMin = "0")) float Gravity = 0.f;
 	/** The entity kinds it can hit, for a predicted hit (PROTOCOL.md §17.9 *Predicted hits*): the kinds the room
-	 *  module hands `ctx.projectiles.sweep(id, { kinds, radius })`. None: no hit is predicted, the server's word alone. */
+	 *  module hands `ctx.projectiles.sweep(id, { kinds, radius, height, duckHeight })`. None: no hit is predicted,
+	 *  the server's word alone. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits") TArray<FString> HitKinds;
-	/** A target's hit sphere around its entity's location, Unreal units (the module's sweep `radius`). */
+	/** A target's hit sphere around its entity's location, Unreal units (the module's sweep `radius`); with Hit
+	 *  Height, its capsule's radius. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits", meta = (ClampMin = "0")) float HitRadius = 0.f;
+	/** A body's height, Unreal units (the module's sweep `height`, PROTOCOL.md §17.9 *Target shapes*): each
+	 *  target is an upright capsule of Hit Radius standing on its entity's location. Below 0: not given, the sphere. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits") float HitHeight = -1.f;
+	/** A body's height fully ducked, Unreal units (the module's sweep `duckHeight`). Below 0: not given, a duck
+	 *  changes nothing. Given without Hit Height, no hit is predicted, as the module's own call would refuse it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits") float HitDuckHeight = -1.f;
 	/** What settles its predicted hit. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex|Hits") EGenexHitSettle HitSettle = EGenexHitSettle::Health;
 };
 
 /** A hitscan your game fires, as it predicts it (UGenexAuthoritySubsystem::PredictHitscan): the ray and the options
- *  the room module hands `ctx.rewind.hitscan(origin, dir, { range, radius, kinds })`, in Unreal units. */
+ *  the room module hands `ctx.rewind.hitscan(origin, dir, { range, radius, kinds, height, duckHeight })`, in
+ *  Unreal units. */
 USTRUCT(BlueprintType)
 struct GENEXMULTIPLAYER_API FGenexHitscan
 {
@@ -364,6 +373,12 @@ struct GENEXMULTIPLAYER_API FGenexHitscan
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") float Radius = -1.f;
 	/** The entity kinds it can hit; none: every kind, as the module's hitscan without `kinds`. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") TArray<FString> Kinds;
+	/** A body's height, Unreal units (the module's hitscan `height`, PROTOCOL.md §17.9 *Target shapes*): each
+	 *  target is an upright capsule of Radius standing on its entity's location. Below 0: not given, the sphere. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") float Height = -1.f;
+	/** A body's height fully ducked, Unreal units (the module's hitscan `duckHeight`). Below 0: not given, a duck
+	 *  changes nothing. Given without Height, no hit is predicted, as the module's own call would refuse it. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") float DuckHeight = -1.f;
 	/** What settles its predicted hit. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Genex") EGenexHitSettle Settle = EGenexHitSettle::Health;
 };
@@ -380,10 +395,12 @@ struct GENEXMULTIPLAYER_API FGenexPredictedHit
 	UPROPERTY(BlueprintReadOnly, Category = "Genex") EGenexHitKind Kind = EGenexHitKind::Hitscan;
 	/** The id of the entity hit. */
 	UPROPERTY(BlueprintReadOnly, Category = "Genex") FString Target;
-	/** Where the path or the ray enters the target's hit sphere (the start of one that starts inside), Unreal units. */
+	/** Where the path or the ray enters the target's hit sphere, or its capsule when the shot was declared with a
+	 *  height (the start of one that starts inside), Unreal units. */
 	UPROPERTY(BlueprintReadOnly, Category = "Genex") FVector Location = FVector::ZeroVector;
 	/** How far along the test found the target, Unreal units: a projectile's along the path of the frame that
-	 *  reached it, a hitscan's along the ray to the point nearest the target's centre. */
+	 *  reached it, a hitscan's along the ray to the point nearest the target's centre, or, declared with a height,
+	 *  to where the ray enters the target's capsule. */
 	UPROPERTY(BlueprintReadOnly, Category = "Genex") float Distance = 0.f;
 };
 

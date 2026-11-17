@@ -4,7 +4,7 @@
 // settling rule are GenexPredictedHits.h's; this is what genex::AuthoritySession keeps around them.
 //
 // Port of the pure pieces of packages/multiplayer/src/authority/hit-session.ts (`ackCeiling`, `lookAck`,
-// `waitingLook`, `pathPoint`, `rayEntry`), in the reference's order, unfused; held to the rows of
+// `waitingLook`, `pathPoint`, `rayEntry`, `rayPoint`), in the reference's order, unfused; held to the rows of
 // packages/multiplayer/test/authority-hit-session.test.ts by genex_offline_check (tools/offline_hits.cpp).
 #pragma once
 
@@ -68,5 +68,9 @@ GENEX_CORE_API HitPoint PathPoint(const HitPoint& a, const HitPoint& b, double d
  *  round `target`, which HitscanHit found `found.dist` along it; `origin` for a ray that starts inside. */
 GENEX_CORE_API HitPoint RayEntry(const HitPoint& origin, const HitPoint& dir, const HitTarget& target, const HitFound& found,
                                  std::optional<double> radius = std::nullopt);
+
+/** The point `dist` along a ray from `origin` along `dir` (any length); `origin` for a `dir` with none. Where
+ *  a ray enters a capsule HitscanHit found `dist` along it (§17.9 *Target shapes*). */
+GENEX_CORE_API HitPoint RayPoint(const HitPoint& origin, const HitPoint& dir, double dist);
 
 }  // namespace genex::hits

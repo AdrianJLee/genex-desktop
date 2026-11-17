@@ -179,6 +179,11 @@ class GENEX_CORE_API FastSeat {
   bool MotionKnown(const std::string& id) const {
     return client_ == nullptr || client_->MotionOf(RecordKind::Entity, id) != nullptr;
   }
+  /** Whether the channel's snapshots carry the motion: live, and one of the seat's own stream has been
+   *  written on this binding. A path challenge (§17.12 *Return path*) proves an address and brings no
+   *  update of the room, so it is written nowhere; until that first snapshot a WebSocket patch still moves
+   *  other entities, and is the sample of the link (§17.3 *The render delay*). */
+  bool CarriesMotion() const { return client_ != nullptr && carries_; }
   /** The channel's client while live (the guard's records). */
   const FastClient* Client() const { return client_.get(); }
   MotionGuard& Guard() { return guard_; }
@@ -209,6 +214,8 @@ class GENEX_CORE_API FastSeat {
   std::optional<double> liveSince_;
   /** The socket's seqBase while live: wire seq = seqBase + handle seq. */
   double linkSeqBase_ = 0;
+  /** A snapshot of the seat's own stream has been written on the live binding (CarriesMotion). */
+  bool carries_ = false;
   struct Fallback {
     int at = 0;
     int wsBefore = 0;

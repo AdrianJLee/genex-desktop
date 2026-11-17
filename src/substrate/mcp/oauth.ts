@@ -2,10 +2,14 @@
  * Host-owned OAuth session. Only explicit UI Connect may unlock storage or open a browser.
  * Disconnect (and removing the connector) is the other explicit act: it forgets the account here
  * and then asks the authorization server to revoke its tokens (RFC 7009) when it offers that.
+ *
+ * The account is pinned to the authorization server it signed in at: the record keeps that
+ * server's discovery, and refresh and revocation go only there. A connected MCP server that later
+ * names another authorization server never gets the account's tokens or client secret sent to it.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import type { OAuthClientProvider, OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { validUrl, type SecretPort } from "./store.ts";
 import { redactValues } from "../../shared/redact.ts";
@@ -25,7 +29,11 @@ interface Saved {
   client?: OAuthClientInformationMixed;
   tokens?: OAuthTokens;
   redirect?: string;
+  /** The authorization server the client and tokens came from, as discovery found it at sign-in. */
+  discovery?: OAuthDiscoveryState;
 }
+/** What the SDK may ask the provider to forget (`OAuthClientProvider.invalidateCredentials`). */
+type CredentialScope = Parameters<NonNullable<OAuthClientProvider["invalidateCredentials"]>>[0];
 /** A revocation is a courtesy to the server, never a wait on the user: this is all it gets. */
 const REVOKE_TIMEOUT_MS = 10 * SECOND_MS;
 /** How long a started browser sign-in may take before it is abandoned. */
@@ -97,12 +105,45 @@ function isLoopbackCallback(redirect: URL): boolean {
 /** The SDK's OAuth record schemas, loaded on first use (main's startup does not wait for them). */
 const oauthSchemas = () => import("@modelcontextprotocol/sdk/shared/auth.js");
 
+/** A saved discovery, checked field by field: the server's URL and the metadata found for it. */
+async function parseDiscovery(value: Record<string, unknown>): Promise<OAuthDiscoveryState> {
+  const { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema, OAuthProtectedResourceMetadataSchema } =
+    await oauthSchemas();
+  if (typeof value.authorizationServerUrl !== "string") throw new Error(MESSAGE.InvalidSavedAccount);
+  const parsed: OAuthDiscoveryState = { authorizationServerUrl: new URL(value.authorizationServerUrl).href };
+  if (value.authorizationServerMetadata)
+    parsed.authorizationServerMetadata = OAuthMetadataSchema.or(OpenIdProviderDiscoveryMetadataSchema).parse(
+      value.authorizationServerMetadata,
+    );
+  if (value.resourceMetadata)
+    parsed.resourceMetadata = OAuthProtectedResourceMetadataSchema.parse(value.resourceMetadata);
+  if (typeof value.resourceMetadataUrl === "string") parsed.resourceMetadataUrl = value.resourceMetadataUrl;
+  return parsed;
+}
+
+/** Whether two authorization server URLs name the same server. */
+function sameServer(a: string, b: string): boolean {
+  return new URL(a).href === new URL(b).href;
+}
+
+/** Where the pinned authorization server takes revocations (RFC 7009), if it said so at sign-in. */
+function revocationEndpoint(discovery: OAuthDiscoveryState | undefined): string | undefined {
+  const metadata = discovery?.authorizationServerMetadata;
+  // OpenID discovery documents do not declare the field; an OAuth server that revokes does.
+  const endpoint =
+    metadata && "revocation_endpoint" in metadata && typeof metadata.revocation_endpoint === "string"
+      ? metadata.revocation_endpoint
+      : undefined;
+  return endpoint && validUrl(endpoint) ? endpoint : undefined;
+}
+
 /** The saved account record, checked field by field; an unexpected shape is refused. */
 async function parseSaved(raw: string | null): Promise<Saved> {
   const value = raw ? JSON.parse(raw) : {};
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(MESSAGE.InvalidSavedAccount);
   const { OAuthTokensSchema, OAuthClientInformationFullSchema, OAuthClientInformationSchema } = await oauthSchemas();
   const parsed: Saved = {};
+  if (value.discovery) parsed.discovery = await parseDiscovery(value.discovery);
   if (value.tokens) parsed.tokens = OAuthTokensSchema.parse(value.tokens);
   if (value.client)
     parsed.client = (
@@ -383,12 +424,48 @@ export class McpOAuthAccount {
       },
       invalidateCredentials: async (scope) => {
         active();
-        if (scope === "all" || scope === "client") delete this.#saved.client;
-        if (scope === "all" || scope === "tokens") delete this.#saved.tokens;
-        if (scope === "all" || scope === "verifier") this.#verifier = undefined;
+        this.#forget(scope);
+        await this.#persist(epoch);
+      },
+      discoveryState: () => {
+        active();
+        return this.#saved.discovery;
+      },
+      saveDiscoveryState: async (state) => {
+        active();
+        this.#pin(state);
         await this.#persist(epoch);
       },
     };
+  }
+  /**
+   * Pin the account to `state`'s authorization server. The same server only refreshes what is known
+   * about it. Any other server, or a first one beside secrets saved before the pin, first costs the
+   * client and tokens: they are never sent to a server that did not issue them. One new sign-in
+   * gets fresh ones there.
+   */
+  #pin(state: OAuthDiscoveryState): void {
+    const pinned = this.#saved.discovery?.authorizationServerUrl;
+    if (!pinned || !sameServer(pinned, state.authorizationServerUrl)) this.#forget("discovery");
+    this.#saved.discovery = state;
+  }
+  /**
+   * Forget what `scope` names. The client and tokens belong to the pinned server, so forgetting the
+   * discovery forgets them too.
+   */
+  #forget(scope: CredentialScope): void {
+    const all = scope === "all";
+    const discovery = all || scope === "discovery";
+    if (discovery || scope === "client") delete this.#saved.client;
+    if (discovery || scope === "tokens") this.#dropTokens();
+    if (all || scope === "verifier") this.#verifier = undefined;
+    if (discovery) delete this.#saved.discovery;
+  }
+  /** Drop the tokens: an account that held them no longer shows as connected, so its card asks for Connect. */
+  #dropTokens(): void {
+    if (!this.#saved.tokens) return;
+    delete this.#saved.tokens;
+    if (this.state === McpAuthState.Connected) this.#set(McpAuthState.SignedOut);
   }
   ready(): void {
     if (this.state !== McpAuthState.Authorizing) this.#finish();
@@ -436,28 +513,21 @@ export class McpOAuthAccount {
   async #savedForRevocation(): Promise<Saved> {
     if (this.#unlocked) return this.#saved;
     try {
-      const value = JSON.parse((await this.store?.get(this.key)) ?? "{}");
-      const { OAuthTokensSchema, OAuthClientInformationSchema } = await oauthSchemas();
-      return {
-        ...(value?.tokens ? { tokens: OAuthTokensSchema.parse(value.tokens) } : {}),
-        ...(value?.client ? { client: OAuthClientInformationSchema.parse(value.client) } : {}),
-      };
+      return await parseSaved((await this.store?.get(this.key)) ?? null);
     } catch {
       return {};
     }
   }
-  /** RFC 7009: the refresh token first (it outlives the access token), then the access token. */
+  /**
+   * RFC 7009 at the pinned server only: the refresh token first (it outlives the access token),
+   * then the access token. The MCP server is not asked again where to send them, and a redirect is
+   * not followed: the tokens and client secret go to the endpoint found at sign-in or nowhere. A
+   * record saved before the pin has no such endpoint, so its tokens simply expire at the server.
+   */
   async #revoke(saved: Saved): Promise<void> {
+    const endpoint = revocationEndpoint(saved.discovery);
+    if (!endpoint) return;
     const signal = AbortSignal.timeout(REVOKE_TIMEOUT_MS);
-    const fetchFn: typeof fetch = (input, init) => this.fetchImpl(input, { ...init, signal });
-    const { discoverOAuthServerInfo } = await import("@modelcontextprotocol/sdk/client/auth.js");
-    const metadata = (await discoverOAuthServerInfo(this.url, { fetchFn })).authorizationServerMetadata;
-    // OpenID discovery documents do not declare the field; an OAuth server that revokes does.
-    const endpoint =
-      metadata && "revocation_endpoint" in metadata && typeof metadata.revocation_endpoint === "string"
-        ? metadata.revocation_endpoint
-        : undefined;
-    if (!endpoint || !validUrl(endpoint)) return;
     const client = saved.client;
     for (const [token, hint] of [
       [saved.tokens?.refresh_token, "refresh_token"],
@@ -467,8 +537,10 @@ export class McpOAuthAccount {
       const body = new URLSearchParams({ token, token_type_hint: hint });
       if (client?.client_id) body.set("client_id", client.client_id);
       if (client?.client_secret) body.set("client_secret", client.client_secret);
-      await fetchFn(endpoint, {
+      await this.fetchImpl(endpoint, {
         method: "POST",
+        redirect: "error",
+        signal,
         headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
         body: body.toString(),
       }).catch(() => undefined);

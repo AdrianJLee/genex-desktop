@@ -644,13 +644,15 @@ export class GameWorkspaces {
 
   /**
    * Create a project from the template under the default library. Idempotent: an existing
-   * project is returned as-is.
+   * project is returned as-is. A name held by a removed game moves to the next free name so a
+   * new game never takes over the removed game's identity or chats.
    */
-  async scaffold(name: string, options: Partial<ScaffoldOptions> = {}): Promise<GameProject> {
+  async scaffold(requestedName: string, options: Partial<ScaffoldOptions> = {}): Promise<GameProject> {
     await this.loadIndex();
-    assertProjectName(name);
+    assertProjectName(requestedName);
+    const name = await this.#resolveScaffoldName(requestedName);
     const dir = this.dirFor(name);
-    const title = options.title ?? name;
+    const title = options.title ?? requestedName;
     if (await this.exists(name)) {
       await this.touch(name);
       return this.#describe(name, dir);
@@ -664,18 +666,20 @@ export class GameWorkspaces {
    * A game with no kind yet under the default library: Genex's bookkeeping (its record, the ignore
    * rules, a repository with its first commit) and nothing else; its first message picks what it
    * becomes. Idempotent: a folder that already holds anything is returned untouched, as `scaffold`
-   * returns an existing game, so a name that collides with a game never writes into it.
+   * returns an existing game, so a name that collides with a game never writes into it. A name held
+   * by a removed game moves to the next free name instead.
    */
-  async makeEmpty(name: string, options: Partial<ScaffoldOptions> = {}): Promise<GameProject> {
+  async makeEmpty(requestedName: string, options: Partial<ScaffoldOptions> = {}): Promise<GameProject> {
     await this.loadIndex();
-    assertProjectName(name);
+    assertProjectName(requestedName);
+    const name = await this.#resolveScaffoldName(requestedName);
     const dir = this.dirFor(name);
     if ((await readdir(dir).catch(() => [])).length > 0) {
       await this.touch(name);
       return this.#describe(name, dir);
     }
     await ensureDir(dir);
-    await this.#writeBookkeeping(dir, { name, title: options.title ?? name });
+    await this.#writeBookkeeping(dir, { name, title: options.title ?? requestedName });
     await this.touch(name);
     return this.#describe(name, dir);
   }
@@ -752,21 +756,10 @@ export class GameWorkspaces {
       const parent = await this.location(options.parent, options.allowed);
       if (parent !== (await realpath(this.root))) return this.#createIn(parent, title, options.provisional);
     }
-    const base = slugFromName(title);
-    const removed = this.#removedGameNames();
-    for (let suffix = 1; ; suffix++) {
-      const tail = suffix === 1 ? "" : `-${suffix}`;
-      const name = base.slice(0, MAX_SLUG_LENGTH - tail.length) + tail;
-      if (this.#aliases.has(name)) continue;
-      if (removed.has(name)) continue;
-      // A removed game still holds its name: its folder may come back, and with it its chats.
-      // A new game takes the next name instead of inheriting another game's history.
-      if (await this.#removedGameAt(path.join(this.root, name))) continue;
-      if (!(await madeFolder(path.join(this.root, name)))) continue;
-      await this.makeEmpty(name, { title });
-      await this.#rollCover(name, provisional(options.provisional));
-      return this.#describe(name, this.dirFor(name));
-    }
+    const name = await this.#reserveFreeName(slugFromName(title));
+    await this.makeEmpty(name, { title });
+    await this.#rollCover(name, provisional(options.provisional));
+    return this.#describe(name, this.dirFor(name));
   }
 
   /**
@@ -820,6 +813,41 @@ export class GameWorkspaces {
     await this.makeEmpty(name, { title });
     await this.#rollCover(name, provisional(waiting));
     return this.#describe(name, dir);
+  }
+
+  /**
+   * The name a scaffold or empty folder uses: `requestedName` when free or still in the library,
+   * or the next free folder under `this.root` when a removed game holds that name.
+   */
+  async #resolveScaffoldName(requestedName: string): Promise<string> {
+    if (!(await this.#isRemovedName(requestedName))) return requestedName;
+    return this.#reserveFreeName(requestedName, 2);
+  }
+
+  /** Whether `name` belongs to a game removed from the library: its identity and chats stay its own. */
+  async #isRemovedName(name: string): Promise<boolean> {
+    if (this.#removedGameNames().has(name)) return true;
+    return this.#removedGameAt(this.dirFor(name));
+  }
+
+  /**
+   * Pick and reserve the next free folder under `this.root` for `base`, skipping aliases, removed
+   * games, and any folder already on disk.
+   */
+  async #reserveFreeName(base: string, startSuffix = 1): Promise<string> {
+    await ensureDir(this.root);
+    const removed = this.#removedGameNames();
+    for (let suffix = startSuffix; ; suffix++) {
+      const tail = suffix === 1 ? "" : `-${suffix}`;
+      const name = base.slice(0, MAX_SLUG_LENGTH - tail.length) + tail;
+      if (this.#aliases.has(name)) continue;
+      if (removed.has(name)) continue;
+      // A removed game still holds its name: its folder may come back, and with it its chats.
+      // A new game takes the next name instead of inheriting another game's history.
+      if (await this.#removedGameAt(path.join(this.root, name))) continue;
+      if (!(await madeFolder(path.join(this.root, name)))) continue;
+      return name;
+    }
   }
 
   /** Whether a removed game used `dir`: its identity, and the chats bound to its name, stay its own. */

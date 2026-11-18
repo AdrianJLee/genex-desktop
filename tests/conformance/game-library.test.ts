@@ -83,6 +83,20 @@ describe("game-first library", () => {
       "the new game's chat starts fresh",
     );
   });
+  it("scaffold and makeEmpty skip a removed game's name even after its folder is deleted, while keeping live games", async () => {
+    const old = await rig.core.createGame("Silver Beacon");
+    const oldChat = await rig.core.threadForGame(old.name);
+    await rig.core.append([{ type: "messages", messages: [{ role: "user", content: "the old beacon" }] }], oldChat);
+    await rig.core.removeGame(old.name);
+    await rm(old.dir, { recursive: true, force: true });
+
+    const empty = await rig.core.games.makeEmpty(old.name, { title: "Silver Beacon" });
+    assert.equal(empty.name, "silver-beacon-2");
+    const web = await rig.core.games.scaffold(old.name, { title: "Silver Beacon" });
+    assert.equal(web.name, "silver-beacon-3");
+    assert.equal((await rig.core.games.makeEmpty(empty.name)).name, empty.name);
+    assert.equal((await rig.core.games.scaffold(web.name)).name, web.name);
+  });
   it("a game made Untitled by a greeting takes its first idea's name in place, never over the person's own", async () => {
     const replies: Record<string, GameName> = {
       "Hi there": { title: "Untitled game", provisional: true },

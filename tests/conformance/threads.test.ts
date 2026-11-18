@@ -321,6 +321,76 @@ describe("per-game threads", () => {
     assert.ok(games.some((g) => g.name === "game"));
   });
 
+  it("a local model's new_game skips a removed game's name and keeps a live game's name", async () => {
+    const rig = await startRig({
+      replies: [
+        {
+          toolCalls: [{ id: "c1", name: "new_game", arguments: { name: "copper-lantern", title: "Copper Lantern" } }],
+        },
+        { text: "Scaffolded fresh empty folder." },
+        {
+          toolCalls: [
+            {
+              id: "c2",
+              name: "new_game",
+              arguments: { name: "copper-lantern", title: "Copper Lantern", kind: "web" },
+            },
+          ],
+        },
+        { text: "Scaffolded fresh web game." },
+      ],
+    });
+    rigs.push(rig);
+
+    const old = await rig.core.createGame("Copper Lantern");
+    const oldChat = await rig.core.threadForGame(old.name);
+    await rig.core.append([{ type: "messages", messages: [{ role: "user", content: "the old lantern" }] }], oldChat);
+    await rig.core.removeGame(old.name);
+
+    const draft = await rig.core.createGameThread();
+    await rig.core.sendUserMessage("make a copper lantern game", { thread: draft });
+    await waitForLog(
+      rig.core,
+      (log) => log.filter((e) => e.data.type === "turn_ended").length >= 1,
+      30_000,
+      "empty turn",
+    );
+
+    const draftMeta = (await rig.core.store.getRecord(draft)).metadata as { project?: string };
+    assert.equal(draftMeta.project, "copper-lantern-2");
+    assert.equal(await rig.core.threadForGame("copper-lantern-2"), draft);
+
+    const webDraft = await rig.core.createGameThread();
+    await rig.core.sendUserMessage("make another copper lantern game", { thread: webDraft });
+    await waitForLog(
+      rig.core,
+      (log) => log.filter((e) => e.data.type === "turn_ended").length >= 2,
+      30_000,
+      "web turn",
+    );
+
+    const webMeta = (await rig.core.store.getRecord(webDraft)).metadata as { project?: string };
+    assert.equal(webMeta.project, "copper-lantern-3");
+    assert.equal(await rig.core.threadForGame("copper-lantern-3"), webDraft);
+
+    const games = await rig.core.games.list();
+    assert.ok(!games.some((g) => g.name === "copper-lantern"), "removed game stays out of the library");
+    assert.ok(games.some((g) => g.name === "copper-lantern-2"));
+    assert.ok(games.some((g) => g.name === "copper-lantern-3" && g.facts.some((f) => f.id === "web-game")));
+    assert.equal(
+      ((await rig.core.store.getRecord(oldChat)).metadata as { project?: string }).project,
+      "copper-lantern",
+    );
+    assert.doesNotMatch(JSON.stringify(await rig.core.store.listEvents(draft)), /the old lantern/);
+    assert.doesNotMatch(JSON.stringify(await rig.core.store.listEvents(webDraft)), /the old lantern/);
+
+    const api = rig.core.api() as unknown as Record<string, (payload: unknown) => Promise<unknown>>;
+    const existingWeb = (await api["game.scaffold"]!({ name: "copper-lantern-3", kind: "web" })) as { name: string };
+    assert.equal(existingWeb.name, "copper-lantern-3", "a live game stays as it is");
+    const existingEmpty = (await rig.core.games.makeEmpty("copper-lantern-2")) as { name: string };
+    assert.equal(existingEmpty.name, "copper-lantern-2", "a live empty game stays as it is");
+  });
+
   it("the Studio thread calls the model without building and keeps its answer", async () => {
     const rig = await startRig({ replies: [] });
     rigs.push(rig);

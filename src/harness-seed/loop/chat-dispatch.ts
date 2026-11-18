@@ -337,15 +337,16 @@ export async function launchFromIntake(
   const { host } = studio;
   requireGoal(spec);
   const games = await host.call(HostMethod.GameList, {});
-  const project = intakeProject(action, spec, games);
+  let project = intakeProject(action, spec, games);
   // A Loop with no game yet makes a web game; one on a game with no kind starts it as one.
   if (!games.some((g) => g.name === project)) {
-    await ctx.call(HostMethod.GameScaffold, {
+    const scaffolded = await ctx.call(HostMethod.GameScaffold, {
       name: project,
       title: spec.goal?.slice(0, CLIP_GAME_TITLE) || project,
       threadId: action.threadId,
       kind: ProjectStarter.Web,
     });
+    if (scaffolded && typeof scaffolded.name === "string") project = scaffolded.name;
   }
   await startWebIfPending(host, project, games);
   // What the folder itself refuses (loopRunRefusal): a game that is already compiled. Said in chat
